@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 from itertools import accumulate
 from typing import TYPE_CHECKING, Optional, Union
 
@@ -86,10 +85,6 @@ class ColModernVBertProcessor(ProcessorMixin):
         self.row_col_ids = [
             tokenizer.convert_tokens_to_ids(f"<row_{i + 1}_col_{j + 1}>") for i in range(6) for j in range(6)
         ]
-
-        # This regex matches one or more occurrences of <global-img> tags (optionally surrounded by newline characters)
-        # or <row_x_col_y> tags (where x and y are digits, also optionally surrounded by newline characters).
-        self._regex_to_remove_extra_special_tokens = re.compile(r"(\n?<global-img>\n?|<row_\d+_col_\d+>\n?)+")
 
         tokens_to_add = {
             "additional_special_tokens": [
@@ -183,7 +178,7 @@ class ColModernVBertProcessor(ProcessorMixin):
         if text is not None:
             if isinstance(text, str):
                 text = [text]
-            text = text.copy()
+            text = list(text).copy()
 
         if images is not None:
             images = self.image_processor.fetch_images(images)
@@ -212,7 +207,7 @@ class ColModernVBertProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        **kwargs: Unpack[ProcessingKwargs],
+        **kwargs: Unpack[ColModernVBertProcessorKwargs],
     ):
         super().validate_inputs(images, text, **kwargs)
 
@@ -233,7 +228,7 @@ class ColModernVBertProcessor(ProcessorMixin):
                     f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
                 )
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         image_rows = [row for row_list in image_inputs["rows"] for row in row_list][image_idx]
         image_cols = [col for col_list in image_inputs["cols"] for col in col_list][image_idx]
         if image_rows == 0 and image_cols == 0:
@@ -308,12 +303,18 @@ class ColModernVBertProcessor(ProcessorMixin):
 
             base_image_length = self.image_seq_len + 3
             col_length = self.image_seq_len + 2
+            # For split images the global section is preceded by "\n" which together with the
+            # row-trailing "\n" forms "\n\n". Some tokenizers merge "\n\n" into one token; others
+            # (e.g. trimmed/tiny tokenizers) keep them as two. Count accurately so the formula
+            # matches the actual tokenized output regardless of the tokenizer's merge rules.
+            extra_split_newline = len(self.tokenizer("\n\n", add_special_tokens=False)["input_ids"]) - 1
             num_image_tokens = []
             num_image_patches = []
 
             for num_patches, num_rows, num_cols in num_image_row_cols:
                 row_length = col_length * num_cols + 1
-                num_image_tokens.append(base_image_length + (row_length * num_rows))
+                split_extra = extra_split_newline if num_rows > 0 else 0
+                num_image_tokens.append(base_image_length + split_extra + (row_length * num_rows))
                 num_image_patches.append(num_patches)
 
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})

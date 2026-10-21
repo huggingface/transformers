@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-07-15 and added to Hugging Face Transformers on 2024-01-17.*
+*This model was published in HF papers on 2024-07-15 and contributed to Hugging Face Transformers on 2024-01-17.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -31,6 +31,8 @@ You can find all the official Qwen2 checkpoints under the [Qwen2](https://huggin
 
 > [!TIP]
 > Click on the Qwen2 models in the right sidebar for more examples of how to apply Qwen2 to different language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to generate text with [`Pipeline`], [`AutoModel`], and from the command line using the instruction-tuned models.
 
@@ -149,10 +151,6 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 
 [[autodoc]] Qwen2Tokenizer
     - save_vocabulary
-
-## Qwen2TokenizerFast
-
-[[autodoc]] Qwen2TokenizerFast
 
 ## Qwen2RMSNorm
 

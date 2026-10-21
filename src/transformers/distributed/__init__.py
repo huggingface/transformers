@@ -18,27 +18,41 @@ from ..utils import _LazyModule
 
 
 _import_structure = {
-    "configuration_utils": ["DistributedConfig"],
-    "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
-    "sharding_utils": [],
-    "tensor_parallel": [
-        "ALL_PARALLEL_STYLES",
-        "apply_tensor_parallel",
-        "verify_tp_plan",
+    "checkpoint": [
+        "consolidate_distributed_checkpoint",
+        "_load_model_checkpoint_distributed",
+        "load_optimizer_distributed",
+        "_save_model_checkpoint_distributed",
+        "save_optimizer_distributed",
     ],
-    "utils": [],
+    "configuration_utils": ["DistributedConfig"],
+    "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module", "verify_fsdp_plan"],
+    "mixin": ["DistributedMixin"],
+    "utils": [
+        "gather_full_state_dict",
+        "initialize_distributed_mesh",
+        "initialize_fully_sharded_data_parallelism",
+    ],
 }
 
 
 if TYPE_CHECKING:
+    from .checkpoint import (
+        _load_model_checkpoint_distributed,
+        _save_model_checkpoint_distributed,
+        consolidate_distributed_checkpoint,
+        load_optimizer_distributed,
+        save_optimizer_distributed,
+    )
     from .configuration_utils import (
         DistributedConfig,
     )
-    from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
-    from .tensor_parallel import (
-        ALL_PARALLEL_STYLES,
-        apply_tensor_parallel,
-        verify_tp_plan,
+    from .fsdp import is_fsdp_enabled, is_fsdp_managed_module, verify_fsdp_plan
+    from .mixin import DistributedMixin
+    from .utils import (
+        gather_full_state_dict,
+        initialize_distributed_mesh,
+        initialize_fully_sharded_data_parallelism,
     )
 
 else:

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-07-18 and added to Hugging Face Transformers on 2023-07-18.*
+*This model was published in HF papers on 2023-07-18 and contributed to Hugging Face Transformers on 2023-07-18.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -144,12 +144,6 @@ visualizer("Plants create energy through a process known as")
 ## LlamaTokenizer
 
 [[autodoc]] LlamaTokenizer
-    - get_special_tokens_mask
-    - save_vocabulary
-
-## LlamaTokenizerFast
-
-[[autodoc]] LlamaTokenizerFast
     - get_special_tokens_mask
     - update_post_processor
     - save_vocabulary

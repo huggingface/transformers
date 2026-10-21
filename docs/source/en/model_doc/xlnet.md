@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-06-19 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2019-06-19 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 # XLNet
 
@@ -45,8 +45,7 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 - Due to the difficulty of training a fully auto-regressive model over various factorization order, XLNet is pretrained
   using only a sub-set of the output tokens as target which are selected with the `target_mapping` input.
 - To use XLNet for sequential decoding (i.e. not in fully bi-directional setting), use the `perm_mask` and
-  `target_mapping` inputs to control the attention span and outputs (see examples in
-  *examples/pytorch/text-generation/run_generation.py*)
+  `target_mapping` inputs to control the attention span and outputs
 - XLNet is one of the few models that has no sequence length limit.
 - XLNet is not a traditional autoregressive model but uses a training strategy that builds on that. It permutes the tokens in the sentence, then allows the model to use the last n tokens to predict the token n+1. Since this is all done with a mask, the sentence is actually fed in the model in the right order, but instead of masking the first n tokens for n+1, XLNet uses a mask that hides the previous tokens in some given permutation of 1,…,sequence length.
 - XLNet also uses the same recurrence mechanism as Transformer-XL to build long-term dependencies.
@@ -68,10 +67,6 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 [[autodoc]] XLNetTokenizer
     - get_special_tokens_mask
     - save_vocabulary
-
-## XLNetTokenizerFast
-
-[[autodoc]] XLNetTokenizerFast
 
 ## XLNet specific outputs
 

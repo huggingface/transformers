@@ -13,6 +13,7 @@
 # limitations under the License.
 import os
 import tempfile
+import unittest
 
 from transformers.testing_utils import require_torch
 
@@ -20,8 +21,10 @@ from transformers.testing_utils import require_torch
 @require_torch
 def test_cli_download(cli):
     with tempfile.TemporaryDirectory() as tmpdir:
-        output = cli("download", "hf-internal-testing/tiny-random-gptj", "--cache-dir", tmpdir)
-        assert output.exit_code == 0
+        # TODO: only necessary for read-only cache systems; replace with a shared helper
+        with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmpdir}):
+            output = cli("download", "hf-internal-testing/tiny-random-gptj", "--cache-dir", tmpdir)
+            assert output.exit_code == 0
 
         # check if the model files are downloaded correctly
         model_dir = os.path.join(tmpdir, "models--hf-internal-testing--tiny-random-gptj")
@@ -38,14 +41,16 @@ def test_cli_download_trust_remote(cli, caplog, capsys):
 
     with capsys.disabled():
         with tempfile.TemporaryDirectory() as tmpdir:
-            output = cli(
-                "download",
-                "hf-internal-testing/test_dynamic_model_with_tokenizer",
-                "--trust-remote-code",
-                "--cache-dir",
-                tmpdir,
-            )
-            assert output.exit_code == 0
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmpdir}):
+                output = cli(
+                    "download",
+                    "hf-internal-testing/test_dynamic_model_with_tokenizer",
+                    "--trust-remote-code",
+                    "--cache-dir",
+                    tmpdir,
+                )
+                assert output.exit_code == 0
 
             # check if the model files are downloaded correctly
             model_dir = os.path.join(tmpdir, "models--hf-internal-testing--test_dynamic_model_with_tokenizer")

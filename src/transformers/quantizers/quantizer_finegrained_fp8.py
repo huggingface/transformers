@@ -24,8 +24,9 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     requires_calibration = False
     quantization_config: "FineGrainedFP8Config"
 
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
+    @property
+    def quantized_element_size(self) -> float:
+        return 1
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
@@ -67,8 +68,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             if (
                 not self.pre_quantized
                 and len(device_map) > 1
-                and "cpu" in device_map.values()
-                or "disk" in device_map.values()
+                and ("cpu" in device_map.values() or "disk" in device_map.values())
             ):
                 raise ValueError(
                     "You are attempting to load an FP8 model with a device_map that contains a cpu/disk device."
@@ -77,6 +77,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 )
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
+        # `FP8GroupedLinear` is a subclass of `FP8Linear`, so the tuple covers it implicitly.
         from ..integrations.finegrained_fp8 import FP8Experts, FP8Linear
 
         module, tensor_name = get_module_from_name(model, param_name)
@@ -87,23 +88,42 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 return True
         return False
 
-    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
-        "Return the element size (in bytes) for `param_name`."
-        if self.param_needs_quantization(model, param_name):
-            # 8 bit, this is neeed as when `pre_quantized`` is False, we don't set the dtype of the FP8Linear in order to correctly load the weights
-            return 1
-        return super().param_element_size(model, param_name, param)
+    def _normalize_modules_to_not_convert(self, model: "PreTrainedModel"):
+        """Rewrite the skip-list to the model's own module tree.
+        For models that were already released, if they have a list of modules to not quantize
+        we need to apply the weight renaming / weight conversion opérations to get the actual
+        layer name of the model in `transformers`.
+        """
+        skip = self.quantization_config.modules_to_not_convert
+        if not skip:
+            return
+
+        from ..conversion_mapping import get_model_conversion_mapping
+
+        renamings = get_model_conversion_mapping(model)
+        remapped = []
+        for name in skip:
+            renamed = name
+            for rename in renamings:
+                renamed, _ = rename.rename_source_key(renamed)
+            remapped.append(renamed)
+        self.quantization_config.modules_to_not_convert = remapped
 
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
         **kwargs,
     ):
-        from ..integrations.finegrained_fp8 import replace_with_fp8_linear
+        from ..integrations.finegrained_fp8 import replace_with_fp8_embedding, replace_with_fp8_linear
 
+        self._normalize_modules_to_not_convert(model)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
+
+        modules_to_convert = self.quantization_config.modules_to_convert
+        if self.pre_quantized and modules_to_convert:
+            replace_with_fp8_embedding(model, modules_to_convert, self.modules_to_not_convert)
 
         model = replace_with_fp8_linear(
             model,
@@ -112,28 +132,24 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
             pre_quantized=self.pre_quantized,
         )
 
-    def update_tp_plan(self, config):
-        if "Qwen3" in config.__class__.__name__:
-            text_plan = {
-                "layers.*.self_attn.q_proj.weight": "colwise",
-                "layers.*.self_attn.q_proj.weight_scale_inv": "colwise",
-                "layers.*.self_attn.k_proj.weight": "colwise",
-                "layers.*.self_attn.k_proj.weight_scale_inv": "colwise",
-                "layers.*.self_attn.v_proj.weight": "colwise",
-                "layers.*.self_attn.v_proj.weight_scale_inv": "colwise",
-                "layers.*.self_attn.o_proj.weight": "rowwise",
-                "layers.*.self_attn.o_proj.weight_scale_inv": "rowwise",
-                "layers.*.mlp.gate_proj.weight": "colwise",
-                "layers.*.mlp.gate_proj.weight_scale_inv": "colwise",
-                "layers.*.mlp.up_proj.weight": "colwise",
-                "layers.*.mlp.up_proj.weight_scale_inv": "colwise",
-                "layers.*.mlp.down_proj.weight": "rowwise",
-                "layers.*.mlp.down_proj.weight_scale_inv": "rowwise",
-            }
+    def _process_model_after_weight_loading(self, model, **kwargs):
+        # Single-process multi-device is unsafe for DeepGEMM (its kernels are bound to one CUDA
+        # context); route those models through Triton/grouped_mm instead.
+        from ..integrations.finegrained_fp8 import _disable_deepgemm_on_multi_device
 
-            config.base_model_tp_plan = text_plan
+        _disable_deepgemm_on_multi_device(model)
+        return model
 
-        return config
+    def update_parallel_plan(self, model, plan):
+        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
+        from ..integrations.finegrained_fp8 import FP8Experts
+
+        super().update_parallel_plan(model, plan)
+        # Per-tensor scales (`activation_scale`, `weight_scale_inv` without blocks) are scalars, not sharded
+        scalars = {replace_layer_number_by_wildcard(n) for n, p in model.named_parameters() if p.ndim == 0}
+        plan.update({name: "replicate" for name in scalars if _get_parameter_plan(name, plan) is not None})
+        overwrite = FP8Experts._impl_tp_layer_overrides.get(getattr(model.config, "_experts_implementation", None), {})
+        plan.update({key: overwrite.get(style, style) for key, style in plan.items()})
 
     def is_serializable(self):
         return True
@@ -151,76 +167,16 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         return Fp8Quantize(self)
 
-    def get_weight_conversions(self):
-        from ..core_model_loading import WeightConverter
+    serialized_names = {"weight": ["weight", "weight_scale_inv", "activation_scale"]}
+
+    def get_load_operations(self):
         from ..integrations.finegrained_fp8 import Fp8Dequantize
 
-        if self.pre_quantized and self.quantization_config.dequantize:
-            return [
-                # either use the dollar sign, or permute the source patterns to start matching against the scales first
-                # We also collect the activation scales, they will not be used
-                WeightConverter(
-                    source_patterns=["weight$", "weight_scale_inv", "activation_scale"],
-                    target_patterns="weight",
-                    operations=[Fp8Dequantize(self)],
-                )
-            ]
-        return []
+        return {"dequantize": Fp8Dequantize}
 
-    def update_weight_conversions(self, weight_conversions):
-        """When loading with ``dequantize=True``, attach an :class:`Fp8Dequantize` op to
-        every existing :class:`WeightConverter` so that per-block scales are folded into
-        the weight *before* any later merge/concat ops collapse the per-expert structure.
+    def update_weight_conversions(self, weight_conversions, model):
+        from ..core_model_loading import WeightRenaming
 
-        For each model-supplied converter that has a ``.weight`` source, we:
-          1. anchor the existing weight patterns with ``$`` so they don't accidentally
-             also match the ``.weight_scale_inv`` keys (the regex is searched, so the
-             unanchored prefix would match both, sending scales to the wrong bucket);
-          2. add anchored ``*.weight_scale_inv`` sources next to each weight pattern so
-             the loader collects scale tensors alongside the weight tensors into the
-             *same* converter bucket (both keys rewrite to the same target);
-          3. prepend a fresh :class:`Fp8Dequantize` op so dequant runs first, before
-             any merge/concat collapses the per-expert structure.
-
-        The generic ``weight$ + weight_scale_inv → weight`` converter from
-        :meth:`get_weight_conversions` is still appended at the end as a fallback for
-        plain ``nn.Linear`` weights with no model-specific converter.
-        """
-        if not (self.pre_quantized and self.quantization_config.dequantize):
-            return weight_conversions + self.get_weight_conversions()
-
-        from ..core_model_loading import WeightConverter, WeightRenaming
-        from ..integrations.finegrained_fp8 import Fp8Dequantize
-
-        # Some upstream FP8 checkpoints (e.g. DeepSeek-V4-Flash) ship per-block scales
-        # under a ``.scale`` suffix instead of HF's canonical ``.weight_scale_inv``.
-        # Prepending the rename here (instead of in each model's conversion_mapping)
-        # keeps the model-side mapping clean — the rename only kicks in when FP8 dequant
-        # is actually active, so a non-FP8 save / load round-trip doesn't see a stray
-        # rule that ``test_reverse_loading_mapping`` can't match.
-        scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale$", target_patterns=r"\1.weight_scale_inv")
-        weight_conversions = [scale_rename] + list(weight_conversions)
-
-        updated: list = []
-        for conv in weight_conversions:
-            # Only WeightConverter has ``.operations`` to extend with the dequant op;
-            # WeightRenaming (e.g. the ``scale_rename`` we prepended) just passes through.
-            if not isinstance(conv, WeightConverter):
-                updated.append(conv)
-                continue
-            weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
-            if weight_sources:
-                anchored_weight = [p + "$" for p in weight_sources]
-                scale_sources = [p[: -len(".weight")] + ".weight_scale_inv$" for p in weight_sources]
-                other = [p for p in conv.source_patterns if not p.endswith(".weight")]
-                new_sources = anchored_weight + scale_sources + other
-                new_ops = [Fp8Dequantize(self)] + list(conv.operations)
-                conv = WeightConverter(
-                    source_patterns=new_sources,
-                    target_patterns=conv._original_target_patterns,
-                    operations=new_ops,
-                )
-            updated.append(conv)
-        # Generic fallback for plain ``nn.Linear`` weights with no model-specific converter.
-        updated.extend(self.get_weight_conversions())
-        return updated
+        # Some FP8 checkpoints (e.g. DeepSeek-V4-Flash) ship per-block scales under `.scale`
+        scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv")
+        return [scale_rename] + super().update_weight_conversions(weight_conversions, model)

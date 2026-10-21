@@ -35,23 +35,26 @@ limitations under the License.
 
 <h4 align="center">
     <p>
-        <a href="https://github.com/huggingface/transformers/">English</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hans.md">简体中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hant.md">繁體中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ko.md">한국어</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_es.md">Español</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ja.md">日本語</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_hd.md">हिन्दी</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ru.md">Русский</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_pt-br.md">Рortuguês</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
+        <a href="../README.md">English</a> |
+        <a href="README_zh-hans.md">简体中文</a> |
+        <a href="README_zh-hant.md">繁體中文</a> |
+        <a href="README_ko.md">한국어</a> |
+        <a href="README_es.md">Español</a> |
+        <a href="README_ja.md">日本語</a> |
+        <a href="README_hd.md">हिन्दी</a> |
+        <a href="README_ru.md">Русский</a> |
+        <a href="README_pt-br.md">Рortuguês</a> |
+        <a href="README_te.md">తెలుగు</a> |
+        <a href="README_fr.md">Français</a> |
         <b>Deutsch</b> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
+        <a href="README_it.md">Italiano</a> |
+        <a href="README_vi.md">Tiếng Việt</a> |
+        <a href="README_ar.md">العربية</a> |
+        <a href="README_ur.md">اردو</a> |
+        <a href="README_bn.md">বাংলা</a> |
+        <a href="README_fa.md">فارسی</a> |
+        <a href="README_ro.md">Română</a> |
+        <a href="README_tr.md">Türkçe</a>
     </p>
 </h4>
 
@@ -242,13 +245,12 @@ Das Modell selbst ist ein reguläres [PyTorch `nn.Module`](https://pytorch.org/d
 
 - Diese Bibliothek ist kein modularer Werkzeugkasten mit Bausteinen für neuronale Netze. Der Code in den Modelldateien ist absichtlich nicht mit zusätzlichen Abstraktionen refaktorisiert, sodass Forscher schnell mit jedem der Modelle iterieren können, ohne sich in zusätzliche Abstraktionen/Dateien vertiefen zu müssen.
 - Die Trainings-API ist nicht dafür gedacht, mit beliebigen Modellen zu funktionieren, sondern ist für die Verwendung mit den von der Bibliothek bereitgestellten Modellen optimiert. Für generische Trainingsschleifen von maschinellem Lernen sollten Sie eine andere Bibliothek verwenden (möglicherweise [Accelerate](https://huggingface.co/docs/accelerate)).
-- Auch wenn wir bestrebt sind, so viele Anwendungsfälle wie möglich zu veranschaulichen, sind die Beispielskripte in unserem [`examples`](./examples) Ordner genau das: Beispiele. Es ist davon auszugehen, dass sie nicht sofort auf Ihr spezielles Problem anwendbar sind und einige Codezeilen geändert werden müssen, um sie für Ihre Bedürfnisse anzupassen.
 
 ## Installation
 
 ### Mit pip
 
-Dieses Repository wurde mit Python 3.10+ und PyTorch 2.4+ getestet.
+Dieses Repository wurde mit Python 3.10+ und PyTorch 2.5+ getestet.
 
 Sie sollten 🤗 Transformers in einer [virtuellen Umgebung](https://docs.python.org/3/library/venv.html) installieren. Wenn Sie mit virtuellen Python-Umgebungen nicht vertraut sind, schauen Sie sich den [Benutzerleitfaden](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/) an.
 
@@ -288,7 +290,7 @@ Aktuelle Anzahl der Checkpoints: ![](https://img.shields.io/endpoint?url=https:/
 
 Um zu überprüfen, ob jedes Modell eine Implementierung in Flax, PyTorch oder TensorFlow hat oder über einen zugehörigen Tokenizer verfügt, der von der 🤗 Tokenizers-Bibliothek unterstützt wird, schauen Sie auf [diese Tabelle](https://huggingface.co/docs/transformers/index#supported-frameworks).
 
-Diese Implementierungen wurden mit mehreren Datensätzen getestet (siehe Beispielskripte) und sollten den Leistungen der ursprünglichen Implementierungen entsprechen. Weitere Details zur Leistung finden Sie im Abschnitt der Beispiele in der [Dokumentation](https://github.com/huggingface/transformers/tree/main/examples).
+Diese Implementierungen wurden mit mehreren Datensätzen getestet und sollten den Leistungen der ursprünglichen Implementierungen entsprechen.
 
 ## Mehr erfahren
 
@@ -298,7 +300,6 @@ Diese Implementierungen wurden mit mehreren Datensätzen getestet (siehe Beispie
 | [Zusammenfassung der Aufgaben](https://huggingface.co/docs/transformers/task_summary) | Von 🤗 Transformers unterstützte Aufgaben |
 | [Vorverarbeitungs-Tutorial](https://huggingface.co/docs/transformers/preprocessing) | Verwendung der `Tokenizer`-Klasse zur Vorverarbeitung der Daten für die Modelle |
 | [Training und Feintuning](https://huggingface.co/docs/transformers/training) | Verwendung der von 🤗 Transformers bereitgestellten Modelle in einer PyTorch-/TensorFlow-Trainingsschleife und der `Trainer`-API |
-| [Schnelleinstieg: Feintuning/Anwendungsskripte](https://github.com/huggingface/transformers/tree/main/examples) | Beispielskripte für das Feintuning von Modellen für eine breite Palette von Aufgaben |
 | [Modellfreigabe und -upload](https://huggingface.co/docs/transformers/model_sharing) | Laden Sie Ihre feingetunten Modelle hoch und teilen Sie sie mit der Community |
 
 ## Zitation

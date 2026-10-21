@@ -13,7 +13,7 @@
 # limitations under the License.
 """Tokenization classes for ALBERT model."""
 
-from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -93,6 +93,7 @@ class AlbertTokenizer(TokenizersBackend):
         pad_token: str = "<pad>",
         cls_token: str = "[CLS]",
         mask_token: str = "[MASK]",
+        _spm_precompiled_charsmap: str | None = None,
         add_prefix_space: bool = True,
         trim_offsets: bool = True,
         **kwargs,
@@ -101,6 +102,7 @@ class AlbertTokenizer(TokenizersBackend):
         self.trim_offsets = trim_offsets
         self.do_lower_case = do_lower_case
         self.keep_accents = keep_accents
+        self._spm_precompiled_charsmap = _spm_precompiled_charsmap
 
         if vocab is not None:
             self._vocab_scores = vocab
@@ -124,10 +126,6 @@ class AlbertTokenizer(TokenizersBackend):
         list_normalizers = [
             normalizers.Replace("``", '"'),
             normalizers.Replace("''", '"'),
-            normalizers.NFKD(),
-            normalizers.StripAccents(),
-            normalizers.Lowercase(),
-            normalizers.Replace(Regex(" {2,}"), " "),
         ]
         if not self.keep_accents:
             list_normalizers.append(normalizers.NFKD())
@@ -135,7 +133,8 @@ class AlbertTokenizer(TokenizersBackend):
         if self.do_lower_case:
             list_normalizers.append(normalizers.Lowercase())
 
-        list_normalizers.append(normalizers.Replace(Regex(" {2,}"), " "))
+        if _spm_precompiled_charsmap is not None:
+            list_normalizers.append(normalizers.Precompiled(_spm_precompiled_charsmap))
         self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
 
         prepend_scheme = "always" if add_prefix_space else "never"
@@ -167,6 +166,7 @@ class AlbertTokenizer(TokenizersBackend):
             unk_token=unk_token,
             pad_token=pad_token,
             mask_token=mask_token,
+            _spm_precompiled_charsmap=_spm_precompiled_charsmap,
             add_prefix_space=add_prefix_space,
             trim_offsets=trim_offsets,
             **kwargs,

@@ -20,30 +20,27 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring
 
 
-logger = logging.get_logger(__name__)
-
-
-@auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     r"""
     max_source_positions (`int`, *optional*, defaults to 1500):
         Maximum sequence length for the inputs
-    n_window (`int`, *optional*, defaults to 100):
-        Number of windwos
+    n_window (`int`, *optional*, defaults to 50):
+        Number of windows
     output_dim (`int`, *optional*, defaults to 3584):
         Dimensionality of the output
-    n_window_infer (`int`, *optional*, defaults to `400`):
+    n_window_infer (`int`, *optional*, defaults to `800`):
         Number of windows during inference
     conv_chunksize (`int`, *optional*, defaults to `500`):
         Chunk size of each input to convolutional layer
     downsample_hidden_size (`int`, *optional*, defaults to `480`):
-        Hidden size in donwsampling layer
+        Hidden size in downsampling layer
     """
 
     model_type = "qwen3_omni_moe_audio_encoder"
@@ -67,15 +64,14 @@ class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     max_source_positions: int = 1500
 
-    n_window: int = 100
+    n_window: int = 50
     output_dim: int = 3584
-
-    n_window_infer: int = 400
+    n_window_infer: int = 800
     conv_chunksize: int = 500
     downsample_hidden_size: int = 480
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     r"""
@@ -89,6 +85,8 @@ class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
 
     model_type = "qwen3_omni_moe_vision_encoder"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -103,9 +101,10 @@ class Qwen3OmniMoeVisionEncoderConfig(PreTrainedConfig):
     num_position_embeddings: int = 2304
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeTextConfig(PreTrainedConfig):
     r"""
@@ -138,23 +137,24 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
-
     ignore_keys_at_rope_validation = {"mrope_section", "interleaved", "mrope_interleaved"}
 
     vocab_size: int = 3584
@@ -190,7 +190,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
     r"""
@@ -219,10 +219,10 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
     model_type = "qwen3_omni_moe_thinker"
     # Override parent's attribute_map as we use audio_token_id directly, not audio_token_index
     attribute_map = {}
-    sub_configs = {
-        "audio_config": Qwen3OmniMoeAudioEncoderConfig,
-        "vision_config": Qwen3OmniMoeVisionEncoderConfig,
-        "text_config": Qwen3OmniMoeTextConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Qwen3OmniMoeTextConfig),
+        "vision_config": SubConfigSpec(config_class=Qwen3OmniMoeVisionEncoderConfig),
+        "audio_config": SubConfigSpec(config_class=Qwen3OmniMoeAudioEncoderConfig),
     }
 
     audio_config: dict | PreTrainedConfig | None = None
@@ -238,26 +238,8 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
     image_token_id: int = 151655
     video_token_id: int = 151656
 
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Qwen3OmniMoeVisionEncoderConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Qwen3OmniMoeVisionEncoderConfig()
 
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Qwen3OmniMoeAudioEncoderConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = Qwen3OmniMoeAudioEncoderConfig()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = Qwen3OmniMoeTextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = Qwen3OmniMoeTextConfig()
-
-        super().__post_init__(**kwargs)
-
-
-@auto_docstring(checkpoint="Qwen/Qwen3OmniMoeTalkerCodePredictor-8B")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
     r"""
@@ -268,55 +250,22 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
     model_type = "qwen3_omni_moe_talker_code_predictor"
     keys_to_ignore_at_inference = ["past_key_values"]
 
-    # TP plan (for inference/generation).
-    # All activations are plain tensors — compatible with KV cache and autoregressive
-    # decode (seq_len=1). Each rank holds a full copy of activations between layers.
+    # Default tensor parallel plan for base model `Qwen3OmniMoeTalkerCodePredictor`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
-    }
-
-    # TP + Sequence Parallelism plan (for training).
-    # Activations between layers are sharded on the sequence dimension (Shard(1)),
-    # reducing per-rank activation memory by tp_size. In exchange, extra collectives
-    # (all-gather before attention/MLP, reduce-scatter after) are needed.
-    # Not compatible with autoregressive decode (because seq_len=1 can't be split across ranks)
-    # or KV cache (which stores plain tensors).
-    base_model_sp_plan = {
-        "embed_tokens": "vocab_reduce_scatter",
-        "layers.*.input_layernorm": "activation",
-        "layers.*.self_attn": "module_allgather_hidden_states",
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.q_norm": "activation_seq_dim_2",
-        "layers.*.self_attn.k_norm": "activation_seq_dim_2",
-        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
-        "layers.*.post_attention_layernorm": "activation",
-        "layers.*.mlp": "module_allgather",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
-        "norm": "activation",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    # FSDP2 plan. Values are sharding strategies; policies (cpu_offload, mixed_precision)
-    # live on DistributedConfig.fsdp_plan. All entries marked `keep_full_weight` are bundled
-    # into a single fully_shard([...]) call at apply time so they share one all-gather.
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 2048
@@ -358,7 +307,7 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
     r"""
@@ -395,46 +344,25 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
-    }
-    base_model_sp_plan = {
-        "embed_tokens": "vocab_reduce_scatter",
-        "layers.*.input_layernorm": "activation",
-        "layers.*.self_attn": "module_allgather_hidden_states",
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
-        "layers.*.self_attn.q_norm": "activation_seq_dim_2",
-        "layers.*.self_attn.k_norm": "activation_seq_dim_2",
-        "layers.*.post_attention_layernorm": "activation",
-        "layers.*.mlp": "module_allgather_split",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
-        "norm": "activation",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 3072
@@ -471,7 +399,7 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     r"""
@@ -523,9 +451,9 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     >>> print(config.code_predictor_config)  # Access code predictor configuration
     ```"""
 
-    sub_configs = {
-        "code_predictor_config": Qwen3OmniMoeTalkerCodePredictorConfig,
-        "text_config": Qwen3OmniMoeTalkerTextConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerTextConfig),
+        "code_predictor_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerCodePredictorConfig),
     }
 
     code_predictor_config: dict | PreTrainedConfig | None = None
@@ -549,24 +477,8 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False
 
-    def __post_init__(self, **kwargs):
-        if self.code_predictor_config is None:
-            self.code_predictor_config = {}
-            self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig()
-            logger.info("code_predictor_config is None. Initializing code_predictor_config model with default values")
-        else:
-            self.code_predictor_config = Qwen3OmniMoeTalkerCodePredictorConfig(**self.code_predictor_config)
 
-        if self.text_config is None:
-            self.text_config = {}
-            self.text_config = Qwen3OmniMoeTalkerTextConfig()
-            logger.info("talker text_config is None. Initializing talker text model with default values")
-        else:
-            self.text_config = Qwen3OmniMoeTalkerTextConfig(**self.text_config)
-        super().__post_init__(**kwargs)
-
-
-@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     r"""
@@ -617,12 +529,12 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
     @property
     def layer_types(self):
         """
-        All layer in code2wav should be sliding attention
+        All layers in code2wav should be sliding attention
         """
         return ["sliding_attention"] * self.num_hidden_layers
 
 
-@auto_docstring(checkpoint="Qwen/Qwen3-30B-A3B-Base")
+@auto_docstring(checkpoint="Qwen/Qwen3-Omni-30B-A3B-Instruct")
 @strict
 class Qwen3OmniMoeConfig(PreTrainedConfig):
     r"""
@@ -673,10 +585,10 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_omni_moe"
-    sub_configs = {
-        "thinker_config": Qwen3OmniMoeThinkerConfig,
-        "talker_config": Qwen3OmniMoeTalkerConfig,
-        "code2wav_config": Qwen3OmniMoeCode2WavConfig,
+    sub_configs_defaults = {
+        "thinker_config": SubConfigSpec(config_class=Qwen3OmniMoeThinkerConfig),
+        "talker_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerConfig),
+        "code2wav_config": SubConfigSpec(config_class=Qwen3OmniMoeCode2WavConfig),
     }
 
     thinker_config: dict | PreTrainedConfig | None = None
@@ -694,28 +606,9 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
     initializer_range: float | None = None
 
     def __post_init__(self, **kwargs):
-        if self.thinker_config is None:
-            self.thinker_config = Qwen3OmniMoeThinkerConfig()
-            logger.info("thinker_config is None. Initializing thinker model with default values")
-        elif isinstance(self.thinker_config, dict):
-            self.thinker_config = Qwen3OmniMoeThinkerConfig(**self.thinker_config)
-
-        if self.talker_config is None:
-            self.talker_config = Qwen3OmniMoeTalkerConfig()
-            logger.info("talker_config is None. Initializing talker model with default values")
-        elif isinstance(self.talker_config, dict):
-            self.talker_config = Qwen3OmniMoeTalkerConfig(**self.talker_config)
-
-        if self.code2wav_config is None:
-            self.code2wav_config = Qwen3OmniMoeCode2WavConfig()
-            logger.info("code2wav_config is None. Initializing code2wav_config model with default values")
-        elif isinstance(self.code2wav_config, dict):
-            self.code2wav_config = Qwen3OmniMoeCode2WavConfig(**self.code2wav_config)
-
+        super().__post_init__(**kwargs)
         if self.initializer_range is None:
             self.initializer_range = self.thinker_config.initializer_range
-
-        super().__post_init__(**kwargs)
 
     def get_text_config(self, decoder=False) -> "PreTrainedConfig":
         """
@@ -733,10 +626,10 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
 
 
 __all__ = [
+    "Qwen3OmniMoeAudioEncoderConfig",
     "Qwen3OmniMoeConfig",
     "Qwen3OmniMoeThinkerConfig",
     "Qwen3OmniMoeTalkerConfig",
-    "Qwen3OmniMoeAudioEncoderConfig",
     "Qwen3OmniMoeTalkerCodePredictorConfig",
     "Qwen3OmniMoeTalkerTextConfig",
     "Qwen3OmniMoeTextConfig",

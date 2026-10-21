@@ -46,6 +46,13 @@ OPENAI_PRIVACY_FILTER_NER_LABELS = ("O",) + tuple(
 @auto_docstring(checkpoint="openai/privacy-filter")
 @strict
 class OpenAIPrivacyFilterConfig(PreTrainedConfig):
+    r"""
+    swiglu_alpha (`float`, *optional*, defaults to 1.702):
+        Sigmoid gain of the clamped SwiGLU the experts apply.
+    swiglu_limit (`float`, *optional*, defaults to 7.0):
+        Clamp applied to the gate (above) and the up projection (both sides) before that SwiGLU.
+    """
+
     model_type = "openai_privacy_filter"
     attribute_map = {
         "num_experts": "num_local_experts",
@@ -56,23 +63,15 @@ class OpenAIPrivacyFilterConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
     base_model_ep_plan = {
-        "layers.*.mlp.router": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.gate_up_proj_bias": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj_bias": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     num_hidden_layers: int = 8
     num_local_experts: int = 128
-
     vocab_size: int = 200064
     hidden_size: int = 640
     intermediate_size: int = 640
@@ -87,6 +86,8 @@ class OpenAIPrivacyFilterConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
     attention_dropout: float | int = 0.0
     num_experts_per_tok: int = 4
+    swiglu_alpha: float = 1.702
+    swiglu_limit: float = 7.0
     router_aux_loss_coef: float = 0.001
     output_router_logits: bool = False
     use_cache: bool = True

@@ -68,17 +68,6 @@ class BlipForConditionalGenerationModelOutput(ModelOutput):
         Prediction scores of the language modeling head of the text decoder model.
     image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*):
         The image embeddings obtained after applying the Vision Transformer model to the input image.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-        one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-        Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`.
-
-        Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-        heads.
     """
 
     loss: tuple[torch.FloatTensor] | None = None
@@ -264,9 +253,7 @@ class BlipTextEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(
         self,
@@ -610,7 +597,7 @@ class BlipModel(BlipPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipModel
 
@@ -653,7 +640,7 @@ class BlipModel(BlipPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipModel
 
@@ -708,7 +695,7 @@ class BlipModel(BlipPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipModel
 
@@ -823,7 +810,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForConditionalGeneration
 
@@ -891,7 +878,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForConditionalGeneration
 
@@ -998,7 +985,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForQuestionAnswering
 
@@ -1107,7 +1094,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForQuestionAnswering
 
@@ -1233,7 +1220,7 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForImageTextRetrieval
 

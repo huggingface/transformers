@@ -24,7 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -210,7 +210,10 @@ class Phi4MultimodalConfig(Phi3Config):
     >>> configuration = model.config
     ```"""
 
-    sub_configs = {"audio_config": Phi4MultimodalAudioConfig, "vision_config": Phi4MultimodalVisionConfig}
+    sub_configs_defaults = {
+        "audio_config": SubConfigSpec(config_class=Phi4MultimodalAudioConfig),
+        "vision_config": SubConfigSpec(config_class=Phi4MultimodalVisionConfig),
+    }
 
     vocab_size: int = 200064
     num_key_value_heads: int | None = 8
@@ -223,17 +226,8 @@ class Phi4MultimodalConfig(Phi3Config):
     audio_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        self.eos_token_id = self.eos_token_id or [199999, 200020]
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Phi4MultimodalVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Phi4MultimodalVisionConfig()
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Phi4MultimodalAudioConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = Phi4MultimodalAudioConfig()
         super().__post_init__(**kwargs)
+        self.eos_token_id = self.eos_token_id or [199999, 200020]
 
 
 class Phi4MultimodalVisionMLP(SiglipMLP):
@@ -346,11 +340,12 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, Phi4MultimodalVisionEmbeddings):
             width = (
                 self.config.hidden_size
                 if isinstance(self.config, Phi4MultimodalVisionConfig)
-                else self.config.hidden_size
+                else self.config.vision_config.hidden_size
             )
             init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
         elif isinstance(module, nn.Embedding):
@@ -377,9 +372,6 @@ class Phi4MultimodalVisionPreTrainedModel(SiglipPreTrainedModel):
             init.lecun_normal_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings):
@@ -428,9 +420,6 @@ class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings):
 
         fractional_coords_h = torch.clamp(fractional_coords_h, max=(1.0 - 1e-6))
         fractional_coords_w = torch.clamp(fractional_coords_w, max=(1.0 - 1e-6))
-
-        fractional_coords_h = fractional_coords_h.to(pixel_values.dtype)
-        fractional_coords_w = fractional_coords_w.to(pixel_values.dtype)
 
         bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
         bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
@@ -911,8 +900,8 @@ class Phi4MultimodalAudioRelativeAttentionBias(nn.Module):
 class Phi4MultimodalAudioMeanVarianceNormLayer(nn.Module):
     def __init__(self, config: Phi4MultimodalAudioConfig):
         super().__init__()
-        self.register_buffer("global_mean", torch.zeros(config.input_size))
-        self.register_buffer("global_invstd", torch.ones(config.input_size))
+        self.global_mean = nn.Buffer(torch.zeros(config.input_size))
+        self.global_invstd = nn.Buffer(torch.ones(config.input_size))
 
     def forward(self, x):
         return (x - self.global_mean) * self.global_invstd
@@ -1416,10 +1405,6 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
             Size of the audio inputs.
         audio_attention_mask (`torch.Tensor, *optional*):
             Attention mask for the audio inputs.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
         ```python
@@ -1458,7 +1443,7 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size)
+            loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         return CausalLMOutputWithPast(
             loss=loss,

@@ -575,7 +575,8 @@ class MobileViTV2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        super()._init_weights(module)
+        if isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -583,9 +584,6 @@ class MobileViTV2PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
-        elif isinstance(module, nn.GroupNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 @auto_docstring
@@ -695,12 +693,6 @@ class MobileViTV2ForImageClassification(MobileViTV2PreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | ImageClassifierOutputWithNoAttention:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss). If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.mobilevitv2(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
@@ -864,14 +856,10 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
         **kwargs,
     ) -> tuple | SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Examples:
 
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
         >>> from PIL import Image

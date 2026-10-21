@@ -2,10 +2,10 @@ import argparse
 import json
 from io import BytesIO
 
-import httpx
 import timm
 import torch
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers import AutoImageProcessor, SwinConfig, SwinForImageClassification
@@ -42,7 +42,7 @@ def get_swin_config(swin_name):
         num_classes = 1000
         repo_id = "huggingface/label-files"
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}

@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 for our doc-builder (similar to MDX) that may not render properly
 in your Markdown viewer.
 -->
-*This model was released on 2021-05-31 and added to Hugging Face Transformers on 2021-10-28.*
+*This model was published in HF papers on 2021-05-31 and contributed to Hugging Face Transformers on 2021-10-28.*
 
 
 # SegFormer

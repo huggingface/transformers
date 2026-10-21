@@ -53,23 +53,25 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     attribute_map = {
@@ -86,6 +88,7 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
     num_key_value_heads: int = 20
     n_shared_experts: int = 1
     n_routed_experts: int = 64
+    output_router_logits: bool = False
     routed_scaling_factor: float = 1.8
     kv_lora_rank: int = 512
     q_lora_rank: int | None = 768

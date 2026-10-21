@@ -9,11 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-01-02 and added to Hugging Face Transformers on 2021-08-17.*
+*This model was published in HF papers on 2021-01-02 and contributed to Hugging Face Transformers on 2021-08-17.*
 
 # Splinter
 
@@ -44,10 +44,9 @@ This model was contributed by [yuvalkirstain](https://huggingface.co/yuvalkirsta
   to question representations which are used to predict the answers. This layer is called QASS, and is the default
   behaviour in the [`SplinterForQuestionAnswering`] class. Therefore:
 - Use [`SplinterTokenizer`] (rather than [`BertTokenizer`]), as it already
-  contains this special token. Also, its default behavior is to use this token when two sequences are given (for
-  example, in the *run_qa.py* script).
-- If you plan on using Splinter outside *run_qa.py*, please keep in mind the question token - it might be important for
-  the success of your model, especially in a few-shot setting.
+  contains this special token. Also, its default behavior is to use this token when two sequences are given.
+- Keep in mind the question token - it might be important for the success of your model, especially in a few-shot
+  setting.
 - Please note there are two different checkpoints for each size of Splinter. Both are basically the same, except that
   one also has the pretrained weights of the QASS layer (*tau/splinter-base-qass* and *tau/splinter-large-qass*) and one
   doesn't (*tau/splinter-base* and *tau/splinter-large*). This is done to support randomly initializing this layer at
@@ -55,7 +54,7 @@ This model was contributed by [yuvalkirstain](https://huggingface.co/yuvalkirsta
 
 ## Resources
 
-- [Question answering task guide](../tasks/question-answering)
+- [Question answering task guide](../tasks/question_answering)
 
 ## SplinterConfig
 
@@ -66,10 +65,6 @@ This model was contributed by [yuvalkirstain](https://huggingface.co/yuvalkirsta
 [[autodoc]] SplinterTokenizer
     - get_special_tokens_mask
     - save_vocabulary
-
-## SplinterTokenizerFast
-
-[[autodoc]] SplinterTokenizerFast
 
 ## SplinterModel
 

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-05-19 and added to Hugging Face Transformers on 2026-05-19.*
+*This model was contributed to Hugging Face Transformers on 2026-05-19.*
 
 # PP-OCRv6_small_det
 
@@ -23,11 +23,11 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-TODO.
+PP-OCRv6_small_det is the small model in the PP-OCRv6 detection series developed by the PaddleOCR team. It uses LCNetV4 as the backbone and RepLKFPN as the feature pyramid neck, providing accurate text localization across diverse scenarios including handwritten, printed, rotated, curved, and artistic text in multiple languages. The model contains 2.48M parameters.
 
 ## Model Architecture
 
-TODO.
+<img src="https://cdn-uploads.huggingface.co/production/uploads/684ba591e717a30275a1b76a/ofnSGExgJL6K6d8ghh0vl.png" width="600"/>
 
 ## Usage
 
@@ -41,7 +41,7 @@ The example below demonstrates how to detect text with PP-OCRv6_small_det using 
 ```python
 from io import BytesIO
 
-import httpx
+from huggingface_hub.utils import httpx
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 from transformers.image_utils import load_image
@@ -50,12 +50,19 @@ model_path = "PaddlePaddle/PP-OCRv6_small_det_safetensors" # or "PaddlePaddle/PP
 model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
+image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"
 image = load_image(image_url)
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
-results = image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
+results = image_processor.post_process_object_detection(
+    outputs, 
+    target_sizes=inputs["target_sizes"],
+    threshold=0.2,
+    box_threshold=0.45,
+    max_candidates=3000,
+    unclip_ratio=1.4,
+)
 
 for result in results:
     print(result)
@@ -74,7 +81,7 @@ Here is how you can do it with PP-OCRv6_small_det using the [`AutoModel`]:
 ```python
 from io import BytesIO
 
-import httpx
+from huggingface_hub.utils import httpx
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 from transformers.image_utils import load_image
@@ -83,12 +90,19 @@ model_path = "PaddlePaddle/PP-OCRv6_small_det_safetensors" # or "PaddlePaddle/PP
 model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
+image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"
 image = load_image(image_url)
 inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
-results = image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
+results = image_processor.post_process_object_detection(
+    outputs, 
+    target_sizes=inputs["target_sizes"],
+    threshold=0.2,
+    box_threshold=0.45,
+    max_candidates=3000,
+    unclip_ratio=1.4,
+)
 
 for result in results:
     print(result)

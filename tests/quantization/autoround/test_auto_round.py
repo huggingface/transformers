@@ -124,7 +124,7 @@ class AutoRoundTest(unittest.TestCase):
         Simple test that checks if the quantized model is working properly after being saved and loaded
         """
 
-        ## some backends like marlin/ipex will repack the weight that caused the weight shape changed
+        ## some backends like marlin/ark will repack the weight that caused the weight shape changed
         with tempfile.TemporaryDirectory() as tmpdirname:
             quantization_config = AutoRoundConfig(backend="triton")
             quantized_model = AutoModelForCausalLM.from_pretrained(

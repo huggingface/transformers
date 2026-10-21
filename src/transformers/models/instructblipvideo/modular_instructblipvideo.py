@@ -182,6 +182,7 @@ class InstructBlipVideoModel(InstructBlipModel):
 
         qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
         qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = qformer_attention_mask.to(query_attention_mask.device)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         query_outputs = self.qformer(
             input_ids=qformer_input_ids,
@@ -205,11 +206,11 @@ class InstructBlipVideoModel(InstructBlipModel):
                 attention_mask = torch.ones_like(input_ids)
         else:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
 
@@ -288,6 +289,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
 
         qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
         qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = qformer_attention_mask.to(query_attention_mask.device)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         qformer_outputs = self.qformer(
             input_ids=qformer_input_ids,
@@ -318,13 +320,13 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
             special_image_mask = input_ids == self.config.video_token_id
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask
 
     @can_return_tuple
@@ -342,6 +344,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
         use_cache: bool | None = None,
+        mm_encoder_outputs: BaseModelOutputWithPooling | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | InstructBlipVideoForConditionalGenerationModelOutput:
         r"""
@@ -387,7 +390,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         ... )
         >>> container = av.open(file_path)
 
-        >>> # sample uniformly 4 frames from the videWhy is this video funny?o
+        >>> # sample uniformly 4 frames from the video
         >>> total_frames = container.streams.video[0].frames
         >>> indices = np.arange(0, total_frames, total_frames / 4).astype(int)
         >>> clip = read_video_pyav(container, indices)
@@ -407,16 +410,21 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         >>> print(generated_text)
         "A person is eating a bowl of pasta, and they are using a fork to eat it. The person is sitting at a table, and the plate of pasta is on the table in front"
         ```"""
-        video_features: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
-            pixel_values,
-            qformer_input_ids=qformer_input_ids,
-            qformer_attention_mask=qformer_attention_mask,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            **kwargs,
-        )
-        language_model_inputs = video_features.pooler_output
-        qformer_outputs = video_features.qformer_outputs
-        vision_outputs = video_features.vision_outputs
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("video") is None:
+            mm_encoder_outputs["video"]: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
+                pixel_values,
+                qformer_input_ids=qformer_input_ids,
+                qformer_attention_mask=qformer_attention_mask,
+                interpolate_pos_encoding=interpolate_pos_encoding,
+                **kwargs,
+            )
+        language_model_inputs = mm_encoder_outputs["video"].pooler_output
+        qformer_outputs = mm_encoder_outputs["video"].qformer_outputs
+        vision_outputs = mm_encoder_outputs["video"].vision_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)

@@ -35,23 +35,26 @@ limitations under the License.
 
 <h4 align="center">
     <p>
-        <a href="https://github.com/huggingface/transformers/blob/main/README.md">English</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hans.md">简体中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hant.md">繁體中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ko.md">한국어</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_es.md">Español</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ja.md">日本語</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_hd.md">हिन्दी</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ru.md">Русский</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_pt-br.md">Рortuguês</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
+        <a href="../README.md">English</a> |
+        <a href="README_zh-hans.md">简体中文</a> |
+        <a href="README_zh-hant.md">繁體中文</a> |
+        <a href="README_ko.md">한국어</a> |
+        <a href="README_es.md">Español</a> |
+        <a href="README_ja.md">日本語</a> |
+        <a href="README_hd.md">हिन्दी</a> |
+        <a href="README_ru.md">Русский</a> |
+        <a href="README_pt-br.md">Português</a> |
+        <a href="README_te.md">తెలుగు</a> |
+        <a href="README_fr.md">Français</a> |
+        <a href="README_de.md">Deutsch</a> |
+        <a href="README_it.md">Italiano</a> |
+        <a href="README_vi.md">Tiếng Việt</a> |
+        <a href="README_ar.md">العربية</a> |
         <b>اردو</b> |
+        <a href="README_bn.md">বাংলা</a> |
+        <a href="README_fa.md">فارسی</a> |
+        <a href="README_ro.md">Română</a> |
+        <a href="README_tr.md">Türkçe</a>
     </p>
 </h4>
 
@@ -255,13 +258,12 @@ limitations under the License.
 
 - یہ لائبریری نیورل نیٹس کے لیے بلڈنگ بلاکس کا ماڈیولر ٹول باکس نہیں ہے۔ ماڈل فائلز میں موجود کوڈ جان بوجھ کر اضافی ایبسٹریکشنز کے ساتھ دوبارہ ترتیب نہیں دیا گیا ہے، تاکہ محققین بغیر اضافی ایبسٹریکشنز/فائلوں میں گئے ہوئے جلدی سے ہر ماڈل پر کام کر سکیں۔
 - تربیتی API کا مقصد کسی بھی ماڈل پر کام کرنے کے لیے نہیں ہے بلکہ یہ لائبریری کے فراہم کردہ ماڈلز کے ساتھ کام کرنے کے لیے بہتر بنایا گیا ہے۔ عام مشین لرننگ لوپس کے لیے، آپ کو دوسری لائبریری (ممکنہ طور پر [Accelerate](https://huggingface.co/docs/accelerate)) استعمال کرنی چاہیے۔
-- حالانکہ ہم جتنا ممکن ہو زیادہ سے زیادہ استعمال کے کیسز پیش کرنے کی کوشش کرتے ہیں، ہمارے [مثالوں کے فولڈر](https://github.com/huggingface/transformers/tree/main/examples) میں موجود اسکرپٹس صرف یہی ہیں: مثالیں۔ یہ توقع کی جاتی ہے کہ یہ آپ کے مخصوص مسئلے پر فوراً کام نہیں کریں گی اور آپ کو اپنی ضروریات کے مطابق کوڈ کی کچھ لائنیں تبدیل کرنی پڑیں گی۔
 
 ### انسٹالیشن
 
 #### &#8207; pip کے ساتھ
 
-یہ ریپوزٹری Python 3.10+ اور PyTorch 2.4+ پر ٹیسٹ کی گئی ہے۔
+یہ ریپوزٹری Python 3.10+ اور PyTorch 2.5+ پر ٹیسٹ کی گئی ہے۔
 
 آپ کو 🤗 Transformers کو ایک [ورچوئل ماحول](https://docs.python.org/3/library/venv.html) میں انسٹال کرنا چاہیے۔ اگر آپ Python ورچوئل ماحول سے واقف نہیں ہیں، تو [یوزر گائیڈ](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/) دیکھیں۔
 
@@ -302,7 +304,7 @@ Flax، PyTorch، یا TensorFlow کو conda کے ساتھ انسٹال کرنے 
 
 یہ چیک کرنے کے لیے کہ ہر ماڈل کی Flax، PyTorch یا TensorFlow میں کوئی عملداری ہے یا 🤗 Tokenizers لائبریری کے ذریعہ سپورٹ کردہ ٹوکنائزر کے ساتھ ہے، [اس جدول](https://huggingface.co/docs/transformers/index#supported-frameworks) کا حوالہ لیں۔
 
-یہ عملداری مختلف ڈیٹا سیٹس پر ٹیسٹ کی گئی ہیں (مثال کے اسکرپٹس دیکھیں) اور اصل عملداری کی کارکردگی کے ہم آہنگ ہونی چاہئیں۔ آپ کو کارکردگی کی مزید تفصیلات [دستاویزات](https://github.com/huggingface/transformers/tree/main/examples) کے مثالوں کے سیکشن میں مل سکتی ہیں۔
+یہ عملداری مختلف ڈیٹا سیٹس پر ٹیسٹ کی گئی ہیں اور اصل عملداری کی کارکردگی کے ہم آہنگ ہونی چاہئیں۔
 
 
 ## مزید معلومات حاصل کریں
@@ -313,7 +315,6 @@ Flax، PyTorch، یا TensorFlow کو conda کے ساتھ انسٹال کرنے 
 | [ٹاسک کا خلاصہ](https://huggingface.co/docs/transformers/task_summary) | 🤗 Transformers کے ذریعہ سپورٹ کردہ ٹاسک |
 | [پری پروسیسنگ ٹیوٹوریل](https://huggingface.co/docs/transformers/preprocessing) | ماڈلز کے لیے ڈیٹا تیار کرنے کے لیے `Tokenizer` کلاس کا استعمال |
 | [ٹریننگ اور فائن ٹیوننگ](https://huggingface.co/docs/transformers/training) | PyTorch/TensorFlow ٹریننگ لوپ میں 🤗 Transformers کی طرف سے فراہم کردہ ماڈلز کا استعمال اور `Trainer` API |
-| [تیز دورہ: فائن ٹیوننگ/استعمال کے اسکرپٹس](https://github.com/huggingface/transformers/tree/main/examples) | مختلف قسم کے ٹاسک پر ماڈلز کو فائن ٹیون کرنے کے لیے مثال کے اسکرپٹس |
 | [ماڈل کا اشتراک اور اپ لوڈ کرنا](https://huggingface.co/docs/transformers/model_sharing) | اپنی فائن ٹیون کردہ ماڈلز کو کمیونٹی کے ساتھ اپ لوڈ اور شیئر کریں |
 
 ## استشہاد

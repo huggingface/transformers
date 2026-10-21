@@ -111,27 +111,18 @@ class DeepseekV4Config(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    # Main attention and the shared MLP stay replicated. Shared-KV MQA and the CSA / HCA compressor
+    # broadcast one KV head via `repeat_kv`, so colwise `q_b_proj` would mismatch the rank-local
+    # head count; the shared MLP is too small to be worth sharding.
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+    }
     base_model_ep_plan = {
-        # EP-only by default, same shape as gpt-oss: route on the gate, run the
-        # routed experts as a grouped-GEMM kernel sharded along the expert axis,
-        # and wrap the experts module with `moe_tp_experts` so its output gets
-        # all-reduced across ranks. Attention stays replicated (V4 is shared-KV
-        # MQA + a CSA / HCA compressor branch — both broadcast a single KV head
-        # across all attention heads via `repeat_kv`, so colwise-sharding
-        # `q_b_proj` would leave KV replicated and `repeat_kv` would no longer
-        # match the rank-local query head count). The shared MLP also stays
-        # replicated — it's small and not worth TP-ing. There's deliberately
-        # no `base_model_tp_plan` for V4: we don't ship a pure-TP plan, only EP.
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
-    }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 129280
@@ -289,12 +280,14 @@ class DeepseekV4Config(PreTrainedConfig):
             )
         self.qk_rope_head_dim = int(self.head_dim * self.partial_rotary_factor)
 
-        # yarn is applied ONLY to layers with a
-        # compressor (CSA/HCA); pure sliding-window layers use plain RoPE with
-        # `theta=rope_theta` (10000) and no scaling. Compress layers use
-        # `theta=compress_rope_theta` (160000) with yarn factor=16, and the reference
-        # does NOT multiply cos/sin by the yarn mscale — force `attention_factor=1.0`
-        # so transformers' `_compute_yarn_parameters` doesn't apply `0.1·log(16)+1`.
+        # yarn is applied ONLY to layers with a compressor (CSA/HCA); pure
+        # sliding-window layers use plain RoPE with `theta=rope_theta` (10000) and no
+        # scaling. Compress layers use `theta=compress_rope_theta` (160000) with yarn
+        # factor=16. For a YaRN compress layer we force `attention_factor=1.0`: the V4
+        # reference does NOT multiply cos/sin by YaRN's computed mscale, and leaving the
+        # key unset lets `_compute_yarn_parameters` derive `0.1·log(factor)+1 ≈ 1.277`.
+        # We only inject the key when `rope_type="yarn"` — the default-rope validator
+        # rejects it (and `compute_default_rope_parameters` hardcodes 1.0 anyway).
         rp = self.rope_parameters or {}
         if isinstance(rp.get("main"), dict) and isinstance(rp.get("compress"), dict):
             # Already nested — drop any leftover top-level keys.
@@ -310,9 +303,10 @@ class DeepseekV4Config(PreTrainedConfig):
                 **yarn,
                 "rope_theta": self.compress_rope_theta,
                 "partial_rotary_factor": self.partial_rotary_factor,
-                "attention_factor": 1.0,
             }
             compress.setdefault("rope_type", "default")
+            if compress["rope_type"] == "yarn":
+                compress.setdefault("attention_factor", 1.0)
             self.rope_parameters = {"main": main, "compress": compress}
 
 

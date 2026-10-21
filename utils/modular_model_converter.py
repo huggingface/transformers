@@ -26,6 +26,7 @@ import libcst as cst
 from create_dependency_mapping import find_priority_list
 from libcst import ClassDef, CSTVisitor
 from libcst import matchers as m
+from libcst.helpers import get_absolute_module_from_package_for_import
 from libcst.metadata import MetadataWrapper, ScopeProvider
 from modular_integrations import (
     EXCLUDED_EXTERNAL_FILES,
@@ -75,7 +76,29 @@ def get_module_source_from_name(module_name: str) -> str:
     return get_module_source_and_tree_from_name(module_name)[0]
 
 
+# Some exceptions to never replace, usually some package names that may contain model names (they may be used outside
+# `from xxx import y`)
+NAMES_TO_NEVER_REPLACE = (
+    "mamba_ssm",
+    "mamba-ssm",
+    "use_mambapy",
+    "mamba_inner_fn",
+    "mamba_selective_state_update",
+    "mamba_selective_scan",
+    "is_mambapy_available",
+    "mamba2_split_conv1d_scan_combined",
+    "mamba2_selective_state_update",
+    "mamba2_chunk_scan",
+)
+
+
 def preserve_case_replace(text, patterns: dict, default_name: str):
+    if text in NAMES_TO_NEVER_REPLACE:
+        return text
+    # For strings, node.value is the actual string INCLUDING enclosing quote characters
+    if text.strip('"') in NAMES_TO_NEVER_REPLACE:
+        return text
+
     # Create a regex pattern to match all variations
     regex_pattern = "|".join(re.escape(key) for key in patterns)
     compiled_regex = re.compile(f"(?<![a-z0-9])({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
@@ -210,6 +233,16 @@ def get_full_attribute_name(node: cst.Attribute | cst.Name) -> str | None:
     return None
 
 
+def get_assign_target(node: cst.CSTNode) -> cst.BaseAssignTargetExpression | None:
+    """Returns the target node of the assignment if `node` is a plain assignment (`self.x = ...`) or annotated assignment
+    (`self.x: int = ...`). Otherwise, returns `None`."""
+    if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+        return node.body[0].targets[0].target
+    if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
+        return node.body[0].target
+    return None
+
+
 class ReplaceParentClassCallTransformer(cst.CSTTransformer):
     """
     This Transformer is used to replace all calls of the form `module.Class.func(...)` by a call of the form
@@ -281,16 +314,20 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
         deduplicated_new_body = []
         existing_nodes = set()
         for node in new_statements:
-            if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
-                target = self.python_module.code_for_node(node.body[0].targets[0].target)
+            # Check if the node is an assign statement (typed or not)
+            target_node = get_assign_target(node)
+            if target_node is not None:
+                target = self.python_module.code_for_node(target_node)
                 self.all_assign_target[target] = node
+            # Check if the node is a delete statement
             if m.matches(node, m.SimpleStatementLine(body=[m.Del()])):
                 target = self.python_module.code_for_node(node.body[0].target)
                 self.deleted_targets[target] = node
 
         for stmt in existing_body:
-            if m.matches(stmt, m.SimpleStatementLine(body=[m.Assign()])):
-                target = self.python_module.code_for_node(stmt.body[0].targets[0].target)
+            target_node = get_assign_target(stmt)
+            if target_node is not None:
+                target = self.python_module.code_for_node(target_node)
                 if target in self.deleted_targets:
                     continue
                 if target in self.all_assign_target:
@@ -636,7 +673,7 @@ class ModuleMapper(CSTVisitor, ABC):
                 self.imports.append(node)
 
     def leave_SimpleStatementLine(self, node):
-        # No need to check for the parent here -> everytime we exit one, it should be None anyway independently of where the
+        # No need to check for the parent here -> every time we exit one, it should be None anyway independently of where the
         # SimpleStatement is located
         self.current_assignment = None
 
@@ -916,6 +953,36 @@ def common_partial_suffix(str1: str, str2: str) -> str:
     return common_suffix
 
 
+def get_decorators_to_keep(
+    mapper: ModelFileMapper,
+    modular_node: cst.ClassDef | cst.FunctionDef,
+    original_node: cst.ClassDef | cst.FunctionDef | None = None,
+) -> list[cst.Decorator]:
+    """Get decorators to keep when merging a modular class or function with its original definition.
+
+    There are 3 different possibilities for decorators, in order of priority:
+        1. Force no inherited decorators via special `no_inherit_decorator` (sole decorator).
+        2. Take the decorators attached in the modular file.
+        3. Inherit all existing decorators of the parent/original node, if any.
+    """
+    decorator_names = [mapper.python_module.code_for_node(dec.decorator) for dec in modular_node.decorators]
+    no_decorators_forced = "no_inherit_decorator" in decorator_names
+
+    if no_decorators_forced:
+        if len(modular_node.decorators) > 1:
+            raise ValueError(
+                "Detected `no_inherit_decorator` together with other decorators. "
+                f"Found decorators: {decorator_names}. Please make sure to use `no_inherit_decorator` "
+                "as the sole decorator."
+            )
+        return []
+
+    if modular_node.decorators:
+        return modular_node.decorators
+
+    return original_node.decorators if original_node is not None else []
+
+
 def replace_class_node(
     mapper: ModelFileMapper, modular_class_node: cst.ClassDef, renamed_super_class: str, original_super_class: str
 ) -> cst.ClassDef:
@@ -987,10 +1054,8 @@ def replace_class_node(
     if "nn.Module" in new_class_bases_names and "GradientCheckpointingLayer" in new_class_bases_names:
         new_class_bases = [k for k in new_class_bases if get_full_attribute_name(k.value) != "nn.Module"]
 
-    # Use class decorators redefined in modular file if any
-    new_class_decorators = (
-        modular_class_node.decorators if len(modular_class_node.decorators) > 0 else original_modeling_node.decorators
-    )
+    # Keep decorators according to the modular/original merge priority
+    new_class_decorators = get_decorators_to_keep(mapper, modular_class_node, original_modeling_node)
 
     # Compute new class docstring
     original_modeling_docstring = [
@@ -1003,20 +1068,18 @@ def replace_class_node(
     # Compute new class attributes
     original_modeling_class_attributes = {}
     for node in original_modeling_node.body.body:
-        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
-            original_modeling_class_attributes[node.body[0].targets[0].target.value] = node
-        elif m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
-            original_modeling_class_attributes[node.body[0].target.value] = node
+        target_node = get_assign_target(node)
+        if target_node is not None:
+            original_modeling_class_attributes[target_node.value] = node
 
     modular_class_attributes = {}
     for node in modular_class_node.body.body:
-        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+        target_node = get_assign_target(node)
+        if target_node is not None:
             if hasattr(node.body[0].value, "func") and node.body[0].value.func.value == "AttributeError":
-                original_modeling_class_attributes.pop(node.body[0].targets[0].target.value)
+                original_modeling_class_attributes.pop(target_node.value)
                 continue  # delete unnecessary cls attribute, especially in configs
-            modular_class_attributes[node.body[0].targets[0].target.value] = node
-        elif m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
-            modular_class_attributes[node.body[0].target.value] = node
+            modular_class_attributes[target_node.value] = node
 
     # Use all original modeling attributes, and potentially override some with values in the modular
     new_class_attributes = list({**original_modeling_class_attributes, **modular_class_attributes}.values())
@@ -1056,6 +1119,9 @@ def replace_class_node(
     new_class_methods = []
     # Iterate over the methods of the original modeling code, and add them to the list of methods to add
     for name, node in original_modeling_methods.items():
+        # A class attribute of the same name in modular shadows the method (e.g. a config field replacing a property)
+        if name.removesuffix("_setter") in modular_class_attributes:
+            continue
         # If the method was redefined in modular, make appropriate changes to the node
         if name in modular_methods:
             # Get the corresponding method node in modular
@@ -1089,8 +1155,8 @@ def replace_class_node(
                 new_param_list = list({**original_modeling_params, **modular_params}.values())
                 new_params = new_params.with_changes(params=new_param_list, star_kwarg=node.params.star_kwarg)
 
-            # Keep decorators in modular if any, else original decorators
-            new_decorators = modular_node.decorators if len(modular_node.decorators) > 0 else node.decorators
+            # Keep decorators according to the modular/original merge priority
+            new_decorators = get_decorators_to_keep(mapper, modular_node, node)
 
             # Keep return annotation in modular if any, else original return annotation
             new_return_annotation = modular_node.returns if modular_node.returns else node.returns
@@ -1135,6 +1201,8 @@ TYPE_TO_FILE_TYPE = {
     "ImageProcessorPil": "image_processing_pil",
     "VideoProcessor": "video_processing",
     "VideoProcessorInitKwargs": "video_processing",
+    "VideoProcessorKwargs": "video_processing",
+    "ImageProcessorPilKwargs": "image_processing_pil",
     "ImageProcessorKwargs": "image_processing",
     "FeatureExtractor": "feature_extraction",
     "ProcessorKwargs": "processing",
@@ -1169,7 +1237,30 @@ VARIABLES_AT_THE_BEGINNING = (
 )
 
 # These specific modeling imports should not be visited as other modeling files
-IMPORTS_TO_SKIP_IN_MODULAR = ("auto.modeling_auto",)
+MODEL_NAMES_TO_SKIP_IN_MODULAR = {"auto"}
+
+
+# Stands for the model of the file containing the import, e.g. the current model directory name
+# in `from .configuration_llama import LlamaConfig`
+CURRENT_MODEL = "__current_model__"
+
+
+def get_imported_model_name(node: cst.ImportFrom) -> str | None:
+    """Return the model directory `node` imports from, e.g. `llama` for `from ..llama.modeling_llama import X`,
+    `CURRENT_MODEL` for `from .configuration_llama import LlamaConfig`, or None if it does not import from a model."""
+    absolute_name = get_absolute_module_from_package_for_import(f"transformers.models.{CURRENT_MODEL}", node)
+    match = re.search(r"(?:^|\.)transformers\.models\.(\w+)", absolute_name or "")
+    return match.group(1) if match is not None else None
+
+
+def is_import_from_other_model(node: cst.CSTNode) -> bool:
+    """Whether `node` is an import statement from another model directory than the current model or MODEL_NAMES_TO_SKIP_IN_MODULAR."""
+    is_import_from = m.matches(node, m.SimpleStatementLine(body=[m.ImportFrom()]))
+    return is_import_from and get_imported_model_name(node.body[0]) not in {
+        None,
+        CURRENT_MODEL,
+        *MODEL_NAMES_TO_SKIP_IN_MODULAR,
+    }
 
 
 def append_new_import_node(
@@ -1279,12 +1370,12 @@ def _ensure_utils_availability_imports(imports: list[cst.CSTNode], needed: set[s
     return [new_import] + imports
 
 
-def protect_torch_imports_for_pil(imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
+def protect_torch_imports(imports: list[cst.CSTNode]) -> list[cst.CSTNode]:
     """
-    For PIL image processor files, collect all torch/torchvision imports — whether bare or
-    already wrapped in a guard — into a single `if is_torch_available():` /
-    `if is_torchvision_available():` block each. Add the required availability checks to the
-    utils import.
+    For files where torch is only a soft dependency (PIL image processors, feature extractors),
+    collect all torch/torchvision imports — whether bare or already wrapped in a guard — into a
+    single `if is_torch_available():` / `if is_torchvision_available():` block each. Add the
+    required availability checks to the utils import.
 
     Pre-existing guarded blocks (no else clause) are absorbed so we never emit duplicate guards
     for the same library.
@@ -1355,7 +1446,8 @@ def replace_unprotected_image_processing_imports(files: dict, all_imports: list)
         if isinstance(import_node, cst.SimpleStatementLine) and isinstance(import_node.body[0], cst.ImportFrom):
             import_node = import_node.body[0]
             full_name = get_full_attribute_name(import_node.module)
-            if re.search(r"^image_processing_(?!(?:backends)|(?:utils))", full_name):
+            # modules from which to import directly without duplicating nodes
+            if re.search(r"^image_processing_(?!(?:backends)|(?:utils)|(?:outputs))", full_name):
                 import_from_image_processing = import_node
                 break
 
@@ -1427,9 +1519,16 @@ class ModularFileMapper(ModuleMapper):
         # `node.module` is None for fully relative imports, e.g. `from ... import initialization as init`
         import_module = self.python_module.code_for_node(node.module) if node.module is not None else ""
         import_statement = "." * len(node.relative) + import_module
-        if any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR):
+        imported_model_name = get_imported_model_name(node)
+        if imported_model_name in MODEL_NAMES_TO_SKIP_IN_MODULAR:
             return
-        if m.matches(node.module, m.Attribute()):
+        elif get_imported_model_name(node) == self.model_name:
+            # do not allow imports like `from transformers.models.current_model import ...` or `from ...models.current_model import ...`
+            raise ValueError(
+                f"`{self.python_module.code_for_node(node)}` imports from `{self.model_name}` itself. Import files from "
+                f"`{self.model_name}` with a single-dot relative import instead, e.g. `from .configuration_{self.model_name} import ...`."
+            )
+        elif m.matches(node.module, m.Attribute()):
             for imported_ in node.names:
                 # If we match here, it's an import from 3rd party lib that we need to skip
                 if any(external_file["name"] in import_statement for external_file in self.excluded_external_files):
@@ -1464,6 +1563,11 @@ class ModularFileMapper(ModuleMapper):
                     f"You are importing from {import_module} directly using global imports. Import from the correct local path"
                 )
 
+    def visit_If(self, node):
+        # do not add imports from other models to the list of imports
+        statements = [stmt for stmt in node.body.body if not is_import_from_other_model(stmt)]
+        super().visit_If(node.with_changes(body=node.body.with_changes(body=statements)))
+
     def visit_SimpleStatementLine(self, node):
         """If we visit an import statement not previously visited, record it. If we visit a module-scope assignment,
         simply record it or, if it is `__all__`, split it between files where we should dispatch it.
@@ -1485,11 +1589,8 @@ class ModularFileMapper(ModuleMapper):
                     self.python_module.code_for_node(node.body[0].module) if node.body[0].module is not None else ""
                 )
                 import_statement = "." * len(node.body[0].relative) + import_module
-                if any(
+                if not is_import_from_other_model(node) or any(
                     external_file["name"] in import_statement for external_file in self.excluded_external_files
-                ) or not (
-                    re.search(rf"(?:transformers\.models\.)|(?:\.\.)\w+\.({self.match_patterns}).*", import_statement)
-                    and not any(import_to_skip in import_statement for import_to_skip in IMPORTS_TO_SKIP_IN_MODULAR)
                 ):
                     self.imports.append(node)
             elif m.matches(node, simple_top_level_assign_structure):
@@ -1563,6 +1664,11 @@ class ModularFileMapper(ModuleMapper):
                         break
 
             self.imported_objects_per_file[file_type].update(mapper.objects_imported_from_modeling)
+
+        # Functions explicitly imported in the modular are inlined, even if the file of an inherited class imports them
+        # from a sibling file
+        for imported_objects in self.imported_objects_per_file.values():
+            imported_objects.difference_update(self.added_objects_file_mapping)
 
     def merge_model_specific_imports(self, visited_modules):
         """Merge the functions and assignments imported from the modeling files to the modular nodes and dependency graph,
@@ -1933,8 +2039,8 @@ def create_modules(
         new_body = [k[1]["node"] for k in sorted(body.items(), key=lambda x: x[1]["insert_idx"])]
         needed_imports = get_needed_imports(body, all_imports)
 
-        if file == "image_processing_pil":
-            needed_imports = protect_torch_imports_for_pil(needed_imports)
+        if file in ("image_processing_pil", "feature_extraction"):
+            needed_imports = protect_torch_imports(needed_imports)
 
         if package_name != "transformers":
             # Convert all transformers relative imports to absolute ones

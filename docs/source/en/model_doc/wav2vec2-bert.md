@@ -9,11 +9,17 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-11-30 and added to Hugging Face Transformers on 2024-01-18.*
+*This model was published in HF papers on 2023-12-08 and contributed to Hugging Face Transformers on 2024-01-18.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # Wav2Vec2-BERT
 
@@ -43,12 +49,10 @@ This model was contributed by [ylacombe](https://huggingface.co/ylacombe). The o
 
 <PipelineTag pipeline="automatic-speech-recognition"/>
 
-- [`Wav2Vec2BertForCTC`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/speech-recognition).
 - You can also adapt these notebooks on [how to finetune a speech recognition model in English](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/speech_recognition.ipynb), and [how to finetune a speech recognition model in any language](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multi_lingual_speech_recognition.ipynb).
 
 <PipelineTag pipeline="audio-classification"/>
 
-- [`Wav2Vec2BertForSequenceClassification`] can be used by adapting this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/audio-classification).
 - See also: [Audio classification task guide](../tasks/audio_classification)
 
 ## Wav2Vec2BertConfig

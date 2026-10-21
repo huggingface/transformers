@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -60,22 +60,24 @@ class Qwen3_5TextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.self_attn.q_norm": "replicated_with_grad_allreduce",
+        "layers.*.self_attn.k_norm": "replicated_with_grad_allreduce",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.linear_attn.in_proj_qkv": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_z": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_b": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_a": "colwise_gather_output",
+        "layers.*.linear_attn.out_proj": "colwise_gather_output",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
+    base_model_ep_plan = None  # no Moe
 
     vocab_size: int = 248320
     hidden_size: int = 4096
@@ -129,6 +131,8 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
 
     model_type = "qwen3_5_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -142,6 +146,7 @@ class Qwen3_5VisionConfig(PreTrainedConfig):
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-27B")
@@ -164,7 +169,10 @@ class Qwen3_5Config(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_5"
-    sub_configs = {"vision_config": Qwen3_5VisionConfig, "text_config": Qwen3_5TextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Qwen3_5VisionConfig),
+        "text_config": SubConfigSpec(config_class=Qwen3_5TextConfig),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -177,16 +185,9 @@ class Qwen3_5Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen3_5":
+            # old ckpt with incorrect model type -> override manually
+            self.vision_config["model_type"] = "qwen3_5_vision"
         super().__post_init__(**kwargs)
 
 

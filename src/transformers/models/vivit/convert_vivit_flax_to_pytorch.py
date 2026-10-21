@@ -20,11 +20,11 @@ import json
 import os.path
 from collections import OrderedDict
 
-import httpx
 import numpy as np
 import torch
 from flax.training.checkpoints import restore_checkpoint
 from huggingface_hub import hf_hub_download
+from huggingface_hub.utils import httpx
 
 from transformers import VivitConfig, VivitForVideoClassification, VivitImageProcessor
 from transformers.image_utils import PILImageResampling
@@ -46,7 +46,7 @@ def get_vivit_config() -> VivitConfig:
     repo_id = "huggingface/label-files"
     filename = "kinetics400-id2label.json"
 
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r", encoding="utf-8"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}

@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Gemma4 model."""
 
+import tempfile
 import unittest
 from contextlib import contextmanager
 
@@ -21,13 +22,19 @@ from parameterized import parameterized
 
 from transformers import (
     AutoTokenizer,
+    Gemma4AudioConfig,
     Gemma4Config,
     Gemma4TextConfig,
+    Gemma4VisionConfig,
     is_torch_available,
+    logging,
+    set_seed,
 )
 from transformers.testing_utils import (
+    CaptureLogger,
     Expectations,
     cleanup,
+    require_deterministic_for_accelerator,
     require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
@@ -35,12 +42,13 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import ModelOutput
 
+from ...alm_tester import ALMModelTest, ALMModelTester
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import floats_tensor
 from ...test_processing_common import url_to_local_path
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
@@ -54,9 +62,18 @@ if is_torch_available():
         Gemma4Processor,
         Gemma4TextModel,
     )
+    from transformers.cache_utils import StaticCache
+    from transformers.models.gemma4.modeling_gemma4 import create_masks_for_vision_model
+
+
+GEMMA4_RANDOM_MOE_FA2_SKIP_REASON = (
+    "Randomly initialized Gemma4 MoE routers are too sensitive to tiny eager/FA2 input differences"
+)
 
 
 class Gemma4TextModelTester(CausalLMModelTester):
+    forced_config_args = ["pad_token_id", "per_layer_config"]
+
     if is_torch_available():
         config_class = Gemma4TextConfig
         base_model_class = Gemma4TextModel
@@ -72,7 +89,11 @@ class Gemma4TextModelTester(CausalLMModelTester):
             "sliding_attention",
             "full_attention",
         ]  # similarly we want to test sharing on both types
-        self.global_head_dim = self.head_dim  # gemma4 use a different head_dim for full and sliding layers
+        self.per_layer_config = {
+            layer_idx: {"head_dim": 2 * self.head_dim}
+            for layer_idx, layer_type in enumerate(self.layer_types)
+            if layer_type == "full_attention"
+        }  # gemma4 use a different head_dim for full and sliding layers
 
         # To make model small
         self.vocab_size_per_layer_input = 99
@@ -97,14 +118,15 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_num_layers_is_small(self):
         pass
 
-    @unittest.skip("Gemma4 uses different rope per layer type, which is not compatible with this test")
-    def test_model_rope_scaling_frequencies(self):
-        pass
+    def test_bidirectional_sliding_window_survives_save_and_reload(self):
+        config = Gemma4TextConfig(sliding_window=512, use_bidirectional_attention="all")
+        self.assertEqual(config.sliding_window, 257)
 
-    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
-    @unittest.skip("Gemma4 uses different rope per layer type, which is not compatible with this test")
-    def test_model_rope_scaling_from_config(self):
-        pass
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            config.save_pretrained(tmpdirname)
+            reloaded = Gemma4TextConfig.from_pretrained(tmpdirname)
+
+        self.assertEqual(reloaded.sliding_window, config.sliding_window)
 
     @unittest.skip(
         "Gemma4 cannot use random inputs_embeds, as it needs to reverse them when input_ids is not provided"
@@ -125,6 +147,33 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_tp_generation_quantized(self):
         pass
 
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_equivalence(self):
+        pass
+
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    def test_all_bidirectional_attention_uses_bidirectional_mask(self):
+        self.model_tester.use_bidirectional_attention = "all"
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"
+
+        model = Gemma4TextModel(config).to(torch_device)
+        model.eval()
+
+        input_ids = inputs_dict["input_ids"][:1]
+        with torch.no_grad():
+            out = model(input_ids=input_ids, output_attentions=True)
+
+        for attention in out.attentions:
+            self.assertTrue((attention[..., :4, :4] != 0).all().item())
+
     def test_model_training(self):
         pass
 
@@ -143,114 +192,88 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
 
-class Gemma4Audio2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        image_token_id=4,
-        boi_token_id=5,
-        eoi_token_id=6,
-        audio_token_id=7,
-        boa_token_id=8,
-        eoa_token_index=9,
-        video_token_id=10,
-        seq_length=50,
-        audio_seq_length=96,
-        audio_num_channels=16,
-        is_training=True,
-        audio_config={
-            "hidden_size": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "hidden_act": "silu",
-            "subsampling_conv_channels": [16, 8],
-            "conv_kernel_size": 3,
-            "attention_chunk_size": 4,
-            "attention_context_left": 5,
-            "attention_context_right": 0,
-            "output_proj_dims": 32,
-            # Clipped linears register inf/-inf buffers which cause NaN in test_torch_save_load's
-            # comparison logic (inf - inf = NaN). Disable for testing.
-            "use_clipped_linears": False,
-        },
-    ):
-        self.parent = parent
-        self.image_token_id = image_token_id
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.audio_token_id = audio_token_id
-        self.boa_token_id = boa_token_id
-        self.eoa_token_index = eoa_token_index
-        self.video_token_id = video_token_id
-        self.llm_tester = Gemma4TextModelTester(self.parent)
-        self.llm_tester.use_bidirectional_attention = None
-        self.text_config = self.llm_tester.get_config()
-        self.audio_config = audio_config
-        self.seq_length = seq_length
-        self.audio_seq_length = audio_seq_length
-        self.audio_num_channels = audio_num_channels
-        self.pad_token_id = self.text_config.pad_token_id
+class Gemma4Audio2TextModelTester(ALMModelTester):
+    base_model_class = Gemma4Model
+    conditional_generation_class = Gemma4ForConditionalGeneration
+    config_class = Gemma4Config
+    text_config_class = Gemma4TextConfig
+    audio_config_class = Gemma4AudioConfig
+    audio_mask_key = "input_features_mask"
 
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.encoder_seq_length = seq_length
-
-    def get_config(self):
-        return Gemma4Config(
-            text_config=self.text_config,
-            vision_config=None,
-            audio_config=self.audio_config,
-            image_token_id=self.image_token_id,
-            boi_token_id=self.boi_token_id,
-            eoi_token_id=self.eoi_token_id,
-            audio_token_id=self.audio_token_id,
-            boa_token_id=self.boa_token_id,
-            eoa_token_index=self.eoa_token_index,
-            video_token_id=self.video_token_id,
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 4)
+        kwargs.setdefault("boi_token_id", 5)
+        kwargs.setdefault("eoi_token_id", 6)
+        kwargs.setdefault("audio_token_id", 7)
+        kwargs.setdefault("boa_token_id", 8)
+        kwargs.setdefault("eoa_token_index", 9)
+        kwargs.setdefault("video_token_id", 10)
+        kwargs.setdefault("pad_token_id", 0)
+        kwargs.setdefault("seq_length", 50)
+        kwargs.setdefault("feat_seq_length", 96)
+        kwargs.setdefault("num_mel_bins", 16)
+        kwargs.setdefault("num_hidden_layers", 4)
+        kwargs.setdefault("num_kv_shared_layers", 2)
+        kwargs.setdefault(
+            "layer_types", ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
         )
-
-    def prepare_config_and_inputs(self):
-        input_features = floats_tensor([self.batch_size, self.audio_seq_length, self.audio_num_channels])
-        input_features_mask = torch.ones(self.batch_size, self.audio_seq_length, dtype=torch.bool)
-        config = self.get_config()
-        return config, input_features, input_features_mask
-
-    def prepare_config_and_inputs_for_common(self):
-        config, input_features, input_features_mask = self.prepare_config_and_inputs()
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
-
-        # Ensure no tokens accidentally match special token IDs
-        for token_id in [config.image_token_id, config.video_token_id, config.audio_token_id]:
-            input_ids[input_ids == token_id] = self.pad_token_id
-
-        # The audio encoder produces audio_seq_length / 4 tokens per audio sample after subsampling.
-        # We need that many audio placeholder tokens per sequence in input_ids.
-        num_audio_tokens = self.audio_seq_length // 4
-        input_ids[:, :num_audio_tokens] = config.audio_token_id
-
-        inputs_dict = {
-            "input_features": input_features,
-            "input_features_mask": input_features_mask,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
+        kwargs.setdefault("vocab_size_per_layer_input", 99)
+        kwargs.setdefault("hidden_size_per_layer_input", 16)
+        kwargs.setdefault("enable_moe_block", True)
+        kwargs.setdefault("moe_intermediate_size", 16)
+        kwargs.setdefault("top_k_experts", 2)
+        kwargs.setdefault("subsampling_conv_channels", [16, 8])
+        kwargs.setdefault("conv_kernel_size", 3)
+        kwargs.setdefault("attention_chunk_size", 4)
+        kwargs.setdefault("attention_context_left", 5)
+        kwargs.setdefault("attention_context_right", 0)
+        kwargs.setdefault("output_proj_dims", 32)
+        # Clipped linears register inf/-inf buffers which cause NaN in test_torch_save_load's
+        # comparison logic (inf - inf = NaN). Disable for testing.
+        kwargs.setdefault("use_clipped_linears", False)
+        super().__init__(parent, **kwargs)
+        self.head_dim = self.hidden_size // self.num_attention_heads
+        self.per_layer_config = {
+            layer_idx: {"head_dim": 2 * self.head_dim}
+            for layer_idx, layer_type in enumerate(self.layer_types)
+            if layer_type == "full_attention"
         }
-        return config, inputs_dict
+
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {self.image_token_id, self.video_token_id}
+
+    @property
+    def text_config_args(self):
+        return super().text_config_args + ["per_layer_config"]
+
+    def create_attention_mask(self, input_ids):
+        return input_ids.ne(self.pad_token_id).to(torch_device)
+
+    def create_audio_features(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
+        # (num_audios, num_frames, num_mel_bins)
+        return floats_tensor([batch_size, self.feat_seq_length, self.num_mel_bins])
+
+    def create_audio_mask(self, batch_size: int | None = None):
+        return super().create_audio_mask(batch_size).bool()
+
+    def get_audio_embeds_mask(self, audio_mask):
+        # Each of the two stride-2 subsampling convs keeps every other mask position
+        return audio_mask[:, ::4]
 
 
 @require_torch
-class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma4Model, Gemma4ForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (Gemma4ForConditionalGeneration,) if is_torch_available() else ()
+class Gemma4Audio2TextModelTest(ALMModelTest, unittest.TestCase):
+    model_tester_class = Gemma4Audio2TextModelTester
 
-    def setUp(self):
-        self.model_tester = Gemma4Audio2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma4Config, hidden_size=37)
+    @unittest.skip("The tester has no image in input dict and mm-encoder-output don't yet support audio")
+    def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
+
+    @unittest.skip("The tester has no image in input dict and mm-encoder-output don't yet support audio")
+    def test_generate_from_multimodal_encoder_outputs(self):
+        pass
 
     @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_hidden_states(self):
@@ -260,9 +283,13 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_get_image_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no image in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_output(self, return_dict: bool | None):
+        pass
+
+    @unittest.skip("The tester has no image in input dict")
+    def test_get_image_features_pooler_output(self):
         pass
 
     @unittest.skip("The tester has no videos in input dict")
@@ -273,8 +300,8 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     def test_get_video_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no videos in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no videos in input dict")
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
@@ -284,6 +311,14 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
     @unittest.skip("Gemma4 needs correct embeddings for per-layer-input computation, random won't work!")
     def test_generate_from_random_inputs_embeds(self):
+        pass
+
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(GEMMA4_RANDOM_MOE_FA2_SKIP_REASON)
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
     def test_audio_rel_pos_encoding_uses_context_size_from_config(self):
@@ -316,123 +351,87 @@ class Gemma4Audio2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
         torch.testing.assert_close(pos, expected)
 
 
-class Gemma4Vision2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        mm_tokens_per_image=2,
-        image_token_id=4,
-        video_token_id=7,
-        audio_token_id=8,
-        boi_token_id=5,
-        eoi_token_id=6,
-        seq_length=25,
-        is_training=True,
-        vision_config={
-            "use_labels": True,
-            "image_size": 20,
-            "patch_size": 5,
-            "num_channels": 3,
-            "is_training": True,
-            "hidden_size": 32,
-            "num_key_value_heads": 1,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 37,
-            "dropout": 0.1,
-            "attention_dropout": 0.1,
-            "initializer_range": 0.02,
-        },
-    ):
-        self.parent = parent
-        # `image_token_id` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.mm_tokens_per_image = mm_tokens_per_image
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-        self.audio_token_id = audio_token_id
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
-        self.llm_tester = Gemma4TextModelTester(self.parent)
-        self.text_config = self.llm_tester.get_config()
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-        self.pad_token_id = self.text_config.pad_token_id
+class Gemma4Vision2TextModelTester(VLMModelTester):
+    base_model_class = Gemma4Model
+    conditional_generation_class = Gemma4ForConditionalGeneration
+    config_class = Gemma4Config
+    text_config_class = Gemma4TextConfig
+    vision_config_class = Gemma4VisionConfig
 
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
-
-        self.batch_size = 3
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
-        self.encoder_seq_length = seq_length
-
-    def get_config(self):
-        return Gemma4Config(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            audio_token_id=self.audio_token_id,
-            boi_token_id=self.boi_token_id,
-            eoi_token_id=self.eoi_token_id,
-            mm_tokens_per_image=self.mm_tokens_per_image,
+    def __init__(self, parent, **kwargs):
+        kwargs.setdefault("image_token_id", 4)
+        kwargs.setdefault("boi_token_id", 5)
+        kwargs.setdefault("eoi_token_id", 6)
+        kwargs.setdefault("video_token_id", 7)
+        kwargs.setdefault("audio_token_id", 8)
+        kwargs.setdefault("patch_size", 5)
+        kwargs.setdefault("pooling_kernel_size", 2)
+        kwargs.setdefault("num_image_tokens", 5)
+        kwargs.setdefault("seq_length", 25)
+        kwargs.setdefault("num_hidden_layers", 4)
+        kwargs.setdefault("num_kv_shared_layers", 2)
+        kwargs.setdefault(
+            "layer_types", ["sliding_attention", "full_attention", "sliding_attention", "full_attention"]
         )
+        kwargs.setdefault("vocab_size_per_layer_input", 99)
+        kwargs.setdefault("hidden_size_per_layer_input", 16)
+        kwargs.setdefault("enable_moe_block", True)
+        kwargs.setdefault("moe_intermediate_size", 16)
+        kwargs.setdefault("top_k_experts", 2)
+        kwargs.setdefault("use_bidirectional_attention", "vision")
+        kwargs.setdefault("tie_word_embeddings", True)
+        super().__init__(parent, **kwargs)
+        self.per_layer_config = {
+            layer_idx: {"head_dim": 2 * self.head_dim}
+            for layer_idx, layer_type in enumerate(self.layer_types)
+            if layer_type == "full_attention"
+        }
 
-    def prepare_config_and_inputs(self):
-        config = self.get_config()
-        config.vision_config.pooling_kernel_size = 2
+    @property
+    def _special_token_ids(self):
+        return super()._special_token_ids | {self.video_token_id, self.audio_token_id}
 
+    @property
+    def text_config_args(self):
+        return super().text_config_args + ["per_layer_config"]
+
+    def create_attention_mask(self, input_ids):
+        return input_ids.ne(self.pad_token_id).to(torch_device)
+
+    def create_pixel_values(self, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         # (num_images, max_num_patches, patch_size * patch_size * num_channels)
-        patch_size = config.vision_config.patch_size
-        pixel_values = floats_tensor(
-            [
-                self.batch_size,
-                self.vision_config["image_size"],
-                patch_size * patch_size * self.vision_config["num_channels"],
-            ]
-        )
-        # (num_images, max_num_patches, 2) for height/width positions. Let it be all ones for testign
-        pixel_position_ids = torch.ones(self.vision_config["image_size"], device=torch_device, dtype=torch.long)
-        pixel_position_ids = pixel_position_ids[None, :, None].repeat(self.batch_size, 1, 2)
+        num_patches = self.num_image_tokens * self.pooling_kernel_size**2
+        return floats_tensor([batch_size, num_patches, self.patch_size**2 * self.num_channels])
 
-        return config, pixel_values, pixel_position_ids
+    def create_image_position_ids(self, num_images):
+        # (num_images, max_num_patches, 2) grid of (x, y) coords for a non-square image
+        num_patches = self.num_image_tokens * self.pooling_kernel_size**2
+        h = int(num_patches**0.5)
+        w = num_patches // h
+        xs = torch.arange(w).repeat(h)
+        ys = torch.arange(h).repeat_interleave(w)
+        position_ids = torch.stack([xs, ys], dim=-1).to(device=torch_device)
+        return position_ids.unsqueeze(0).repeat(num_images, 1, 1)
 
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values, pixel_position_ids = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
-
-        # Ensure no tokens accidentally match special token IDs
-        for token_id in [config.image_token_id, config.video_token_id, config.audio_token_id]:
-            input_ids[input_ids == token_id] = self.pad_token_id
-        input_ids[:, :1] = config.image_token_id
-
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == config.image_token_id] = 1
-
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "image_position_ids": pixel_position_ids,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
+        return {
+            "image_position_ids": self.create_image_position_ids(batch_size),
             "mm_token_type_ids": mm_token_type_ids,
         }
-        return config, inputs_dict
 
 
 @require_torch
-class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (Gemma4Model, Gemma4ForConditionalGeneration) if is_torch_available() else ()
-    all_generative_model_classes = (Gemma4ForConditionalGeneration,) if is_torch_available() else ()
-    additional_model_inputs = ["mm_token_type_ids"]
+class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = Gemma4Vision2TextModelTester
+    additional_model_inputs = ["mm_token_type_ids", "image_position_ids"]
+    model_split_percents = [0.85, 0.9]
 
     def setUp(self):
-        self.model_tester = Gemma4Vision2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma4Config, hidden_size=37)
+        super().setUp()
         self.skip_flash_attn_inference_equivalence_tests()
 
     def skip_flash_attn_inference_equivalence_tests(self):
@@ -465,6 +464,60 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
         loss = model(**inputs).loss
         loss.backward()
 
+    def test_vision_axial_rope(self):
+        # override -> model shipped weirdly to from the start, pos IDs have actual batch dim
+
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        rope_class = None
+        base_model = Gemma4Model(config)
+        for name, module in base_model.named_modules():
+            if hasattr(module, "compute_axial_rope_parameters"):
+                rope_class = type(module)
+                vision_config = module.config
+                break
+
+        if rope_class is None:
+            self.skipTest("Couldn't infer RoPE layer for this model class.")
+
+        # First make sure that validation on default config raises no rope-related warnings
+        logger = logging.get_logger("transformers.modeling_rope_utils")
+        with CaptureLogger(logger) as cl:
+            vision_config.validate_rope()
+        self.assertEqual("", cl.out)
+        logger.warning_once.cache_clear()
+
+        # Axial rope type expects only `rope_theta`, otherwise raises warning
+        vision_config.rope_parameters["factor"] = 0.25
+        logger = logging.get_logger("transformers.modeling_rope_utils")
+        with CaptureLogger(logger) as cl:
+            vision_config.validate_rope()
+        self.assertEqual("Unrecognized keys in `rope_parameters` for 'rope_type'='axial': {'factor'}\n", cl.out)
+        del vision_config.rope_parameters["factor"]
+        logger.warning_once.cache_clear()
+
+        inv_freq, attention_scale = rope_class.compute_axial_rope_parameters(config=vision_config)
+        rope_module = rope_class(vision_config).to(device=torch_device)
+
+        self.assertTrue(hasattr(rope_module, "inv_freq"))
+        self.assertTrue(hasattr(rope_module, "attention_scaling"))
+        self.assertEqual(attention_scale, 1.0)  # attention scale is always 1
+        torch.testing.assert_close(inv_freq, rope_module.inv_freq.cpu())
+
+        # create 2D position IDs for a single grid of one row and 10 cols `size=(10, 2)`
+        position_ids = torch.stack(
+            [
+                torch.arange(10, dtype=torch.long, device=torch_device),
+                torch.zeros(10, dtype=torch.long, device=torch_device),
+            ]
+        ).transpose(0, 1)
+        position_ids = position_ids[None, ...].repeat(3, 1, 1)  # batch size of `3`
+        # and an empty hidden states used only to infer device/dtype
+        hidden_states = torch.empty(1, dtype=torch.float32, device=torch_device)
+        cos, sin = rope_module(hidden_states, position_ids)
+        self.assertEqual(cos.shape[-1], inv_freq.shape[-1] * 4)  # the freq are `//4` of head dim
+        self.assertEqual(cos.shape[0], 3)  # angles presserve batch
+
     @unittest.skip("The tester has no audios in input dict")
     def test_get_audio_features_hidden_states(self):
         pass
@@ -473,8 +526,8 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_get_audio_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no audios in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no audios in input dict")
     def test_get_audio_features_output(self, return_dict: bool | None):
         pass
 
@@ -486,8 +539,8 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     def test_get_video_features_attentions(self):
         pass
 
-    @unittest.skip("The tester has no videos in input dict")
     @parameterized.expand([True, False, None])
+    @unittest.skip("The tester has no videos in input dict")
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
@@ -560,6 +613,184 @@ class Gemma4Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
             _ = model(inputs_embeds=inputs_embeds)
             self.assertEqual(counter["call_count"], 1)
 
+    @parameterized.expand([True, False, None])
+    def test_get_image_features_output(self, return_dict: bool | None):
+        "Override to infer last hidden states' `batch_size` from image position ids"
+        for model_class in self.all_model_classes:
+            if not hasattr(model_class, "get_image_features"):
+                continue
+
+            config, inputs_dict = self._image_features_prepare_config_and_inputs()
+            if return_dict is not None:
+                config.return_dict = return_dict
+
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+
+            set_seed(42)
+            with torch.no_grad():
+                outputs = model.get_image_features(**inputs_dict)
+
+            if return_dict in (True, None):
+                self.assertTrue(isinstance(outputs, ModelOutput), "get_image_features() must return a BaseModelOutput")
+                self.assertTrue(
+                    hasattr(outputs, "last_hidden_state"),
+                    "get_image_features() must return a BaseModelOutput with last_hidden_state",
+                )
+                self.assertTrue(
+                    hasattr(outputs, "pooler_output"),
+                    "get_image_features() must return a BaseModelOutput with pooler_output",
+                )
+                self.assertTrue(
+                    hasattr(outputs, "hidden_states"),
+                    "get_image_features() must return a BaseModelOutput with hidden_states",
+                )
+                if self.has_attentions:
+                    self.assertTrue(
+                        hasattr(outputs, "attentions"),
+                        "get_image_features() must return a BaseModelOutput with attentions",
+                    )
+
+                if getattr(self, "skip_test_image_features_output_shape", False):
+                    return
+
+                last_hidden_state_shape = outputs.last_hidden_state.shape
+                batch_size = (
+                    inputs_dict["pixel_values"].shape[0]
+                    if "pixel_values" in inputs_dict
+                    else inputs_dict["pixel_values_images"].shape[0]
+                )
+                output_length = inputs_dict["pixel_values"].shape[-2] // (
+                    model.config.vision_config.pooling_kernel_size**2
+                )
+                k_squared = int((inputs_dict["image_position_ids"].shape[1] // output_length) ** 0.5) ** 2
+                batch_size *= inputs_dict["image_position_ids"].shape[1] // k_squared
+
+                self.assertEqual(
+                    last_hidden_state_shape[0],
+                    batch_size,
+                    f"batch_size mismatch, full shape: {last_hidden_state_shape}",
+                )
+
+                vision_config = config.vision_config if hasattr(config, "vision_config") else config
+                vision_config = (
+                    vision_config.backbone_config if hasattr(vision_config, "backbone_config") else vision_config
+                )
+                vision_config = vision_config.vq_config if hasattr(vision_config, "vq_config") else vision_config
+                vision_config = vision_config.model_args if hasattr(vision_config, "model_args") else vision_config
+                attribute_candidates = [
+                    "embed_dim_per_stage",
+                    "embed_dim",
+                    "embed_dims",
+                    "out_hidden_size",
+                    "hidden_size",
+                    "hidden_dim",
+                ]
+                hidden_size = None
+                for attr in attribute_candidates:
+                    if hasattr(vision_config, attr):
+                        hidden_size = getattr(vision_config, attr)
+                        break
+                    elif isinstance(vision_config, dict) and attr in vision_config:
+                        hidden_size = vision_config[attr]
+                        break
+                else:
+                    raise ValueError("Cannot find the hidden size attribute in vision_config")
+                if isinstance(hidden_size, (list, tuple)):
+                    hidden_size = hidden_size[-1]
+                self.assertEqual(
+                    last_hidden_state_shape[-1],
+                    hidden_size,
+                    f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
+                )
+
+                self.assertEqual(
+                    len(outputs.pooler_output),
+                    self.model_tester.batch_size,
+                    f"batch_size mismatch for `pooler_output`: {len(outputs.pooler_output)} != {self.model_tester.batch_size}",
+                )
+                self.assertEqual(
+                    outputs.pooler_output[0].ndim,
+                    2,
+                    f"each sample in `pooler_output` should be a 2D array but got {outputs.pooler_output[0].ndim}",
+                )
+            else:
+                self.assertIsInstance(outputs, tuple, "get_image_features() must return a tuple if return_dict=False")
+
+    def test_attention_mask_composition(self):
+        config = self.model_tester.get_config()
+        config.text_config._attn_implementation = "eager"
+
+        # Override sliding window to a known small value to test truncation
+        sliding_window = 4
+        config.text_config.sliding_window = sliding_window
+
+        # Create a sequence of 13 tokens: 0..4 text, 5..11 image (7 tokens), 12 text
+        # block_sequence_ids maps image tokens to group 0, and text tokens to -1
+        block_sequence_ids = torch.tensor([[-1, -1, -1, -1, -1, 0, 0, 0, 0, 0, 0, 0, -1]], dtype=torch.long)
+        attention_mask = torch.ones((1, 13), dtype=torch.bool)
+        position_ids = torch.arange(13).unsqueeze(0)
+        inputs_embeds = torch.randn(1, 13, config.text_config.hidden_size)
+
+        mask_dict = create_masks_for_vision_model(
+            config=config.text_config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=None,
+            position_ids=position_ids,
+            block_sequence_ids=block_sequence_ids,
+        )
+
+        full_mask = mask_dict["full_attention"]
+        sliding_mask = mask_dict["sliding_attention"]
+
+        # In full_attention (global layers), Gemma 4 uses causal-only masking —
+        # no bidirectional attention on vision tokens. This matches the internal
+        # Gemax/Gemini3 transformer which sets bidirectional_segment_ids=None
+        # for GLOBAL layers.
+        # Token 5 looking ahead at token 11 -> MASKED (causal prevents look-ahead)
+        self.assertLess(full_mask[0, 0, 5, 11].item(), -1000)
+        # Token 11 looking back at token 5 -> VISIBLE (causal allows look-back)
+        self.assertEqual(full_mask[0, 0, 11, 5].item(), 0.0)
+
+        # In sliding_attention (local layers), bidirectional IS applied within the window.
+        # Token 8 looking back at 5 (dist 3 < 4) -> VISIBLE
+        self.assertEqual(sliding_mask[0, 0, 8, 5].item(), 0.0)
+        # Token 5 looking ahead at 8 (dist 3 < 4, same image block) -> VISIBLE (bidirectional)
+        self.assertEqual(sliding_mask[0, 0, 5, 8].item(), 0.0)
+
+        # In sliding_attention, look-back outside the sliding window is strictly masked
+        # Token 11 looking back at 5 (dist 6 > 4) -> MASKED
+        self.assertLess(sliding_mask[0, 0, 11, 5].item(), -1000)
+
+        # Verify that causal masking still applies correctly to text
+        # Token 11 (image) looking ahead at Token 12 (text) -> MASKED
+        self.assertLess(full_mask[0, 0, 11, 12].item(), -1000)
+
+    def test_vision_mask_with_cache_beyond_sliding_window(self):
+        """Regression test, see the Gemma 3 test of the same name.
+
+        Once the cache is longer than the sliding window, sliding and full attention layers report
+        different `kv_length`s. The vision mask has to be built for a sliding layer, otherwise the
+        sliding mask ends up sized against a full attention layer and the forward pass crashes.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.text_config._attn_implementation = "eager"
+        config.text_config.sliding_window = 4
+
+        model = Gemma4ForConditionalGeneration(config).to(torch_device).eval()
+        batch_size, prompt_length = inputs_dict["input_ids"].shape
+        past_key_values = StaticCache(
+            config=config.get_text_config(),
+            max_batch_size=batch_size,
+            max_cache_len=prompt_length + 8,  # longer than the sliding window
+            device=torch_device,
+            dtype=model.dtype,
+        )
+
+        with torch.no_grad():
+            model(**inputs_dict, past_key_values=past_key_values, use_cache=True)
+
 
 @slow
 @require_torch_accelerator
@@ -572,7 +803,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
         )
         self.url2 = url_to_local_path(
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
         self.messages = [
             {"role": "system", "content": [{"type": "text", "text": "You are a helpful assistant."}]},
@@ -606,8 +837,8 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 8): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background'],
-                ("xpu", 3): ['This image shows a **brown and white cow standing on a sandy beach near the ocean**.\n\nHere are some details about the image:\n\n*   '],
+                ("cuda", 8): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean** in the background under a **clear'],
+                ("xpu", 5): ['This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean** in the background under a **clear'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -647,17 +878,13 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", (8, 0)): [
+                ("cuda", 8): [
                     "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
-                    "No, these images are not identical.\n\nThe first image is a photograph of a **cow** standing on a beach under a blue sky.\n\n",
+                    "No, these images are **not identical**.\n\nHere's a breakdown of the differences:\n\n1.  **Image 1 (Cow on",
                 ],
-                ("cuda", (8, 6)): [
-                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
-                    "No, these images are not identical.\n\nThe first image is a photograph of a **brown and white cow standing on a beach** under a blue",
-                ],
-                ("xpu", 3): [
-                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean and a blue sky** in the background",
-                    "No, these images are not identical.\n\nThe first image is a photograph of a **brown and white cow standing on a beach** under a blue",
+                ("xpu", 5): [
+                    "This image shows a **brown and white cow** standing on a **sandy beach** with the **ocean** in the background under a **clear",
+                    "No, these images are **not identical**.\n\nHere's a breakdown of the differences:\n\n1.  **Image 1 (Cow on",
                 ],
             }
         )
@@ -693,8 +920,9 @@ class Gemma4IntegrationTest(unittest.TestCase):
         output_text = self.processor.batch_decode(output[:, input_size:], skip_special_tokens=True)
         EXPECTED_TEXTS = Expectations(
             {
-                ("cuda", 8): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Traffic Sign:** The most prominent'],
-                ("xpu", 3): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
+                ("cuda", 8): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
+                ("cuda", (9, 0)): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
+                ("xpu", 5): ['Based on the image, here is a description of what I see:\n\n**Foreground & Street Scene:**\n* **Roadway:** There is an'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -722,7 +950,8 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", (8, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
-                ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA tapestry of data, vast and deep,\nWhere silent numbers in their slumber sleep.\nA sea of text'],
+                ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA loom of logic, spun from endless thread,\nWhere data streams in, and the patterns spread.\nNo'],
+                ("cuda", (9, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -747,8 +976,9 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = Expectations(
             {
                 ("cuda", (8, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
-                ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA tapestry of data, vast and deep,\nWhere silent numbers in their slumber sleep.\nA sea of text'],
-                ("xpu", 3): ['## The Algorithmic Mind\n\nA whisper starts in silicon deep,\nWhere data streams in endless sweep.\nNo flesh and blood, no beating'],
+                ("cuda", (8, 6)): ['## The Algorithmic Mind\n\nA loom of logic, spun from endless thread,\nWhere data streams in, and the patterns spread.\nNo'],
+                ("cuda", (9, 0)): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
+                ("xpu", 5): ['## The Algorithmic Mind\n\nA whisper starts, a seed unseen,\nOf data vast, a vibrant sheen.\nA sea of numbers,'],
             }
         )  # fmt: skip
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
@@ -779,7 +1009,7 @@ class Gemma4IntegrationTest(unittest.TestCase):
 
     # Note: we do not test FA2 as the head dim is 512 on some layers, which is not compatible with the kernels
     @parameterized.expand([("sdpa",), ("eager",)])
-    @require_deterministic_for_xpu
+    @require_deterministic_for_accelerator(devices=["cuda"])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. Outputs for every attention functions
         should be coherent and identical.
@@ -803,7 +1033,9 @@ class Gemma4IntegrationTest(unittest.TestCase):
         model = Gemma4ForConditionalGeneration.from_pretrained(
             self.model_name,
             device_map=torch_device,
-            attn_implementation=attn_implementation,
+            # Audio tower chunked local attention is eager-only (#49404); vary only text
+            # attention.
+            attn_implementation={"text_config": attn_implementation, "audio_config": "eager"},
         )
 
         # Make sure prefill is larger than sliding window
@@ -816,10 +1048,12 @@ class Gemma4IntegrationTest(unittest.TestCase):
         EXPECTED_COMPLETIONS = Expectations(
             {
                 ("cuda", 8): [
-                    "That sounds lovely! It seems like you're really enjoying the place you'",
+                    "That sounds lovely! It seems like you're really enjoying the place you'"
+                    if attn_implementation == "sdpa"
+                    else "That sounds like a very pleasant place! It seems like you're really enjoying",
                     "Here are a few ways you could use or expand upon that list, depending on",
                 ],
-                ("xpu", 3): [
+                ("xpu", 5): [
                     "That sounds lovely! It seems like you're really enjoying the place you'",
                     "Here are a few ways you could use or expand upon that list, depending on",
                 ],
@@ -831,14 +1065,15 @@ class Gemma4IntegrationTest(unittest.TestCase):
     def test_export_text_only(self):
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
-        model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map=torch_device)
+        # Run on CPU: the full E2B model (~4 GiB bfloat16) + torch.export tracing overhead
+        # (~4 GiB) exceeds the 22.3 GiB GPU memory available in CI. CPU avoids the OOM.
+        # max_cache_len=19 covers the prompt (~16 tokens) + 3 new tokens with a small buffer.
+        model = Gemma4ForConditionalGeneration.from_pretrained(self.model_name, device_map="cpu")
         tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
-        exportable_module = TorchExportableModuleForDecoderOnlyLM(
-            model, batch_size=1, max_cache_len=1024, device=torch_device
-        )
+        exportable_module = TorchExportableModuleForDecoderOnlyLM(model, batch_size=1, max_cache_len=19, device="cpu")
         exported_program = exportable_module.export(
-            input_ids=torch.tensor([[1]], device=torch_device, dtype=torch.long),
+            input_ids=torch.tensor([[1]], device="cpu", dtype=torch.long),
         )
 
         # Test generation with the exported model
@@ -848,13 +1083,13 @@ class Gemma4IntegrationTest(unittest.TestCase):
             add_generation_prompt=True,
         )
 
-        max_new_tokens_to_generate = 20
+        max_new_tokens_to_generate = 3
         # Generate text with the exported model
         export_generated_text = TorchExportableModuleForDecoderOnlyLM.generate(
-            exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate, device=torch_device
+            exported_program, tokenizer, prompt, max_new_tokens=max_new_tokens_to_generate, device="cpu"
         )
 
-        input_text = tokenizer(prompt, return_tensors="pt").to(torch_device)
+        input_text = tokenizer(prompt, return_tensors="pt").to("cpu")
         eager_outputs = model.generate(
             **input_text,
             max_new_tokens=max_new_tokens_to_generate,

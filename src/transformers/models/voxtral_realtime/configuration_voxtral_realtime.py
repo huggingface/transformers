@@ -15,10 +15,10 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="mistralai/Voxtral-Mini-4B-Realtime-2602")
@@ -30,21 +30,15 @@ class VoxtralRealtimeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 32000
@@ -62,7 +56,6 @@ class VoxtralRealtimeTextConfig(PreTrainedConfig):
     pad_token_id: int | None = None
     bos_token_id: int | None = 1
     eos_token_id: int | list[int] | None = 2
-    tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     sliding_window: int | None = 4096
     attention_dropout: float | int = 0.0
@@ -120,6 +113,7 @@ class VoxtralRealtimeEncoderConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     sliding_window: int = 750
     head_dim: int = 64
+    use_cache: bool = True
 
     def __post_init__(self, **kwargs):
         self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
@@ -152,22 +146,27 @@ class VoxtralRealtimeConfig(PreTrainedConfig):
     """
 
     model_type = "voxtral_realtime"
-    sub_configs = {"text_config": AutoConfig, "audio_config": AutoConfig}
-
-    _default_text_config_kwargs = {
-        "vocab_size": 131072,
-        "hidden_size": 3072,
-        "intermediate_size": 9216,
-        "num_hidden_layers": 26,
-        "num_attention_heads": 32,
-        "num_key_value_heads": 8,
-        "max_position_embeddings": 131072,
-        "rms_norm_eps": 1e-05,
-        "use_cache": True,
-        "rope_theta": 1000000.0,
-        "head_dim": 128,
-        "tie_word_embeddings": True,
-        "sliding_window": 8192,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="voxtral_realtime_text",
+            init_kwargs={
+                "vocab_size": 131072,
+                "hidden_size": 3072,
+                "intermediate_size": 9216,
+                "num_hidden_layers": 26,
+                "num_attention_heads": 32,
+                "num_key_value_heads": 8,
+                "max_position_embeddings": 131072,
+                "rms_norm_eps": 1e-05,
+                "use_cache": True,
+                "rope_theta": 1000000.0,
+                "head_dim": 128,
+                "tie_word_embeddings": True,
+                "sliding_window": 8192,
+            },
+        ),
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="voxtral_realtime_encoder"),
     }
 
     audio_config: dict | PreTrainedConfig | None = None
@@ -176,24 +175,15 @@ class VoxtralRealtimeConfig(PreTrainedConfig):
     audio_length_per_tok: int = 8
     default_num_delay_tokens: int = 6
     downsample_factor: int = 4
+    tie_word_embeddings: bool = True
+    use_cache: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "voxtral_realtime_encoder")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["voxtral_realtime_encoder"]()
-
+        # Keep for BC only - shouldn't appear in new releases!
         if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "voxtral_realtime_text")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](
-                **{**self._default_text_config_kwargs, **self.text_config}
-            )
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["voxtral_realtime_text"](**self._default_text_config_kwargs)
-
-        self.hidden_size = self.text_config.hidden_size
+            self.text_config = {**self.sub_configs_defaults["text_config"].init_kwargs, **self.text_config}
         super().__post_init__(**kwargs)
+        self.hidden_size = self.text_config.hidden_size
 
 
 __all__ = ["VoxtralRealtimeEncoderConfig", "VoxtralRealtimeConfig", "VoxtralRealtimeTextConfig"]

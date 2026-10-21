@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -59,45 +59,23 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
+        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_allreduce",
-    }
-    base_model_sp_plan = {
-        "embed_tokens": "vocab_reduce_scatter",
-        "layers.*.input_layernorm": "activation",
-        "layers.*.self_attn": "module_allgather_hidden_states",
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_reduce_scatter",
-        "layers.*.self_attn.q_norm": "activation_seq_dim_2",
-        "layers.*.self_attn.k_norm": "activation_seq_dim_2",
-        "layers.*.post_attention_layernorm": "activation",
-        "layers.*.mlp": "module_allgather_split",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise_reduce_scatter",
-        "norm": "activation",
+        "layers.*.mlp.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_experts_allreduce",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
     }
 
     vocab_size: int = 151936
@@ -120,6 +98,7 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
     moe_intermediate_size: int = 1408
     num_experts_per_tok: int = 4
     num_experts: int = 60
+    output_router_logits: bool = False
     router_aux_loss_coef: float = 0.001
     mlp_only_layers: list[int] | None = None
     pad_token_id: int | None = None
@@ -154,6 +133,8 @@ class Qwen3VLMoeVisionConfig(PreTrainedConfig):
 
     model_type = "qwen3_vl_moe_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -168,6 +149,7 @@ class Qwen3VLMoeVisionConfig(PreTrainedConfig):
     num_position_embeddings: int = 2304
     deepstack_visual_indexes: list[int] | tuple[int, ...] = (8, 16, 24)
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-VL-30B-A3B-Instruct")
@@ -190,7 +172,10 @@ class Qwen3VLMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_vl_moe"
-    sub_configs = {"vision_config": Qwen3VLMoeVisionConfig, "text_config": Qwen3VLMoeTextConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=Qwen3VLMoeVisionConfig),
+        "text_config": SubConfigSpec(config_class=Qwen3VLMoeTextConfig),
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -202,16 +187,9 @@ class Qwen3VLMoeConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen3_vl_moe":
+            # old ckpt with incorrect model type -> override manually
+            self.vision_config["model_type"] = "qwen3_vl_moe_vision"
         super().__post_init__(**kwargs)
 
 

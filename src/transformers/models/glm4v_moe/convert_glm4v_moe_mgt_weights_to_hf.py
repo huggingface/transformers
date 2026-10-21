@@ -226,7 +226,7 @@ def save_sharded_model(state_dict, output_path, max_shard_size_gb=5, num_layers=
         print(f"  Keys in shard: {len(shard)}")
 
     index_path = os.path.join(output_path, "model.safetensors.index.json")
-    with open(index_path, "w") as f:
+    with open(index_path, "w", encoding="utf-8") as f:
         json.dump(index_dict, f, indent=2)
 
     return len(shards)
@@ -436,7 +436,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             print(f"{k} {item.shape} {item.dtype}", flush=True)
 
     print(f"Loading vLLM configuration file: {vllm_config_path}")
-    with open(vllm_config_path, "r") as f:
+    with open(vllm_config_path, "r", encoding="utf-8") as f:
         model_config = json.load(f)
         print(model_config)
         text_config = model_config.get("text_config", {})
@@ -564,7 +564,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
             )
         layer_i += 1
 
-    # Embedd Model, LM Head, and Norm
+    # Embed Model, LM Head, and Norm
     embed_tokens = torch.cat(full_weights["embedding.word_embeddings.weight"], dim=0)
     complete_state_dict["model.language_model.embed_tokens.weight"] = embed_tokens.clone()
 
@@ -736,7 +736,7 @@ def merge_tp_weights(model_path, output_path, vllm_config_path=None):
         hf_config["vision_config"] = vision_config
 
     config_path = os.path.join(output_path, "config.json")
-    with open(config_path, "w") as f:
+    with open(config_path, "w", encoding="utf-8") as f:
         json.dump(hf_config, f, indent=2)
 
     print(f"Conversion complete! Model saved to {output_path}")

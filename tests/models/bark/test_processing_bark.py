@@ -114,6 +114,110 @@ class BarkProcessorTest(unittest.TestCase):
         # test loading voice preset from the hub
         inputs = processor(text=self.input_string, voice_preset=self.voice_preset)
 
+    def test_speaker_embeddings_saving_rejects_path_traversal(self):
+        # A malicious speaker_embeddings_path.json dict key must not be usable to escape the save
+        # directory and write attacker-controlled content to an arbitrary path (path traversal, CWE-22).
+        tokenizer = self.get_tokenizer()
+        seq_len = 5
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            # Plant the per-prompt npy files the malicious "repo" claims to provide so that
+            # `_load_voice_preset` succeeds and we reach the vulnerable `np.save` call.
+            np.save(os.path.join(tmp_dir_name, "s.npy"), np.ones(seq_len))
+            np.save(os.path.join(tmp_dir_name, "c.npy"), np.ones((2, seq_len)))
+            np.save(os.path.join(tmp_dir_name, "f.npy"), np.ones((8, seq_len)))
+            speaker_embeddings = {
+                "repo_or_path": tmp_dir_name,
+                "../../PWNED": {"semantic_prompt": "s.npy", "coarse_prompt": "c.npy", "fine_prompt": "f.npy"},
+            }
+            processor = BarkProcessor(tokenizer=tokenizer, speaker_embeddings=speaker_embeddings)
+
+            save_dir = os.path.join(tmp_dir_name, "save")
+            # Where the "../../PWNED" key would land if traversal succeeded.
+            canary = os.path.join(tmp_dir_name, "PWNED_semantic_prompt.npy")
+            with self.assertRaises(ValueError):
+                processor.save_pretrained(save_dir)
+            self.assertFalse(os.path.exists(canary))
+
+    def test_speaker_embeddings_saving_allows_subdirectories(self):
+        # Voice presets are legitimately stored in subdirectories (e.g. the `v2/...` presets in
+        # ylacombe/bark-large), so saving a nested key must be allowed - the guard rejects escapes only.
+        tokenizer = self.get_tokenizer()
+        seq_len = 5
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            np.save(os.path.join(tmp_dir_name, "s.npy"), np.ones(seq_len))
+            np.save(os.path.join(tmp_dir_name, "c.npy"), np.ones((2, seq_len)))
+            np.save(os.path.join(tmp_dir_name, "f.npy"), np.ones((8, seq_len)))
+            speaker_embeddings = {
+                "repo_or_path": tmp_dir_name,
+                "v2/en_speaker_0": {"semantic_prompt": "s.npy", "coarse_prompt": "c.npy", "fine_prompt": "f.npy"},
+            }
+            processor = BarkProcessor(tokenizer=tokenizer, speaker_embeddings=speaker_embeddings)
+
+            save_dir = os.path.join(tmp_dir_name, "save")
+            processor.save_pretrained(save_dir)
+            self.assertTrue(
+                os.path.exists(os.path.join(save_dir, "speaker_embeddings", "v2", "en_speaker_0_semantic_prompt.npy"))
+            )
+
+    def test_load_voice_preset_rejects_path_traversal(self):
+        # The per-prompt paths in speaker_embeddings_path.json are also untrusted and are joined onto
+        # repo_or_path before being read, so a "../x" value must be rejected before the file is loaded.
+        tokenizer = self.get_tokenizer()
+        seq_len = 5
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            repo_dir = os.path.join(tmp_dir_name, "repo")
+            os.makedirs(repo_dir)
+            # A readable .npy outside the repo dir that the traversal would otherwise reach.
+            np.save(os.path.join(tmp_dir_name, "PWNED.npy"), np.ones(seq_len))
+            speaker_embeddings = {
+                "repo_or_path": repo_dir,
+                "evil": {
+                    "semantic_prompt": "../PWNED.npy",
+                    "coarse_prompt": "../PWNED.npy",
+                    "fine_prompt": "../PWNED.npy",
+                },
+            }
+            processor = BarkProcessor(tokenizer=tokenizer, speaker_embeddings=speaker_embeddings)
+            with self.assertRaises(ValueError):
+                processor._load_voice_preset("evil")
+
+    def test_load_voice_preset_allows_symlinked_cache_files(self):
+        # The path-traversal guard must be lexical, not symlink-resolving: the HF hub cache stores each
+        # snapshot file as a symlink into a sibling `blobs/` dir (snapshots/<rev>/f -> ../../blobs/<sha>),
+        # which sits outside repo_or_path. A resolve()/realpath()-based check would follow that symlink
+        # out of repo_or_path and wrongly reject a legitimate load, so loading must still succeed here.
+        tokenizer = self.get_tokenizer()
+        seq_len = 5
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            # Mimic the hub cache layout: models--org--model/{blobs,snapshots/<rev>/...}.
+            repo_cache = os.path.join(tmp_dir_name, "models--dummy--bark")
+            blobs_dir = os.path.join(repo_cache, "blobs")
+            snapshot_dir = os.path.join(repo_cache, "snapshots", "deadbeef")
+            os.makedirs(blobs_dir)
+            os.makedirs(snapshot_dir)
+
+            arrays = {
+                "semantic_prompt": np.ones(seq_len),
+                "coarse_prompt": np.ones((2, seq_len)),
+                "fine_prompt": np.ones((8, seq_len)),
+            }
+            voice_preset_paths = {}
+            for key, array in arrays.items():
+                blob = os.path.join(blobs_dir, key)  # real content lives in blobs/
+                np.save(blob, array, allow_pickle=False)
+                # ...and the snapshot exposes it as a relative symlink, exactly like the real cache.
+                link = os.path.join(snapshot_dir, f"{key}.npy")
+                os.symlink(os.path.relpath(blob + ".npy", snapshot_dir), link)
+                voice_preset_paths[key] = f"{key}.npy"
+            self.assertTrue(os.path.islink(os.path.join(snapshot_dir, "semantic_prompt.npy")))
+
+            speaker_embeddings = {"repo_or_path": snapshot_dir, "preset": voice_preset_paths}
+            processor = BarkProcessor(tokenizer=tokenizer, speaker_embeddings=speaker_embeddings)
+
+            voice_preset = processor._load_voice_preset("preset")
+            for key, array in arrays.items():
+                self.assertTrue(np.array_equal(voice_preset[key], array))
+
     def test_tokenizer(self):
         tokenizer = self.get_tokenizer()
 

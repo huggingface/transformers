@@ -155,7 +155,7 @@ class ShieldGemma2Processor(Gemma3Processor):
             if not isinstance(img, list):
                 img = [img]
             elif len(img) > 1:
-                raise ValueError(f"SheildGemma can process at most one image per sample, but got {len(img)} images")
+                raise ValueError(f"ShieldGemma can process at most one image per sample, but got {len(img)} images")
 
             for policy in policies:
                 if img:

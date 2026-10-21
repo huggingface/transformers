@@ -61,23 +61,26 @@ checkpoint: 检查点
 
 <h4 align="center">
     <p>
-        <a href="https://github.com/huggingface/transformers/blob/main/README.md">English</a> |
+        <a href="../README.md">English</a> |
         <b>简体中文</b> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_zh-hant.md">繁體中文</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ko.md">한국어</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_es.md">Español</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ja.md">日本語</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_hd.md">हिन्दी</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ru.md">Русский</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_pt-br.md">Português</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_te.md">తెలుగు</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_it.md">Italiano</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
-        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_bn.md">বাংলা</a> |
+        <a href="README_zh-hant.md">繁體中文</a> |
+        <a href="README_ko.md">한국어</a> |
+        <a href="README_es.md">Español</a> |
+        <a href="README_ja.md">日本語</a> |
+        <a href="README_hd.md">हिन्दी</a> |
+        <a href="README_ru.md">Русский</a> |
+        <a href="README_pt-br.md">Português</a> |
+        <a href="README_te.md">తెలుగు</a> |
+        <a href="README_fr.md">Français</a> |
+        <a href="README_de.md">Deutsch</a> |
+        <a href="README_it.md">Italiano</a> |
+        <a href="README_vi.md">Tiếng Việt</a> |
+        <a href="README_ar.md">العربية</a> |
+        <a href="README_ur.md">اردو</a> |
+        <a href="README_bn.md">বাংলা</a> |
+        <a href="README_fa.md">فارسی</a> |
+        <a href="README_ro.md">Română</a> |
+        <a href="README_tr.md">Türkçe</a>
     </p>
 </h4>
 
@@ -262,7 +265,6 @@ pipeline(
 
 - 该库不是一个可自由拼搭的神经网络模块化工具箱。模型文件中的代码刻意减少额外抽象，以便研究者能快速在各个模型上迭代，而无需深入更多抽象或文件跳转。
 - 训练 API 优化用于 Transformers 提供的 PyTorch 模型。若需要通用的机器学习训练循环，请使用其它库，如 [Accelerate](https://huggingface.co/docs/accelerate)。
-- [示例脚本](https://github.com/huggingface/transformers/tree/main/examples)只是「示例」。它们不一定能直接适配你的具体用例，需要你进行必要的改动。
 
 
 ## 100 个使用 Transformers 的项目

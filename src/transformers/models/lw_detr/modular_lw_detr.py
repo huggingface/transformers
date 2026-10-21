@@ -22,8 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -166,7 +165,19 @@ class LwDetrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "lw_detr"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="lw_detr_vit",
+            init_kwargs={
+                "image_size": 1024,
+                "hidden_size": 192,
+                "num_hidden_layers": 10,
+                "window_block_indices": [0, 1, 3, 6, 7, 9],
+                "out_indices": [2, 4, 5, 9],
+            },
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     projector_scale_factors: list[float] | tuple[float, ...] = ()
@@ -207,19 +218,6 @@ class LwDetrConfig(PreTrainedConfig):
                 "Please use `class_loss_coefficient` instead. `mask_loss_coefficient` will be removed in a future version."
             )
             self.class_loss_coefficient = kwargs.pop("mask_loss_coefficient")
-
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="lw_detr_vit",
-            default_config_kwargs={
-                "image_size": 1024,
-                "hidden_size": 192,
-                "num_hidden_layers": 10,
-                "window_block_indices": [0, 1, 3, 6, 7, 9],
-                "out_indices": [2, 4, 5, 9],
-            },
-            **kwargs,
-        )
 
         self.projector_in_channels = [self.d_model] * len(self.projector_scale_factors)
         self.projector_out_channels = self.d_model
@@ -318,13 +316,11 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module) -> None:
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, LwDetrViTEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, LwDetrViTLayer):
@@ -395,7 +391,6 @@ class LwDetrViTBackbone(VitDetBackbone):
             .reshape(batch_size * self.config.num_windows_side**2, window_height * window_width, channels)
         )
 
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         output = self.encoder(hidden_states, **kwargs)
 
         feature_maps = ()
@@ -764,8 +759,9 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "attentions": [LwDetrAttention, LwDetrMultiscaleDeformableAttention],
-        "hidden_states": [LwDetrDecoderLayer],
+        "attentions": LwDetrAttention,
+        "cross_attentions": LwDetrMultiscaleDeformableAttention,
+        "hidden_states": LwDetrDecoderLayer,
     }
 
     @torch.no_grad()
@@ -1061,7 +1057,7 @@ class LwDetrModel(DeformableDetrModel):
         ```python
         >>> from transformers import AutoImageProcessor, DeformableDetrModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1213,7 +1209,7 @@ class LwDetrMLPPredictionHead(DeformableDetrMLPPredictionHead):
 class LwDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
@@ -1286,18 +1282,12 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
         **kwargs: Unpack[TransformersKwargs],
     ) -> LwDetrObjectDetectionOutput:
         r"""
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
         Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, LwDetrForObjectDetection
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

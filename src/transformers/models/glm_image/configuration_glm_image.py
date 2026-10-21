@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -59,6 +59,8 @@ class GlmImageVisionConfig(PreTrainedConfig):
 
     model_type = "glm_image_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 40
     hidden_size: int = 1536
@@ -106,22 +108,15 @@ class GlmImageTextConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise_allreduce",
-        "layers.*.mlp.gate_up_proj": "colwise_allgather",  # we need to replicate here due to the `chunk` operation
-        "layers.*.mlp.down_proj": "vocab_allreduce",  # input is replicated due to the `chunk` operation
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_up_proj": "colwise_gather_output",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.down_proj": "rowwise_split_input",  # input is replicated due to the `chunk` operation
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
-
-    base_model_fsdp_plan = {
-        "embed_tokens": "free_full_weight",
-        "layers.*": "free_full_weight",
-        "norm": "keep_full_weight",
-    }
-
     ignore_keys_at_rope_validation = {"mrope_section"}
 
     vocab_size: int = 168064
@@ -172,10 +167,10 @@ class GlmImageConfig(PreTrainedConfig):
     ```"""
 
     model_type = "glm_image"
-    sub_configs = {
-        "vision_config": GlmImageVisionConfig,
-        "text_config": GlmImageTextConfig,
-        "vq_config": GlmImageVQVAEConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=GlmImageTextConfig),
+        "vision_config": SubConfigSpec(config_class=GlmImageVisionConfig),
+        "vq_config": SubConfigSpec(config_class=GlmImageVQVAEConfig),
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -186,24 +181,6 @@ class GlmImageConfig(PreTrainedConfig):
     image_start_token_id: int = 16384
     image_end_token_id: int = 16385
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"](**kwargs)
-
-        if isinstance(self.vq_config, dict):
-            self.vq_config = self.sub_configs["vq_config"](**self.vq_config)
-        elif self.vq_config is None:
-            self.vq_config = self.sub_configs["vq_config"](**kwargs)
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"](**kwargs)
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["GlmImageVQVAEConfig", "GlmImageVisionConfig", "GlmImageTextConfig", "GlmImageConfig"]

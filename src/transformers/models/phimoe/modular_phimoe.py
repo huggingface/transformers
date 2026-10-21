@@ -23,7 +23,6 @@ from ...modeling_layers import (
     GenericForSequenceClassification,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...utils.generic import maybe_autocast
 from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import LlamaAttention
 from ..mixtral.modeling_mixtral import (
@@ -38,28 +37,22 @@ from .configuration_phimoe import PhimoeConfig
 
 
 class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
-    def __init__(self, config: PhimoeConfig, device=None):
+    def __init__(self, config: PhimoeConfig):
         nn.Module.__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-
         self.rope_type = self.config.rope_parameters["rope_type"]
         self.rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
-    def forward(self, x, position_ids=None, layer_type=None):
-        if layer_type is not None:
-            raise ValueError(
-                f"{self.__class__.__name__} does not support layer types, but got `layer_type={layer_type}`"
-            )
-
+    def forward(self, x, position_ids=None):
         mscale = None
         seq_len = torch.max(position_ids) + 1
         if self.config.rope_parameters["rope_type"] != "default" and seq_len:
@@ -68,17 +61,12 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
                 if seq_len > self.config.rope_parameters["original_max_position_embeddings"]
                 else self.config.rope_parameters["short_mscale"]
             )
-        inv_freq, attention_scaling = self.rope_init_fn(self.config, x.device, seq_len)
+        inv_freq, attention_scaling = self.rope_init_fn(self.config)
         mscale = attention_scaling if mscale is None else mscale
-        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * mscale
-            sin = emb.sin() * mscale
+        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * mscale
+        sin = emb.sin() * mscale
         return cos.to(x.dtype), sin.to(x.dtype)
 
 
@@ -281,6 +269,7 @@ class PhimoeTopKRouter(nn.Linear):
         self.router_jitter_noise = config.router_jitter_noise
         self.input_jitter_noise = config.input_jitter_noise
         self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if self.training and self.input_jitter_noise > 0:
@@ -369,7 +358,7 @@ class PhimoeForCausalLM(MixtralForCausalLM):
         inputs_embeds=None,
         position_ids=None,
         use_cache=True,
-        logits_to_keep=None,
+        logits_to_keep=0,
         **kwargs,
     ):
         # Overwritten -- this model may need to switch between short and long rope, invalidating the cache in the
@@ -385,6 +374,7 @@ class PhimoeForCausalLM(MixtralForCausalLM):
             past_length = past_key_values.get_seq_length()
             if past_length <= self.config.original_max_position_embeddings:
                 past_key_values = None
+                kwargs["next_sequence_length"] = None
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids=input_ids,

@@ -211,6 +211,7 @@ class FuyuImageProcessor(TorchvisionBackend):
                 "image_unpadded_heights": image_unpadded_heights,
                 "image_unpadded_widths": image_unpadded_widths,
                 "image_scale_factors": image_scale_factors,
+                "image_sizes": original_image_sizes,
             },
             tensor_type=return_tensors,
             skip_tensor_conversion=["overflowing_values"],
@@ -301,7 +302,7 @@ class FuyuImageProcessor(TorchvisionBackend):
             patch_size (`dict[str, int]`, *optional*):
                 Size of the patches.
         """
-        requires_backends(self, ["torch"])
+        logger.warning("`image_processor.preprocess_with_tokenizer_info` is deprecated and will be removed in v.5.20.")
 
         if patch_size is None:
             if isinstance(self.patch_size, SizeDict):

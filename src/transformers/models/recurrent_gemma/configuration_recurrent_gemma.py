@@ -35,7 +35,7 @@ class RecurrentGemmaConfig(PreTrainedConfig):
     logits_soft_cap (`float`, *optional*, defaults to 30.0):
         The value at which the logits should be soft-capped to after the transformer and LM-head computation in the Causal LM architecture.
     block_types (`list[str]`, *optional*, defaults to `('recurrent', 'recurrent', 'attention')`):
-        List of aleternating blocks that will be repeated to initialize the `temporal_block` layer.
+        List of alternating blocks that will be repeated to initialize the `temporal_block` layer.
     w_init_variance_scale (`float`, *optional*, defaults to 0.01):
         weight initialization variance.
 

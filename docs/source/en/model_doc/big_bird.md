@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-07-28 and added to Hugging Face Transformers on 2021-03-30.*
+*This model was published in HF papers on 2020-07-28 and contributed to Hugging Face Transformers on 2021-03-30.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -99,10 +99,6 @@ print(f"The predicted token is: {predicted_token}")
 [[autodoc]] BigBirdTokenizer
     - get_special_tokens_mask
     - save_vocabulary
-
-## BigBirdTokenizerFast
-
-[[autodoc]] BigBirdTokenizerFast
 
 ## BigBird specific outputs
 

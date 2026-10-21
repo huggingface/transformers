@@ -12,10 +12,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2025-09-16.*
+*This model was contributed to Hugging Face Transformers on 2025-09-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -26,7 +26,7 @@ limitations under the License.
 
 # OLMo3
 
-Olmo3 is an improvement on [OLMo2](./olmo2). More details will be released on *soon*.
+Olmo3 is an improvement on [OLMo2](./olmo2). More details will be released *soon*.
 
 > [!TIP]
 > Click on the OLMo3 models in the right sidebar for more examples of how to apply OLMo3 to different language tasks.

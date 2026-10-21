@@ -1224,7 +1224,6 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @require_torch_accelerator
     def test_flex_attention_with_grads(self):
         for model_class in self.all_model_classes:
-            # TODO: raushan, fix for composite models after making VLMs support new attn API
             if not model_class._supports_flex_attn or self._is_composite:
                 self.skipTest(reason="This model does not support flex attention")
 
@@ -1280,6 +1279,24 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         # Only generate beyond prefill, we don't care about the output as it only checks for crashes
         _ = model.generate(input_ids, attention_mask=attention_mask, max_new_tokens=2, use_cache=True)
+
+    def test_generate_cross_attention_cache_is_not_sliding(self):
+        # Fast (CPU-friendly, no flash-attn) regression test for the same fix as
+        # `test_generate_beyond_sliding_window_with_flash_attn`: even when the decoder declares sliding-window
+        # layers, `_prepare_cache_for_generation` must build a full-attention cross-attention cache.
+        config, input_ids, _, attention_mask, _, _ = self.model_tester.prepare_config_and_inputs()
+        config.decoder.sliding_window = 2  # arbitrary but less than seq_len
+
+        model = self.model_tester.causal_lm_class(config=config).to(torch_device).eval()
+
+        out = model.generate(
+            input_ids,
+            attention_mask=attention_mask,
+            max_new_tokens=4,  # beyond the sliding window
+            use_cache=True,
+            return_dict_in_generate=True,
+        )
+        self.assertFalse(any(out.past_key_values.cross_attention_cache.is_sliding))
 
 
 class T5GemmaEncoderOnlyModelTester:
@@ -1516,41 +1533,6 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
-
-    # Based on tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads
-    # Update hidden size for encoder
-    @require_torch_accelerator
-    def test_flex_attention_with_grads(self):
-        for model_class in self.all_model_classes:
-            # TODO: raushan, fix for composite models after making VLMs support new attn API
-            if not model_class._supports_flex_attn or self._is_composite:
-                self.skipTest(reason="This model does not support flex attention")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config._attn_implementation = "flex_attention"
-            # Flex Attention cannot use dropout
-            config.encoder.attention_dropout = 0
-
-            # Flex attention relies on triton on compilation
-            # However, triton cannot handle hidden dimensions of less than 16
-            # --> forcing at least a hidden dim of 16
-            config.encoder.hidden_size *= max(
-                16
-                // getattr(
-                    config.encoder, "head_dim", config.encoder.hidden_size // config.encoder.num_attention_heads
-                ),
-                1,
-            )
-            config.encoder.head_dim = max(16, config.encoder.head_dim)
-
-            model = model_class(config).to(device=torch_device)
-            self.assertTrue(model.config._attn_implementation == "flex_attention")
-
-            # Elaborate workaround for encoder-decoder models as some do not specify their main input
-            dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
-
-            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
-            _ = model(**dummy_inputs)
 
 
 # Based on tests.models.t5.test_modeling_t5.TestAsymmetricT5

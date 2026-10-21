@@ -328,7 +328,7 @@ def get_chat_template() -> str | None:
         return None
 
     if _CHAT_TEMPLATE_PATH.value:
-        with open(_CHAT_TEMPLATE_PATH.value, "r") as f:
+        with open(_CHAT_TEMPLATE_PATH.value, "r", encoding="utf-8") as f:
             return f.read()
 
     return _CHAT_TEMPLATE
@@ -695,7 +695,7 @@ def main(*args):
     if variant == _VARIANT_EMBEDDINGGEMMA:
         from sentence_transformers import SentenceTransformer, models
 
-        # TODO: Support Retrieval tasks where we use `"title: {title} | text: {passage}"` interally and construct this
+        # TODO: Support Retrieval tasks where we use `"title: {title} | text: {passage}"` internally and construct this
         # from split-records cached data, but externally these come through as a single string with components
         # separated by a newline. This should be used for `passage` for SentenceTransformers and the relevant MTEB
         # Retrieval tasks.

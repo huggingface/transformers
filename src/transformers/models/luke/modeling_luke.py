@@ -769,11 +769,8 @@ class LukePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
+        super()._init_weights(module)
+        if isinstance(module, nn.Embedding):
             if module.embedding_dim == 1:  # embedding for bias parameters
                 init.zeros_(module.weight)
             else:
@@ -781,9 +778,6 @@ class LukePreTrainedModel(PreTrainedModel):
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
                 init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
 
 @auto_docstring(
@@ -1086,10 +1080,6 @@ class LukeForMaskedLM(LukePreTrainedModel):
         entity_position_ids (`torch.LongTensor` of shape `(batch_size, entity_length, max_mention_length)`, *optional*):
             Indices of positions of each input entity in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         entity_labels (`torch.LongTensor` of shape `(batch_size, entity_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
@@ -1641,10 +1631,6 @@ class LukeForSequenceClassification(LukePreTrainedModel):
         entity_position_ids (`torch.LongTensor` of shape `(batch_size, entity_length, max_mention_length)`, *optional*):
             Indices of positions of each input entity in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -2012,10 +1998,6 @@ class LukeForMultipleChoice(LukePreTrainedModel):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]

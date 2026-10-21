@@ -103,9 +103,7 @@ class CanineEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def _hash_bucket_tensors(self, input_ids, num_hashes: int, num_buckets: int):
         """
@@ -341,7 +339,7 @@ class CanineSelfAttention(nn.Module):
                 # positions we want to attend and the dtype's smallest value for masked positions.
                 attention_mask = (1.0 - attention_mask.float()) * torch.finfo(attention_scores.dtype).min
             # Apply the attention mask (precomputed for all layers in CanineModel forward() function)
-            attention_scores = attention_scores + attention_mask
+            attention_scores = attention_scores + attention_mask.to(attention_scores.dtype)
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -708,7 +706,7 @@ class CanineOnlyMLMHead(nn.Module):
     def forward(
         self,
         sequence_output: tuple[torch.Tensor],
-    ) -> tuple[torch.Tensor]:
+    ) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
@@ -800,10 +798,8 @@ class CanineModel(CaninePreTrainedModel):
             poolable_char_mask.float()
         )
 
-        # finally, squeeze to get tensor of shape (batch_size, mol_seq_len)
-        molecule_attention_mask = torch.squeeze(pooled_molecule_mask, dim=-1)
-
-        return molecule_attention_mask
+        # drop the channel dim added for MaxPool1d to get tensor of shape (batch_size, mol_seq_len)
+        return pooled_molecule_mask.squeeze(dim=1)
 
     def _repeat_molecules(self, molecules: torch.Tensor, char_seq_length: int) -> torch.Tensor:
         """Repeats molecules to make them the same length as the char sequence."""
@@ -916,7 +912,7 @@ class CanineModel(CaninePreTrainedModel):
         molecule_attention_mask = create_bidirectional_mask(
             config=self.config,
             inputs_embeds=init_molecule_encoding[:, 0:1, :],  # force q_len == 1
-            attention_mask=molecule_attention_mask.squeeze(1),  # 3D mask at times due to custom fn
+            attention_mask=molecule_attention_mask,
         )
 
         # Deep BERT encoder
@@ -1022,12 +1018,6 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.canine(
@@ -1131,10 +1121,6 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1211,9 +1197,6 @@ class CanineForTokenClassification(CaninePreTrainedModel):
         **kwargs,
     ) -> tuple | TokenClassifierOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-
         Example:
 
         ```python

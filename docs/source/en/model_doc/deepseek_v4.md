@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-05-02.*
+*This model was contributed to Hugging Face Transformers on 2026-05-02.*
 
 # DeepSeek-V4
 
@@ -25,6 +25,9 @@ token-id → expert-id hash table.
 
 This implementation covers `DeepSeek-V4-Flash`, `DeepSeek-V4-Pro`, and their `-Base` pretrained siblings. All four
 share the same architecture; they differ only in width / depth / expert count and weights.
+
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 ## Architecture (paper §2)
 

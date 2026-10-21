@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2018-10-11 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2018-10-11 and contributed to Hugging Face Transformers on 2020-11-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -29,6 +29,8 @@ You can find all the original BERT checkpoints under the [BERT](https://huggingf
 
 > [!TIP]
 > Click on the BERT models in the right sidebar for more examples of how to apply BERT to different language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
 
@@ -98,10 +100,6 @@ print(f"The predicted token is: {predicted_token}")
 ## BertTokenizerLegacy
 
 [[autodoc]] BertTokenizerLegacy
-
-## BertTokenizerFast
-
-[[autodoc]] BertTokenizerFast
 
 ## BertModel
 

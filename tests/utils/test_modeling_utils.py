@@ -16,6 +16,7 @@ import glob
 import json
 import os
 import os.path
+import re
 import subprocess
 import sys
 import tempfile
@@ -28,9 +29,9 @@ import warnings
 from pathlib import Path
 from unittest.mock import patch
 
-import httpx
 import pytest
 from huggingface_hub import HfApi, snapshot_download, split_torch_state_dict_into_shards
+from huggingface_hub.utils import httpx
 from parameterized import parameterized
 from pytest import mark
 
@@ -43,6 +44,7 @@ from transformers import (
     BartForConditionalGeneration,
     BartModel,
     CLIPTextModelWithProjection,
+    DistributedConfig,
     DynamicCache,
     GPT2Config,
     GPT2LMHeadModel,
@@ -59,7 +61,6 @@ from transformers import (
     is_torch_available,
     logging,
 )
-from transformers.distributed import DistributedConfig
 from transformers.modeling_flash_attention_utils import is_flash_attn_available
 from transformers.models.mistral.modeling_mistral import MistralModel
 from transformers.testing_utils import (
@@ -68,13 +69,20 @@ from transformers.testing_utils import (
     LoggingLevel,
     TemporaryHubRepo,
     TestCasePlus,
+    backend_empty_cache,
+    backend_memory_allocated,
+    backend_synchronize,
     force_serialization_as_bin_files,
     hub_retry,
     is_staging_test,
     require_accelerate,
+    require_kernels,
     require_non_hpu,
+    require_rocm,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
+    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -86,10 +94,12 @@ from transformers.utils import (
     WEIGHTS_NAME,
 )
 from transformers.utils.import_utils import (
+    PACKAGE_DISTRIBUTION_MAPPING,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
     is_kernels_available,
+    is_torch_distributed_available,
     is_torch_npu_available,
 )
 
@@ -119,6 +129,7 @@ if is_torch_available():
         LlamaConfig,
         LlamaForCausalLM,
         MixtralConfig,
+        MixtralForCausalLM,
         MixtralModel,
         MusicgenConfig,
         MusicgenForConditionalGeneration,
@@ -133,6 +144,9 @@ if is_torch_available():
         _find_identical,
         get_total_byte_count,
     )
+
+    if is_torch_distributed_available():
+        from torch.testing._internal.distributed.fake_pg import FakeStore
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -336,34 +350,38 @@ if is_torch_available():
     class TestOffline(unittest.TestCase):
         def test_offline(self):
             with tempfile.TemporaryDirectory() as tmpdir:
-                # First offline load should fail
-                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
-                    with pytest.raises(OSError):
+                # TODO: only necessary for read-only cache systems; replace with a shared helper
+                with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmpdir}):
+                    # First offline load should fail
+                    with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
+                        with pytest.raises(OSError):
+                            AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+
+                    # Enable online mode for download
+                    with patch("huggingface_hub.constants.HF_HUB_OFFLINE", False):
+                        snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+
+                    # Load again in offline mode - should work now
+                    with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
                         AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
-
-                # Enable online mode for download
-                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", False):
-                    snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
-
-                # Load again in offline mode - should work now
-                with patch("huggingface_hub.constants.HF_HUB_OFFLINE", True):
-                    AutoModelForImageClassification.from_pretrained(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
 
         def test_local_files_only(self):
             with tempfile.TemporaryDirectory() as tmpdir:
-                # Empty cache => fail to load from cache
-                with pytest.raises(OSError):
+                # TODO: only necessary for read-only cache systems; replace with a shared helper
+                with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmpdir}):
+                    # Empty cache => fail to load from cache
+                    with pytest.raises(OSError):
+                        AutoModelForImageClassification.from_pretrained(
+                            TINY_IMAGE_CLASSIF, cache_dir=tmpdir, local_files_only=True
+                        )
+
+                    # Populate cache
+                    snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
+
+                    # Load again from cache => success
                     AutoModelForImageClassification.from_pretrained(
                         TINY_IMAGE_CLASSIF, cache_dir=tmpdir, local_files_only=True
                     )
-
-                # Populate cache
-                snapshot_download(TINY_IMAGE_CLASSIF, cache_dir=tmpdir)
-
-                # Load again from cache => success
-                AutoModelForImageClassification.from_pretrained(
-                    TINY_IMAGE_CLASSIF, cache_dir=tmpdir, local_files_only=True
-                )
 
 
 # Need to be serializable, which means they cannot be in a test class method
@@ -432,41 +450,101 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
 
-    def test_model_from_pretrained_fsdp_distributes_before_loading(self):
-        model = GPT2LMHeadModel(GPT2Config(n_layer=1, n_head=2, n_embd=8, n_positions=8, n_ctx=8, vocab_size=32))
+    @parameterized.expand(
+        [
+            ("fsdp", {"fsdp_size": 8}),
+            ("tp", {"tp_size": 8}),
+            ("fsdp_tp", {"fsdp_size": 4, "tp_size": 2}),
+            ("fsdp_ep_efsdp2", {"fsdp_size": 8, "ep_size": 4}),  # EP without TP, efsdp = 8 / 4 = 2
+            ("fsdp_tp_ep_efsdp1", {"fsdp_size": 4, "tp_size": 2, "ep_size": 8}),  # ep == fsdp * tp, no expert FSDP
+            ("fsdp_tp_ep_efsdp2", {"fsdp_size": 4, "tp_size": 2, "ep_size": 4}),  # efsdp = 4 * 2 / 4 = 2
+            ("fsdp_tp_ep_efsdp4", {"fsdp_size": 4, "tp_size": 2, "ep_size": 2}),  # ep == tp, efsdp == fsdp = 4
+        ]
+    )
+    @require_torch_greater_or_equal("2.7")
+    @unittest.skipUnless(is_torch_distributed_available(), "test requires torch.distributed")
+    def test_get_total_byte_count_counts_require_process_group(self, _, parallel_sizes):
+        import transformers.modeling_utils as modeling_utils
+
+        config = MixtralConfig(
+            vocab_size=64,
+            hidden_size=32,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=8,
+            num_key_value_heads=8,
+            head_dim=4,
+            num_local_experts=8,
+            num_experts_per_tok=2,
+            tied_word_embeddings=True,
+        )
+
+        # Mixtral's default plans would also work, since EP rules take precedence over TP rules on shared keys, but the
+        # plans are spelled out so that readers can easily understand the intent.
+        base_model_tp_plan = {
+            "embed_tokens": "embedding_rowwise",
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.o_proj": "rowwise",
+        }
+        base_model_ep_plan = {
+            "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj": "grouped_gemm",
+            "layers.*.mlp.experts": "ep_dispatch_experts",
+        }
+        # This is tied with the head
+        head_tp_plan = {"lm_head": "colwise_gather_output"}
+
+        def expected_local_byte_count(model, tp_size=1, fsdp_size=1, ep_size=1):
+            full_tp_plan = {f"model.{key}": style for key, style in base_model_tp_plan.items()} | head_tp_plan
+            full_ep_plan = {f"model.{key}": style for key, style in base_model_ep_plan.items()}
+
+            def in_plan(name, plan):
+                generic_name = re.sub(r"\.\d+\.", ".*.", name)
+                return generic_name in plan or generic_name.removesuffix(".weight") in plan
+
+            total = 0
+            for name, param in model.named_parameters():
+                if ep_size > 1 and in_plan(name, full_ep_plan):
+                    # Split by EP, then by FSDP across the ranks holding the same experts (efsdp).
+                    efsdp_size = fsdp_size * tp_size // ep_size
+                    num_shards = ep_size * efsdp_size
+                elif tp_size > 1 and in_plan(name, full_tp_plan):
+                    # Split by TP, then by FSDP
+                    num_shards = tp_size * fsdp_size
+                else:
+                    # only FSDP splits it
+                    num_shards = fsdp_size
+
+                total += param.numel() * param.element_size() // num_shards
+            return total
+
+        byte_counts = []
+
+        def capture_total_byte_count(model, expanded_device_map, hf_quantizer):
+            # Because we are running from_pretrained to make sure all the parallelisms are applied before calling
+            # get_total_byte_count(), we need to capture its value at the point where the warmup runs.
+            byte_counts.append(sum(get_total_byte_count(model, expanded_device_map, hf_quantizer).values()))
 
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir)
-            call_order = []
+            MixtralForCausalLM(config).save_pretrained(tmp_dir)
 
-            fake_mesh = mock.Mock()
-            fake_mesh.mesh_dim_names = ("fsdp",)
-            fake_mesh.ndim = 1
+            torch.distributed.init_process_group("fake", rank=0, world_size=8, store=FakeStore())
+            try:
+                with (
+                    patch.object(MixtralConfig, "base_model_tp_plan", base_model_tp_plan),
+                    patch.object(MixtralConfig, "base_model_ep_plan", base_model_ep_plan),
+                    patch.object(MixtralForCausalLM, "_tp_plan", head_tp_plan),
+                    patch.object(modeling_utils, "caching_allocator_warmup", side_effect=capture_total_byte_count),
+                ):
+                    model = MixtralForCausalLM.from_pretrained(
+                        tmp_dir, distributed_config=DistributedConfig(**parallel_sizes)
+                    )
+            finally:
+                torch.distributed.destroy_process_group()
 
-            def fake_apply_fsdp(model, fsdp_mesh, fsdp_plan):
-                call_order.append("distribute")
-                self.assertIs(fsdp_mesh, fake_mesh)
-                self.assertIsNone(fsdp_plan)
-                return model
-
-            def fake_load_pretrained_model(model, state_dict, checkpoint_files, load_config, expected_keys=None):
-                call_order.append("load")
-                self.assertIs(load_config.device_mesh, fake_mesh)
-                return mock.Mock(), None
-
-            with (
-                patch("transformers.modeling_utils.init_device_mesh", return_value=fake_mesh),
-                patch("transformers.distributed.utils.apply_fully_shard_data_parallel", side_effect=fake_apply_fsdp),
-                patch.object(GPT2LMHeadModel, "_load_pretrained_model", side_effect=fake_load_pretrained_model),
-                patch.object(
-                    GPT2LMHeadModel,
-                    "_finalize_model_loading",
-                    side_effect=lambda model, load_config, loading_info: loading_info,
-                ),
-            ):
-                GPT2LMHeadModel.from_pretrained(tmp_dir, distributed_config=DistributedConfig(fsdp_size=2))
-
-        self.assertEqual(call_order, ["distribute", "load"])
+        self.assertEqual(byte_counts, [expected_local_byte_count(model, **parallel_sizes)])
 
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)
@@ -601,6 +679,8 @@ class ModelUtilsTest(TestCasePlus):
 
         model = AutoModel.from_config(config, dtype=torch.float16)
         self.assertEqual(model.dtype, torch.float16)
+        # the resolved dtype is kept on the config so it matches the actual weights (see #46512)
+        self.assertEqual(model.config.dtype, torch.float16)
 
         # torch.set_default_dtype() supports only float dtypes, so will fail with non-float type
         with self.assertRaises(ValueError):
@@ -746,7 +826,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.config.dtype, torch.float16)
         self.assertEqual(model.dtype, torch.float16)
         # tests `config.dtype` saving
-        with open(f"{model_path}/config.json") as f:
+        with open(f"{model_path}/config.json", encoding="utf-8") as f:
             config_dict = json.load(f)
         self.assertEqual(config_dict["dtype"], "float16")
         # 2. test dtype="auto" via auto-derivation
@@ -889,6 +969,66 @@ class ModelUtilsTest(TestCasePlus):
                 for p1, p2 in zip(model.parameters(), new_model.parameters()):
                     torch.testing.assert_close(p1, p2)
 
+    def test_transformers_weights_config_field_rejects_path_traversal(self):
+        config = BertConfig(
+            vocab_size=16,
+            hidden_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=1,
+            intermediate_size=8,
+            max_position_embeddings=8,
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = os.path.join(tmp_dir, "repo")
+            outside_dir = os.path.join(tmp_dir, "outside")
+            BertModel(config).save_pretrained(repo)
+            BertModel(config).save_pretrained(outside_dir)
+
+            config_file = os.path.join(repo, "config.json")
+            with open(config_file, encoding="utf-8") as f:
+                repo_config = json.load(f)
+
+            for bad in [
+                os.path.join("..", "outside", "model.safetensors"),
+                os.path.join(outside_dir, "model.safetensors"),
+            ]:
+                repo_config["transformers_weights"] = bad
+                with open(config_file, "w", encoding="utf-8") as f:
+                    json.dump(repo_config, f)
+                with self.assertRaises(ValueError):
+                    BertModel.from_pretrained(repo)
+
+            repo_config["transformers_weights"] = "model.safetensors"
+            with open(config_file, "w", encoding="utf-8") as f:
+                json.dump(repo_config, f)
+            self.assertIsInstance(BertModel.from_pretrained(repo), BertModel)
+
+    def test_transformers_weights_allows_symlinked_snapshot_file(self):
+        if os.name == "nt":
+            self.skipTest("creating symlinks requires privileges on Windows")
+        config = BertConfig(
+            vocab_size=16,
+            hidden_size=8,
+            num_hidden_layers=1,
+            num_attention_heads=1,
+            intermediate_size=8,
+            max_position_embeddings=8,
+        )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            blobs = os.path.join(tmp_dir, "blobs")
+            snapshot = os.path.join(tmp_dir, "snapshot")
+            os.makedirs(blobs)
+            os.makedirs(snapshot)
+            BertModel(config).save_pretrained(blobs, safe_serialization=True)
+
+            config_dict = config.to_dict()
+            config_dict["transformers_weights"] = "model.safetensors"
+            with open(os.path.join(snapshot, "config.json"), "w", encoding="utf-8") as f:
+                json.dump(config_dict, f)
+            os.symlink(os.path.join(blobs, "model.safetensors"), os.path.join(snapshot, "model.safetensors"))
+
+            self.assertIsInstance(BertModel.from_pretrained(snapshot), BertModel)
+
     def test_checkpoint_sharding_from_hub(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
         # the model above is the same as the model below, just a sharded version.
@@ -1010,68 +1150,83 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_checkpoint_variant_hub(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(EnvironmentError):
-                _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir)
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir, variant="v2", use_safetensors=False
-            )
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                with self.assertRaises(EnvironmentError):
+                    _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-variant", cache_dir=tmp_dir)
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant",
+                    cache_dir=tmp_dir,
+                    variant="v2",
+                    use_safetensors=False,
+                )
         self.assertIsNotNone(model)
 
     def test_checkpoint_variant_hub_sharded(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(EnvironmentError):
-                _ = BertModel.from_pretrained(
-                    "hf-internal-testing/tiny-random-bert-variant-sharded", cache_dir=tmp_dir
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                with self.assertRaises(EnvironmentError):
+                    _ = BertModel.from_pretrained(
+                        "hf-internal-testing/tiny-random-bert-variant-sharded", cache_dir=tmp_dir
+                    )
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant-sharded",
+                    cache_dir=tmp_dir,
+                    variant="v2",
+                    use_safetensors=False,
                 )
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant-sharded",
-                cache_dir=tmp_dir,
-                variant="v2",
-                use_safetensors=False,
-            )
         self.assertIsNotNone(model)
 
     def test_checkpoint_variant_hub_safe(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(EnvironmentError):
-                _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-variant-safe", cache_dir=tmp_dir)
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant-safe", cache_dir=tmp_dir, variant="v2"
-            )
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                with self.assertRaises(EnvironmentError):
+                    _ = BertModel.from_pretrained(
+                        "hf-internal-testing/tiny-random-bert-variant-safe", cache_dir=tmp_dir
+                    )
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant-safe", cache_dir=tmp_dir, variant="v2"
+                )
         self.assertIsNotNone(model)
 
     def test_checkpoint_variant_hub_sharded_safe(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertRaises(EnvironmentError):
-                _ = BertModel.from_pretrained(
-                    "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                with self.assertRaises(EnvironmentError):
+                    _ = BertModel.from_pretrained(
+                        "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir
+                    )
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir, variant="v2"
                 )
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant-sharded-safe", cache_dir=tmp_dir, variant="v2"
-            )
         self.assertIsNotNone(model)
 
     def test_checkpoint_variant_save_load(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model = BertModel.from_pretrained(
-                "hf-internal-testing/tiny-random-bert-variant",
-                cache_dir=tmp_dir,
-                variant="v2",
-                use_safetensors=False,
-            )
-            weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                model = BertModel.from_pretrained(
+                    "hf-internal-testing/tiny-random-bert-variant",
+                    cache_dir=tmp_dir,
+                    variant="v2",
+                    use_safetensors=False,
+                )
+                weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
 
-            model.save_pretrained(tmp_dir, variant="v2")
-            # saving will create a variant checkpoint
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
+                model.save_pretrained(tmp_dir, variant="v2")
+                # saving will create a variant checkpoint
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
 
-            model.save_pretrained(tmp_dir)
-            # saving shouldn't delete variant checkpoints
-            weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
+                model.save_pretrained(tmp_dir)
+                # saving shouldn't delete variant checkpoints
+                weights_name = ".".join(SAFE_WEIGHTS_NAME.split(".")[:-1] + ["v2"] + ["safetensors"])
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, weights_name)))
 
-            # there should be a normal checkpoint
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+                # there should be a normal checkpoint
+                self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
 
         self.assertIsNotNone(model)
 
@@ -1176,6 +1331,40 @@ class ModelUtilsTest(TestCasePlus):
             torch.testing.assert_close(outputs1[0].cpu(), outputs2[0].cpu())
 
     @slow
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_disk_onload_dtype(self):
+        from accelerate.utils import align_module_device
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # load model with full disk offloading
+            model = AutoModelForCausalLM.from_pretrained(
+                "inference-optimization/DSV4-tiny-empty",
+                device_map="auto",
+                max_memory={},
+                offload_folder=tmp_dir,
+                offload_buffers=True,
+            )
+
+            # note that `model.dtype` and the dtype of `tid2eid` differ
+            offloaded = model.model.layers[0].mlp.gate.tid2eid
+            self.assertEqual(offloaded.dtype, torch.int64)
+            self.assertEqual(model.dtype, torch.bfloat16)
+
+            # the dtype used to load from disk should match
+            index = model.model.layers[0].mlp.gate._hf_hook.weights_map.dataset.index
+            weights_info = index["model.layers.0.mlp.gate.tid2eid"]
+            weights_info_type = getattr(torch, weights_info["dtype"])
+            self.assertEqual(weights_info_type, offloaded.dtype)
+            self.assertEqual(weights_info_type, torch.int64)
+
+            # the onloaded dtype should be the weight dtype, not the model dtype
+            with align_module_device(model.model.layers[0].mlp.gate):
+                self.assertEqual(model.model.layers[0].mlp.gate.tid2eid.dtype, offloaded.dtype)
+                self.assertEqual(model.model.layers[0].mlp.gate.tid2eid.dtype, torch.int64)
+
+    @slow
     @require_torch
     def test_from_pretrained_non_contiguous_checkpoint(self):
         # See: https://github.com/huggingface/transformers/pull/28414
@@ -1205,7 +1394,7 @@ class ModelUtilsTest(TestCasePlus):
         _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
+        with mock.patch.object(httpx.Client, "request", return_value=response_mock) as mock_head:
             _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -1313,29 +1502,33 @@ class ModelUtilsTest(TestCasePlus):
 
         # test that only safetensors if both available and use_safetensors=False
         with tempfile.TemporaryDirectory() as tmp_dir:
-            CLIPTextModel.from_pretrained(
-                "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
-                subfolder="text_encoder",
-                use_safetensors=False,
-                cache_dir=tmp_dir,
-            )
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                CLIPTextModel.from_pretrained(
+                    "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
+                    subfolder="text_encoder",
+                    use_safetensors=False,
+                    cache_dir=tmp_dir,
+                )
 
-            all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
-            self.assertTrue(any(f.endswith("bin") for f in all_downloaded_files))
-            self.assertFalse(any(f.endswith("safetensors") for f in all_downloaded_files))
+                all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
+                self.assertTrue(any(f.endswith("bin") for f in all_downloaded_files))
+                self.assertFalse(any(f.endswith("safetensors") for f in all_downloaded_files))
 
         # test that no safetensors if both available and use_safetensors=True
         with tempfile.TemporaryDirectory() as tmp_dir:
-            CLIPTextModel.from_pretrained(
-                "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
-                subfolder="text_encoder",
-                use_safetensors=True,
-                cache_dir=tmp_dir,
-            )
+            # TODO: only necessary for read-only cache systems; replace with a shared helper
+            with unittest.mock.patch.dict(os.environ, {"HF_XET_CACHE": tmp_dir}):
+                CLIPTextModel.from_pretrained(
+                    "hf-internal-testing/diffusers-stable-diffusion-tiny-all",
+                    subfolder="text_encoder",
+                    use_safetensors=True,
+                    cache_dir=tmp_dir,
+                )
 
-            all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
-            self.assertTrue(any(f.endswith("safetensors") for f in all_downloaded_files))
-            self.assertFalse(any(f.endswith("bin") for f in all_downloaded_files))
+                all_downloaded_files = glob.glob(os.path.join(tmp_dir, "*", "snapshots", "*", "*", "*"))
+                self.assertTrue(any(f.endswith("safetensors") for f in all_downloaded_files))
+                self.assertFalse(any(f.endswith("bin") for f in all_downloaded_files))
 
         # test no model file found when use_safetensors=None (default when safetensors package available)
         with self.assertRaises(OSError) as missing_model_file_error:
@@ -1343,7 +1536,7 @@ class ModelUtilsTest(TestCasePlus):
 
         with self.assertRaises(OSError) as missing_model_file_error:
             with tempfile.TemporaryDirectory() as tmp_dir:
-                with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
                     f.write("{}")
                 f.close()
                 BertModel.from_pretrained(tmp_dir)
@@ -1455,7 +1648,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Save the config
-            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+            with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
                 f.write(json.dumps(model.config.to_dict()))
 
             state_dict = model.state_dict()
@@ -1484,7 +1677,7 @@ class ModelUtilsTest(TestCasePlus):
                 self.assertIs(model.linear.weight, model.linear_3.weight, msg="Weights are not tied!")
                 with tempfile.TemporaryDirectory() as tmp_dir:
                     # Save the config
-                    with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+                    with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
                         f.write(json.dumps(model.config.to_dict()))
 
                     state_dict = model.state_dict()
@@ -1537,7 +1730,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Save the config
-            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+            with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
                 f.write(json.dumps(model.config.to_dict()))
 
             state_dict = model.state_dict()
@@ -1567,7 +1760,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Save the config
-            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+            with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
                 f.write(json.dumps(model.config.to_dict()))
 
             state_dict = model.state_dict()
@@ -1594,7 +1787,7 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Save the config
-            with open(os.path.join(tmp_dir, "config.json"), "w") as f:
+            with open(os.path.join(tmp_dir, "config.json"), "w", encoding="utf-8") as f:
                 f.write(json.dumps(model.config.to_dict()))
 
             state_dict = model.state_dict()
@@ -2055,11 +2248,10 @@ class ModelUtilsTest(TestCasePlus):
             device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
             device = torch.device(f"{device_type}:0")
 
-            torch_accelerator_module = getattr(torch, device_type, torch.cuda)
-            torch_accelerator_module.synchronize(device)
+            torch.accelerator.synchronize(device)
             t0 = time.time()
             model = AutoModelForCausalLM.from_pretrained(args.model_id, dtype=torch.float16, device_map=device)
-            torch_accelerator_module.synchronize(device)
+            torch.accelerator.synchronize(device)
             dt = time.time() - t0
 
             # Assert loading is faster (it should be more than enough in both cases)
@@ -2072,7 +2264,7 @@ class ModelUtilsTest(TestCasePlus):
             """
         )
 
-        with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
+        with tempfile.NamedTemporaryFile(encoding="utf-8", mode="w+", suffix=".py") as tmp:
             tmp.write(script_to_run)
             tmp.flush()
             tmp.seek(0)
@@ -2123,7 +2315,7 @@ class ModelUtilsTest(TestCasePlus):
             model.save_pretrained(tmpdirname)
 
             # The config should not have a mention of transformers_weights
-            with open(os.path.join(tmpdirname, "config.json")) as f:
+            with open(os.path.join(tmpdirname, "config.json"), encoding="utf-8") as f:
                 config = json.loads(f.read())
                 self.assertFalse("transformers_weights" in config)
 
@@ -2149,7 +2341,7 @@ class ModelUtilsTest(TestCasePlus):
             model.save_pretrained(tmpdirname, max_shard_size="100kb")
 
             # The config should not have a mention of transformers_weights
-            with open(os.path.join(tmpdirname, "config.json")) as f:
+            with open(os.path.join(tmpdirname, "config.json"), encoding="utf-8") as f:
                 config = json.loads(f.read())
                 self.assertFalse("transformers_weights" in config)
 
@@ -2415,6 +2607,137 @@ class ModelUtilsTest(TestCasePlus):
         model.config.is_causal = False
         with_config_only = model(input_ids, attention_mask=attention_mask).last_hidden_state
         torch.testing.assert_close(reference, with_config_only)
+
+    def test_last_hidden_state_can_be_untied_from_config(self):
+        """Test that `config.tie_last_hidden_states` overrides the default of the `capture_outputs` decorator, so that
+        `hidden_states[-1]` stays the hidden state before the final norm (which embedding models dropping that norm
+        rely on). As for the test above, testing it on Llama is enough as the entry point is the general
+        `capture_outputs` decorator, so this cannot easily be made a common model test."""
+        from transformers import LlamaConfig, LlamaModel
+
+        config = LlamaConfig(
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=16,
+            hidden_size=32,
+            intermediate_size=64,
+            vocab_size=100,
+        )
+        model = LlamaModel(config).to(torch_device).eval()
+        input_ids = torch.randint(5, 95, (2, 17), device=torch_device)
+
+        # By default, the output of the last decoder layer is overwritten with the post-norm `last_hidden_state`
+        with torch.no_grad():
+            tied = model(input_ids, output_hidden_states=True)
+        torch.testing.assert_close(tied.hidden_states[-1], tied.last_hidden_state)
+
+        model.config.tie_last_hidden_states = False
+        with torch.no_grad():
+            untied = model(input_ids, output_hidden_states=True)
+
+        # Neither `last_hidden_state` nor the earlier hidden states are affected
+        torch.testing.assert_close(untied.last_hidden_state, tied.last_hidden_state)
+        for untied_hidden_state, tied_hidden_state in zip(untied.hidden_states[:-1], tied.hidden_states[:-1]):
+            torch.testing.assert_close(untied_hidden_state, tied_hidden_state)
+
+        # But `hidden_states[-1]` is now the input of the final norm instead of its output
+        torch.testing.assert_close(model.norm(untied.hidden_states[-1]), tied.hidden_states[-1])
+
+        # `None` means unset, i.e. fall back to the decorator default, as a config saved with an explicit
+        # `"tie_last_hidden_states": null` must not silently untie the model
+        model.config.tie_last_hidden_states = None
+        with torch.no_grad():
+            unset = model(input_ids, output_hidden_states=True)
+        torch.testing.assert_close(unset.hidden_states[-1], unset.last_hidden_state)
+
+    def test_linear_attention_models_can_use_accelerate_hooks(self):
+        """
+        Test that linear attention models (here only tested on lfm2 as it has small checkpoints) can use device_map and
+        offloading correctly (the conv module inside the Mixer are not used through `forward`, so accelerate hooks have to be
+        forced)
+        """
+        model_id = "LiquidAI/LFM2.5-230M"
+        input_text = "Hello, who are you?"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer.apply_chat_template(
+            [{"role": "user", "content": input_text}],
+            tokenize=True,
+            return_tensors="pt",
+            add_generation_prompt=True,
+        )
+
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float16)
+        out = model.generate(**inputs.to(model.device), max_new_tokens=20, do_sample=False)
+        output_text1 = tokenizer.batch_decode(out[:, inputs["input_ids"].shape[1] :])[0]
+
+        # This will offload to disk
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, dtype=torch.float16, device_map="auto", max_memory={"cpu": "200MiB", "disk": "12GiB"}
+        )
+        # Make sure it was offloaded
+        self.assertTrue("cpu" in model.hf_device_map.values())
+        self.assertTrue("disk" in model.hf_device_map.values())
+
+        # Make sure we will not crash when reaching a disk offloaded mixer with linear attention
+        out = model.generate(**inputs.to(model.device), max_new_tokens=20, do_sample=False)
+        output_text2 = tokenizer.batch_decode(out[:, inputs["input_ids"].shape[1] :])[0]
+
+        EXPECTED_TEXT = (
+            "I’m an AI language model created to help answer questions, provide information, and assist with a wide"
+        )
+
+        # Make sure they are equal, and equal to the ref
+        self.assertEqual(output_text1, output_text2)
+        self.assertEqual(output_text1, EXPECTED_TEXT)
+
+    @require_kernels
+    def test_force_accelerate_hooks_does_not_hide_the_signature_it_wraps(self):
+        """
+        `kernels` refuses to swap in a layer whose forward signature does not match the one it replaces. The
+        `force_accelerate_hooks` wrapper must therefore keep the signature of the forward it decorates, otherwise
+        every mixer carrying it looks like `(self, *args, **kwargs)` and can never be kernelized.
+
+        This is based on one concrete case: `Qwen3_5GatedDeltaNet` is kernelized as a whole layer
+        (`@use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")`, mapped to `Atlas-Inference/gdn` on GB10/SM121)
+        while its `forward` also carries `@force_accelerate_hooks("conv1d")` -- it is the one class where both
+        decorators meet. See #48089 for the report and #48156 for the fix.
+
+        The signature check is driven directly, so this needs neither the kernel nor the hardware to be available.
+        """
+        from kernels.layer.layer import _validate_layer
+
+        from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5GatedDeltaNet
+
+        # Stands in for a hub kernel layer: same forward signature as the class it would replace
+        class KernelGatedDeltaNet(torch.nn.Module):
+            def forward(self, hidden_states, cache_params=None, attention_mask=None, **kwargs):
+                return hidden_states
+
+        # Raises `TypeError: ... different number of arguments` if the decorator hides the signature
+        _validate_layer(check_cls=Qwen3_5GatedDeltaNet, cls=KernelGatedDeltaNet, repo="dummy-repo")
+
+    def test_accelerator_warmup_skipped_when_mem_get_info_unavailable(self):
+        """
+        Some backends cannot answer free-memory queries (e.g. Intel XPU under WSL2, where the Level Zero Sysman
+        interface is not exposed, so `torch.xpu.mem_get_info` raises). Warmup is a best-effort optimization and must
+        not turn such a failure into a model loading failure.
+        """
+        from transformers.modeling_utils import caching_allocator_warmup
+
+        model = LlamaForCausalLM(
+            LlamaConfig(hidden_size=32, num_hidden_layers=2, num_attention_heads=4, intermediate_size=37)
+        )
+        # Pretend everything is loaded on an accelerator; the warmup must bail out before touching the device
+        expanded_device_map = {name: "cuda:0" for name, _ in model.named_parameters()}
+
+        # The warning is emitted through `warning_once`, which is cached globally
+        logging.warning_once.cache_clear()
+        with patch("torch.cuda.mem_get_info", side_effect=RuntimeError("The device doesn't get_mem_info.")):
+            with CaptureLogger(logging.get_logger("transformers.modeling_utils")) as cl:
+                caching_allocator_warmup(model, expanded_device_map, None)
+
+        self.assertIn("Skipping caching allocator warmup", cl.out)
 
 
 @slow
@@ -2892,6 +3215,83 @@ class TestAttentionImplementation(unittest.TestCase):
             )
         self.assertTrue("the package for FlashAttention2 doesn't seem to be installed." in str(cm.exception))
 
+    @parameterized.expand(
+        [
+            # (key head_dim, value head_dim, use_mask, GQA kept, expected backend): GQA is kept only for matched
+            # head_dim <= 256 without a mask, else `repeat_kv` runs so a fused kernel still serves it.
+            (256, 256, False, True, "flash"),  # matched <= 256: GQA kept
+            (512, 512, False, False, "efficient"),  # head_dim > 256: repeat_kv
+            (192, 128, False, False, "efficient"),  # mismatched (MLA): repeat_kv
+            (256, 256, True, False, "efficient"),  # mask disables GQA
+        ]
+    )
+    @require_torch_gpu
+    def test_gqa_in_sdpa_uses_a_fused_kernel(
+        self, key_head_dim, value_head_dim, use_mask, keeps_gqa, expected_backend
+    ):
+        # Restricting SDPA to the expected backend (which excludes `math`) proves each case stays on a fused kernel
+        # rather than silently falling back to math: the call must succeed.
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward, use_gqa_in_sdpa
+
+        backends = {"flash": SDPBackend.FLASH_ATTENTION, "efficient": SDPBackend.EFFICIENT_ATTENTION}
+        module = torch.nn.Module()
+        module.num_key_value_groups = 4  # 8 query heads, 2 key/value heads
+        query = torch.randn(1, 8, 16, key_head_dim, device=torch_device, dtype=torch.float16)
+        key = torch.randn(1, 2, 16, key_head_dim, device=torch_device, dtype=torch.float16)
+        value = torch.randn(1, 2, 16, value_head_dim, device=torch_device, dtype=torch.float16)
+        attention_mask = torch.zeros(1, 1, 16, 16, device=torch_device, dtype=torch.float16) if use_mask else None
+
+        self.assertEqual(use_gqa_in_sdpa(attention_mask, key, value), keeps_gqa)
+        with sdpa_kernel([backends[expected_backend]]):
+            attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
+        self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
+
+    @parameterized.expand(
+        [
+            # (use_mask, is_causal): the `create_position_bias_mask` branches taken by T5-style models
+            (False, False),  # position_bias used as is
+            (False, True),  # causal mask applied to position_bias
+            (True, False),  # bool mask applied to position_bias
+        ]
+    )
+    @require_torch_gpu
+    def test_position_bias_in_sdpa_uses_a_fused_kernel(self, use_mask, is_causal):
+        # Regression test for https://github.com/huggingface/transformers/issues/49516.
+        # Restricting SDPA to the efficient backend (which excludes `math`) proves the mask built from a T5-style
+        # `position_bias` by `create_position_bias_mask` stays on a fused kernel: the call must succeed.
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward
+
+        query = torch.randn(1, 8, 16, 64, device=torch_device, dtype=torch.float16)
+        key = torch.randn(1, 8, 16, 64, device=torch_device, dtype=torch.float16)
+        value = torch.randn(1, 8, 16, 64, device=torch_device, dtype=torch.float16)
+        # same layout as T5's `compute_bias`, whose last dim is not stride 1
+        position_bias = torch.randn(16, 16, 8, device=torch_device, dtype=torch.float16).permute(2, 0, 1).unsqueeze(0)
+        attention_mask = torch.ones(1, 1, 16, 16, device=torch_device, dtype=torch.bool) if use_mask else None
+
+        with sdpa_kernel([SDPBackend.EFFICIENT_ATTENTION]):
+            attn_output, _ = sdpa_attention_forward(
+                torch.nn.Module(), query, key, value, attention_mask, is_causal=is_causal, position_bias=position_bias
+            )
+        self.assertEqual(attn_output.shape, (1, 16, 8, 64))
+
+    def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
+        # Regression test for https://github.com/huggingface/transformers/issues/45520.
+        # When flash_attn is importable but not present in PACKAGE_DISTRIBUTION_MAPPING
+        # (e.g. installed via a non-standard wheel), the availability checks must not raise
+        # a KeyError; they should simply return False.
+        stripped_map = {
+            k: v for k, v in PACKAGE_DISTRIBUTION_MAPPING.items() if k not in ("flash_attn", "flash_attn_interface")
+        }
+        with patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", stripped_map):
+            with patch("transformers.modeling_flash_attention_utils.PACKAGE_DISTRIBUTION_MAPPING", stripped_map):
+                self.assertFalse(is_flash_attn_2_available())
+                self.assertFalse(is_flash_attn_3_available())
+                self.assertFalse(is_flash_attn_4_available())
+
     def test_not_available_flash_with_config(self):
         if is_flash_attn_2_available():
             self.skipTest(reason="Please uninstall flash-attn package to run test_not_available_flash")
@@ -2997,6 +3397,99 @@ class TestAttentionImplementation(unittest.TestCase):
         experts_module.config._experts_implementation = "foobar"
         with self.assertRaisesRegex(KeyError, "`foobar` is not a valid experts implementation registered"):
             _ = experts_module(hidden_states, dummy_indices, dummy_scores)
+
+    def test_can_set_attn_returns_false_when_module_missing(self):
+        # Simulate the "module cleared from sys.modules" case (test cleanup, REPL).
+        from transformers.models.llama.modeling_llama import LlamaModel
+
+        # The method _can_set_attn_implementation caches the result on a successful call, so we need to clear the cache
+        if hasattr(LlamaModel, "_can_set_attn_implementation_cached_value"):
+            delattr(LlamaModel, "_can_set_attn_implementation_cached_value")
+
+        original = sys.modules.pop(LlamaModel.__module__)
+        try:
+            self.assertFalse(LlamaModel._can_set_attn_implementation())
+            self.assertFalse(LlamaModel._can_set_experts_implementation())
+        finally:
+            sys.modules[LlamaModel.__module__] = original
+
+    def test_can_set_attn_skips_torch_dynamic_wrappers(self):
+        # Simulate FSDP2's `FSDP<ModelName>`: a dynamic subclass whose __module__ lives under torch.*
+        from transformers.models.llama.modeling_llama import LlamaModel
+
+        FSDPLlamaModel = type("FSDPLlamaModel", (LlamaModel,), {})
+        FSDPLlamaModel.__module__ = "torch.distributed.fsdp._fully_shard._fsdp_state"
+
+        # The MRO walk should skip past FSDPLlamaModel to LlamaModel and find the underlying answer.
+        self.assertTrue(FSDPLlamaModel._can_set_attn_implementation())
+
+    def test_can_set_attn_modern_vs_legacy(self):
+        # Modern interface model: True. Legacy model (ProphetNet doesn't use ALL_ATTENTION_FUNCTIONS): False.
+        from transformers.models.llama.modeling_llama import LlamaModel
+        from transformers.models.prophetnet.modeling_prophetnet import ProphetNetModel
+
+        self.assertTrue(LlamaModel._can_set_attn_implementation())
+        self.assertFalse(ProphetNetModel._can_set_attn_implementation())
+
+    def test_can_set_attn_legacy_edge_cases(self):
+        # FSMT: bare `class Attention(nn.Module):` -- tightened regex catches this case.
+        from transformers.models.fsmt.modeling_fsmt import FSMTModel
+
+        self.assertFalse(FSMTModel._can_set_attn_implementation())
+
+        # SLANet: `class SLANetAttentionGRUCell(nn.Module):` -- "Attention" not at end of class name.
+        from transformers.models.slanet.modeling_slanet import SLANetBackbone
+
+        self.assertFalse(SLANetBackbone._can_set_attn_implementation())
+
+        # ShieldGemma2: output dataclass with "Attention" in the name but no `nn.Module` parent.
+        # No actual Attention class -> assume True (multimodal model or inherits from elsewhere).
+        from transformers.models.shieldgemma2.modeling_shieldgemma2 import ShieldGemma2ForImageClassification
+
+        self.assertTrue(ShieldGemma2ForImageClassification._can_set_attn_implementation())
+
+    def test_can_set_experts_moe_vs_dense(self):
+        # MoE model with @use_experts_implementation: True. Non-MoE model: False.
+        from transformers.models.llama.modeling_llama import LlamaModel
+        from transformers.models.mixtral.modeling_mixtral import MixtralModel
+
+        self.assertTrue(MixtralModel._can_set_experts_implementation())
+        self.assertFalse(LlamaModel._can_set_experts_implementation())
+
+    @require_kernels
+    @require_rocm
+    def test_flash_fallback_skips_implementations_not_built_for_the_device(self):
+        # The CUDA-only kernel comes first, so the fallback must skip it and pick the ROCm one
+        compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "kernels-community/aiter-flash-attn"]
+        with patch.object(MistralForCausalLM, "_compatible_flash_implementations", compatible_flash_implementations):
+            model = MistralForCausalLM.from_pretrained(TINY_MISTRAL, attn_implementation="flash_attention_2")
+            self.assertEqual(model.config._attn_implementation, "kernels-community/aiter-flash-attn")
+
+            model.set_attn_implementation("eager")
+            model.set_attn_implementation("flash_attention_2")
+            self.assertEqual(model.config._attn_implementation, "kernels-community/aiter-flash-attn")
+
+    @require_kernels
+    @require_rocm
+    def test_flash_attention_2_falls_back_to_aiter_kernel_on_rocm(self):
+        # `kernels-community/flash-attn2` has no ROCm build, so FA2 must fall back to the AITER kernel instead
+        from transformers.modeling_flash_attention_utils import FLASH_ATTENTION_COMPATIBILITY_MATRIX
+
+        self.assertEqual(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], "kernels-community/aiter-flash-attn")
+
+        # Hide the `flash-attn` package (installed in the AMD CI image) so that the kernel fallback is used
+        with patch.dict(FLASH_ATTENTION_COMPATIBILITY_MATRIX[2], {"general_availability_check": lambda: False}):
+            model = MistralForCausalLM.from_pretrained(
+                TINY_MISTRAL, attn_implementation="flash_attention_2", dtype=torch.bfloat16
+            ).to(torch_device)
+        self.assertEqual(model.config._attn_implementation, "kernels-community/aiter-flash-attn")
+
+        input_ids = torch.randint(0, model.config.vocab_size, (2, 16), device=torch_device)
+        with torch.no_grad():
+            logits = model(input_ids).logits
+            model.set_attn_implementation("sdpa")
+            expected_logits = model(input_ids).logits
+        torch.testing.assert_close(logits, expected_logits, atol=2e-2, rtol=2e-2)
 
 
 @require_torch
@@ -3566,3 +4059,145 @@ class DisableMmapLoadingTest(unittest.TestCase):
         self.assertEqual(set(loaded_mmap.keys()), set(loaded_no_mmap.keys()))
         for k in loaded_mmap:
             torch.testing.assert_close(loaded_mmap[k], loaded_no_mmap[k])
+
+
+@require_torch
+class RemoteAndCustomCodeModelTests(unittest.TestCase):
+    def test_remote_code_registration(self):
+        """
+        Test that remote code is correctly registered with auto classes, and correctly sets its auto class, so that it's
+        detected by `is_remote_code()`
+        """
+        model = AutoModel.from_pretrained("hf-internal-testing/dummy_remote_code", trust_remote_code=True)
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertTrue(model.is_remote_code())
+        self.assertFalse(model.__class__.__module__.startswith("transformers."))
+
+    def test_remote_code_registration_with_model_type_collision(self):
+        """
+        Test that remote code is correctly registered with auto classes, and correctly sets its auto class, so that it's
+        detected by `is_remote_code()`, even if the `model_type` registered in the custom model is the same as an existing one
+        in the library. In this case, we should also be able to load the native model if `trust_remote_code=False` after registration.
+        """
+
+        # This remote model uses "llama" as model_type, same to our llama inside the lib
+        model_name = "hf-internal-testing/dummy_remote_code_collision_model_type"
+        custom_model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertTrue(custom_model.is_remote_code())
+        self.assertFalse(custom_model.__class__.__module__.startswith("transformers."))
+        # Check the config as well
+        self.assertFalse(custom_model.config.__class__.__module__.startswith("transformers."))
+
+        # Check that if we do NOT use `trust_remote_code=True`, then the registration of the same model type before it will not force
+        # a model type of the wrong type, i.e. we use the native LlamaModel
+        native_model = AutoModel.from_pretrained("hf-internal-testing/tiny-llama")
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertFalse(native_model.is_remote_code())
+        self.assertTrue(native_model.__class__.__module__.startswith("transformers."))
+        # Check the config as well
+        self.assertTrue(native_model.config.__class__.__module__.startswith("transformers."))
+
+    def test_remote_code_registration_with_config_and_model_type_collision(self):
+        """
+        Test that remote code is correctly registered with auto classes, and correctly sets its auto class, so that it's
+        detected by `is_remote_code()`, even if the config class AND the `model_type` used in the custom model are the same as an
+        existing model in the library. In this case, we should also be able to load the native model if `trust_remote_code=False`
+        after registration.
+        """
+
+        model_name = "hf-internal-testing/dummy_remote_code_collision_config_and_model_type"
+        custom_model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertTrue(custom_model.is_remote_code())
+        self.assertFalse(custom_model.__class__.__module__.startswith("transformers."))
+        # Here, the config class is the original llama config even with the remote model
+        self.assertTrue(custom_model.config.__class__.__module__.startswith("transformers."))
+
+        # Check that if we do NOT use `trust_remote_code=True`, then the registration of the same model type with the
+        # same name and same config class before it will not force a model type of the wrong type, i.e. we use the native LlamaModel
+        native_model = AutoModel.from_pretrained("hf-internal-testing/tiny-llama")
+        # Those 2 checks are equivalent, but keep both to make sure implementation of `is_remote_code` will not diverge
+        self.assertFalse(native_model.is_remote_code())
+        self.assertTrue(native_model.__class__.__module__.startswith("transformers."))
+        # Check config as well
+        self.assertTrue(native_model.config.__class__.__module__.startswith("transformers."))
+
+    def test_custom_code_is_detected(self):
+        """Test that classes defined in the current context (user module, notebook, ...) will be detected as custom code"""
+
+        class MyNewModel(PreTrainedModel):
+            def __init__(self, config):
+                super().__init__(config)
+                self.foo = nn.Linear(2, 2)
+                self.post_init()
+
+            def forward(self, x):
+                return self.foo(x)
+
+        # This is a type created in the current session - it should be custom code, but not remote code
+        model = MyNewModel(PreTrainedConfig())
+
+        self.assertTrue(model.is_custom_code())
+        self.assertFalse(model.is_remote_code())
+
+
+@require_torch_accelerator
+class GradientCheckpointingOffloadTest(unittest.TestCase):
+    """`gradient_checkpointing_enable(offload=True)` holds the saved activations in host memory."""
+
+    def _model(self, num_hidden_layers=8, hidden_size=256):
+        from transformers import LlamaModel, set_seed
+
+        config = LlamaConfig(
+            num_hidden_layers=num_hidden_layers,
+            hidden_size=hidden_size,
+            intermediate_size=hidden_size * 2,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            vocab_size=128,
+        )
+        set_seed(0)
+        return LlamaModel(config).to(torch_device).train()
+
+    def _backward(self, model, input_ids):
+        model(input_ids=input_ids).last_hidden_state.float().pow(2).mean().backward()
+
+    def test_gradients_match_the_non_offloaded_run(self):
+        model = self._model()
+        input_ids = torch.randint(0, 128, (1, 64), device=torch_device)
+
+        model.gradient_checkpointing_enable()
+        self._backward(model, input_ids)
+        expected = [p.grad.clone() for p in model.parameters()]
+
+        model.zero_grad(set_to_none=True)
+        model.gradient_checkpointing_enable(offload=True)
+        self._backward(model, input_ids)
+
+        for expected_grad, param in zip(expected, model.parameters()):
+            torch.testing.assert_close(param.grad, expected_grad)
+
+    def test_frees_exactly_the_saved_activations(self):
+        num_hidden_layers, hidden_size, seq_len = 8, 256, 2048
+        # Each checkpointed layer saves one `seq_len x hidden_size` input for its recompute.
+        saved_bytes = num_hidden_layers * seq_len * hidden_size * 4  # fp32
+
+        resident = []
+        for offload in (False, True):
+            model = self._model(num_hidden_layers, hidden_size)
+            model.gradient_checkpointing_enable(offload=offload)
+            input_ids = torch.randint(0, 128, (1, seq_len), device=torch_device)
+            self._backward(model, input_ids)  # warm the allocator
+            model.zero_grad(set_to_none=True)
+            backend_synchronize(torch_device)
+            backend_empty_cache(torch_device)
+
+            # Sampled after the forward, where every layer's saved input is still live.
+            base = backend_memory_allocated(torch_device)
+            output = model(input_ids=input_ids)
+            backend_synchronize(torch_device)
+            resident.append(backend_memory_allocated(torch_device) - base)
+            del output, model
+
+        self.assertEqual(resident[0] - resident[1], saved_bytes)

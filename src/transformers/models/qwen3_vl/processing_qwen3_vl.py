@@ -73,12 +73,12 @@ class Qwen3VLProcessor(ProcessorMixin):
             else tokenizer.convert_tokens_to_ids(self.vision_end_token)
         )
 
-    def replace_image_token(self, image_inputs: dict, image_idx: int) -> str:
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
         num_image_tokens = image_inputs["image_grid_thw"][image_idx].prod() // merge_length
         return self.image_token * num_image_tokens
 
-    def replace_video_token(self, video_inputs: dict, video_idx: int) -> str:
+    def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         merge_length = self.video_processor.merge_size**2
         num_frames = video_inputs["video_grid_thw"][video_idx][0]
         frame_seqlen = video_inputs["video_grid_thw"][video_idx][1:].prod() // merge_length
@@ -103,7 +103,7 @@ class Qwen3VLProcessor(ProcessorMixin):
         for frame_idx in range(num_frames):
             curr_time = curr_timestamp[frame_idx]
             video_placeholder += f"<{curr_time:.1f} seconds>"
-            video_placeholder += self.vision_start_token + "<|placeholder|>" * frame_seqlen + self.vision_end_token
+            video_placeholder += self.vision_start_token + self.video_token * frame_seqlen + self.vision_end_token
         return video_placeholder
 
     def _get_num_multimodal_tokens(self, image_sizes=None, video_sizes=None, **kwargs):
@@ -135,9 +135,9 @@ class Qwen3VLProcessor(ProcessorMixin):
         if video_sizes is not None:
             videos_kwargs = Qwen3VLProcessorKwargs._defaults.get("videos_kwargs", {})
             videos_kwargs.update(kwargs)
+            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
             num_video_patches = [
-                self.video_processor.get_number_of_video_patches(*video_size, videos_kwargs)
-                for video_size in video_sizes
+                self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
             ]
             num_video_tokens = [(num_patches // merge_size**2) for num_patches in num_video_patches]
             vision_data["num_video_tokens"] = num_video_tokens

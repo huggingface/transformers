@@ -239,7 +239,7 @@ class KyutaiSpeechToTextEmbeddings(nn.Module):
         audio_tokens_offsets = nn.functional.pad(
             audio_tokens_offsets, (1, 0)
         )  # pad one 0 to the left for the text token
-        self.register_buffer("audio_tokens_offsets", audio_tokens_offsets, persistent=False)
+        self.audio_tokens_offsets = nn.Buffer(audio_tokens_offsets, persistent=False)
 
     def forward(self, input_ids):
         input_ids = torch.where(
@@ -272,11 +272,6 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
     def forward(self, **super_kwargs):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -374,18 +369,18 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
 
         # initialize the padding cache for the codec model
         per_layer_padding, per_layer_padding_mode, per_layer_in_channels = [], [], []
-        for layer_name in self.codec_model.encoder._mimiconv1d_layer_names:
-            per_layer_padding.append(self.codec_model.encoder.get_submodule(layer_name).padding_total)
-            per_layer_padding_mode.append(self.codec_model.encoder.get_submodule(layer_name).pad_mode)
-            per_layer_in_channels.append(self.codec_model.encoder.get_submodule(layer_name).in_channels)
+        for layer_name in self.codec_model.encoder.encoder_seanet._conv1d_layer_names:
+            per_layer_padding.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).padding_total)
+            per_layer_padding_mode.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).pad_mode)
+            per_layer_in_channels.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).in_channels)
 
         # downsample layer
-        per_layer_padding.append(self.codec_model.downsample.padding_total)
-        per_layer_padding_mode.append(self.codec_model.downsample.pad_mode)
-        per_layer_in_channels.append(self.codec_model.downsample.in_channels)
+        per_layer_padding.append(self.codec_model.encoder.downsample.padding_total)
+        per_layer_padding_mode.append(self.codec_model.encoder.downsample.pad_mode)
+        per_layer_in_channels.append(self.codec_model.encoder.downsample.in_channels)
 
         model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache(
-            num_layers=len(self.codec_model.encoder._mimiconv1d_layer_names) + 1,
+            num_layers=len(self.codec_model.encoder.encoder_seanet._conv1d_layer_names) + 1,
             per_layer_padding=per_layer_padding,
             per_layer_padding_mode=per_layer_padding_mode,
             per_layer_in_channels=per_layer_in_channels,
@@ -428,7 +423,9 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
                     )
                     new_audio_tokens = codec_model_output.audio_codes.transpose(1, 2)
 
-                audio_tokens.copy_(new_audio_tokens)
+                # last window can be shorter than audio_window_size, copy only the overlap
+                n = min(audio_tokens.shape[1], new_audio_tokens.shape[1])
+                audio_tokens[:, :n].copy_(new_audio_tokens[:, :n])
 
                 start = end.clone()
                 end = end + audio_window_size

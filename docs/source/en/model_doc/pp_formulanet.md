@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-03-24 and added to Hugging Face Transformers on 2026-04-30.*
+*This model was contributed to Hugging Face Transformers on 2026-04-30.*
 
 # PP-FormulaNet
 
@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 ### Single input inference
 
-The example below demonstrates how to detect text with PP-PP-FormulaNet_plus-L using the [`AutoModel`].
+The example below demonstrates how to detect text with PP-FormulaNet_plus-L using the [`AutoModel`].
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
@@ -34,7 +34,7 @@ The example below demonstrates how to detect text with PP-PP-FormulaNet_plus-L u
 ```py
 from io import BytesIO
 
-import httpx
+from huggingface_hub.utils import httpx
 from PIL import Image
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
@@ -42,7 +42,7 @@ model_path = "PaddlePaddle/PP-FormulaNet_plus-L_safetensors" # or "PaddlePaddle/
 model = AutoModelForImageTextToText.from_pretrained(model_path, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_path)
 
-image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"
+image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_formula_rec_001.png"
 image = Image.open(BytesIO(httpx.get(image_url).content)).convert("RGB")
 inputs = processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)

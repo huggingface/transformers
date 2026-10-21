@@ -242,12 +242,10 @@ class PPOCRV6MediumDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
 
-# TODO: vasqu
 @require_torch
 @require_vision
 @require_cv2
 @slow
-@unittest.skip(reason="PP-OCRv6_medium_det_safetensors weights have not been uploaded yet.")
 class PPOCRV6MediumDetModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/PP-OCRv6_medium_det_safetensors"
@@ -256,7 +254,7 @@ class PPOCRV6MediumDetModelIntegrationTest(unittest.TestCase):
             PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"
         )
         self.image = load_image(img_url)
 
@@ -267,15 +265,22 @@ class PPOCRV6MediumDetModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs)
 
-        results = self.image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
+        results = self.image_processor.post_process_object_detection(
+            outputs,
+            target_sizes=inputs["target_sizes"],
+            threshold=0.2,
+            box_threshold=0.45,
+            max_candidates=3000,
+            unclip_ratio=1.4,
+        )
 
         expected_shape_logits = torch.Size((bs, c // 3, h, w))
 
         expected_logits = torch.tensor(
             [
-                [0.0004, 0.0003, 0.0002],
-                [0.0003, 0.0002, 0.0002],
-                [0.0006, 0.0003, 0.0003],
+                [3.9601e-07, 1.0846e-07, 7.5263e-07],
+                [3.1742e-07, 4.2307e-07, 3.1295e-07],
+                [2.4335e-07, 1.1717e-07, 3.5127e-07],
             ],
             device=torch_device,
         )
@@ -285,10 +290,10 @@ class PPOCRV6MediumDetModelIntegrationTest(unittest.TestCase):
         expected_shape_boxes = torch.Size((4, 4, 2))
         expected_boxes = torch.tensor(
             [
-                [[76, 550], [399, 538], [400, 575], [77, 587]],
-                [[14, 505], [517, 484], [519, 532], [16, 553]],
-                [[193, 452], [401, 443], [403, 483], [195, 492]],
-                [[32, 406], [488, 384], [491, 434], [34, 456]],
+                [[88, 364], [304, 364], [304, 405], [88, 405]],
+                [[89, 267], [260, 267], [260, 316], [89, 316]],
+                [[87, 175], [269, 175], [269, 225], [87, 225]],
+                [[89, 88], [572, 88], [572, 145], [89, 145]],
             ],
             dtype=torch.short,
             device=torch_device,
@@ -297,7 +302,7 @@ class PPOCRV6MediumDetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(results[0]["boxes"].shape, expected_shape_boxes)
         torch.testing.assert_close(results[0]["boxes"], expected_boxes, rtol=2e-2, atol=2e-2)
 
-        expected_scores = torch.tensor([0.9023, 0.8941, 0.8937, 0.8781], device=torch_device)
+        expected_scores = torch.tensor([0.9016, 0.9150, 0.9287, 0.8561], device=torch_device)
         self.assertEqual(results[0]["scores"].shape, (4,))
         torch.testing.assert_close(results[0]["scores"], expected_scores, rtol=2e-2, atol=2e-2)
 
