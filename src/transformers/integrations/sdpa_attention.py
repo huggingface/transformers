@@ -90,15 +90,14 @@ def sdpa_attention_forward(
     cache: PagedAttentionCache | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
+    if kwargs.get("softcap") is not None:
+        raise ValueError(
+            "`sdpa` attention does not support `softcap`. Try using `eager`, `flex_attention`, or the few FA kernels supporting it"
+        )
     if kwargs.get("output_attentions", False):
         logger.warning_once(
             "`sdpa` attention does not support `output_attentions=True`."
             " Please set your attention to `eager` if you want any of these features."
-        )
-    if kwargs.get("softcap") is not None:
-        logger.warning_once(
-            "`sdpa` attention does not support `softcap`, so the attention logits are not capped."
-            " Please set your attention to `eager` or `flex_attention` to apply it."
         )
 
     # If there is a paged cache, it is updated before the KV heads are repeated.

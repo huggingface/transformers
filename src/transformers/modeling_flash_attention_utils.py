@@ -695,10 +695,9 @@ def _process_flash_attention_kwargs(
     if softcap is not None:
         if supports_mapping["softcap"]:
             flash_kwargs["softcap"] = softcap
-        elif not is_tracing():
-            logger.warning_once(
-                "This flash attention implementation does not support `softcap`, so the attention logits are not"
-                " capped. Please set your attention to `eager` or `flex_attention` to apply it."
+        else:
+            raise ValueError(
+                "This flash attention implementation does not support `softcap`. Try using `eager` or `flex_attention` instead."
             )
 
     if s_aux is not None:
