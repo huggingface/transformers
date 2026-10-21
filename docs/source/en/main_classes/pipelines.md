@@ -358,6 +358,12 @@ Pipelines available for computer vision tasks include the following.
     - __call__
     - all
 
+### SchemaExtractionPipeline
+
+[[autodoc]] SchemaExtractionPipeline
+    - __call__
+    - all
+
 ### ObjectDetectionPipeline
 
 [[autodoc]] ObjectDetectionPipeline
