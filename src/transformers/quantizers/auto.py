@@ -72,6 +72,7 @@ from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_metal import MetalHfQuantizer
 from .quantizer_mxfp4 import Mxfp4HfQuantizer
+from .quantizer_mxfp4_legacy import Mxfp4LegacyHfQuantizer, runs_on_legacy_kernels
 from .quantizer_nvfp4 import NVFP4HfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
@@ -242,6 +243,9 @@ class AutoHfQuantizer:
         # The deprecated config keeps its own frozen integration
         if isinstance(quantization_config, FineGrainedFP8Config):
             return FineGrainedFP8HfQuantizer(quantization_config, **kwargs)
+        # MXFP4 below compute capability 8.9 keeps main's integration
+        if isinstance(quantization_config, Mxfp4Config) and runs_on_legacy_kernels():
+            return Mxfp4LegacyHfQuantizer(quantization_config, **kwargs)
 
         quant_method = quantization_config.quant_method
 
