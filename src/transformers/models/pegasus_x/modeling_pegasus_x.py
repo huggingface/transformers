@@ -795,7 +795,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         inputs_embeds=None,
         output_hidden_states=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutput:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -947,7 +947,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         inputs_embeds=None,
         use_cache=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):

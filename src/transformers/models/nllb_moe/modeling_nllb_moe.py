@@ -713,7 +713,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> MoEModelOutput:
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 

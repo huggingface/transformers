@@ -874,7 +874,7 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
         norm=None,
         mask_feat=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> PPDocLayoutV3DecoderOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             The query embeddings that are passed into the decoder.

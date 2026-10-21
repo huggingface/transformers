@@ -530,7 +530,7 @@ class EsmEncoder(nn.Module):
         encoder_attention_mask=None,
         position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutputWithCrossAttentions:
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(
                 hidden_states,

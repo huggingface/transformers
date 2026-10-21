@@ -1471,7 +1471,7 @@ class RTDetrDecoder(RTDetrPreTrainedModel):
         spatial_shapes_list=None,
         level_start_index=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> RTDetrDecoderOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):

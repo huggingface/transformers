@@ -682,7 +682,7 @@ class MT5Stack(MT5PreTrainedModel):
         past_key_values=None,
         use_cache=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

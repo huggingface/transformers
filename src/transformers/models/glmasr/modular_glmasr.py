@@ -310,7 +310,7 @@ class GlmAsrEncoder(GlmAsrPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
-    def forward(self, input_features, **kwargs: Unpack[TransformersKwargs]):
+    def forward(self, input_features, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
         inputs_embeds = inputs_embeds.transpose(1, 2)

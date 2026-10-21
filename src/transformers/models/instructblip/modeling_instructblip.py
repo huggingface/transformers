@@ -691,7 +691,7 @@ class InstructBlipQFormerEncoder(nn.Module):
         encoder_attention_mask=None,
         query_length=0,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         for i in range(self.config.num_hidden_layers):
             layer_module = self.layer[i]
 

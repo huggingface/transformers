@@ -1308,7 +1308,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
     @auto_docstring
     def forward(
         self, input_features=None, feature_lens=None, aftercnn_lens=None, **kwargs: Unpack[TransformersKwargs]
-    ):
+    ) -> BaseModelOutputWithPooling:
         r"""
         feature_lens (`torch.LongTensor` of shape `(batch_size,)`):
             mel length
