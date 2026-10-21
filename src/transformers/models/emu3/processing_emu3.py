@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 class Emu3TextKwargs(TextKwargs, total=False):
     """
     return_for_image_generation (`bool`, *optional*):
-        Deprecated, use [`Eu3ProcessorKwargs.return_for_image_generation`] instead.
+        Deprecated, use [`Emu3ProcessorKwargs.return_for_image_generation`] instead.
         Whether the processed text is intended for image generation tasks. When `True`, the processor prepares
         inputs for image generation by appending image start tokens and size information to the prompt, and
         images should not be provided. When `False`, the processor prepares inputs for text generation from

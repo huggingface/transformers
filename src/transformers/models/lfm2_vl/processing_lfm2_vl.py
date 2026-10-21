@@ -31,7 +31,7 @@ logger = logging.get_logger(__name__)
 class Lfm2VlTextKwargs(TextKwargs, total=False):
     """
     use_image_special_tokens (`bool`, *optional*, defaults to `True`):
-        Deprecated, use [`Lfm2VlTextKwargs.use_image_special_tokens`] instead.
+        Deprecated, use [`Lfm2VlProcessorKwargs.use_image_special_tokens`] instead.
         Whether to use special image tokens (`<|image_start|>` and `<|image_end|>`) to delimit image sequences
         in the text. When enabled, images are wrapped with these tokens to clearly mark image boundaries.
         When disabled, only the image token itself is used without delimiters.
