@@ -29,6 +29,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TensorType, auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
@@ -38,8 +39,7 @@ if TYPE_CHECKING:
     from .modeling_owlvit import OwlViTImageGuidedObjectDetectionOutput, OwlViTObjectDetectionOutput
 
 
-# Kept here for BC. Identical to ImagesKwargs once deprecated arguments are removed.
-class OwlViTImagesKwargs(ImagesKwargs, total=False):
+class DeprecatedOwlViTImagesKwargs(ImagesKwargs, total=False):
     """
     query_images (`ImageInput`, *optional*):
         Deprecated, pass directly as `query_images` to [`OwlViTProcessor.__call__`] instead.
@@ -51,14 +51,12 @@ class OwlViTImagesKwargs(ImagesKwargs, total=False):
     query_images: ImageInput | None
 
 
-class OwlViTProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: OwlViTImagesKwargs
+class DeprecatedOwlViTProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: DeprecatedOwlViTImagesKwargs
 
 
 @auto_docstring
 class OwlViTProcessor(ProcessorMixin):
-    valid_processor_kwargs = OwlViTProcessorKwargs
-
     text_kwargs = {
         "padding": "max_length",
         "return_tensors": "pt",
@@ -76,7 +74,7 @@ class OwlViTProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         query_images: ImageInput | None = None,
-        **kwargs: Unpack[OwlViTProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         query_images (`ImageInput`, *optional*):
@@ -247,4 +245,11 @@ class OwlViTProcessor(ProcessorMixin):
         )
 
 
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={
+        "OwlViTImagesKwargs": (DeprecatedOwlViTImagesKwargs, "5.29.0"),
+        "OwlViTProcessorKwargs": (DeprecatedOwlViTProcessorKwargs, "5.29.0"),
+    },
+)
 __all__ = ["OwlViTProcessor"]

@@ -29,6 +29,7 @@ from ...utils import (
     is_torchvision_available,
     logging,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -38,9 +39,15 @@ logger = logging.get_logger(__name__)
 if TYPE_CHECKING:
     from .modeling_omdet_turbo import OmDetTurboObjectDetectionOutput
 
+if is_torch_available():
+    import torch
 
-# Kept here for BC. Identical to TextKwargs once deprecated arguments are removed.
-class OmDetTurboTextKwargs(TextKwargs, total=False):
+
+if is_torchvision_available():
+    from torchvision.ops.boxes import batched_nms
+
+
+class DeprecatedOmDetTurboTextKwargs(TextKwargs, total=False):
     """
     task (`str`, `list[str]`, `TextInput`, or `PreTokenizedInput`, *optional*):
         Deprecated, pass directly as `task` to [`OmDetTurboProcessor.__call__`] instead.
@@ -52,16 +59,8 @@ class OmDetTurboTextKwargs(TextKwargs, total=False):
     task: str | list[str] | TextInput | PreTokenizedInput | None
 
 
-if is_torch_available():
-    import torch
-
-
-if is_torchvision_available():
-    from torchvision.ops.boxes import batched_nms
-
-
-class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: OmDetTurboTextKwargs
+class DeprecatedOmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: DeprecatedOmDetTurboTextKwargs
 
 
 def clip_boxes(box, box_size: tuple[int, int]):
@@ -178,8 +177,6 @@ def _post_process_boxes_for_image(
 @requires(backends=("vision", "torchvision"))
 @auto_docstring
 class OmDetTurboProcessor(ProcessorMixin):
-    valid_processor_kwargs = OmDetTurboProcessorKwargs
-
     text_kwargs = {
         "padding": "max_length",
         "truncation": True,
@@ -196,7 +193,7 @@ class OmDetTurboProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: list[str] | list[list[str]] | None = None,
         task: str | list[str] | TextInput | PreTokenizedInput | None = None,
-        **kwargs: Unpack[OmDetTurboProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         task (`str`, `list[str]`, `TextInput`, or `PreTokenizedInput`, *optional*):
@@ -361,5 +358,13 @@ class OmDetTurboProcessor(ProcessorMixin):
 
         return results
 
+
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={
+        "OmDetTurboProcessorKwargs": (DeprecatedOmDetTurboProcessorKwargs, "5.29.0"),
+        "OmDetTurboTextKwargs": (DeprecatedOmDetTurboTextKwargs, "5.29.0"),
+    },
+)
 
 __all__ = ["OmDetTurboProcessor"]

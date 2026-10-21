@@ -23,6 +23,7 @@ from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, 
 from ...tokenization_python import AddedToken
 from ...tokenization_utils_base import BatchEncoding, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
@@ -39,8 +40,7 @@ BboxInput = (
 NestedList = list[tuple | None | list[tuple | None | list[tuple | None | list[tuple | None]]]]
 
 
-# Kept here for BC. Identical to ImagesKwargs once deprecated arguments are removed.
-class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
+class DeprecatedKosmos2ImagesKwargs(ImagesKwargs, total=False):
     """
     bboxes (`Union[list[tuple[int]], list[tuple[float]], list[list[tuple[int]]], list[list[tuple[float]]]]`, *optional*):
         Deprecated, pass directly as `bboxes` to [`Kosmos2Processor.__call__`] instead.
@@ -60,7 +60,7 @@ class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
     first_image_token_id: int | None
 
 
-class Kosmos2TextKwargs(TextKwargs, total=False):
+class DeprecatedKosmos2TextKwargs(TextKwargs, total=False):
     """
     add_eos_token (`bool`, *optional*):
         Deprecated, use [`Kosmos2ProcessorKwargs.add_eos_token`] instead.
@@ -82,8 +82,8 @@ class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
         Whether or not to include `EOS` token id in the encoding when `add_special_tokens=True`.
     """
 
-    text_kwargs: Kosmos2TextKwargs
-    images_kwargs: Kosmos2ImagesKwargs
+    text_kwargs: DeprecatedKosmos2TextKwargs
+    images_kwargs: DeprecatedKosmos2ImagesKwargs
 
     num_image_tokens: int
     first_image_token_id: int | None
@@ -712,4 +712,11 @@ def clean_text_and_extract_entities_with_bboxes(text, num_patches_per_side=32):
     return _cleanup_spaces(processed_text, entities)
 
 
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={
+        "Kosmos2TextKwargs": (DeprecatedKosmos2TextKwargs, "5.29.0"),
+        "Kosmos2ImagesKwargs": (DeprecatedKosmos2ImagesKwargs, "5.29.0"),
+    },
+)
 __all__ = ["Kosmos2Processor"]

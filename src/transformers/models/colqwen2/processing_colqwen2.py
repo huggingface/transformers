@@ -38,12 +38,10 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring
 class ColQwen2Processor(ProcessorMixin):
-    valid_processor_kwargs = ProcessingKwargs
     images_kwargs = {
         "data_format": "channels_first",
         "return_tensors": "pt",
     }
-
     text_kwargs = {
         "padding": "longest",
         "return_tensors": "pt",

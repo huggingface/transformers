@@ -28,6 +28,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
@@ -36,7 +37,7 @@ IMAGE_TOKEN = "<image>"
 EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
 
 
-class PaliGemmaTextKwargs(TextKwargs):
+class DeprecatedPaliGemmaTextKwargs(TextKwargs):
     """
     suffix (`str | list[str] | list[list[str]]`, *optional*):
         Deprecated, pass directly to [`PaliGemmaProcessor.__call__`] instead.
@@ -47,14 +48,12 @@ class PaliGemmaTextKwargs(TextKwargs):
     suffix: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
 
 
-class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: PaliGemmaTextKwargs
+class DeprecatedPaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: DeprecatedPaliGemmaTextKwargs
 
 
 @auto_docstring
 class PaliGemmaProcessor(ProcessorMixin):
-    valid_processor_kwargs = PaliGemmaProcessorKwargs
-
     images_kwargs = {
         "data_format": "channels_first",
     }
@@ -93,7 +92,7 @@ class PaliGemmaProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         suffix: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[PaliGemmaProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         suffix (`str | list[str] | list[list[str]]`, *optional*):
@@ -223,4 +222,11 @@ class PaliGemmaProcessor(ProcessorMixin):
         return super().model_input_names + ["token_type_ids", "labels"]
 
 
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={
+        "PaliGemmaTextKwargs": (DeprecatedPaliGemmaTextKwargs, "5.29.0"),
+        "PaliGemmaProcessorKwargs": (DeprecatedPaliGemmaProcessorKwargs, "5.29.0"),
+    },
+)
 __all__ = ["PaliGemmaProcessor"]

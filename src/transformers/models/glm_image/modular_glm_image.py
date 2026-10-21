@@ -30,6 +30,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import (
     get_max_seqlen,
     is_flash_attention_requested,
@@ -1050,8 +1051,7 @@ class GlmImageImageProcessorPil(Qwen2VLImageProcessorPil):
     model_input_names = ["pixel_values", "image_grid_thw", "images_per_sample"]
 
 
-# Kept here for BC. Identical to ImagesKwargs once deprecated arguments are removed.
-class GlmImageImagesKwargs(ImagesKwargs, total=False):
+class DeprecatedGlmImageImagesKwargs(ImagesKwargs, total=False):
     """
     target_h (`int`):
         Deprecated, use [`GlmImageProcessorKwargs.target_h`] instead.
@@ -1073,7 +1073,7 @@ class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
         Width of the target image to be generated.
     """
 
-    images_kwargs: GlmImageImagesKwargs
+    images_kwargs: DeprecatedGlmImageImagesKwargs
 
     target_h: int
     target_w: int
@@ -1293,6 +1293,8 @@ class GlmImageProcessor(ProcessorMixin):
                 ],
             )
 
+
+__getattr__ = deprecate_attr(__name__, remove={"GlmImageImagesKwargs": (DeprecatedGlmImageImagesKwargs, "5.29.0")})
 
 __all__ = [
     "GlmImageVQVAEConfig",

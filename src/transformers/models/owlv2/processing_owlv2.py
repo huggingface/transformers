@@ -29,6 +29,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TensorType, auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
@@ -38,8 +39,7 @@ if TYPE_CHECKING:
     from .modeling_owlv2 import Owlv2ImageGuidedObjectDetectionOutput, Owlv2ObjectDetectionOutput
 
 
-# Kept here for BC. Identical to ImagesKwargs once deprecated arguments are removed.
-class Owlv2ImagesKwargs(ImagesKwargs, total=False):
+class DeprecatedOwlv2ImagesKwargs(ImagesKwargs, total=False):
     """
     query_images (`ImageInput`, *optional*):
         Deprecated, pass directly as `query_images` to [`Owlv2Processor.__call__`] instead.
@@ -51,14 +51,12 @@ class Owlv2ImagesKwargs(ImagesKwargs, total=False):
     query_images: ImageInput | None
 
 
-class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Owlv2ImagesKwargs
+class DeprecatedOwlv2ProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: DeprecatedOwlv2ImagesKwargs
 
 
 @auto_docstring
 class Owlv2Processor(ProcessorMixin):
-    valid_processor_kwargs = Owlv2ProcessorKwargs
-
     text_kwargs = {
         "padding": "max_length",
         "return_tensors": "np",
@@ -71,13 +69,12 @@ class Owlv2Processor(ProcessorMixin):
         super().__init__(image_processor, tokenizer)
 
     @auto_docstring
-    # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.__call__ with OwlViT->Owlv2
     def __call__(
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         query_images: ImageInput | None = None,
-        **kwargs: Unpack[Owlv2ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         query_images (`ImageInput`, *optional*):
@@ -243,4 +240,11 @@ class Owlv2Processor(ProcessorMixin):
         )
 
 
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={
+        "Owlv2ImagesKwargs": (DeprecatedOwlv2ImagesKwargs, "5.29.0"),
+        "Owlv2ProcessorKwargs": (DeprecatedOwlv2ProcessorKwargs, "5.29.0"),
+    },
+)
 __all__ = ["Owlv2Processor"]

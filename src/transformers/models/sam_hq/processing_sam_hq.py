@@ -24,6 +24,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 
 
 if is_torch_available():
@@ -34,9 +35,10 @@ logger = logging.get_logger(__name__)
 NestedList = list[Union[float | int | None, "NestedList"]]
 
 
-class SamHQImagesKwargs(ImagesKwargs, total=False):
+class DeprecatedSamHQImagesKwargs(ImagesKwargs, total=False):
     """
     segmentation_maps (`ImageInput`, *optional*):
+        Deprecated, pass directly as `segmentation_maps` to [`SamHQProcessor.__call__`] instead.
         Ground truth segmentation maps to process alongside the input images. These maps are used for training
         or evaluation purposes and are resized and normalized to match the processed image dimensions.
     input_points (`NestedList`, *optional*):
@@ -83,7 +85,7 @@ class SamHQProcessorKwargs(ProcessingKwargs, total=False):
         padded positions and is preserved during coordinate normalization to distinguish real points from padding.
     """
 
-    images_kwargs: SamHQImagesKwargs
+    images_kwargs: DeprecatedSamHQImagesKwargs
 
     point_pad_value: int | None
 
@@ -107,12 +109,16 @@ class SamHQProcessor(ProcessorMixin):
     def __call__(
         self,
         images: ImageInput | None = None,
+        segmentation_maps: ImageInput | None = None,
         input_points: "NestedList | torch.Tensor | None" = None,
         input_labels: "NestedList | int | torch.Tensor | None" = None,
         input_boxes: "NestedList | torch.Tensor | None" = None,
         **kwargs: Unpack[SamHQProcessorKwargs],
     ) -> BatchFeature:
         r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            Ground truth segmentation maps to process alongside the input images. These maps are used for training
+            or evaluation purposes and are resized and normalized to match the processed image dimensions.
         input_points (`NestedList`, *optional*):
             Input points for prompt-based segmentation. Should be a nested list with structure
             `[image_level, object_level, point_level, [x, y]]` where each point is specified as `[x, y]` coordinates
@@ -131,7 +137,7 @@ class SamHQProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        for key in ("input_points", "input_labels", "input_boxes", "point_pad_value"):
+        for key in ("segmentation_maps", "input_points", "input_labels", "input_boxes", "point_pad_value"):
             if key in output_kwargs["images_kwargs"]:
                 logger.warning_once(
                     f"Passing `{key}` in `images_kwargs` is deprecated "
@@ -140,6 +146,7 @@ class SamHQProcessor(ProcessorMixin):
                 )
 
         # "images_kwargs" has priority for backwards compatibility
+        segmentation_maps = output_kwargs["images_kwargs"].pop("segmentation_maps", segmentation_maps)
         input_points = output_kwargs["images_kwargs"].pop("input_points", input_points)
         input_labels = output_kwargs["images_kwargs"].pop("input_labels", input_labels)
         input_boxes = output_kwargs["images_kwargs"].pop("input_boxes", input_boxes)
@@ -149,6 +156,7 @@ class SamHQProcessor(ProcessorMixin):
 
         encoding_image_processor = self.image_processor(
             images,
+            segmentation_maps=segmentation_maps,
             **output_kwargs["images_kwargs"],
         )
 
@@ -364,4 +372,5 @@ class SamHQProcessor(ProcessorMixin):
             ]
 
 
+__getattr__ = deprecate_attr(__name__, remove={"SamHQImagesKwargs": (DeprecatedSamHQImagesKwargs, "5.29.0")})
 __all__ = ["SamHQProcessor"]

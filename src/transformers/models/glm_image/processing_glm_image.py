@@ -27,14 +27,14 @@ from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
 
 
-# Kept here for BC. Identical to ImagesKwargs once deprecated arguments are removed.
-class GlmImageImagesKwargs(ImagesKwargs, total=False):
+class DeprecatedGlmImageImagesKwargs(ImagesKwargs, total=False):
     """
     target_h (`int`):
         Deprecated, use [`GlmImageProcessorKwargs.target_h`] instead.
@@ -56,7 +56,7 @@ class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
         Width of the target image to be generated.
     """
 
-    images_kwargs: GlmImageImagesKwargs
+    images_kwargs: DeprecatedGlmImageImagesKwargs
 
     target_h: int
     target_w: int
@@ -276,5 +276,7 @@ class GlmImageProcessor(ProcessorMixin):
                 ],
             )
 
+
+__getattr__ = deprecate_attr(__name__, remove={"GlmImageImagesKwargs": (DeprecatedGlmImageImagesKwargs, "5.29.0")})
 
 __all__ = ["GlmImageProcessor"]

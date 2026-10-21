@@ -23,12 +23,13 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class Lfm2VlTextKwargs(TextKwargs, total=False):
+class DeprecatedLfm2VlTextKwargs(TextKwargs, total=False):
     """
     use_image_special_tokens (`bool`, *optional*, defaults to `True`):
         Deprecated, use [`Lfm2VlProcessorKwargs.use_image_special_tokens`] instead.
@@ -48,7 +49,7 @@ class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
         When disabled, only the image token itself is used without delimiters.
     """
 
-    text_kwargs: Lfm2VlTextKwargs
+    text_kwargs: DeprecatedLfm2VlTextKwargs
     use_image_special_tokens: bool
 
 
@@ -278,4 +279,5 @@ class Lfm2VlProcessor(ProcessorMixin):
         return ["image_rows", "image_cols", "image_sizes", "token_type_ids"]
 
 
+__getattr__ = deprecate_attr(__name__, remove={"Lfm2VlTextKwargs": (DeprecatedLfm2VlTextKwargs, "5.29.0")})
 __all__ = ["Lfm2VlProcessor"]

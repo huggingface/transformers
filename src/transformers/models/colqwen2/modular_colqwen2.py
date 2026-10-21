@@ -34,8 +34,6 @@ logger = logging.get_logger(__name__)
 
 
 class ColQwen2Processor(ColPaliProcessor):
-    valid_processor_kwargs = ProcessingKwargs
-
     text_kwargs = {
         "padding": "longest",
         "return_tensors": "pt",

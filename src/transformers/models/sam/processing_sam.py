@@ -24,6 +24,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 
 
 if is_torch_available():
@@ -34,8 +35,7 @@ logger = logging.get_logger(__name__)
 NestedList = list[Union[float | int | None, "NestedList"]]
 
 
-# Kept here for BC. Identical to SamImageProcessorKwargs once deprecated arguments are removed.
-class SamImagesKwargs(ImagesKwargs, total=False):
+class DeprecatedSamImagesKwargs(ImagesKwargs, total=False):
     """
     segmentation_maps (`ImageInput`, *optional*):
         Deprecated, pass directly as `segmentation_maps` to [`SamProcessor.__call__`] instead.
@@ -84,7 +84,7 @@ class SamProcessorKwargs(ProcessingKwargs, total=False):
         padded positions and is preserved during coordinate normalization to distinguish real points from padding.
     """
 
-    images_kwargs: SamImagesKwargs
+    images_kwargs: DeprecatedSamImagesKwargs
 
     point_pad_value: int | None
 
@@ -338,4 +338,5 @@ class SamProcessor(ProcessorMixin):
         return self.image_processor.post_process_masks(*args, **kwargs)
 
 
+__getattr__ = deprecate_attr(__name__, remove={"SamImagesKwargs": (DeprecatedSamImagesKwargs, "5.29.0")})
 __all__ = ["SamProcessor"]

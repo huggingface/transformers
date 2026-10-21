@@ -30,6 +30,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 from ...video_utils import VideoInput
 
@@ -41,15 +42,13 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class Gemma4UnifiedProcessorKwargs(ProcessingKwargs, total=False):
+class DeprecatedGemma4UnifiedProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: Gemma4UnifiedImageProcessorKwargs
 
 
 @auto_docstring
 @requires(backends=("vision",))
 class Gemma4UnifiedProcessor(ProcessorMixin):
-    valid_processor_kwargs = Gemma4UnifiedProcessorKwargs
-
     text_kwargs = {
         "padding": True,
     }
@@ -316,5 +315,9 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["num_soft_tokens_per_image", "num_soft_tokens_per_video"]
 
+
+__getattr__ = deprecate_attr(
+    __name__, remove={"Gemma4UnifiedProcessorKwargs": (DeprecatedGemma4UnifiedProcessorKwargs, "5.29.0")}
+)
 
 __all__ = ["Gemma4UnifiedProcessor"]

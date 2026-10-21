@@ -18,6 +18,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import BatchFeature, MultiModalData, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_vision_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -28,7 +29,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class Emu3TextKwargs(TextKwargs, total=False):
+class DeprecatedEmu3TextKwargs(TextKwargs, total=False):
     """
     return_for_image_generation (`bool`, *optional*):
         Deprecated, use [`Emu3ProcessorKwargs.return_for_image_generation`] instead.
@@ -54,7 +55,7 @@ class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
         The area of the image to resize the image.
     """
 
-    text_kwargs: Emu3TextKwargs
+    text_kwargs: DeprecatedEmu3TextKwargs
     images_kwargs: Emu3ImageProcessorKwargs
 
     return_for_image_generation: bool
@@ -233,4 +234,5 @@ class Emu3Processor(ProcessorMixin):
             )
 
 
+__getattr__ = deprecate_attr(__name__, remove={"Emu3TextKwargs": (DeprecatedEmu3TextKwargs, "5.29.0")})
 __all__ = ["Emu3Processor"]

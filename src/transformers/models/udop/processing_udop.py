@@ -22,13 +22,13 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-# Kept here for BC. Identical to TextKwargs once deprecated arguments are removed.
-class UdopTextKwargs(TextKwargs, total=False):
+class DeprecatedUdopTextKwargs(TextKwargs, total=False):
     """
     boxes (`list[list[int]]`, `list[list[list[int]]]`, *optional*):
         Deprecated, pass directly as `boxes` to [`UdopProcessor.__call__`] instead.
@@ -42,8 +42,8 @@ class UdopTextKwargs(TextKwargs, total=False):
     boxes: list[list[int]] | list[list[list[int]]] | None
 
 
-class UdopProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: UdopTextKwargs
+class DeprecatedUdopProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: DeprecatedUdopTextKwargs
 
 
 @auto_docstring
@@ -63,8 +63,6 @@ class UdopProcessor(ProcessorMixin):
     prepare labels for language modeling tasks.
     """
 
-    valid_processor_kwargs = UdopProcessorKwargs
-
     text_kwargs = {
         "truncation": False,
     }
@@ -79,7 +77,7 @@ class UdopProcessor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         boxes: list[list[int]] | list[list[list[int]]] | None = None,
         word_labels: list[int] | list[list[int]] | None = None,
-        **kwargs: Unpack[UdopProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         boxes (`list[list[int]]`, `list[list[list[int]]]`, *optional*):
@@ -183,5 +181,13 @@ class UdopProcessor(ProcessorMixin):
 
         return list(tokenizer_input_names + image_processor_input_names + ["bbox"])
 
+
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={
+        "UdopProcessorKwargs": (DeprecatedUdopProcessorKwargs, "5.29.0"),
+        "UdopTextKwargs": (DeprecatedUdopTextKwargs, "5.29.0"),
+    },
+)
 
 __all__ = ["UdopProcessor"]

@@ -20,12 +20,13 @@ from ...image_utils import ImageInput, get_image_size, is_valid_image
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class GotOcr2TextKwargs(TextKwargs, total=False):
+class DeprecatedGotOcr2TextKwargs(TextKwargs, total=False):
     """
     format (`bool`, *optional*):
         Deprecated, use [`GotOcr2ProcessorKwargs.format`] instead.
@@ -36,8 +37,7 @@ class GotOcr2TextKwargs(TextKwargs, total=False):
     format: bool | None
 
 
-# Kept here for BC. Identical to GotOcr2ImageProcessorKwargs once deprecated arguments are removed.
-class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
+class DeprecatedGotOcr2ImagesKwargs(ImagesKwargs, total=False):
     """
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop images into patches before processing. When enabled, large images are divided into
@@ -94,8 +94,8 @@ class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
         of page boundaries.
     """
 
-    text_kwargs: GotOcr2TextKwargs
-    images_kwargs: GotOcr2ImagesKwargs
+    text_kwargs: DeprecatedGotOcr2TextKwargs
+    images_kwargs: DeprecatedGotOcr2ImagesKwargs
 
     format: bool
     color: str | None
@@ -354,4 +354,11 @@ class GotOcr2Processor(ProcessorMixin):
         return ["num_patches"]
 
 
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={
+        "GotOcr2TextKwargs": (DeprecatedGotOcr2TextKwargs, "5.29.0"),
+        "GotOcr2ImagesKwargs": (DeprecatedGotOcr2ImagesKwargs, "5.29.0"),
+    },
+)
 __all__ = ["GotOcr2Processor"]

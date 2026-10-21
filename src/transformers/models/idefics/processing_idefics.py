@@ -27,6 +27,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 
 
 if is_torch_available():
@@ -38,7 +39,7 @@ logger = logging.get_logger(__name__)
 IMAGE_TOKEN = "<image>"
 
 
-class IdeficsTextKwargs(TextKwargs, total=False):
+class DeprecatedIdeficsTextKwargs(TextKwargs, total=False):
     """
     add_eos_token (`bool`, *optional*):
         Deprecated, use [`IdeficsProcessorKwargs.add_eos_token`] instead.
@@ -67,7 +68,7 @@ class IdeficsProcessorKwargs(ProcessingKwargs, total=False):
         trained with it.
     """
 
-    text_kwargs: IdeficsTextKwargs
+    text_kwargs: DeprecatedIdeficsTextKwargs
 
     add_eos_token: bool
     add_end_of_utterance_token: bool | None
@@ -445,4 +446,5 @@ class IdeficsProcessor(ProcessorMixin):
         return list(tokenizer_input_names + image_processor_input_names + ["image_attention_mask"])
 
 
+__getattr__ = deprecate_attr(__name__, remove={"IdeficsTextKwargs": (DeprecatedIdeficsTextKwargs, "5.29.0")})
 __all__ = ["IdeficsProcessor"]

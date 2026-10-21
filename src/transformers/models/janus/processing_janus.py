@@ -20,6 +20,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
@@ -31,8 +32,7 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 
 
-# Kept here for BC. Identical to TextKwargs once deprecated arguments are removed.
-class JanusTextKwargs(TextKwargs, total=False):
+class DeprecatedJanusTextKwargs(TextKwargs, total=False):
     """
     generation_mode (`str`, *optional*, defaults to `"text"`):
         Deprecated, use [`JanusProcessorKwargs.generation_mode`] instead.
@@ -52,7 +52,7 @@ class JanusProcessorKwargs(ProcessingKwargs, total=False):
         for image generation by appending image start tokens to the prompt.
     """
 
-    text_kwargs: JanusTextKwargs
+    text_kwargs: DeprecatedJanusTextKwargs
 
     generation_mode: str
 
@@ -174,4 +174,5 @@ class JanusProcessor(ProcessorMixin):
             )
 
 
+__getattr__ = deprecate_attr(__name__, remove={"JanusTextKwargs": (DeprecatedJanusTextKwargs, "5.29.0")})
 __all__ = ["JanusProcessor"]

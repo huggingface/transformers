@@ -26,12 +26,13 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class ChameleonTextKwargs(TextKwargs, total=False):
+class DeprecatedChameleonTextKwargs(TextKwargs, total=False):
     """
     return_for_text_completion (`bool`, *optional*):
         Deprecated, use [`ChameleonProcessorKwargs.return_for_text_completion`] instead.
@@ -51,7 +52,7 @@ class ChameleonProcessorKwargs(ProcessingKwargs, total=False):
         mode. When `False`, the separator token is appended for proper chat formatting.
     """
 
-    text_kwargs: ChameleonTextKwargs
+    text_kwargs: DeprecatedChameleonTextKwargs
     return_for_text_completion: bool
 
 
@@ -159,4 +160,5 @@ class ChameleonProcessor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
 
+__getattr__ = deprecate_attr(__name__, remove={"ChameleonTextKwargs": (DeprecatedChameleonTextKwargs, "5.29.0")})
 __all__ = ["ChameleonProcessor"]
