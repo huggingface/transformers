@@ -294,3 +294,46 @@ class ProducerSkipListTest(unittest.TestCase):
             self.assertTrue(should_convert_module(name, config.modules_to_not_convert), name)
         restored = AutoQuantizationConfig.from_dict(config.to_dict())
         self.assertEqual(restored.modules_to_not_convert, config.modules_to_not_convert)
+
+
+@require_torch
+class FusedModuleEntryTest(unittest.TestCase):
+    """A ModelOpt export names one module per expert. The model fuses them into one experts module."""
+
+    def _resolve(self, formats):
+        from transformers import AutoModelForCausalLM, Qwen2MoeConfig
+
+        config = Qwen2MoeConfig(
+            vocab_size=32,
+            hidden_size=64,
+            intermediate_size=32,
+            moe_intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            num_experts=2,
+            num_experts_per_tok=1,
+        )
+        with torch.device("meta"):
+            model = AutoModelForCausalLM.from_config(config)
+        layers = {
+            f"model.layers.0.mlp.experts.{expert}.{proj}": {"quant_algo": algo}
+            for (expert, proj), algo in formats.items()
+        }
+        quantizer = _quantizer_for(_modelopt(quant_algo="MIXED_PRECISION", quantized_layers=layers))
+        quantizer._resolve_plan(model)
+        return quantizer
+
+    def test_per_expert_entries_in_one_format_load_the_fused_experts(self):
+        pieces = {(expert, proj): "NVFP4" for expert in range(2) for proj in ("gate_proj", "up_proj", "down_proj")}
+        quantizer = self._resolve(pieces)
+        self.assertIsInstance(quantizer.member_for("model.layers.0.mlp.experts").quantization_config, NVFP4Config)
+
+    def test_a_fused_module_takes_one_format_for_all_its_pieces(self):
+        pieces = {(expert, proj): "NVFP4" for expert in range(2) for proj in ("gate_proj", "up_proj", "down_proj")}
+        for name, plan in (
+            ("different formats", {**pieces, (1, "down_proj"): "FP8"}),
+            ("all of its pieces", {key: algo for key, algo in pieces.items() if key[0] == 0}),
+        ):
+            with self.subTest(name), self.assertRaisesRegex(ValueError, name):
+                self._resolve(plan)

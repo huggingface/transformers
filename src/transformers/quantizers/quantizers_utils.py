@@ -146,26 +146,23 @@ def checkpoint_module_namer(model):
     return checkpoint_name
 
 
-def checkpoint_module_names(model) -> dict[str, list[str]]:
-    """Return the names each module of `model` has in the checkpoint.
+def fused_module_names(model) -> dict[str, tuple[str, str]]:
+    """Return `{piece: (its checkpoint name, the model module it fuses into)}` for the modules a converter fuses.
 
-    A module has one name, renamed as the loader does. A module that a converter fuses, such as `experts`, has one
-    name per piece, such as `experts.3.gate_proj`. Each param's reversed converter names the pieces, with `*` taken
-    over the param's first dim.
+    A converter stacks checkpoint modules into one, such as `experts.3.gate_proj` into `experts`. Each param's reversed
+    converter names those pieces, with `*` taken over the param's first dim.
     """
     from ..conversion_mapping import get_model_conversion_mapping
     from ..core_model_loading import WeightConverter
 
-    to_checkpoint = checkpoint_module_namer(model)
-    names = {name: [to_checkpoint(name)] for name, _ in model.named_modules()}
     converters = [
         rule.reverse_transform()
         for rule in get_model_conversion_mapping(model, add_legacy=False)
         if isinstance(rule, WeightConverter)
     ]
-    pieces = {}
+    to_checkpoint = checkpoint_module_namer(model)
+    names = {}
     for param_name, param in model.named_parameters():
-        module_name = param_name.rpartition(".")[0]
         for rule in converters:
             renamed, source = rule.rename_source_key(param_name)
             if source is None:
@@ -173,10 +170,10 @@ def checkpoint_module_names(model) -> dict[str, list[str]]:
             for target in rule.target_patterns:
                 key = renamed.replace(rule.target_patterns[0], target, 1)
                 for index in range(param.shape[0] if "*" in key else 1):
-                    piece = to_checkpoint(key.replace("*", str(index)).rpartition(".")[0])
-                    pieces.setdefault(module_name, {})[piece] = None
+                    name = key.replace("*", str(index)).rpartition(".")[0]
+                    names[name] = (to_checkpoint(name), param_name.rpartition(".")[0])
             break
-    return names | {name: list(module_pieces) for name, module_pieces in pieces.items()}
+    return names
 
 
 @contextmanager
