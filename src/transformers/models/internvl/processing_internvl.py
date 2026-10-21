@@ -21,17 +21,12 @@ from ...image_utils import ImageInput, concatenate_list
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
-
-
-class InternVLProcessorKwargs(ProcessingKwargs, total=False):
-    pass
 
 
 @auto_docstring
 class InternVLProcessor(ProcessorMixin):
-    valid_processor_kwargs = InternVLProcessorKwargs
-
     text_kwargs = {
         "padding_side": "left",
     }
@@ -80,7 +75,7 @@ class InternVLProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[InternVLProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         Returns:
@@ -137,7 +132,7 @@ class InternVLProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[InternVLProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         super().validate_inputs(images=images, text=text, videos=videos, **kwargs)
         if text is None:
@@ -188,5 +183,7 @@ class InternVLProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return tokenizer_input_names + image_processor_input_names
 
+
+__getattr__ = deprecate_attr(__name__, rename={"InternVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["InternVLProcessor"]

@@ -34,6 +34,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import (
@@ -717,14 +718,8 @@ class Kimi_K25ForConditionalGeneration(Glm4vForConditionalGeneration):
         raise AttributeError("Uses normal super call")
 
 
-class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class Kimi_K25Processor(Qwen2VLProcessor):
-    valid_processor_kwargs = Kimi_K25ProcessorKwargs
-
     videos_kwargs = {"return_metadata": True}
     return_mm_token_type_ids = AttributeError()
 
@@ -840,6 +835,8 @@ class Kimi_K25Processor(Qwen2VLProcessor):
     def unused_input_names(self):
         return ["num_chunks_per_video"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Kimi_K25ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Kimi_K25Config",

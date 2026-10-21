@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
@@ -30,7 +30,7 @@ from ..auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
 from ..colqwen2.configuration_colqwen2 import ColQwen2Config
-from ..idefics3.processing_idefics3 import Idefics3Processor, Idefics3ProcessorKwargs
+from ..idefics3.processing_idefics3 import Idefics3Processor
 
 
 logger = logging.get_logger(__name__)
@@ -55,7 +55,7 @@ class ColModernVBertConfig(ColQwen2Config):
     }
 
 
-class ColModernVBertProcessorKwargs(Idefics3ProcessorKwargs, total=False):
+class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
     """
     suffix (`str`, *optional*):
         Suffix appended to queries.
@@ -67,6 +67,7 @@ class ColModernVBertProcessorKwargs(Idefics3ProcessorKwargs, total=False):
 @requires(backends=("torch",))
 @auto_docstring
 class ColModernVBertProcessor(Idefics3Processor):
+    valid_processor_kwargs = ColModernVBertProcessorKwargs
     suffix: str | None = None
 
     text_kwargs = {

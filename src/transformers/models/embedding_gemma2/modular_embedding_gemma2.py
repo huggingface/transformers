@@ -39,6 +39,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_attr
 from ...video_processing_utils import VideoMetadata
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 from ..auto import AutoConfig
@@ -840,12 +841,8 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
         return indices
 
 
-class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 class EmbeddingGemma2Processor(Gemma4Processor):
-    valid_processor_kwargs = EmbeddingGemma2ProcessorKwargs
+    valid_processor_kwargs = ProcessingKwargs
     return_mm_token_type_ids = AttributeError()
 
     def model_input_names(self):
@@ -1003,6 +1000,8 @@ class EmbeddingGemma2Processor(Gemma4Processor):
             [f"{t} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}" for t in timestamp_str]
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"EmbeddingGemma2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "EmbeddingGemma2Config",

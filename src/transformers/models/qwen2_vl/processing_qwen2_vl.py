@@ -22,19 +22,14 @@ Processor class for Qwen2-VL.
 
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class Qwen2VLProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class Qwen2VLProcessor(ProcessorMixin):
-    valid_processor_kwargs = Qwen2VLProcessorKwargs
-
     return_mm_token_type_ids = True
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
@@ -130,5 +125,7 @@ class Qwen2VLProcessor(ProcessorMixin):
     def model_input_names(self):
         return super().model_input_names + ["mm_token_type_ids"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Qwen2VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Qwen2VLProcessor"]

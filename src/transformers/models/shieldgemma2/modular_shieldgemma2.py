@@ -16,9 +16,9 @@ from collections.abc import Mapping, Sequence
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import auto_docstring, logging
-from ..gemma3.processing_gemma3 import Gemma3Processor, Gemma3ProcessorKwargs
+from ..gemma3.processing_gemma3 import Gemma3Processor
 
 
 logger = logging.get_logger(__name__)
@@ -44,7 +44,7 @@ DEFAULT_SHIELDGEMMA2_POLICIES = {
 }
 
 
-class ShieldGemma2ProcessorKwargs(Gemma3ProcessorKwargs, total=False):
+class ShieldGemma2ProcessorKwargs(ProcessingKwargs, total=False):
     r"""
     policies (`list[str]`, *optional*):
         Keys in the joint `self.policy_definitions | custom_policies` dictionary of specific interest

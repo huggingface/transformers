@@ -17,18 +17,15 @@ Processor class for ViLT.
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class ViltProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class ViltProcessor(ProcessorMixin):
-    valid_processor_kwargs = ViltProcessorKwargs
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"ViltProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["ViltProcessor"]

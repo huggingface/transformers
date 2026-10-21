@@ -24,19 +24,14 @@ import numpy as np
 
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class Kimi_K25ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class Kimi_K25Processor(ProcessorMixin):
-    valid_processor_kwargs = Kimi_K25ProcessorKwargs
-
     videos_kwargs = {"return_metadata": True}
 
     def __init__(
@@ -183,5 +178,7 @@ class Kimi_K25Processor(ProcessorMixin):
     def unused_input_names(self):
         return ["num_chunks_per_video"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Kimi_K25ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Kimi_K25Processor"]

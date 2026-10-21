@@ -15,16 +15,11 @@
 
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class Cohere2VisionProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class Cohere2VisionProcessor(ProcessorMixin):
-    valid_processor_kwargs = Cohere2VisionProcessorKwargs
-
     text_kwargs = {
         "padding_side": "left",
         "padding": True,
@@ -102,5 +97,7 @@ class Cohere2VisionProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Cohere2VisionProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Cohere2VisionProcessor"]

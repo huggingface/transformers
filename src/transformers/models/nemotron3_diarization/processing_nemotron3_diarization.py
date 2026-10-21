@@ -17,6 +17,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import auto_docstring, is_torch_available
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -31,14 +32,8 @@ DEFAULT_STREAMING_MODES = {
 }
 
 
-class Nemotron3DiarizationProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class Nemotron3DiarizationProcessor(ProcessorMixin):
-    valid_processor_kwargs = Nemotron3DiarizationProcessorKwargs
-
     def __init__(self, feature_extractor, subsampling_factor=8, streaming_modes=None, streaming_mode="low_latency"):
         r"""
         subsampling_factor (`int`, *optional*, defaults to 8):
@@ -77,7 +72,7 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
         is_streaming: bool = False,
         is_first_audio_chunk: bool = True,
         is_last_audio_chunk: bool = False,
-        **kwargs: Unpack[Nemotron3DiarizationProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         sampling_rate (`int`, *optional*):
@@ -264,5 +259,7 @@ class Nemotron3DiarizationProcessor(ProcessorMixin):
     def model_input_names(self):
         return self.feature_extractor.model_input_names + ["num_lookahead_frames"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Nemotron3DiarizationProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Nemotron3DiarizationProcessor"]

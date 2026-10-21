@@ -25,6 +25,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -33,10 +34,6 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
-
-
-class Nemotron3_5AsrProcessorKwargs(ProcessingKwargs, total=False):
-    pass
 
 
 # Default supported right attention contexts (lookaheads, in subsampled encoder frames) of the NeMo
@@ -172,8 +169,6 @@ DEFAULT_PROMPT_DICTIONARY = {
 @requires(backends=("torch",))
 @auto_docstring
 class Nemotron3_5AsrProcessor(ProcessorMixin):
-    valid_processor_kwargs = Nemotron3_5AsrProcessorKwargs
-
     text_kwargs = {
         "padding": True,
         "padding_side": "right",
@@ -244,7 +239,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
         is_streaming: bool = False,
         is_first_audio_chunk: bool | None = True,
         language: str | list[str] = "auto",
-        **kwargs: Unpack[Nemotron3_5AsrProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""
         sampling_rate (`int`, *optional*):
@@ -481,5 +476,7 @@ class Nemotron3_5AsrProcessor(ProcessorMixin):
             prompt_ids.append(self.prompt_dictionary[lang])
         return torch.tensor(prompt_ids, dtype=torch.long)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Nemotron3_5AsrProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Nemotron3_5AsrProcessor"]

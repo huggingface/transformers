@@ -1922,5 +1922,5 @@ class ProcessorTesterMixin:
         """Check that processor.valid_processor_kwargs is set to the correct class."""
         processor = self.get_processor()
         processor_module = sys.modules[processor.__class__.__module__]
-        expected_kwargs_class = getattr(processor_module, f"{processor.__class__.__name__}Kwargs", ProcessingKwargs)
+        expected_kwargs_class = vars(processor_module).get(f"{processor.__class__.__name__}Kwargs", ProcessingKwargs)
         self.assertIs(processor.valid_processor_kwargs, expected_kwargs_class)

@@ -20,16 +20,11 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-
-
-class TrOCRProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class TrOCRProcessor(ProcessorMixin):
-    valid_processor_kwargs = TrOCRProcessorKwargs
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
@@ -38,7 +33,7 @@ class TrOCRProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[TrOCRProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
@@ -66,5 +61,7 @@ class TrOCRProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return image_processor_input_names + ["labels"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"TrOCRProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["TrOCRProcessor"]

@@ -19,13 +19,10 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
-
-
-class NemotronAsrStreamingProcessorKwargs(ProcessingKwargs, total=False):
-    pass
 
 
 # Default supported right attention contexts (lookaheads, in subsampled encoder frames) of the NeMo
@@ -35,8 +32,6 @@ DEFAULT_NUM_LOOKAHEAD_TOKENS = [13, 6, 1, 0]
 
 @auto_docstring
 class NemotronAsrStreamingProcessor(ProcessorMixin):
-    valid_processor_kwargs = NemotronAsrStreamingProcessorKwargs
-
     text_kwargs = {
         "padding": True,
         "padding_side": "right",
@@ -93,7 +88,7 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
         sampling_rate: int | None = None,
         is_streaming: bool = False,
         is_first_audio_chunk: bool | None = True,
-        **kwargs: Unpack[NemotronAsrStreamingProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""
         sampling_rate (`int`, *optional*):
@@ -313,5 +308,7 @@ class NemotronAsrStreamingProcessor(ProcessorMixin):
             self.num_mel_frames_per_audio_chunk * self.feature_extractor.hop_length + self.feature_extractor.win_length
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"NemotronAsrStreamingProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["NemotronAsrStreamingProcessor"]

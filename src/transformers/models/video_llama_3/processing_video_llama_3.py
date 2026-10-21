@@ -19,18 +19,14 @@
 # limitations under the License.
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class VideoLlama3ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class VideoLlama3Processor(ProcessorMixin):
-    valid_processor_kwargs = VideoLlama3ProcessorKwargs
     videos_kwargs = {"return_metadata": True}
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
@@ -143,5 +139,7 @@ class VideoLlama3Processor(ProcessorMixin):
             **kwargs,
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"VideoLlama3ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["VideoLlama3Processor"]

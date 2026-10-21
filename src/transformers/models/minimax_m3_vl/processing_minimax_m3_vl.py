@@ -19,10 +19,7 @@
 # limitations under the License.
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class MiniMaxM3VLProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
@@ -34,8 +31,6 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
     / `VISION_END_TOKEN` brackets. Video chunks are additionally prefixed with a
     `]<]{seconds} seconds[>[` timestamp marker per frame when metadata is available.
     """
-
-    valid_processor_kwargs = MiniMaxM3VLProcessorKwargs
 
     videos_kwargs = {
         "do_resize": False,
@@ -151,5 +146,7 @@ class MiniMaxM3VLProcessor(ProcessorMixin):
     def model_input_names(self):
         return super().model_input_names + ["mm_token_type_ids"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"MiniMaxM3VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["MiniMaxM3VLProcessor"]

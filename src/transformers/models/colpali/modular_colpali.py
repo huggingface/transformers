@@ -21,6 +21,7 @@ from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 
 
 if is_torch_available():
@@ -29,12 +30,8 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class ColPaliProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 class ColPaliProcessor(PaliGemmaProcessor):
-    valid_processor_kwargs = ColPaliProcessorKwargs
+    valid_processor_kwargs = ProcessingKwargs
 
     text_kwargs = {
         "padding": "longest",
@@ -78,7 +75,7 @@ class ColPaliProcessor(PaliGemmaProcessor):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         suffix: TextInput | None = None,
-        **kwargs: Unpack[ColPaliProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         suffix (`str | list[str] | list[list[str]]`, *optional*):
@@ -230,6 +227,8 @@ class ColPaliProcessor(PaliGemmaProcessor):
 
         return torch.cat(scores, dim=0)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"ColPaliProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "ColPaliProcessor",

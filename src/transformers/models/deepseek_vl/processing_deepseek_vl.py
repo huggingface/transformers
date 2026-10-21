@@ -21,16 +21,11 @@
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class DeepseekVLProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class DeepseekVLProcessor(ProcessorMixin):
-    valid_processor_kwargs = DeepseekVLProcessorKwargs
-
     text_kwargs = {"return_tensors": "pt"}
     images_kwargs = {"return_tensors": "pt"}
 
@@ -54,5 +49,7 @@ class DeepseekVLProcessor(ProcessorMixin):
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         return self.image_token * self.num_image_tokens
 
+
+__getattr__ = deprecate_attr(__name__, rename={"DeepseekVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["DeepseekVLProcessor"]

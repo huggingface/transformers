@@ -23,16 +23,11 @@ import re
 
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class HyperCLOVAXVisionV2_ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class HyperCLOVAXVisionV2Processor(ProcessorMixin):
-    valid_processor_kwargs = HyperCLOVAXVisionV2_ProcessorKwargs
-
     videos_kwargs = {"return_metadata": True}
     # Stopgap for `video_duration`: the hub template renders it as text, leaving the literal
     # `<|video_duration|>` placeholder when missing. These three overrides fill it in after the fact,
@@ -178,5 +173,7 @@ class HyperCLOVAXVisionV2Processor(ProcessorMixin):
         result = super().get_text_with_replacements(text, images_replacements, videos_replacements, audio_replacements)
         return result
 
+
+__getattr__ = deprecate_attr(__name__, rename={"HyperCLOVAXVisionV2_ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["HyperCLOVAXVisionV2Processor"]

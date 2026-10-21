@@ -20,20 +20,15 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, is_torch_available
+from ...utils.deprecation import deprecate_attr
 
 
 if is_torch_available():
     import torch
 
 
-class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class Kosmos2_5Processor(ProcessorMixin):
-    valid_processor_kwargs = Kosmos2_5ProcessorKwargs
-
     text_kwargs = {
         "padding": True,
         "return_token_type_ids": False,
@@ -61,7 +56,7 @@ class Kosmos2_5Processor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | list[TextInput] = None,
-        **kwargs: Unpack[Kosmos2_5ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
@@ -127,5 +122,7 @@ class Kosmos2_5Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Kosmos2_5ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Kosmos2_5Processor"]

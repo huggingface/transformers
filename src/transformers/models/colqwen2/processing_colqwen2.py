@@ -25,6 +25,7 @@ from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 
 
 if is_torch_available():
@@ -35,13 +36,9 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class ColQwen2Processor(ProcessorMixin):
-    valid_processor_kwargs = ColQwen2ProcessorKwargs
+    valid_processor_kwargs = ProcessingKwargs
     images_kwargs = {
         "data_format": "channels_first",
         "return_tensors": "pt",
@@ -81,7 +78,7 @@ class ColQwen2Processor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         suffix: TextInput | None = None,
-        **kwargs: Unpack[ColQwen2ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         suffix (`str | list[str] | list[list[str]]`, *optional*):
@@ -290,5 +287,7 @@ class ColQwen2Processor(ProcessorMixin):
 
         return torch.cat(scores, dim=0)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"ColQwen2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["ColQwen2Processor"]

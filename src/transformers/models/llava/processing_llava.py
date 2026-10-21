@@ -22,19 +22,14 @@ from ...processing_utils import (
     ProcessorMixin,
 )
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class LlavaProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class LlavaProcessor(ProcessorMixin):
-    valid_processor_kwargs = LlavaProcessorKwargs
-
     def __init__(
         self,
         image_processor=None,
@@ -103,5 +98,7 @@ class LlavaProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"LlavaProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["LlavaProcessor"]

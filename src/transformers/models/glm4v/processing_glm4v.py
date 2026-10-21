@@ -22,19 +22,14 @@ import numpy as np
 
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class Glm4vProcessor(ProcessorMixin):
-    valid_processor_kwargs = Glm4vProcessorKwargs
-
     return_mm_token_type_ids = True
     text_kwargs = {
         "return_token_type_ids": False,
@@ -186,5 +181,7 @@ class Glm4vProcessor(ProcessorMixin):
     def replace_frame_token_id(self, timestamp_sec, num_image_tokens: int = 1):
         return f"<|begin_of_image|>{self.image_token * num_image_tokens}<|end_of_image|>{int(timestamp_sec)}"
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Glm4vProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Glm4vProcessor"]

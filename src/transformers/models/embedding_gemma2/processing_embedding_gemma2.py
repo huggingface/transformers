@@ -29,12 +29,9 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     auto_docstring,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
-
-
-class EmbeddingGemma2ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
 
 
 def get_aspect_ratio_preserving_size(
@@ -94,7 +91,7 @@ def get_aspect_ratio_preserving_size(
 @auto_docstring
 @requires(backends=("vision",))
 class EmbeddingGemma2Processor(ProcessorMixin):
-    valid_processor_kwargs = EmbeddingGemma2ProcessorKwargs
+    valid_processor_kwargs = ProcessingKwargs
 
     text_kwargs = {
         "padding": True,
@@ -451,5 +448,7 @@ class EmbeddingGemma2Processor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["num_soft_tokens_per_image", "num_soft_tokens_per_video"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"EmbeddingGemma2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["EmbeddingGemma2Processor"]

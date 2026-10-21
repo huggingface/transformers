@@ -21,16 +21,11 @@
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class VideoPrismProcessor(ProcessorMixin):
-    valid_processor_kwargs = VideoPrismProcessorKwargs
-
     text_kwargs = {
         "padding": "max_length",
         "truncation": True,
@@ -48,5 +43,7 @@ class VideoPrismProcessor(ProcessorMixin):
     def __init__(self, video_processor=None, tokenizer=None):
         super().__init__(video_processor, tokenizer)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"VideoPrismProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["VideoPrismProcessor"]

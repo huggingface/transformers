@@ -42,6 +42,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
@@ -133,10 +134,6 @@ class PPFormulaNetImageProcessor(NougatImageProcessor):
 
 
 # Don't copy default values from Nougat!
-class PPFormulaNetProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 class PPFormulaNetProcessor(NougatProcessor):
     r"""
     [`PPFormulaNetProcessor`] offers all the functionalities of [`PPFormulaNetImageProcessor`] and [`NougatTokenizer`]. See the
@@ -163,7 +160,7 @@ class PPFormulaNetProcessor(NougatProcessor):
     def __call__(
         self,
         images: ImageInput,
-        **kwargs: Unpack[PPFormulaNetProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -520,6 +517,8 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     def _maybe_prepare_encoder_kwargs_for_generation(self):
         raise AttributeError("The PPFormulaNet use default implementation.")
 
+
+__getattr__ = deprecate_attr(__name__, rename={"PPFormulaNetProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "PPFormulaNetProcessor",

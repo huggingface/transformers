@@ -21,15 +21,11 @@
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-
-
-class MoonshineStreamingProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class MoonshineStreamingProcessor(ProcessorMixin):
-    valid_processor_kwargs = MoonshineStreamingProcessorKwargs
     text_kwargs = {"return_tensors": "pt"}
     audio_kwargs = {
         "pad_to_multiple_of": 80,
@@ -45,7 +41,7 @@ class MoonshineStreamingProcessor(ProcessorMixin):
         self,
         audio: AudioInput | None = None,
         text: str | list[str] | TextInput | PreTokenizedInput | None = None,
-        **kwargs: Unpack[MoonshineStreamingProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""
         Returns:
@@ -111,5 +107,7 @@ class MoonshineStreamingProcessor(ProcessorMixin):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return feature_extractor_input_names + ["labels"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"MoonshineStreamingProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["MoonshineStreamingProcessor"]

@@ -59,6 +59,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
@@ -897,14 +898,8 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
         return BatchFeature(data, tensor_type=return_tensors)
 
 
-class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class Molmo2Processor(ProcessorMixin):
-    valid_processor_kwargs = Molmo2ProcessorKwargs
-
     videos_kwargs = {"return_metadata": True}
     return_mm_token_type_ids = True
 
@@ -1798,6 +1793,8 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
 
         return create_masks_for_generate(**mask_kwargs)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Molmo2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Molmo2AdapterConfig",

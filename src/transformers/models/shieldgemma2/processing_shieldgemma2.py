@@ -68,11 +68,11 @@ DEFAULT_SHIELDGEMMA2_POLICIES = {
 
 @auto_docstring
 class ShieldGemma2Processor(ProcessorMixin):
-    valid_processor_kwargs = ShieldGemma2ProcessorKwargs
     images_kwargs = {
         "do_pan_and_scan": False,
     }
     return_mm_token_type_ids = True
+    valid_processor_kwargs = ShieldGemma2ProcessorKwargs
 
     # TODO: This is a BC breaking bugfix.
     # Because this processor incorrectly inherits from Gemma3Processor and didn't assign

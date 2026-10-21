@@ -15,16 +15,11 @@
 
 from ...processing_utils import BatchFeature, MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class AyaVisionProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class AyaVisionProcessor(ProcessorMixin):
-    valid_processor_kwargs = AyaVisionProcessorKwargs
-
     text_kwargs = {
         "padding_side": "left",
         "padding": True,
@@ -163,5 +158,7 @@ class AyaVisionProcessor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["num_patches"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"AyaVisionProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["AyaVisionProcessor"]

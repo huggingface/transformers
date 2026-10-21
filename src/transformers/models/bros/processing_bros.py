@@ -17,21 +17,18 @@ Processor class for Bros.
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class BrosProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class BrosProcessor(ProcessorMixin):
-    valid_processor_kwargs = BrosProcessorKwargs
-
     def __init__(self, tokenizer=None, **kwargs):
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
         super().__init__(tokenizer)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"BrosProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["BrosProcessor"]

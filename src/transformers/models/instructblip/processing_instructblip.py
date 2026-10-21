@@ -20,19 +20,14 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class InstructBlipProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class InstructBlipProcessor(ProcessorMixin):
-    valid_processor_kwargs = InstructBlipProcessorKwargs
-
     text_kwargs = {
         "return_token_type_ids": False,
     }
@@ -59,7 +54,7 @@ class InstructBlipProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[InstructBlipProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
@@ -112,5 +107,7 @@ class InstructBlipProcessor(ProcessorMixin):
         qformer_input_names = ["qformer_input_ids", "qformer_attention_mask"]
         return tokenizer_input_names + image_processor_input_names + qformer_input_names
 
+
+__getattr__ = deprecate_attr(__name__, rename={"InstructBlipProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["InstructBlipProcessor"]

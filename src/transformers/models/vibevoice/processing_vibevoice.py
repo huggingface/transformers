@@ -19,6 +19,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_soundfile_available, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires, requires_backends
 
 
@@ -32,16 +33,9 @@ if is_soundfile_available():
     import soundfile as sf
 
 
-# trf-ignore: TRF019, `sampling_rate` is recommended by the feature extractor
-class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @requires(backends=("torch",))
 @auto_docstring
 class VibeVoiceProcessor(ProcessorMixin):
-    valid_processor_kwargs = VibeVoiceProcessorKwargs
-
     audio_kwargs = {
         "sampling_rate": 24000,
     }
@@ -101,7 +95,7 @@ class VibeVoiceProcessor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
         audio: AudioInput | None = None,
         output_labels: bool | None = False,
-        **kwargs: Unpack[VibeVoiceProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         text (`str`, `List[str]`):
@@ -188,5 +182,7 @@ class VibeVoiceProcessor(ProcessorMixin):
                 saved_paths.append(file_path)
         return saved_paths
 
+
+__getattr__ = deprecate_attr(__name__, rename={"VibeVoiceProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["VibeVoiceProcessor"]

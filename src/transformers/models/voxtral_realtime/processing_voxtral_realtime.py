@@ -16,6 +16,7 @@ import numpy as np
 
 from ...tokenization_mistral_common import MistralCommonBackend
 from ...utils import auto_docstring, is_mistral_common_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -31,15 +32,9 @@ from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 logger = logging.get_logger(__name__)
 
 
-class VoxtralRealtimeProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 @requires(backends=("mistral-common",))
 class VoxtralRealtimeProcessor(ProcessorMixin):
-    valid_processor_kwargs = VoxtralRealtimeProcessorKwargs
-
     text_kwargs = {
         "padding": True,
         "add_special_tokens": False,
@@ -133,7 +128,7 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
         audio: AudioInput | None = None,
         is_streaming: bool = False,
         is_first_audio_chunk: bool | None = True,
-        **kwargs: Unpack[VoxtralRealtimeProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""
         Main method to prepare audio input for the Voxtral Realtime model. This method encodes the audio into
@@ -214,5 +209,7 @@ class VoxtralRealtimeProcessor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return BatchFeature(data=encoding, tensor_type=return_tensors)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"VoxtralRealtimeProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["VoxtralRealtimeProcessor"]

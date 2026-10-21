@@ -17,13 +17,10 @@ from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
-
-
-class HunYuanVLProcessorKwargs(ProcessingKwargs, total=False):
-    pass
 
 
 @auto_docstring
@@ -35,8 +32,6 @@ class HunYuanVLProcessor(ProcessorMixin):
     inferred from the corresponding `image_grid_thw`. The model uses those expanded placeholders and image grids to
     build HunYuanVL's multimodal RoPE position ids at runtime.
     """
-
-    valid_processor_kwargs = HunYuanVLProcessorKwargs
 
     text_kwargs = {
         "padding": True,
@@ -110,7 +105,7 @@ class HunYuanVLProcessor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[HunYuanVLProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         super().validate_inputs(images=images, text=text, **kwargs)
 
@@ -165,5 +160,7 @@ class HunYuanVLProcessor(ProcessorMixin):
     def model_input_names(self):
         return super().model_input_names + ["mm_token_type_ids"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"HunYuanVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["HunYuanVLProcessor"]

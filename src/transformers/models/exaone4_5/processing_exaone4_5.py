@@ -20,16 +20,11 @@
 # limitations under the License.
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class Exaone4_5_ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class Exaone4_5_Processor(ProcessorMixin):
-    valid_processor_kwargs = Exaone4_5_ProcessorKwargs
-
     videos_kwargs = {"return_metadata": True}
 
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
@@ -125,5 +120,7 @@ class Exaone4_5_Processor(ProcessorMixin):
     def model_input_names(self):
         return super().model_input_names
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Exaone4_5_ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Exaone4_5_Processor"]

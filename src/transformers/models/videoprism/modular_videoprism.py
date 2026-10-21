@@ -28,6 +28,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Ima
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..codegen.modeling_codegen import create_sinusoidal_positions
@@ -173,14 +174,8 @@ class VideoPrismTokenizer(T5Tokenizer):
         del self._tokenizer.post_processor
 
 
-class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class VideoPrismProcessor(ProcessorMixin):
-    valid_processor_kwargs = VideoPrismProcessorKwargs
-
     text_kwargs = {
         "padding": "max_length",
         "truncation": True,
@@ -954,6 +949,8 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
             attentions=vision_model_outputs.attentions,
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"VideoPrismProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "VideoPrismVisionConfig",

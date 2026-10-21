@@ -24,17 +24,12 @@
 # limitations under the License.
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
-
-
-class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
-    pass
 
 
 @auto_docstring
 class Qwen2_5_VLProcessor(ProcessorMixin):
-    valid_processor_kwargs = Qwen2_5_VLProcessorKwargs
-
     return_mm_token_type_ids = True
     videos_kwargs = {"return_metadata": True}
 
@@ -149,5 +144,7 @@ class Qwen2_5_VLProcessor(ProcessorMixin):
         processed_data["second_per_grid_ts"] = second_per_grid_ts
         return processed_data, video_replacements
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Qwen2_5_VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Qwen2_5_VLProcessor"]

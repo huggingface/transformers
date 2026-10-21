@@ -28,10 +28,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
-
-
-class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 # The model was trained with these Chinese names in the transcription instruction ("语音转写成<NAME>：").
@@ -48,7 +45,7 @@ LANGUAGE_CODE_TO_NAME = {
 
 @auto_docstring
 class FunAsrNanoProcessor(ProcessorMixin):
-    valid_processor_kwargs = FunAsrNanoProcessorKwargs
+    valid_processor_kwargs = ProcessingKwargs
 
     text_kwargs = {"return_tensors": "pt"}
     audio_kwargs = {
@@ -76,7 +73,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
         text: TextInput | list[TextInput],
         audio: AudioInput | None = None,
         output_labels: bool | None = False,
-        **kwargs: Unpack[FunAsrNanoProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
@@ -140,7 +137,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
         language: str | list[str] | None = None,
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
-        **kwargs: Unpack[FunAsrNanoProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """Prepare inputs for ASR using the checkpoint's structured transcription chat template.
 
@@ -228,5 +225,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
 
         return stripped
 
+
+__getattr__ = deprecate_attr(__name__, rename={"FunAsrNanoProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["FunAsrNanoProcessor"]

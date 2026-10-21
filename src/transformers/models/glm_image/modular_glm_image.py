@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...image_utils import ImageInput
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import ImagesKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import (
@@ -55,7 +55,6 @@ from ..glm4v.modeling_glm4v import (
 from ..glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextAttention, Glm4vMoeTextRotaryEmbedding, eager_attention_forward
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
-from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
 from ..siglip.modeling_siglip import SiglipMLP
 
 
@@ -1066,7 +1065,7 @@ class GlmImageImagesKwargs(ImagesKwargs, total=False):
     target_w: int
 
 
-class GlmImageProcessorKwargs(Qwen2VLProcessorKwargs):
+class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
     """
     target_h (`int`, *optional*, defaults to `1152`):
         Height of the target image to be generated.

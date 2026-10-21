@@ -17,16 +17,11 @@ Processor class for Blip.
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class BlipProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class BlipProcessor(ProcessorMixin):
-    valid_processor_kwargs = BlipProcessorKwargs
-
     text_kwargs = {
         "return_token_type_ids": False,
     }
@@ -39,5 +34,7 @@ class BlipProcessor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["token_type_ids"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"BlipProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["BlipProcessor"]

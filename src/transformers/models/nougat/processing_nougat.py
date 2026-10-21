@@ -17,16 +17,11 @@ Processor class for Nougat.
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class NougatProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class NougatProcessor(ProcessorMixin):
-    valid_processor_kwargs = NougatProcessorKwargs
-
     images_kwargs = {
         "data_format": "channels_first",
     }
@@ -49,5 +44,7 @@ class NougatProcessor(ProcessorMixin):
         """
         return self.tokenizer.post_process_generation(*args, **kwargs)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"NougatProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["NougatProcessor"]

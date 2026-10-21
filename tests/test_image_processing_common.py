@@ -1004,8 +1004,8 @@ class ImageProcessingTestMixin:
         for image_processing_class in self.image_processing_classes.values():
             processor = image_processing_class(**self.image_processor_dict)
             processor_module = sys.modules[processor.__class__.__module__]
-            expected_kwargs_class = getattr(
-                processor_module, f"{processor.__class__.__name__.removesuffix('Pil')}Kwargs", ImagesKwargs
+            expected_kwargs_class = vars(processor_module).get(
+                f"{processor.__class__.__name__.removesuffix('Pil')}Kwargs", ImagesKwargs
             )
             self.assertIs(processor.valid_kwargs, expected_kwargs_class)
 

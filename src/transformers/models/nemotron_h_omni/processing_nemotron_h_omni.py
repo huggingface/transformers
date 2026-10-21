@@ -20,9 +20,10 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
 
 
@@ -34,15 +35,8 @@ if is_torch_available():
 AudioInput = Union[str, "np.ndarray", "torch.Tensor", list]
 
 
-class NemotronH_Omni_Reasoning_V3ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: ImagesKwargs
-    videos_kwargs: VideosKwargs
-
-
 @auto_docstring
 class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
-    valid_processor_kwargs = NemotronH_Omni_Reasoning_V3ProcessorKwargs
-
     def __init__(
         self,
         image_processor=None,
@@ -92,7 +86,7 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         videos: VideoInput = None,
         audio: AudioInput = None,
-        **kwargs: Unpack[NemotronH_Omni_Reasoning_V3ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
@@ -309,5 +303,9 @@ class NemotronH_Omni_Reasoning_V3Processor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
 
+
+__getattr__ = deprecate_attr(
+    __name__, rename={"NemotronH_Omni_Reasoning_V3ProcessorKwargs": (ProcessingKwargs, "5.29.0")}
+)
 
 __all__ = ["NemotronH_Omni_Reasoning_V3Processor"]

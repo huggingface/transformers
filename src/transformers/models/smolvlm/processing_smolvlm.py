@@ -20,6 +20,7 @@ from datetime import timedelta
 from ...image_utils import make_nested_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, is_num2words_available, logging
+from ...utils.deprecation import deprecate_attr
 
 
 # Adapted from transformers.models.smolvlm.video_processing_smolvlm.DEFAULT_VIDEO_INTRO
@@ -90,14 +91,8 @@ def get_image_prompt_string(
     )
 
 
-class SmolVLMProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class SmolVLMProcessor(ProcessorMixin):
-    valid_processor_kwargs = SmolVLMProcessorKwargs
-
     images_kwargs = {
         "return_row_col_info": True,
     }
@@ -266,5 +261,7 @@ class SmolVLMProcessor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["rows", "cols", "video_metadata"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"SmolVLMProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["SmolVLMProcessor"]

@@ -20,16 +20,11 @@
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class Tipsv2ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class Tipsv2Processor(ProcessorMixin):
-    valid_processor_kwargs = Tipsv2ProcessorKwargs
-
     text_kwargs = {
         "padding": "max_length",
         "truncation": True,
@@ -39,5 +34,7 @@ class Tipsv2Processor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Tipsv2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Tipsv2Processor"]

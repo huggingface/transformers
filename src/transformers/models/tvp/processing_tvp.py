@@ -17,16 +17,11 @@ Processor class for TVP.
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class TvpProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class TvpProcessor(ProcessorMixin):
-    valid_processor_kwargs = TvpProcessorKwargs
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
         self.video_processor = image_processor
@@ -54,5 +49,7 @@ class TvpProcessor(ProcessorMixin):
 
         return start, end
 
+
+__getattr__ = deprecate_attr(__name__, rename={"TvpProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["TvpProcessor"]

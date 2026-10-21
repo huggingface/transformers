@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 from ...image_transforms import center_to_corners_format
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import TensorType, auto_docstring, is_torch_available
+from ...utils.deprecation import deprecate_attr
 
 
 if is_torch_available():
@@ -95,14 +96,8 @@ class DictWithDeprecationWarning(dict):
         return super().get(key, *args, **kwargs)
 
 
-class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class GroundingDinoProcessor(ProcessorMixin):
-    valid_processor_kwargs = GroundingDinoProcessorKwargs
-
     text_kwargs = {
         "return_token_type_ids": True,
     }
@@ -216,5 +211,7 @@ class GroundingDinoProcessor(ProcessorMixin):
 
         return results
 
+
+__getattr__ = deprecate_attr(__name__, rename={"GroundingDinoProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["GroundingDinoProcessor"]

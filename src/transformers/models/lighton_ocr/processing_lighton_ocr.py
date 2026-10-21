@@ -24,10 +24,7 @@ import numpy as np
 
 from ...image_utils import ChannelDimension, ImageInput, get_image_size
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
-
-
-class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 def _num_image_tokens(image_size: tuple[int, int], patch_size: tuple[int, int]) -> int:
@@ -91,8 +88,6 @@ def get_resize_output_image_size(
 
 
 class LightOnOcrProcessor(ProcessorMixin):
-    valid_processor_kwargs = LightOnOcrProcessorKwargs
-
     text_kwargs = {
         "return_tensors": "pt",
     }
@@ -172,5 +167,7 @@ class LightOnOcrProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"LightOnOcrProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["LightOnOcrProcessor"]

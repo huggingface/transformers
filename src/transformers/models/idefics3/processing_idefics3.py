@@ -26,6 +26,7 @@ from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 if TYPE_CHECKING:
@@ -34,14 +35,8 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class Idefics3Processor(ProcessorMixin):
-    valid_processor_kwargs = Idefics3ProcessorKwargs
-
     images_kwargs = {
         "return_row_col_info": True,
     }
@@ -89,7 +84,7 @@ class Idefics3Processor(ProcessorMixin):
         images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         image_seq_len: int | None = None,
-        **kwargs: Unpack[Idefics3ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchEncoding:
         r"""
         image_seq_len (`int`, *optional*):
@@ -165,7 +160,7 @@ class Idefics3Processor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        **kwargs: Unpack[Idefics3ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         if text is not None:
             if isinstance(text, str):
@@ -199,7 +194,7 @@ class Idefics3Processor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        **kwargs: Unpack[Idefics3ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         super().validate_inputs(images, text, **kwargs)
 
@@ -312,5 +307,7 @@ class Idefics3Processor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Idefics3ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Idefics3Processor"]

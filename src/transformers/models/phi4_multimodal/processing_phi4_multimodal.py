@@ -24,19 +24,14 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class Phi4MultimodalProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class Phi4MultimodalProcessor(ProcessorMixin):
-    valid_processor_kwargs = Phi4MultimodalProcessorKwargs
-
     def __init__(
         self,
         image_processor,
@@ -56,7 +51,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         text: TextInput | list[TextInput],
         images: ImageInput | None = None,
         audio: AudioInput | None = None,
-        **kwargs: Unpack[Phi4MultimodalProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         Returns:
@@ -127,5 +122,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Phi4MultimodalProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Phi4MultimodalProcessor"]

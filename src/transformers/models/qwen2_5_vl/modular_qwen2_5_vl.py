@@ -31,6 +31,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import get_max_seqlen, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
@@ -675,10 +676,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         )
 
 
-class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 class Qwen2_5_VLProcessor(Qwen2VLProcessor):
     videos_kwargs = {"return_metadata": True}
 
@@ -704,6 +701,8 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
     def model_input_names(self):
         return super().model_input_names + ["second_per_grid_ts", "mm_token_type_ids"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Qwen2_5_VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Qwen2_5_VLConfig",

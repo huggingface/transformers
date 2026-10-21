@@ -33,6 +33,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import maybe_autocast
 from ...utils.import_utils import requires
 from ..auto import AutoConfig, AutoModel
@@ -49,15 +50,9 @@ class PI0ImageProcessor(SiglipImageProcessor):
     do_pad = True
 
 
-class PI0ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 @requires(backends=("vision", "torch"))
 class PI0Processor(ProcessorMixin):
-    valid_processor_kwargs = PI0ProcessorKwargs
-
     text_kwargs = {
         "padding": "max_length",
         "max_length": 48,
@@ -108,7 +103,7 @@ class PI0Processor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         actions: list | np.ndarray | torch.Tensor | None = None,
         state: list | np.ndarray | torch.Tensor | None = None,
-        **kwargs: Unpack[PI0ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         actions (`list | np.ndarray | torch.Tensor`, *optional*):
@@ -669,6 +664,8 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             noise = noise + dt * output.logits
         return noise
 
+
+__getattr__ = deprecate_attr(__name__, rename={"PI0ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "PI0Config",

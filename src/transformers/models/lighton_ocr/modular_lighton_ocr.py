@@ -28,6 +28,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.deprecation import deprecate_attr
 from ..auto import AutoConfig, AutoModel
 from ..mistral3.modeling_mistral3 import (
     Mistral3ForConditionalGeneration,
@@ -109,13 +110,7 @@ class LightOnOcrConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
 
 
-class LightOnOcrProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 class LightOnOcrProcessor(ProcessorMixin):
-    valid_processor_kwargs = LightOnOcrProcessorKwargs
-
     text_kwargs = {
         "return_tensors": "pt",
     }
@@ -299,6 +294,8 @@ class LightOnOcrForConditionalGeneration(Mistral3ForConditionalGeneration):
     ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes, **kwargs)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"LightOnOcrProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "LightOnOcrPreTrainedModel",  # noqa

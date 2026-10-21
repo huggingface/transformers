@@ -21,19 +21,14 @@ from ...image_processing_utils import select_best_resolution
 from ...image_utils import get_image_size, to_numpy_array
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class LlavaNextVideoProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class LlavaNextVideoProcessor(ProcessorMixin):
-    valid_processor_kwargs = LlavaNextVideoProcessorKwargs
-
     text_kwargs = {"return_tensors": "pt"}
     images_kwargs = {"return_tensors": "pt"}
     videos_kwargs = {"return_tensors": "pt"}
@@ -189,5 +184,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"LlavaNextVideoProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["LlavaNextVideoProcessor"]

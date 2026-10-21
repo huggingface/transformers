@@ -19,19 +19,14 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class ParakeetProcessor(ProcessorMixin):
-    valid_processor_kwargs = ParakeetProcessorKwargs
-
     text_kwargs = {
         "padding": True,
         "padding_side": "right",
@@ -78,7 +73,7 @@ class ParakeetProcessor(ProcessorMixin):
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         sampling_rate: int | None = None,
-        **kwargs: Unpack[ParakeetProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""
         sampling_rate (`int`, *optional*):
@@ -197,5 +192,7 @@ class ParakeetProcessor(ProcessorMixin):
 
         return char_offsets
 
+
+__getattr__ = deprecate_attr(__name__, rename={"ParakeetProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["ParakeetProcessor"]

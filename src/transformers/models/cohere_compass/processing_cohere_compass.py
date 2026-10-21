@@ -21,20 +21,15 @@ import numpy as np
 
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class CohereCompassProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class CohereCompassProcessor(ProcessorMixin):
-    valid_processor_kwargs = CohereCompassProcessorKwargs
     return_mm_token_type_ids = True
-
     text_kwargs = {
         "return_token_type_ids": False,
     }
@@ -181,5 +176,7 @@ class CohereCompassProcessor(ProcessorMixin):
         ]
         return timestamps
 
+
+__getattr__ = deprecate_attr(__name__, rename={"CohereCompassProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["CohereCompassProcessor"]

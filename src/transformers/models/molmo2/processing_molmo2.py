@@ -22,20 +22,15 @@ from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
 
 
-class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class Molmo2Processor(ProcessorMixin):
-    valid_processor_kwargs = Molmo2ProcessorKwargs
-
     videos_kwargs = {"return_metadata": True}
     return_mm_token_type_ids = True
 
@@ -208,5 +203,7 @@ class Molmo2Processor(ProcessorMixin):
         timestamps = [frame_idx / fps for frame_idx in frames_indices]
         return self.get_video_string(video_grid, timestamps)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Molmo2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Molmo2Processor"]

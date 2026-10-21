@@ -21,17 +21,12 @@ from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
-
-
-class Ernie4_5_VLMoeProcessorKwargs(ProcessingKwargs, total=False):
-    pass
 
 
 @auto_docstring
 class Ernie4_5_VLMoeProcessor(ProcessorMixin):
-    valid_processor_kwargs = Ernie4_5_VLMoeProcessorKwargs
-
     text_kwargs = {
         "return_token_type_ids": False,
     }
@@ -72,7 +67,7 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | list[TextInput] | None = None,
         videos: VideoInput | None = None,
-        **kwargs: Unpack[Ernie4_5_VLMoeProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         model_inputs = super().__call__(images=images, text=text, videos=videos, **kwargs)
         model_inputs["moe_mm_token_type_ids"] = self.create_moe_mm_token_type_ids(model_inputs["input_ids"])
@@ -173,5 +168,7 @@ class Ernie4_5_VLMoeProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Ernie4_5_VLMoeProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Ernie4_5_VLMoeProcessor"]

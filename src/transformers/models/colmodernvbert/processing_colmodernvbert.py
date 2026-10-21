@@ -51,12 +51,12 @@ class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
 @requires(backends=("torch",))
 @auto_docstring
 class ColModernVBertProcessor(ProcessorMixin):
-    valid_processor_kwargs = ColModernVBertProcessorKwargs
     images_kwargs = {
         "return_row_col_info": True,
         "data_format": "channels_first",
         "return_tensors": "pt",
     }
+    valid_processor_kwargs = ColModernVBertProcessorKwargs
     suffix: str | None = None
 
     text_kwargs = {
@@ -123,7 +123,7 @@ class ColModernVBertProcessor(ProcessorMixin):
         images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
         image_seq_len: int | None = None,
-        **kwargs: Unpack[ColModernVBertProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchEncoding:
         r"""
         image_seq_len (`int`, *optional*):
@@ -199,7 +199,7 @@ class ColModernVBertProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        **kwargs: Unpack[ColModernVBertProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         if text is not None:
             if isinstance(text, str):
@@ -233,7 +233,7 @@ class ColModernVBertProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        **kwargs: Unpack[ColModernVBertProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         super().validate_inputs(images, text, **kwargs)
 

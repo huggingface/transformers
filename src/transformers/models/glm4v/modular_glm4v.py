@@ -30,13 +30,14 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
@@ -55,10 +56,7 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLVisionRotaryEmbedding,
 )
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
-from ..qwen2_vl.processing_qwen2_vl import (
-    Qwen2VLProcessor,
-    Qwen2VLProcessorKwargs,
-)
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -1080,10 +1078,6 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
         return mm_encoder_output
 
 
-class Glm4vProcessorKwargs(Qwen2VLProcessorKwargs):
-    pass
-
-
 class Glm4vProcessor(Qwen2VLProcessor):
     text_kwargs = {
         "return_token_type_ids": False,
@@ -1152,6 +1146,8 @@ class Glm4vProcessor(Qwen2VLProcessor):
     def replace_frame_token_id(self, timestamp_sec, num_image_tokens: int = 1):
         return f"<|begin_of_image|>{self.image_token * num_image_tokens}<|end_of_image|>{int(timestamp_sec)}"
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Glm4vProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Glm4vConfig",

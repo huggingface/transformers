@@ -536,9 +536,8 @@ class VideoProcessingTestMixin:
             processor = video_processing_class(**self.video_processor_dict)
             processor_module = sys.modules[processor.__class__.__module__]
             # Kwargs are either called <Model>VideoProcessorInitKwargs or <Model>VideoProcessorKwargs
-            expected_kwargs_class = getattr(
-                processor_module,
+            expected_kwargs_class = vars(processor_module).get(
                 f"{processor.__class__.__name__}InitKwargs",
-                getattr(processor_module, f"{processor.__class__.__name__}Kwargs", VideosKwargs),
+                vars(processor_module).get(f"{processor.__class__.__name__}Kwargs", VideosKwargs),
             )
             self.assertIs(processor.valid_kwargs, expected_kwargs_class)

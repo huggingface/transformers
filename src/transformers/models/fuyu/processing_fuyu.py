@@ -31,6 +31,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging, requires_backends
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -51,10 +52,6 @@ TOKEN_BBOX_CLOSE_STRING = "<0x01>"  # </bbox>
 TOKEN_POINT_OPEN_STRING = "<0x02>"  # <point>
 TOKEN_POINT_CLOSE_STRING = "<0x03>"  # </point>
 BEGINNING_OF_ANSWER_STRING = "<0x04>"  # <boa>
-
-
-class FuyuProcessorKwargs(ProcessingKwargs, total=False):
-    pass
 
 
 # Simplified assuming self.crop_top = self.padding_top = 0
@@ -197,8 +194,6 @@ def construct_full_unpacked_stream(
 @requires(backends=("vision",))
 @auto_docstring
 class FuyuProcessor(ProcessorMixin):
-    valid_processor_kwargs = FuyuProcessorKwargs
-
     @classmethod
     def _load_tokenizer_from_pretrained(
         cls, sub_processor_type, pretrained_model_name_or_path, subfolder="", **kwargs
@@ -235,7 +230,7 @@ class FuyuProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: str | list[str] | TextInput | PreTokenizedInput | None = None,
-        **kwargs: Unpack[FuyuProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> "BatchFeature":
         r"""
         Returns:
@@ -632,5 +627,7 @@ class FuyuProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         return list(tokenizer_input_names + ["image_patches"])
 
+
+__getattr__ = deprecate_attr(__name__, rename={"FuyuProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["FuyuProcessor"]

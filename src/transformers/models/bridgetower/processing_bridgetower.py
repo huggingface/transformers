@@ -17,16 +17,11 @@ Processor class for BridgeTower.
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class BridgeTowerProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class BridgeTowerProcessor(ProcessorMixin):
-    valid_processor_kwargs = BridgeTowerProcessorKwargs
-
     images_kwargs = {
         "do_normalize": True,
         "do_center_crop": True,
@@ -35,5 +30,7 @@ class BridgeTowerProcessor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"BridgeTowerProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["BridgeTowerProcessor"]

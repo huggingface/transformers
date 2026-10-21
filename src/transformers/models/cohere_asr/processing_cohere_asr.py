@@ -16,6 +16,7 @@ from ...audio_utils import AudioInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -30,15 +31,9 @@ _NO_SPACE_LANGS = {"ja", "zh"}
 logger = logging.get_logger(__name__)
 
 
-class CohereAsrProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 @requires(backends=("torch",))
 class CohereAsrProcessor(ProcessorMixin):
-    valid_processor_kwargs = CohereAsrProcessorKwargs
-
     text_kwargs = {
         "padding": True,
         "padding_side": "right",
@@ -85,7 +80,7 @@ class CohereAsrProcessor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         punctuation: bool = True,
         sampling_rate: int | None = None,
-        **kwargs: Unpack[CohereAsrProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""
         language (`str`):
@@ -175,5 +170,7 @@ class CohereAsrProcessor(ProcessorMixin):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return feature_extractor_input_names + ["labels"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"CohereAsrProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["CohereAsrProcessor"]

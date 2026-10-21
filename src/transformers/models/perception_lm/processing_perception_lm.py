@@ -17,16 +17,11 @@ Processor class for PerceptionLM.
 from ...image_utils import get_image_size, to_numpy_array
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class PerceptionLMProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class PerceptionLMProcessor(ProcessorMixin):
-    valid_processor_kwargs = PerceptionLMProcessorKwargs
-
     def __init__(
         self,
         video_processor=None,
@@ -117,5 +112,7 @@ class PerceptionLMProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
         return MultiModalData(**vision_data)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"PerceptionLMProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["PerceptionLMProcessor"]

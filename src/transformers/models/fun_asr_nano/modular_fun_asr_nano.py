@@ -29,7 +29,9 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack, prepare_keyword_inputs, prepare_prompt_input
+from ...tokenization_utils_base import TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..audioflamingo3.modeling_audioflamingo3 import (
@@ -66,13 +68,9 @@ LANGUAGE_CODE_TO_NAME = {
 }
 
 
-class FunAsrNanoProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
-    pass
-
-
 @auto_docstring
 class FunAsrNanoProcessor(AudioFlamingo3Processor):
-    valid_processor_kwargs = FunAsrNanoProcessorKwargs
+    valid_processor_kwargs = ProcessingKwargs
 
     text_kwargs = {"return_tensors": "pt"}
     audio_kwargs = {
@@ -99,6 +97,15 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         del self.max_audio_len
         del self.default_transcription_prompt
 
+    def __call__(
+        self,
+        text: TextInput | list[TextInput],
+        audio: AudioInput | None = None,
+        output_labels: bool | None = False,
+        **kwargs: Unpack[ProcessingKwargs],
+    ) -> BatchFeature:
+        return super().__call__(text, audio=audio, output_labels=output_labels, **kwargs)
+
     def _get_audio_token_length(self, audio_lengths):
         raise AttributeError("Not needed for Fun-ASR-Nano")
 
@@ -120,7 +127,7 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         language: str | list[str] | None = None,
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
-        **kwargs: Unpack[FunAsrNanoProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """Prepare inputs for ASR using the checkpoint's structured transcription chat template.
 
@@ -527,6 +534,8 @@ class FunAsrNanoForConditionalGeneration(Qwen3ASRForConditionalGeneration):
         ```"""
         return super().forward(**super_kwargs)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"FunAsrNanoProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "FunAsrNanoProcessor",

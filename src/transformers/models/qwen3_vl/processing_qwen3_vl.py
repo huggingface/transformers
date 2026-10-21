@@ -22,20 +22,15 @@ import numpy as np
 
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class Qwen3VLProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class Qwen3VLProcessor(ProcessorMixin):
-    valid_processor_kwargs = Qwen3VLProcessorKwargs
     return_mm_token_type_ids = True
-
     text_kwargs = {
         "return_token_type_ids": False,
     }
@@ -186,5 +181,7 @@ class Qwen3VLProcessor(ProcessorMixin):
         ]
         return timestamps
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Qwen3VLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Qwen3VLProcessor"]

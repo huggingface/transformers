@@ -15,16 +15,11 @@
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class KyutaiSpeechToTextProcessorKwargs(ProcessingKwargs, total=False):
-    pass
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class KyutaiSpeechToTextProcessor(ProcessorMixin):
-    valid_processor_kwargs = KyutaiSpeechToTextProcessorKwargs
-
     text_kwargs = {
         "return_tensors": "pt",
     }
@@ -36,5 +31,7 @@ class KyutaiSpeechToTextProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"KyutaiSpeechToTextProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["KyutaiSpeechToTextProcessor"]
