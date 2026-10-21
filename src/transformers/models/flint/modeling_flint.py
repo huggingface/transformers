@@ -364,8 +364,7 @@ class FlintPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
 
     _can_compile_fullgraph = True
-    # Inference engines that wrap this model must apply the sinks and NoPE layers, so do not advertise generic support
-    _supports_attention_backend = False
+    _supports_attention_backend = True
     _can_record_outputs = {
         "router_logits": OutputRecorder(FlintTopKRouter, index=0),
         "hidden_states": FlintDecoderLayer,

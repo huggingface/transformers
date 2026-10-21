@@ -230,8 +230,6 @@ class FlintDecoderLayer(Qwen3MoeDecoderLayer):
 class FlintPreTrainedModel(Qwen3MoePreTrainedModel):
     _supports_sdpa = False  # SDPA cannot apply the attention sinks
     _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
-    # Inference engines that wrap this model must apply the sinks and NoPE layers, so do not advertise generic support
-    _supports_attention_backend = False
     _keep_in_fp32_modules_strict = ["gate.weight", "sinks"]
 
     @torch.no_grad()
