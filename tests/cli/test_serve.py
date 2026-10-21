@@ -682,11 +682,11 @@ class TestSpeechHandler(unittest.TestCase):
         body = {"input": "Hi.", "ref_audio": voice["url"]}
         # VibeVoice's roles are speaker IDs, other models get one user turn
         vibevoice = SpeechHandler.get_processor_inputs_from_request(body, "vibevoice")
-        self.assertEqual(vibevoice, [{"role": "0", "content": [text, voice]}])
+        self.assertEqual(vibevoice, ([{"role": "0", "content": [text, voice]}], {}))
         other = SpeechHandler.get_processor_inputs_from_request(body, "other_tts")
-        self.assertEqual(other, [{"role": "user", "content": [text, voice]}])
+        self.assertEqual(other, ([{"role": "user", "content": [text, voice]}], {}))
         # Higgs takes the instructions in its scene, and the voice as an example turn with its transcript...
-        higgs = SpeechHandler.get_processor_inputs_from_request(
+        higgs, _ = SpeechHandler.get_processor_inputs_from_request(
             {**body, "instructions": "Calm.", "ref_text": "Words."}, "higgs_audio_v2"
         )
         self.assertEqual([message["role"] for message in higgs], ["system", "scene", "user", "assistant", "user"])
@@ -694,9 +694,25 @@ class TestSpeechHandler(unittest.TestCase):
         self.assertEqual(higgs[2]["content"], [{"type": "text", "text": "Words."}])
         self.assertEqual(higgs[3]["content"], [voice])
         # ... or in its scene without a transcript
-        higgs = SpeechHandler.get_processor_inputs_from_request(body, "higgs_audio_v2")
+        higgs, _ = SpeechHandler.get_processor_inputs_from_request(body, "higgs_audio_v2")
         self.assertEqual([message["role"] for message in higgs], ["system", "scene", "user"])
         self.assertEqual(higgs[1]["content"], [voice])
+
+    def test_processor_inputs_from_voice_embedding(self):
+        import tempfile
+
+        import torch
+        from safetensors.torch import save_file
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            embedding = f"{tmp_dir}/voice.safetensors"
+            save_file({"speaker_wavs": torch.randn(1, 512, 3)}, embedding)
+            # Phonon takes its voice as an embedding, which goes to the processor
+            messages, processor_kwargs = SpeechHandler.get_processor_inputs_from_request(
+                {"input": "Hi.", "ref_audio": embedding}, "gradium_phonon_tts"
+            )
+        self.assertEqual(messages, [{"role": "user", "content": [{"type": "text", "text": "Hi."}, {"type": "audio"}]}])
+        self.assertEqual(processor_kwargs["audio_prompt_latents"][0].shape, (3, 512))
 
     def test_pcm16_and_wav_header(self):
         import torch
