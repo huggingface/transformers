@@ -216,6 +216,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("flava_multimodal_model", "FlavaMultimodalConfig"),
         ("flava_text_model", "FlavaTextConfig"),
         ("flex_olmo", "FlexOlmoConfig"),
+        ("flint", "FlintConfig"),
         ("florence2", "Florence2Config"),
         ("florence_vision", "Florence2VisionConfig"),
         ("fnet", "FNetConfig"),
