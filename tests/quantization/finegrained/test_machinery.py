@@ -173,7 +173,7 @@ class TestFormatModulesTest(_ChainAssertions, unittest.TestCase):
                     continue
                 q_proj = layer.self_attn.q_proj
                 self.assertIsInstance(q_proj, FineGrainedLinear)
-                self.assertTrue(q_proj.tp_uses_local_tensors)
+                self.assertTrue(q_proj._hf_quantized_needs_local_tp)
                 self.assertEqual((q_proj.weight.dtype, q_proj.weight_scale_inv.shape), (torch.float8_e4m3fn, (2, 2)))
 
     def test_a_linear_hands_the_kernel_its_weight_and_scale(self):

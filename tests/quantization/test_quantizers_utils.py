@@ -29,20 +29,20 @@ class SkipListTest(unittest.TestCase):
         self.assertTrue(should_convert_module("model", []))
 
         # Should not convert if in exclusion list
-        patterns = ["model.layers.*.self_attn", "lm_head"]
-        self.assertFalse(should_convert_module("lm_head", patterns))
-        self.assertTrue(should_convert_module("experts", patterns))
-        self.assertFalse(should_convert_module("model.layers.3.self_attn.q_proj", patterns))
+        modules_to_not_convert = ["model.layers.*.self_attn", "lm_head"]
+        self.assertFalse(should_convert_module("lm_head", modules_to_not_convert))
+        self.assertTrue(should_convert_module("experts", modules_to_not_convert))
+        self.assertFalse(should_convert_module("model.layers.3.self_attn.q_proj", modules_to_not_convert))
 
         # A match from the start ends at a module boundary
-        patterns = ["model.layers.1", "model.layers.0.mlp.gate", r"^model\.audio_tower(?:\.|$)"]
-        self.assertFalse(should_convert_module("model.layers.1.mlp.up_proj", patterns))
-        self.assertTrue(should_convert_module("model.layers.10.mlp.up_proj", patterns))
-        self.assertFalse(should_convert_module("model.layers.0.mlp.gate", patterns))
-        self.assertTrue(should_convert_module("model.layers.0.mlp.gate_proj", patterns))
+        modules_to_not_convert = ["model.layers.1", "model.layers.0.mlp.gate", r"^model\.audio_tower(?:\.|$)"]
+        self.assertFalse(should_convert_module("model.layers.1.mlp.up_proj", modules_to_not_convert))
+        self.assertTrue(should_convert_module("model.layers.10.mlp.up_proj", modules_to_not_convert))
+        self.assertFalse(should_convert_module("model.layers.0.mlp.gate", modules_to_not_convert))
+        self.assertTrue(should_convert_module("model.layers.0.mlp.gate_proj", modules_to_not_convert))
         # A user regex that brings its own anchor and boundary still works.
-        self.assertFalse(should_convert_module("model.audio_tower.layers.1.proj", patterns))
-        self.assertTrue(should_convert_module("model.audio_towers.proj", patterns))
+        self.assertFalse(should_convert_module("model.audio_tower.layers.1.proj", modules_to_not_convert))
+        self.assertTrue(should_convert_module("model.audio_towers.proj", modules_to_not_convert))
 
         # A name still covers the names ending in it, as Hub skip-lists rely on
         self.assertFalse(should_convert_module("model.layers.0.mlp.shared_expert_gate", ["gate"]))
@@ -72,13 +72,17 @@ class SkipListTest(unittest.TestCase):
         config = LlavaConfig(text_config=text_config, vision_config=vision_config)
         with torch.device("meta"):
             model = LlavaForConditionalGeneration(config)
-        skip = HfQuantizer.get_modules_to_not_convert(model, ["vision_tower", "language_model.model.layers.1"])
+        modules_to_not_convert = HfQuantizer.get_modules_to_not_convert(
+            model, ["vision_tower", "language_model.model.layers.1"]
+        )
         for name in (
             "model.vision_tower.vision_model.encoder.layers.0.mlp.fc1",
             "model.language_model.layers.1.self_attn.q_proj",
         ):
-            self.assertFalse(should_convert_module(name, skip), name)
-        self.assertTrue(should_convert_module("model.language_model.layers.0.self_attn.q_proj", skip))
+            self.assertFalse(should_convert_module(name, modules_to_not_convert), name)
+        self.assertTrue(
+            should_convert_module("model.language_model.layers.0.self_attn.q_proj", modules_to_not_convert)
+        )
 
 
 @require_torch

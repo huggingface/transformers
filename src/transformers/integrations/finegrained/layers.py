@@ -264,7 +264,7 @@ class _FineGrainedModule:
     """State shared by every finegrained module, dense linear or experts."""
 
     # the kernels take raw pointers, so the TP styles pass them local shards and not DTensors
-    tp_uses_local_tensors = True
+    _hf_quantized_needs_local_tp = True
     # set by `disable_deepgemm_on_multi_device`
     _deepgemm_disabled = False
 

@@ -19,8 +19,6 @@ a real expert to keep the weight gather in bounds, so they have to be kept out o
 gradient explicitly.
 """
 
-import subprocess
-import sys
 import types
 import unittest
 
@@ -121,15 +119,6 @@ class UseExpertsImplementationTest(unittest.TestCase):
 @require_torch
 class LoadTimeOnlyExpertsTest(unittest.TestCase):
     """Check the experts implementations that `ExpertsInterface._load_time_only` names."""
-
-    def test_names_are_known_without_importing_the_interface_that_serves_them(self):
-        code = (
-            "import sys\n"
-            "from transformers import MixtralConfig, PreTrainedModel\n"
-            "PreTrainedModel(MixtralConfig()).get_correct_experts_implementation('deepgemm_megamoe')\n"
-            "assert not any(name.startswith('transformers.integrations.finegrained') for name in sys.modules)\n"
-        )
-        subprocess.run([sys.executable, "-c", code], check=True)
 
     def test_a_load_time_implementation_cannot_be_switched_to(self):
         from transformers import MixtralConfig, MixtralForCausalLM

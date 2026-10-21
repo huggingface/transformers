@@ -818,7 +818,7 @@ def replace_with_fp8_embedding(model, patterns: list[str], modules_to_not_conver
                 continue
             with torch.device("meta"):
                 new_module = FP8Embedding(module.num_embeddings, module.embedding_dim, module.padding_idx)
-            new_module.tp_uses_local_tensors = True
+            new_module._hf_quantized_needs_local_tp = True
             model.set_submodule(name, new_module)
     return model
 
@@ -896,7 +896,7 @@ def replace_with_fp8_linear(
                 )
             if new_module is not None:
                 # TP must use local tensors because this quantization path does not support DTensor inputs or weights.
-                new_module.tp_uses_local_tensors = True
+                new_module._hf_quantized_needs_local_tp = True
                 model.set_submodule(module_name, new_module)
                 has_been_replaced = True
 

@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
@@ -172,12 +173,15 @@ class HfQuantizer(ABC):
         """
         Updates in place `model.tp_plan` or `model.ep_plan` (the full plans, merged from the config and all
         sub-configs) to take into account the quantizer's custom keys like 'inv_scale'"""
-        from ..distributed.tensor_parallel import replace_layer_number_by_wildcard
+        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
 
         params = {replace_layer_number_by_wildcard(name) for name, _ in model.named_parameters()}
         suffixes = {n.removeprefix(p) for p, names in self.serialized_names.items() for n in names}
         extra = {key + suffix: style for key, style in plan.items() for suffix in suffixes}
         plan.update({key: style for key, style in extra.items() if key in params and key not in plan})
+        # A scalar has no axis to shard, e.g. a per-tensor FP8 `activation_scale`
+        scalars = {replace_layer_number_by_wildcard(n) for n, p in model.named_parameters() if p.ndim == 0}
+        plan.update({name: "replicate" for name in scalars if _get_parameter_plan(name, plan) is not None})
 
     def update_attn_implementation(self, config):
         """Sees the requested `attn_implementation` before the model is built, so a quantizer can default it."""
@@ -379,6 +383,13 @@ class HfQuantizer(ABC):
         - otherwise the converter also collects `experts.*.gate_proj.weight_scale_inv`, the dequantize op runs first
         """
         from ..core_model_loading import WeightConverter
+
+        dequantized = self.pre_quantized and getattr(self.quantization_config, "dequantize", False)
+        if dequantized and self.dequantized_saves_unquantized:
+            # Keep the model's own transforms, so a dequantized model saves like an unquantized one.
+            # Copy them, as the quantizer and the loader mutate the live transforms.
+            for conversion in weight_conversions:
+                conversion._unquantized_transform = copy.deepcopy(conversion)
 
         param_names = "\n".join(name for name, _ in model.named_parameters())
         dequantize = self.get_load_operations().get("dequantize") if self.pre_quantized else None

@@ -1499,12 +1499,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
     def adapt_quantization_config(self, quantization_config):
         """
-        Return the quantization config to load this model with.
+        Return the quantization config to load this model with. The default returns it unchanged.
 
-        Override it when a checkpoint declares part of its quantization elsewhere, e.g. on the model config.
-        `DeepseekV4Config` uses it. Its checkpoints ship `quant_method="fp8"` and mark MXFP4 experts with
-        `expert_dtype="fp4"`, so it returns a config that also quantizes the experts in MXFP4.
-        The default returns `quantization_config` unchanged.
+        Override it when a checkpoint declares part of its quantization elsewhere, e.g. `DeepseekV4Config`, whose
+        checkpoints mark their experts' dtype on the model config.
         """
         return quantization_config
 
