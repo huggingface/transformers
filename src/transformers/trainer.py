@@ -2184,7 +2184,17 @@ class Trainer:
             # TP ranks (and the expert-parallel ranks sharing their batch) see replicated batches; `num_processes`
             # over-counts them by `tp_size`. Mirror the divisor used in `_get_num_items_in_batch`.
             loss_scale = self.accelerator.num_processes // self.get_tp_size()
-            loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
+            loss_scale = loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
+            unwrapped_model = self.accelerator.unwrap_model(model)
+            router_aux_loss_coef = getattr(getattr(unwrapped_model, "config", None), "router_aux_loss_coef", None)
+            aux_loss = getattr(outputs, "aux_loss", None)
+            if aux_loss is not None and router_aux_loss_coef is not None:
+                # The token-normalized primary loss needs data-parallel compensation,
+                # while DDP already averages this rank-local auxiliary contribution.
+                aux_contribution = router_aux_loss_coef * aux_loss.to(loss.device)
+                loss = (loss - aux_contribution) * loss_scale + aux_contribution
+            else:
+                loss *= loss_scale
 
         return (loss, outputs) if return_outputs else loss
 
