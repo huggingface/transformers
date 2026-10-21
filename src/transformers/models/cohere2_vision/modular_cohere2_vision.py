@@ -118,7 +118,7 @@ class Cohere2VisionModel(AyaVisionModel):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple | Cohere2VisionModelOutputWithPast:
+    ) -> Cohere2VisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -179,7 +179,7 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
         image_sizes: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Cohere2VisionCausalLMOutputWithPast:
+    ) -> Cohere2VisionCausalLMOutputWithPast:
         r"""
         Example:
 

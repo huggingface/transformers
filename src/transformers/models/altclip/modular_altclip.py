@@ -511,7 +511,7 @@ class AltCLIPModel(ChineseCLIPModel, AltCLIPPreTrainedModel):
         return_loss: bool | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | AltCLIPOutput:
+    ) -> AltCLIPOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.

@@ -458,7 +458,7 @@ class VideoLlama3Model(Qwen2VLModel):
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
             The spatial downsampling ratio of each video feature.
@@ -476,7 +476,7 @@ class VideoLlama3Model(Qwen2VLModel):
         image_grid_thw: torch.LongTensor,
         image_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
@@ -512,7 +512,7 @@ class VideoLlama3Model(Qwen2VLModel):
         video_compression_mask: torch.BoolTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | VideoLlama3ModelOutputWithPast:
+    ) -> VideoLlama3ModelOutputWithPast:
         r"""
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.
@@ -637,7 +637,7 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         video_compression_mask: torch.BoolTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | VideoLlama3CausalLMOutputWithPast:
+    ) -> VideoLlama3CausalLMOutputWithPast:
         r"""
         image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
             The spatial downsampling ratio of each image feature.

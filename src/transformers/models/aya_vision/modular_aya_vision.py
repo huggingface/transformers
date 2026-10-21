@@ -217,7 +217,7 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
         image_sizes: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | AyaVisionCausalLMOutputWithPast:
+    ) -> AyaVisionCausalLMOutputWithPast:
         r"""
         Example:
 

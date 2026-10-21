@@ -1225,7 +1225,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | UnlimitedOcrModelOutputWithPast:
+    ) -> UnlimitedOcrModelOutputWithPast:
         r"""
         pixel_values_local (`torch.FloatTensor`, *optional*):
             Local patch pixel values of shape `(total_patches, 3, H, W)`.

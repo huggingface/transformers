@@ -631,7 +631,7 @@ class Granite4VisionModel(LlavaNextModel):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Granite4VisionModelOutputWithPast:
+    ) -> Granite4VisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -711,7 +711,7 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Granite4VisionCausalLMOutputWithPast:
+    ) -> Granite4VisionCausalLMOutputWithPast:
         outputs = self.model(
             input_ids,
             pixel_values=pixel_values,
