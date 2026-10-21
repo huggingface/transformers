@@ -106,7 +106,7 @@ class FlintIntegrationTest(unittest.TestCase):
         model = FlintForCausalLM.from_pretrained(model_id, dtype="auto", device_map="auto")
         expected = {
             "Who are you?": "<think>The user asks who I am. Simple identity question. Answer concisely: Flint, made by "
-            "Recursive. No need for extra disclaimers or lineage speculation.</think>I'm Flint, an AI assistant "
+            "Recursive. No need for extra disclaimers.</think>I'm Flint, an AI assistant "
             "developed by Recursive.",
             "What is 17 * 23? Answer briefly.": "<think>User asks simple multiplication, wants brief answer. "
             "17*23 = 391.</think>391",
