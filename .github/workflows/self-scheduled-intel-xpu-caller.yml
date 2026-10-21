@@ -13,8 +13,7 @@ on:
     types: [completed]
   push:
     branches:
-      - run_intel_scheduled_ci_caller*
-      - add_xpu_ci
+      - run_intel_xpu_scheduled_ci_caller*
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
