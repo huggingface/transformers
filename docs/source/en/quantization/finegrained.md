@@ -58,8 +58,9 @@ quantized in the format of its entry. A typical plan puts the MoE experts in a 4
 - A targeted entry wins over the `".*"` catch-all, whatever the order of the plan. A plan saved to `config.json`
   loses its order.
 - Two targeted entries that match the same module raise an error.
-- A module that no entry matches stays in full precision. So does a module listed in `modules_to_not_convert`.
-- `dequantize` and `modules_to_not_convert` belong to the plan, not to its entries.
+- A `None` entry keeps its modules in full precision. It wins over every other entry.
+- A module that no entry matches stays in full precision.
+- `dequantize` belongs to the plan, not to its entries.
 - An entry can be the config of any registered quantization method. Its modules load through that method's quantizer.
 
 ## Tensor and expert parallelism

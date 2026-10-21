@@ -382,9 +382,7 @@ class FineGrainedDequantize(_FineGrainedOp):
             return None
         config = self.hf_quantizer.quantization_config
         if full_layer_name is not None:
-            module_name = full_layer_name.rpartition(".")[0]
-            owner = owner_of(self, module_name)
-            config = owner.config_for(module_name) if hasattr(owner, "config_for") else None
+            config = getattr(owner_of(self, full_layer_name.rpartition(".")[0]), "quantization_config", None)
         return config
 
     # a converter passes these weights one at a time

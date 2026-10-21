@@ -32,7 +32,6 @@ from .quantizers_utils import (
     FUSED_STACKS,
     STACK_COMPANIONS,
     get_module_from_name,
-    plan_entry_for,
     replace_with_quantized_modules,
 )
 
@@ -57,10 +56,6 @@ class BlockScaledQuantizer(HfQuantizer):
     def _plan(self) -> dict[str, "BlockScaledConfig"]:
         """Return `{module regex: format config}` for the modules this quantizer covers."""
         return {".*": self.quantization_config}
-
-    def config_for(self, module_name: str) -> "BlockScaledConfig | None":
-        """Return the format config of `module_name`, or `None` if it stays in full precision."""
-        return plan_entry_for(self._plan(), module_name)
 
     def get_param_ops(self, model: "PreTrainedModel", param_name: str) -> list:
         """Return the layout ops a tensor runs when it loads into `param_name`. Each op is reversed on save.
