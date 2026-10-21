@@ -1,8 +1,11 @@
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
+from transformers import GenerationConfig, PixtralImageProcessorFast, PixtralProcessor
+from transformers.integrations.mistral import convert_tekken_tokenizer
 from transformers.models.mistral_large4.modular_mistral_large4 import MistralLarge4Config
 
 
@@ -58,6 +61,7 @@ HF_TO_VLLM_MAPPING = {
     "vision_config.rope_parameters.rope_theta": "vision_encoder.rope_theta",
 }
 
+
 def recursive_get(d: dict, key: tuple[str, ...]) -> Any:
     # Error case
     if not isinstance(key, tuple) or len(key) == 0:
@@ -102,7 +106,7 @@ def format_quantization_config(source: dict) -> dict:
         "lm_head",
         "kv_b_proj",
         "indexer.wk",
-        "indexer.weights_proj"
+        "indexer.weights_proj",
     ]
     if not source["quantize_kv_a"]:
         modules_to_not_convert.append("kv_a_proj_with_mqa")
@@ -113,7 +117,6 @@ def format_quantization_config(source: dict) -> dict:
         "weight_block_size": weight_block_size,
         "modules_to_not_convert": modules_to_not_convert,
     }
-
 
 
 def convert_config(source: dict) -> dict:
@@ -199,13 +202,24 @@ def convert_and_write_processor(input_dir: Path, output_dir: Path, params: dict)
     return processor
 
 
+def write_weights_index(input_dir: Path, output_dir: Path) -> None:
+    """Writes the weight index to the output dir and symlinks the shards there."""
+    source_index = json.loads((input_dir / "consolidated.safetensors.index.json").read_text(encoding="utf-8"))
+    for shard in sorted(set(source_index["weight_map"].values())):
+        target = output_dir / shard
+        if output_dir.resolve() != input_dir.resolve() and not target.exists():
+            os.symlink((input_dir / shard).resolve(), target)
+    with open(output_dir / "model.safetensors.index.json", "w", encoding="utf-8") as f:
+        json.dump(source_index, f, indent=4)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("input_dir", help="Location of the mistral_large4 checkpoint")
     parser.add_argument(
         "--output-dir",
         default=None,
-        help="Location to write the HF-formatted checkpoint. If not specified, only the config will be created.",
+        help="Location to write the HF-formatted checkpoint. If not specified, defaults to input_dir.",
     )
     parser.add_argument("--config_name", type=str, default="params.json", help="The name of the original config file.")
     parser.add_argument("--config-only", action="store_true", help="Only write config.json.")
@@ -213,11 +227,23 @@ if __name__ == "__main__":
 
     input_dir = Path(args.input_dir)
     output_dir = Path(args.output_dir) if args.output_dir is not None else input_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    config_path = input_dir / args.config_name
-    with open(config_path, encoding="utf-8") as f:
+    with open(input_dir / args.config_name, encoding="utf-8") as f:
         params = json.load(f)
+
+    # Config: build the real object so that it validates, then save it (only non-default fields are written)
+    config = MistralLarge4Config(**convert_config(params))
+    config.save_pretrained(output_dir)
+    print(f"config.json -> {output_dir}")
+
     if args.config_only:
 
         # Tokenizer, chat template, image processor
         processor = convert_and_write_processor(input_dir, output_dir, params)
+        tokenizer = processor.tokenizer
+        print(f"processor + tokenizer -> {output_dir}")
+
+        # Weights: symlinks + HF index over the Mistral-native shards
+        write_weights_index(input_dir, output_dir)
+        print(f"model.safetensors.index.json -> {output_dir}")
