@@ -28,6 +28,7 @@ import torch
 from safetensors.torch import load_file
 
 from ...utils import logging
+from ...utils.hub import cached_file
 from ...utils.import_utils import is_serve_available
 from .utils import BaseHandler, GenerateManager, _encode_audio, _StreamError, streaming_wav_header
 
@@ -246,9 +247,12 @@ class SpeechHandler(BaseHandler):
         voice = None
         processor_kwargs = {}
         ref_audio = body.get("ref_audio")
-        if ref_audio and model_type == "gradium_phonon_tts":
+        if model_type == "gradium_phonon_tts":
             # Phonon ships no voice encoder, so its voice is an embedding made with the Gradium API, of shape
-            # `(1, dim, num_frames)`, which goes to the processor
+            # `(1, dim, num_frames)`, which goes to the processor. Without one, it reads with its checkpoint's voice
+            if not ref_audio:
+                model_id, _, revision = body["model"].partition("@")
+                ref_audio = cached_file(model_id, "default-voice.safetensors", revision=revision or None)
             voice = {"type": "audio"}
             embedding = load_file(ref_audio)["speaker_wavs"]
             processor_kwargs["audio_prompt_latents"] = [embedding[0].T.float()]

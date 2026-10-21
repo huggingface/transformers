@@ -26,7 +26,7 @@ import struct
 import time
 import unittest
 import wave
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from huggingface_hub.utils import httpx
 from parameterized import parameterized
@@ -711,8 +711,15 @@ class TestSpeechHandler(unittest.TestCase):
             messages, processor_kwargs = SpeechHandler.get_processor_inputs_from_request(
                 {"input": "Hi.", "ref_audio": embedding}, "gradium_phonon_tts"
             )
+            # Without `ref_audio`, it reads with its checkpoint's default voice
+            with patch("transformers.cli.serving.speech.cached_file", return_value=embedding) as default_voice:
+                _, default_kwargs = SpeechHandler.get_processor_inputs_from_request(
+                    {"model": "gradium/phonon-40m-en@main", "input": "Hi."}, "gradium_phonon_tts"
+                )
         self.assertEqual(messages, [{"role": "user", "content": [{"type": "text", "text": "Hi."}, {"type": "audio"}]}])
         self.assertEqual(processor_kwargs["audio_prompt_latents"][0].shape, (3, 512))
+        default_voice.assert_called_once_with("gradium/phonon-40m-en", "default-voice.safetensors", revision="main")
+        self.assertEqual(default_kwargs["audio_prompt_latents"][0].shape, (3, 512))
 
     def test_pcm16_and_wav_header(self):
         import torch
