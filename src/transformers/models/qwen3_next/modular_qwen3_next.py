@@ -102,6 +102,7 @@ class Qwen3NextRMSNorm(Gemma3RMSNorm):
 
 
 @no_inherit_decorator
+@use_kernelized_func(apply_rotary_pos_emb)
 class Qwen3NextAttention(Qwen3MoeAttention):
     def __init__(self, config: Qwen3NextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
