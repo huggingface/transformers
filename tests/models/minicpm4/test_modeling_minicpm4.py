@@ -36,6 +36,28 @@ class MiniCPM4ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = MiniCPM4Model
 
+    def __init__(
+        self,
+        parent,
+        vocab_size=99,
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        **kwargs,
+    ):
+        super().__init__(
+            parent=parent,
+            vocab_size=vocab_size,
+            hidden_size=hidden_size,
+            intermediate_size=intermediate_size,
+            num_hidden_layers=num_hidden_layers,
+            num_attention_heads=num_attention_heads,
+            num_key_value_heads=num_key_value_heads,
+            **kwargs,
+        )
+
 
 @require_torch
 class MiniCPM4ModelTest(CausalLMModelTest, unittest.TestCase):

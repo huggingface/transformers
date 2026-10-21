@@ -35,7 +35,7 @@ The following checkpoints use the same native [`MiniCPM4ForCausalLM`] implementa
 - [`openbmb/MiniCPM4.1-8B`](https://huggingface.co/openbmb/MiniCPM4.1-8B), an updated 8B checkpoint with a 65,536-token context window and hybrid reasoning support
 
 > [!NOTE]
-> This implementation supports dense attention. The optional InfLLM-v2 sparse inference mode described by OpenBMB requires a separate CUDA kernel and is not enabled by the released checkpoint configurations.
+> This implementation supports dense attention. The optional InfLLM-v2 sparse inference mode described by OpenBMB is not supported.
 
 The example below loads MiniCPM4 without custom model code.
 
