@@ -39,7 +39,7 @@ from ...test_modeling_common import (
 )
 
 
-TINY_CHECKPOINT = "huggingface-mic/mic-weathernext2-mini-slim"
+TINY_CHECKPOINT = "huggingface-mic/weathernext2-mic"
 TINY_REVISION = "main"
 
 
