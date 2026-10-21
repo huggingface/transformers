@@ -268,6 +268,52 @@ class MiniCPMOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             large_area = np.prod(large_target(image, return_tensors="pt")["target_sizes"].numpy(), axis=1).sum()
             self.assertGreater(large_area, small_area)
 
+    @require_cv2
+    def test_adaptive_tile_target_sizes_match_pixel_values(self):
+        """Per-tile adaptive resolution must keep `target_sizes` in sync with `pixel_values`."""
+        for image_processing_class in self.image_processing_classes.values():
+            # 800x800 with a dense-text top half and a blank bottom half: with the default
+            # `scale_resolution=448` this slices into a 2x2 grid whose cells classify as
+            # `"448"` (dense text -> baseline tile) and `"native"` (blank -> smaller tile).
+            image = Image.new("RGB", (800, 800), (255, 255, 255))
+            image.paste(self._dense_text_image(width=800, height=400, num_glyphs=900), (0, 0))
+            patch_size = self.image_processor_tester.patch_size
+
+            adaptive = image_processing_class(
+                **{
+                    **self.image_processor_dict,
+                    "slice_mode": True,
+                    "adaptive_tile_upsize": True,
+                    "adaptive_small_image_upsize": True,
+                }
+            )
+            result = adaptive(image, return_tensors="pt")
+            rows = result["target_sizes"].tolist()
+
+            self.assertEqual(result["grids"], [[2, 2]])
+            self.assertEqual(len(rows), 5)  # one source row + one row per tile
+            # Dense-text tiles keep the baseline grid while blank tiles keep their native
+            # (smaller) grid, so the rows are not uniform.
+            self.assertEqual(len({tuple(row) for row in rows}), 2)
+            tile_areas = [height * width for height, width in rows[1:]]
+            self.assertLess(min(tile_areas), max(tile_areas))
+            # The claimed patch count matches what `pixel_values` actually carries.
+            self.assertEqual(
+                sum(height * width for height, width in rows),
+                result["pixel_values"].shape[-1] // patch_size,
+            )
+
+            # Without adaptive tiling every row is the baseline grid and the invariant
+            # holds the same way.
+            plain = image_processing_class(**{**self.image_processor_dict, "slice_mode": True})
+            result = plain(image, return_tensors="pt")
+            rows = result["target_sizes"].tolist()
+            self.assertEqual(len({tuple(row) for row in rows}), 1)
+            self.assertEqual(
+                sum(height * width for height, width in rows),
+                result["pixel_values"].shape[-1] // patch_size,
+            )
+
     def test_adaptive_upsize_requires_cv2(self):
         """Without OpenCV the feature raises instead of silently using a different rule."""
         for name, image_processing_class in self.image_processing_classes.items():

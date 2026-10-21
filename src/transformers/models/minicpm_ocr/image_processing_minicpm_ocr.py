@@ -403,7 +403,9 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
             all_target_sizes.append([source_h // patch_size, source_w // patch_size])
             for processed_slice in processed_patches[1:]:
                 all_pixel_values.append(self.reshape_by_patch(processed_slice, patch_size))
-                all_target_sizes.append([patch_height // patch_size, patch_width // patch_size])
+                all_target_sizes.append(
+                    [processed_slice.shape[-2] // patch_size, processed_slice.shape[-1] // patch_size]
+                )
             num_patches_per_image.append(len(processed_patches))
             all_grids.append(best_grid if best_grid is not None else [0, 0])
 

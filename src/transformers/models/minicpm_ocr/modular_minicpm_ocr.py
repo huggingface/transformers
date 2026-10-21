@@ -530,7 +530,9 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
             all_target_sizes.append([source_h // patch_size, source_w // patch_size])
             for processed_slice in processed_patches[1:]:
                 all_pixel_values.append(self.reshape_by_patch(processed_slice, patch_size))
-                all_target_sizes.append([patch_height // patch_size, patch_width // patch_size])
+                all_target_sizes.append(
+                    [processed_slice.shape[-2] // patch_size, processed_slice.shape[-1] // patch_size]
+                )
             num_patches_per_image.append(len(processed_patches))
             all_grids.append(best_grid if best_grid is not None else [0, 0])
 
@@ -835,6 +837,8 @@ class MiniCPMOcrVideoProcessor(MiniCPMV4_6VideoProcessor):
 
 class MiniCPMOcrProcessor(MiniCPMV4_6Processor):
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        # Unlike the parent, slices carry individual token counts: `adaptive_tile_upsize` resizes
+        # each tile independently, so a uniform count would desync text tokens from `pixel_values`.
         image_grids = image_inputs["grids"]
         num_patches_per_image = image_inputs["num_patches_per_image"]
         target_sizes = image_inputs["target_sizes"]

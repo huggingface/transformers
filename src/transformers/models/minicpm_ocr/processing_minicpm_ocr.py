@@ -149,6 +149,8 @@ class MiniCPMOcrProcessor(ProcessorMixin):
         return processed_images, image_replacements
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        # Unlike the parent, slices carry individual token counts: `adaptive_tile_upsize` resizes
+        # each tile independently, so a uniform count would desync text tokens from `pixel_values`.
         image_grids = image_inputs["grids"]
         num_patches_per_image = image_inputs["num_patches_per_image"]
         target_sizes = image_inputs["target_sizes"]
