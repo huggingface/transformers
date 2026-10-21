@@ -21,7 +21,7 @@ import re
 from typing import TYPE_CHECKING
 
 from .base import HfQuantizer
-from .quantizers_utils import checkpoint_module_namer, dedupe_conversions, plan_entry_for
+from .quantizers_utils import checkpoint_module_namer, dedupe_conversions, plan_entry_for, skip_pattern
 
 
 if TYPE_CHECKING:
@@ -52,7 +52,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
         # Equal entries share one config, so a per-layer export builds one member per format
         shared = {}
         quantization_config.dtype_plan = {
-            pattern: shared.setdefault(config.to_json_string(), config)
+            pattern: None if config is None else shared.setdefault(config.to_json_string(), config)
             for pattern, config in quantization_config.dtype_plan.items()
         }
         members = {}
@@ -65,9 +65,10 @@ class FineGrainedHfQuantizer(HfQuantizer):
             method = getattr(config.quant_method, "value", config.quant_method)
             members[key] = AUTO_QUANTIZER_MAPPING[method](member_config, **kwargs)
         self.members = list(members.values())
-        # `{module regex: member}`, the plan with each config's member in its place
+        # `{module regex: member}`, the plan with each config's member in its place. `None` stays in full precision.
         self._plan = {
-            pattern: members[config.to_json_string()] for pattern, config in quantization_config.dtype_plan.items()
+            pattern: None if config is None else members[config.to_json_string()]
+            for pattern, config in quantization_config.dtype_plan.items()
         }
         self.dequantized_saves_unquantized = all(member.dequantized_saves_unquantized for member in self.members)
         for member in self.members:
@@ -129,13 +130,15 @@ class FineGrainedHfQuantizer(HfQuantizer):
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         self._resolve_plan(model)
+        # The skip-list and the model's default skips are `None` entries, so the plan alone says who owns a module
         skipped = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
+        self._plan.update(dict.fromkeys(map(skip_pattern, skipped)))
         for member in self.members:
             own = [pattern for pattern, owner in self._plan.items() if owner is member]
             others = [pattern for pattern in self._plan if pattern not in own]
-            member.quantization_config.modules_to_not_convert = [*skipped, _skip_unowned(own, others)]
+            member.quantization_config.modules_to_not_convert = [_skip_unowned(own, others)]
             member._process_model_before_weight_loading(model, **kwargs)
 
     def _resolve_plan(self, model: "PreTrainedModel"):
@@ -145,17 +148,20 @@ class FineGrainedHfQuantizer(HfQuantizer):
         """
         to_checkpoint = checkpoint_module_namer(model)
         plan = self._plan
+        targeted = [pattern for pattern in plan if pattern != ".*"]
         resolved = dict(plan)
         for name, _ in model.named_modules():
             checkpoint_name = to_checkpoint(name)
-            native = plan_entry_for(plan, name, catch_all=False)
+            if checkpoint_name == name or not any(re.search(pattern, checkpoint_name) for pattern in targeted):
+                continue
             source = plan_entry_for(plan, checkpoint_name, catch_all=False)
-            if native is not None and source is not None and native is not source:
-                raise ValueError(
-                    f"Conflicting quantization entries for {name!r} and checkpoint module {checkpoint_name!r}"
-                )
-            if source is not None and native is None:
-                resolved[rf"^{re.escape(name)}$"] = source
+            if any(re.search(pattern, name) for pattern in targeted):
+                if plan_entry_for(plan, name, catch_all=False) is not source:
+                    raise ValueError(
+                        f"Conflicting quantization entries for {name!r} and checkpoint module {checkpoint_name!r}"
+                    )
+                continue
+            resolved[rf"^{re.escape(name)}$"] = source
         self._plan = resolved
 
     def update_parallel_plan(self, model, plan):

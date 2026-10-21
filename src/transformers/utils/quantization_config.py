@@ -1717,12 +1717,13 @@ class FineGrainedConfig(QuantizationConfigMixin):
     method. The other options apply to the whole model. A model in one method takes that method's config alone.
 
     Args:
-        dtype_plan (`dict[str, QuantizationConfigMixin]`, *optional*):
-            Maps a module regex to the config of the modules it matches. A targeted entry wins over the
-            `".*"` catch-all. Modules that no entry covers stay in full precision. Entries take no loading options.
+        dtype_plan (`dict[str, QuantizationConfigMixin | None]`, *optional*):
+            Maps a module regex to the config of the modules it matches. A `None` entry keeps its modules in full
+            precision and wins over any other entry. A targeted entry wins over the `".*"` catch-all. Modules that no
+            entry covers stay in full precision. Entries take no loading options.
             Set `dequantize` and `modules_to_not_convert` on this config instead.
         modules_to_not_convert (`list`, *optional*):
-            Modules to keep in full precision.
+            Modules to keep in full precision. They load as `None` entries of the plan.
         dequantize (`bool`, *optional*, defaults to `False`):
             Whether to dequantize the model to full precision while loading.
     """
@@ -1733,7 +1734,7 @@ class FineGrainedConfig(QuantizationConfigMixin):
     def __init__(
         self,
         *,
-        dtype_plan: dict[str, QuantizationConfigMixin] | None = None,
+        dtype_plan: dict[str, QuantizationConfigMixin | None] | None = None,
         modules_to_not_convert: list | None = None,
         dequantize: bool = False,
         **kwargs,
@@ -1746,10 +1747,12 @@ class FineGrainedConfig(QuantizationConfigMixin):
         self.modules_to_not_convert = modules_to_not_convert
         self.dequantize = dequantize
 
-    def _plan_entry(self, pattern: str, entry) -> QuantizationConfigMixin:
+    def _plan_entry(self, pattern: str, entry) -> QuantizationConfigMixin | None:
         """Return `entry` as a config. An entry read from `config.json` is a dict with its `quant_method`."""
         from ..quantizers.auto import AUTO_QUANTIZATION_CONFIG_MAPPING
 
+        if entry is None:
+            return None
         methods = sorted(set(AUTO_QUANTIZATION_CONFIG_MAPPING) - {QuantizationMethod.FINEGRAINED.value})
         if isinstance(entry, dict):
             method = entry.get("quant_method")
@@ -1772,7 +1775,9 @@ class FineGrainedConfig(QuantizationConfigMixin):
         return {
             "quant_method": self.quant_method,
             "dtype_plan": {
-                pattern: {
+                pattern: None
+                if config is None
+                else {
                     name: value for name, value in config.to_dict().items() if name not in self._entry_loading_options
                 }
                 for pattern, config in self.dtype_plan.items()
@@ -1786,7 +1791,7 @@ class FineGrainedConfig(QuantizationConfigMixin):
 
     def loading_attributes_lender(self, config):
         # The config of a plan entry's method lends its loading options to the plan
-        if not any(type(entry) is type(config) for entry in self.dtype_plan.values()):
+        if not any(type(entry) is type(config) for entry in self.dtype_plan.values() if entry is not None):
             return super().loading_attributes_lender(config)
         return FineGrainedConfig(
             modules_to_not_convert=getattr(config, "modules_to_not_convert", None),

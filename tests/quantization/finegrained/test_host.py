@@ -23,7 +23,13 @@ from transformers.core_model_loading import WeightRenaming
 from transformers.quantizers import auto
 from transformers.quantizers.base import HfQuantizer
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
-from transformers.quantizers.quantizers_utils import dedupe_conversions, get_module_from_name, should_convert_module
+from transformers.quantizers.quantizers_utils import (
+    dedupe_conversions,
+    get_module_from_name,
+    plan_entry_for,
+    should_convert_module,
+    skip_pattern,
+)
 from transformers.testing_utils import require_torch
 from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import FineGrainedConfig, QuantizationConfigMixin
@@ -198,3 +204,24 @@ class FineGrainedHostTest(unittest.TestCase):
         self.assertEqual(quantizer.get_new_dtype(converter(rest), None, torch.bfloat16), torch.bfloat16)
         with self.assertRaisesRegex(ValueError, "different dtypes"):
             quantizer.get_new_dtype(converter(quantizer), None, torch.bfloat16)
+
+    def test_a_none_entry_keeps_its_modules_in_full_precision(self):
+        quantizer = self._load(
+            {r"layers\.1\.self_attn": None, "self_attn": OtherTagTestConfig(), ".*": TagTestConfig()}
+        )
+        tags = _tags(self.model)
+        self.assertIsNone(tags["model.layers.1.self_attn.q_proj"])
+        self.assertEqual(tags["model.layers.0.self_attn.q_proj"], "a")
+        self.assertIsNone(quantizer.member_for("model.layers.1.self_attn.q_proj"))
+        self.assertIsNone(quantizer.member_for("lm_head"))
+        read = auto.AutoQuantizationConfig.from_dict(json.loads(quantizer.quantization_config.to_json_string()))
+        self.assertIsNone(read.dtype_plan[r"layers\.1\.self_attn"])
+
+    def test_a_skip_list_entry_reads_as_the_plan_entry_that_skips_the_same_modules(self):
+        names = ["model.layers.1.mlp", "model.layers.11.mlp", "model.layers.1", "lm_head", "model.decoder.fc1", "fc10"]
+        for entry in ("model.layers.1", "layers.*.mlp", "fc1", "lm_head"):
+            plan = {skip_pattern(entry): None, ".*": "quantized"}
+            for name in names:
+                with self.subTest(entry=entry, name=name):
+                    skipped = not should_convert_module(name, [entry])
+                    self.assertEqual(plan_entry_for(plan, name) is None, skipped)

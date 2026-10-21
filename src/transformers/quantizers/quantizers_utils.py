@@ -24,12 +24,15 @@ def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
 
 
 def plan_entry_for(dtype_plan: dict, module_name: str, catch_all: bool = True):
-    """Return the entry `dtype_plan` gives `module_name`, or `None` if no entry covers it.
+    """Return the entry `dtype_plan` gives `module_name`, or `None` if it stays in full precision.
 
-    A targeted entry wins over the `".*"` catch-all in any order, since `config.json` does not keep the order. Two
-    targeted entries on one module raise. Without `catch_all`, only a targeted entry counts.
+    A `None` entry keeps the module in full precision and wins over any other entry. A targeted entry wins over the
+    `".*"` catch-all in any order, since `config.json` does not keep the order. Two targeted entries on one module
+    raise. Without `catch_all`, only a targeted entry counts.
     """
     claimed = [pattern for pattern in dtype_plan if pattern != ".*" and re.search(pattern, module_name)]
+    if any(dtype_plan[pattern] is None for pattern in claimed):
+        return None
     if len(claimed) > 1:
         raise ValueError(f"{module_name!r} is claimed by more than one dtype_plan entry: {claimed}")
     if claimed:
@@ -49,6 +52,11 @@ def should_convert_module(full_name, patterns: list[str] | None = None):
     boundary = r"(?:(?<=\.)|(?=\.|$))"
     # Group the key so the boundary applies to every alternative.
     return not any(re.match(rf"(?:{key}){boundary}", full_name) or full_name.endswith(key) for key in patterns)
+
+
+def skip_pattern(entry: str) -> str:
+    """Return the `dtype_plan` pattern of a skip-list entry. It matches what `should_convert_module` skips."""
+    return rf"^(?:{entry})(?:(?<=\.)|(?=\.|$))|{re.escape(entry)}$"
 
 
 def dedupe_conversions(conversions, keep=()) -> tuple[list, list]:
