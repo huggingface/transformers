@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
@@ -376,6 +377,13 @@ class HfQuantizer(ABC):
         - otherwise the converter also collects `experts.*.gate_proj.weight_scale_inv`, the dequantize op runs first
         """
         from ..core_model_loading import WeightConverter
+
+        dequantized = self.pre_quantized and getattr(self.quantization_config, "dequantize", False)
+        if dequantized and self.dequantized_saves_unquantized:
+            # Keep the model's own transforms, so a dequantized model saves like an unquantized one.
+            # Copy them, as the quantizer and the loader mutate the live transforms.
+            for conversion in weight_conversions:
+                conversion._unquantized_transform = copy.deepcopy(conversion)
 
         param_names = "\n".join(name for name, _ in model.named_parameters())
         dequantize = self.get_load_operations().get("dequantize") if self.pre_quantized else None
