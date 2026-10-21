@@ -18,6 +18,17 @@ if len(sys.argv) == 1:
     assert all(r['outputs'] == explicit[0]['outputs'] for r in explicit)
     assert all(r['inputs'] == explicit[0]['inputs'] for r in explicit)
     print('Explicit prompt inputs and outputs match exactly across all three dates', flush=True)
+    from transformersci.contracts import run
+    result_path = OUT / 'fleet-results.jsonl'
+    for fleet, variant in [('control', 'default'), ('prototypes', 'bfloat16')]:
+        try:
+            run.main(['--fixtures-only', '--fleet', fleet, '--fleet-revision', os.environ['CANDIDATE_REVISION'], '--variant', variant, '--output', str(result_path)])
+        except SystemExit as exc:
+            assert exc.code in (None, 0), (fleet, exc.code)
+    rows = [json.loads(line) for line in result_path.read_text().splitlines()]
+    assert len(rows) == 31
+    assert all(row['status'] == 'pass' for row in rows), rows
+    print('Candidate fleet: 31/31 pass', flush=True)
     raise SystemExit(0)
 
 from huggingface_hub import snapshot_download
