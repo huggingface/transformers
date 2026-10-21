@@ -90,7 +90,7 @@ class MiniCPM4ModelTest(CausalLMModelTest, unittest.TestCase):
                     checkpoint_config["model_type"] = legacy_model_type
                 else:
                     checkpoint_config.pop("model_type", None)
-                Path(directory, "config.json").write_text(json.dumps(checkpoint_config))
+                Path(directory, "config.json").write_text(json.dumps(checkpoint_config), encoding="utf-8")
                 config = AutoConfig.from_pretrained(directory, trust_remote_code=False)
 
             self.assertIsInstance(config, MiniCPM4Config)
