@@ -356,13 +356,9 @@ class MiniCPM4PreTrainedModel(PreTrainedModel):
 class MiniCPM4Model(MiniCPM4PreTrainedModel):
     def __init__(self, config: MiniCPM4Config):
         super().__init__(config)
-        if config.sparse_config is not None:
-            raise NotImplementedError(
-                "MiniCPM4 InfLLM-v2 sparse attention is not implemented in Transformers. Remove `sparse_config` to "
-                "use dense attention."
-            )
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+        # MiniCPM4 scales the input embeddings by `scale_emb` (not present in Llama).
         self.embed_tokens = MiniCPM4ScaledWordEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=config.scale_emb
         )

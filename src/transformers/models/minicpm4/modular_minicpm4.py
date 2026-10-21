@@ -31,10 +31,10 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaMLP,
-    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
 )
+from ..minicpm3.modeling_minicpm3 import MiniCPM3Model
 from ..olmo.modeling_olmo import OlmoRotaryEmbedding, apply_rotary_pos_emb  # noqa: F401
 
 
@@ -149,18 +149,8 @@ class MiniCPM4PreTrainedModel(LlamaPreTrainedModel):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
 
 
-@auto_docstring
-class MiniCPM4Model(LlamaModel):
-    def __init__(self, config: MiniCPM4Config):
-        if config.sparse_config is not None:
-            raise NotImplementedError(
-                "MiniCPM4 InfLLM-v2 sparse attention is not implemented in Transformers. Remove `sparse_config` to "
-                "use dense attention."
-            )
-        super().__init__(config)
-        self.embed_tokens = MiniCPM4ScaledWordEmbedding(
-            config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=config.scale_emb
-        )
+class MiniCPM4Model(MiniCPM3Model):
+    pass
 
 
 @auto_docstring
