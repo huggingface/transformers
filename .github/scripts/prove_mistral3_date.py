@@ -33,7 +33,7 @@ chat_template_utils.datetime = FrozenDatetime
 folder = Path(snapshot_download('huggingface-mic/mistral3-mic', revision='6320652c65d41c49903fe19d7cc2e5c0ab2842ad'))
 code = contract_code(folder / 'integrations/transformers/usage.md')
 if prompt == 'explicit':
-    code = code.replace('texts = [processor.apply_chat_template(m,', 'texts = [processor.apply_chat_template([{"role": "system", "content": "You are a helpful assistant."}, *m],')
+    code = code.replace('processor = AutoProcessor.from_pretrained(model_id)', 'processor = AutoProcessor.from_pretrained(model_id)\nprocessor.chat_template = processor.chat_template.replace(\'strftime_now("%Y-%m-%d")\', \'"2026-10-20"\')')
 code = code.replace('model.eval()', 'print("INPUTS=" + json.dumps({k: v.tolist() for k, v in inputs.items()}))\nprint("TEXTS=" + json.dumps(texts))\nmodel.eval()')
 ok, stdout, stderr = execute_inline(code, str(folder / 'integrations/transformers/usage.md'), {
     'MIC_RUNNER': '1', 'MIC_MODEL': str(folder), 'MIC_MODEL_KWARGS': '{"dtype": "bfloat16"}',
@@ -44,7 +44,7 @@ outputs = next(json.loads(line) for line in reversed(lines) if line.startswith('
 inputs = next(json.loads(line.removeprefix('INPUTS=')) for line in lines if line.startswith('INPUTS='))
 texts = next(json.loads(line.removeprefix('TEXTS=')) for line in lines if line.startswith('TEXTS='))
 baseline = json.loads((folder / 'integrations/transformers/expectations/cpu-x86_64-bf16/mistral3-mic.bfloat16.json').read_text())['outputs']
-if prompt == 'original' and date == '2026-10-20':
+if prompt == 'explicit' or date == '2026-10-20':
     assert outputs == baseline, (outputs, baseline)
 row = {'prompt': prompt, 'date': date, 'outputs': outputs, 'inputs': inputs, 'texts': texts,
        'matches_reviewed_baseline_exactly': outputs == baseline}
