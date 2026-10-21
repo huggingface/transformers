@@ -51,12 +51,8 @@ from transformers.utils.quantization_config import (
 )
 
 from ...integrations.finegrained.utils import (
-    H,
     _Cfg,
     _conversion_model,
-    _modelopt,
-    _moe_config,
-    _MoeModel,
     _quantizer_for,
     _targets,
 )
@@ -421,21 +417,6 @@ class FineGrainedPlanTest(unittest.TestCase):
         ALL_PARALLEL_STYLES["replicate"].shard_param(model.q_proj, "weight_global_scale", mesh=None)
         self.assertIs(model.q_proj.weight_global_scale, scale)
 
-    def test_an_export_mixing_formats_is_a_finegrained_config(self):
-        config = _modelopt(
-            config_groups={
-                "group_0": {"weights": {"num_bits": 4, "type": "float", "group_size": 16}, "targets": ["re:.*mlp.*"]},
-                "group_1": {"weights": {"num_bits": 4, "type": "float", "group_size": 32}, "targets": ["re:.*attn.*"]},
-            },
-        )
-        self.assertIsInstance(config, FineGrainedConfig)
-        self.assertEqual(
-            {pattern: type(entry) for pattern, entry in config.dtype_plan.items()},
-            {".*mlp.*": NVFP4Config, ".*attn.*": Mxfp4Config},
-        )
-        # Without `input_activations` the entry is weight-only, whatever the weights' own activation format
-        self.assertEqual(config.dtype_plan[".*mlp.*"].activation_format, "bf16")
-
     def test_a_passed_config_lends_its_activation_format(self):
         """Check that a passed config lends its activation format like its other loading attributes.
 
@@ -467,17 +448,6 @@ class FineGrainedPlanTest(unittest.TestCase):
                         AutoHfQuantizer.merge_quantization_configs(mixed, passed)
                 else:
                     self.assertTrue(AutoHfQuantizer.merge_quantization_configs(mixed, passed).dequantize)
-
-    def test_the_formats_own_activation_name_is_native(self):
-        """Check that each format's own activation name normalizes to `None`."""
-        for config_class, own in (
-            (Fp8Config, "fp8"),
-            (Mxfp4Config, "mxfp4"),
-            (NVFP4Config, "nvfp4"),
-        ):
-            with self.subTest(config_class=config_class.__name__):
-                self.assertIsNone(config_class(activation_format=own).activation_format)
-        self.assertIsNone(_modelopt().activation_format)
 
     def test_a_copied_model_keeps_its_param_ops(self):
         """Check that `copy.deepcopy(model)` modules, whose configs are equal copies, still get their layout ops."""
@@ -531,3 +501,185 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
                 quantizer = _quantizer_for(Fp8Config(dequantize=dequantize))
                 (rewritten, *_) = quantizer.update_weight_conversions([model_converter], _conversion_model(quantizer))
                 self.assertTrue(rewritten.force_cpu)
+
+    def test_input_scale_reaches_each_formats_own_slot(self):
+        """Check that `input_scale` reaches each format's own slot.
+
+        A static FP8 module reads it as its activation scale. An NVFP4 module reads it as its activation global.
+        Only the format that holds the experts reads their keys. A plan where two formats would is refused.
+        """
+        from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+        from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
+
+        config = FineGrainedConfig(
+            dtype_plan={
+                EXPERTS_PATTERN: NVFP4Config(activation_format="nvfp4"),
+                ".*": Fp8Config(weight_block_size=None, activation_scheme="static"),
+            },
+        )
+        quantizer = FineGrainedHfQuantizer(config)
+        fp8 = quantizer.member_for("model.layers.0.self_attn.q_proj")
+        model = _conversion_model(quantizer)
+        self.assertEqual(fp8._up_projections(model), ())
+        conversions = quantizer.update_weight_conversions([], model)
+        renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
+        converters = [c for c in conversions if isinstance(c, WeightConverter)]
+
+        renamed, _ = rename_source_key("model.layers.0.self_attn.q_proj.input_scale", renamings, converters)
+        self.assertEqual(renamed, "model.layers.0.self_attn.q_proj.activation_scale")
+        _, pattern = rename_source_key("model.layers.0.mlp.experts.3.down_proj.input_scale", renamings, converters)
+        (converter,) = [c for c in converters if pattern in c.source_patterns]
+        self.assertIn("experts.down_proj_activation_scale", _targets(converter))
+        self.assertIn("experts.down_proj_weight_global_scale", _targets(converter))
+
+        with mock.patch.object(fp8, "_up_projections", return_value=("gate_up_proj",)), self.assertRaises(ValueError):
+            quantizer.update_weight_conversions([], model)
+
+    @staticmethod
+    def _split(conversions):
+        from transformers.core_model_loading import WeightConverter, WeightRenaming
+
+        renamings = [c for c in conversions if isinstance(c, WeightRenaming)]
+        return renamings, [c for c in conversions if isinstance(c, WeightConverter)]
+
+    def test_experts_under_any_parent_and_ungated_stacks_get_their_converters(self):
+        """Check that ungated experts under any parent get their converters.
+
+        Nemotron-H holds ungated experts (`up_proj`) under `mixer.experts`. Their per-expert scales must reach that
+        stack. The scales take the swizzle op but not the gate/up interleave.
+        """
+        from transformers.core_model_loading import rename_source_key
+        from transformers.integrations.finegrained.conversions import (
+            FineGrainedInterleaveGateUp,
+            FineGrainedSwizzleScales,
+        )
+        from transformers.integrations.moe import use_experts_implementation
+
+        @use_experts_implementation(has_gate=False)
+        class UngatedExperts(nn.Module):
+            def __init__(self, config):
+                super().__init__()
+                self.up_proj = nn.Parameter(
+                    torch.empty(_Cfg.num_local_experts, _Cfg.intermediate_size, _Cfg.hidden_size)
+                )
+                self.down_proj = nn.Parameter(
+                    torch.empty(_Cfg.num_local_experts, _Cfg.hidden_size, _Cfg.intermediate_size)
+                )
+
+        class HybridModel(PreTrainedModel):
+            config: PreTrainedConfig
+
+            def __init__(self, config):
+                super().__init__(config)
+                self.layers = nn.ModuleList([nn.Module()])
+                self.layers[0].mixer = nn.Module()
+                self.layers[0].mixer.experts = UngatedExperts(config)
+                self.post_init()
+
+            def _init_weights(self, module):
+                pass
+
+        config = PreTrainedConfig()
+        for name in ("hidden_size", "intermediate_size", "num_local_experts", "hidden_act"):
+            setattr(config, name, getattr(_Cfg, name))
+        model = HybridModel(config)
+        quantizer = _quantizer_for(NVFP4Config())
+        with mock.patch.object(fg, "is_sm100", return_value=False):
+            quantizer._process_model_before_weight_loading(model)
+        renamings, converters = self._split(quantizer.get_weight_conversions(model))
+        for shipped, slot in (("weight_scale_2", "weight_global_scale"), ("input_scale", "activation_scale")):
+            with self.subTest(key=shipped):
+                renamed, _ = rename_source_key(f"layers.0.mixer.experts.3.up_proj.{shipped}", renamings, converters)
+                self.assertEqual(renamed, f"layers.0.mixer.experts.up_proj_{slot}")
+
+        ops = quantizer.get_param_ops(model, "layers.0.mixer.experts.up_proj_scale_inv")
+        self.assertTrue(any(isinstance(op, FineGrainedSwizzleScales) for op in ops))
+        self.assertFalse(any(isinstance(op, FineGrainedInterleaveGateUp) for op in ops))
+
+
+MIXED_PAIRS = [
+    (f"{experts.name}_{experts_activation}_x_{dense.name}_{dense_activation}", *pair)
+    for pair in (
+        (FP8, None, NVFP4, "bf16"),
+        (NVFP4, None, MXFP4, None),
+    )
+    for experts, experts_activation, dense, dense_activation in [pair]
+]
+
+
+@slow
+@require_kernels
+@require_torch_accelerator
+class FineGrainedMixedSchemesTest(TestCasePlus):
+    """One model quantized with two schemes, one for the experts and one for every other linear.
+
+    Each module must be built in its plan entry's scheme. The forward must stay close to the bf16 model.
+    A save must reload to the same logits, which rebuilds both schemes from the saved plan.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from transformers import Qwen3MoeConfig, Qwen3MoeForCausalLM
+
+        super().setUpClass()
+        cls.enterClassContext(_cheap_tuning())
+        cls.bf16_dir = cls.enterClassContext(tempfile.TemporaryDirectory())
+        config = Qwen3MoeConfig(
+            vocab_size=1024,
+            hidden_size=256,
+            intermediate_size=256,
+            moe_intermediate_size=256,
+            num_hidden_layers=2,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            head_dim=64,
+            num_experts=8,
+            num_experts_per_tok=2,
+        )
+        torch.manual_seed(0)
+        reference = Qwen3MoeForCausalLM(config).to(torch.bfloat16)
+        reference.save_pretrained(cls.bf16_dir)
+        cls.ids = torch.arange(3, 35, dtype=torch.long, device=torch_device).unsqueeze(0)
+        with torch.no_grad():
+            cls.want = reference.to(torch_device)(cls.ids).logits.float()
+
+    def setUp(self):
+        super().setUp()
+        _require_kernel_capability(self)
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+        super().tearDown()
+
+    @parameterized.expand(MIXED_PAIRS)
+    def test_mixed_schemes_load_save_and_reload(self, _, experts, experts_activation, dense, dense_activation):
+        from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
+
+        experts_type = experts.config_cls(activation_format=experts_activation)
+        dense_type = dense.config_cls(activation_format=dense_activation)
+        quantization_config = FineGrainedConfig(dtype_plan={EXPERTS_PATTERN: experts_type, ".*": dense_type})
+        model = AutoModelForCausalLM.from_pretrained(
+            self.bf16_dir, quantization_config=quantization_config, device_map=torch_device
+        )
+        layer = model.model.layers[0]
+        for module, expected in ((layer.mlp.experts, experts_type), (layer.self_attn.q_proj, dense_type)):
+            self.assertEqual(
+                (module.weight_format, module.activation_format), (expected.quant_method, expected.activation_format)
+            )
+
+        ids, want = self.ids, self.want
+        with torch.no_grad():
+            logits = model(ids).logits.float()
+        error = ((logits - want).norm() / want.norm()).item()
+        self.assertLess(error, 0.5, f"{error:.3f} off bf16")
+
+        saved = os.path.join(self.get_auto_remove_tmp_dir(), "saved")
+        model.save_pretrained(saved)
+        reloaded, info = AutoModelForCausalLM.from_pretrained(saved, device_map=torch_device, output_loading_info=True)
+        self.assertEqual(
+            (set(info["missing_keys"]), set(info["unexpected_keys"]), set(info["mismatched_keys"])),
+            (set(), set(), set()),
+        )
+        with torch.no_grad():
+            torch.testing.assert_close(reloaded(ids).logits.float(), logits, rtol=1e-2, atol=1e-2)

@@ -104,29 +104,6 @@ Some checkpoints load as a [`FineGrainedConfig`] without passing one.
   model config declares `expert_dtype="fp4"`. DeepSeek-V4.1 declares `expert_dtype` in its quantization config instead.
   Together they read as a plan of MXFP4 experts over block FP8. See [DeepSeek-V4](../model_doc/deepseek_v4) for the
   full plan.
-- A ModelOpt export with `quant_algo="NVFP4"` can give different modules different formats in its `config_groups`. It
-  reads as a plan with one entry per group target.
-- A ModelOpt export with `quant_algo="MIXED_PRECISION"` reads its `quantized_layers` mapping. Each module name covers
-  that module and its descendants. Modules missing from the mapping stay in full precision. The supported algorithms
-  are `FP8`, `NVFP4`, `MXFP4`, `W4A16_NVFP4` and `W4A16_MXFP4`. `FP8` is calibrated per-tensor FP8. The
-  `W4A16` variants are weight-only.
-
-```json
-{
-  "quant_method": "modelopt",
-  "quant_algo": "MIXED_PRECISION",
-  "quantized_layers": {
-    "layers.8.attention.wq": {"quant_algo": "FP8"},
-    "layers.9.experts": {"quant_algo": "NVFP4", "group_size": 16}
-  }
-}
-```
-
-Module names resolve through the checkpoint renames of the model. Loading raises an error in these cases.
-
-- An assignment matches no supported linear, expert or embedding module.
-- A per-expert assignment does not fit the fused expert module of the model.
-- The kernels do not serve the assigned format.
 
 ## Tensor and expert parallelism
 

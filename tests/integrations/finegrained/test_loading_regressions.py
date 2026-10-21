@@ -16,20 +16,16 @@
 import os
 import tempfile
 import unittest
-from unittest import mock
 
 import torch
 from safetensors.torch import load_file, save_file
 
-import transformers.conversion_mapping as conversion_mapping
 from transformers import (
     AutoModelForCausalLM,
     LlamaConfig,
     NVFP4Config,
     Qwen2MoeConfig,
 )
-from transformers.core_model_loading import WeightRenaming
-from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 from transformers.testing_utils import require_torch
 from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config
@@ -74,3 +70,63 @@ class FineGrainedLoadingRegressionTest(_ChainAssertions, unittest.TestCase):
                 )["weight"]
                 expected = scales.repeat_interleave(block, dim=0).repeat_interleave(block, dim=1)[:192, :192]
                 torch.testing.assert_close(result, expected)
+
+    def _checkpoint(self, directory, moe=False):
+        config_class = Qwen2MoeConfig if moe else LlamaConfig
+        config = config_class(
+            vocab_size=32,
+            hidden_size=64,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            **({"num_experts": 2, "num_experts_per_tok": 1, "moe_intermediate_size": 32} if moe else {}),
+        )
+        model = AutoModelForCausalLM.from_config(config).to(torch.bfloat16).eval()
+        # Saving the model first gives the checkpoint key layout, including split experts
+        model.save_pretrained(directory)
+        filename = os.path.join(directory, "model.safetensors")
+        state = load_file(filename)
+        quantized = {}
+        # Every weight dequantizes to exactly 1/64, so all tests compare to one constant.
+        # E2M1 code 2 is 1.0, the block scale is 1, and the global is 1/64.
+        for name, tensor in state.items():
+            if tensor.ndim != 2 or name.endswith(("embed_tokens.weight", "lm_head.weight", "mlp.gate.weight")):
+                quantized[name] = tensor
+                continue
+            stem = name.removesuffix("weight")
+            quantized[name] = torch.full((tensor.shape[0], tensor.shape[1] // 2), 0x22, dtype=torch.uint8)
+            quantized[stem + "weight_scale"] = torch.ones(
+                tensor.shape[0], tensor.shape[1] // 16, dtype=torch.float8_e4m3fn
+            )
+            quantized[stem + "weight_scale_2"] = torch.tensor(1 / 64)
+        config.quantization_config = NVFP4Config(modules_to_not_convert=["lm_head", "mlp.gate"])
+        config.save_pretrained(directory)
+        save_file(quantized, filename, metadata={"format": "pt"})
+
+    def test_dequantized_dense_model_respects_requested_dtype(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self._checkpoint(directory)
+            model = AutoModelForCausalLM.from_pretrained(
+                directory, quantization_config=NVFP4Config(dequantize=True), dtype=torch.float16, device_map="cpu"
+            ).eval()
+            self.assertEqual({parameter.dtype for parameter in model.parameters()}, {torch.float16})
+            with torch.no_grad():
+                self.assertTrue(torch.isfinite(model(torch.tensor([[1, 2, 3]])).logits).all())
+
+    def test_dequantized_moe_can_save_and_reload(self):
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as saved:
+            self._checkpoint(directory, moe=True)
+            model = AutoModelForCausalLM.from_pretrained(
+                directory, quantization_config=NVFP4Config(dequantize=True), dtype=torch.float32, device_map="cpu"
+            ).eval()
+            model.save_pretrained(saved)
+            reloaded, info = AutoModelForCausalLM.from_pretrained(saved, output_loading_info=True)
+            self.assertEqual(info["missing_keys"], set())
+            self.assertEqual(info["unexpected_keys"], set())
+            self.assertFalse(hasattr(reloaded.config, "quantization_config"))
+            for key, value in model.state_dict().items():
+                torch.testing.assert_close(reloaded.state_dict()[key], value)
+            with torch.no_grad():
+                inputs = torch.tensor([[1, 2, 3]])
+                torch.testing.assert_close(model(inputs).logits, reloaded(inputs).logits)
