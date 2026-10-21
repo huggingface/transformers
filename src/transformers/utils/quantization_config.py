@@ -2027,6 +2027,18 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
     return config
 
 
+def read_fp8(config_dict: dict) -> QuantizationConfigMixin | None:
+    """Return the config of an FP8 checkpoint in DeepSeek's layout, or `None` to read it as `Fp8Config`.
+
+    DeepSeek-V4 names its block scales `scale` and ships MXFP4 experts. It loads through the legacy FP8 integration,
+    as on main, until MXFP4 runs on the fine-grained one.
+    """
+    if config_dict.get("checkpoint_format") != "deepseek":
+        return None
+    legacy = ("weight_block_size", "scale_fmt", "activation_scheme", "dequantize", "modules_to_not_convert")
+    return FineGrainedFP8Config.from_dict({name: config_dict[name] for name in legacy if name in config_dict})
+
+
 def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None:
     """Return the block-scaled config a compressed-tensors checkpoint describes.
 

@@ -49,6 +49,7 @@ from ..utils.quantization_config import (
     TorchAoConfig,
     VptqConfig,
     read_compressed_tensors,
+    read_fp8,
     read_modelopt,
 )
 from .base import HfQuantizer
@@ -147,6 +148,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
 # Readers for checkpoints written by other tools, keyed by `quant_method`.
 # A reader returns the config the checkpoint describes, or `None` to fall back to the method's config class.
 AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
+    "fp8": read_fp8,
     "modelopt": read_modelopt,
     "compressed-tensors": read_compressed_tensors,
 }
@@ -427,15 +429,11 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
 
     if pre_quantized or quantization_config is not None:
         if pre_quantized:
-            # The adapt hook always gets a config object
-            quantization_params_from_config = _quantization_config_from_dict(
+            config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
                 quantization_params_from_config, quantization_config
             )
-            config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
-                config.adapt_quantization_config(quantization_params_from_config), quantization_config
-            )
         else:
-            config.quantization_config = config.adapt_quantization_config(quantization_config)
+            config.quantization_config = quantization_config
 
         hf_quantizer = AutoHfQuantizer.from_config(
             config.quantization_config,

@@ -120,8 +120,13 @@ class Fp8ConfigTest(unittest.TestCase):
         from transformers.quantizers.auto import get_hf_quantizer
         from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
-        config = DeepseekV4Config(expert_dtype="fp4")
-        config.quantization_config = {"quant_method": "fp8", "weight_block_size": [128, 128], "scale_fmt": "ue8m0"}
+        shipped = {"quant_method": "fp8", "weight_block_size": [128, 128], "scale_fmt": "ue8m0"}
+        config = DeepseekV4Config(expert_dtype="fp4", quantization_config=shipped)
+        # the model config moves its experts' dtype and its scale names into the quantization config
+        self.assertEqual(
+            (config.quantization_config["expert_dtype"], config.quantization_config["checkpoint_format"]),
+            ("fp4", "deepseek"),
+        )
         quantizer, _, _ = get_hf_quantizer(config, None, None, True, {})
         self.assertIsInstance(quantizer, FineGrainedFP8HfQuantizer)
         self.assertEqual(quantizer.quantization_config.scale_fmt, "ue8m0")
