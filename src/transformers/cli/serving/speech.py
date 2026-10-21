@@ -25,6 +25,7 @@ from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 
 import torch
+from safetensors.torch import load_file
 
 from ...utils import logging
 from ...utils.import_utils import is_serve_available
@@ -92,7 +93,7 @@ class SpeechHandler(BaseHandler):
                 "/v1/audio/speech does not support continuous batching. Falling back to sequential generation."
             )
         gen_manager = self.generation_state.get_manager(model_id, use_cb=False)  # type: ignore[assignment]
-        processor_inputs = self.get_processor_inputs_from_request(body, model.config.model_type)
+        processor_inputs, processor_kwargs = self.get_processor_inputs_from_request(body, model.config.model_type)
         # Some processors encode `ref_audio` with a codec model (e.g. Higgs Audio V2), which needs no gradients.
         # They return the audio in float32, so it is cast to the model's dtype, as in the model docs.
         # TODO: models such as VibeVoice could cast their audio inputs themselves, like CLIP does for `pixel_values`
@@ -103,6 +104,7 @@ class SpeechHandler(BaseHandler):
                 return_tensors="pt",
                 return_dict=True,
                 tokenize=True,
+                processor_kwargs=processor_kwargs,
             ).to(model.device, model.dtype)  # type: ignore[union-attr]
 
         gen_config = self._build_generation_config(body, model.generation_config)
@@ -230,25 +232,33 @@ class SpeechHandler(BaseHandler):
         return Response(audio, media_type=AUDIO_FORMATS[body["response_format"]], headers=headers)
 
     @staticmethod
-    def get_processor_inputs_from_request(body: dict, model_type: str) -> list[dict]:
-        """Convert an OpenAI speech request to the messages expected by HF processors.
+    def get_processor_inputs_from_request(body: dict, model_type: str) -> tuple[list[dict], dict]:
+        """Convert an OpenAI speech request to the messages and kwargs expected by HF processors.
 
         Args:
             body (`dict`): The OpenAI speech request.
             model_type (`str`): The model type.
 
         Returns:
-            `list[dict]`: Processor-compatible messages.
+            `tuple[list[dict], dict]`: Processor-compatible messages, and the `processor_kwargs` to apply them with.
         """
         text = {"type": "text", "text": body["input"]}
         voice = None
-        if body.get("ref_audio"):
-            voice = {"type": "audio", "url": body["ref_audio"]}
+        processor_kwargs = {}
+        ref_audio = body.get("ref_audio")
+        if ref_audio and model_type == "gradium_phonon_tts":
+            # Phonon ships no voice encoder, so its voice is an embedding made with the Gradium API, of shape
+            # `(1, dim, num_frames)`, which goes to the processor
+            voice = {"type": "audio"}
+            embedding = load_file(ref_audio)["speaker_wavs"]
+            processor_kwargs["audio_prompt_latents"] = [embedding[0].T.float()]
+        elif ref_audio:
+            voice = {"type": "audio", "url": ref_audio}
         instructions = body.get("instructions")
 
         if model_type == "vibevoice":
             # Roles are speaker IDs
-            return [{"role": "0", "content": [text, voice] if voice else [text]}]
+            return [{"role": "0", "content": [text, voice] if voice else [text]}], processor_kwargs
 
         if model_type == "higgs_audio_v2":
             messages = [
@@ -273,6 +283,6 @@ class SpeechHandler(BaseHandler):
                 messages.append({"role": "scene", "content": scene})
             messages += example
             messages.append({"role": "user", "content": [text]})
-            return messages
+            return messages, processor_kwargs
 
-        return [{"role": "user", "content": [text, voice] if voice else [text]}]
+        return [{"role": "user", "content": [text, voice] if voice else [text]}], processor_kwargs
