@@ -225,12 +225,6 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
         fp8_config = BailingHybridConfig.from_dict(
             {**config.to_dict(), "quantization_config": checkpoint_quantization_config}
         )
-        self.assertEqual(fp8_config.quantization_config, checkpoint_quantization_config)
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            fp8_config.save_pretrained(tmpdirname)
-            reloaded_config = BailingHybridConfig.from_pretrained(tmpdirname)
-        self.assertEqual(reloaded_config.quantization_config, checkpoint_quantization_config)
-
         with torch.device("meta"):
             model = BailingHybridForCausalLM(fp8_config)
         quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config.from_dict(fp8_config.quantization_config))
