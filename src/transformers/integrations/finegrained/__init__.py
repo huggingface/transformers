@@ -1,4 +1,4 @@
-# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,3 +11,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""The fine-grained quantization integration.
+
+`layers` holds the modules and their forwards. `conversions` holds the loader ops that fill them.
+`formats` holds the storage facts both share.
+"""
+
+from .layers import (
+    ALL_FINEGRAINED_EXPERTS_FUNCTIONS,
+    FineGrainedExperts,
+    FineGrainedGroupedLinear,
+    FineGrainedLinear,
+    finegrained_linear,
+    load_finegrained_kernel,
+)
+
+
+__all__ = [
+    "ALL_FINEGRAINED_EXPERTS_FUNCTIONS",
+    "FineGrainedExperts",
+    "FineGrainedGroupedLinear",
+    "FineGrainedLinear",
+    "finegrained_linear",
+    "load_finegrained_kernel",
+]

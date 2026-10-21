@@ -1,0 +1,75 @@
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
+
+-->
+
+# Fine-grained
+
+The block-scaled formats store low-precision weights with one scale per block or group of values. They share one
+integration and one kernel bundle, [finegrained-kernels](https://huggingface.co/kernels-community/finegrained-kernels).
+Each format has its own config that quantizes a whole model. [`FineGrainedConfig`] mixes several formats in one model.
+
+This page covers what the formats share. Each format page covers its layouts and activation formats.
+
+## Requirements
+
+```bash
+pip install --upgrade accelerate "kernels>=0.17.2,<0.18"
+```
+
+Quantized compute needs the `kernels` package and an Intel XPU or a CUDA GPU. A CUDA GPU needs compute capability 8.9
+or newer. Without them, a pre-quantized checkpoint is dequantized to bf16 as it loads. Quantizing on the fly raises
+an error.
+
+## Load, quantize and save
+
+A pre-quantized checkpoint carries its quantization config, so it loads without one. Pass a format config to
+[`~PreTrainedModel.from_pretrained`] to quantize a full-precision checkpoint as it loads. Save the result with
+[`~PreTrainedModel.save_pretrained`]. The saved model reloads without a config.
+
+A config passed with a pre-quantized checkpoint does not requantize it. Its `activation_format` picks the kernels the
+weights run on. Its loading options also apply.
+
+- `dequantize=True` loads the weights in full precision, for example to fine-tune them.
+- `modules_to_not_convert` replaces the checkpoint's list of modules kept in full precision. If it is unset, the
+  checkpoint's list stays.
+
+The other options, such as the block size or the scale format, come from the checkpoint. Passing a config warns that
+they are ignored.
+
+## Mix formats in one model
+
+The `dtype_plan` of [`FineGrainedConfig`] maps module name patterns to format configs. Each matching module is
+quantized in the format of its entry. A typical plan puts the MoE experts in a 4-bit format and every other linear in
+8 bits. The experts hold most of the weights.
+
+- A pattern matches module names with `re.search`.
+- A targeted entry wins over the `".*"` catch-all, whatever the order of the plan. A plan saved to `config.json`
+  loses its order.
+- Two targeted entries that match the same module raise an error.
+- A module that no entry matches stays in full precision. So does a module listed in `modules_to_not_convert`.
+- `dequantize` and `modules_to_not_convert` belong to the plan, not to its entries.
+
+## Tensor and expert parallelism
+
+Pass a [`DistributedConfig`] to [`~PreTrainedModel.from_pretrained`] to shard a quantized model. Each scale is sharded
+with its weight. Quantized experts use [masking and all-reduce](../expert_parallelism) expert parallelism instead of
+token dispatch. This is why `ep_size` must equal `tp_size`.
+
+## Kernel autotuning
+
+The kernels tune each new input shape and cache the chosen configuration. Set `FINEGRAINED_AUTOTUNE_CONFIG=fast`
+before the kernels load to shrink the search. Use it for correctness tests or quick experiments. Leave it unset when
+measuring performance. See the
+[kernel autotuning documentation](https://huggingface.co/kernels-community/finegrained-kernels#autotuning).

@@ -97,7 +97,7 @@ class FourOverSixHfQuantizer(HfQuantizer):
 
         return FourOverSixQuantize(self)
 
-    def get_weight_conversions(self):
+    def get_weight_conversions(self, model=None):
         # Pre-quantized checkpoints of other formats are converted by fouroversix itself
         model_config_type = getattr(self.quantization_config, "pre_quantized_model_config_type", None)
         if model_config_type is None:

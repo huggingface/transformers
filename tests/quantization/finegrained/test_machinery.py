@@ -1,0 +1,410 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Tests for the fine-grained machinery, run on two test-only formats defined here.
+
+The modules, conversion ops, shared quantizer and host need no shipped format.
+Each shipped format (FP8, MXFP4, NVFP4, MXFP8) adds its config, quantizer and tests on top.
+"""
+
+import json
+import unittest
+from contextlib import ExitStack, contextmanager
+from types import SimpleNamespace
+from unittest import mock
+
+import torch
+
+import transformers.integrations.deepgemm as deepgemm
+import transformers.integrations.finegrained.layers as fg
+from transformers.core_model_loading import convert_and_load_state_dict_in_model
+from transformers.distributed.tensor_parallel import _get_parameter_plan
+from transformers.integrations.finegrained import FineGrainedExperts, FineGrainedLinear
+from transformers.modeling_utils import LoadStateDictConfig
+from transformers.quantizers import auto
+from transformers.quantizers.block_scaled_utils import BlockScaledQuantizer
+from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+from transformers.testing_utils import require_torch
+from transformers.utils import quantization_config as qc
+from transformers.utils.quantization_config import BlockScaledConfig, FineGrainedConfig, QuantizationMethod
+
+from ...integrations.finegrained.utils import (
+    E,
+    H,
+    I,
+    _Cfg,
+    _ChainAssertions,
+    _load_and_save,
+    _model_mapping,
+    _moe_config,
+    _MoeModel,
+    _quantizer_for,
+    fake_finegrained_kernel,
+    patch_finegrained_kernel,
+)
+from ..block_scaled_tester import BlockScaledFormatTesterMixin, FormatSpec
+
+
+class BlockFp8TestConfig(BlockScaledConfig):
+    """Test-only format with `float8_e4m3fn` weights, an fp32 scale per 32x32 block and dynamic activations."""
+
+    method = QuantizationMethod.FP8
+    weight_block_size = (32, 32)
+
+
+class GroupFp4TestConfig(BlockScaledConfig):
+    """Test-only format with packed E2M1 weights and a UE8M0 scale per 32. It is weight-only by default."""
+
+    method = QuantizationMethod.MXFP4
+    activation_formats = (None, "bf16")
+    weight_block_size = (1, 32)
+    scale_fmt = "ue8m0"
+
+    def __init__(self, *, activation_format="bf16", **kwargs):
+        super().__init__(activation_format=activation_format, **kwargs)
+
+
+class BlockFp8TestQuantizer(BlockScaledQuantizer):
+    pass
+
+
+class GroupFp4TestQuantizer(BlockScaledQuantizer):
+    pass
+
+
+EXPERTS = r"\.experts($|\.)"
+
+
+@contextmanager
+def registered_test_formats():
+    """Register the test formats under their `quant_method`, as a shipped format does."""
+    configs = {"fp8": BlockFp8TestConfig, "mxfp4": GroupFp4TestConfig}
+    quantizers = {"fp8": BlockFp8TestQuantizer, "mxfp4": GroupFp4TestQuantizer}
+    with ExitStack() as stack:
+        stack.enter_context(mock.patch.dict(auto.AUTO_QUANTIZER_MAPPING, quantizers))
+        stack.enter_context(mock.patch.dict(auto.AUTO_QUANTIZATION_CONFIG_MAPPING, configs))
+        stack.enter_context(mock.patch.dict(qc.BLOCK_SCALED_CONFIGS, configs))
+        yield
+
+
+def _fp8_blocks(n, k):
+    return {
+        "weight": torch.randn(n, k).to(torch.float8_e4m3fn),
+        "weight_scale_inv": torch.rand(n // 32, k // 32) + 0.5,
+    }
+
+
+def _fp4_groups(n, k):
+    return {
+        "weight": torch.randint(-128, 127, (n, k // 2), dtype=torch.int8),
+        "weight_scale_inv": torch.randint(120, 130, (n, k // 32), dtype=torch.uint8).view(torch.float8_e8m0fnu),
+    }
+
+
+def _checkpoint(experts, dense):
+    """Return one layer in the per-expert layout. The experts use `experts` and `q_proj` uses `dense`."""
+    checkpoint = {}
+    for expert in range(E):
+        for proj, shape in (("gate_proj", (I, H)), ("up_proj", (I, H)), ("down_proj", (H, I))):
+            for suffix, tensor in experts(*shape).items():
+                checkpoint[f"model.layers.0.mlp.experts.{expert}.{proj}.{suffix}"] = tensor
+    for suffix, tensor in dense(H, H).items():
+        checkpoint[f"model.layers.0.self_attn.q_proj.{suffix}"] = tensor
+    return checkpoint
+
+
+@require_torch
+class TestFormatContractTest(BlockScaledFormatTesterMixin, unittest.TestCase):
+    """The shared format contract, run on a test-only format."""
+
+    spec = FormatSpec(
+        name="fp8",
+        config_cls=BlockFp8TestConfig,
+        quantizer_cls=BlockFp8TestQuantizer,
+        checkpoint_config=BlockFp8TestConfig,
+        activation_formats=(None,),
+        weight_bits=8,
+        checkpoint_keys=(
+            "model.layers.3.mlp.experts.7.gate_proj.weight_scale_inv",
+            "model.layers.3.mlp.experts.gate_up_proj_scale_inv",
+            "model.layers.3.self_attn.q_proj.weight_scale_inv",
+        ),
+        dequantize_keys=("model.layers.0.mlp.down_proj.weight", "model.layers.0.mlp.down_proj.weight_scale_inv"),
+    )
+
+    def setUp(self):
+        super().setUp()
+        self.enterContext(registered_test_formats())
+
+
+@require_torch
+class TestFormatModulesTest(_ChainAssertions, unittest.TestCase):
+    """Modules a format's config builds, what they hold and what they pass to the kernels."""
+
+    def setUp(self):
+        super().setUp()
+        self.enterContext(registered_test_formats())
+        self.enterContext(mock.patch.object(fg, "is_sm100", return_value=False))
+
+    def test_the_base_config_is_not_a_format(self):
+        with self.assertRaises(TypeError):
+            BlockScaledConfig()
+
+    def test_a_format_swaps_linears_and_experts_and_keeps_its_skip_list(self):
+        for skip in (None, ["q_proj"]):
+            with self.subTest(skip=skip):
+                with torch.device("meta"):
+                    model = _MoeModel(_moe_config())
+                _quantizer_for(BlockFp8TestConfig()).replace_modules(model, modules_to_not_convert=skip)
+                layer = model.model.layers[0]
+                self.assertIsInstance(layer.mlp.experts, FineGrainedExperts)
+                if skip:
+                    self.assertIs(type(layer.self_attn.q_proj), torch.nn.Linear)
+                    continue
+                q_proj = layer.self_attn.q_proj
+                self.assertIsInstance(q_proj, FineGrainedLinear)
+                self.assertTrue(q_proj._hf_quantized_needs_local_tp)
+                self.assertEqual((q_proj.weight.dtype, q_proj.weight_scale_inv.shape), (torch.float8_e4m3fn, (2, 2)))
+
+    def test_a_linear_hands_the_kernel_its_weight_and_scale(self):
+        kernel, rec = fake_finegrained_kernel()
+        linear = FineGrainedLinear(64, 32, quantization_config=BlockFp8TestConfig())
+        linear.weight.data = torch.randn(32, 64).to(torch.float8_e4m3fn)
+        linear.weight_scale_inv.data = torch.ones(1, 2)
+        with patch_finegrained_kernel(kernel), mock.patch.object(deepgemm, "is_deepgemm_loadable", return_value=False):
+            out = linear(torch.randn(3, 5, 64, dtype=torch.bfloat16))
+        call = rec.calls["matmul_2d"][-1]
+        self.assertIs(call.args[1], linear.weight)
+        self.assertIs(call.args[3], linear.weight_scale_inv)
+        self.assertIsNone(call.args[2])
+        self.assertEqual(out.shape, (3, 5, 32))
+
+    def test_experts_run_the_kernels_fused_chain(self):
+        kernel, rec = fake_finegrained_kernel()
+        cfg = _Cfg()
+        cfg._experts_implementation = "grouped_mm"
+        experts = FineGrainedExperts(cfg, quantization_config=GroupFp4TestConfig())
+        self.assertTrue(experts.holds_interleaved_gate_up)
+        hidden = torch.randn(6, 64, dtype=torch.bfloat16)
+        with patch_finegrained_kernel(kernel):
+            experts(hidden, torch.randint(0, 4, (6, 2)), torch.rand(6, 2))
+        call = rec.calls["moe_fused_grouped"][-1]
+        self.assertIs(call.kwargs["gate_up_proj"], experts.gate_up_proj)
+        self.assertEqual(call.kwargs["activation_format"], "bf16")
+
+    def test_experts_swizzle_both_scale_grids_or_neither(self):
+        # the fused kernels read both grids in one layout, and two 4-column K bands at least
+        cfg = _Cfg()
+        cfg.hidden_size = 256
+        with mock.patch.object(fg, "is_sm100", return_value=True):
+            for intermediate, swizzled in ((256, True), (128, False), (192, False)):
+                with self.subTest(intermediate=intermediate):
+                    cfg.intermediate_size = intermediate
+                    experts = FineGrainedExperts(cfg, quantization_config=GroupFp4TestConfig(activation_format=None))
+                    ndims = {experts.gate_up_proj_scale_inv.ndim, experts.down_proj_scale_inv.ndim}
+                    self.assertEqual(ndims, {5} if swizzled else {3})
+
+    def test_a_checkpoint_loads_into_the_modules_and_saves_back(self):
+        checkpoint = _checkpoint(_fp8_blocks, _fp8_blocks)
+        # block-scaled gate|up are interleaved on SM100 and stay stacked elsewhere
+        for sm100 in (True, False):
+            with self.subTest(sm100=sm100):
+                model, info, saved = _load_and_save(checkpoint, BlockFp8TestConfig(), sm100=sm100)
+                self.assertLoadsCleanly(info)
+                self.assertSavesBack(saved, checkpoint)
+                experts = model.model.layers[0].mlp.experts
+                if sm100:
+                    self.assertHoldsInterleaved(experts, checkpoint, "weight", experts.gate_up_proj)
+                else:
+                    self.assertFalse(experts.holds_interleaved_gate_up)
+
+    def test_a_dequantized_load_keeps_the_full_precision_modules(self):
+        checkpoint = _checkpoint(_fp8_blocks, _fp8_blocks)
+        quantizer = _quantizer_for(BlockFp8TestConfig(dequantize=True))
+        quantizer.pre_quantized = True
+        model = _MoeModel(_moe_config())
+        quantizer._process_model_before_weight_loading(model)
+        load_config = LoadStateDictConfig(
+            weight_mapping=quantizer.update_weight_conversions(_model_mapping(), model), hf_quantizer=quantizer
+        )
+        info, _ = convert_and_load_state_dict_in_model(model, dict(checkpoint), load_config)
+        self.assertLoadsCleanly(info)
+        q_proj = model.model.layers[0].self_attn.q_proj
+        self.assertIs(type(q_proj), torch.nn.Linear)
+        weight = checkpoint["model.layers.0.self_attn.q_proj.weight"].float()
+        scale = checkpoint["model.layers.0.self_attn.q_proj.weight_scale_inv"]
+        expected = weight * scale.repeat_interleave(32, 0).repeat_interleave(32, 1)
+        torch.testing.assert_close(q_proj.weight.float(), expected, rtol=1e-2, atol=1e-2)
+
+    def test_a_dequantized_load_holds_the_stacks_in_the_experts_orientation(self):
+        # GPT-OSS holds its stacks as `(E, K, rows)` while a quantized checkpoint ships them as `(E, rows, K)`
+        model = _MoeModel(_moe_config())
+        experts = model.model.layers[0].mlp.experts
+        experts.is_transposed = True
+        experts.gate_up_proj = torch.nn.Parameter(torch.empty(E, H, 2 * I))
+        experts.down_proj = torch.nn.Parameter(torch.empty(E, I, H))
+        checkpoint = {f"model.layers.0.self_attn.q_proj.{suffix}": t for suffix, t in _fp8_blocks(H, H).items()}
+        expected = {}
+        for proj, (rows, cols) in (("gate_up_proj", (2 * I, H)), ("down_proj", (H, I))):
+            weight = torch.randn(E, rows, cols).to(torch.float8_e4m3fn)
+            scale = torch.rand(E, rows // 32, cols // 32) + 0.5
+            checkpoint[f"model.layers.0.mlp.experts.{proj}"] = weight
+            checkpoint[f"model.layers.0.mlp.experts.{proj}_scale_inv"] = scale
+            expected[proj] = (weight.float() * scale.repeat_interleave(32, 1).repeat_interleave(32, 2)).transpose(1, 2)
+        _, info, _ = _load_and_save(checkpoint, BlockFp8TestConfig(dequantize=True), model=model)
+        self.assertLoadsCleanly(info)
+        for proj, reference in expected.items():
+            torch.testing.assert_close(getattr(experts, proj).float(), reference, rtol=1e-2, atol=1e-2)
+
+    def test_block_scaled_experts_run_ungated_off_sm100(self):
+        # off SM100 block-scaled gate|up stay stacked, so the kernels run ungated and the module gates
+        kernel, rec = fake_finegrained_kernel()
+        cfg = _Cfg()
+        cfg._experts_implementation = "grouped_mm"
+        hidden = torch.randn(6, 64, dtype=torch.bfloat16)
+        for sm100 in (True, False):
+            with self.subTest(sm100=sm100), mock.patch.object(fg, "is_sm100", return_value=sm100):
+                experts = FineGrainedExperts(cfg, quantization_config=BlockFp8TestConfig())
+                self.assertEqual(experts.holds_interleaved_gate_up, sm100)
+                with patch_finegrained_kernel(kernel):
+                    experts(hidden, torch.randint(0, 4, (6, 2)), torch.rand(6, 2))
+                call = rec.calls["moe_fused_grouped"][-1]
+                self.assertEqual(call.kwargs["gate"], sm100)
+                self.assertEqual(call.kwargs["act_fn"], "silu" if sm100 else experts._apply_gate)
+
+    def test_experts_loaded_for_deepgemm_hold_its_layout(self):
+        # DeepGEMM reads gate|up stacked and scales row-major, so experts loaded for it hold that layout on SM100 too
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size = 256, 256
+        configs = (BlockFp8TestConfig(), GroupFp4TestConfig(activation_format=None))
+        with mock.patch.object(fg, "is_sm100", return_value=True):
+            for implementation, triton in (("grouped_mm", True), ("deepgemm", False), ("deepgemm_megamoe", False)):
+                cfg._experts_implementation = implementation
+                for config in configs:
+                    with self.subTest(implementation=implementation, config=type(config).__name__):
+                        experts = FineGrainedExperts(cfg, quantization_config=config)
+                        self.assertEqual(experts.holds_interleaved_gate_up, triton)
+                        if isinstance(config, GroupFp4TestConfig):
+                            self.assertEqual(experts.down_proj_scale_inv.ndim, 5 if triton else 3)
+
+    def test_prefer_deepgemm_linear_false_keeps_the_linears_on_triton(self):
+        config = BlockFp8TestConfig(prefer_deepgemm_linear=False)
+        self.assertEqual(config.get_loading_attributes()["prefer_deepgemm_linear"], False)
+        linear = FineGrainedLinear(64, 32, quantization_config=config)
+        with mock.patch.object(fg, "finegrained_linear") as finegrained_linear:
+            linear(torch.randn(3, 64, dtype=torch.bfloat16))
+        self.assertIs(finegrained_linear.call_args.kwargs["allow_deepgemm"], False)
+
+
+@require_torch
+class TestFormatHostTest(_ChainAssertions, unittest.TestCase):
+    """`FineGrainedConfig` over the test formats, with one member quantizer per format."""
+
+    def setUp(self):
+        super().setUp()
+        self.enterContext(registered_test_formats())
+        self.enterContext(mock.patch.object(fg, "is_sm100", return_value=False))
+
+    def _plan(self, **options):
+        return FineGrainedConfig(dtype_plan={EXPERTS: GroupFp4TestConfig(), ".*": BlockFp8TestConfig()}, **options)
+
+    def test_each_module_is_built_in_its_entrys_format(self):
+        quantizer = _quantizer_for(self._plan())
+        self.assertIsInstance(quantizer, FineGrainedHfQuantizer)
+        fp4, fp8 = sorted(quantizer.members, key=lambda member: type(member).__name__ != "GroupFp4TestQuantizer")
+        self.assertEqual((type(fp4), type(fp8)), (GroupFp4TestQuantizer, BlockFp8TestQuantizer))
+        with torch.device("meta"):
+            model = _MoeModel(_moe_config())
+        quantizer._process_model_before_weight_loading(model)
+        layer = model.model.layers[0]
+        self.assertEqual((layer.mlp.experts.weight_format, layer.self_attn.q_proj.weight_format), ("mxfp4", "fp8"))
+        self.assertIs(quantizer.member_for("model.layers.0.mlp.experts"), fp4)
+        self.assertIs(layer.mlp.experts.quantization_config, fp4.quantization_config)
+
+    def test_a_plan_round_trips_through_config_json(self):
+        config = self._plan(modules_to_not_convert=["lm_head"])
+        read = auto.AutoQuantizationConfig.from_dict(json.loads(config.to_json_string()))
+        self.assertIsInstance(read, FineGrainedConfig)
+        self.assertEqual(read.to_dict(), config.to_dict())
+        self.assertIsInstance(read.dtype_plan[EXPERTS], GroupFp4TestConfig)
+
+    def test_a_plan_entry_takes_no_loading_options(self):
+        with self.assertRaisesRegex(ValueError, "hold for the whole model"):
+            FineGrainedConfig(dtype_plan={".*": BlockFp8TestConfig(dequantize=True)})
+        with self.assertRaises(TypeError):
+            FineGrainedConfig(dtype_plan={".*": SimpleNamespace()})
+
+    def test_a_format_config_lends_its_loading_options_to_the_plan(self):
+        lender = self._plan().loading_attributes_lender(BlockFp8TestConfig(dequantize=True))
+        self.assertIsInstance(lender, FineGrainedConfig)
+        self.assertTrue(lender.dequantize)
+        self.assertEqual(list(lender.dtype_plan), [".*"])
+
+    def test_a_mixed_checkpoint_loads_and_saves_back(self):
+        checkpoint = _checkpoint(_fp4_groups, _fp8_blocks)
+        model, info, saved = _load_and_save(checkpoint, self._plan())
+        self.assertLoadsCleanly(info)
+        self.assertSavesBack(saved, checkpoint)
+        layer = model.model.layers[0]
+        self.assertEqual(layer.mlp.experts.gate_up_proj.dtype, torch.int8)
+        self.assertEqual(layer.self_attn.q_proj.weight.dtype, torch.float8_e4m3fn)
+
+    def test_every_expert_companion_shards_with_its_weight(self):
+        quantizer = _quantizer_for(BlockFp8TestConfig())
+        model = torch.nn.Module()
+        model.config = SimpleNamespace(_experts_implementation=None)
+        model.layers = torch.nn.ModuleList([torch.nn.Module() for _ in range(2)])
+        with torch.device("meta"):
+            for layer in model.layers:
+                layer.mlp = torch.nn.Module()
+                layer.mlp.experts = FineGrainedExperts(_Cfg(), quantization_config=BlockFp8TestConfig(), has_bias=True)
+        plan = {
+            "layers.*.mlp.gate": "ep_router",
+            "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj": "grouped_gemm",
+            "layers.*.mlp.experts": "moe_tp_experts",
+        }
+        quantizer.update_parallel_plan(model, plan)
+        for proj in ("gate_up_proj", "down_proj"):
+            for name in (proj, f"{proj}_scale_inv", f"{proj}_bias"):
+                self.assertEqual(_get_parameter_plan(f"layers.1.mlp.experts.{name}", plan), "grouped_gemm", name)
+
+    def test_intra_expert_tp_keeps_scale_grids_row_major_when_a_shard_cannot_be_swizzled(self):
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size = 256, 256
+        plan = {
+            "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+            "layers.*.mlp.experts.down_proj": "rowwise",
+            "layers.*.mlp.experts": "moe_tp_experts",
+        }
+        # a 2-way rowwise split leaves `down_proj` one K band, which the swizzled read cannot run
+        for tp_size, ndim in ((1, 5), (2, 3)):
+            with self.subTest(tp_size=tp_size):
+                model = torch.nn.Module()
+                model.config = SimpleNamespace(
+                    _experts_implementation=None, distributed_config=SimpleNamespace(tp_size=tp_size, ep_size=1)
+                )
+                model.layers = torch.nn.ModuleList([torch.nn.Module()])
+                with torch.device("meta"), mock.patch.object(fg, "is_sm100", return_value=True):
+                    model.layers[0].mlp = torch.nn.Module()
+                    experts = FineGrainedExperts(cfg, quantization_config=GroupFp4TestConfig(activation_format=None))
+                    model.layers[0].mlp.experts = experts
+                _quantizer_for(GroupFp4TestConfig(activation_format=None)).update_parallel_plan(model, dict(plan))
+                self.assertEqual((experts.gate_up_proj_scale_inv.ndim, experts.down_proj_scale_inv.ndim), (ndim, ndim))
+
+    def test_megamoe_takes_over_the_experts_rules(self):
+        model = torch.nn.Module()
+        model.config = SimpleNamespace(_experts_implementation="deepgemm_megamoe")
+        plan = {"layers.*.mlp.gate": "ep_router", "layers.*.mlp.experts": "ep_dispatch_experts"}
+        _quantizer_for(BlockFp8TestConfig()).update_parallel_plan(model, plan)
+        self.assertEqual(plan, {"layers.*.mlp.gate": "megamoe_router", "layers.*.mlp.experts": "megamoe_experts"})
