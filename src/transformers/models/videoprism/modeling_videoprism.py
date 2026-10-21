@@ -476,7 +476,6 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
         "VideoPrismMultiheadAttentionPoolingHead",
     ]
     # sdpa is disabled because it does not support attention capping
-    # used in eager and logits are too far off
     _supports_sdpa = False
     _supports_flash_attn = True
     _supports_flex_attn = True

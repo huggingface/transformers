@@ -513,7 +513,6 @@ class VideoPrismPreTrainedModel(VivitPreTrainedModel):
         "VideoPrismMultiheadAttentionPoolingHead",
     ]
     # sdpa is disabled because it does not support attention capping
-    # used in eager and logits are too far off
     _supports_sdpa = False
     _input_embed_layer = AttributeError()
 
