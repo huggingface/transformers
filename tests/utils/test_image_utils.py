@@ -829,19 +829,12 @@ class LoadImageTester(unittest.TestCase):
 
     @require_torchvision
     def test_load_image_as_tensor_exif_transpose(self):
-        # we use revision="refs/pr/1" until the PR is merged
-        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
-        path = hf_hub_download(
-            "hf-internal-testing/fixtures_image_utils",
-            "3-test-cat-rotated.jpg",
-            repo_type="dataset",
-            revision="refs/pr/1",
-        )
+        path = hf_hub_download("hf-internal-testing/fixtures_image_utils", "cat-rotated.jpg", repo_type="dataset")
         with open(path, "rb") as f:
             raw = f.read()
         sources = {
             "path": path,
-            "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/refs%2Fpr%2F1/3-test-cat-rotated.jpg",
+            "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/cat-rotated.jpg",
             "base64": base64.b64encode(raw).decode(),
             "pil": PIL.Image.open(path),
         }
