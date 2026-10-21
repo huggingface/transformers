@@ -42,7 +42,9 @@ class UltraVBertConfig(PreTrainedConfig):
     model_type = "ultravbert"
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="ultrabert"),
-        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="siglip_vision_model", init_kwargs={"vision_use_head": False}
+        ),
     }
 
     text_config: PreTrainedConfig | dict | None = None
@@ -55,10 +57,6 @@ class UltraVBertConfig(PreTrainedConfig):
     classifier_pooling: Literal["cls", "mean"] = "cls"
     classifier_dropout: float | int = 0.0
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        super().__post_init__(**kwargs)
-        self.vision_config.vision_use_head = False
 
 
 __all__ = ["UltraVBertConfig"]

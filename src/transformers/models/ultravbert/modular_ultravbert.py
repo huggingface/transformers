@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 from torchvision.transforms.v2 import functional as tvF
 
 from ...activations import ACT2FN
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import SubConfigSpec
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
@@ -68,15 +68,13 @@ class UltraVBertConfig(ModernVBertConfig):
     model_type = "ultravbert"
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="ultrabert"),
-        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="siglip_vision_model", init_kwargs={"vision_use_head": False}
+        ),
     }
 
     image_token_id: int = 49191
     classifier_bias = AttributeError()
-
-    def __post_init__(self, **kwargs):
-        PreTrainedConfig.__post_init__(self, **kwargs)
-        self.vision_config.vision_use_head = False
 
 
 def get_tile_grid(height: int, width: int, longest_edge: int, tile_size: int) -> tuple[int, int]:
