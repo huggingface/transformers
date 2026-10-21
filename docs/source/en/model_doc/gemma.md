@@ -98,7 +98,7 @@ model = AutoModelForCausalLM.from_pretrained(
     attn_implementation="sdpa"
 )
 
-input_text = "LLMs generate text through a process known as."
+input_text = "LLMs generate text through a process known as"
 input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 outputs = model.generate(
     **input_ids,
@@ -133,8 +133,8 @@ visualizer("LLMs generate text through a process known as")
    tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
    model = AutoModelForCausalLM.from_pretrained(
        "google/gemma-2b",
-          device_map="auto",
-       attn_implementation="sdpa"
+        device_map="auto",
+        attn_implementation="sdpa"
    )
    input_text = "LLMs generate text through a process known as"
    input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
