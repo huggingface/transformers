@@ -239,8 +239,18 @@ IGNORE_NON_TESTED = (
         "InklingForCausalLM",
         "VibeVoiceAcousticTokenizerDecoderModel",
         "VibeVoiceAcousticTokenizerEncoderModel",
+        "PocketTTSAudioTokenizerEncoderModel",
+        "PocketTTSAudioTokenizerDecoderModel",
+        "MimiEncoderModel",
+        "MimiDecoderModel",
         "DiffusionGemmaDecoderModel",
         "DiffusionGemmaEncoderModel",
+        "SLANetSLAHead",
+        "SLANeXtBackbone",
+        "SLANeXtSLAHead",
+        "SLANetBackbone",
+        "CsmBackboneModel",
+        "PeAudioVideoModel",  # FIXME @eustlib, model isn't convered as backbone
     ]
 )
 
