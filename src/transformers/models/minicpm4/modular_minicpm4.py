@@ -20,11 +20,9 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast
 from ..gemma3.modeling_gemma3 import Gemma3TextScaledWordEmbedding
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -36,9 +34,8 @@ from ..llama.modeling_llama import (
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
-    LlamaRotaryEmbedding,
-    rotate_half,
 )
+from ..olmo.modeling_olmo import OlmoRotaryEmbedding, apply_rotary_pos_emb  # noqa: F401
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM4-8B")
@@ -97,55 +94,12 @@ class MiniCPM4RMSNorm(LlamaRMSNorm):
     pass
 
 
-class MiniCPM4RotaryEmbedding(LlamaRotaryEmbedding):
-    @torch.no_grad()
-    @dynamic_rope_update
-    def forward(self, x: torch.Tensor, position_ids: torch.LongTensor) -> tuple[torch.Tensor, torch.Tensor]:
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            if self.rope_type == "longrope":
-                rope_parameters = self.config.rope_parameters
-                head_dim = getattr(self.config, "head_dim", self.config.hidden_size // self.config.num_attention_heads)
-                dim = int(head_dim * rope_parameters.get("partial_rotary_factor", 1.0))
-                factor_name = (
-                    "long_factor"
-                    if position_ids.max().item() + 1 > rope_parameters["original_max_position_embeddings"]
-                    else "short_factor"
-                )
-                ext_factors = torch.tensor(rope_parameters[factor_name], dtype=torch.float32, device=x.device)
-                inv_freq_shape = torch.arange(0, dim, 2, dtype=torch.int64, device=x.device).float() / dim
-                base_inv_freq = 1.0 / (rope_parameters["rope_theta"] ** inv_freq_shape)
-                freqs = position_ids.float().unsqueeze(-1) * (1.0 / ext_factors)
-                freqs = freqs * base_inv_freq
-            else:
-                inv_freq_expanded = self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).float()
-                position_ids_expanded = position_ids[:, None, :].float()
-                freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos, sin
+class MiniCPM4RotaryEmbedding(OlmoRotaryEmbedding):
+    pass
 
 
 class MiniCPM4MLP(LlamaMLP):
     pass
-
-
-def apply_rotary_pos_emb(
-    query: torch.Tensor,
-    key: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    unsqueeze_dim: int = 1,
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Apply rotary embeddings in float32 and restore the query and key dtypes."""
-    query_dtype, key_dtype = query.dtype, key.dtype
-    query, key = query.float(), key.float()
-    cos, sin = cos.unsqueeze(unsqueeze_dim), sin.unsqueeze(unsqueeze_dim)
-    query = (query * cos) + (rotate_half(query) * sin)
-    key = (key * cos) + (rotate_half(key) * sin)
-    return query.to(query_dtype), key.to(key_dtype)
 
 
 class MiniCPM4Attention(LlamaAttention):
