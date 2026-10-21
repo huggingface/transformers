@@ -25,28 +25,17 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
+from ...utils.type_validators import interval
 
 
 @auto_docstring(checkpoint="openbmb/VoxCPM2")
 @strict
 class VoxCPM2TextConfig(PreTrainedConfig):
     r"""
-    scale_emb (`int` or `float`, *optional*, defaults to 12):
-        Multiplier applied to input embeddings.
-    scale_depth (`int` or `float`, *optional*, defaults to 1.4):
-        Multiplier for residual connections.
-    dim_model_base (`int`, *optional*, defaults to 256):
-        Base model dimension used to scale hidden states before the language model head.
-    mup_denominator (`int`, *optional*):
-        Width denominator used by compatible speculative decoding heads.
-    sparse_config (`dict`, *optional*):
-        Configuration for OpenBMB's optional InfLLM-v2 sparse attention implementation.
-    use_mup (`bool`, *optional*, defaults to `False`):
-        Whether to apply the muP embedding and residual scaling used by standalone MiniCPM4 checkpoints.
-    kv_channels (`int`, *optional*, defaults to 128):
-        Dimension of each attention key and value head in the original VoxCPM2 configuration.
     no_rope (`bool`, *optional*, defaults to `False`):
         Whether to disable rotary position embeddings. The residual language model enables this setting.
+    use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
+        Whether attention is bidirectional. The local audio encoder and diffusion Transformer enable this setting.
 
     Example:
 
@@ -85,42 +74,25 @@ class VoxCPM2TextConfig(PreTrainedConfig):
     num_key_value_heads: int | None = 2
     hidden_act: str = "silu"
     max_position_embeddings: int = 32768
-    initializer_range: float = 0.1
+    initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
     rms_norm_eps: float = 1e-5
     use_cache: bool = True
     pad_token_id: int | None = None
     bos_token_id: int | None = 1
     eos_token_id: int | list[int] | None = 2
     pretraining_tp: int | None = 1
-    tie_word_embeddings: bool = True
+    tie_word_embeddings: bool = False
     rope_parameters: RopeParameters | dict | None = None
     attention_bias: bool = False
     attention_dropout: int | float | None = 0.0
     mlp_bias: bool = False
-    head_dim: int | None = None
-    scale_emb: int | float = 12
-    scale_depth: int | float | None = 1.4
-    dim_model_base: int | None = 256
-    mup_denominator: int | None = None
-    sparse_config: dict | None = None
+    head_dim: int | None = 128
     base_config_key = "lm_config"
-    use_mup: bool = False
-    kv_channels: int | None = 128
+    attribute_map = {"kv_channels": "head_dim"}
     no_rope: bool = False
+    use_bidirectional_attention: bool = False
 
     def __post_init__(self, **kwargs):
-        if self.head_dim is None:
-            self.head_dim = self.kv_channels
-        elif self.kv_channels is None:
-            self.kv_channels = self.head_dim
-        elif self.head_dim != self.kv_channels:
-            raise ValueError(
-                f"`head_dim` ({self.head_dim}) must match `kv_channels` ({self.kv_channels}) for VoxCPM2."
-            )
-        if self.scale_depth is None:
-            self.scale_depth = math.sqrt(self.num_hidden_layers)
-        if self.dim_model_base is None:
-            self.dim_model_base = self.hidden_size
         if self.head_dim is None:
             self.head_dim = self.hidden_size // self.num_attention_heads
         if self.num_key_value_heads is None:
@@ -135,10 +107,6 @@ class VoxCPM2TextConfig(PreTrainedConfig):
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads})."
             )
-
-    @property
-    def logits_scaling(self) -> float:
-        return self.hidden_size / self.dim_model_base
 
 
 @auto_docstring(checkpoint="openbmb/VoxCPM2")
@@ -204,8 +172,6 @@ class VoxCPM2CfmConfig(PreTrainedConfig):
         Default classifier-free guidance scale stored by the released checkpoint.
     reg_loss_type (`str`, *optional*, defaults to `"l1"`):
         Regression loss used for the flow-matching objective.
-    ratio_r_neq_t_range (`tuple[float, float]`, *optional*, defaults to `(0.25, 0.75)`):
-        Sampling range for the probability that the conditioning and target timesteps differ.
     noise_cond_prob_range (`tuple[float, float]`, *optional*, defaults to `(0.0, 0.0)`):
         Sampling range for noisy conditioning probability.
     noise_cond_scale (`float`, *optional*, defaults to 0.0):
@@ -221,7 +187,6 @@ class VoxCPM2CfmConfig(PreTrainedConfig):
     training_cfg_rate: int | float = 0.1
     inference_cfg_rate: int | float = 2.0
     reg_loss_type: str = "l1"
-    ratio_r_neq_t_range: list[int | float] | tuple[int | float, ...] = (0.25, 0.75)
     noise_cond_prob_range: list[int | float] | tuple[int | float, ...] = (0.0, 0.0)
     noise_cond_scale: int | float = 0.0
 
@@ -229,12 +194,11 @@ class VoxCPM2CfmConfig(PreTrainedConfig):
         super().validate_architecture()
         if self.sigma_min < 0:
             raise ValueError("`sigma_min` must be non-negative.")
-        for name in ("ratio_r_neq_t_range", "noise_cond_prob_range"):
-            value = getattr(self, name)
-            if len(value) != 2 or value[0] > value[1]:
-                raise ValueError(f"`{name}` must contain two ordered values.")
-            if name == "noise_cond_prob_range" and not 0 <= value[0] <= value[1] <= 1:
-                raise ValueError("`noise_cond_prob_range` values must be between 0 and 1.")
+        value = self.noise_cond_prob_range
+        if len(value) != 2 or value[0] > value[1]:
+            raise ValueError("`noise_cond_prob_range` must contain two ordered values.")
+        if not 0 <= value[0] <= value[1] <= 1:
+            raise ValueError("`noise_cond_prob_range` values must be between 0 and 1.")
 
 
 @auto_docstring(checkpoint="openbmb/VoxCPM2")
@@ -251,8 +215,6 @@ class VoxCPM2DiTConfig(PreTrainedConfig):
         Number of local diffusion Transformer layers.
     kv_channels (`int`, *optional*, defaults to 128):
         Dimension of each attention key and value head.
-    mean_mode (`bool`, *optional*, defaults to `False`):
-        Whether the flow estimator uses the conditional mean formulation.
     cfm_config (`VoxCPM2CfmConfig` or `dict`, *optional*):
         Conditional flow-matching configuration.
     """
@@ -266,7 +228,6 @@ class VoxCPM2DiTConfig(PreTrainedConfig):
         "num_attention_heads": "num_heads",
         "num_hidden_layers": "num_layers",
         "head_dim": "kv_channels",
-        "dit_mean_mode": "mean_mode",
     }
 
     hidden_dim: int = 1024
@@ -274,7 +235,6 @@ class VoxCPM2DiTConfig(PreTrainedConfig):
     num_heads: int = 16
     num_layers: int = 12
     kv_channels: int | None = 128
-    mean_mode: bool = False
     cfm_config: dict | VoxCPM2CfmConfig | None = None
 
     def __post_init__(self, **kwargs):
@@ -370,7 +330,7 @@ class VoxCPM2AudioVAEConfig(PreTrainedConfig):
 class VoxCPM2Config(PreTrainedConfig):
     r"""
     lm_config (`VoxCPM2TextConfig` or `dict`, *optional*):
-        Configuration of the MiniCPM4-based text-semantic language model.
+        Configuration of the text-semantic language model.
     encoder_config (`VoxCPM2EncoderConfig` or `dict`, *optional*):
         Configuration of the local audio encoder.
     dit_config (`VoxCPM2DiTConfig` or `dict`, *optional*):

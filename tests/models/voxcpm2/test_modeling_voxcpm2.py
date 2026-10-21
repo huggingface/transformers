@@ -1333,42 +1333,45 @@ def test_timestep_projection_matches_reference():
 
 
 @require_torch
-def test_attention_matches_reference():
-    config = VoxCPM2TextConfig(
-        vocab_size=32,
-        hidden_size=6,
-        intermediate_size=12,
-        num_hidden_layers=2,
-        num_attention_heads=2,
-        num_key_value_heads=1,
-        head_dim=4,
-        kv_channels=4,
-        use_mup=False,
-        rope_parameters=None,
-    )
-    config._attn_implementation = "sdpa"
-    layer = VoxCPM2Attention(config, layer_idx=0).eval()
+@pytest.mark.parametrize("dtype", ["float32", "bfloat16"])
+def test_attention_matches_reference(dtype):
+    dtype = getattr(torch, dtype)
+    for is_causal, use_rope in ((True, False), (False, False), (True, True)):
+        config = VoxCPM2TextConfig(
+            vocab_size=32,
+            hidden_size=6,
+            intermediate_size=12,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=4,
+            kv_channels=4,
+            no_rope=not use_rope,
+            use_bidirectional_attention=not is_causal,
+            rope_parameters=None,
+        )
+        config._attn_implementation = "sdpa"
+        layer = VoxCPM2Attention(config, layer_idx=0).eval().to(dtype=dtype)
 
-    assert list(layer.state_dict()) == ["q_proj.weight", "k_proj.weight", "v_proj.weight", "o_proj.weight"]
-    assert layer.q_proj.weight.shape == (8, 6)
-    assert layer.k_proj.weight.shape == (4, 6)
-    assert layer.o_proj.weight.shape == (6, 8)
+        assert list(layer.state_dict()) == ["q_proj.weight", "k_proj.weight", "v_proj.weight", "o_proj.weight"]
+        assert layer.q_proj.weight.shape == (8, 6)
+        assert layer.k_proj.weight.shape == (4, 6)
+        assert layer.o_proj.weight.shape == (6, 8)
 
-    hidden_states = torch.randn(1, 4, 6)
-    angles = torch.randn(1, 4, 4)
-    position_embeddings = (angles.cos(), angles.sin())
-    for is_causal, rotary_embeddings in ((True, None), (False, None), (True, position_embeddings)):
-        output, _ = layer(hidden_states, position_embeddings=rotary_embeddings, is_causal=is_causal)
+        hidden_states = torch.randn(1, 4, 6, dtype=dtype)
+        angles = torch.randn(1, 4, 4)
+        position_embeddings = (angles.cos(), angles.sin()) if use_rope else None
+        output, _ = layer(hidden_states, position_embeddings=position_embeddings, attention_mask=None)
 
         query_states = layer.q_proj(hidden_states).view(1, 4, 2, 4).transpose(1, 2)
         key_states = layer.k_proj(hidden_states).view(1, 4, 1, 4).transpose(1, 2)
         value_states = layer.v_proj(hidden_states).view(1, 4, 1, 4).transpose(1, 2)
-        if rotary_embeddings is not None:
-            cos, sin = (embedding.unsqueeze(1) for embedding in rotary_embeddings)
+        if position_embeddings is not None:
+            cos, sin = (embedding.unsqueeze(1) for embedding in position_embeddings)
             rotated_query = torch.cat((-query_states[..., 2:], query_states[..., :2]), dim=-1)
             rotated_key = torch.cat((-key_states[..., 2:], key_states[..., :2]), dim=-1)
-            query_states = query_states * cos + rotated_query * sin
-            key_states = key_states * cos + rotated_key * sin
+            query_states = (query_states.float() * cos + rotated_query.float() * sin).to(dtype)
+            key_states = (key_states.float() * cos + rotated_key.float() * sin).to(dtype)
 
         expected_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
@@ -1384,48 +1387,45 @@ def test_attention_matches_reference():
 
 
 @require_torch
-def test_decoder_layer_residual_scaling():
-    for use_mup in (False, True):
-        config = VoxCPM2TextConfig(
-            vocab_size=32,
-            hidden_size=6,
-            intermediate_size=12,
-            num_hidden_layers=2,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-            head_dim=4,
-            kv_channels=4,
-            scale_depth=1.4,
-            use_mup=use_mup,
-            rope_parameters=None,
-        )
-        layer = VoxCPM2DecoderLayer(config, layer_idx=0)
-        expected_keys = {
-            "self_attn.q_proj.weight",
-            "self_attn.k_proj.weight",
-            "self_attn.v_proj.weight",
-            "self_attn.o_proj.weight",
-            "mlp.gate_proj.weight",
-            "mlp.up_proj.weight",
-            "mlp.down_proj.weight",
-            "input_layernorm.weight",
-            "post_attention_layernorm.weight",
-        }
-        assert set(layer.state_dict()) == expected_keys
+def test_decoder_layer_residual_connections():
+    config = VoxCPM2TextConfig(
+        vocab_size=32,
+        hidden_size=6,
+        intermediate_size=12,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        num_key_value_heads=1,
+        head_dim=4,
+        kv_channels=4,
+        no_rope=True,
+        use_bidirectional_attention=True,
+        rope_parameters=None,
+    )
+    layer = VoxCPM2DecoderLayer(config, layer_idx=0)
+    expected_keys = {
+        "self_attn.q_proj.weight",
+        "self_attn.k_proj.weight",
+        "self_attn.v_proj.weight",
+        "self_attn.o_proj.weight",
+        "mlp.gate_proj.weight",
+        "mlp.up_proj.weight",
+        "mlp.down_proj.weight",
+        "input_layernorm.weight",
+        "post_attention_layernorm.weight",
+    }
+    assert set(layer.state_dict()) == expected_keys
 
-        layer.input_layernorm = torch.nn.Identity()
-        layer.post_attention_layernorm = torch.nn.Identity()
-        layer.self_attn = torch.nn.Identity()
-        layer.self_attn.forward = lambda hidden_states, **kwargs: (hidden_states, None)
-        layer.mlp = torch.nn.Identity()
+    layer.input_layernorm = torch.nn.Identity()
+    layer.post_attention_layernorm = torch.nn.Identity()
+    layer.self_attn = torch.nn.Identity()
+    layer.self_attn.forward = lambda hidden_states, **kwargs: (hidden_states, None)
+    layer.mlp = torch.nn.Identity()
 
-        hidden_states = torch.randn(1, 3, 6)
-        output = layer(hidden_states, position_embeddings=None, is_causal=False)
-        expected_scale = 1.4 / math.sqrt(2) if use_mup else 1.0
-        expected_output = hidden_states + hidden_states * expected_scale
-        expected_output = expected_output + expected_output * expected_scale
-        torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
-        assert layer.residual_scale == expected_scale
+    hidden_states = torch.randn(1, 3, 6)
+    output = layer(hidden_states, position_embeddings=None)
+    expected_output = hidden_states + hidden_states
+    expected_output = expected_output + expected_output
+    torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
 
 
 @require_torch
@@ -1511,16 +1511,18 @@ def test_transformer_backbone_embeddings_and_cache():
 
     input_ids = torch.tensor([[1, 2, 3, 4]])
     inputs_embeds = model.embed_tokens(input_ids)
-    token_output = model(input_ids=input_ids).last_hidden_state
     embedding_output = model(inputs_embeds=inputs_embeds).last_hidden_state
-    torch.testing.assert_close(token_output, embedding_output, rtol=0, atol=0)
 
     changed_embeds = inputs_embeds.clone()
     changed_embeds[:, -1] += 10
     changed_causal_output = model(inputs_embeds=changed_embeds).last_hidden_state
     torch.testing.assert_close(changed_causal_output[:, :-1], embedding_output[:, :-1], rtol=0, atol=0)
-    bidirectional_output = model(inputs_embeds=inputs_embeds, is_causal=False).last_hidden_state
-    changed_bidirectional_output = model(inputs_embeds=changed_embeds, is_causal=False).last_hidden_state
+    bidirectional_config = VoxCPM2TextConfig(**{**config.to_dict(), "use_bidirectional_attention": True})
+    bidirectional_config._attn_implementation = "sdpa"
+    bidirectional_model = VoxCPM2BackboneModel(bidirectional_config).eval()
+    bidirectional_model.load_state_dict(model.state_dict())
+    bidirectional_output = bidirectional_model(inputs_embeds=inputs_embeds).last_hidden_state
+    changed_bidirectional_output = bidirectional_model(inputs_embeds=changed_embeds).last_hidden_state
     assert not torch.allclose(changed_bidirectional_output[:, :-1], bidirectional_output[:, :-1])
 
     prefill = model(inputs_embeds=inputs_embeds[:, :3], use_cache=True)
@@ -1533,8 +1535,8 @@ def test_transformer_backbone_embeddings_and_cache():
     residual_config._attn_implementation = "sdpa"
     residual_model = VoxCPM2BackboneModel(residual_config)
     assert set(residual_model.state_dict()) == expected_keys - {"embed_tokens.weight"}
-    with pytest.raises(ValueError, match="inputs_embeds.*vocab_size"):
-        residual_model(input_ids=input_ids)
+    assert residual_model.embed_tokens is None
+    assert residual_model(inputs_embeds=inputs_embeds).last_hidden_state.shape == inputs_embeds.shape
 
 
 @require_torch
@@ -1589,7 +1591,7 @@ def test_local_encoder_matches_reference_layout():
     projected_features = model.in_proj(audio_features)
     special_tokens = model.special_token.expand(2, 3, 1, -1)
     encoder_input = torch.cat((special_tokens, projected_features), dim=2).reshape(6, 5, 8)
-    expected_output = model.encoder(inputs_embeds=encoder_input, is_causal=False).last_hidden_state[:, 0]
+    expected_output = model.encoder(inputs_embeds=encoder_input).last_hidden_state[:, 0]
     expected_output = expected_output.reshape(2, 3, 8)
     torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
 
@@ -1667,7 +1669,7 @@ def test_local_dit_matches_reference_layout():
         dim=1,
     )
     assert decoder_input.shape == (2, 8, 8)
-    decoder_output = model.decoder(inputs_embeds=decoder_input, is_causal=False).last_hidden_state
+    decoder_output = model.decoder(inputs_embeds=decoder_input).last_hidden_state
     expected_output = model.out_proj(decoder_output[:, 5:]).transpose(1, 2).contiguous()
     torch.testing.assert_close(output, expected_output, rtol=0, atol=0)
 

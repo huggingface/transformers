@@ -21,7 +21,6 @@ import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 from torch import nn
-from torch.func import jvp
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
@@ -33,15 +32,9 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..dac.modeling_dac import Snake1d
-from ..llama.modeling_llama import eager_attention_forward
-from ..minicpm4.configuration_minicpm4 import MiniCPM4Config
-from ..minicpm4.modeling_minicpm4 import (
-    MiniCPM4Attention,
-    MiniCPM4DecoderLayer,
-    MiniCPM4RMSNorm,
-    MiniCPM4RotaryEmbedding,
-)
-from ..olmo.modeling_olmo import apply_rotary_pos_emb
+from ..llama.configuration_llama import LlamaConfig
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaModel, LlamaRMSNorm, eager_attention_forward
+from ..olmo.modeling_olmo import OlmoRotaryEmbedding, apply_rotary_pos_emb
 
 
 logger = logging.get_logger(__name__)
@@ -107,24 +100,12 @@ class VoxCPM2GenerationOutput(ModelOutput):
 
 @auto_docstring(checkpoint="openbmb/VoxCPM2")
 @strict
-class VoxCPM2TextConfig(MiniCPM4Config):
+class VoxCPM2TextConfig(LlamaConfig):
     r"""
-    scale_emb (`int` or `float`, *optional*, defaults to 12):
-        Multiplier applied to input embeddings.
-    scale_depth (`int` or `float`, *optional*, defaults to 1.4):
-        Multiplier for residual connections.
-    dim_model_base (`int`, *optional*, defaults to 256):
-        Base model dimension used to scale hidden states before the language model head.
-    mup_denominator (`int`, *optional*):
-        Width denominator used by compatible speculative decoding heads.
-    sparse_config (`dict`, *optional*):
-        Configuration for OpenBMB's optional InfLLM-v2 sparse attention implementation.
-    use_mup (`bool`, *optional*, defaults to `False`):
-        Whether to apply the muP embedding and residual scaling used by standalone MiniCPM4 checkpoints.
-    kv_channels (`int`, *optional*, defaults to 128):
-        Dimension of each attention key and value head in the original VoxCPM2 configuration.
     no_rope (`bool`, *optional*, defaults to `False`):
         Whether to disable rotary position embeddings. The residual language model enables this setting.
+    use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
+        Whether attention is bidirectional. The local audio encoder and diffusion Transformer enable this setting.
 
     Example:
 
@@ -139,6 +120,7 @@ class VoxCPM2TextConfig(MiniCPM4Config):
 
     model_type = "voxcpm2_text"
     base_config_key = "lm_config"
+    attribute_map = {"kv_channels": "head_dim"}
 
     vocab_size: int = 73448
     hidden_size: int = 2048
@@ -148,25 +130,9 @@ class VoxCPM2TextConfig(MiniCPM4Config):
     num_key_value_heads: int | None = 2
     max_position_embeddings: int = 32768
     rms_norm_eps: float = 1e-5
-    bos_token_id: int | None = 1
-    eos_token_id: int | list[int] | None = 2
-    scale_emb: int | float = 12
-    scale_depth: int | float | None = 1.4
-    dim_model_base: int | None = 256
-    use_mup: bool = False
-    kv_channels: int | None = 128
+    head_dim: int | None = 128
     no_rope: bool = False
-
-    def __post_init__(self, **kwargs):
-        if self.head_dim is None:
-            self.head_dim = self.kv_channels
-        elif self.kv_channels is None:
-            self.kv_channels = self.head_dim
-        elif self.head_dim != self.kv_channels:
-            raise ValueError(
-                f"`head_dim` ({self.head_dim}) must match `kv_channels` ({self.kv_channels}) for VoxCPM2."
-            )
-        super().__post_init__(**kwargs)
+    use_bidirectional_attention: bool = False
 
 
 @auto_docstring(checkpoint="openbmb/VoxCPM2")
@@ -232,8 +198,6 @@ class VoxCPM2CfmConfig(PreTrainedConfig):
         Default classifier-free guidance scale stored by the released checkpoint.
     reg_loss_type (`str`, *optional*, defaults to `"l1"`):
         Regression loss used for the flow-matching objective.
-    ratio_r_neq_t_range (`tuple[float, float]`, *optional*, defaults to `(0.25, 0.75)`):
-        Sampling range for the probability that the conditioning and target timesteps differ.
     noise_cond_prob_range (`tuple[float, float]`, *optional*, defaults to `(0.0, 0.0)`):
         Sampling range for noisy conditioning probability.
     noise_cond_scale (`float`, *optional*, defaults to 0.0):
@@ -249,7 +213,6 @@ class VoxCPM2CfmConfig(PreTrainedConfig):
     training_cfg_rate: int | float = 0.1
     inference_cfg_rate: int | float = 2.0
     reg_loss_type: str = "l1"
-    ratio_r_neq_t_range: list[int | float] | tuple[int | float, ...] = (0.25, 0.75)
     noise_cond_prob_range: list[int | float] | tuple[int | float, ...] = (0.0, 0.0)
     noise_cond_scale: int | float = 0.0
 
@@ -257,12 +220,11 @@ class VoxCPM2CfmConfig(PreTrainedConfig):
         super().validate_architecture()
         if self.sigma_min < 0:
             raise ValueError("`sigma_min` must be non-negative.")
-        for name in ("ratio_r_neq_t_range", "noise_cond_prob_range"):
-            value = getattr(self, name)
-            if len(value) != 2 or value[0] > value[1]:
-                raise ValueError(f"`{name}` must contain two ordered values.")
-            if name == "noise_cond_prob_range" and not 0 <= value[0] <= value[1] <= 1:
-                raise ValueError("`noise_cond_prob_range` values must be between 0 and 1.")
+        value = self.noise_cond_prob_range
+        if len(value) != 2 or value[0] > value[1]:
+            raise ValueError("`noise_cond_prob_range` must contain two ordered values.")
+        if not 0 <= value[0] <= value[1] <= 1:
+            raise ValueError("`noise_cond_prob_range` values must be between 0 and 1.")
 
 
 @auto_docstring(checkpoint="openbmb/VoxCPM2")
@@ -279,8 +241,6 @@ class VoxCPM2DiTConfig(PreTrainedConfig):
         Number of local diffusion Transformer layers.
     kv_channels (`int`, *optional*, defaults to 128):
         Dimension of each attention key and value head.
-    mean_mode (`bool`, *optional*, defaults to `False`):
-        Whether the flow estimator uses the conditional mean formulation.
     cfm_config (`VoxCPM2CfmConfig` or `dict`, *optional*):
         Conditional flow-matching configuration.
     """
@@ -294,7 +254,6 @@ class VoxCPM2DiTConfig(PreTrainedConfig):
         "num_attention_heads": "num_heads",
         "num_hidden_layers": "num_layers",
         "head_dim": "kv_channels",
-        "dit_mean_mode": "mean_mode",
     }
 
     hidden_dim: int = 1024
@@ -302,7 +261,6 @@ class VoxCPM2DiTConfig(PreTrainedConfig):
     num_heads: int = 16
     num_layers: int = 12
     kv_channels: int | None = 128
-    mean_mode: bool = False
     cfm_config: dict | VoxCPM2CfmConfig | None = None
 
     def __post_init__(self, **kwargs):
@@ -398,7 +356,7 @@ class VoxCPM2AudioVAEConfig(PreTrainedConfig):
 class VoxCPM2Config(PreTrainedConfig):
     r"""
     lm_config (`VoxCPM2TextConfig` or `dict`, *optional*):
-        Configuration of the MiniCPM4-based text-semantic language model.
+        Configuration of the text-semantic language model.
     encoder_config (`VoxCPM2EncoderConfig` or `dict`, *optional*):
         Configuration of the local audio encoder.
     dit_config (`VoxCPM2DiTConfig` or `dict`, *optional*):
@@ -538,9 +496,9 @@ def _get_local_encoder_backbone_config(config: VoxCPM2Config) -> VoxCPM2TextConf
     encoder_config.intermediate_size = config.encoder_config.ffn_dim
     encoder_config.num_attention_heads = config.encoder_config.num_heads
     encoder_config.num_hidden_layers = config.encoder_config.num_layers
-    encoder_config.kv_channels = config.encoder_config.kv_channels
     encoder_config.head_dim = config.encoder_config.kv_channels
     encoder_config.vocab_size = 0
+    encoder_config.use_bidirectional_attention = True
     return encoder_config
 
 
@@ -552,9 +510,9 @@ def _get_local_dit_backbone_config(config: VoxCPM2Config) -> VoxCPM2TextConfig:
     dit_config.intermediate_size = config.dit_config.ffn_dim
     dit_config.num_attention_heads = config.dit_config.num_heads
     dit_config.num_hidden_layers = config.dit_config.num_layers
-    dit_config.kv_channels = config.dit_config.kv_channels
     dit_config.head_dim = config.dit_config.kv_channels
     dit_config.vocab_size = 0
+    dit_config.use_bidirectional_attention = True
     return dit_config
 
 
@@ -1113,17 +1071,18 @@ class VoxCPM2TimestepEmbedding(nn.Module):
         return self.linear_2(hidden_states)
 
 
-class VoxCPM2Attention(MiniCPM4Attention):
+class VoxCPM2Attention(LlamaAttention):
     def __init__(self, config: VoxCPM2TextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.is_causal = not config.use_bidirectional_attention
+        self.use_rope = not config.no_rope
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
+        attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        is_causal: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -1133,7 +1092,7 @@ class VoxCPM2Attention(MiniCPM4Attention):
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        if position_embeddings is not None:
+        if self.use_rope:
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
@@ -1145,105 +1104,51 @@ class VoxCPM2Attention(MiniCPM4Attention):
         )
         attn_output, attn_weights = attention_interface(
             self,
-            query_states.contiguous(),
-            key_states.contiguous(),
-            value_states.contiguous(),
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            is_causal=is_causal,
             **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return self.o_proj(attn_output), attn_weights
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
-class VoxCPM2RMSNorm(MiniCPM4RMSNorm):
+class VoxCPM2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class VoxCPM2RotaryEmbedding(MiniCPM4RotaryEmbedding):
-    def __init__(self, config: VoxCPM2TextConfig, device=None):
-        super().__init__(config, device)
+class VoxCPM2RotaryEmbedding(OlmoRotaryEmbedding):
+    pass
 
 
-class VoxCPM2DecoderLayer(MiniCPM4DecoderLayer):
-    def __init__(self, config: VoxCPM2TextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.residual_scale = config.scale_depth / math.sqrt(config.num_hidden_layers) if config.use_mup else 1.0
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        is_causal: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            position_embeddings=position_embeddings,
-            is_causal=is_causal,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states * self.residual_scale
-
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        return residual + hidden_states * self.residual_scale
+class VoxCPM2DecoderLayer(LlamaDecoderLayer):
+    pass
 
 
-class VoxCPM2BackboneModel(nn.Module):
+class VoxCPM2BackboneModel(LlamaModel):
     def __init__(self, config: VoxCPM2TextConfig):
-        super().__init__()
-        if config.sparse_config is not None:
-            raise NotImplementedError(
-                "VoxCPM2 InfLLM-v2 sparse attention is not implemented in Transformers. Remove `sparse_config` to "
-                "use dense attention."
-            )
-        self.config = config
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
-        self.embed_tokens = (
-            nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-            if config.vocab_size > 0
-            else nn.Identity()
-        )
-        self.layers = nn.ModuleList(
-            [VoxCPM2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = VoxCPM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = None if config.no_rope else VoxCPM2RotaryEmbedding(config=config)
+        super().__init__(config)
+        # CODEPATH: VoxCPM2 residual LM / local encoder / local DiT take embeddings from the base LM, no vocab.
+        if config.vocab_size == 0:
+            self.embed_tokens = None
+        # CODEPATH: VoxCPM2 residual LM (`residual_lm_no_rope=True`) has no rotary.
+        if config.no_rope:
+            self.rotary_emb = None
 
     def forward(
         self,
-        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool = False,
-        is_causal: bool = True,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-        if inputs_embeds is None:
-            if self.vocab_size == 0:
-                raise ValueError("`inputs_embeds` must be provided when `vocab_size` is 0")
-            inputs_embeds = self.embed_tokens(input_ids)
-
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
@@ -1253,7 +1158,12 @@ class VoxCPM2BackboneModel(nn.Module):
                 torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             ).unsqueeze(0)
 
-        if is_causal:
+        # CODEPATH: VoxCPM2 local encoder / local DiT are bidirectional, base and residual LMs are causal.
+        if self.config.use_bidirectional_attention:
+            attention_mask = create_bidirectional_mask(
+                config=self.config, inputs_embeds=inputs_embeds, attention_mask=attention_mask
+            )
+        else:
             attention_mask = create_causal_mask(
                 config=self.config,
                 inputs_embeds=inputs_embeds,
@@ -1261,18 +1171,9 @@ class VoxCPM2BackboneModel(nn.Module):
                 past_key_values=past_key_values,
                 position_ids=position_ids,
             )
-        else:
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-            )
 
         hidden_states = inputs_embeds
-        position_embeddings = (
-            None if self.rotary_emb is None else self.rotary_emb(hidden_states, position_ids=position_ids)
-        )
+        position_embeddings = None if self.rotary_emb is None else self.rotary_emb(hidden_states, position_ids)
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
@@ -1281,15 +1182,11 @@ class VoxCPM2BackboneModel(nn.Module):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                is_causal=is_causal,
                 **kwargs,
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
-        )
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
 class VoxCPM2LocalEncoder(nn.Module):
@@ -1306,7 +1203,7 @@ class VoxCPM2LocalEncoder(nn.Module):
         special_tokens = self.special_token.expand(batch_size, num_steps, 1, -1)
         hidden_states = torch.cat((special_tokens, hidden_states), dim=2)
         hidden_states = hidden_states.reshape(batch_size * num_steps, hidden_states.shape[2], hidden_states.shape[3])
-        hidden_states = self.encoder(inputs_embeds=hidden_states, is_causal=False).last_hidden_state[:, 0]
+        hidden_states = self.encoder(inputs_embeds=hidden_states).last_hidden_state[:, 0]
         return hidden_states.reshape(batch_size, num_steps, -1)
 
 
@@ -1346,7 +1243,7 @@ class VoxCPM2LocalDiT(nn.Module):
         hidden_states = torch.cat(
             (mu_hidden_states, timestep_hidden_states.unsqueeze(1), conditioning_hidden_states, hidden_states), dim=1
         )
-        hidden_states = self.decoder(inputs_embeds=hidden_states, is_causal=False).last_hidden_state
+        hidden_states = self.decoder(inputs_embeds=hidden_states).last_hidden_state
         prefix_length = mu_hidden_states.shape[1] + 1 + conditioning_hidden_states.shape[1]
         hidden_states = self.out_proj(hidden_states[:, prefix_length:])
         return hidden_states.transpose(1, 2).contiguous()
@@ -1366,11 +1263,9 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
         self.training_cfg_rate = cfm_config.training_cfg_rate
         self.inference_cfg_rate = cfm_config.inference_cfg_rate
         self.reg_loss_type = cfm_config.reg_loss_type
-        self.ratio_r_neq_t_range = cfm_config.ratio_r_neq_t_range
         self.noise_cond_prob_range = cfm_config.noise_cond_prob_range
         self.noise_cond_scale = cfm_config.noise_cond_scale
         self.in_channels = config.feat_dim
-        self.mean_mode = config.dit_config.mean_mode
         self.estimator = VoxCPM2LocalDiT(config)
 
     @torch.inference_mode()
@@ -1436,9 +1331,7 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
                 sample_input = torch.cat((sample, sample), dim=0)
                 mu_input = torch.cat((mu, torch.zeros_like(mu)), dim=0)
                 timestep_input = timestep.expand(2 * batch_size)
-                delta_timestep_input = delta_timestep.expand(2 * batch_size)
-                if not self.mean_mode:
-                    delta_timestep_input = torch.zeros_like(delta_timestep_input)
+                delta_timestep_input = torch.zeros_like(timestep_input)
                 conditioning_input = torch.cat((conditioning, conditioning), dim=0)
 
                 positive_derivative, negative_derivative = self.estimator(
@@ -1537,13 +1430,7 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
             noisy_conditioning.view(-1, 1, 1) * torch.randn_like(conditioning) * self.noise_cond_scale
         )
 
-        ratio_r_neq_t = (
-            self.ratio_r_neq_t_range[0] + progress * (self.ratio_r_neq_t_range[1] - self.ratio_r_neq_t_range[0])
-            if self.mean_mode
-            else 0.0
-        )
-        r_samples, t_samples = self.sample_r_t(target, ratio_r_neq_t=ratio_r_neq_t)
-        detached_r_samples = r_samples.detach().clone()
+        r_samples, t_samples = self.sample_r_t(target, ratio_r_neq_t=0.0)
         detached_t_samples = t_samples.detach().clone()
 
         noise = torch.randn_like(target)
@@ -1561,20 +1448,7 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
                 delta_timestep=t_timestep - r_timestep,
             )
 
-        if self.mean_mode:
-            r_velocity = torch.zeros_like(r_samples)
-            t_velocity = torch.ones_like(t_samples)
-            with torch.backends.cuda.sdp_kernel(enable_flash=False, enable_mem_efficient=False):
-                predicted_velocity, velocity_derivative = jvp(
-                    model_function,
-                    (interpolated_states, r_samples, t_samples),
-                    (target_velocity, r_velocity, t_velocity),
-                )
-            target_velocity = (
-                target_velocity - (detached_t_samples - detached_r_samples).view(-1, 1, 1) * velocity_derivative
-            )
-        else:
-            predicted_velocity = model_function(interpolated_states, r_samples, t_samples)
+        predicted_velocity = model_function(interpolated_states, r_samples, t_samples)
 
         losses = F.mse_loss(predicted_velocity, target_velocity.detach(), reduction="none").mean(dim=1)
         if target_mask is None:
@@ -1850,17 +1724,13 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
         audio_features = audio_features.to(dtype=target_dtype)
         encoded_features = self.enc_to_lm_proj(self.feat_encoder(audio_features))
 
-        lm_config = self.config.lm_config
-        if not isinstance(lm_config, VoxCPM2TextConfig):
-            raise TypeError("`lm_config` must be a `VoxCPM2TextConfig` instance")
-        embedding_scale = lm_config.scale_emb if lm_config.use_mup else 1.0
-        text_embeddings = self.base_lm.embed_tokens(input_ids) * embedding_scale
+        text_embeddings = self.base_lm.embed_tokens(input_ids)
         text_mask = text_mask.to(dtype=text_embeddings.dtype)
         audio_mask = audio_mask.to(dtype=text_embeddings.dtype)
         inputs_embeds = text_mask.unsqueeze(-1) * text_embeddings
         inputs_embeds = inputs_embeds + audio_mask.unsqueeze(-1) * encoded_features
 
-        base_outputs = self.base_lm(inputs_embeds=inputs_embeds, is_causal=True, use_cache=True)
+        base_outputs = self.base_lm(inputs_embeds=inputs_embeds, use_cache=True)
         encoded_states = base_outputs.last_hidden_state.to(target_dtype)
         encoded_states = self.fsq_layer(encoded_states) * audio_mask.unsqueeze(
             -1
@@ -1870,7 +1740,7 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
         residual_inputs = self.fusion_concat_proj(
             torch.cat((encoded_states, audio_mask.unsqueeze(-1) * encoded_features), dim=-1)
         )
-        residual_outputs = self.residual_lm(inputs_embeds=residual_inputs, is_causal=True, use_cache=True)
+        residual_outputs = self.residual_lm(inputs_embeds=residual_inputs, use_cache=True)
         residual_hidden_states = residual_outputs.last_hidden_state[:, -1].to(target_dtype)
 
         return (
@@ -1927,7 +1797,6 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
             inputs_embeds=encoded_features,
             past_key_values=base_past_key_values,
             use_cache=True,
-            is_causal=True,
         )
         lm_hidden_states = self.fsq_layer(base_outputs.last_hidden_state[:, -1])
 
@@ -1936,7 +1805,6 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
             inputs_embeds=residual_inputs.unsqueeze(1),
             past_key_values=residual_past_key_values,
             use_cache=True,
-            is_causal=True,
         )
         residual_hidden_states = residual_outputs.last_hidden_state[:, -1]
         return (
@@ -2458,17 +2326,13 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
         audio_features = audio_features.to(dtype=target_dtype)
         encoded_features = self.enc_to_lm_proj(self.feat_encoder(audio_features))
 
-        lm_config = self.config.lm_config
-        if not isinstance(lm_config, VoxCPM2TextConfig):
-            raise TypeError("`lm_config` must be a `VoxCPM2TextConfig` instance")
-        embedding_scale = lm_config.scale_emb if lm_config.use_mup else 1.0
-        text_embeddings = self.base_lm.embed_tokens(input_ids) * embedding_scale
+        text_embeddings = self.base_lm.embed_tokens(input_ids)
         text_mask = text_mask.to(dtype=text_embeddings.dtype)
         audio_mask = audio_mask.to(dtype=text_embeddings.dtype)
         inputs_embeds = text_mask.unsqueeze(-1) * text_embeddings
         inputs_embeds = inputs_embeds + audio_mask.unsqueeze(-1) * encoded_features
 
-        encoded_states = self.base_lm(inputs_embeds=inputs_embeds, is_causal=True).last_hidden_state
+        encoded_states = self.base_lm(inputs_embeds=inputs_embeds).last_hidden_state
         encoded_states = encoded_states.to(target_dtype)
         encoded_states = self.fsq_layer(encoded_states) * audio_mask.unsqueeze(
             -1
@@ -2478,7 +2342,7 @@ class VoxCPM2Model(VoxCPM2PreTrainedModel, GenerationMixin):
         residual_inputs = self.fusion_concat_proj(
             torch.cat((encoded_states, audio_mask.unsqueeze(-1) * encoded_features), dim=-1)
         )
-        residual_states = self.residual_lm(inputs_embeds=residual_inputs, is_causal=True).last_hidden_state
+        residual_states = self.residual_lm(inputs_embeds=residual_inputs).last_hidden_state
         residual_states = residual_states.to(target_dtype)
         residual_hidden_states = torch.cat((torch.zeros_like(residual_states[:, :1]), residual_states[:, :-1]), dim=1)
 
