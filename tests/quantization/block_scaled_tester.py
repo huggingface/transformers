@@ -29,7 +29,7 @@ import torch
 from transformers import AutoModelForCausalLM
 from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
 from transformers.integrations.finegrained import FineGrainedExperts, FineGrainedLinear
-from transformers.quantizers.auto import AutoHfQuantizer, AutoQuantizationConfig
+from transformers.quantizers.auto import AutoHfQuantizer
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
 from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer

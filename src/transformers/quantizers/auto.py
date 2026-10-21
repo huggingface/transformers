@@ -50,6 +50,7 @@ from ..utils.quantization_config import (
     TorchAoConfig,
     VptqConfig,
     read_fp8,
+    read_mxfp8,
 )
 from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
@@ -150,6 +151,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
 # A reader returns the config the checkpoint describes, or `None` to fall back to the method's config class.
 AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
     "fp8": read_fp8,
+    "mxfp8": read_mxfp8,
 }
 
 # A passed config of these types reads a pre-quantized checkpoint's config as its own class.

@@ -1958,6 +1958,20 @@ class NVFP4Config(BlockScaledConfig):
 BLOCK_SCALED_CONFIGS = {config.method.value: config for config in (Fp8Config, Mxfp8Config, Mxfp4Config, NVFP4Config)}
 
 
+def read_mxfp8(config_dict: dict) -> QuantizationConfigMixin | None:
+    """Return the config of an MXFP8 checkpoint, or `None` to read it as `Mxfp8Config`.
+
+    MiniMax names the skip-list `ignored_layers`, e.g. `MiniMaxAI/MiniMax-M3-MXFP8`.
+    """
+    if "ignored_layers" not in config_dict:
+        return None
+    config_dict = dict(config_dict)
+    ignored = config_dict.pop("ignored_layers")
+    if config_dict.get("modules_to_not_convert") is None:
+        config_dict["modules_to_not_convert"] = ignored
+    return Mxfp8Config.from_dict(config_dict)
+
+
 def read_fp8(config_dict: dict) -> QuantizationConfigMixin | None:
     """Return the config of an FP8 checkpoint, or `None` to read it as `Fp8Config`.
 

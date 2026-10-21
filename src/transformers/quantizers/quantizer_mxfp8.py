@@ -13,13 +13,12 @@
 # limitations under the License.
 """MXFP8 quantizer for `float8_e4m3fn` weights with one UE8M0 scale per 32 values.
 
-The checkpoint ships `weight` and `weight_scale_inv`. ModelOpt and compressed-tensors exports name the scale
-`weight_scale`.
+The checkpoint ships `weight` and `weight_scale_inv`.
 """
 
 from typing import TYPE_CHECKING
 
-from .block_scaled_utils import BlockScaledQuantizer, ProducerLayout
+from .block_scaled_utils import BlockScaledQuantizer
 
 
 if TYPE_CHECKING:
@@ -30,6 +29,3 @@ class Mxfp8HfQuantizer(BlockScaledQuantizer):
     """MXFP8 weights, W8A8 or weight-only."""
 
     quantization_config: "Mxfp8Config"
-    producer_layouts = dict.fromkeys(
-        ("compressed-tensors", "modelopt"), ProducerLayout(block_scale_name="weight_scale")
-    )
