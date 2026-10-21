@@ -174,7 +174,7 @@ class KimiK25IntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cleanup(torch_device, gc_collect=True)
-        cls.model = Kimi_K25ForConditionalGeneration.from_pretrained(cls.model_id, device_map="auto")
+        cls.model = Kimi_K25ForConditionalGeneration.from_pretrained(cls.model_id)
         cls.processor = AutoProcessor.from_pretrained(cls.model_id)
 
         cls.message1 = [
