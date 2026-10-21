@@ -162,7 +162,7 @@ class SLANetSLAHead(SLANetPreTrainedModel):
         hidden_states: torch.FloatTensor,
         targets: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutput:
         features = torch.zeros(
             (hidden_states.shape[0], self.config.hidden_size), dtype=torch.float32, device=hidden_states.device
         )

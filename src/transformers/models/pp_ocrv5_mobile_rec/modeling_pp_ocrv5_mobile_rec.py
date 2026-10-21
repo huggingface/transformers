@@ -297,7 +297,9 @@ class PPOCRV5MobileRecEncoderWithSVTR(PPOCRV5MobileRecPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
-    def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+    def forward(
+        self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutputWithNoAttention:
         residual = hidden_states
 
         hidden_states = self.conv_block[0](hidden_states)

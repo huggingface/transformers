@@ -1192,7 +1192,7 @@ class PPDocLayoutV4Decoder(PPDocLayoutV4PreTrainedModel):
         spatial_shapes_list=None,
         level_start_index=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> PPDocLayoutV4DecoderOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             The query embeddings that are passed into the decoder.

@@ -1049,7 +1049,7 @@ class DeformableDetrDecoder(DeformableDetrPreTrainedModel):
         level_start_index=None,
         valid_ratios=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> DeformableDetrDecoderOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):

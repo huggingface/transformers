@@ -326,7 +326,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         padding_mask: torch.BoolTensor | None = None,
         acoustic_tokenizer_chunk_size: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutputWithPooling:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, num_samples)`):
             Input audio tensor sampled at 24kHz.

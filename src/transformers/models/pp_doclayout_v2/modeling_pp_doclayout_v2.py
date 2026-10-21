@@ -1808,7 +1808,7 @@ class PPDocLayoutV2Decoder(PPDocLayoutV2PreTrainedModel):
         spatial_shapes_list=None,
         level_start_index=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> PPDocLayoutV2DecoderOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):

@@ -503,7 +503,7 @@ class EvollaSaProtEncoder(nn.Module):
         encoder_attention_mask=None,
         position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutputWithCrossAttentions:
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(
                 hidden_states,
@@ -748,7 +748,9 @@ class EvollaProteinEncoder(nn.Module):
         self.sequence_compressor_resampler = EvollaSequenceCompressorResampler(config=config)
 
     @can_return_tuple
-    def forward(self, input_ids: torch.LongTensor, attention_mask: torch.FloatTensor, **kwargs):
+    def forward(
+        self, input_ids: torch.LongTensor, attention_mask: torch.FloatTensor, **kwargs
+    ) -> EvollaProteinEncoderModelOutput:
         protein_output = self.model(input_ids=input_ids, attention_mask=attention_mask)
         protein_embeds = protein_output.last_hidden_state
         sequence_repr = self.sequence_compressor_resampler(protein_embeds, attention_mask)
@@ -1421,7 +1423,7 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ):
+    ) -> CausalLMOutputWithPast:
         r"""
         protein_input_ids (torch.LongTensor):
             The input IDs for the protein sequence. Should be of shape `(batch_size, protein_seq_length)` and type `torch.LongTensor`.

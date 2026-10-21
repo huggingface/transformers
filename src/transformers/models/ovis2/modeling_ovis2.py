@@ -341,7 +341,7 @@ class Ovis2VisionTransformer(nn.Module):
         pixel_values,
         attention_mask: torch.Tensor | None = None,
         **kwargs,
-    ):
+    ) -> BaseModelOutput:
         hidden_states = self.embeddings(pixel_values)
 
         encoder_outputs: BaseModelOutput = self.encoder(
