@@ -67,3 +67,13 @@ class Mxfp8TinyCheckpointTest(TinyCheckpointTesterMixin, TestCasePlus):
 
 class Mxfp8LoadPathEquivalenceTest(LoadPathEquivalenceTesterMixin, TestCasePlus):
     spec = MXFP8
+
+
+@require_torch
+class Mxfp8ReaderTest(unittest.TestCase):
+    def test_minimax_names_its_skip_list_ignored_layers(self):
+        from transformers.quantizers.auto import AutoQuantizationConfig
+
+        config = AutoQuantizationConfig.from_dict({"quant_method": "mxfp8", "ignored_layers": ["lm_head"]})
+        self.assertIsInstance(config, Mxfp8Config)
+        self.assertEqual(config.modules_to_not_convert, ["lm_head"])

@@ -486,7 +486,9 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         quantizer = _quantizer_for(Fp8Config(weight_block_size=None))
         model = torch.nn.Module()
         model.config = SimpleNamespace(_experts_implementation=None)
-        model.table = fg.FineGrainedEmbedding.from_module(torch.nn.Embedding(8, 64), quantizer.quantization_config, model)
+        model.table = fg.FineGrainedEmbedding.from_module(
+            torch.nn.Embedding(8, 64), quantizer.quantization_config, model
+        )
         for style in ("embedding_colwise", "replicate"):
             with self.subTest(style=style):
                 plan = {"table": style}
