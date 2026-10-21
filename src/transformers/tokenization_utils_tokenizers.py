@@ -440,36 +440,26 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._tokenizer is None:
             raise ValueError("The backend tokenizer is not correctly initialized.")
 
-        mismatch_decoder = False
-        mismatch_pre_tokenizer = False
-        built_decoder = ""
-        built_pre_tokenizer = ""
-
-        if _json_decoder_type is not None and self._tokenizer.decoder is not None:
+        # A `ByteLevel` pipeline in tokenizer.json that the Python class did not build means `tokenizer_class` is wrong.
+        mismatches = []
+        for name, json_type in (("decoder", _json_decoder_type), ("pre_tokenizer", _json_pre_tokenizer_type)):
+            built = getattr(self._tokenizer, name)
+            if json_type != "ByteLevel" or built is None:
+                continue
             try:
-                decoder_repr = str(self._tokenizer.decoder)
-            except Exception:
-                decoder_repr = ""
-            built_decoder = decoder_repr.split("(")[0]
-            if _json_decoder_type == "ByteLevel" and "ByteLevel" not in decoder_repr:
-                mismatch_decoder = True
+                built_repr = str(built)
+            except Exception as e:
+                logger.debug(f"Could not inspect the {name} of {self.__class__.__name__}: {e}")
+                continue
+            if "ByteLevel" not in built_repr:
+                mismatches.append(f"{name} is '{built_repr.split('(')[0]}' but `tokenizer.json` specifies 'ByteLevel'")
 
-        if _json_pre_tokenizer_type is not None and self._tokenizer.pre_tokenizer is not None:
-            try:
-                pre_tokenizer_repr = str(self._tokenizer.pre_tokenizer)
-            except Exception:
-                pre_tokenizer_repr = ""
-            built_pre_tokenizer = pre_tokenizer_repr.split("(")[0]
-            if _json_pre_tokenizer_type == "ByteLevel" and "ByteLevel" not in pre_tokenizer_repr:
-                mismatch_pre_tokenizer = True
-
-        if mismatch_decoder or mismatch_pre_tokenizer:
+        if mismatches:
             logger.warning(
-                f"The tokenizer class you loaded from this checkpoint ({self.__class__.__name__}) is a "
-                f"'{built_decoder or built_pre_tokenizer}' tokenizer. "
-                f"However, the `tokenizer.json` file found in this checkpoint contains a '{_json_decoder_type or _json_pre_tokenizer_type}' pipeline. "
-                f"This usually means the `tokenizer_class` in `tokenizer_config.json` is incorrectly set. "
-                f"We will load the pipeline from `tokenizer.json` to ensure correct tokenization."
+                f"The tokenizer class you loaded from this checkpoint ({self.__class__.__name__}) does not match "
+                f"the `tokenizer.json` file found in this checkpoint: {'; '.join(mismatches)}. "
+                "This usually means the `tokenizer_class` in `tokenizer_config.json` is incorrectly set. "
+                "The decoder and pre-tokenizer are loaded together from `tokenizer.json` to ensure correct tokenization."
             )
             if _json_decoder is not None:
                 self._tokenizer.decoder = _json_decoder
