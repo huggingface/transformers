@@ -30,7 +30,6 @@ from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
-    LlamaMLP,
     LlamaPreTrainedModel,
 )
 from ..minicpm3.modeling_minicpm3 import MiniCPM3Model
@@ -90,10 +89,6 @@ class MiniCPM4ScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
 
 
 class MiniCPM4RotaryEmbedding(OlmoRotaryEmbedding):
-    pass
-
-
-class MiniCPM4MLP(LlamaMLP):
     pass
 
 
