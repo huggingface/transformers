@@ -1427,6 +1427,21 @@ class Cache:
 
         return keys, values
 
+    def get_conv_state(self, layer_idx: int, state_idx: int = 0) -> torch.Tensor | None:
+        """Returns the conv state `state_idx` for the layer `layer_idx`, or None if the layer is not initialized.
+        Raises if the layer is not a linear attention layer."""
+        layer = self.layers[layer_idx]
+        if not isinstance(layer, LinearAttentionCacheLayerMixin):
+            raise ValueError(
+                f"Cannot get conv state for non linear attention layer {layer_idx} of type {type(layer).__name__}."
+            )
+        # After __init__ and before the first update, the conv_state is None, so this branch is redundant. But after a
+        # reset, the conv_state is still a tensor, only zeroed. To have consistent behavior where returning None means
+        # there is no previous state, we need this branch.
+        if layer.has_previous_state[state_idx]:
+            return layer.conv_states[state_idx]
+        return None
+
     def update_conv_state(
         self, conv_states: torch.Tensor, layer_idx: int, state_idx: int = 0, **kwargs
     ) -> torch.Tensor:
@@ -1448,6 +1463,19 @@ class Cache:
             raise ValueError("Cannot call `update_conv_state` on a non-LinearAttention layer!")
         conv_states = self.layers[layer_idx].update_conv_state(conv_states, state_idx, **kwargs)
         return conv_states
+
+    def get_recurrent_state(self, layer_idx: int, state_idx: int = 0) -> torch.Tensor | None:
+        """Returns the recurrent state `state_idx` for the layer `layer_idx`, or None if the layer is not initialized.
+        Raises an error if the layer is not a linear attention layer."""
+        layer = self.layers[layer_idx]
+        if not isinstance(layer, LinearAttentionCacheLayerMixin):
+            raise ValueError(
+                f"Cannot get recurrent state for non linear attention layer {layer_idx} of type {type(layer).__name__}."
+            )
+        # Same as in `get_conv_state`: this is needed so that returning None means there is no previous state.
+        if layer.has_previous_state[state_idx]:
+            return layer.recurrent_states[state_idx]
+        return None
 
     def update_recurrent_state(
         self, recurrent_states: torch.Tensor, layer_idx: int, state_idx: int = 0, **kwargs
@@ -1675,6 +1703,11 @@ class Cache:
             if hasattr(self.layers[layer_idx], "activate_past_recording"):
                 self.layers[layer_idx].activate_past_recording()
 
+    def is_recording_past(self, layer_idx: int) -> bool:
+        """Returns a boolean indicating if the layer at index `layer_idx` is recording past states. If the layer cannot
+        record past states and is missing the `record_past` attribute, this returns False."""
+        return getattr(self.layers[layer_idx], "record_past", False)
+
     @property
     def batch_size(self) -> int:
         """Return the batch size of the cache, or ``-1`` if no layer has been initialized yet
@@ -1752,7 +1785,7 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
     per_layer_kwargs = []
     for layer_type, layer_config in zip(layer_types, layer_configs):
         layer_kwargs = {}
-        if layer_type in ("sliding_attention", "hybrid_sliding"):
+        if layer_type in ("sliding_attention", "hybrid_sliding", "reference_sliding_attention"):
             layer_kwargs["sliding_window"] = layer_config.sliding_window
         elif layer_type == "chunked_attention":
             layer_kwargs["sliding_window"] = layer_config.attention_chunk_size

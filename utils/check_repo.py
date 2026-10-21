@@ -278,6 +278,8 @@ IGNORE_NON_TESTED = (
         "InternVLVisionModel",  # Building part of bigger (tested) model
         "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
         "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
+        "UnlimitedOcrTextModel",  # Building part of bigger (tested) model
+        "UnlimitedOcrVisionModel",  # Building part of bigger (tested) model
         "QianfanOCRVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model
@@ -300,6 +302,10 @@ IGNORE_NON_TESTED = (
         "Ernie4_5_VL_MoeTextModel",  # BC alias
         "PeAudioFrameLevelModel",
         "PeAudioVideoModel",
+        "MimiEncoderModel",  # Tested through MimiModel
+        "MimiDecoderModel",  # Tested through MimiModel
+        "PocketTTSAudioTokenizerEncoderModel",  # Tested through PocketTTSAudioTokenizerModel
+        "PocketTTSAudioTokenizerDecoderModel",  # Tested through PocketTTSAudioTokenizerModel
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
@@ -315,12 +321,16 @@ IGNORE_NON_TESTED = (
         "Kimi_K25VisionModel",
         "MuseGlimmerTextModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
         "MuseGlimmerVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
+        "MuseSparkTextModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
+        "MuseSparkVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
+        "MuseSparkAudioModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
         "HunYuanVLTextModel",
         "HunYuanVLVisionTransformer",
         "InklingForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "Nemotron3DiarizationAudioModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3DiarizationModel.
+        "MossTranscribeDiarizeAudioModel",  # Building part of bigger (tested) model. Tested implicitly through MossTranscribeDiarizeForConditionalGeneration.
     ]
 )
 
@@ -569,6 +579,8 @@ IGNORE_NON_AUTO_CONFIGURED = (
         "InklingTextModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
+        "UnlimitedOcrTextModel",  # Building part of bigger (tested) model
+        "UnlimitedOcrVisionModel",  # Building part of bigger (tested) model
         "VibeVoiceModel",  # Building part of a bigger model
     ]
 )
@@ -1180,17 +1192,18 @@ def find_all_documented_objects() -> list[str]:
     Parse the content of all doc files to detect which classes and functions it documents.
 
     Returns:
-        `List[str]`: The list of all object names being documented.
-        `Dict[str, List[str]]`: A dictionary mapping the object name (full import path, e.g.
-            `integrations.PeftAdapterMixin`) to its documented methods
+        `List[str]`: The list of all object names being documented in the English docs.
+        `Dict[Tuple[Path, str], List[str]]`: A dictionary mapping the doc file (in any language) and the object name
+            (full import path, e.g. `integrations.PeftAdapterMixin`) to its documented methods
     """
     documented_obj = []
     documented_methods_map = {}
-    for doc_file in Path(PATH_TO_DOC).glob("**/*.md"):
+    for doc_file in Path(PATH_TO_DOC).parent.glob("**/*.md"):
         with open(doc_file, "r", encoding="utf-8", newline="\n") as f:
             content = f.read()
         raw_doc_objs = re.findall(r"\[\[autodoc\]\]\s+(\S+)\s+", content)
-        documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
+        if doc_file.is_relative_to(PATH_TO_DOC):
+            documented_obj += [obj.split(".")[-1] for obj in raw_doc_objs]
 
         for obj in raw_doc_objs:
             obj_public_methods = re.findall(rf"\[\[autodoc\]\] {obj}((\n\s+-.*)+)", content)
@@ -1198,7 +1211,7 @@ def find_all_documented_objects() -> list[str]:
             if len(obj_public_methods) == 0:
                 continue
             else:
-                documented_methods_map[obj] = re.findall(r"(?<=-\s).*", obj_public_methods[0][0])
+                documented_methods_map[(doc_file, obj)] = re.findall(r"(?<=-\s).*", obj_public_methods[0][0])
 
     return documented_obj, documented_methods_map
 
@@ -1345,10 +1358,12 @@ def check_all_objects_are_documented():
 def check_public_method_exists(documented_methods_map):
     """Check that all explicitly documented public methods are defined in the corresponding class."""
     failures = []
-    for obj, methods in documented_methods_map.items():
+    for (doc_file, obj), methods in documented_methods_map.items():
         # Let's ensure there is no repetition
         if len(set(methods)) != len(methods):
-            failures.append(f"Error in the documentation of {obj}: there are repeated documented methods.")
+            failures.append(
+                f"Error in the documentation of {obj} in {doc_file}: there are repeated documented methods."
+            )
 
         # Navigates into the object, given the full import path
         nested_path = obj.split(".")
@@ -1381,8 +1396,8 @@ def check_public_method_exists(documented_methods_map):
                 if not hasattr(obj_class, method):
                     failures.append(
                         "The following public method is explicitly documented but not defined in the corresponding "
-                        f"class. class: {obj}, method: {method}. If the method is defined, this error can be due to "
-                        f"lacking dependencies."
+                        f"class. file: {doc_file}, class: {obj}, method: {method}. If the method is defined, this error "
+                        "can be due to lacking dependencies."
                     )
             except ImportError:
                 pass

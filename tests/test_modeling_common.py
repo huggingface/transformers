@@ -606,15 +606,20 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
             "grouped_mm": Mock(wraps=grouped_mm_experts_forward),
         }
 
+        # sonicmoe and deepgemm do not yet support post-expert norms
+        has_post_expert_norm_attribute = any(
+            getattr(module, "has_post_expert_norm", False) for module in model.modules()
+        )
+
         # `is_sonicmoe_loadable` checks for `kernels`, a Hopper+ GPU and the `nvidia-cutlass-dsl` / `apache-tvm-ffi`
         # build dependencies, so the kernel is only exercised where it can actually be loaded
-        if dtype != torch.float32 and is_sonicmoe_loadable():
+        if dtype != torch.float32 and is_sonicmoe_loadable() and not has_post_expert_norm_attribute:
             # we also need nvidia-cutlass-dsl and apache-tvm-ffi
             mocks["sonicmoe"] = Mock(wraps=sonicmoe_experts_forward)
             implementations.append("sonicmoe")
 
         # `is_deepgemm_loadable` checks for kernels availibility and NVCC version
-        if dtype == torch.bfloat16 and is_deepgemm_loadable():
+        if dtype == torch.bfloat16 and is_deepgemm_loadable() and not has_post_expert_norm_attribute:
             # DeepGEMM BF16 grouped forward requires Hopper+, a new-enough nvcc toolkit, and bf16 hidden states
             mocks["deepgemm"] = Mock(wraps=deepgemm_bf16_experts_forward)
             implementations.append("deepgemm")
@@ -998,7 +1003,10 @@ class ModelTesterMixin(ExportTesterMixin):
                     )
                     # When reloading in fp16, keep_in_fp32_modules AND keep_in_fp32_modules_strict should be upcasted
                     all_fp32_modules = model._keep_in_fp32_modules | model._keep_in_fp32_modules_strict
+                    # integer buffers (e.g. step counters) are never cast
                     for name, param in model.state_dict().items():
+                        if not param.is_floating_point():
+                            continue
                         if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in all_fp32_modules):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
@@ -1007,6 +1015,8 @@ class ModelTesterMixin(ExportTesterMixin):
                     # When reloading in bf16, only keep_in_fp32_modules_strict should be upcasted
                     model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                     for name, param in model.state_dict().items():
+                        if not param.is_floating_point():
+                            continue
                         if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules_strict):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
@@ -5480,23 +5490,37 @@ class ModelTesterMixin(ExportTesterMixin):
                     hidden_size,
                     f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
                 )
-
-                if (
-                    model_class.__name__ in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES)
-                    and outputs.pooler_output is not None
-                ):
-                    self.assertEqual(
-                        len(outputs.pooler_output),
-                        self.model_tester.batch_size,
-                        f"batch_size mismatch for `pooler_output`: {len(outputs.pooler_output)} != {self.model_tester.batch_size}",
-                    )
-                    self.assertEqual(
-                        outputs.pooler_output[0].ndim,
-                        2,
-                        f"each sample in `pooler_output` should be a 2D array but got {outputs.pooler_output[0].ndim}",
-                    )
             else:
                 self.assertIsInstance(outputs, tuple, "get_image_features() must return a tuple if return_dict=False")
+
+    def test_get_image_features_pooler_output(self):
+        """
+        Generation assumes that encoded images always follow certain layout. This test is IMPORTANT
+        and should NEVER be skipped unless your model override beam-search expansion on `generate()`
+        """
+        for model_class in self.all_model_classes:
+            if model_class.__name__ not in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES):
+                continue
+            if not hasattr(model_class, "get_image_features"):
+                continue
+
+            config, inputs_dict = self._image_features_prepare_config_and_inputs()
+            model = model_class(config).eval().to(torch_device)
+            with torch.no_grad():
+                pooler_output = model.get_image_features(**inputs_dict, return_dict=True).pooler_output
+            if pooler_output is None:
+                continue
+
+            self.assertEqual(
+                len(pooler_output),
+                self.model_tester.batch_size,
+                f"`pooler_output` should have one entry per image: {len(pooler_output)} != {self.model_tester.batch_size}",
+            )
+            self.assertEqual(
+                pooler_output[0].ndim,
+                2,
+                f"each sample in `pooler_output` should be a 2D array but got {pooler_output[0].ndim}",
+            )
 
     def test_get_image_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -5638,6 +5662,8 @@ class ModelTesterMixin(ExportTesterMixin):
                         hidden_size = audio_config.encoder_config.hidden_dim
                 elif hasattr(audio_config, "encoder_ffn_dim"):
                     hidden_size = audio_config.encoder_ffn_dim
+                elif hasattr(audio_config, "out_hidden_size"):
+                    hidden_size = audio_config.out_hidden_size
                 self.assertEqual(
                     last_hidden_state_shape[-1],
                     hidden_size,
@@ -5796,6 +5822,35 @@ class ModelTesterMixin(ExportTesterMixin):
 
             else:
                 self.assertIsInstance(outputs, tuple, "get_video_features() must return a tuple if return_dict=False")
+
+    def test_get_video_features_pooler_output(self):
+        """
+        Generation assumes that encoded images always follow certain layout. This test is IMPORTANT
+        and should NEVER be skipped unless your model override beam-search expansion on `generate()`
+        """
+        for model_class in self.all_model_classes:
+            if model_class.__name__ not in get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES):
+                continue
+            if not hasattr(model_class, "get_video_features"):
+                continue
+
+            config, inputs_dict = self._video_features_prepare_config_and_inputs()
+            model = model_class(config).eval().to(torch_device)
+            with torch.no_grad():
+                pooler_output = model.get_video_features(**inputs_dict, return_dict=True).pooler_output
+            if pooler_output is None:
+                continue
+
+            self.assertEqual(
+                len(pooler_output),
+                self.model_tester.batch_size,
+                f"batch_size mismatch for `pooler_output`: {len(pooler_output)} != {self.model_tester.batch_size}",
+            )
+            self.assertEqual(
+                pooler_output[0].ndim,
+                2,
+                f"each sample in `pooler_output` should be a 2D array but got {pooler_output[0].ndim}",
+            )
 
     def test_get_video_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

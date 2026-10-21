@@ -112,6 +112,32 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],
+    # Read by `generation_pocket_tts.py`, and by `loss/loss_lsd.py` for the `lsd_*` / `flow_loss_*` ones
+    "PocketTTSConfig": [
+        "eos_threshold",
+        "min_frames_before_eos",
+        "num_flow_steps",
+        "frame_rate",
+        "flow_loss_num_samples",
+        "lsd_diagonal_weight",
+        "lsd_distill_probability",
+        "lsd_time_logit_mean",
+        "lsd_time_logit_std",
+    ],
+    # Same as `PocketTTSConfig`: read by the inherited `generation_pocket_tts.py` and by `loss/loss_lsd.py`
+    "GradiumPhononTTSConfig": [
+        "frame_rate",
+        "flow_loss_num_samples",
+        "lsd_diagonal_weight",
+        "lsd_distill_probability",
+        "lsd_time_logit_mean",
+        "lsd_time_logit_std",
+    ],
+    # Encoder/decoder halves share every field of their codec's config; each half reads only its own.
+    "MimiEncoderConfig": True,
+    "MimiDecoderConfig": True,
+    "PocketTTSAudioTokenizerEncoderConfig": True,
+    "PocketTTSAudioTokenizerDecoderConfig": True,
     "XcodecConfig": ["sample_rate", "audio_channels"],
     "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
     "MambaConfig": ["expand"],
@@ -300,6 +326,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
     ],
+    "UnlimitedOcrTextConfig": ["sliding_window"],  # only used for cache init
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
