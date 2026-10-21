@@ -13,7 +13,6 @@
 # limitations under the License.
 """Blt modular model, inheriting from Mllama where appropriate."""
 
-import copy
 from collections.abc import Callable
 
 import torch
@@ -972,13 +971,12 @@ class BltModel(BltPreTrainedModel):
             position_ids = torch.arange(encoder_embeds.shape[1], device=encoder_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        byte_mask_fn, byte_mask_config = create_causal_mask, self.config
-        if getattr(self.config, "local_attention_window_len", None):
-            byte_mask_fn = create_sliding_window_causal_mask
-            byte_mask_config = copy.copy(self.config)
-            byte_mask_config.sliding_window = self.config.local_attention_window_len
-        causal_mask = byte_mask_fn(
-            config=byte_mask_config,
+        encoder_config = self.config.encoder_config
+        mask_function = (
+            create_causal_mask if encoder_config.sliding_window is None else create_sliding_window_causal_mask
+        )
+        causal_mask = mask_function(
+            config=encoder_config,
             inputs_embeds=encoder_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,

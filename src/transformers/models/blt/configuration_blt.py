@@ -53,6 +53,7 @@ class BltLocalEncoderConfig(PreTrainedConfig):
     hidden_act: str = "silu"
     intermediate_size: int | None = None
     initializer_range: float = 0.02
+    sliding_window: int | None = None
 
     def __post_init__(self, **kwargs):
         self.num_key_value_heads = self.num_key_value_heads or self.num_attention_heads
@@ -246,6 +247,8 @@ class BltConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         super().__post_init__(**kwargs)
         self.encoder_hash_byte_group_size = self.encoder_hash_byte_group_size or [3, 4, 5, 6, 7, 8]
+
+        self.encoder_config.sliding_window = self.local_attention_window_len
 
         # Determine if token embedding projection is needed based on dimension mismatch (7b)
         encoder_cross_output_size = self.encoder_config.hidden_size * self.cross_attn_k
