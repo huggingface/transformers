@@ -4871,28 +4871,23 @@ class PreTrainedModel(
         later as they will be tied (overwritten) anyway.
         This is very important as most embeddings are tied, and they are huge params (vocabularies are often 256k), so
         running inits on them is very costly."""
-        for tied_param in getattr(self, "all_tied_weights_keys", {}).keys():
-            param = self.get_parameter(tied_param)
-            setattr(param, "_is_hf_initialized", True)
-
-        # Some custom code models define module tying (not parameter tying) in their __init__. When modules themselves are shared,
+        # Some models define module tying (not parameter tying) in their __init__. When modules themselves are shared,
         # weights inside both modules appear in the `state_dict` but only one will appear in the safetensors checkpoints
         # as they are inherently tied because the 2 modules are the same object. In this case, once we load a parameter
         # inside one of the 2 modules, the other will also automatically be loaded and will have the `_is_hf_initialized`
         # flag (because we call `setattr` with the loaded param on the module, which is the same object), but its counterpart
         # will still appear as a missing key as we never get it out of the set (because it appears in the state_dict as well).
         # So we remove it now - otherwise it's considered missing and will be wrongly reinitialized
-        # Note: this is never an issue in main Transformers, as we never do module-tying, only parameter-tying, and we know
-        # which params are supposed to be tied to which other params
-        if self.is_custom_code():
-            # Remove those that are already initialized, but appear as missing due to module tying (only if they are not known
-            # tied weights, i.e. we did not explicitly mark them as initialized just above)
-            loading_info.missing_keys = {
-                key
-                for key in loading_info.missing_keys
-                if key in self.all_tied_weights_keys
-                or not getattr(self.get_parameter_or_buffer(key), "_is_hf_initialized", False)
-            }
+        loading_info.missing_keys = {
+            key
+            for key in loading_info.missing_keys
+            if key in self.all_tied_weights_keys
+            or not getattr(self.get_parameter_or_buffer(key), "_is_hf_initialized", False)
+        }
+
+        for tied_param in getattr(self, "all_tied_weights_keys", {}).keys():
+            param = self.get_parameter(tied_param)
+            setattr(param, "_is_hf_initialized", True)
 
     def get_parameter_or_buffer(self, target: str):
         """
