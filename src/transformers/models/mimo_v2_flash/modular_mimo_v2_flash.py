@@ -21,10 +21,11 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_mimo_v2_utils import load_original_checkpoint_if_needed
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import no_inherit_decorator
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Experts,
@@ -59,6 +60,18 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     attention_value_scale (`float`, *optional*, defaults to 0.707 (which is the decimal approximation
         of `sqrt(hidden_size / (num_attention_heads * v_head_dim))`):
         Constant multiplier applied to rescale the attention values.
+    swa_num_attention_heads (`int`, *optional*):
+        Number of query heads in sliding attention. Defaults to `num_attention_heads`.
+    swa_num_key_value_heads (`int`, *optional*):
+        Number of sliding-attention KV heads. Defaults to twice `num_key_value_heads` for the original Flash model.
+    swa_head_dim (`int`, *optional*):
+        Sliding-attention query/key head dimension. Defaults to `head_dim`.
+    swa_v_head_dim (`int`, *optional*):
+        Sliding-attention value head dimension. Defaults to `v_head_dim`.
+    add_full_attention_sink_bias (`bool`, *optional*, defaults to `False`):
+        Whether global attention layers have learned softmax sinks.
+    add_swa_attention_sink_bias (`bool`, *optional*, defaults to `True`):
+        Whether sliding attention layers have learned softmax sinks.
     """
 
     model_type = "mimo_v2_flash"
@@ -94,13 +107,19 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     n_routed_experts: int = 256
     bos_token_id: int | None = 1
     routed_scaling_factor: float | None = 1.0
-    # MiMo-V2-Flash specific
+    # MiMo V2 text-family attention dimensions and layer patterns.
     head_dim: int = 192
     v_head_dim: int = 128
     sliding_window: int = 129
     layer_types: list[str] | None = None
     mlp_layer_types: list[str] | None = None
     attention_value_scale: float | None = 0.707
+    swa_num_attention_heads: int | None = None
+    swa_num_key_value_heads: int | None = None
+    swa_head_dim: int | None = None
+    swa_v_head_dim: int | None = None
+    add_full_attention_sink_bias: bool = False
+    add_swa_attention_sink_bias: bool = True
     # Remove unused attributes inherited from Glm4MoeConfig
     first_k_dense_replace = AttributeError()
     n_shared_experts = AttributeError()
@@ -108,6 +127,16 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
     num_mtp_layers = AttributeError()
 
     def __post_init__(self, **kwargs):
+        if "layernorm_epsilon" in kwargs:
+            self.rms_norm_eps = kwargs.pop("layernorm_epsilon")
+        pattern = kwargs.pop("hybrid_layer_pattern", None)
+        if self.layer_types is None and pattern is not None:
+            self.layer_types = ["sliding_attention" if kind else "full_attention" for kind in pattern]
+        frequency = kwargs.pop("moe_layer_freq", None)
+        if self.mlp_layer_types is None and frequency is not None:
+            if isinstance(frequency, int):
+                frequency = [frequency > 0 and index % frequency == 0 for index in range(self.num_hidden_layers)]
+            self.mlp_layer_types = ["sparse" if kind else "dense" for kind in frequency]
         # Full attention for the first layer and every 6th layer; SWA for the rest.
         if self.layer_types is None:
             self.layer_types = [
@@ -117,11 +146,31 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
         # First layer is a dense MLP, the rest are MoE.
         if self.mlp_layer_types is None:
             self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
-        # Per-layer rope defaults matching the XiaomiMiMo/MiMo-V2-Flash pretrained thetas.
-        if self.rope_parameters is None:
+        if len(self.layer_types) != self.num_hidden_layers or len(self.mlp_layer_types) != self.num_hidden_layers:
+            raise ValueError("Attention and MLP layer patterns must match num_hidden_layers.")
+        self.swa_num_attention_heads = (
+            self.num_attention_heads if self.swa_num_attention_heads is None else self.swa_num_attention_heads
+        )
+        self.swa_num_key_value_heads = (
+            2 * self.num_key_value_heads if self.swa_num_key_value_heads is None else self.swa_num_key_value_heads
+        )
+        self.swa_head_dim = self.head_dim if self.swa_head_dim is None else self.swa_head_dim
+        self.swa_v_head_dim = self.v_head_dim if self.swa_v_head_dim is None else self.swa_v_head_dim
+        # Normalize legacy text-family settings while retaining the original Flash defaults.
+        rope_theta = kwargs.pop("rope_theta", 5_000_000.0)
+        swa_rope_theta = kwargs.pop("swa_rope_theta", 10_000.0)
+        rotary_factor = kwargs.pop("partial_rotary_factor", 0.334)
+        legacy_rope = kwargs.pop("rope_scaling", None)
+        if self.rope_parameters is None or "rope_type" in self.rope_parameters:
+            full_rope = {"rope_type": "default", "rope_theta": rope_theta, "partial_rotary_factor": rotary_factor}
+            full_rope.update(self.rope_parameters or legacy_rope or {})
             self.rope_parameters = {
-                "full_attention": {"rope_type": "default", "rope_theta": 5_000_000.0, "partial_rotary_factor": 0.334},
-                "sliding_attention": {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": 0.334},
+                "full_attention": full_rope,
+                "sliding_attention": {
+                    "rope_type": "default",
+                    "rope_theta": swa_rope_theta,
+                    "partial_rotary_factor": rotary_factor,
+                },
             }
         # BC: The hub config.json stores `routed_scaling_factor` as null
         if self.routed_scaling_factor is None:
@@ -162,7 +211,7 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
         """
         base = config.rope_parameters[layer_type]["rope_theta"]
         partial_rotary_factor = config.rope_parameters[layer_type].get("partial_rotary_factor", 0.334)
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        head_dim = config.swa_head_dim if layer_type == "sliding_attention" else config.head_dim
         dim = int(head_dim * partial_rotary_factor)
 
         attention_factor = 1.0  # Unused in this type of RoPE
@@ -237,21 +286,26 @@ def eager_attention_forward(
 @no_inherit_decorator
 class MiMoV2FlashAttention(Qwen2Attention):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
-        # SWA layers double the kv heads vs full-attention and have attention sinks.
         is_swa = config.layer_types[layer_idx] == "sliding_attention"
-        num_key_value_heads = config.num_key_value_heads * 2 if is_swa else config.num_key_value_heads
-        num_attention_heads = config.num_attention_heads
-        super().__init__(config, layer_idx)
-        self.v_head_dim = config.v_head_dim
+        num_key_value_heads = config.swa_num_key_value_heads if is_swa else config.num_key_value_heads
+        num_attention_heads = config.swa_num_attention_heads if is_swa else config.num_attention_heads
+        nn.Module.__init__(self)
+        self.config = config
+        self.layer_idx = layer_idx
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+        self.sliding_window = config.sliding_window if is_swa else None
+        self.head_dim = config.swa_head_dim if is_swa else config.head_dim
+        self.v_head_dim = config.swa_v_head_dim if is_swa else config.v_head_dim
+        self.scaling = self.head_dim**-0.5
         self.num_key_value_groups = num_attention_heads // num_key_value_heads
 
         self.q_proj = nn.Linear(config.hidden_size, num_attention_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(
-            config.hidden_size, num_key_value_heads * config.v_head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(num_attention_heads * config.v_head_dim, config.hidden_size, bias=False)
-        self.sinks = nn.Parameter(torch.empty(num_attention_heads)) if is_swa else None
+        self.v_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.v_head_dim, bias=config.attention_bias)
+        self.o_proj = nn.Linear(num_attention_heads * self.v_head_dim, config.hidden_size, bias=False)
+        use_sink = config.add_swa_attention_sink_bias if is_swa else config.add_full_attention_sink_bias
+        self.sinks = nn.Parameter(torch.empty(num_attention_heads)) if use_sink else None
         self.v_scale = config.attention_value_scale if config.attention_value_scale is not None else 1.0
 
     def forward(
@@ -311,6 +365,13 @@ class MiMoV2FlashPreTrainedModel(DeepseekV3PreTrainedModel):
     _compatible_flash_implementations = ["flash_attention_4"]
     _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
 
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
+        model = load_original_checkpoint_if_needed(cls, pretrained_model_name_or_path, **kwargs)
+        if model is not None:
+            return model
+        return PreTrainedModel.from_pretrained.__func__(cls, pretrained_model_name_or_path, *model_args, **kwargs)
+
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -333,7 +394,11 @@ class MiMoV2FlashModel(LagunaModel):
 
 
 class MiMoV2FlashForCausalLM(DeepseekV3ForCausalLM):
-    pass
+    @can_return_tuple
+    @auto_docstring(checkpoint="XiaomiMiMo/MiMo-V2-Flash")
+    def forward(self, **super_kwargs):
+        """Run the MiMo V2 text-family language model."""
+        return super().forward(**super_kwargs)
 
 
 __all__ = [

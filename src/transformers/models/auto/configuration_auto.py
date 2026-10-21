@@ -275,6 +275,13 @@ def replace_list_option_in_docstrings(
     return docstring_decorator
 
 
+def _get_mimo_v2_model_type(config_dict):
+    """Resolve legacy MiMo V2 checkpoints from encoder configuration, not their shared architectures string."""
+    return (
+        "mimo_v2_vl" if any(config_dict.get(name) for name in ("vision_config", "audio_config")) else "mimo_v2_flash"
+    )
+
+
 class AutoConfig:
     r"""
     This is a generic configuration class that will be instantiated as one of the configuration classes of the library
@@ -291,6 +298,8 @@ class AutoConfig:
 
     @classmethod
     def for_model(cls, model_type: str, *args, **kwargs) -> PreTrainedConfig:
+        if model_type == "mimo_v2" and model_type not in CONFIG_MAPPING:
+            model_type = _get_mimo_v2_model_type(kwargs)
         if model_type in CONFIG_MAPPING:
             config_class = CONFIG_MAPPING[model_type]
             return config_class(*args, **kwargs)
@@ -395,6 +404,10 @@ class AutoConfig:
         )
 
         config_dict, unused_kwargs = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if config_dict.get("model_type") == "mimo_v2" and "mimo_v2" not in CONFIG_MAPPING:
+            # Released text and multimodal checkpoints share both model_type and architectures.
+            # Encoder configurations, rather than the repository name, identify the multimodal family.
+            config_dict["model_type"] = _get_mimo_v2_model_type(config_dict)
         has_remote_code = "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]
         has_local_code = "model_type" in config_dict and config_dict["model_type"] in CONFIG_MAPPING
         explicit_local_code = has_local_code and not CONFIG_MAPPING[config_dict["model_type"]].__module__.startswith(

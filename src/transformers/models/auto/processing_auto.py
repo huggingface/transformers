@@ -39,6 +39,7 @@ from .auto_mappings import PROCESSOR_MAPPING_NAMES
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
     AutoConfig,
+    _get_mimo_v2_model_type,
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
@@ -68,6 +69,7 @@ else:
             ("lasr_ctc", "LasrProcessor"),
             ("lasr_encoder", "LasrProcessor"),
             ("metaclip_2", "CLIPProcessor"),
+            ("mimo_v2_vl", "MiMoV2Processor"),
             ("mistral3", "PixtralProcessor"),
             ("mm-grounding-dino", "GroundingDinoProcessor"),
             ("modernvbert", "Idefics3Processor"),
@@ -315,6 +317,19 @@ class AutoProcessor:
                 # Config loading failed (unrecognized model_type, invalid config, etc.)
                 # Continue to fallback logic below (AutoTokenizer, AutoImageProcessor, etc.)
                 pass
+
+        if processor_config_file is None and processor_class in ("Qwen2VLProcessor", "Qwen2_5_VLProcessor"):
+            # Legacy MiMo V2 VL repositories declare a Qwen processor in preprocessor_config.json.
+            # An explicit processor_config.json always takes precedence over this compatibility rule.
+            try:
+                model_config_dict, _ = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
+            except OSError:
+                model_config_dict = {}
+            model_type = model_config_dict.get("model_type")
+            if model_type == "mimo_v2_vl" or (
+                model_type == "mimo_v2" and _get_mimo_v2_model_type(model_config_dict) == "mimo_v2_vl"
+            ):
+                processor_class = "MiMoV2Processor"
 
         if processor_class is not None:
             processor_class = processor_class_from_name(processor_class)

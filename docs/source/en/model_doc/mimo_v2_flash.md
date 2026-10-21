@@ -39,6 +39,12 @@ This model was contributed by [casinca](https://huggingface.co/casinca).
 
 ## Usage examples
 
+The native text implementation also supports compatible MiMo V2 text checkpoints such as
+`XiaomiMiMo/MiMo-V2.5-Pro`. [`AutoConfig`] recognizes legacy `model_type="mimo_v2"` configurations without
+vision/audio encoders and selects this family. Pro's layer patterns, sliding-attention head counts, RoPE bases,
+normalization epsilon, and value scaling are taken from its configuration. Original fused QKV weights are
+de-interleaved automatically when loading with [`AutoModelForCausalLM`].
+
 ### Text generation
 
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
@@ -108,6 +114,8 @@ response = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 print(response)
 ```
 
+
+For MiMo V2.6 image, video, and audio understanding, see [MiMo V2 VL](mimo_v2_vl).
 
 ## MiMoV2FlashConfig
 

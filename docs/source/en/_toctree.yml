@@ -777,6 +777,8 @@
         title: MegatronBERT
       - local: model_doc/mellum
         title: Mellum
+      - local: model_doc/mimo_v2_vl
+        title: MiMo V2 VL
       - local: model_doc/mimo_v2_flash
         title: MiMo-V2-Flash
       - local: model_doc/minicpm3
