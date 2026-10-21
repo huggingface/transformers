@@ -317,7 +317,8 @@ class DistMoEStrategy(EpStrategy):
     Dist-MoE (https://github.com/meta-pytorch/dist_moe), whose kernels fuse the token dispatch, the SwiGLU experts and
     the combine, forward and backward. It takes the global expert ids and routing weights as they are and runs the
     experts' own `gate_up_proj` / `down_proj` in bfloat16, so the experts' forward is never called. The ranks of a TP
-    group each send a disjoint slice of the batch they share, as with `AllToAllStrategy`.
+    group each send a disjoint slice of the batch they share, as with `AllToAllStrategy`, so it runs with
+    `ep_size == tp_size` (a shared batch) and `ep_size > tp_size` (ranks holding different batches) alike.
 
     Every rank of the EP group must pass Dist-MoE the same number of tokens: each rank pads its slice to the largest
     one with skipped routes (expert id -1, weight 0). Eagerly, the ranks agree on it with one small all-reduce; under
@@ -570,7 +571,8 @@ class EpDispatchExpertsParallel(MoeExpertsParallel):
     further across the replicas of an expert (the `efsdp` mesh). How the tokens reach them is the strategy's job, named
     by `DistributedConfig.ep_implementation`: `"all_to_all"` sends each (token, expert) pair to the expert's rank,
     `"all_reduce"` masks every rank's experts on a batch the whole EP group holds and sums the outputs, `"deepep"` runs
-    DeepEP's dispatch and combine, and `"auto"` picks among them on every forward. Every strategy runs on the same expert shards, so the choice can change
+    DeepEP's dispatch and combine, `"dist_moe"` runs Dist-MoE's fused dispatch, experts and combine, and `"auto"` picks among all of them but
+    `"dist_moe"` on every forward. Every strategy runs on the same expert shards, so the choice can change
     from one forward to the next.
     """
 
