@@ -16,6 +16,7 @@ Import utilities: Utilities related to imports and our lazy inits.
 """
 
 import functools
+import importlib.abc
 import importlib.machinery
 import importlib.metadata
 import importlib.util
@@ -166,7 +167,7 @@ TORCHAO_MIN_VERSION = "0.15.0"
 COMPRESSED_TENSORS_MIN_VERSION = "0.15.0"
 AUTOROUND_MIN_VERSION = "0.5.0"
 TRITON_MIN_VERSION = "1.0.0"
-KERNELS_MIN_VERSION = "0.17.0"
+KERNELS_MIN_VERSION = "0.17.2"
 KERNELS_MAX_VERSION = "0.18.0"
 MISTRAL_COMMON_MIN_VERSION = "1.11.5"
 
@@ -195,9 +196,9 @@ def is_torch_available() -> bool:
     try:
         is_available, torch_version = _is_package_available("torch", return_version=True)
         parsed_version = version.parse(torch_version)
-        if is_available and parsed_version < version.parse("2.5.0"):
-            logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.5 is required but found {torch_version}")
-        return is_available and version.parse(torch_version) >= version.parse("2.5.0")
+        if is_available and parsed_version < version.parse("2.6.0"):
+            logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.6 is required but found {torch_version}")
+        return is_available and version.parse(torch_version) >= version.parse("2.6.0")
     except packaging.version.InvalidVersion:
         return False
 
@@ -331,12 +332,23 @@ def is_rocm_platform() -> bool:
     return False
 
 
+def get_current_accelerator() -> "torch.device | None":
+    # TODO Remove when our minimum torch version is >= 2.7
+    # This is a workaround for torch 2.6 raising instead of returning None
+    import torch
+
+    try:
+        return torch.accelerator.current_accelerator()
+    except RuntimeError:
+        return None
+
+
 def get_device_type(device: "torch.device | str | None" = None) -> str:
     """Type of a device (the current accelerator by default, else cpu), with AMD GPUs reported as rocm."""
     import torch
 
     if device is None:
-        device = torch.accelerator.current_accelerator() or torch.device("cpu")
+        device = get_current_accelerator() or torch.device("cpu")
     device_type = torch.device(device).type if isinstance(device, str) else device.type
     return "rocm" if device_type == "cuda" and is_rocm_platform() else device_type
 
@@ -615,20 +627,8 @@ def is_torch_neuron_available(check_device: bool = False) -> bool:
 def is_torch_tpu_available(check_device: bool = False) -> bool:
     import torch
 
-    if importlib.util.find_spec("torch_tpu") is None:
-        return False
-
-    if check_device:
-        try:
-            import torch_tpu  # noqa: F401
-
-            if hasattr(torch, "tpu") and torch.tpu.is_available():
-                return torch.tpu.device_count() >= 1
-            return False
-        except RuntimeError:
-            return False
-
-    return hasattr(torch, "tpu") and torch.tpu.is_available()
+    accelerator = get_current_accelerator()
+    return accelerator is not None and accelerator.type == "tpu" and torch.accelerator.is_available()
 
 
 @lru_cache
@@ -761,7 +761,6 @@ def enable_tf32(enable: bool) -> None:
 def is_torch_flex_attn_available() -> bool:
     return (
         is_torch_available()
-        and version.parse(get_torch_version()) >= version.parse("2.5.0")
         # torch's flex_attention refuses TPU tensors; checks the host accelerator, not the model's device
         and get_device_type() != "tpu"
     )
@@ -1061,6 +1060,11 @@ def is_onnxscript_available() -> bool:
 @_make_compile_constant
 def is_openvino_available() -> bool:
     return _is_package_available("openvino")[0]
+
+
+@lru_cache
+def is_nncf_available() -> bool:
+    return _is_package_available("nncf")[0]
 
 
 @lru_cache
@@ -1836,13 +1840,24 @@ def is_cuda_stream_capturing() -> bool:
         return False
 
 
+def is_xpu_stream_capturing() -> bool:
+    try:
+        import torch
+
+        return torch.xpu.is_current_stream_capturing()
+    except Exception:
+        return False
+
+
 def is_tracing(tensor=None) -> bool:
-    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, torch.fx, jax.jit (with torchax) or
-    CUDA stream capturing or FakeTensor"""
+    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, torch.fx, jax.jit (with torchax),
+    accelerator stream capturing or FakeTensor"""
 
     # Note that `is_torchdynamo_compiling` checks both compiling and exporting (the export check is stricter and
     # only checks export)
-    _is_tracing = is_torchdynamo_compiling() or is_jit_tracing() or is_cuda_stream_capturing()
+    _is_tracing = (
+        is_torchdynamo_compiling() or is_jit_tracing() or is_cuda_stream_capturing() or is_xpu_stream_capturing()
+    )
     if tensor is not None:
         _is_tracing |= is_torch_fx_proxy(tensor)
         _is_tracing |= is_fake_tensor(tensor)
@@ -2833,6 +2848,38 @@ class _LazyModule(ModuleType):
 
 class OptionalDependencyNotAvailable(BaseException):
     """Internally used error class for signalling an optional dependency was not found."""
+
+
+class _LegacyModuleAliasFinder(importlib.abc.MetaPathFinder, importlib.abc.Loader):
+    """
+    Serves deprecated module paths as copies of their replacement, created only when actually imported. Nothing is
+    pre-registered in `sys.modules`, so tools that scan it and probe attributes (unittest's `assertWarns`, `pickle`,
+    `inspect`, ...) never trigger imports of optional heavy dependencies.
+    """
+
+    def __init__(self, resolve: Callable[[str], str | None]):
+        self.resolve = resolve  # legacy module name -> replacement module name, `None` if not an alias
+
+    def find_spec(self, fullname, path=None, target=None):
+        replacement = self.resolve(fullname)
+        if replacement is None or importlib.util.find_spec(replacement) is None:
+            return None
+        return importlib.machinery.ModuleSpec(fullname, self, loader_state=replacement)
+
+    def exec_module(self, module):
+        # Import the replacement first: a missing optional dependency fails right here, at the user's import statement.
+        replacement = importlib.import_module(module.__spec__.loader_state)
+        vars(module).update({k: v for k, v in vars(replacement).items() if k == "__all__" or not k.startswith("__")})
+
+        def __getattr__(name):  # `XImageProcessorFast` classes were renamed `XImageProcessor`
+            if name.endswith("ImageProcessorFast") and hasattr(replacement, name[:-4]):
+                logger.warning_once(
+                    f"`{name}` is deprecated, use `{name[:-4]}` from `{replacement.__name__}` instead."
+                )
+                return getattr(replacement, name[:-4])
+            raise AttributeError(f"module {module.__name__!r} has no attribute {name!r}")
+
+        module.__getattr__ = __getattr__
 
 
 def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:

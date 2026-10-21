@@ -738,21 +738,17 @@ class TrainingArguments:
 
         do_train (`bool`, *optional*, defaults to `False`):
             Whether to run training or not. This argument is not directly used by [`Trainer`], it's intended to be used
-            by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
+            by your training/evaluation scripts instead.
         do_eval (`bool`, *optional*):
             Whether to run evaluation on the validation set or not. Will be set to `True` if `eval_strategy` is
             different from `"no"`. This argument is not directly used by [`Trainer`], it's intended to be used by your
-            training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
+            training/evaluation scripts instead.
         do_predict (`bool`, *optional*, defaults to `False`):
             Whether to run predictions on the test set or not. This argument is not directly used by [`Trainer`], it's
-            intended to be used by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
+            intended to be used by your training/evaluation scripts instead.
         resume_from_checkpoint (`str`, *optional*):
             The path to a folder with a valid checkpoint for your model. This argument is not directly used by
-            [`Trainer`], it's intended to be used by your training/evaluation scripts instead. See the [example
-            scripts](https://github.com/huggingface/transformers/tree/main/examples) for more details.
+            [`Trainer`], it's intended to be used by your training/evaluation scripts instead.
     """
 
     # Fields that accept dict values via CLI as JSON strings (e.g., '{"key": "value"}').
@@ -1907,7 +1903,7 @@ class TrainingArguments:
                 torch.neuron.set_device(device)
             elif is_torch_tpu_available():
                 device = torch.device("tpu:0")
-                torch.tpu.set_device(device)
+                torch.accelerator.set_device_index(device)
             else:
                 # Default to cuda:0 (respects CUDA_VISIBLE_DEVICES); nn.DataParallel handles n_gpu > 1
                 device = torch.device(
