@@ -76,9 +76,12 @@ Transformers looks for the toolkit in this order.
 3. `nvcc` on your `PATH`
 4. `/usr/local/cuda`
 
-If DeepGEMM cannot load, Transformers logs a warning once and uses the Triton kernels. Set
-`TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR=1` to always use the Triton kernels for linears. It does not affect the
-`"deepgemm"` experts backend.
+If DeepGEMM cannot load, Transformers logs a warning once and uses the Triton kernels. To always run the linears on
+the Triton kernels, pass `prefer_deepgemm_linear=False`. It does not affect the `"deepgemm"` experts backend.
+
+```py
+quantization_config = Fp8Config(prefer_deepgemm_linear=False)
+```
 
 ## Migrating from FineGrainedFP8Config
 
