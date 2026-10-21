@@ -198,7 +198,7 @@ This section explores some of the specific features of 8-bit quantization, such 
 
 ### Offloading
 
-8-bit models can offload weights between the CPU and GPU to fit very large models into memory. The weights dispatched to the CPU are stored in **float32** and aren't converted to 8-bit. For example, enable offloading for [bigscience/bloom-1b7](https://huggingface.co/bigscience/bloom-1b7) through [`BitsAndBytesConfig`].
+8-bit (and 4-bit) models can offload weights between the CPU and GPU to fit very large models into memory. The weights dispatched to the CPU are stored in **float32** and aren't converted to 8-bit. For example, enable offloading for [bigscience/bloom-1b7](https://huggingface.co/bigscience/bloom-1b7) through [`BitsAndBytesConfig`].
 
 ```py
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
