@@ -142,7 +142,7 @@ class FineGrainedModulesTest(unittest.TestCase):
         model.other = torch.nn.Embedding(8, 4)
         _replace(model, Fp8Config(modules_to_convert=["ngram_embedding", "other"]), ["other"])
         self.assertIsInstance(model.ngram_embedding, fg.FineGrainedEmbedding)
-        self.assertTrue(model.ngram_embedding.tp_uses_local_tensors)
+        self.assertTrue(model.ngram_embedding._hf_quantized_needs_local_tp)
         self.assertIs(type(model.embed_tokens), torch.nn.Embedding)
         self.assertIs(type(model.other), torch.nn.Embedding)
 
