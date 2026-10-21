@@ -211,8 +211,8 @@ class QuantizationConfigMixin:
         Return the config whose loading attributes override this checkpoint config.
 
         `config` is the config passed to `from_pretrained`. Return `None` if it cannot override this one.
-        By default only a config of the same class can. A format may accept others, e.g. an FP8 checkpoint takes
-        `FineGrainedConfig(dequantize=True)`.
+        By default only a config of the same class can. A method may accept others, e.g. a `FineGrainedConfig`
+        checkpoint takes the config of one of its plan entries.
         """
         return config if config.__class__.__name__ == self.__class__.__name__ else None
 
@@ -2206,11 +2206,11 @@ def _config_for_plan(dtype_plan: dict, modules_to_not_convert: list | None) -> Q
 
 class FineGrainedConfig(QuantizationConfigMixin):
     """
-    Configuration for a model whose modules use different fine-grained formats.
+    Configuration for a model whose modules use different quantization methods.
 
-    The `dtype_plan` maps modules to format configs. These are [`Fp8Config`], [`Mxfp8Config`], [`Mxfp4Config`]
-    and [`NVFP4Config`].
-    The other options apply to the whole model. A model in a single format can use that format's config directly.
+    The `dtype_plan` maps modules to the configs of their methods. An entry can be any registered method's config.
+    The other options apply to the whole model. A model in a single method can use that method's config directly.
+    The block-scaled formats are [`Fp8Config`], [`Mxfp8Config`], [`Mxfp4Config`] and [`NVFP4Config`]:
 
     | format    | weights                        | block scales                | a checkpoint that ships it |
     |-----------|--------------------------------|-----------------------------|----------------------------|
@@ -2220,8 +2220,8 @@ class FineGrainedConfig(QuantizationConfigMixin):
     | NVFP4     | E2M1, two values per `int8`    | E4M3 group-16 + fp32 global | `nvidia/GLM-5.2-NVFP4`     |
 
     Args:
-        dtype_plan (`dict[str, BlockScaledConfig]`, *optional*):
-            Maps a module regex to the format config of the modules it matches. A targeted entry wins over the
+        dtype_plan (`dict[str, QuantizationConfigMixin]`, *optional*):
+            Maps a module regex to the config of the modules it matches. A targeted entry wins over the
             `".*"` catch-all. Modules that no entry covers stay in full precision. Entries take no loading options.
             Set `dequantize`, `modules_to_not_convert` and `modules_to_convert` on this config instead.
             On a pre-quantized checkpoint, a passed plan only overrides the activation formats of the checkpoint's
@@ -2229,7 +2229,8 @@ class FineGrainedConfig(QuantizationConfigMixin):
         modules_to_not_convert (`list`, *optional*):
             Modules to keep in full precision.
         modules_to_convert (`list`, *optional*):
-            Embedding tables to quantize, by name suffix. Each gets FP8 rows with one per-tensor scale.
+            Embedding tables to quantize, by name suffix. Each gets FP8 rows with one per-tensor scale. They load
+            through the quantizer of the `".*"` entry.
         dequantize (`bool`, *optional*, defaults to `False`):
             Whether to dequantize the model to full precision while loading.
     """
@@ -2240,7 +2241,7 @@ class FineGrainedConfig(QuantizationConfigMixin):
     def __init__(
         self,
         *,
-        dtype_plan: dict[str, BlockScaledConfig] | None = None,
+        dtype_plan: dict[str, QuantizationConfigMixin] | None = None,
         modules_to_not_convert: list | None = None,
         modules_to_convert: list | None = None,
         dequantize: bool = False,
@@ -2255,21 +2256,18 @@ class FineGrainedConfig(QuantizationConfigMixin):
         self.modules_to_convert = modules_to_convert
         self.dequantize = dequantize
 
-    def _plan_entry(self, pattern: str, entry) -> BlockScaledConfig:
-        """Return `entry` as a format config. An entry read from `config.json` is a dict with its `quant_method`."""
+    def _plan_entry(self, pattern: str, entry) -> QuantizationConfigMixin:
+        """Return `entry` as a config. An entry read from `config.json` is a dict with its `quant_method`."""
+        from ..quantizers.auto import AUTO_QUANTIZATION_CONFIG_MAPPING
+
+        methods = sorted(set(AUTO_QUANTIZATION_CONFIG_MAPPING) - {QuantizationMethod.FINEGRAINED.value})
         if isinstance(entry, dict):
             method = entry.get("quant_method")
-            if method not in BLOCK_SCALED_CONFIGS:
-                raise ValueError(
-                    f"dtype_plan entry {pattern!r} has quant_method {method!r}; an entry is one of "
-                    f"{sorted(BLOCK_SCALED_CONFIGS)}"
-                )
-            entry = BLOCK_SCALED_CONFIGS[method].from_dict(entry)
-        if not isinstance(entry, BlockScaledConfig):
-            raise TypeError(
-                f"dtype_plan entry {pattern!r} is a {type(entry).__name__}; an entry is one of "
-                f"{', '.join(config.__name__ for config in BLOCK_SCALED_CONFIGS.values())}"
-            )
+            if method not in methods:
+                raise ValueError(f"dtype_plan entry {pattern!r} has quant_method {method!r}; it is one of {methods}")
+            entry = AUTO_QUANTIZATION_CONFIG_MAPPING[method].from_dict(entry)
+        if not isinstance(entry, QuantizationConfigMixin) or isinstance(entry, FineGrainedConfig):
+            raise TypeError(f"dtype_plan entry {pattern!r} is a {type(entry).__name__}, not a method's config")
         loading = [name for name in self._entry_loading_options if getattr(entry, name, None)]
         if loading:
             raise ValueError(
@@ -2296,9 +2294,9 @@ class FineGrainedConfig(QuantizationConfigMixin):
         return _loading_attributes(self, **({"dtype_plan": self.dtype_plan} if self.dtype_plan else {}))
 
     def loading_attributes_lender(self, config):
-        # A format config lends its loading options to the plan.
+        # The config of a plan entry's method lends its loading options to the plan.
         # It lends its activation format to the plan entries of the same format.
-        if not isinstance(config, BlockScaledConfig):
+        if not any(type(entry) is type(config) for entry in self.dtype_plan.values()):
             return super().loading_attributes_lender(config)
         entry = copy.copy(config)
         entry.dequantize, entry.modules_to_not_convert = False, None
@@ -2306,9 +2304,9 @@ class FineGrainedConfig(QuantizationConfigMixin):
             entry.modules_to_convert = None
         return FineGrainedConfig(
             dtype_plan={pattern: entry for pattern, own in self.dtype_plan.items() if type(own) is type(config)},
-            modules_to_not_convert=config.modules_to_not_convert,
+            modules_to_not_convert=getattr(config, "modules_to_not_convert", None),
             modules_to_convert=getattr(config, "modules_to_convert", None),
-            dequantize=config.dequantize,
+            dequantize=getattr(config, "dequantize", False),
         )
 
 

@@ -24,7 +24,7 @@ from collections import defaultdict
 import torch
 
 from ...core_model_loading import ConversionOps, Interleave
-from ...quantizers.quantizers_utils import FUSED_STACKS, get_module_from_name, plan_entry_for
+from ...quantizers.quantizers_utils import FUSED_STACKS, get_module_from_name
 from .formats import (
     FP8_DTYPE,
     FP8_MAX,
@@ -71,13 +71,26 @@ def slot_key(key: str, slot: str) -> str:
     return f"{head}{dot}{lookbehind}{slot_name(name.removeprefix(lookbehind), slot)}{anchor}"
 
 
+def owner_of(op, module_name: str):
+    """Return the quantizer that owns `module_name`, or `None`.
+
+    An op that several members of a `FineGrainedHfQuantizer` share has the host as its quantizer. The host names the
+    member.
+    """
+    from ...quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+
+    if isinstance(op.hf_quantizer, FineGrainedHfQuantizer):
+        return op.hf_quantizer.member_for(module_name)
+    return op.hf_quantizer
+
+
 def apply_param_ops(op, model, module, full_name: str, key: str, value, **kwargs) -> dict:
     """Run `{key: value}` through the layout ops of `full_name`. On save, run them in reverse.
 
     Deserialized and on-the-fly quantized tensors go through the same ops.
     """
-    member = op.hf_quantizer.member_of(module) if op.hf_quantizer is not None else None
-    ops = member.get_param_ops(model, full_name) if member is not None else []
+    owner = owner_of(op, full_name.rpartition(".")[0])
+    ops = owner.get_param_ops(model, full_name) if owner is not None else []
     if op.inverse:
         ops = [param_op.reverse_op for param_op in ops[::-1]]
     tensors = {key: value}
@@ -549,7 +562,8 @@ class FineGrainedDequantize(_FineGrainedOp):
         config = self.hf_quantizer.quantization_config
         if full_layer_name is not None:
             module_name = full_layer_name.rpartition(".")[0]
-            config = plan_entry_for(self.hf_quantizer.plan(), module_name)
+            owner = owner_of(self, module_name)
+            config = owner.config_for(module_name) if hasattr(owner, "config_for") else None
         return config
 
     # a converter passes these weights one at a time

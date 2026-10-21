@@ -42,7 +42,7 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
         for name, module in model.named_modules():
             if (
                 isinstance(module, FineGrainedEmbedding)
-                and self.member_of(module) is not None
+                and self.holds(module)
                 and _get_parameter_plan(name, plan, is_weight=False) is not None
             ):
                 # A `(1,)` scale cannot follow a vocab-sharded table
@@ -63,7 +63,7 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
         scalar_scales = [
             f"{name}.{proj}_scale_inv"
             for name, module in model.named_modules()
-            if isinstance(module, FineGrainedExperts) and module.quantization_config is self.quantization_config
+            if isinstance(module, FineGrainedExperts) and self.holds(module)
             for proj in (module.gate_up_name, "down_proj")
         ]
         for converter in converters:

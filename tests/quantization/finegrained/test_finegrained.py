@@ -364,7 +364,7 @@ class FineGrainedPlanTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     FineGrainedConfig(dtype_plan={".*": entry})
         with self.assertRaises(ValueError):
-            FineGrainedConfig(dtype_plan={".*": {"quant_method": "awq"}})
+            FineGrainedConfig(dtype_plan={".*": {"quant_method": "not_a_method"}})
         with self.assertRaises(TypeError):
             FineGrainedConfig(dtype_plan={".*": "fp8"})
 
@@ -373,10 +373,10 @@ class FineGrainedPlanTest(unittest.TestCase):
 
         config = FineGrainedConfig(dtype_plan={r"\.experts($|\.)": NVFP4Config(), ".*": Fp8Config()})
         quantizer = FineGrainedHfQuantizer(config, pre_quantized=False)
-        self.assertEqual([member.pre_quantized for member in quantizer.members()], [False, False])
+        self.assertEqual([member.pre_quantized for member in quantizer.members], [False, False])
 
-    def test_a_loaded_model_is_finished_once_whatever_its_formats(self):
-        """Check that each format checks its modules and disables multi-device DeepGEMM once per load."""
+    def test_each_member_finishes_the_loaded_model_once(self):
+        """Check that each member checks the modules and disables multi-device DeepGEMM once per load."""
         from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 
         for config in (
@@ -392,7 +392,8 @@ class FineGrainedPlanTest(unittest.TestCase):
                     mock.patch.object(fg, "disable_deepgemm_on_multi_device") as deepgemm,
                 ):
                     quantizer._process_model_after_weight_loading(nn.Module())
-                self.assertEqual((checked.call_count, deepgemm.call_count), (1, 1))
+                members = len(getattr(quantizer, "members", [quantizer]))
+                self.assertEqual((checked.call_count, deepgemm.call_count), (members, members))
 
     def test_the_tensor_parallel_plan_resolves_the_experts_entry_for_the_tp_glob(self):
         """Check that intra-expert TP reads the expert scale style from the plan entries under the TP glob.
@@ -493,8 +494,8 @@ class FineGrainedPlanTest(unittest.TestCase):
         ALL_PARALLEL_STYLES["replicate"].shard_param(model.q_proj, "weight_global_scale", mesh=None)
         self.assertIs(model.q_proj.weight_global_scale, scale)
 
-    def test_a_copied_model_finds_its_members_by_config_value(self):
-        """Check that `copy.deepcopy(model)` modules, whose configs are equal copies, still find their member."""
+    def test_a_copied_model_keeps_its_param_ops(self):
+        """Check that `copy.deepcopy(model)` modules, whose configs are equal copies, still get their layout ops."""
         import copy
 
         from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
@@ -503,11 +504,31 @@ class FineGrainedPlanTest(unittest.TestCase):
         model = _conversion_model(quantizer)
         copied = copy.deepcopy(model)
         name = "model.layers.0.mlp.experts.gate_up_proj"
-        ops = [type(op) for op in quantizer.get_param_ops(model, name)]
-        self.assertEqual([type(op) for op in quantizer.get_param_ops(copied, name)], ops)
-        self.assertIsNone(
-            quantizer.member_of(SimpleNamespace(quantization_config=Fp8Config(weight_block_size=(2, 2))))
-        )
+        member = quantizer.member_for("model.layers.0.mlp.experts")
+        ops = [type(op) for op in member.get_param_ops(model, name)]
+        self.assertEqual([type(op) for op in member.get_param_ops(copied, name)], ops)
+
+    def test_an_embedding_table_loads_through_the_member_that_owns_it(self):
+        """Check that a passed table loads through the catch-all's member, and that a targeted entry opts one in."""
+        from transformers import LlamaConfig, LlamaForCausalLM
+        from transformers.integrations.finegrained import FineGrainedEmbedding
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+
+        config = LlamaConfig(hidden_size=64, intermediate_size=64, num_hidden_layers=1, vocab_size=64)
+        per_tensor = Fp8Config(weight_block_size=None)
+        plans = {
+            "passed": FineGrainedConfig(dtype_plan={".*": Fp8Config()}, modules_to_convert=["embed_tokens"]),
+            "targeted": FineGrainedConfig(dtype_plan={"embed_tokens": per_tensor, ".*": Fp8Config()}),
+        }
+        for name, plan in plans.items():
+            with self.subTest(name), torch.device("meta"):
+                model = LlamaForCausalLM(config)
+                FineGrainedHfQuantizer(plan)._process_model_before_weight_loading(model)
+                self.assertIsInstance(model.model.embed_tokens, FineGrainedEmbedding)
+                self.assertNotIsInstance(model.lm_head, FineGrainedEmbedding)
+        with self.assertRaisesRegex(ValueError, "needs a `.\\*` entry"), torch.device("meta"):
+            plan = FineGrainedConfig(dtype_plan={"mlp": Fp8Config()}, modules_to_convert=["embed_tokens"])
+            FineGrainedHfQuantizer(plan)._process_model_before_weight_loading(LlamaForCausalLM(config))
 
 
 @require_torch
@@ -531,8 +552,7 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
             },
         )
         quantizer = FineGrainedHfQuantizer(config)
-        quantizer.pre_quantized = True
-        fp8 = next(member for member in quantizer.members() if member.quantization_config is config.dtype_plan[".*"])
+        fp8 = quantizer.member_for("model.layers.0.self_attn.q_proj")
         model = _conversion_model(quantizer)
         self.assertEqual(fp8._up_projections(model), ())
         conversions = quantizer.update_weight_conversions([], model)

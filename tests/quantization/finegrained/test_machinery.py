@@ -321,16 +321,15 @@ class TestFormatHostTest(_ChainAssertions, unittest.TestCase):
     def test_each_module_is_built_in_its_entrys_format(self):
         quantizer = _quantizer_for(self._plan())
         self.assertIsInstance(quantizer, FineGrainedHfQuantizer)
-        self.assertEqual(
-            sorted(type(member).__name__ for member in quantizer.members()),
-            ["BlockFp8TestQuantizer", "GroupFp4TestQuantizer"],
-        )
+        fp4, fp8 = sorted(quantizer.members, key=lambda member: type(member).__name__ != "GroupFp4TestQuantizer")
+        self.assertEqual((type(fp4), type(fp8)), (GroupFp4TestQuantizer, BlockFp8TestQuantizer))
         with torch.device("meta"):
             model = _MoeModel(_moe_config())
-        quantizer.replace_modules(model)
+        quantizer._process_model_before_weight_loading(model)
         layer = model.model.layers[0]
         self.assertEqual((layer.mlp.experts.weight_format, layer.self_attn.q_proj.weight_format), ("mxfp4", "fp8"))
-        self.assertIs(quantizer.member_of(layer.mlp.experts).quantization_config, quantizer.plan()[EXPERTS])
+        self.assertIs(quantizer.member_for("model.layers.0.mlp.experts"), fp4)
+        self.assertIs(layer.mlp.experts.quantization_config, fp4.quantization_config)
 
     def test_a_plan_round_trips_through_config_json(self):
         config = self._plan(modules_to_not_convert=["lm_head"])

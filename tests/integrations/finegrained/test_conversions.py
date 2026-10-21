@@ -516,7 +516,7 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
                 ),
                 "param_needs_quantization": lambda self, _model, param_name: param_name.endswith("q_proj.weight"),
                 "get_quantize_ops": lambda self: FineGrainedQuantize(self),
-                "member_of": lambda self, _module: None,
+                "get_param_ops": lambda self, _model, _name: [],
                 "pre_quantized": False,
             },
         )

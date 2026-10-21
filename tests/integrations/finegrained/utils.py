@@ -75,12 +75,12 @@ def _tiny_config(config_cls, **overrides):
     return config_cls(**{**defaults, **overrides})
 
 
-def _quantizer_for(config):
+def _quantizer_for(config, **kwargs):
     """Return the quantizer `from_pretrained` picks for this config."""
     from transformers.quantizers.auto import AUTO_QUANTIZER_MAPPING
 
     method = getattr(config.quant_method, "value", config.quant_method)
-    return AUTO_QUANTIZER_MAPPING[method](config)
+    return AUTO_QUANTIZER_MAPPING[method](config, **kwargs)
 
 
 def _replace(model, config, modules_to_not_convert=None):
@@ -231,8 +231,7 @@ def _load_and_save(checkpoint, quantization_config, model=None, mapping=None, pr
     `model` defaults to the tiny MoE.
     Pass `pre_quantized=False` to quantize a full-precision checkpoint. Return `(model, loading_info, saved)`.
     """
-    quantizer = _quantizer_for(quantization_config)
-    quantizer.pre_quantized = pre_quantized
+    quantizer = _quantizer_for(quantization_config, pre_quantized=pre_quantized)
     model = _MoeModel(_moe_config()) if model is None else model
     with mock.patch.object(fg, "is_sm100", return_value=sm100):
         quantizer._process_model_before_weight_loading(model)
