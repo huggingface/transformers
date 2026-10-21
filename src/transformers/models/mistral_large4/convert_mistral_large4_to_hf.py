@@ -30,7 +30,6 @@ HF_TO_VLLM_MAPPING = {
     "text_config.rope_parameters.beta_fast": "yarn.beta",
     "text_config.rope_parameters.beta_slow": "yarn.alpha",
     # Text model: MLA
-    "text_config.q_lora_rank": "q_lora_rank",
     "text_config.kv_lora_rank": "kv_lora_rank",
     "text_config.qk_rope_head_dim": "qk_rope_head_dim",
     "text_config.qk_nope_head_dim": "qk_nope_head_dim",
@@ -59,7 +58,6 @@ HF_TO_VLLM_MAPPING = {
     "vision_config.rope_parameters.rope_theta": "vision_encoder.rope_theta",
 }
 
-
 def recursive_get(d: dict, key: tuple[str, ...]) -> Any:
     # Error case
     if not isinstance(key, tuple) or len(key) == 0:
@@ -84,6 +82,38 @@ def recursive_set(d: dict, key: tuple[str, ...], value: Any) -> None:
         if key[0] not in d:
             d[key[0]] = {}
         recursive_set(d[key[0]], key[1:], value)
+
+
+def format_quantization_config(source: dict) -> dict:
+    # Quantization method
+    qformat_weight = source["qformat_weight"]
+    quant_method = {"fp8_e4m3": "fp8"}[qformat_weight]
+    # Activation scheme
+    qscheme_act = source["qscheme_act"]
+    activation_scheme = {"BLOCK": "dynamic", "NO_SCALES": "dynamic", "TENSOR": "static"}[qscheme_act]
+    # Weight block size
+    block_size_out = source["block_size_out"]
+    block_size_in = source["block_size_in"]
+    weight_block_size = [block_size_out, block_size_in]
+    # Modules not to convert
+    modules_to_not_convert = [
+        "model.vision_tower",
+        "model.multi_modal_projector",
+        "lm_head",
+        "kv_b_proj",
+        "indexer.wk",
+        "indexer.weights_proj"
+    ]
+    if not source["quantize_kv_a"]:
+        modules_to_not_convert.append("kv_a_proj_with_mqa")
+    # Format and return the config
+    return {
+        "quant_method": quant_method,
+        "activation_scheme": activation_scheme,
+        "weight_block_size": weight_block_size,
+        "modules_to_not_convert": modules_to_not_convert,
+    }
+
 
 
 def convert_config(source: dict) -> dict:
@@ -111,9 +141,10 @@ def convert_config(source: dict) -> dict:
         value = recursive_get(source, vllm_key)
         recursive_set(config_dict, hf_key, value)
 
-    # For some parameters, the mapping is more complex, and done here
+    # For some parameters, the mapping is more complex:
+    # ... indexer_types
     config_dict["text_config"]["indexer_types"] = source["dsa"]["sharing"].split(",")
-
+    # ... no_rope_layers
     layers_pe = source["nope"].split(",")
     num_hidden_layers = config_dict["text_config"]["num_hidden_layers"]
     if num_hidden_layers % len(layers_pe) != 0:
@@ -123,17 +154,22 @@ def convert_config(source: dict) -> dict:
     repeats = num_hidden_layers // len(layers_pe)
     no_rope_layers = [{"rope": 1, "nope": 0}[layer_pe] for layer_pe in layers_pe] * repeats
     config_dict["text_config"]["no_rope_layers"] = no_rope_layers
-
+    # ... kv_source_layers
     kv_source_layers = [int(layer_idx) for layer_idx in source["kv_sharing"]["source_layers_str"].split(",")]
     if len(kv_source_layers) != num_hidden_layers:
         raise ValueError(
             f"kv_sharing.source_layers_str has {len(kv_source_layers)} entries, expected {num_hidden_layers}"
         )
     config_dict["text_config"]["kv_source_layers"] = kv_source_layers
-
+    # ... mlp_layer_types
     first_k_dense_replace = source["moe"]["first_k_dense_replace"]
     mlp_layer_types = ["dense"] * first_k_dense_replace + ["sparse"] * (num_hidden_layers - first_k_dense_replace)
     config_dict["text_config"]["mlp_layer_types"] = mlp_layer_types
+
+    # If there is a quantization config in the source, transfer it to the config
+    if "quantization" in source:
+        config_dict["quantization_config"] = format_quantization_config(source["quantization"])
+
     return config_dict
 
 
@@ -150,31 +186,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     input_dir = Path(args.input_dir)
+    output_dir = Path(args.output_dir) if args.output_dir is not None else input_dir
+
     config_path = input_dir / args.config_name
     with open(config_path, encoding="utf-8") as f:
         params = json.load(f)
-    config = convert_config(params)
+    config_dict = convert_config(params)
 
-    # Compare the keys of the config to the reference, recursively
-    def flatten_keys(d: str | dict):
-        if isinstance(d, str):
-            return [d]
-        flattened = []
-        for key, value in d.items():
-            if isinstance(value, dict):
-                flattened += [f"{key}.{x}" for x in flatten_keys(value)]
-            else:
-                flattened.append(key)
-        return flattened
+    with open(output_dir / "config.json", "w", encoding="utf-8") as f:
+        json.dump(config_dict, f, indent=4)
 
-    reference = json.loads(MistralLarge4Config().to_json_string())
-    with open("reference.json", "w", encoding="utf-8") as f:
-        json.dump(reference, f, indent=4)
 
-    reference_keys = set(flatten_keys(reference))
-    config_keys = set(flatten_keys(config))
 
-    missing_keys = reference_keys - config_keys
-    print("\nMissing keys:")
-    for key in missing_keys:
-        print(f"  {key}")
+##################################################
+
+    cfg = MistralLarge4Config(**config_dict)
