@@ -19,20 +19,18 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring
 from ..gemma3.modeling_gemma3 import Gemma3TextScaledWordEmbedding
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
-    LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaPreTrainedModel,
 )
-from ..minicpm3.modeling_minicpm3 import MiniCPM3Model
+from ..minicpm3.modeling_minicpm3 import MiniCPM3ForCausalLM, MiniCPM3Model
 from ..olmo.modeling_olmo import OlmoRotaryEmbedding, apply_rotary_pos_emb  # noqa: F401
 
 
@@ -143,22 +141,8 @@ class MiniCPM4Model(MiniCPM3Model):
     pass
 
 
-@auto_docstring
-class MiniCPM4ForCausalLM(LlamaForCausalLM):
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+class MiniCPM4ForCausalLM(MiniCPM3ForCausalLM):
+    def forward(self, **super_kwargs):
         r"""
         Example:
 
@@ -172,33 +156,8 @@ class MiniCPM4ForCausalLM(LlamaForCausalLM):
         >>> inputs = tokenizer(prompt, return_tensors="pt")
         >>> generate_ids = model.generate(**inputs, max_new_tokens=10)
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True)[0]
-        ```
-        """
-        outputs: BaseModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state / self.config.logits_scaling
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :]).float()
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        ```"""
+        return super().forward(**super_kwargs)
 
 
 class MiniCPM4ForSequenceClassification(LlamaForSequenceClassification):
