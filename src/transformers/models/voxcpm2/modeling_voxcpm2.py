@@ -895,9 +895,8 @@ class VoxCPM2BackboneModel(VoxCPM2PreTrainedModel):
 
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            position_ids = (
-                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            ).unsqueeze(0)
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         # CODEPATH: VoxCPM2 local encoder / local DiT are bidirectional, base and residual LMs are causal.
         if self.config.use_bidirectional_attention:
