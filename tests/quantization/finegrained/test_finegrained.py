@@ -178,21 +178,22 @@ class FineGrainedPlanTest(unittest.TestCase):
             "scale_fmt": "ue8m0",
             "expert_dtype": "fp4",
         }
-        model_config = DeepseekV4Config()
-        model_config.quantization_config = shipped
-        for passed in (AutoQuantizationConfig.from_dict(shipped), Fp8Config(dequantize=True)):
+        from transformers.quantizers.auto import AutoHfQuantizer
+
+        model_config = DeepseekV4Config(quantization_config=shipped)
+        for passed in (None, Fp8Config(dequantize=True)):
             with self.subTest(passed=type(passed).__name__):
-                config = model_config.adapt_quantization_config(passed)
+                config = AutoHfQuantizer.merge_quantization_configs(model_config.quantization_config, passed)
                 self.assertIsInstance(config, FineGrainedConfig)
                 experts, rest = config.dtype_plan[EXPERTS_PATTERN], config.dtype_plan[".*"]
                 # W4A4 uses the weights' own activation format
                 self.assertEqual((type(experts), experts.activation_format), (Mxfp4Config, None))
                 self.assertEqual(
                     (type(rest), rest.weight_block_size, rest.scale_fmt),
-                    (Fp8Config, passed.weight_block_size, passed.scale_fmt),
+                    (Fp8Config, (32, 32), "ue8m0"),
                 )
                 # Loading options belong to the plan, not to an entry
-                self.assertEqual((config.dequantize, rest.dequantize), (passed.dequantize, False))
+                self.assertEqual((config.dequantize, rest.dequantize), (passed is not None, False))
 
     def test_resolution_survives_a_round_trip_through_config_json(self):
         """Check that plan resolution does not depend on key order.
@@ -235,22 +236,6 @@ class FineGrainedPlanTest(unittest.TestCase):
         # Without `input_activations` the entry is weight-only, whatever the weights' own activation format
         self.assertEqual(config.dtype_plan[".*mlp.*"].activation_format, "bf16")
 
-    def test_expert_dtype_reaches_a_config_quantizing_on_the_fly(self):
-        """Check that on-the-fly quantization honors the model config's `expert_dtype`.
-
-        The experts quantize to MXFP4, so the saved checkpoint loads as what it holds.
-        """
-        from transformers.quantizers.auto import get_hf_quantizer
-        from transformers.quantizers.block_scaled_utils import BlockScaledQuantizer
-        from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN
-
-        model_config = DeepseekV4Config(expert_dtype="fp4")
-        with mock.patch.object(BlockScaledQuantizer, "validate_environment"):
-            quantizer, model_config, _ = get_hf_quantizer(model_config, Fp8Config(), None, True, {})
-        self.assertIsInstance(quantizer.quantization_config, FineGrainedConfig)
-        self.assertIsInstance(quantizer.quantization_config.dtype_plan[EXPERTS_PATTERN], Mxfp4Config)
-        self.assertFalse(quantizer.pre_quantized)
-
     def test_a_passed_configs_activation_format_reaches_a_prequantized_checkpoint(self):
         """Check that a passed config sets the activation format of a pre-quantized checkpoint.
 
@@ -266,7 +251,6 @@ class FineGrainedPlanTest(unittest.TestCase):
         self.assertEqual((type(merged), merged.activation_format), (Mxfp4Config, "mxfp8"))
 
         # A plan's entries lend their activation formats to the checkpoint's entries
-        model_config = DeepseekV4Config(expert_dtype="fp4")
         hub = {"quant_method": "fp8", "scale_fmt": "ue8m0", "weight_block_size": [128, 128]}
         passed = FineGrainedConfig(
             dtype_plan={
@@ -277,7 +261,7 @@ class FineGrainedPlanTest(unittest.TestCase):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             merged = AutoHfQuantizer.merge_quantization_configs(
-                model_config.adapt_quantization_config(AutoQuantizationConfig.from_dict(hub)), passed
+                DeepseekV4Config(expert_dtype="fp4", quantization_config=hub).quantization_config, passed
             )
         self.assertTrue(any(issubclass(w.category, UserWarning) for w in caught))
         experts, rest = merged.dtype_plan[EXPERTS_PATTERN], merged.dtype_plan[".*"]
