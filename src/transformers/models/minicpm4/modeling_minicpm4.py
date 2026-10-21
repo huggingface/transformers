@@ -22,7 +22,7 @@ import math
 from collections.abc import Callable
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -40,20 +40,6 @@ from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_minicpm4 import MiniCPM4Config
-
-
-class MiniCPM4ScaledWordEmbedding(nn.Embedding):
-    """
-    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
-    """
-
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
-        super().__init__(num_embeddings, embedding_dim, padding_idx)
-        self.scalar_embed_scale = embed_scale
-        self.embed_scale = nn.Buffer(torch.tensor(embed_scale), persistent=False)
-
-    def forward(self, input_ids: torch.Tensor):
-        return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
 
 
 class MiniCPM4RotaryEmbedding(nn.Module):
@@ -295,6 +281,8 @@ class MiniCPM4DecoderLayer(GradientCheckpointingLayer):
         self.mlp = MiniCPM4MLP(config)
         self.input_layernorm = MiniCPM4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiniCPM4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        # MiniCPM4 multiplies each residual branch by `scale_depth / sqrt(num_hidden_layers)`
+        # (Llama adds the branch directly). Precompute the constant once instead of per forward.
         self.residual_scale = config.scale_depth / math.sqrt(config.num_hidden_layers)
 
     def forward(
@@ -325,6 +313,20 @@ class MiniCPM4DecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states * self.residual_scale
         return hidden_states
+
+
+class MiniCPM4ScaledWordEmbedding(nn.Embedding):
+    """
+    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
+    """
+
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
+        super().__init__(num_embeddings, embedding_dim, padding_idx)
+        self.scalar_embed_scale = embed_scale
+        self.embed_scale = nn.Buffer(torch.tensor(embed_scale), persistent=False)
+
+    def forward(self, input_ids: torch.Tensor):
+        return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
 
 
 @auto_docstring

@@ -14,25 +14,17 @@
 
 import math
 
-import torch
 from huggingface_hub.dataclasses import strict
 
-from ... import initialization as init
-from ...cache_utils import Cache
-from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
-from ..gemma3.modeling_gemma3 import Gemma3TextScaledWordEmbedding
+from ...utils import auto_docstring
 from ..llama.configuration_llama import LlamaConfig
-from ..llama.modeling_llama import (
-    LlamaAttention,
-    LlamaDecoderLayer,
-    LlamaPreTrainedModel,
-)
+from ..llama.modeling_llama import LlamaAttention
 from ..minicpm3.modeling_minicpm3 import (
+    MiniCPM3DecoderLayer,
     MiniCPM3ForCausalLM,
     MiniCPM3ForSequenceClassification,
     MiniCPM3Model,
+    MiniCPM3PreTrainedModel,
 )
 from ..olmo.modeling_olmo import OlmoRotaryEmbedding, apply_rotary_pos_emb  # noqa: F401
 
@@ -85,10 +77,6 @@ class MiniCPM4Config(LlamaConfig):
         return self.hidden_size / self.dim_model_base
 
 
-class MiniCPM4ScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
-    pass
-
-
 class MiniCPM4RotaryEmbedding(OlmoRotaryEmbedding):
     pass
 
@@ -97,47 +85,12 @@ class MiniCPM4Attention(LlamaAttention):
     pass
 
 
-class MiniCPM4DecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: MiniCPM4Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.residual_scale = config.scale_depth / math.sqrt(config.num_hidden_layers)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states * self.residual_scale
-
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states * self.residual_scale
-        return hidden_states
+class MiniCPM4DecoderLayer(MiniCPM3DecoderLayer):
+    pass
 
 
-class MiniCPM4PreTrainedModel(LlamaPreTrainedModel):
-    @torch.no_grad()
-    def _init_weights(self, module):
-        PreTrainedModel._init_weights(self, module)
-        if isinstance(module, MiniCPM4ScaledWordEmbedding):
-            init.constant_(module.embed_scale, module.scalar_embed_scale)
+class MiniCPM4PreTrainedModel(MiniCPM3PreTrainedModel):
+    pass
 
 
 class MiniCPM4Model(MiniCPM3Model):
