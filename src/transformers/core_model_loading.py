@@ -1724,14 +1724,11 @@ def convert_and_load_state_dict_in_model(
             if hf_quantizer and hf_quantizer.pre_quantized:
                 _dtype = hf_quantizer.get_new_dtype(mapping, tensor, _dtype)
 
-            # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
-            # distributed op selects whole experts. The signal is a `MergeModulelist`
-            # in the chain; it isn't always `operations[0]` (e.g. an FP8 quantizer
-            # prepends a scale-decode op), so scan the whole chain rather than just the head.
+            # A converter collects its checkpoint tensors into lists (e.g. one tensor per expert); the position in
+            # the list lets the sharding op tell which slice of the param each one is
             tensor_idx = (
                 len(mapping.collected_tensors.get(source_pattern, []))
                 if isinstance(mapping, WeightConverter)
-                and any(isinstance(op, MergeModulelist) for op in mapping.operations)
                 else None
             )
 

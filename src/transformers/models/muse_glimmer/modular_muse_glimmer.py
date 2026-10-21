@@ -585,7 +585,6 @@ class MuseGlimmerTextConfig(Gemma2Config, PreTrainedConfig):
 
     model_type = "muse_glimmer_text"
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
@@ -1067,6 +1066,8 @@ class MuseGlimmerVisionAdapter(nn.Module):
 
 
 class MuseGlimmerModel(Kimi_K25Model):
+    input_modalities = ("image", "video", "text")
+
     def __init__(self, config: MuseGlimmerConfig):
         super().__init__(config)
         del self.mm_projector
@@ -1094,6 +1095,7 @@ class MuseGlimmerModel(Kimi_K25Model):
 
 
 class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
+    input_modalities = ("image", "video", "text")
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def forward(

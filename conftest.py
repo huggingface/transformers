@@ -45,6 +45,10 @@ from transformers.utils.network_logging import register_network_debug_plugin
 
 
 _ci_fallback_cache_dir = None
+# Repos that already fell back to `_ci_fallback_cache_dir` in this process. Later lookups for
+# them must go to the tmp cache first: their files are not in the read-only shared cache, so
+# e.g. a `local_files_only=True` reload would otherwise fail to find them.
+_ci_fallback_repo_ids = set()
 # Directory holding one append-only file per process recording the repo/file id for every
 # call retried through the read-only cache fallback. A directory (rather than an in-memory
 # list) is used so the count survives `pytest-xdist`: tests run in worker subprocesses, but
@@ -123,8 +127,28 @@ def _with_tmpdir_cache_fallback(fn):
     `HF_XET_CACHE` is still redirected too, as a belt-and-suspenders measure.
     """
 
+    def call_with_fallback_cache(args, kwargs):
+        import huggingface_hub.constants as hf_constants
+
+        with (
+            mock.patch.object(hf_constants, "HF_HUB_DISABLE_XET", True),
+            mock.patch.dict(os.environ, {"HF_HUB_DISABLE_XET": "1"}),
+            mock.patch.object(hf_constants, "HF_XET_CACHE", _ci_fallback_cache_dir),
+            mock.patch.dict(os.environ, {"HF_XET_CACHE": _ci_fallback_cache_dir}),
+        ):
+            return fn(*args, **{**kwargs, "cache_dir": _ci_fallback_cache_dir})
+
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
+        # `cached_files` names it `path_or_repo_id`; `hf_hub_download` names it `repo_id`.
+        repo_id = str(kwargs.get("path_or_repo_id") or kwargs.get("repo_id") or (args[0] if args else "?"))
+        if repo_id in _ci_fallback_repo_ids and kwargs.get("cache_dir") is None:
+            try:
+                return call_with_fallback_cache(args, kwargs)
+            except (OSError, RuntimeError):
+                # The repo may be split across both caches (only some files were new); fall
+                # through to the shared cache, which retries via the tmp dir again on EROFS.
+                pass
         try:
             return fn(*args, **kwargs)
         except (OSError, RuntimeError) as e:
@@ -133,9 +157,8 @@ def _with_tmpdir_cache_fallback(fn):
             global _ci_fallback_cache_dir
             if _ci_fallback_cache_dir is None:
                 _ci_fallback_cache_dir = tempfile.mkdtemp(prefix="ci_fallback_tmpdir_cache_dir_")
-            # `cached_files` names it `path_or_repo_id`; `hf_hub_download` names it `repo_id`.
-            repo_id = kwargs.get("path_or_repo_id") or kwargs.get("repo_id") or (args[0] if args else "?")
-            _record_fallback_event(str(repo_id))
+            _ci_fallback_repo_ids.add(repo_id)
+            _record_fallback_event(repo_id)
             # Emit a marker as well; captured per-test by pytest, but the guaranteed-visible
             # count is reported in `pytest_terminal_summary` at the end of the run.
             print(
@@ -144,16 +167,28 @@ def _with_tmpdir_cache_fallback(fn):
                 file=sys.stderr,
                 flush=True,
             )
-            import huggingface_hub.constants as hf_constants
+            return call_with_fallback_cache(args, kwargs)
 
-            with (
-                mock.patch.object(hf_constants, "HF_HUB_DISABLE_XET", True),
-                mock.patch.dict(os.environ, {"HF_HUB_DISABLE_XET": "1"}),
-                mock.patch.object(hf_constants, "HF_XET_CACHE", _ci_fallback_cache_dir),
-                mock.patch.dict(os.environ, {"HF_XET_CACHE": _ci_fallback_cache_dir}),
-            ):
-                return fn(*args, **{**kwargs, "cache_dir": _ci_fallback_cache_dir})
+    return wrapper
 
+
+def _with_fallback_cache_revision(resolve_revision):
+    """Decorator for `HfApi.resolve_revision` that resolves repos which already fell back
+    against `_ci_fallback_cache_dir`.
+
+    `from_pretrained` resolves the revision once before downloading anything. Offline (e.g.
+    `local_files_only=True`), it reads `refs/<revision>` from the cache, and the read-only shared
+    cache may point to an older commit than the one the fallback downloaded into the tmp cache,
+    so the tmp cache lookups would then miss.
+    """
+
+    @functools.wraps(resolve_revision)
+    def wrapper(self, repo_id, *args, **kwargs):
+        if repo_id in _ci_fallback_repo_ids and kwargs.get("cache_dir") is None:
+            kwargs = {**kwargs, "cache_dir": _ci_fallback_cache_dir}
+        return resolve_revision(self, repo_id, *args, **kwargs)
+
+    wrapper._ci_fallback_wrapped = True
     return wrapper
 
 
@@ -228,6 +263,13 @@ def pytest_configure(config):
     import transformers.utils.hub as _hub
 
     _hub.cached_files = _with_tmpdir_cache_fallback(_hub.cached_files)
+
+    # `transformers.utils.hub.resolve_revision` is imported by name in many modules, but all of
+    # them go through `HfApi.resolve_revision`, so patch the method once.
+    from huggingface_hub import HfApi
+
+    if not getattr(HfApi.resolve_revision, "_ci_fallback_wrapped", False):
+        HfApi.resolve_revision = _with_fallback_cache_revision(HfApi.resolve_revision)
 
     # `cached_files` is transformers' entry point, but libraries such as PEFT call
     # `huggingface_hub.hf_hub_download` directly (e.g. PeftConfig.from_pretrained fetching

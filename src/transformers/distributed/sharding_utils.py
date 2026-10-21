@@ -85,7 +85,7 @@ class DtensorShardOperation:
 
     2. One tensor per expert:  the checkpoint has a separate key for each expert (expert 0, expert 1, …), each shaped [in, out].
        The weight loader feeds them in one at a time. If this rank doesn't own a given expert,
-       we skip it. Later, `MergeModulelist` will stack the owned expert we kept to create the rank's local shard
+       we skip it. Later, the converter (e.g. `MergeModulelist`) stacks the owned experts we kept into the rank's local shard
     """
 
     def __init__(self, param: DTensor):
@@ -97,6 +97,7 @@ class DtensorShardOperation:
         # [_axis0_offset, _axis0_offset + _axis0_local_size)
         self._axis0_offset = offsets[0]
         self._axis0_local_size = local_shape[0]
+        self._axis0_size = param.shape[0]
 
     def shard_tensor(
         self, source: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
@@ -105,14 +106,15 @@ class DtensorShardOperation:
 
         Two layouts (example param shape [N, in, out]):
 
-        - tensor_idx is None: one stacked [N, in, out] tensor;
-          slice every sharded dim (including axis 0).
-        - tensor_idx given: one [in, out] tensor per expert;
-          return None if this rank does not own that expert, else slice
-          inner dims only. Surviving pieces are stacked by MergeModulelist
-          into this rank's local [n_local, in, out] shard.
+        - a stacked [N, in, out] tensor: slice every sharded dim (including axis 0).
+        - one [in, out] slice of axis 0 (e.g. one expert), the `tensor_idx`-th of the list a converter collects:
+          return None if this rank does not own that slice, else slice inner dims only. Surviving slices are
+          stacked by the converter into this rank's local [n_local, in, out] shard. A list can fill several params
+          of the same axis-0 size back to back (e.g. text then vision experts as in ernie), so `tensor_idx` wraps around it.
         """
         source_shape = list(source.shape) if isinstance(source, torch.Tensor) else source.get_shape()
+        if tensor_idx is not None and len(source_shape) != self.param_ndim - 1:
+            tensor_idx = None  # not a slice of axis 0, the list holds whole tensors
         dim_placements = [
             (mesh_dim, placement) for mesh_dim, placement in enumerate(self.placements) if hasattr(placement, "dim")
         ]
@@ -165,6 +167,7 @@ class DtensorShardOperation:
 
         # if this rank owns expert `tensor_idx` along axis 0, we need to slice the inner dimensions, else we drop it
         has_axis0_shard = any(param_dim == 0 for _, _, param_dim in normalized_dim_placements)
+        tensor_idx %= self._axis0_size
         owns_tensor_idx = self._axis0_offset <= tensor_idx < self._axis0_offset + self._axis0_local_size
         if has_axis0_shard and not owns_tensor_idx:
             return None

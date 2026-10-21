@@ -390,7 +390,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
             "defaults": {"role": "assistant"},
             "start_anchor": "<start_of_turn>model\n",
             "fields": {
-                "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
+                "reasoning_content": {"open": "<think>", "close": "</think>", "content": "text"},
                 "content": {"close": "<end_of_turn>", "content": "text"},
             },
         }
@@ -405,14 +405,14 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         outputs = pipe(text=messages, generate_kwargs={"do_sample": False})
         parsed_message = outputs[0]["generated_text"][-1]
         # The model never emits </think> here, so everything it generates stays inside the
-        # `thinking` region opened by the chat template in the prompt. Without `prefix=`,
+        # `reasoning_content` region opened by the chat template in the prompt. Without `prefix=`,
         # the parser would never see the opening <think> and would mis-route the generated
         # text into `content` instead.
         self.assertEqual(parsed_message["role"], "assistant")
-        self.assertIn("thinking", parsed_message)
+        self.assertIn("reasoning_content", parsed_message)
         self.assertNotIn("content", parsed_message)
-        self.assertIsInstance(parsed_message["thinking"], str)
-        self.assertGreater(len(parsed_message["thinking"]), 0)
+        self.assertIsInstance(parsed_message["reasoning_content"], str)
+        self.assertGreater(len(parsed_message["reasoning_content"]), 0)
 
     @slow
     def test_small_model_pt_token_audio_input(self):

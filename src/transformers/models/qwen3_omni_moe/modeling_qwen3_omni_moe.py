@@ -848,7 +848,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         hidden_states = self.proj1(hidden_states)
         hidden_states = self.act(hidden_states)
         hidden_states = self.proj2(hidden_states)
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states)
 
 
 def rotate_half(x):
@@ -1753,87 +1753,14 @@ class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
     rope_deltas: torch.LongTensor | None = None
 
 
-def load_balancing_loss_func(
-    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
-    num_experts: int | None = None,
-    top_k=2,
-    attention_mask: torch.Tensor | None = None,
-) -> torch.Tensor | int:
-    r"""
-    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
-
-    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
-    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
-    experts is too unbalanced.
-
-    Args:
-        gate_logits:
-            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
-            shape [batch_size X sequence_length, num_experts].
-        num_experts:
-            Number of experts
-        top_k:
-            The number of experts to route per-token, can be also interpreted as the `top-k` routing
-            parameter.
-        attention_mask (`torch.Tensor`, *optional*):
-            The attention_mask used in forward function
-            shape [batch_size X sequence_length] if not None.
-
-    Returns:
-        The auxiliary loss.
-    """
-    if gate_logits is None or not isinstance(gate_logits, tuple):
-        return 0
-
-    # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
-    # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
-    compute_device = gate_logits[0].device
-    tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
-    router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
-    total_rows = 0.0
-
-    if attention_mask is not None:
-        # The same flat mask applies to every layer's [batch_size * sequence_length] rows.
-        flat_mask = attention_mask.reshape(-1).to(device=compute_device, dtype=torch.float32)
-
-    for layer_gate in gate_logits:
-        routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
-        _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
-        if attention_mask is None:
-            # Count of top-k assignments per expert
-            tokens_per_expert_sum = (
-                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
-            )
-            # Sum of routing probabilities per expert
-            router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
-            total_rows = total_rows + routing_weights.shape[0]
-        else:
-            # Same reductions, weighted by the attention mask to exclude padding tokens
-            tokens_per_expert_sum = tokens_per_expert_sum + torch.zeros(
-                num_experts, dtype=torch.float32, device=compute_device
-            ).scatter_add_(0, selected_experts.reshape(-1), flat_mask.repeat_interleave(top_k))
-            router_prob_sum = router_prob_sum + (routing_weights.float() * flat_mask.unsqueeze(-1)).sum(dim=0)
-            total_rows = total_rows + flat_mask.sum()
-
-    tokens_per_expert = tokens_per_expert_sum / total_rows
-    router_prob_per_expert = router_prob_sum / total_rows
-
-    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
-    return overall_loss * num_experts
-
-
 @auto_docstring(
     custom_intro="""
     The Qwen2.5OmniThinker model which consists of an audio backbone and a language model.
     """
 )
-class Qwen3OmniMoeThinkerForConditionalGeneration(
-    Qwen3OmniMoePreTrainedModelForConditionalGeneration, GenerationMixin
-):
+class Qwen3OmniMoeThinkerModel(Qwen3OmniMoePreTrainedModelForConditionalGeneration):
     config: Qwen3OmniMoeThinkerConfig
-    base_model_prefix = "thinker"
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
-    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _keys_to_ignore_on_load_unexpected = [r"^talker", r"^code2wav"]
     _no_split_modules = [
         "Qwen3OmniMoeAudioEncoder",
         "Qwen3OmniMoeVisionEncoder",
@@ -1846,30 +1773,14 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         "router_logits": OutputRecorder(Qwen3OmniMoeThinkerTextTopKRouter, index=0),
     }
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3OmniMoeThinkerConfig):
         super().__init__(config)
         self.audio_tower = Qwen3OmniMoeAudioEncoder._from_config(config.audio_config)
         self.visual = Qwen3OmniMoeVisionEncoder._from_config(config.vision_config)
-        self.vocab_size = config.text_config.vocab_size
-        self.model = Qwen3OmniMoeThinkerTextModel._from_config(config.text_config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.language_model = Qwen3OmniMoeThinkerTextModel._from_config(config.text_config)
         self.spatial_merge_size = config.vision_config.spatial_merge_size
         self.rope_deltas = None
-        self.num_experts = config.text_config.num_experts
-        self.num_experts_per_tok = config.text_config.num_experts_per_tok
-        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_decoder(self):
-        # `base_model_prefix = "thinker"` means `self.base_model` falls back to `self`, so
-        # the default `get_decoder` can't find the LLM. The text model lives on `self.model`.
-        return self.model
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -2046,14 +1957,13 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         position_ids=None,
         past_key_values=None,
         inputs_embeds=None,
-        labels=None,
         use_cache=None,
         output_router_logits: bool | None = None,
         use_audio_in_video=None,
         video_second_per_grid=None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | Qwen3OmniMoeThinkerCausalLMOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         r"""
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
@@ -2066,39 +1976,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
         video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
             Number of seconds per grid for each video, used for temporal feature mapping.
-
-        Example:
-
-        ```python
-        >>> from io import BytesIO
-        >>> from urllib.request import urlopen
-        >>> import librosa
-        >>> from qwen_vl_utils import process_vision_info
-        >>> from transformers import Qwen3OmniMoeProcessor, Qwen3OmniMoeThinkerForConditionalGeneration
-
-        >>> thinker = Qwen3OmniMoeThinkerForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-Omni-7B")
-        >>> processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
-
-        >>> conversations = [
-        >>>         {'role': 'system', 'content': 'You are a helpful voice chat bot, and please respond to me in a casual conversation manner using random voice.'},
-        >>>         {"role": "user", "content": [
-        >>>             {"type": "image", "image_url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-        >>>             {"type": "audio", "audio_url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"},
-        >>>         ]},
-        >>> ]
-
-        >>> text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-        >>> audios = [ librosa.load(BytesIO(urlopen( conversations[1]['content'][1]['audio_url'] ).read()), sr=self.processor.feature_extractor.sampling_rate) ]
-        >>> images, videos = process_vision_info(conversations)
-        >>> inputs = processor(text=text, audio=audios, images=images, videos=videos, return_tensors="pt", padding=True)
-
-        >>> # Generate
-        >>> inputs['use_audio_in_video'] = `True` or `False`
-        >>> generation = thinker.generate(**inputs, max_new_tokens=2048)
-        >>> generate_ids = generation[:, inputs.input_ids.size(1):]
-
-        >>> response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        ```"""
+        """
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
@@ -2196,7 +2074,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
                 video_second_per_grid=video_second_per_grid,
             )
 
-        outputs = self.model(
+        outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -2205,6 +2083,238 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             output_router_logits=output_router_logits,
             deepstack_visual_embeds=visual_embeds_multiscale,
             visual_pos_masks=visual_pos_masks,
+            **kwargs,
+        )
+
+        return MoeModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            past_key_values=outputs.past_key_values,
+            router_logits=outputs.router_logits,
+        )
+
+
+def load_balancing_loss_func(
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts: int | None = None,
+    top_k=2,
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor | int:
+    r"""
+    Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
+
+    See Switch Transformer (https://huggingface.co/papers/2101.03961) for more details. This function implements the loss
+    function presented in equations (4) - (6) of the paper. It aims at penalizing cases where the routing between
+    experts is too unbalanced.
+
+    Args:
+        gate_logits:
+            Logits from the `gate`, should be a tuple of model.config.num_hidden_layers tensors of
+            shape [batch_size X sequence_length, num_experts].
+        num_experts:
+            Number of experts
+        top_k:
+            The number of experts to route per-token, can be also interpreted as the `top-k` routing
+            parameter.
+        attention_mask (`torch.Tensor`, *optional*):
+            The attention_mask used in forward function
+            shape [batch_size X sequence_length] if not None.
+
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple):
+        return 0
+
+    # Accumulate assignment counts and probability sums layer by layer, normalizing at the end,
+    # so peak memory stays O(seq_len * num_experts) regardless of the number of layers.
+    compute_device = gate_logits[0].device
+    tokens_per_expert_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    router_prob_sum = torch.zeros(num_experts, dtype=torch.float32, device=compute_device)
+    total_rows = 0.0
+
+    if attention_mask is not None:
+        # The same flat mask applies to every layer's [batch_size * sequence_length] rows.
+        flat_mask = attention_mask.reshape(-1).to(device=compute_device, dtype=torch.float32)
+
+    for layer_gate in gate_logits:
+        routing_weights = torch.nn.functional.softmax(layer_gate.to(compute_device), dim=-1)
+        _, selected_experts = torch.topk(routing_weights, top_k, dim=-1)
+        if attention_mask is None:
+            # Count of top-k assignments per expert
+            tokens_per_expert_sum = (
+                tokens_per_expert_sum + torch.bincount(selected_experts.reshape(-1), minlength=num_experts).float()
+            )
+            # Sum of routing probabilities per expert
+            router_prob_sum = router_prob_sum + routing_weights.float().sum(dim=0)
+            total_rows = total_rows + routing_weights.shape[0]
+        else:
+            # Same reductions, weighted by the attention mask to exclude padding tokens
+            tokens_per_expert_sum = tokens_per_expert_sum + torch.zeros(
+                num_experts, dtype=torch.float32, device=compute_device
+            ).scatter_add_(0, selected_experts.reshape(-1), flat_mask.repeat_interleave(top_k))
+            router_prob_sum = router_prob_sum + (routing_weights.float() * flat_mask.unsqueeze(-1)).sum(dim=0)
+            total_rows = total_rows + flat_mask.sum()
+
+    tokens_per_expert = tokens_per_expert_sum / total_rows
+    router_prob_per_expert = router_prob_sum / total_rows
+
+    overall_loss = torch.sum(tokens_per_expert * router_prob_per_expert.unsqueeze(0))
+    return overall_loss * num_experts
+
+
+class Qwen3OmniMoeThinkerForConditionalGeneration(
+    Qwen3OmniMoePreTrainedModelForConditionalGeneration, GenerationMixin
+):
+    config: Qwen3OmniMoeThinkerConfig
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _can_compile_fullgraph = True
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.vocab_size = config.text_config.vocab_size
+        self.model = Qwen3OmniMoeThinkerModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.spatial_merge_size = config.vision_config.spatial_merge_size
+        self.num_experts = config.text_config.num_experts
+        self.num_experts_per_tok = config.text_config.num_experts_per_tok
+        self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
+        self.post_init()
+
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        """
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        """
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_audio_features(
+        self,
+        input_features: torch.FloatTensor,
+        feature_attention_mask: torch.LongTensor | None = None,
+        audio_feature_lengths: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        input_features (`torch.FloatTensor`):
+            The tensors corresponding to the input audios.
+        feature_attention_mask (`torch.LongTensor`, *optional*):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
+        """
+        return self.model.get_audio_features(input_features, feature_attention_mask, audio_feature_lengths, **kwargs)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids=None,
+        input_features=None,
+        pixel_values=None,
+        pixel_values_videos=None,
+        image_grid_thw=None,
+        video_grid_thw=None,
+        attention_mask=None,
+        feature_attention_mask=None,
+        audio_feature_lengths=None,
+        position_ids=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_router_logits: bool | None = None,
+        use_audio_in_video=None,
+        video_second_per_grid=None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs,
+    ) -> tuple | Qwen3OmniMoeThinkerCausalLMOutputWithPast:
+        r"""
+        feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
+        use_audio_in_video (`bool`, *optional*):
+            Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
+        video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
+            Number of seconds per grid for each video, used for temporal feature mapping.
+
+        Example:
+
+        ```python
+        >>> from transformers import Qwen3OmniMoeProcessor, Qwen3OmniMoeThinkerForConditionalGeneration
+
+        >>> thinker = Qwen3OmniMoeThinkerForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+        >>> processor = Qwen3OmniMoeProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+
+        >>> conversations = [
+        >>>         {'role': 'system', 'content': 'You are a helpful voice chat bot, and please respond to me in a casual conversation manner using random voice.'},
+        >>>         {"role": "user", "content": [
+        >>>             {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+        >>>             {"type": "audio", "audio": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"},
+        >>>         ]},
+        >>> ]
+
+        >>> inputs = processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt"
+        )
+
+        >>> # Generate
+        >>> generation = thinker.generate(**inputs, max_new_tokens=2048)
+        >>> generate_ids = generation[:, inputs.input_ids.size(1):]
+
+        >>> response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        ```"""
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
+        )
+        outputs: MoeModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            input_features=input_features,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            attention_mask=attention_mask,
+            feature_attention_mask=feature_attention_mask,
+            audio_feature_lengths=audio_feature_lengths,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            use_audio_in_video=use_audio_in_video,
+            video_second_per_grid=video_second_per_grid,
+            mm_encoder_outputs=mm_encoder_outputs,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 
@@ -2235,7 +2345,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             past_key_values=outputs.past_key_values,
-            rope_deltas=self.rope_deltas,
+            rope_deltas=self.model.rope_deltas,
             router_logits=outputs.router_logits,
         )
 
@@ -2248,8 +2358,8 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         past_length = 0
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
-        if past_length != 0 and self.rope_deltas is not None:
-            position_ids = text_positions[None, ...] + self.rope_deltas
+        if past_length != 0 and self.model.rope_deltas is not None:
+            position_ids = text_positions[None, ...] + self.model.rope_deltas
             return position_ids
 
         # Otherwise compute 3d position ids for audio/vision tokens and concat with text position ids
@@ -2271,10 +2381,12 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
                 audio_seqlens=audio_feature_lengths,
                 second_per_grids=model_kwargs.get("video_second_per_grid"),
             )
-            self.rope_deltas = rope_deltas
+            self.model.rope_deltas = rope_deltas
         else:
             vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
-            self.rope_deltas = torch.zeros(inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device)
+            self.model.rope_deltas = torch.zeros(
+                inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
+            )
 
         # Concatenate "text + vision" positions into [4, bs, seq-len]
         text_positions = text_positions[None, ...]
@@ -3964,8 +4076,12 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         talker_top_p: float = 1.0,
         talker_temperature: float = 0.9,
         talker_repetition_penalty: float = 1.05,
+        generation_mode: str | None = None,
         **kwargs,
     ):
+        if return_audio is None and generation_mode is not None:
+            return_audio = generation_mode != "text"
+
         if return_audio and not self.has_talker:
             raise ValueError(
                 "Cannot use talker when talker module not initialized. Use `enable_talker` method or set enable_talker in config to enable talker."
@@ -4208,6 +4324,7 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
 __all__ = [
     "Qwen3OmniMoeForConditionalGeneration",
     "Qwen3OmniMoeThinkerTextModel",
+    "Qwen3OmniMoeThinkerModel",
     "Qwen3OmniMoeThinkerForConditionalGeneration",
     "Qwen3OmniMoeTalkerForConditionalGeneration",
     "Qwen3OmniMoePreTrainedModel",
