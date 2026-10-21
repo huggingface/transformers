@@ -13,7 +13,6 @@
 # limitations under the License.
 
 
-import copy
 import math
 
 import numpy as np
@@ -211,29 +210,6 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
     adaptive_tile_upsize = False
     valid_kwargs = MiniCPMOcrImageProcessorKwargs
 
-    def __call__(self, images, **kwargs):
-        # OCR-specific options are read from the instance by find_best_resize and
-        # resolve_source_resolution. Apply overrides to a shallow copy so the processor
-        # itself is never mutated and concurrent calls cannot observe each other's values.
-        processor = self
-        for name in (
-            "downsample_mode",
-            "disable_small_image_upsize",
-            "adaptive_small_image_upsize",
-            "adaptive_upsize_font_px",
-            "adaptive_upsize_dense_per_kpx",
-            "adaptive_upsize_tiny_pixels",
-            "adaptive_upsize_tiny_target_resolution",
-            "adaptive_tile_upsize",
-        ):
-            value = kwargs.pop(name, None)
-            if value is None or value == getattr(self, name):
-                continue
-            if processor is self:
-                processor = copy.copy(self)
-            setattr(processor, name, value)
-        return processor.preprocess(images, **kwargs)
-
     def find_best_resize(
         self,
         image_size: tuple[int, int],
@@ -329,32 +305,33 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
 
     def _resolve_tile_size(
         self,
-        orig_image: "torch.Tensor",
-        orig_image_size: tuple[int, int],
+        original_image: "torch.Tensor",
+        original_image_size: tuple[int, int],
         grid: tuple[int, int],
         row: int,
-        col: int,
+        column: int,
         base_tile: "torch.Tensor",
         scale_resolution: int,
         patch_size: int,
+        downsample_mode: str,
     ) -> "torch.Tensor":
-        """Return the tile to use for (row, col) when adaptive_tile_upsize is enabled.
+        """Return the tile to use for (row, column) when adaptive_tile_upsize is enabled.
 
         Crops the cell from the original image, classifies it with the same CV heuristic
         used for small whole-image upsize, then picks the lowest-cost resolution that is
         still no larger than the baseline tile. The baseline tile is always returned when
         the original crop already exceeds scale_resolution², so this can only reduce tokens.
         """
-        orig_h, orig_w = orig_image_size
-        grid_y, grid_x = grid
-        oy0 = round(orig_h * row / grid_y)
-        oy1 = round(orig_h * (row + 1) / grid_y)
-        ox0 = round(orig_w * col / grid_x)
-        ox1 = round(orig_w * (col + 1) / grid_x)
-        cell = orig_image[..., oy0:oy1, ox0:ox1]
-        cell_h, cell_w = cell.shape[-2:]
+        original_height, original_width = original_image_size
+        grid_rows, grid_columns = grid
+        top = round(original_height * row / grid_rows)
+        bottom = round(original_height * (row + 1) / grid_rows)
+        left = round(original_width * column / grid_columns)
+        right = round(original_width * (column + 1) / grid_columns)
+        cell = original_image[..., top:bottom, left:right]
+        cell_height, cell_width = cell.shape[-2:]
 
-        if cell_h < 1 or cell_w < 1 or cell_h * cell_w > scale_resolution * scale_resolution:
+        if cell_height < 1 or cell_width < 1 or cell_height * cell_width > scale_resolution * scale_resolution:
             return base_tile
 
         tier = adaptive_upsize_tier(
@@ -366,22 +343,30 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
         if tier == "448":
             return base_tile
 
-        merge_factor = 2 if self.downsample_mode == "4x" else 4
-        align = patch_size * merge_factor
+        merge_factor = 2 if downsample_mode == "4x" else 4
+        divisor = patch_size * merge_factor
         if tier == "84":
-            tgt_h, tgt_w = self.find_best_resize(
-                (cell_h, cell_w), self.adaptive_upsize_tiny_target_resolution, patch_size, allow_upscale=True
+            target_height, target_width = self.find_best_resize(
+                (cell_height, cell_width),
+                self.adaptive_upsize_tiny_target_resolution,
+                patch_size,
+                allow_upscale=True,
+                downsample_mode=downsample_mode,
             )
         else:
-            tgt_h = ensure_divide(cell_h, align)
-            tgt_w = ensure_divide(cell_w, align)
+            target_height = ensure_divide(cell_height, divisor)
+            target_width = ensure_divide(cell_width, divisor)
 
-        if tgt_h * tgt_w >= base_tile.shape[-2] * base_tile.shape[-1]:
+        if target_height * target_width >= base_tile.shape[-2] * base_tile.shape[-1]:
             return base_tile
 
-        if (tgt_h, tgt_w) == (cell_h, cell_w):
+        if (target_height, target_width) == (cell_height, cell_width):
             return cell
-        return self.resize(cell, size=SizeDict(height=tgt_h, width=tgt_w), resample=PILImageResampling.BICUBIC)
+        return self.resize(
+            cell,
+            size=SizeDict(height=target_height, width=target_width),
+            resample=PILImageResampling.BICUBIC,
+        )
 
     def _preprocess_image_like_inputs(
         self,
@@ -526,6 +511,7 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
                                     base_tile,
                                     scale_resolution,
                                     patch_size,
+                                    downsample_mode,
                                 )
                             )
                 else:
