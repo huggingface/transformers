@@ -34,7 +34,7 @@ if is_torch_available():
 
 if is_torch_distributed_available():
     from torch.distributed._composable.fsdp import fully_shard
-    from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy
+    from torch.distributed.fsdp import CPUOffloadPolicy, FSDPModule, MixedPrecisionPolicy
 
 logger = logging.get_logger(__name__)
 
@@ -221,6 +221,19 @@ def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshMan
                 # FSDP2 applies a divide factor other than the group size through PREMUL_SUM, which non-NCCL backends
                 # reject and NCCL zeroes in bfloat16 up to torch 2.13 (pytorch/pytorch#190747): sum, divide locally.
                 module.set_force_sum_reduction_for_comms(True)
+
+    # FSDP2 needs one dtype per group. The parameters kept in float32 next to half-precision weights
+    # (`_keep_in_fp32_modules_strict`, e.g. a router) are upcast when the weights load, after this sharding, so they
+    # get a group of their own, sharded before their parent (children first, as FSDP2 requires).
+    if dtype_plan := model._get_dtype_plan(model.dtype):
+        from ..core_model_loading import build_glob_alternation
+
+        fp32_pattern, _, _ = build_glob_alternation(list(dtype_plan))
+        for module_name, module in reversed(list(model.named_modules())):
+            names = [f"{module_name}.{name}" for name, _ in module.named_parameters(recurse=False)]
+            if names and not isinstance(module, FSDPModule) and any(fp32_pattern.search(name) for name in names):
+                fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
+                logger.debug(f"Applied fully_shard to {module_name} (reshard=True, kept in float32)")
 
     for module_name, module in reshard_targets:
         fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
