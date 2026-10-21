@@ -17,8 +17,8 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -26,8 +26,6 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.generic import maybe_replace_from_package
-from ..bamba.modeling_bamba import apply_mask_to_padding_states
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -38,6 +36,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..qwen3_next.modeling_qwen3_next import apply_mask_to_padding_states, causal_conv1d_fn, causal_conv1d_update
 from .configuration_lfm2 import Lfm2Config
 
 
@@ -124,49 +123,7 @@ class Lfm2Attention(LlamaAttention):
         return output, attn_weights
 
 
-@maybe_replace_from_package("causal_conv1d", "causal_conv1d_update")
-def causal_conv1d_update(
-    hidden_states: torch.Tensor,
-    conv_state: torch.Tensor,
-    weight: nn.Parameter,
-    bias: nn.Parameter | None = None,
-    activation: str | None = None,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    state_len = conv_state.shape[-1]
-
-    hidden_states_new = torch.cat([conv_state, hidden_states], dim=-1).to(weight.dtype)
-    conv_state.copy_(hidden_states_new[:, :, -state_len:])
-    out = F.conv1d(hidden_states_new, weight.unsqueeze(1), bias, padding=0, groups=hidden_size)
-    out = out[:, :, -seq_len:]
-    if activation is not None:
-        out = ACT2FN[activation](out)
-    return out.to(hidden_states.dtype)
-
-
-@maybe_replace_from_package("causal_conv1d", "causal_conv1d_fn")
-def causal_conv1d_fn(
-    hidden_states: torch.Tensor,
-    weight: nn.Parameter,
-    bias: nn.Parameter | None = None,
-    activation: str | None = None,
-    **kwargs,
-):
-    _, hidden_size, seq_len = hidden_states.shape
-    padding = weight.shape[-1] - 1
-
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
-    if activation is not None:
-        out = ACT2FN[activation](out)
-    return out.to(hidden_states.dtype)
-
-
+@use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
 class Lfm2ShortConv(nn.Module):
     def __init__(
         self,
@@ -207,10 +164,12 @@ class Lfm2ShortConv(nn.Module):
         B, C, x = BCx.chunk(3, dim=-2)
         hidden_states = B * x
 
-        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
+        if past_key_values is not None:
+            conv_state = past_key_values.get_conv_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state = None
 
-        if use_precomputed_states and seq_len == 1 and not past_key_values.layers[self.layer_idx].record_past:
-            conv_state = past_key_values.layers[self.layer_idx].conv_states[0]
+        if conv_state is not None and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             hidden_states = causal_conv1d_update(
                 hidden_states, conv_state, self.conv.weight.squeeze(1), self.conv.bias

@@ -1,4 +1,13 @@
 name: Assign PR Reviewers
+
+# Caller workflow — delegates to the reusable reviewer-assignment workflow in transformers-ci,
+# which requests up to two reviewers ranked by how many lines this PR changes in the files they
+# own. The resolution logic lives there; what stays here is the data it reads:
+# `.github/scripts/codeowners_for_review_action`, because who owns what is this repo's decision.
+# `utils/check_reviewers.py` checks that file against this tree on every PR.
+#
+# `pull_request_target` so the job gets a token that can request reviews on a PR from a fork. The
+# reusable workflow checks out the BASE, never the head, and executes nothing from the PR.
 on:
   pull_request_target:
     branches:
@@ -8,24 +17,10 @@ on:
 permissions:
   contents: read
 
+# we will pin once the feature is stable.
 jobs:
   assign_reviewers:
     permissions:
-       pull-requests: write
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
-        with:
-          persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
-        with:
-          python-version: '3.13'
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install PyGithub
-      - name: Run assignment script
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python .github/scripts/assign_reviewers.py
+      contents: read
+      pull-requests: write
+    uses: huggingface/transformers-ci/.github/workflows/assign-reviewers.yml@main # main

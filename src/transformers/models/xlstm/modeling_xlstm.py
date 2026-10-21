@@ -18,7 +18,6 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...generation import GenerationMixin
@@ -1577,14 +1576,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # move labels to correct device
-            labels = labels.to(logits.device)
-            # Shift so that tokens < nstate predict nstate
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         return xLSTMCausalLMOutput(
             loss=loss,

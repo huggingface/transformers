@@ -42,6 +42,8 @@ You can find all the original Gemma 3n checkpoints under the [Gemma 3n][gemma3n-
 > [!TIP]
 > Click on the Gemma 3n models in the right sidebar for more examples of how to apply Gemma to different vision, audio,
 > and language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 

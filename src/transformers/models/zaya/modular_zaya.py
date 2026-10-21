@@ -19,11 +19,10 @@ from typing import Any, Literal
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from huggingface_hub.dataclasses import strict
 from torch import nn
-from torch.nn import init
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask, create_sliding_window_causal_mask
@@ -72,6 +71,11 @@ class ZayaConfig(LagunaConfig):
     """
 
     model_type = "zaya"
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
+    }
 
     vocab_size: int = 262272
     moe_intermediate_size: int = 2048
@@ -128,7 +132,11 @@ class ZayaConfig(LagunaConfig):
         PreTrainedConfig.__post_init__(self, **kwargs, ignore_keys_at_rope_validation={"hybrid", "hybrid_sliding"})
 
     def convert_rope_params_to_dict(self, **kwargs):
-        # No legacy flat RoPE format is supported here; conversion writes the nested ZAYA layer-type format directly.
+        # config on the hub has nested rope dict AND also a `rope_type` key
+        # This will raise an error in further validation, and should be fixed on the hub
+        # Workaround until PR merged (Zyphra/ZAYA1-8B/discussions/19)
+        if self.rope_parameters.get("rope_type") is not None:
+            del self.rope_parameters["rope_type"]
         return kwargs
 
     def validate_architecture(self):
@@ -208,6 +216,13 @@ class ZayaCCAProjection(nn.Module):
         if conv_mask is not None:
             hidden_states = hidden_states * conv_mask[:, :, None].to(hidden_states.dtype)
 
+        # Retrieve conv state if there is a cache. It may be None if the layer is not initialized.
+        if past_key_values is not None:
+            cached_qk_states = past_key_values.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_v_state = past_key_values.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            cached_qk_states, recurrent_v_state = None, None
+
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -222,9 +237,7 @@ class ZayaCCAProjection(nn.Module):
         key_residual = query_residual.view(*input_shape, -1, self.num_key_value_groups, self.head_dim).mean(dim=-2)
 
         qk_states = qk_states.transpose(1, 2)
-        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
-        if use_precomputed_states:
-            cached_qk_states = past_key_values.layers[self.layer_idx].conv_states[0]
+        if cached_qk_states is not None:
             qk_states = torch.cat([cached_qk_states, qk_states], dim=-1)
         else:
             qk_states = F.pad(qk_states, (self.conv_kernel_size, 0))
@@ -245,8 +258,8 @@ class ZayaCCAProjection(nn.Module):
         # During cached decoding, `recurrent_v_state` is the previous token's delayed projection.
         value_current = self.v_proj_current(hidden_states)
         delayed_v_state = self.v_proj_delayed(hidden_states)
-        if use_precomputed_states:
-            recurrent_v_state = past_key_values.layers[self.layer_idx].recurrent_states[0].unsqueeze(1)
+        if recurrent_v_state is not None:
+            recurrent_v_state = recurrent_v_state.unsqueeze(1)
         else:
             recurrent_v_state = self.v_proj_delayed(hidden_states.new_zeros(input_shape[0], 1, self.hidden_size))
         value_delayed = torch.cat([recurrent_v_state, delayed_v_state[:, :-1]], dim=1)
@@ -514,7 +527,7 @@ class ZayaSparseMoeBlock(nn.Module):
 
 class ZayaPreTrainedModel(LlamaPreTrainedModel):
     config: ZayaConfig
-    # ZAYA generation uses the native hybrid dynamic cache, which is not a compileable cache.
+    # ZAYA generation uses the native hybrid dynamic cache, which is not a compilable cache.
     _can_compile_fullgraph = False
     _can_record_outputs = {
         "router_logits": OutputRecorder(ZayaRouter, index=0),

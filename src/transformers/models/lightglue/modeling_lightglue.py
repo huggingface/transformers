@@ -459,7 +459,7 @@ def get_matches_from_scores(scores: torch.Tensor, threshold: float) -> tuple[tor
 
 def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
     """
-    Normalize keypoints locations based on image image_shape
+    Normalize keypoints locations based on image_shape
 
     Args:
         keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):

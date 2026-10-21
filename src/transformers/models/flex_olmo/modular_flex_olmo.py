@@ -74,10 +74,9 @@ class FlexOlmoConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 100352
@@ -110,7 +109,7 @@ class FlexOlmoConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-# FlexOlmo RMS norm reuses Olmo2 RMS norm, which handles low precision slightly differently than the original Olmoe.
+# FlexOlmo RMS norm reuses Olmo2 RMS norm, which handles low precision slightly differently than the original OlmoE.
 class FlexOlmoRMSNorm(Olmo2RMSNorm):
     pass
 

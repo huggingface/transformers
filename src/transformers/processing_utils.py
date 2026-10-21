@@ -62,6 +62,7 @@ from .utils import (
     is_torch_available,
     list_repo_templates,
     logging,
+    resolve_revision,
 )
 from .utils.chat_template_utils import _get_template_variables, render_jinja_template
 from .utils.type_validators import (
@@ -129,13 +130,17 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
     "audio_tokenizer": (
         "HiggsAudioV2TokenizerModel",
         "DacModel",
+        "PocketTTSAudioTokenizerModel",
     ),  # TODO: @eustlb, to be replaced with PreTrainedAudioTokenizerBase
     "audio_processor": "FeatureExtractionMixin",
     "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
     "feature_extractor": "FeatureExtractionMixin",
     "image_processor": "ImageProcessingMixin",
-    "video_processor": "BaseVideoProcessor",
+    "video_processor": "VideoProcessorMixin",
 }
+
+# The kwargs of a processor's `from_pretrained` that also apply to its audio tokenizer's `from_pretrained`
+AUDIO_TOKENIZER_KWARGS = ("cache_dir", "force_download", "proxies", "token", "local_files_only", "device_map", "dtype")
 
 
 def _get_modality_for_attribute(attribute_name: str) -> str:
@@ -243,7 +248,8 @@ class ImagesKwargs(TypedDict, total=False):
         do_resize (`bool`, *optional*):
             Whether to resize the image.
         size (`dict[str, int]`, *optional*):
-            Resize the shorter side of the input to `size["shortest_edge"]`.
+            Resize using one of the supported size dictionaries. Pixel-area bounds use
+            `{"min_pixels": int, "max_pixels": int}`.
         default_to_square (`bool`, *optional*, defaults to `self.default_to_square`):
             Whether to default to a square when resizing, if size is an int.
         crop_size (`dict[str, int]`, *optional*):
@@ -410,6 +416,9 @@ class AudioKwargs(TypedDict, total=False):
             If set, will pad the sequence to a multiple of the provided value.
         return_attention_mask (`bool`, *optional*):
             Whether or not [`~ASTFeatureExtractor.__call__`] should return `attention_mask`.
+        device (`str` or `torch.device`, *optional*):
+            The device to compute the audio features on (e.g. "cpu", "cuda"), only relevant for feature
+            extractors that compute them with torch.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -426,6 +435,7 @@ class AudioKwargs(TypedDict, total=False):
     truncation: Annotated[bool | str | TruncationStrategy | None, truncation_validator()]
     pad_to_multiple_of: Annotated[int | None, positive_int()]
     return_attention_mask: bool | None
+    device: Annotated[Union[str, "torch.device"] | None, device_validator()]
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
     load_audio_backend: str | None
 
@@ -802,7 +812,7 @@ class ProcessorMixin(PushToHubMixin):
 
         return processed_audio, audio_replacements
 
-    # To be overriden by each model's processor if they need to add placeholder tokens
+    # To be overridden by each model's processor if they need to add placeholder tokens
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         raise NotImplementedError
 
@@ -861,7 +871,7 @@ class ProcessorMixin(PushToHubMixin):
                     - `"text"` (`str`): the original placeholder token string that was matched
                     - `"replacement"` (`str`): the string it was replaced with
         """
-        # Early exit if no special tokens found, nothing to replace
+        # Early exit if no special tokens found, nothing to replace or if text is not a list
         if not self.all_special_multimodal_tokens:
             return text, []
 
@@ -1231,8 +1241,9 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the processor object.
         """
-        # holding a copy for optionally loading the audio tokenizer (if available)
-        audio_tokenizer_kwargs = copy.deepcopy(kwargs)
+        # The audio tokenizer (if any) lives in another repository: it gets the Hub access and placement kwargs only, not
+        # the ones that locate files in this repository (`revision`, `subfolder`) or override sub-processors.
+        audio_tokenizer_kwargs = {key: kwargs[key] for key in AUDIO_TOKENIZER_KWARGS if key in kwargs}
 
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
@@ -1241,6 +1252,15 @@ class ProcessorMixin(PushToHubMixin):
         local_files_only = kwargs.pop("local_files_only", False)
         revision = kwargs.pop("revision", None)
         subfolder = kwargs.pop("subfolder", "")
+
+        # Resolve the revision once, so that the template listing and all the files below come from the same repo state
+        revision = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -1721,7 +1741,14 @@ class ProcessorMixin(PushToHubMixin):
         kwargs["cache_dir"] = cache_dir
         kwargs["force_download"] = force_download
         kwargs["local_files_only"] = local_files_only
-        kwargs["revision"] = revision
+        # Resolve the revision once, so the processor config and all its sub-processors come from the same repo state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         if token is not None:
             kwargs["token"] = token
@@ -2076,16 +2103,23 @@ class ProcessorMixin(PushToHubMixin):
                 processor_kwargs["return_offsets_mapping"] = (
                     True  # force offset mapping so we can infer token boundaries
                 )
+                processor_kwargs["return_text_replacement_offsets"] = True
 
-        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`
-        sampling_rate = kwargs.get("sampling_rate", processor_kwargs.get("sampling_rate"))
+        # Set the sampling rate to load the audio files if user hasn't already passed with `kwargs`.
+        audio_kwargs_from_user = processor_kwargs.get("audio_kwargs", {})
+        sampling_rate = kwargs.get(
+            "sampling_rate", processor_kwargs.get("sampling_rate", audio_kwargs_from_user.get("sampling_rate"))
+        )
         if sampling_rate is None:
             if hasattr(self._audio_processor, "sampling_rate"):
                 sampling_rate = self._audio_processor.sampling_rate
             else:
                 sampling_rate = 16_000
 
-        load_audio_backend = kwargs.get("load_audio_backend", processor_kwargs.get("load_audio_backend"))
+        load_audio_backend = kwargs.get(
+            "load_audio_backend",
+            processor_kwargs.get("load_audio_backend", audio_kwargs_from_user.get("load_audio_backend")),
+        )
         if load_audio_backend is None:
             default_audio_kwargs = self.valid_processor_kwargs._defaults.get("audio_kwargs", {})
             load_audio_backend = default_audio_kwargs.get("load_audio_backend", "auto")
@@ -2207,6 +2241,14 @@ class ProcessorMixin(PushToHubMixin):
             if return_tensors:
                 processor_kwargs["return_tensors"] = return_tensors
 
+            # Audio was loaded/resampled by us above, so let the audio processor know at which rate.
+            # (we additionally preserve the location of the kwarg in the nested structure kwargs -> processor -> audio)
+            if batch_audios:
+                if "sampling_rate" in audio_kwargs_from_user:
+                    processor_kwargs["audio_kwargs"] = {**audio_kwargs_from_user, "sampling_rate": sampling_rate}
+                else:
+                    processor_kwargs["sampling_rate"] = sampling_rate
+
             images_exist = any((im is not None) for im_list in batch_images for im in im_list)
             videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)
             out = self(
@@ -2222,26 +2264,25 @@ class ProcessorMixin(PushToHubMixin):
                     assistant_masks = []
                     offset_mapping = out.pop("offset_mapping")
                     input_ids = out["input_ids"]
+                    # We do some corrections here to ensure the assistant masks aren't
+                    # misaligned when we expand up image tokens
+                    replacement_offsets = out.pop("text_replacement_offsets", None)
+                    if replacement_offsets is None or len(replacement_offsets) == 0:
+                        replacement_offsets = [[]] * len(input_ids)
                     for i in range(len(input_ids)):
                         current_mask = [0] * len(input_ids[i])
-                        offsets = offset_mapping[i]
-                        offset_starts = [start for start, end in offsets]
-                        for assistant_start_char, assistant_end_char in generation_indices[i]:
-                            start_pos = bisect.bisect_left(offset_starts, assistant_start_char)
-                            end_pos = bisect.bisect_left(offset_starts, assistant_end_char)
-
-                            if not (
-                                start_pos >= 0
-                                and start_pos < len(offsets)
-                                and offsets[start_pos][0] <= assistant_start_char < offsets[start_pos][1]
-                            ):
-                                # start_token is out of bounds maybe due to truncation.
-                                continue
-                            # Ensure end_pos is also within bounds
-                            if end_pos > len(input_ids[i]):
-                                end_pos = len(input_ids[i])
-                            for token_id in range(start_pos, end_pos or len(input_ids[i])):
-                                current_mask[token_id] = 1
+                        placeholder_ends = [r["span"][1] for r in replacement_offsets[i]]
+                        chars_gained = [0] + [r["new_span"][1] - r["span"][1] for r in replacement_offsets[i]]
+                        for span in generation_indices[i]:
+                            # Shift the span past any placeholders that were expanded before it
+                            start_char, end_char = (
+                                char + chars_gained[bisect.bisect_right(placeholder_ends, char)] for char in span
+                            )
+                            # Mask every token overlapping the span. Zero-width tokens (padding, added specials) never
+                            # match, and a span truncated away simply matches nothing
+                            for pos, (token_start, token_end) in enumerate(offset_mapping[i]):
+                                if token_start < end_char and token_end > start_char:
+                                    current_mask[pos] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks
                     out.convert_to_tensors(tensor_type=return_tensors)
@@ -2391,3 +2432,28 @@ def prepare_prompt_input(
             )
         return list(inputs)
     raise TypeError(f"`{input_name}` must be a string, a sequence of strings, or `None`.")
+
+
+def prepare_keyword_inputs(
+    keywords: str | list[str] | list[list[str]] | None, batch_size: int
+) -> list[list[str] | None]:
+    """
+    Broadcast and validate a hotword/keyword argument to match ``batch_size``.
+
+    Args:
+        keywords (`str`, `list[str]`, `list[list[str]]`, or `None`):
+            The keyword(s) to bias transcription towards. A single string, or a flat list of strings, is broadcast
+            to every sample in the batch. A list of lists must match ``batch_size``, one keyword list per sample.
+            ``None`` disables keyword biasing for the whole batch.
+        batch_size (`int`):
+            The number of samples in the batch.
+
+    Returns:
+        `list[list[str] | None]`: A list of length ``batch_size``.
+    """
+    if isinstance(keywords, str):
+        keywords = [keywords]
+    if isinstance(keywords, (list, tuple)) and all(isinstance(item, str) for item in keywords):
+        keywords = [list(keywords)] * batch_size
+
+    return prepare_prompt_input(keywords, batch_size, input_name="keywords")

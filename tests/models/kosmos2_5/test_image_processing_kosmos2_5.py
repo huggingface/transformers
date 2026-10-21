@@ -20,9 +20,9 @@ import pytest
 
 from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow, torch_device
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 from ...test_processing_common import url_to_local_path
 
 
@@ -32,74 +32,30 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import Kosmos2_5ImageProcessorPil
 
-if is_torchvision_available():
-    from transformers import Kosmos2_5ImageProcessor
+class Kosmos2_5ImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("max_patches_values", [512, 1024, 2048, 4096])
 
+        # Image processor init kwargs
+        kwargs.setdefault("patch_size", {"height": 16, "width": 16})
+        kwargs.setdefault("size", {"height": 20, "width": 20})
 
-class Kosmos2_5ImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        image_size=18,
-        min_resolution=30,
-        max_resolution=400,
-        size=None,
-        do_normalize=True,
-        do_convert_rgb=True,
-        patch_size=None,
-    ):
-        size = size if size is not None else {"height": 20, "width": 20}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.image_size = image_size
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.size = size
-        self.do_normalize = do_normalize
-        self.do_convert_rgb = do_convert_rgb
-        self.max_patches = [512, 1024, 2048, 4096]
-        self.patch_size = patch_size if patch_size is not None else {"height": 16, "width": 16}
-
-    def prepare_image_processor_dict(self):
-        return {"do_normalize": self.do_normalize, "do_convert_rgb": self.do_convert_rgb}
+        super().__init__(**kwargs)
 
     def prepare_dummy_image(self):
         img_url = url_to_local_path(
-            "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
         raw_image = load_image(img_url).convert("RGB")
         return raw_image
-
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
 
 
 @require_torch
 @require_vision
 class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        self.image_processing_classes = {
-            "torchvision": Kosmos2_5ImageProcessor,
-            "pil": Kosmos2_5ImageProcessorPil,
-        }
-        self.image_processor_tester = Kosmos2_5ImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    image_processor_tester_class = Kosmos2_5ImageProcessingTester
 
     # Overwrite from the common test to use `flattened_patches` instead of `pixel_values`.
     # TODO: enhance the common test to avoid overwriting
@@ -110,7 +66,11 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+        dummy_image = load_image(
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+            )
+        )
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
@@ -176,12 +136,6 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             output_eager.flattened_patches, output_compiled.flattened_patches, atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )
 
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processor, "do_normalize"))
-            self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
-
     def test_expected_patches(self):
         dummy_image = self.image_processor_tester.prepare_dummy_image()
 
@@ -208,7 +162,7 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            for max_patch in self.image_processor_tester.max_patches:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch
@@ -240,7 +194,7 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            for max_patch in self.image_processor_tester.max_patches:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch
@@ -273,7 +227,7 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            for max_patch in self.image_processor_tester.max_patches:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch, input_data_format="channels_last"
@@ -307,7 +261,7 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            for max_patch in self.image_processor_tester.max_patches:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch
@@ -330,17 +284,12 @@ class Kosmos2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 @require_torch
 @require_vision
 class Kosmos2_5ImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        self.image_processor_tester = Kosmos2_5ImageProcessingTester(self, num_channels=4)
-        self.image_processing_classes = {
-            "torchvision": Kosmos2_5ImageProcessor,
-            "pil": Kosmos2_5ImageProcessorPil,
-        }
-        self.expected_encoded_image_num_channels = 3
+    image_processor_tester_class = Kosmos2_5ImageProcessingTester
 
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
+    def setUp(self):
+        super().setUp()
+        self.image_processor_tester.num_channels = 4
+        self.expected_encoded_image_num_channels = 3
 
     # Overwrite from the common test to use `flattened_patches` instead of `pixel_values`.
     # TODO: enhance the common test to avoid overwriting
@@ -352,7 +301,11 @@ class Kosmos2_5ImageProcessingTestFourChannels(ImageProcessingTestMixin, unittes
         if len(self.image_processing_classes) < 2:
             self.skipTest(reason="Skipping backends equivalence test as there are less than 2 backends")
 
-        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
+        dummy_image = load_image(
+            url_to_local_path(
+                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+            )
+        )
 
         encodings = {}
         for backend_name, image_processing_class in self.image_processing_classes.items():
@@ -375,12 +328,6 @@ class Kosmos2_5ImageProcessingTestFourChannels(ImageProcessingTestMixin, unittes
     def test_can_compile_torchvision_backend(self):
         return super().test_can_compile_torchvision_backend()
 
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processor, "do_normalize"))
-            self.assertTrue(hasattr(image_processor, "do_convert_rgb"))
-
     def test_call_pil(self):
         # create random PIL images
         image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
@@ -395,7 +342,7 @@ class Kosmos2_5ImageProcessingTestFourChannels(ImageProcessingTestMixin, unittes
 
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**self.image_processor_dict)
-            for max_patch in self.image_processor_tester.max_patches:
+            for max_patch in self.image_processor_tester.max_patches_values:
                 # Test not batched input
                 encoded_images = image_processor(
                     image_inputs[0], return_tensors="pt", max_patches=max_patch

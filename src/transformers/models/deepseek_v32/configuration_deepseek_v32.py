@@ -20,13 +20,12 @@
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RotaryEmbeddingConfigMixin
 from ...utils import auto_docstring
 
 
 @auto_docstring(checkpoint="deepseek-ai/DeepSeek-V3.2-Exp")
 @strict
-class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class DeepseekV32Config(PreTrainedConfig):
     r"""
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
@@ -78,10 +77,9 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     attribute_map = {"num_local_experts": "n_routed_experts"}
@@ -95,6 +93,7 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     num_key_value_heads: int = 128
     n_shared_experts: int = 1
     n_routed_experts: int = 256
+    output_router_logits: bool = False
     routed_scaling_factor: float = 2.5
     kv_lora_rank: int = 512
     q_lora_rank: int = 1536
@@ -137,7 +136,7 @@ class DeepseekV32Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
             self.mlp_layer_types = ["dense"] * n_dense + ["sparse"] * (self.num_hidden_layers - n_dense)
         # Every layer is DSA — drives cache-class dispatch.
         if self.layer_types is None:
-            self.layer_types = ["deepseek_sparse_attention"] * self.num_hidden_layers
+            self.layer_types = ["indexed_attention"] * self.num_hidden_layers
         # BC: re-route `num_experts` to `n_routed_experts`
         if (num_experts := kwargs.get("num_experts")) is not None:
             self.n_routed_experts = num_experts

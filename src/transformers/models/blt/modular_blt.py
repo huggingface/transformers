@@ -29,7 +29,7 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..cohere2.modeling_cohere2 import rotate_half  # noqa: F401
 from ..llama.modeling_llama import LlamaRotaryEmbedding
@@ -276,15 +276,10 @@ class BltRotaryEmbedding(LlamaRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.repeat_interleave(freqs, 2, dim=-1)  # diff from Llama: we interleave() instead of cat()
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.repeat_interleave(freqs, 2, dim=-1)  # diff from Llama: we interleave() instead of cat()
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -357,7 +352,8 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
     _supports_attention_backend = False
     _supports_flash_attn = False
     _supports_flex_attn = False
-    _no_split_modules = ["BltTransformerLayer"]
+    _no_split_modules = ["BltTransformerLayer", "BltCrossAttention"]
+    _can_compile_fullgraph = False  # static cache cannot have different shapes for each layer
     _can_record_outputs = {
         "hidden_states": OutputRecorder(BltTransformerLayer, index=0),
         "attentions": OutputRecorder(BltSelfAttention, index=1),
@@ -690,7 +686,7 @@ class BltLocalDecoder(BltPreTrainedModel):
                     attention_mask=encoder_attention_mask,
                     **kwargs,
                 )
-                hidden_states = hidden_states + cross_attention_output
+                hidden_states = hidden_states + cross_attention_output.to(hidden_states.device)
             hidden_states = layer(
                 hidden_states,
                 position_embeddings=position_embeddings,
@@ -1118,10 +1114,6 @@ class BltForCausalLM(BltPreTrainedModel, GenerationMixin):
               the forward pass of cross-attention layers.
             This mask is derived from the cross_attention_mask and is used to handle cases where a text token
             should not attend to any image token.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 

@@ -93,13 +93,14 @@ class EmptyJob:
 class CircleCIJob:
     name: str
     additional_env: dict[str, Any] = None
+    disabled: bool = False  # If True, job is a noop (pipeline parameters still declared)
     docker_image: list[dict[str, str]] = None
     install_steps: list[str] = None
     marker: str | None = None
     parallelism: int | None = 0
     pytest_num_workers: int = 8
     pytest_options: dict[str, Any] = None
-    resource_class: str | None = "xlarge"
+    resource_class: str | None = "large"
     tests_to_run: list[str] | None = None
     num_test_files_per_worker: int | None = 10
     # This should be only used for doctest job!
@@ -144,6 +145,13 @@ class CircleCIJob:
                 print("not Found")
 
     def to_dict(self):
+        if self.disabled:
+            return {
+                "docker": [{"image": "cimg/base:stable"}],
+                "resource_class": "small",
+                "steps": [{"run": f"echo 'Job {self.name} is disabled on this runner'"}],
+            }
+
         env = COMMON_ENV_VARIABLES.copy()
         # fmt: off
         # not critical
@@ -166,29 +174,18 @@ class CircleCIJob:
             f"--{key}={value}" if (value is not None or key in ["doctest-modules"]) else f"-{key}"
             for key, value in all_options.items()
         ]
-        pytest_flags.append(
-            f"--make-reports={self.name}" if "examples" in self.name else f"--make-reports=tests_{self.name}"
-        )
-        # Examples special case: we need to download NLTK files in advance to avoid cuncurrency issues
+        pytest_flags.append(f"--make-reports=tests_{self.name}")
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
         junit_flags = " -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
         joined_flaky_patterns = "|".join(FLAKY_TEST_FAILURE_PATTERNS)
         repeat_on_failure_flags = f"--reruns 5 --reruns-delay 2 --only-rerun '({joined_flaky_patterns})'"
-        parallel = f" << pipeline.parameters.{self.job_name}_parallelism >> "
+        parallel = f"<< pipeline.parameters.{self.job_name}_parallelism>>"
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
             {"run": "apt-get update && apt-get install -y curl"},
             {"run": " && ".join(self.install_steps)},
-            {
-                "run": {
-                    "name": "Download NLTK files",
-                    "command": """python -c "import nltk; nltk.download('punkt', quiet=True)" """,
-                }
-                if "example" in self.name
-                else "echo Skipping"
-            },
             {
                 "run": {
                     "name": "Show installed libraries and their size",
@@ -247,7 +244,7 @@ class CircleCIJob:
             {
                 "run": {
                     "name": "Run tests",
-                    "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)",
+                    "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n {max(1, self.pytest_num_workers // 2)} {junit_flags} {repeat_on_failure_flags} {' '.join(pytest_flags)} $(cat splitted_tests.txt) | tee tests_output.txt)",
                 }
             },
             {
@@ -302,11 +299,7 @@ class CircleCIJob:
 
     @property
     def job_name(self):
-        return (
-            self.name
-            if ("examples" in self.name or "pipeline" in self.name or "pr_documentation" in self.name)
-            else f"tests_{self.name}"
-        )
+        return self.name if ("pipeline" in self.name or "pr_documentation" in self.name) else f"tests_{self.name}"
 
 
 # JOBS
@@ -351,15 +344,6 @@ custom_tokenizers_job = CircleCIJob(
     "custom_tokenizers",
     additional_env={"RUN_CUSTOM_TOKENIZERS": True},
     docker_image=[{"image": "huggingface/transformers-custom-tokenizers"}],
-)
-
-examples_torch_job = CircleCIJob(
-    "examples_torch",
-    additional_env={"OMP_NUM_THREADS": 8},
-    docker_image=[{"image": "huggingface/transformers-examples-torch"}],
-    # TODO @ArthurZucker remove this once docker is easier to build
-    install_steps=["uv pip install . && uv pip install -r examples/pytorch/_tests_requirements.txt"],
-    pytest_num_workers=4,
 )
 
 exotic_models_job = CircleCIJob(
@@ -437,15 +421,22 @@ doc_test_job = CircleCIJob(
     pytest_num_workers=1,
 )
 
+peft_integration_job = CircleCIJob(
+    "peft_integration",
+    docker_image=[{"image": "huggingface/transformers-torch-light"}],
+    install_steps=["uv pip install . peft datasets"],
+    parallelism=2,
+)
+
 REGULAR_TESTS = [torch_job, tokenization_job, processor_job, generate_job, non_model_job]  # fmt: skip
-EXAMPLES_TESTS = [examples_torch_job]
 PIPELINE_TESTS = [pipelines_torch_job]
 REPO_UTIL_TESTS = [repo_utils_job]
 DOC_TESTS = [doc_test_job]
 TRAINING_CI_TESTS = [training_ci_job]
 TENSOR_PARALLEL_CI_TESTS = [tensor_parallel_ci_job]
 FSDP_CI_TESTS = [fsdp_ci_job]
-ALL_TESTS = REGULAR_TESTS + EXAMPLES_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS + FSDP_CI_TESTS  # fmt: skip
+PEFT_INTEGRATION_TESTS = [peft_integration_job]
+ALL_TESTS = REGULAR_TESTS + PIPELINE_TESTS + REPO_UTIL_TESTS + DOC_TESTS + [custom_tokenizers_job] + [exotic_models_job] + TRAINING_CI_TESTS + TENSOR_PARALLEL_CI_TESTS + FSDP_CI_TESTS + PEFT_INTEGRATION_TESTS  # fmt: skip
 
 
 def create_circleci_config(folder=None):
@@ -495,8 +486,8 @@ def create_circleci_config(folder=None):
     with open(os.path.join(folder, "generated_config.yml"), "w", encoding="utf-8") as f:
         f.write(
             yaml.dump(config, sort_keys=False, default_flow_style=False)
-            .replace("' << pipeline", " << pipeline")
-            .replace(">> '", " >>")
+            .replace("'<< pipeline", "<< pipeline")
+            .replace(">>'", ">>")
         )
 
 

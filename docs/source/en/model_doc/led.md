@@ -125,10 +125,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
     - get_special_tokens_mask
     - save_vocabulary
 
-## LEDTokenizerFast
-
-[[autodoc]] LEDTokenizerFast
-
 ## LED specific outputs
 
 [[autodoc]] models.led.modeling_led.LEDEncoderBaseModelOutput

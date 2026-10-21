@@ -1179,7 +1179,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> # prepare image and text
@@ -1261,29 +1261,18 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         image_embeds_with_ln = image_embeds_with_ln + image_token_type_embeddings
         cross_modal_image = self.cross_modal_image_layernorm(image_embeds_with_ln)
 
-        pixel_mask = torch.ones(
-            (cross_modal_image.size(0), cross_modal_image.size(1)),
-            dtype=torch.long,
-            device=input_ids.device,
-        )
-        extend_image_masks = create_bidirectional_mask(
-            config=self.config,
-            inputs_embeds=cross_modal_image,
-            attention_mask=pixel_mask,
-        )
+        # The image stream is never padded, so no mask is built for it: every image token attends to every other one.
 
         layer_outputs_text = self.cross_modal_text_layers[0](
             cross_modal_text,
             cross_modal_image,
             attention_mask=extend_text_masks,
-            encoder_attention_mask=extend_image_masks,
         )
         cross_text_features = layer_outputs_text[0]
 
         layer_outputs_image = self.cross_modal_image_layers[0](
             cross_modal_image,
             cross_modal_text,
-            attention_mask=extend_image_masks,
             encoder_attention_mask=extend_text_masks,
         )
         cross_image_features = layer_outputs_image[0]
@@ -1316,21 +1305,19 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 cross_text_features,
                 extend_text_masks,
             )
-            cross_image_features_ = image_link_tower(image_embeds_with_ln, cross_image_features, extend_image_masks)
+            cross_image_features_ = image_link_tower(image_embeds_with_ln, cross_image_features, None)
 
             # Cross-modal encoder via bridge layers of textual and visual encoders
             layer_outputs_text = self.cross_modal_text_layers[link_layer_index + 1](
                 cross_text_features_,
                 cross_image_features_,
                 attention_mask=extend_text_masks,
-                encoder_attention_mask=extend_image_masks,
             )
             cross_text_features = layer_outputs_text[0]
 
             layer_outputs_image = self.cross_modal_image_layers[link_layer_index + 1](
                 cross_image_features_,
                 cross_text_features_,
-                attention_mask=extend_image_masks,
                 encoder_attention_mask=extend_text_masks,
             )
             cross_image_features = layer_outputs_image[0]
@@ -1450,17 +1437,13 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.
             This is useful if you want more control over how to convert `pixel_values` into patch embeddings.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
         Examples:
 
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForMaskedLM
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000360943.jpg"
@@ -1552,7 +1535,7 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
 
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForImageAndTextRetrieval
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
 
@@ -1656,7 +1639,7 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
 
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForContrastiveLearning
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch

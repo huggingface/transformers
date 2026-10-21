@@ -34,6 +34,8 @@ from ...image_transforms import (
     center_to_corners_format,
     corners_to_center_format,
     get_size_with_aspect_ratio,
+    group_images_by_shape,
+    reorder_images,
     safe_squeeze,
 )
 from ...image_utils import (
@@ -270,7 +272,7 @@ def prepare_coco_detection_annotation(
     """
     Convert the target in COCO format into the format expected by CONDITIONAL_DETR.
     """
-    image_height, image_width = image.size()[-2:]
+    image_height, image_width = image.shape[-2:]
 
     image_id = target["image_id"]
     image_id = torch.as_tensor([image_id], dtype=torch.int64, device=image.device)
@@ -642,11 +644,15 @@ class ConditionalDetrImageProcessor(TorchvisionBackend):
         self,
         image: torch.Tensor,
         padded_size: tuple[int, int],
-        annotation: dict[str, Any] | None = None,
+        annotation: dict[str, Any] | list[dict[str, Any]] | None = None,
         update_bboxes: bool = True,
         fill: int = 0,
-    ):
-        original_size = image.size()[-2:]
+    ) -> tuple["torch.Tensor", "torch.Tensor", dict[str, Any] | list[dict[str, Any]] | None]:
+        """
+        Pad an image, or a batch of stacked images, to `padded_size`. If a single annotation is passed, a single
+        annotation is returned. If a list of annotations is passed, a list is returned.
+        """
+        original_size = image.shape[-2:]
         padding_bottom = padded_size[0] - original_size[0]
         padding_right = padded_size[1] - original_size[1]
         if padding_bottom < 0 or padding_right < 0:
@@ -658,13 +664,19 @@ class ConditionalDetrImageProcessor(TorchvisionBackend):
             padding = [0, 0, padding_right, padding_bottom]
             image = tvF.pad(image, padding, fill=fill)
             if annotation is not None:
-                annotation = self._update_annotation_for_padded_image(
-                    annotation, original_size, padded_size, padding, update_bboxes
-                )
+                is_single_annotation = isinstance(annotation, dict)
+                annotations = [annotation] if is_single_annotation else annotation
+                annotations = [
+                    self._update_annotation_for_padded_image(
+                        single_annotation, original_size, padded_size, padding, update_bboxes
+                    )
+                    for single_annotation in annotations
+                ]
+                annotation = annotations[0] if is_single_annotation else annotations
 
-        # Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
-        pixel_mask = torch.zeros(padded_size, dtype=torch.int64, device=image.device)
-        pixel_mask[: original_size[0], : original_size[1]] = 1
+        # Make a pixel mask for the image(s), where 1 indicates a valid pixel and 0 indicates padding.
+        pixel_mask = torch.zeros((*image.shape[:-3], *padded_size), dtype=torch.int64, device=image.device)
+        pixel_mask[..., : original_size[0], : original_size[1]] = 1
 
         return image, pixel_mask, annotation
 
@@ -706,6 +718,7 @@ class ConditionalDetrImageProcessor(TorchvisionBackend):
         pad_size: SizeDict | None,
         format: str | AnnotationFormat | None,
         return_tensors: str | TensorType | None,
+        disable_grouping: bool | None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -735,13 +748,10 @@ class ConditionalDetrImageProcessor(TorchvisionBackend):
 
         data = {}
 
-        processed_images = []
-        processed_annotations = []
-        pixel_masks = []  # Initialize pixel_masks here
-        for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
-            # prepare (COCO annotations as a list of Dict -> CONDITIONAL_DETR target as a single Dict per image)
-            if annotations is not None:
-                annotation = self.prepare_annotation(
+        # prepare (COCO annotations as a list of Dict -> CONDITIONAL_DETR target as a single Dict per image)
+        if annotations is not None:
+            annotations = [
+                self.prepare_annotation(
                     image,
                     annotation,
                     format,
@@ -749,55 +759,63 @@ class ConditionalDetrImageProcessor(TorchvisionBackend):
                     masks_path=masks_path,
                     input_data_format=ChannelDimension.FIRST,
                 )
+                for image, annotation in zip(images, annotations)
+            ]
 
+        grouped_images, grouped_annotations, grouped_images_index = group_images_by_shape(
+            images, annotations, disable_grouping=disable_grouping
+        )
+
+        for key, stacked_images in grouped_images.items():
+            stacked_annotations = grouped_annotations[key]
             if do_resize:
-                resized_image = self.resize(image, size=size, resample=resample)
-                if annotations is not None:
-                    annotation = self.resize_annotation(
-                        annotation,
-                        orig_size=image.size()[-2:],
-                        target_size=resized_image.size()[-2:],
-                    )
-                image = resized_image
+                orig_size = stacked_images.shape[-2:]
+                stacked_images = self.resize(stacked_images, size=size, resample=resample)
+                if stacked_annotations is not None:
+                    stacked_annotations = [
+                        self.resize_annotation(
+                            annotation,
+                            orig_size=orig_size,
+                            target_size=stacked_images.shape[-2:],
+                        )
+                        for annotation in stacked_annotations
+                    ]
             # Fused rescale and normalize
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-            if do_convert_annotations and annotations is not None:
-                annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
-
-            processed_images.append(image)
-            processed_annotations.append(annotation)
-        images = processed_images
-        annotations = processed_annotations if annotations is not None else None
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            if do_convert_annotations and stacked_annotations is not None:
+                image_size = get_image_size(stacked_images, ChannelDimension.FIRST)
+                stacked_annotations = [
+                    self.normalize_annotation(annotation, image_size) for annotation in stacked_annotations
+                ]
+            grouped_images[key] = stacked_images
+            grouped_annotations[key] = stacked_annotations
+        processed_images = reorder_images(grouped_images, grouped_images_index)
 
         if do_pad:
             # depends on all resized image shapes so we need another loop
             if pad_size is not None:
                 padded_size = (pad_size.height, pad_size.width)
             else:
-                padded_size = get_max_height_width(images)
+                padded_size = get_max_height_width(processed_images)
 
-            padded_images = []
-            padded_annotations = []
-            for image, annotation in zip(images, annotations if annotations is not None else [None] * len(images)):
-                # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
-                if padded_size == image.size()[-2:]:
-                    padded_images.append(image)
-                    pixel_masks.append(torch.ones(padded_size, dtype=torch.int64, device=image.device))
-                    padded_annotations.append(annotation)
-                    continue
-                image, pixel_mask, annotation = self.pad(
-                    image, padded_size, annotation=annotation, update_bboxes=do_convert_annotations
+            grouped_masks = {}
+            for key, stacked_images in grouped_images.items():
+                grouped_images[key], grouped_masks[key], grouped_annotations[key] = self.pad(
+                    stacked_images,
+                    padded_size,
+                    annotation=grouped_annotations[key],
+                    update_bboxes=do_convert_annotations,
                 )
-                padded_images.append(image)
-                padded_annotations.append(annotation)
-                pixel_masks.append(pixel_mask)
-            images = padded_images
-            annotations = padded_annotations if annotations is not None else None
-            data.update({"pixel_mask": torch.stack(pixel_masks, dim=0)})
 
-        data.update({"pixel_values": torch.stack(images, dim=0)})
+            processed_images = reorder_images(grouped_images, grouped_images_index)
+            data.update({"pixel_mask": torch.stack(reorder_images(grouped_masks, grouped_images_index), dim=0)})
+
+        data.update({"pixel_values": torch.stack(processed_images, dim=0)})
         encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
         if annotations is not None:
+            annotations = reorder_images(grouped_annotations, grouped_images_index)
             encoded_inputs["labels"] = [
                 BatchFeature(annotation, tensor_type=return_tensors) for annotation in annotations
             ]

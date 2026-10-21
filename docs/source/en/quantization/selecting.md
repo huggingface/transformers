@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 There are many quantization methods available in Transformers for inference and fine-tuning. This guide helps you choose the most common and production-ready quantization techniques depending on your use case, and presents the advantages and disadvantages of each technique.
 
-For a comprehensive overview of all supported methods and their features, refer back to the table in the [Overview](./overview).
+For a comprehensive overview of all supported methods and their features, refer to the [quantization picker](./overview) or the full compatibility table below it.
 
 ## Inference
 
@@ -129,7 +129,7 @@ Consider the quantization method below during fine-tuning to save memory.
 
 Other methods offer PEFT compatibility, though bitsandbytes is the most established and straightforward path for QLoRA.
 
-See the [bitsandbytes documentation](./bitsandbytes#qlora) and [PEFT Docs](https://huggingface.co/docs/peft/developer_guides/quantization#aqlm-quantization) for more details.
+See the [bitsandbytes documentation](./bitsandbytes#qlora) and [PEFT Docs](https://huggingface.co/docs/peft/developer_guides/quantization#quantize-a-model) for more details.
 
 ## Research
 
