@@ -34,11 +34,7 @@ class Mxfp4HfQuantizer(BlockScaledQuantizer):
     """
 
     quantization_config: "Mxfp4Config"
-    producer_layouts = {
-        # DeepSeek already ships int8 and GPT-OSS gets its view in `FineGrainedPackedBlocks`
-        "modelopt": ProducerLayout(block_scale_name="weight_scale", packed_as_uint8=True),
-        "deepseek": ProducerLayout(block_scale_name="scale"),
-    }
+    producer_layouts = {"deepseek": ProducerLayout(block_scale_name="scale")}
 
     def _process_model_before_weight_loading(self, model, use_kernels: bool = False, **kwargs):
         # Hub kernels replace GPT-OSS's experts forward with one that reads full-precision weights on every device

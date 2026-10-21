@@ -240,7 +240,6 @@ class FineGrainedPackedBlocks(_FineGrainedOp):
         return out
 
 
-
 class FineGrainedViewPackedInt8(_FineGrainedOp):
     """View packed FP4 uint8 bytes as the int8 the modules hold. A copy would convert the values instead.
 

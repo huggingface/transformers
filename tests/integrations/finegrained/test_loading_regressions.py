@@ -19,7 +19,7 @@ import torch
 
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 from transformers.testing_utils import require_torch
-from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config, Mxfp4Config
+from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config
 
 from .utils import _ChainAssertions
 
