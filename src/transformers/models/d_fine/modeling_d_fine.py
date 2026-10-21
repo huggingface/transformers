@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -1978,8 +1979,8 @@ class DFineForObjectDetection(DFinePreTrainedModel):
             ]
         )
 
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         # Initialize weights and apply final processing
         self.post_init()
 
