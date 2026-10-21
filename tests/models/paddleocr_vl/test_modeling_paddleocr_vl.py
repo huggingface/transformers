@@ -24,6 +24,7 @@ from transformers import (
     AutoProcessor,
     PaddleOCRVLConfig,
     PaddleOCRVLForConditionalGeneration,
+    PaddleOCRVLModel,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -172,7 +173,7 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
     Model tester for `PaddleOCRVLForConditionalGeneration`.
     """
 
-    all_model_classes = (PaddleOCRVLForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (PaddleOCRVLForConditionalGeneration, PaddleOCRVLModel) if is_torch_available() else ()
     pipeline_model_mapping = {"image-text-to-text": PaddleOCRVLForConditionalGeneration}
     _is_composite = True
 

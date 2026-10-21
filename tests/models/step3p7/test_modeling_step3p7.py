@@ -99,7 +99,7 @@ class Step3p7ModelTest(VLMModelTest, unittest.TestCase):
     # Step3p7Model is a backbone (returns BaseModelOutputWithPast, no .loss).
     def _for_cond_gen_only(self, fn):
         orig = self.all_model_classes
-        self.all_model_classes = (Step3p7ForConditionalGeneration,) if is_torch_available() else ()
+        self.all_model_classes = (Step3p7ForConditionalGeneration, Step3p7Model) if is_torch_available() else ()
         try:
             fn()
         finally:

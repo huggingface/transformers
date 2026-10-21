@@ -629,6 +629,8 @@ class UnlimitedOcrVisionEncoder(CLIPVisionModel):
 
 @auto_docstring(custom_intro="Vision model encoding images first with SAM followed by an additional (CLIP) model.")
 class UnlimitedOcrVisionModel(DeepseekOcr2VisionModel):
+    config: UnlimitedOcrVisionConfig
+
     def __init__(self, config: UnlimitedOcrVisionConfig):
         super().__init__(config)
         del self.query_768_resolution

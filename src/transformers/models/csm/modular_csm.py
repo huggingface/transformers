@@ -275,6 +275,7 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
     _tied_weights_keys = None
     _tp_plan = None
     _pp_plan = None
+    config: CsmDepthDecoderConfig
 
     def __init__(self, config):
         super().__init__(config)

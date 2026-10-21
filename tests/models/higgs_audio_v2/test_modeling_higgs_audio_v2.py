@@ -187,7 +187,7 @@ class HiggsAudioV2ModelTester:
 
 @require_torch
 class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (HiggsAudioV2ForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (HiggsAudioV2ForConditionalGeneration, HiggsAudioV2Model) if is_torch_available() else ()
     pipeline_model_mapping = {"text-to-speech": HiggsAudioV2ForConditionalGeneration} if is_torch_available() else {}
 
     def setUp(self):

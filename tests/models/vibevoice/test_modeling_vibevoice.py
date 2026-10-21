@@ -25,6 +25,7 @@ from transformers import (
     AutoProcessor,
     VibeVoiceConfig,
     VibeVoiceForConditionalGeneration,
+    VibeVoiceModel,
     is_torch_available,
 )
 from transformers.testing_utils import cleanup, is_diffusers_available, require_diffusers, slow, torch_device
@@ -220,7 +221,7 @@ class VibeVoiceModelTester:
 
 
 class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (VibeVoiceForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (VibeVoiceForConditionalGeneration, VibeVoiceModel) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "text-to-audio": VibeVoiceForConditionalGeneration,

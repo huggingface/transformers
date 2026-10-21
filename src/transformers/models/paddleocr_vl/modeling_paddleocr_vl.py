@@ -483,6 +483,8 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel):
+    config: PaddleOCRTextConfig
+
     def __init__(self, config: PaddleOCRTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

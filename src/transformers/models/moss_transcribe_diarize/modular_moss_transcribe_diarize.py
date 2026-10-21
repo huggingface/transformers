@@ -243,7 +243,7 @@ class MossTranscribeDiarizeConfig(AudioFlamingo3Config):
     model_type = "moss_transcribe_diarize"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
-        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="moss_transcribe_diarize_audio"),
+        "audio_config": SubConfigSpec(config_class=MossTranscribeDiarizeAudioConfig),
         "text_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="qwen3",

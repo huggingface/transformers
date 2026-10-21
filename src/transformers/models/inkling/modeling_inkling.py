@@ -604,7 +604,7 @@ class InklingNormedEmbedding(nn.Embedding):
 
 @auto_docstring
 class InklingPreTrainedModel(PreTrainedModel):
-    config_class = InklingConfig
+    config: InklingConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["InklingDecoderLayer"]
@@ -831,6 +831,8 @@ class InklingAudioModelEmbeddings(nn.Module):
 
 @auto_docstring
 class InklingAudioModel(InklingPreTrainedModel):
+    config: InklingAudioConfig
+
     def __init__(self, config: InklingAudioConfig):
         super().__init__(config)
         self.embed_audio_tokens = InklingAudioModelEmbeddings(config)
@@ -968,6 +970,8 @@ def plan_out_scales(
 
 @auto_docstring
 class InklingVisionModel(InklingPreTrainedModel):
+    config: InklingVisionConfig
+
     def __init__(self, config: InklingVisionConfig):
         super().__init__(config)
         self.scales = plan_out_scales(

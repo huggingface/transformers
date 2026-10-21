@@ -555,6 +555,7 @@ class DeepseekOcr2SamVisionProj(nn.Module):
 
 class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
     _can_record_outputs = {"hidden_states": DeepseekOcr2SamVisionLayer, "attentions": DeepseekOcr2SamVisionAttention}
+    config: DeepseekOcr2SamVisionConfig
     _input_embed_layer = "patch_embed"
 
     def __init__(self, config: DeepseekOcr2SamVisionConfig):
@@ -885,6 +886,7 @@ class DeepseekOcr2VisionEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring(custom_intro="Vision encoder for DeepSeek-OCR-2.")
 class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
+    config: DeepseekOcr2VisionConfig
     _can_record_outputs = {
         "hidden_states": DeepseekOcr2VisionEncoderLayer,
         "attentions": DeepseekOcr2VisionAttention,
@@ -952,6 +954,8 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
 
 @auto_docstring(custom_intro="Vision pipeline: SAM ViT-B (with neck)")
 class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
+    config: DeepseekOcr2VisionConfig
+
     def __init__(self, config: DeepseekOcr2VisionConfig):
         super().__init__(config)
         self.sam_encoder = DeepseekOcr2SamVisionEncoder(config.sam_config)
