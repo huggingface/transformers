@@ -50,6 +50,7 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
         ("embedding_gemma2", "Gemma4AudioFeatureExtractor"),
         ("glmasr", "WhisperFeatureExtractor"),
+        ("gradium_phonon_tts", "PocketTTSFeatureExtractor"),
         ("granite_speech5_ctc", "GraniteSpeech5FeatureExtractor"),
         ("granite_speech5_encoder", "GraniteSpeech5FeatureExtractor"),
         ("granite_speech_plus", "GraniteSpeechFeatureExtractor"),

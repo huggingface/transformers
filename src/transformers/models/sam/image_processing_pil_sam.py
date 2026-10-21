@@ -387,6 +387,10 @@ class SamImageProcessorPil(PilBackend):
         masks = masks[keep_mask]
         converted_boxes = converted_boxes[keep_mask]
 
+        left = int(cropped_box_image[0])
+        top = int(cropped_box_image[1])
+        converted_boxes += torch.tensor([left, top, left, top], device=converted_boxes.device)
+
         masks = _pad_masks(masks, cropped_box_image, original_height, original_width)
         # conversion to rle is necessary to run non-maximum suppression
         masks = _mask_to_rle(masks)
@@ -547,7 +551,9 @@ def _is_box_near_crop_edge(boxes, crop_box, orig_box, atol=20.0):
 
 
 def _pad_masks(masks, crop_box: list[int], orig_height: int, orig_width: int):
-    left, top, right, bottom = crop_box
+    left, top, right, bottom = (int(v) for v in crop_box)
+    orig_height = int(orig_height)
+    orig_width = int(orig_width)
     if left == 0 and top == 0 and right == orig_width and bottom == orig_height:
         return masks
     # Coordinate transform masks
@@ -563,7 +569,7 @@ def _generate_crop_boxes(
     overlap_ratio: float = 512 / 1500,
     points_per_crop: int | None = 32,
     crop_n_points_downscale_factor: list[int] | None = 1,
-) -> tuple[list[list[int]], list[int]]:
+) -> tuple[np.ndarray, np.ndarray, list[np.ndarray], np.ndarray]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.
 
@@ -596,7 +602,7 @@ def _generate_crop_boxes(
     crop_boxes, layer_idxs = _generate_per_layer_crops(crop_n_layers, overlap_ratio, original_size)
 
     cropped_images, point_grid_per_crop = _generate_crop_images(
-        crop_boxes, image, points_grid, layer_idxs, target_size, original_size
+        crop_boxes, image, points_grid, layer_idxs, target_size
     )
     crop_boxes = np.array(crop_boxes)
     crop_boxes = crop_boxes.astype(np.float32)
@@ -652,9 +658,7 @@ def _build_point_grid(n_per_side: int) -> np.ndarray:
     return points
 
 
-def _generate_crop_images(
-    crop_boxes, image, points_grid, layer_idxs, target_size, original_size, input_data_format=None
-):
+def _generate_crop_images(crop_boxes, image, points_grid, layer_idxs, target_size, input_data_format=None):
     """
     Takes as an input bounding boxes that are used to crop the image. Based in the crops, the corresponding points are
     also passed.
@@ -671,7 +675,7 @@ def _generate_crop_images(
         points_scale = np.array(cropped_im_size)[None, ::-1]
 
         points = points_grid[layer_idxs[i]] * points_scale
-        normalized_points = _normalize_coordinates(target_size, points, original_size)
+        normalized_points = _normalize_coordinates(target_size, points, cropped_im_size)
         total_points_per_crop.append(normalized_points)
 
     return cropped_images, total_points_per_crop
