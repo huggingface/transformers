@@ -27,7 +27,6 @@ import re
 import shutil
 import signal
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -46,6 +45,7 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     Trainer,
+    TrainerCallback,
     TrainerState,
     TrainingArguments,
     default_data_collator,
@@ -61,10 +61,10 @@ from transformers.testing_utils import (
     backend_device_count,
     evaluate_side_effect_factory,
     get_steps_per_epoch,
+    get_torch_dist_unique_port,
     is_staging_test,
-    require_accelerate,
+    mockenv_context,
     require_deepspeed,
-    require_non_hpu,
     require_peft,
     require_tensorboard,
     require_torch,
@@ -459,29 +459,40 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
         # won't be the same since the training dataloader is shuffled).
 
+        def check_train_metrics(metrics, step_losses):
+            # `train_loss` and throughput must only cover the steps run in this `train()` call
+            self.assertAlmostEqual(metrics["train_loss"], sum(step_losses) / len(step_losses), places=3)
+            self.assertEqual(round(metrics["train_steps_per_second"] * metrics["train_runtime"]), len(step_losses))
+
         with tempfile.TemporaryDirectory() as tmpdir:
-            trainer = get_regression_trainer(
-                output_dir=tmpdir,
-                train_len=128,
-                save_steps=5,
-                learning_rate=0.1,
-            )
-            trainer.train()
+            kwargs = {
+                "output_dir": tmpdir,
+                "train_len": 128,
+                "save_steps": 5,
+                "learning_rate": 0.1,
+                "logging_steps": 1,
+            }
+            trainer = get_regression_trainer(**kwargs)
+            metrics = trainer.train().metrics
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
             state = dataclasses.asdict(trainer.state)
+            step_losses = {log["step"]: log["loss"] for log in trainer.state.log_history if "loss" in log}
+            check_train_metrics(metrics, list(step_losses.values()))
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
             self.convert_to_sharded_checkpoint(checkpoint)
 
             # Reinitialize trainer
-            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
+            trainer = get_regression_trainer(**kwargs)
 
-            trainer.train(resume_from_checkpoint=checkpoint)
+            metrics1 = trainer.train(resume_from_checkpoint=checkpoint).metrics
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
+            # The resumed run only trained the steps after the checkpoint, with the same losses as the full run
+            check_train_metrics(metrics1, [loss for step, loss in step_losses.items() if step > 5])
 
     @require_torch_up_to_2_accelerators
     def test_resume_training_with_gradient_accumulation(self):
@@ -626,41 +637,28 @@ class TrainerAutoBatchSizeTest(TestCasePlus, TrainerIntegrationCommon):
         self.n_epochs = args.num_train_epochs
         self.batch_size = args.train_batch_size
 
-    @slow
-    @require_non_hpu
-    @require_accelerate
-    @require_torch_non_multi_accelerator
     def test_auto_batch_size_finder(self):
-        if torch.cuda.is_available():
-            torch.backends.cudnn.deterministic = True
+        train_dataset = RegressionDataset(length=128)
+        model = RegressionRandomPreTrainedModel(RegressionModelConfig(a=0, b=2))
 
-        SRC_DIR = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "examples", "pytorch", "text-classification")
-        )
-        sys.path.append(SRC_DIR)
-        import run_glue
+        def make_trainer(auto_find_batch_size):
+            args = RegressionTrainingArguments(
+                self.get_auto_remove_tmp_dir(),
+                max_steps=2,
+                save_strategy="no",
+                per_device_train_batch_size=16,
+                auto_find_batch_size=auto_find_batch_size,
+            )
+            return Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            testargs = f"""
-                run_glue.py
-                --model_name_or_path distilbert/distilbert-base-uncased
-                --task_name mrpc
-                --do_train
-                --do_eval
-                --max_seq_len 128
-                --per_device_train_batch_size 4096
-                --learning_rate 2e-5
-                --num_train_epochs 1
-                --output_dir {tmpdir}
-                --auto_find_batch_size 0
-                """.split()
-            with self.assertRaises(RuntimeError):
-                with patch.object(sys, "argv", testargs):
-                    run_glue.main()
+        # Without the finder, the OOM reaches the user
+        with self.assertRaisesRegex(RuntimeError, "CUDA out of memory"):
+            make_trainer(auto_find_batch_size=False).train()
 
-        testargs[-1] = "1"
-        with patch.object(sys, "argv", testargs):
-            run_glue.main()
+        # With it, training shrinks the batch size until it fits
+        trainer = make_trainer(auto_find_batch_size=True)
+        trainer.train()
+        self.assertLess(trainer._train_batch_size, 16)
 
     @require_deepspeed
     @require_torch_non_multi_accelerator
@@ -690,9 +688,44 @@ class TrainerAutoBatchSizeTest(TestCasePlus, TrainerIntegrationCommon):
             auto_find_batch_size=True,
             deepspeed=deepspeed,
         )
-        trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
-        trainer.train()
+        # DeepSpeed refuses to initialize without a rank in the environment, and this test runs
+        # in-process rather than under `accelerate launch`, so stand in for the launcher.
+        dist_env_1_gpu = {
+            "MASTER_ADDR": "localhost",
+            "MASTER_PORT": str(get_torch_dist_unique_port()),
+            "RANK": "0",
+            "LOCAL_RANK": "0",
+            "WORLD_SIZE": "1",
+        }
+        with mockenv_context(**dist_env_1_gpu):
+            trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
+            trainer.train()
         self.assertEqual(trainer._train_batch_size, 14)
+
+    def test_auto_batch_size_eval_oom_fails_fast(self):
+        # An eval OOM must not be caught by the batch size finder, which only shrinks the train batch size
+        class MockEvalOOMCallback(TrainerCallback):
+            def on_evaluate(self, args, state, control, **kwargs):
+                raise RuntimeError("CUDA out of memory.")
+
+        train_dataset = RegressionDataset(length=128)
+        eval_dataset = RegressionDataset(length=16)
+        model = RegressionRandomPreTrainedModel(RegressionModelConfig(a=0, b=2))
+        args = RegressionTrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            max_steps=2,
+            eval_strategy="steps",
+            eval_steps=1,
+            save_strategy="no",
+            per_device_train_batch_size=16,
+            auto_find_batch_size=True,
+        )
+        trainer = Trainer(
+            model, args, train_dataset=train_dataset, eval_dataset=eval_dataset, callbacks=[MockEvalOOMCallback()]
+        )
+        with self.assertRaisesRegex(RuntimeError, "per_device_eval_batch_size"):
+            trainer.train()
+        self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
 
     def test_auto_batch_size_with_resume_from_checkpoint(self):
         train_dataset = RegressionDataset(length=128)

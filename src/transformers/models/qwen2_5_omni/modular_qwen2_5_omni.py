@@ -28,9 +28,14 @@ from torch.nn import Parameter
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+    ModelOutput,
+)
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -363,10 +368,10 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
         "video_token_id": "video_token_index",
         "audio_token_id": "audio_token_index",
     }
-    sub_configs = {
-        "audio_config": Qwen2_5OmniAudioEncoderConfig,
-        "vision_config": Qwen2_5OmniVisionEncoderConfig,
-        "text_config": Qwen2_5OmniTextConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Qwen2_5OmniTextConfig),
+        "vision_config": SubConfigSpec(config_class=Qwen2_5OmniVisionEncoderConfig),
+        "audio_config": SubConfigSpec(config_class=Qwen2_5OmniAudioEncoderConfig),
     }
 
     audio_config: dict | PreTrainedConfig | None = None
@@ -382,24 +387,6 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
     user_token_id: int = 872
     initializer_range: float = 0.02
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Qwen2_5OmniVisionEncoderConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Qwen2_5OmniVisionEncoderConfig()
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Qwen2_5OmniAudioEncoderConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = Qwen2_5OmniAudioEncoderConfig()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = Qwen2_5OmniTextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = Qwen2_5OmniTextConfig()
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
@@ -648,26 +635,13 @@ class Qwen2_5OmniToken2WavConfig(PreTrainedConfig):
     """
 
     model_type = "qwen2_5_omni_token2wav"
-    sub_configs = {
-        "dit_config": Qwen2_5OmniDiTConfig,
-        "bigvgan_config": Qwen2_5OmniBigVGANConfig,
+    sub_configs_defaults = {
+        "dit_config": SubConfigSpec(config_class=Qwen2_5OmniDiTConfig),
+        "bigvgan_config": SubConfigSpec(config_class=Qwen2_5OmniBigVGANConfig),
     }
 
     dit_config: dict | PreTrainedConfig | None = None
     bigvgan_config: dict | PreTrainedConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        if self.dit_config is None:
-            self.dit_config = Qwen2_5OmniDiTConfig()
-        elif isinstance(self.dit_config, dict):
-            self.dit_config = Qwen2_5OmniDiTConfig(**self.dit_config)
-
-        if self.bigvgan_config is None:
-            self.bigvgan_config = Qwen2_5OmniBigVGANConfig()
-        elif isinstance(self.bigvgan_config, dict):
-            self.bigvgan_config = Qwen2_5OmniBigVGANConfig(**self.bigvgan_config)
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen2.5-Omni-7B")
@@ -714,37 +688,16 @@ class Qwen2_5OmniConfig(PreTrainedConfig):
     """
 
     model_type = "qwen2_5_omni"
-    sub_configs = {
-        "thinker_config": Qwen2_5OmniThinkerConfig,
-        "talker_config": Qwen2_5OmniTalkerConfig,
-        "token2wav_config": Qwen2_5OmniToken2WavConfig,
+    sub_configs_defaults = {
+        "thinker_config": SubConfigSpec(config_class=Qwen2_5OmniThinkerConfig),
+        "talker_config": SubConfigSpec(config_class=Qwen2_5OmniTalkerConfig),
+        "token2wav_config": SubConfigSpec(config_class=Qwen2_5OmniToken2WavConfig),
     }
 
     thinker_config: dict | PreTrainedConfig | None = None
     talker_config: dict | PreTrainedConfig | None = None
     token2wav_config: dict | PreTrainedConfig | None = None
     enable_audio_output: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.thinker_config is None:
-            self.thinker_config = Qwen2_5OmniThinkerConfig()
-            logger.info("thinker_config is None. Initializing thinker model with default values")
-        elif isinstance(self.thinker_config, dict):
-            self.thinker_config = Qwen2_5OmniThinkerConfig(**self.thinker_config)
-
-        if self.talker_config is None:
-            self.talker_config = Qwen2_5OmniTalkerConfig()
-            logger.info("talker_config is None. Initializing talker model with default values")
-        elif isinstance(self.talker_config, dict):
-            self.talker_config = Qwen2_5OmniTalkerConfig(**self.talker_config)
-
-        if self.token2wav_config is None:
-            self.token2wav_config = Qwen2_5OmniToken2WavConfig()
-            logger.info("token2wav_config is None. Initializing token2wav model with default values")
-        elif isinstance(self.token2wav_config, dict):
-            self.token2wav_config = Qwen2_5OmniToken2WavConfig(**self.token2wav_config)
-
-        super().__post_init__(**kwargs)
 
     def get_text_config(self, *args, **kwargs):
         """
@@ -1396,7 +1349,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         # Post-process: stride-2 average pooling using precomputed indices, then project
         hidden_states = (hidden_states[pool_indices] + hidden_states[pool_indices + 1]) / 2
         hidden_states = self.proj(self.ln_post(hidden_states))
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states)
 
     # Ignore copy
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
@@ -1666,10 +1619,9 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5_VLTextModel):
     The Qwen2.5OmniThinker model which consists of an audio backbone and a language model.
     """
 )
-class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
+class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration):
     config: Qwen2_5OmniThinkerConfig
-    base_model_prefix = "thinker"
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _keys_to_ignore_on_load_unexpected = [r"^talker", r"^token2wav"]
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
     _can_compile_fullgraph = True
 
@@ -1677,23 +1629,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         super().__init__(config)
         self.audio_tower = Qwen2_5OmniAudioEncoder._from_config(config.audio_config)
         self.visual = Qwen2_5OmniVisionEncoder._from_config(config.vision_config)
-        self.vocab_size = config.text_config.vocab_size
-        self.model = Qwen2_5OmniThinkerTextModel._from_config(config.text_config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.language_model = Qwen2_5OmniThinkerTextModel._from_config(config.text_config)
         self.spatial_merge_size = config.vision_config.spatial_merge_size
         self.rope_deltas = None
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_decoder(self):
-        # `base_model_prefix = "thinker"` means `self.base_model` falls back to `self`, so
-        # the default `get_decoder` can't find the LLM. The text model lives on `self.model`.
-        return self.model
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -1707,8 +1646,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = list(video_embeds)
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="image")
@@ -1723,10 +1661,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = list(image_embeds)
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="audio")
     @can_return_tuple
     @auto_docstring
     def get_audio_features(
@@ -1872,12 +1810,12 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         use_audio_in_video: bool | None = None,
         video_second_per_grid: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen2_5OmniThinkerCausalLMOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         r"""
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
@@ -1890,39 +1828,11 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
         video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
             Number of seconds per grid for each video, used for temporal feature mapping.
-
-        Example:
-
-        ```python
-        >>> from io import BytesIO
-        >>> from urllib.request import urlopen
-        >>> import librosa
-        >>> from qwen_vl_utils import process_vision_info
-        >>> from transformers import Qwen2_5OmniProcessor, Qwen2_5OmniThinkerForConditionalGeneration
-
-        >>> thinker = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-Omni-7B")
-        >>> processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
-
-        >>> conversations = [
-        >>>         {'role': 'system', 'content': 'You are a helpful voice chat bot, and please respond to me in a casual conversation manner using random voice.'},
-        >>>         {"role": "user", "content": [
-        >>>             {"type": "image", "image_url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-        >>>             {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"},
-        >>>         ]},
-        >>> ]
-
-        >>> text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-        >>> audios = [ librosa.load(BytesIO(urlopen( conversations[1]['content'][1]['audio_url'] ).read()), sr=self.processor.feature_extractor.sampling_rate) ]
-        >>> images, videos = process_vision_info(conversations)
-        >>> inputs = processor(text=text, audio=audios, images=images, videos=videos, return_tensors="pt", padding=True)
-
-        >>> # Generate
-        >>> inputs['use_audio_in_video'] = `True` or `False`
-        >>> generation = thinker.generate(**inputs, max_new_tokens=2048)
-        >>> generate_ids = generation[:, inputs.input_ids.size(1):]
-
-        >>> response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        ```"""
+        """
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
 
         if inputs_embeds is None:
             # 1. Extract the input embeddings
@@ -1937,21 +1847,28 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"]: BaseModelOutputWithPooling = self.get_image_features(
                 pixel_values, image_grid_thw, return_dict=True, **kwargs
-            ).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"]: BaseModelOutputWithPooling = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
             )
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
-            ).pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0)
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
             )
@@ -1975,7 +1892,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 video_second_per_grid=video_second_per_grid,
             )
 
-        outputs = self.model(
+        outputs = self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1985,13 +1902,165 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             **kwargs,
         )
 
+        return BaseModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
+    config: Qwen2_5OmniThinkerConfig
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _can_compile_fullgraph = True
+
+    def __init__(self, config: Qwen2_5OmniThinkerConfig):
+        super().__init__(config)
+        self.vocab_size = config.text_config.vocab_size
+        self.model = Qwen2_5OmniThinkerModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.spatial_merge_size = config.vision_config.spatial_merge_size
+        self.post_init()
+
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        """
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        """
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_audio_features(
+        self,
+        input_features: torch.FloatTensor,
+        feature_attention_mask: torch.LongTensor | None = None,
+        audio_feature_lengths: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        input_features (`torch.FloatTensor`):
+            The tensors corresponding to the input audios.
+        feature_attention_mask (`torch.LongTensor`, *optional*):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
+        """
+        return self.model.get_audio_features(input_features, feature_attention_mask, audio_feature_lengths, **kwargs)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        feature_attention_mask: torch.Tensor | None = None,
+        audio_feature_lengths: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        use_audio_in_video: bool | None = None,
+        video_second_per_grid: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Qwen2_5OmniThinkerCausalLMOutputWithPast:
+        r"""
+        feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
+        use_audio_in_video (`bool`, *optional*):
+            Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
+        video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
+            Number of seconds per grid for each video, used for temporal feature mapping.
+
+        Example:
+
+        ```python
+        >>> from transformers import Qwen2_5OmniProcessor, Qwen2_5OmniThinkerForConditionalGeneration
+
+        >>> thinker = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+        >>> processor = Qwen2_5OmniProcessor.from_pretrained("Qwen/Qwen2.5-Omni-7B")
+
+        >>> conversations = [
+        >>>         {'role': 'system', 'content': 'You are a helpful voice chat bot, and please respond to me in a casual conversation manner using random voice.'},
+        >>>         {"role": "user", "content": [
+        >>>             {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+        >>>             {"type": "audio", "audio": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"},
+        >>>         ]},
+        >>> ]
+
+        >>> inputs = processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt"
+        )
+
+        >>> # Generate
+        >>> generation = thinker.generate(**inputs, max_new_tokens=2048)
+        >>> generate_ids = generation[:, inputs.input_ids.size(1):]
+
+        >>> response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        ```"""
+        outputs: BaseModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            input_features=input_features,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            attention_mask=attention_mask,
+            feature_attention_mask=feature_attention_mask,
+            audio_feature_lengths=audio_feature_lengths,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            use_audio_in_video=use_audio_in_video,
+            video_second_per_grid=video_second_per_grid,
+            mm_encoder_outputs=mm_encoder_outputs,
+            **kwargs,
+        )
+
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size
+                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size, **kwargs
             )
 
         return Qwen2_5OmniThinkerCausalLMOutputWithPast(
@@ -2000,28 +2069,8 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
+            rope_deltas=self.model.rope_deltas,
         )
-
-    def _expand_inputs_for_generation(
-        self,
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Overwritten -- position ids are packed as `[4, batch_size, seq_len]`, so the batch dim is not `0`
-        position_ids = model_kwargs.pop("position_ids", None)
-        input_ids, model_kwargs = super()._expand_inputs_for_generation(
-            expand_size=expand_size,
-            is_encoder_decoder=is_encoder_decoder,
-            input_ids=input_ids,
-            **model_kwargs,
-        )
-        if position_ids is not None:
-            batch_dim = 1 if position_ids.ndim == 3 else 0
-            model_kwargs["position_ids"] = position_ids.repeat_interleave(expand_size, dim=batch_dim)
-        return input_ids, model_kwargs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- requires 3D position ids
@@ -2032,8 +2081,8 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         past_length = 0
         if (cache := model_kwargs.get("past_key_values")) is not None:
             past_length = cache.get_seq_length()
-        if past_length != 0 and self.rope_deltas is not None:
-            position_ids = text_positions[None, ...] + self.rope_deltas
+        if past_length != 0 and self.model.rope_deltas is not None:
+            position_ids = text_positions[None, ...] + self.model.rope_deltas
             return position_ids
 
         # Otherwise compute 3d position ids for audio/vision tokens and concat with text position ids
@@ -2055,10 +2104,12 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 audio_seqlens=audio_feature_lengths,
                 second_per_grids=model_kwargs.get("video_second_per_grid"),
             )
-            self.rope_deltas = rope_deltas
+            self.model.rope_deltas = rope_deltas
         else:
             vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
-            self.rope_deltas = torch.zeros(inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device)
+            self.model.rope_deltas = torch.zeros(
+                inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
+            )
 
         # Concatenate "text + vision" positions into [4, bs, seq-len]
         text_positions = text_positions[None, ...]
@@ -2177,7 +2228,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B")
 
         >>> prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
-        >>> url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"
         >>> audio, _ = librosa.load(BytesIO(urlopen(url).read()), sr=self.processor.feature_extractor.sampling_rate)
 
         >>> inputs = processor(text=prompt, audio=audio, return_tensors="pt")
@@ -3893,6 +3944,7 @@ __all__ = [
     "Qwen2_5OmniVisionEncoderConfig",
     "Qwen2_5OmniForConditionalGeneration",
     "Qwen2_5OmniThinkerTextModel",
+    "Qwen2_5OmniThinkerModel",
     "Qwen2_5OmniThinkerForConditionalGeneration",
     "Qwen2_5OmniTalkerModel",
     "Qwen2_5OmniTalkerForConditionalGeneration",

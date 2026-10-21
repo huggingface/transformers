@@ -97,7 +97,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "image",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
                             ),
                         },
                     ],
@@ -222,7 +222,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {
                             "type": "image",
                             "url": url_to_local_path(
-                                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
                             ),
                         },
                     ],
@@ -235,7 +235,9 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {"type": "text", "text": "What is shown in this image?"},
                         {
                             "type": "image",
-                            "url": url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"),
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                            ),
                         },
                     ],
                 },
@@ -399,7 +401,7 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             {
                 "type": "image",
                 "url": url_to_local_path(
-                    "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
+                    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
                 ),
             }
         )

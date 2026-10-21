@@ -166,10 +166,6 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="PPOCRV5MobileDet does not support.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -241,7 +237,7 @@ class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
             PPOCRV5ServerDetImageProcessor.from_pretrained(model_path) if is_vision_available() else None
         )
         img_url = url_to_local_path(
-            "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_001.png"
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"
         )
         self.image = load_image(img_url)
 
@@ -271,10 +267,10 @@ class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
         expected_shape_boxes = torch.Size((4, 4, 2))
         expected_boxes = torch.tensor(
             [
-                [[76, 550], [451, 539], [452, 576], [77, 587]],
-                [[11, 504], [518, 483], [520, 534], [13, 555]],
-                [[189, 452], [401, 445], [402, 482], [190, 490]],
-                [[38, 408], [488, 387], [490, 433], [40, 454]],
+                [[83, 362], [309, 362], [309, 433], [83, 433]],
+                [[82, 265], [266, 267], [265, 339], [81, 336]],
+                [[82, 173], [274, 177], [273, 244], [81, 240]],
+                [[87, 90], [577, 90], [577, 152], [87, 152]],
             ],
             dtype=torch.short,
             device=torch_device,
@@ -283,7 +279,7 @@ class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
         self.assertEqual(results[0]["boxes"].shape, expected_shape_boxes)
         torch.testing.assert_close(results[0]["boxes"], expected_boxes, rtol=2e-2, atol=2e-2)
 
-        expected_scores = torch.tensor([0.8363, 0.8170, 0.8746, 0.8694]).to(torch_device)
+        expected_scores = torch.tensor([0.8882, 0.8907, 0.9146, 0.8886]).to(torch_device)
         self.assertEqual(len(results[0]["scores"]), 4)
         torch.testing.assert_close(
             torch.tensor(results[0]["scores"]).to(device=torch_device), expected_scores, rtol=2e-2, atol=2e-2

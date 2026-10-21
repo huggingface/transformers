@@ -86,7 +86,7 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     {
                         "type": "audio",
                         "audio_url": url_to_local_path(
-                            "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/glass-breaking-151256.mp3"
+                            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/glass-breaking-151256.mp3"
                         ),
                     },
                     {"type": "text", "text": "What's that sound?"},
@@ -99,7 +99,7 @@ class Qwen2AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     {
                         "type": "audio",
                         "audio_url": url_to_local_path(
-                            "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+                            "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav"
                         ),
                     },
                     {"type": "text", "text": "How about this one?"},

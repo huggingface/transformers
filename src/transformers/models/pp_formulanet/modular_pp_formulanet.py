@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     ImageInput,
@@ -83,6 +83,7 @@ class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
         The hidden size of the decoder that the encoder features are projected to.
     """
 
+    model_type = "pp_formulanet_vision"
     post_conv_in_channels: int = 256
     post_conv_out_channels: int = 1024
     post_conv_mid_channels: int = 512
@@ -92,6 +93,7 @@ class PPFormulaNetVisionConfig(SLANeXtVisionConfig):
 @auto_docstring(checkpoint="PaddlePaddle/PP-FormulaNet_plus-L_safetensors")
 @strict
 class PPFormulaNetTextConfig(MBartConfig):
+    model_type = "pp_formulanet_text"
     base_config_key = "text_config"
     vocab_size: int = 50000
     max_position_embeddings: int = 2560
@@ -112,26 +114,14 @@ class PPFormulaNetTextConfig(MBartConfig):
 @strict
 class PPFormulaNetConfig(PreTrainedConfig):
     model_type = "pp_formulanet"
-    sub_configs = {"text_config": PPFormulaNetTextConfig, "vision_config": PPFormulaNetVisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=PPFormulaNetTextConfig),
+        "vision_config": SubConfigSpec(config_class=PPFormulaNetVisionConfig),
+    }
 
     text_config: dict | PPFormulaNetTextConfig | None = None
     vision_config: dict | PPFormulaNetVisionConfig | None = None
     is_encoder_decoder: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config = PPFormulaNetTextConfig(**self.text_config)
-        elif self.text_config is None:
-            logger.info("text_config is None. Initializing the PPFormulaNetTextConfig with default values.")
-            self.text_config = PPFormulaNetTextConfig()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = PPFormulaNetVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            logger.info("vision_config is None. Initializing the PPFormulaNetVisionConfig with default values.")
-            self.vision_config = PPFormulaNetVisionConfig()
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring
@@ -455,7 +445,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         ```python
         >>> from io import BytesIO
 
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, PPFormulaNetForConditionalGeneration
 
@@ -463,7 +453,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         >>> model = PPFormulaNetForConditionalGeneration.from_pretrained(model_path, device_map="auto")
         >>> processor = AutoProcessor.from_pretrained(model_path)
 
-        >>> image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"
+        >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_formula_rec_001.png"
         >>> image = Image.open(BytesIO(httpx.get(image_url).content)).convert("RGB")
         >>> inputs = processor(images=image, return_tensors="pt").to(model.device)
         >>> outputs = model(**inputs)
@@ -518,7 +508,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    # override this function to compatible with `_prepare_encoder_decoder_kwargs_for_generation`
+    # override this function to compatible with `_maybe_prepare_encoder_kwargs_for_generation`
     def get_encoder(self, modality: str | None = None):
         return self.model.get_encoder(modality=modality)
 
@@ -528,7 +518,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
     def get_image_features(self):
         raise AttributeError("The PPFormulaNet does not need `get_image_features`.")
 
-    def _prepare_encoder_decoder_kwargs_for_generation(self):
+    def _maybe_prepare_encoder_kwargs_for_generation(self):
         raise AttributeError("The PPFormulaNet use default implementation.")
 
 

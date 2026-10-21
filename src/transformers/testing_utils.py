@@ -47,8 +47,8 @@ from typing import TYPE_CHECKING, Any
 from unittest import mock
 from unittest.mock import patch
 
-import httpx
 from huggingface_hub import create_repo, delete_repo
+from huggingface_hub.utils import httpx
 from packaging import version
 
 from transformers import logging as transformers_logging
@@ -123,11 +123,13 @@ from .utils import (
     is_multipart_available,
     is_natten_available,
     is_nltk_available,
+    is_nncf_available,
     is_numba_available,
     is_onnx_available,
     is_onnxruntime_available,
     is_onnxscript_available,
     is_openai_available,
+    is_openvino_available,
     is_optimum_available,
     is_optimum_quanto_available,
     is_pandas_available,
@@ -161,6 +163,7 @@ from .utils import (
     is_tokenizers_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
+    is_torch_flex_attn_available,
     is_torch_fp16_available_on_device,
     is_torch_greater_or_equal,
     is_torch_hpu_available,
@@ -640,6 +643,14 @@ def require_onnxruntime(test_case):
 
 def require_executorch(test_case):
     return unittest.skipUnless(is_executorch_available(), "test requires ExecuTorch")(test_case)
+
+
+def require_openvino(test_case):
+    return unittest.skipUnless(is_openvino_available(), "test requires OpenVINO")(test_case)
+
+
+def require_nncf(test_case):
+    return unittest.skipUnless(is_nncf_available(), "test requires NNCF")(test_case)
 
 
 def require_timm(test_case):
@@ -1139,6 +1150,14 @@ if is_torch_available():
             raise ValueError(
                 f"TRANSFORMERS_TEST_DEVICE={torch_device}, but HPU is unavailable. Please double-check your testing environment."
             )
+        if torch_device == "mps" and not torch.backends.mps.is_available():
+            raise ValueError(
+                f"TRANSFORMERS_TEST_DEVICE={torch_device}, but MPS is unavailable. Please double-check your testing environment."
+            )
+        if torch_device == "tpu" and not is_torch_tpu_available():
+            raise ValueError(
+                "TRANSFORMERS_TEST_DEVICE=tpu, but TPU is unavailable. Please double-check your testing environment."
+            )
 
         try:
             # try creating device to see if provided device is valid
@@ -1157,6 +1176,8 @@ if is_torch_available():
         torch_device = "hpu"
     elif is_torch_xpu_available():
         torch_device = "xpu"
+    elif is_torch_tpu_available():
+        torch_device = "tpu"
     else:
         torch_device = "cpu"
 else:
@@ -1191,7 +1212,11 @@ def require_torch_gpu(test_case):
 
 
 def require_torch_mps(test_case):
-    """Decorator marking a test that requires CUDA and PyTorch."""
+    """Decorator marking a test that requires MPS and PyTorch.
+
+    MPS is not auto-detected as `torch_device` -- a Mac reports `cpu` unless asked otherwise -- so
+    these run under `TRANSFORMERS_TEST_DEVICE=mps`.
+    """
     return unittest.skipUnless(torch_device == "mps", "test requires MPS")(test_case)
 
 
@@ -1214,7 +1239,7 @@ def get_cgroup_memory_limit_bytes() -> int | None:
     )
     for path, unlimited_marker in candidates:
         try:
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 raw = f.read().strip()
         except OSError:
             continue
@@ -1406,6 +1431,11 @@ def require_torch_fp16(test_case):
     return unittest.skipUnless(
         is_torch_fp16_available_on_device(torch_device), "test requires device with fp16 support"
     )(test_case)
+
+
+def require_flex_attention(test_case):
+    """Decorator marking a test that requires FlexAttention."""
+    return unittest.skipUnless(is_torch_flex_attn_available(), "test requires FlexAttention")(test_case)
 
 
 def require_fp8(test_case):
@@ -1956,6 +1986,7 @@ def assert_screenout(out, what):
 def set_config_for_less_flaky_test(config):
     target_attrs = [
         "rms_norm_eps",
+        "post_norm_eps",
         "layer_norm_eps",
         "norm_eps",
         "norm_epsilon",
@@ -1978,6 +2009,7 @@ def set_model_for_less_flaky_test(model):
     # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
     target_names = (
         "LayerNorm",
+        "LayerNorm1P",
         "GroupNorm",
         "BatchNorm",
         "RMSNorm",
@@ -2562,7 +2594,7 @@ def mockenv_context(*remove, **update):
 
 # --- pytest conf functions --- #
 
-# to avoid multiple invocation from tests/conftest.py and examples/conftest.py - make sure it's called only once
+# to avoid multiple invocation if several conftest.py files call it - make sure it's called only once
 pytest_opt_registered = {}
 
 
@@ -2642,7 +2674,7 @@ def pytest_terminal_summary_main(tr, id):
                 dlist.append(rep)
     if dlist:
         dlist.sort(key=lambda x: x.duration, reverse=True)
-        with open(report_files["durations"], "w") as f:
+        with open(report_files["durations"], "w", encoding="utf-8") as f:
             durations_min = 0.05  # sec
             f.write("slowest durations\n")
             for i, rep in enumerate(dlist):
@@ -2672,25 +2704,25 @@ def pytest_terminal_summary_main(tr, id):
 
     # report failures with line/short/long styles
     config.option.tbstyle = "auto"  # full tb
-    with open(report_files["failures_long"], "w") as f:
+    with open(report_files["failures_long"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_failures()
 
     # config.option.tbstyle = "short" # short tb
-    with open(report_files["failures_short"], "w") as f:
+    with open(report_files["failures_short"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         summary_failures_short(tr)
 
     config.option.tbstyle = "line"  # one line per error
-    with open(report_files["failures_line"], "w") as f:
+    with open(report_files["failures_line"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_failures()
 
-    with open(report_files["errors"], "w") as f:
+    with open(report_files["errors"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_errors()
 
-    with open(report_files["warnings"], "w") as f:
+    with open(report_files["warnings"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_warnings()  # normal warnings
         tr.summary_warnings()  # final warnings
@@ -2704,11 +2736,11 @@ def pytest_terminal_summary_main(tr, id):
     #     tr._tw = create_terminal_writer(config, f)
     #     tr.summary_passes()
 
-    with open(report_files["summary_short"], "w") as f:
+    with open(report_files["summary_short"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.short_test_summary()
 
-    with open(report_files["stats"], "w") as f:
+    with open(report_files["stats"], "w", encoding="utf-8") as f:
         tr._tw = create_terminal_writer(config, f)
         tr.summary_stats()
 
@@ -2855,7 +2887,7 @@ def nested_simplify(obj, decimals=3):
 
 
 def check_json_file_has_correct_format(file_path):
-    with open(file_path) as f:
+    with open(file_path, encoding="utf-8") as f:
         lines = f.readlines()
         if len(lines) == 1:
             # length can only be 1 if dict is empty
@@ -3084,16 +3116,22 @@ def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
         test_case.fail(f"{results['error']}")
 
 
+# Devices locked to the process that opens them; a device spec adds its own with `SINGLE_PROCESS_DEVICE = True`
+SINGLE_PROCESS_DEVICES = {"tpu"}
+
+
 def run_test_using_subprocess(func):
     """
     To decorate a test to run in a subprocess using the `subprocess` module. This could avoid potential GPU memory
     issues (GPU OOM or a test that causes many subsequential failing with `CUDA error: device-side assert triggered`).
+
+    On devices in `SINGLE_PROCESS_DEVICES`, the test runs in the current process instead.
     """
     import pytest
 
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        if os.getenv("_INSIDE_SUB_PROCESS", None) == "1":
+        if os.getenv("_INSIDE_SUB_PROCESS", None) == "1" or torch_device in SINGLE_PROCESS_DEVICES:
             func(*args, **kwargs)
         else:
             test = " ".join(os.environ.get("PYTEST_CURRENT_TEST").split(" ")[:-1])
@@ -3408,6 +3446,17 @@ if is_torch_xpu_available():
     BACKEND_TORCH_ACCELERATOR_MODULE["xpu"] = torch.xpu
 
 
+if is_torch_available() and is_torch_tpu_available():
+    # `torch.tpu` does not expose the whole accelerator API yet, so anything missing is left out and
+    # falls back to the `default` entry of its table rather than being faked here.
+    BACKEND_MANUAL_SEED["tpu"] = torch.tpu.manual_seed
+    BACKEND_DEVICE_COUNT["tpu"] = torch.accelerator.device_count
+    BACKEND_SYNCHRONIZE["tpu"] = torch.accelerator.synchronize
+    BACKEND_TORCH_ACCELERATOR_MODULE["tpu"] = torch.tpu
+    if hasattr(torch.tpu, "empty_cache"):
+        BACKEND_EMPTY_CACHE["tpu"] = torch.tpu.empty_cache
+
+
 if is_torch_xla_available():
     BACKEND_EMPTY_CACHE["xla"] = torch.cuda.empty_cache
     BACKEND_MANUAL_SEED["xla"] = torch.cuda.manual_seed
@@ -3500,6 +3549,9 @@ if is_torch_available():
         update_mapping_from_spec(BACKEND_MANUAL_SEED, "MANUAL_SEED_FN")
         update_mapping_from_spec(BACKEND_EMPTY_CACHE, "EMPTY_CACHE_FN")
         update_mapping_from_spec(BACKEND_DEVICE_COUNT, "DEVICE_COUNT_FN")
+
+        if getattr(device_spec_module, "SINGLE_PROCESS_DEVICE", False):
+            SINGLE_PROCESS_DEVICES.add(torch_device)
 
 
 def compare_pipeline_output_to_hub_spec(output, hub_spec):
@@ -3702,6 +3754,14 @@ class Expectations(UserDict[PackedDeviceProperties, Any]):
         return f"{self.data}"
 
 
+def get_json_expectation(expectations: dict[str, Any]) -> Any:
+    """
+    Same as `Expectations.get_expectation`, for expectations stored in a JSON fixture. JSON only allows string keys, so
+    they are written as their `Expectations` counterpart repr, e.g. `"(None, None)"` or `"('xpu', 5)"`.
+    """
+    return Expectations({ast.literal_eval(key): value for key, value in expectations.items()}).get_expectation()
+
+
 def patch_torch_compile_force_graph():
     """
     Patch `torch.compile` to always use `fullgraph=True`.
@@ -3869,13 +3929,13 @@ def _get_test_info():
     # Get the code context in the test function/method.
     from _pytest._code.source import Source
 
-    with open(actual_test_file) as fp:
+    with open(actual_test_file, encoding="utf-8") as fp:
         s = fp.read()
         source = Source(s)
         test_code_context = "\n".join(source.getstatement(test_lineno - 1).lines)
 
     # Get the code context in the caller (to the patched function/method).
-    with open(caller_path) as fp:
+    with open(caller_path, encoding="utf-8") as fp:
         s = fp.read()
         source = Source(s)
         caller_code_context = "\n".join(source.getstatement(caller_lineno - 1).lines)
@@ -3965,7 +4025,7 @@ def _prepare_debugging_info(test_info, info):
     info = f"{test_info}\n\n{info}"
     p = os.path.join(os.environ.get("_PATCHED_TESTING_METHODS_OUTPUT_DIR", ""), "captured_info.txt")
     # TODO (ydshieh): This is not safe when we use pytest-xdist with more than 1 worker.
-    with open(p, "a") as fp:
+    with open(p, "a", encoding="utf-8") as fp:
         fp.write(f"{info}\n\n{'=' * 120}\n\n")
 
     return info
@@ -4109,7 +4169,9 @@ def _patch_with_call_info(module_or_class, attr_name, _parse_call_info_func, tar
 
             # This is specific
             info = _parse_call_info_func(orig_method, args, kwargs, call_argument_expressions, target_args)
-            info = _prepare_debugging_info(test_info, info)
+            # An empty `info` means the call site's expressions could not be matched to this call
+            # (a delegated call, see `_parse_call_info`): don't append a record with no values.
+            info = _prepare_debugging_info(test_info, info) if info else ""
 
             # If the test is running in a CI environment (e.g. not a manual run), let's raise and fail the test, so it
             # behaves as usual.
@@ -4162,6 +4224,12 @@ def _parse_call_info(func, args, kwargs, call_argument_expressions, target_args)
         # (This part is very unlikely what a user would be interest to know)
         call_argument_expressions["positional_args"] = ["self"] + call_argument_expressions["positional_args"]
 
+    # Source expressions only match direct calls. Delegation can add args (e.g. assertListEqual ->
+    # assertSequenceEqual), so counts may differ; indexing would misattribute expressions or crash.
+    # Report nothing instead.
+    if len(args) != len(call_argument_expressions["positional_args"]):
+        return ""
+
     param_position_mapping = {param_name: idx for idx, param_name in enumerate(signature_names)}
 
     arg_info = {}
@@ -4208,6 +4276,9 @@ def patch_testing_methods_to_collect_info():
     _patch_with_call_info(
         unittest.case.TestCase, "assertTupleEqual", _parse_call_info, target_args=("tuple1", "tuple2")
     )
+    _patch_with_call_info(
+        unittest.case.TestCase, "assertSequenceEqual", _parse_call_info, target_args=("seq1", "seq2")
+    )
     _patch_with_call_info(unittest.case.TestCase, "assertSetEqual", _parse_call_info, target_args=("set1", "set1"))
     _patch_with_call_info(unittest.case.TestCase, "assertDictEqual", _parse_call_info, target_args=("d1", "d2"))
     _patch_with_call_info(unittest.case.TestCase, "assertIn", _parse_call_info, target_args=("member", "container"))
@@ -4220,7 +4291,7 @@ def patch_testing_methods_to_collect_info():
 
 def torchrun(script: str, nproc_per_node: int, is_torchrun: bool = True, env: dict | None = None):
     """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necessary."""
-    with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
+    with tempfile.NamedTemporaryFile(encoding="utf-8", mode="w+", suffix=".py") as tmp:
         tmp.write(script)
         tmp.flush()
         tmp.seek(0)
@@ -4259,6 +4330,12 @@ def _format_tensor(t, indent_level=0, sci_mode=None):
 
         # We work directly with the string representation instead the tensor itself
         t_str = str(t)
+
+        # A non-default dtype is repr'd as a trailing kwarg, e.g.
+        # `tensor([83, 362], dtype=torch.int16)`. It is not part of the value, and
+        # stripping only `tensor(` / `)` leaves it stranded inside the literal,
+        # which then does not parse (integer tensors hit this).
+        t_str = re.sub(r",\s*dtype=torch\.\w+", "", t_str)
 
         # remove `tensor( ... )` so keep only the content
         t_str = t_str.replace("tensor(", "").replace(")", "")
@@ -4315,6 +4392,11 @@ def _quote_string(s):
 
     We choice double quotes over single quote despite `str(s)` would give `'abc'` instead of `"abc"`.
     """
+    # Backslashes first: escaping the quotes below adds none, but a backslash
+    # already in `s` would otherwise escape whatever follows it -- a value ending
+    # in one swallows the closing quote and the literal no longer parses.
+    s = s.replace("\\", "\\\\")
+
     has_single_quote = "'" in s
     has_double_quote = '"' in s
 
@@ -4474,10 +4556,14 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
             else:
                 groups.append(buf)
 
+        # a 1-element tuple needs its trailing comma or the value changes type:
+        # `(5)` parses back as the int 5, not as `(5,)`
+        trailing = "," if isinstance(obj, tuple) and len(obj) == 1 else ""
+
         output = f"{' ' * 4 * indent}{p1}\n"
         element_strings = [f"{' ' * (4 * (indent + 1))}" + ", ".join(buf) for buf in groups]
         output += ",\n".join(element_strings)
-        output += f"\n{' ' * 4 * indent}{p2}"
+        output += f"{trailing}\n{' ' * 4 * indent}{p2}"
 
         # if all elements are in one-line
         no_new_line_in_elements = all("\n" not in x for x in element_strings)
@@ -4488,7 +4574,7 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
         # will be `True`.
         if could_use_one_line:
             one_line_form = ", ".join([x.lstrip() for x in element_strings])
-            one_line_form = f"{p1}{one_line_form}{p2}"
+            one_line_form = f"{p1}{one_line_form}{trailing}{p2}"
 
             if mode == "one-line":
                 return output
@@ -4514,10 +4600,17 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
                             return False
 
                         # only one element that is iterable, but not the same type as `obj` --> no one line repr.
-                        if type(obj) is not type(obj[0]):
+                        # (`obj[0]` on a dict is a *key* lookup, not positional: use its single value)
+                        only_element = next(iter(obj.values())) if type(obj) is dict else obj[0]
+                        if type(obj) is not type(only_element):
                             return False
 
                         # one-line repr. if possible, without width limit
+                        return no_new_line_in_elements
+
+                    # empty container: nothing to inspect, and `element_types[0]`
+                    # below would raise IndexError
+                    if not element_types:
                         return no_new_line_in_elements
 
                     # all elements are of simple types, but more than one type --> no one line repr.
@@ -4542,6 +4635,9 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
             # width condition combined with specific mode conditions
             if use_one_line_repr(obj):
                 output = f"{' ' * 4 * indent}{one_line_form}"
+    else:
+        # anything else (e.g. `torch.Size`, `numpy` scalars): fall back to `repr`, which stays copy-pastable
+        output = repr(obj)
 
     cache[(id(obj), indent, mode, prefix)] = output
 
@@ -4549,12 +4645,12 @@ def _format_py_obj(obj, indent=0, mode="", cache=None, prefix=""):
 
 
 def write_file(file, content):
-    with open(file, "w") as f:
+    with open(file, "w", encoding="utf-8") as f:
         f.write(content)
 
 
 def read_json_file(file):
-    with open(file, "r") as fh:
+    with open(file, "r", encoding="utf-8") as fh:
         return json.load(fh)
 
 
@@ -4790,7 +4886,7 @@ def convert_all_safetensors_to_bins(folder: str):
         # Adapt the index as well
         elif file == SAFE_WEIGHTS_INDEX_NAME:
             new_path = os.path.join(folder, WEIGHTS_INDEX_NAME)
-            with open(path) as f:
+            with open(path, encoding="utf-8") as f:
                 index = json.loads(f.read())
             os.remove(path)
             if "weight_map" in index.keys():
@@ -4799,7 +4895,7 @@ def convert_all_safetensors_to_bins(folder: str):
                 for k, v in weight_map.items():
                     new_weight_map[k] = v.replace(".safetensors", ".bin").replace("model", "pytorch_model")
             index["weight_map"] = new_weight_map
-            with open(new_path, "w") as f:
+            with open(new_path, "w", encoding="utf-8") as f:
                 f.write(json.dumps(index, indent=4))
 
 

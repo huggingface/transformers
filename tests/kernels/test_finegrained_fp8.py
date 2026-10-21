@@ -264,7 +264,7 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
     def test_batched_mm_passes_sentinel_expert_ids_unclamped(self):
         # EP sentinels (expert_ids >= num_experts) reach the kernel unclamped; the post-mask zeroes the
         # matching output rows before the per-token reduction (the kernel leaves them uninitialized).
-        experts = make_fp8_experts(num_experts=4, hidden=8, inter=16)
+        experts = make_fp8_experts(num_experts=4, hidden=8, inter=16, is_expert_parallel=True)
         hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.tensor([[0, 4], [1, 4], [2, 4]], device=torch_device)  # 4 == num_experts -> sentinel
         top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)
@@ -326,7 +326,7 @@ class FinegrainedFp8ForwardTest(unittest.TestCase):
     def test_grouped_mm_sentinels_dropped_from_histogram(self):
         # Sentinels are left unclamped so the sort pushes them to the tail and histc(max=num_experts-1)
         # drops them from tokens_per_expert -> no wasted GEMM rows; the post-mask zeroes their output.
-        experts = make_fp8_experts(num_experts=4, hidden=8, inter=16)
+        experts = make_fp8_experts(num_experts=4, hidden=8, inter=16, is_expert_parallel=True)
         hidden_states = torch.randn(3, 8, dtype=torch.bfloat16, device=torch_device)
         top_k_index = torch.tensor([[0, 4], [1, 4], [2, 4]], device=torch_device)  # three sentinels (== num_experts)
         top_k_weights = torch.rand(3, 2, dtype=torch.bfloat16, device=torch_device)

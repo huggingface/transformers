@@ -45,6 +45,7 @@ from transformers.utils import is_torchcodec_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
@@ -226,10 +227,6 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
-    @unittest.skip(reason="Test tries to instantiate dynamic cache with an arg")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(reason="Test is only for old attention format")
     def test_sdpa_can_dispatch_composite_models(self):
         pass
@@ -282,8 +279,8 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 class Phi4MultimodalIntegrationTest(unittest.TestCase):
     checkpoint_path = "microsoft/Phi-4-multimodal-instruct"
     revision = "refs/pr/70"
-    image_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg"
-    audio_url = "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav"
+    image_url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
+    audio_url = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/f2641_0_throatclearing.wav"
 
     def setUp(self):
         # Currently, the Phi-4 checkpoint on the hub is not working with the latest Phi-4 code, so the slow integration tests
@@ -358,8 +355,8 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         images = []
         placeholder = ""
         for i in range(1, 5):
-            url = f"https://image.slidesharecdn.com/azureintroduction-191206101932/75/Introduction-to-Microsoft-Azure-Cloud-{i}-2048.jpg"
-            images.append(Image.open(requests.get(url, stream=True).raw))
+            url = f"https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/azure_slide_{i}.jpg"
+            images.append(load_test_image(url))
             placeholder += "<|image|>"
 
         prompt = f"{self.user_token}{placeholder}Summarize the deck of slides.{self.end_token}{self.assistant_token}"
@@ -372,7 +369,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
         output = output[:, inputs["input_ids"].shape[1] :]
         response = self.processor.batch_decode(output, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
-        EXPECTED_RESPONSE = "The presentation provides an overview of Microsoft Azure, a cloud computing platform by Microsoft, and its various services"
+        EXPECTED_RESPONSE = "This presentation provides an introduction to cloud computing, focusing on Microsoft Azure services. It outlines a four-part"
 
         self.assertEqual(response, EXPECTED_RESPONSE)
 

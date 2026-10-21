@@ -24,11 +24,12 @@ env:
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
 
-permissions:
-  contents: read
+
+permissions: {}
 
 jobs:
   get_runner:
+    permissions: {}
     name: "Get runner to use"
     runs-on: ubuntu-22.04
     outputs:
@@ -63,6 +64,8 @@ jobs:
           echo "RUNNER=$RUNNER" >> $GITHUB_OUTPUT
 
   ssh_runner:
+    permissions:
+      contents: read
     name: "SSH"
     needs: get_runner
     runs-on:
@@ -135,6 +138,8 @@ jobs:
           # Create shared environment setup
           cat > /root/.env_setup << 'EOF'
           # Auto-setup (non-sensitive vars)
+          # Prepend venv bin to PATH if it exists (new images use uv + /opt/venv)
+          export PATH="/opt/venv/bin:$PATH"
           export HF_HOME=/mnt/cache
           export TRANSFORMERS_IS_CI=yes
           export OMP_NUM_THREADS=8

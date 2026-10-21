@@ -23,7 +23,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...backbone_utils import filter_output_hidden_states
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_bidirectional_mask
@@ -273,24 +273,14 @@ class Tipsv2Config(PreTrainedConfig):
     ```"""
 
     model_type = "tipsv2"
-    sub_configs = {"text_config": Tipsv2TextConfig, "vision_config": Tipsv2VisionConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=Tipsv2TextConfig),
+        "vision_config": SubConfigSpec(config_class=Tipsv2VisionConfig),
+    }
 
     text_config: dict | Tipsv2TextConfig | None = None
     vision_config: dict | Tipsv2VisionConfig | None = None
     temperature_init_value: float = 0.005065968260169029
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         super().validate_architecture()

@@ -43,6 +43,7 @@ if is_torch_available():
 
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 class Qwen2MoeModelTester(CausalLMModelTester):
@@ -52,7 +53,6 @@ class Qwen2MoeModelTester(CausalLMModelTester):
 
 @require_torch
 class Qwen2MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    test_all_params_have_gradient = False
     model_tester_class = Qwen2MoeModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
@@ -114,8 +114,11 @@ class Qwen2MoeModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch
-class Qwen2MoeIntegrationTest(unittest.TestCase):
-    model = None
+class Qwen2MoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.model = None
 
     @classmethod
     def get_model(cls):
@@ -124,15 +127,6 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
                 "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16, experts_implementation="eager"
             )
         return cls.model
-
-    @classmethod
-    def tearDownClass(cls):
-        if cls.model is not None:
-            del cls.model
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_deterministic_for_xpu

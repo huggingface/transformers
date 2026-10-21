@@ -36,6 +36,8 @@ PLE enriches selected decoder layers with layer-specific lexical features derive
 - FSDP2 shards token embeddings and decoder layers while keeping the final GR mixer gathered. TP and FSDP cannot currently be combined, and no pipeline-parallel plan is provided.
 - Use [`Qwen4ExpForCausalLM`] with [`Qwen4ExpTextConfig`] for text-only generation. Use [`Qwen4ExpForConditionalGeneration`] with [`Qwen4ExpConfig`] for multimodal inputs.
 
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## Qwen4ExpConfig
 
 [[autodoc]] Qwen4ExpConfig

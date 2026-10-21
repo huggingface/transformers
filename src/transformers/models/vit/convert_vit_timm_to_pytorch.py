@@ -17,9 +17,9 @@ import argparse
 from io import BytesIO
 from pathlib import Path
 
-import httpx
 import timm
 import torch
+from huggingface_hub.utils import httpx
 from PIL import Image
 from timm.data import ImageNetInfo, infer_imagenet_subset
 

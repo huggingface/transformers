@@ -33,7 +33,15 @@ from transformers.tokenization_utils_base import (
     TextInput,
     TruncationStrategy,
 )
-from transformers.utils import PaddingStrategy, TensorType, add_end_docstrings, hf_api, logging, to_py_obj
+from transformers.utils import (
+    PaddingStrategy,
+    TensorType,
+    add_end_docstrings,
+    hf_api,
+    logging,
+    resolve_revision,
+    to_py_obj,
+)
 from transformers.utils.import_utils import is_mistral_common_available, is_torch_available, requires
 
 
@@ -291,6 +299,10 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
         self._all_special_ids = self._get_all_special_ids()
         self._all_special_tokens = self.convert_ids_to_tokens(self.all_special_ids)
+
+        # Set backend to "mistral_common" if not already set
+        if "backend" not in kwargs:
+            kwargs["backend"] = "mistral_common"
 
         super().__init__(
             truncation_side=truncation_side,
@@ -1508,6 +1520,13 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         mode = cls._get_validation_mode(mode)
 
         if not os.path.isdir(pretrained_model_name_or_path):
+            revision = resolve_revision(
+                pretrained_model_name_or_path,
+                revision,
+                token=token,
+                local_files_only=local_files_only,
+                cache_dir=cache_dir,
+            )
             tokenizer_path = download_tokenizer_from_hf_hub(
                 repo_id=pretrained_model_name_or_path,
                 cache_dir=cache_dir,

@@ -36,9 +36,7 @@ from tokenizers.trainers import BpeTrainer, UnigramTrainer, WordLevelTrainer, Wo
 from transformers.utils.hub import cached_file
 
 from .convert_slow_tokenizer import SpmConverter
-from .integrations.ggml import convert_gguf_tokenizer
 from .integrations.mistral.constants import is_tekken_vocab_filename
-from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
     BatchEncoding,
@@ -117,7 +115,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             and os.path.isfile(fast_tokenizer_file)
             and (cls is TokenizersBackend or "__init__" not in cls.__dict__ or trust_remote_code)
         ):
-            local_kwargs["tokenizer_object"] = TokenizerFast.from_file(fast_tokenizer_file)
+            # Let `__init__` load the file: passing a `tokenizer_object` would make it deepcopy the whole backend
+            local_kwargs["tokenizer_file"] = fast_tokenizer_file
             return local_kwargs
         elif fast_tokenizer_file is not None and os.path.isfile(fast_tokenizer_file):
             # we extract vocab/merges and pass decoder/pre_tokenizer/post_processor
@@ -393,12 +392,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)
         elif gguf_file is not None:
-            # We need to convert a slow tokenizer to build the backend
+            from .integrations.gguf import convert_gguf_tokenizer, get_gguf_tokenizer
+
             gguf_path = cached_file(kwargs.get("name_or_path", ""), gguf_file, **kwargs)
-            gguf_param = load_gguf_checkpoint(gguf_path)
-            architecture = gguf_param["config"]["model_type"]
-            tokenizer_dict = gguf_param["tokenizer"]
-            tokenizer_config = gguf_param["tokenizer_config"]
+            architecture, tokenizer_dict, tokenizer_config = get_gguf_tokenizer(gguf_path)
             fast_tokenizer, additional_kwargs = convert_gguf_tokenizer(architecture, tokenizer_dict)
             kwargs.update(tokenizer_config)
             if len(additional_kwargs) > 0:
@@ -886,6 +883,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     def tokenize(self, text: str, pair: str | None = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
         return self._encode_plus(text=text, text_pair=pair, add_special_tokens=add_special_tokens, **kwargs).tokens()
+
+    def _encode_without_added_tokens(self, text: str) -> list[int]:
+        # `split_special_tokens` only skips special tokens here, so run the backend's pipeline without its added tokens
+        if self._tokenizer.normalizer is not None:
+            text = self._tokenizer.normalizer.normalize_str(text)
+        splits = [text]
+        if self._tokenizer.pre_tokenizer is not None:
+            splits = [split for split, _ in self._tokenizer.pre_tokenizer.pre_tokenize_str(text)]
+        return [token.id for split in splits for token in self._tokenizer.model.tokenize(split)]
 
     def set_truncation_and_padding(
         self,
@@ -1388,7 +1394,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         token=None,
         cache_dir=None,
         local_files_only=False,
-        _commit_hash=None,
+        revision=None,
         is_local=False,
         init_kwargs=None,
         fix_mistral_regex=None,
@@ -1432,9 +1438,9 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 cache_dir=cache_dir,
                 token=token,
                 local_files_only=local_files_only,
+                revision=revision,
                 _raise_exceptions_for_missing_entries=False,
                 _raise_exceptions_for_connection_errors=False,
-                _commit_hash=_commit_hash,
             )
 
             # Detected using a (local) mistral tokenizer

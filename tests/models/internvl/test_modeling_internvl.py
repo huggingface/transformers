@@ -40,6 +40,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image, url_to_local_path
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -232,8 +233,8 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         model = InternVLForConditionalGeneration.from_pretrained(
             self.small_model_checkpoint, device_map=torch_device, dtype=torch.float16
         )
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        image = load_test_image(url)
 
         prompt = (
             "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
@@ -263,8 +264,8 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         model = InternVLForConditionalGeneration.from_pretrained(
             self.small_model_checkpoint, device_map=torch_device, dtype=torch.float16
         )
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        image = load_test_image(url)
 
         prompt = (
             "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
@@ -280,6 +281,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): torch.tensor([11.9922, 14.7188, 14.3125, 10.6719, 6.9297], dtype=torch.float16),
                 ("cuda", 8): torch.tensor([11.9609, 14.7188, 14.2734, 10.6484, 6.9141], dtype=torch.float16),
+                ("tpu", None): torch.tensor([11.9609, 14.7188, 14.2734, 10.6484, 6.9141], dtype=torch.float16),
             }
         )  # fmt: skip
         expected_logits = expected_logits_all.get_expectation()
@@ -309,6 +311,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.",
                 ("cuda", 8): 'Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.',
+                ("tpu", None): 'Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -324,7 +327,12 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
                     {"type": "text", "text": "Please describe the image explicitly."},
                 ],
             }
@@ -353,12 +361,11 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             "<|im_start|>user\n<IMG_CONTEXT>\nWrite a haiku for this image<|im_end|>\n<|im_start|>assistant\n",
             "<|im_start|>user\n<IMG_CONTEXT>\nDescribe this image<|im_end|>\n<|im_start|>assistant\n",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
-                stream=True,
-            ).raw
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
+        image2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
@@ -369,7 +376,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
 
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
-        expected_output = "user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature's peace."  # fmt: skip
+        expected_output = "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm waters,  \nNature's peace."  # fmt: skip
 
         self.assertEqual(
             decoded_output,
@@ -403,18 +410,20 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             "<|im_start|>user\n<IMG_CONTEXT>\nWrite a haiku for this image<|im_end|>\n<|im_start|>assistant\n",
             "<|im_start|>user\n<IMG_CONTEXT><IMG_CONTEXT>\nWhat are the differences between these two images?<|im_end|>\n<|im_start|>assistant\n",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = Image.open(
             BytesIO(
                 requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
                 ).content
             )
         )
         image3 = Image.open(
             BytesIO(
                 requests.get(
-                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg"
                 ).content
             )
         )
@@ -430,9 +439,8 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
             {
-                ("xpu", 3): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
-                ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
-                ("rocm", (9, 4)): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s embrace.',
+                (None, None): "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm waters,  \nNature's peace.",
+                ("rocm", (9, 4)): "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm waters,  \nNature's peace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -446,9 +454,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground",
-                ("cuda", 8): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the differences:\n\n1. **Foreground",
-                ("rocm", (9, 4)): "user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the Golden Gate Bridge from different angles. Here are the main differences:\n\n1. **",
+                (None, None): 'user\n\nWhat are the differences between these two images?\nassistant\nThe images show the Statue of Liberty and the New York City skyline with the Golden Gate Bridge in the background. Here are the',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -474,7 +480,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                        ),
                     },
                     {"type": "text", "text": "What type of shot is the man performing?"},
                 ],
@@ -520,11 +528,15 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
+                            ),
                         },
                         {
                             "type": "image",
-                            "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg"
+                            ),
                         },
                         {"type": "text", "text": "What are the differences between these two images?"},
                     ],
@@ -536,7 +548,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "video",
-                            "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                            ),
                         },
                         {"type": "text", "text": "What type of shot is the man performing?"},
                     ],
@@ -548,7 +562,9 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://llava-vl.github.io/static/images/view.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
@@ -571,9 +587,8 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an",
-                ("cuda", 8): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - The Statue of Liberty is prominently featured on an',
-                ("rocm", (9, 4)): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe images depict two distinct scenes:\n\n1. **Left Image:**\n   - This image features the Statue of Liberty on Liberty',
+                (None, None): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe two images depict different scenes:\n\n1. **Left Image**: This shows the Statue of Liberty in New York City. The',
+                ("rocm", (9, 4)): 'user\n\n\nWhat are the differences between these two images?\nassistant\nThe two images depict different scenes:\n\n1. **Left Image**: This shows the Statue of Liberty in New York City. The',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -603,9 +618,8 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[2], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
-                ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s peace.',
-                ("rocm", (9, 4)): 'user\n\nWrite a haiku for this image\nassistant\nSilky lake,  \nWooden pier,  \nNature\'s embrace.',
+                (None, None): "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm waters,  \nNature's peace.",
+                ("rocm", (9, 4)): "user\n\nWrite a haiku for this image\nassistant\nLakeside, serene,  \nWooden pier, calm waters,  \nNature's peace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -632,8 +646,8 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         model = InternVLForConditionalGeneration.from_pretrained(
             self.small_model_checkpoint, device_map=torch_device, dtype=torch.float16
         )
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        image = load_test_image(url)
 
         prompt = (
             "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
@@ -652,8 +666,8 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         model = InternVLForConditionalGeneration.from_pretrained(
             self.small_model_checkpoint, device_map=torch_device, dtype=torch.float16
         )
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        image = load_test_image(url)
 
         prompt = (
             "<|im_start|>user\n<IMG_CONTEXT>\nPlease describe the image explicitly.<|im_end|>\n<|im_start|>assistant\n"
@@ -670,8 +684,9 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): [-9.8828,  -0.4954,   1.4561, -10.3438, -10.3438],
                 ("cuda", 8): [-9.8750,  -0.4900,   1.4629, -10.3281, -10.3359],
-                ("rocm", (9, 4)): [ -9.8672,  -0.4888,   1.4648, -10.3281, -10.3281],
+                ("rocm", (9, 4)): [ -9.8906,  -0.5146,   1.4600, -10.3438, -10.3516],
                 ("rocm", (9, 5)): [ -9.8906,  -0.4976,   1.4502, -10.3359, -10.3438],
+                ("tpu", None): [-9.8984,  -0.5151,   1.4463, -10.3359, -10.3438],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(expected_logits_all.get_expectation(), dtype=torch.float16)
@@ -704,6 +719,8 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
                 ("cuda", 8): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
+                ("rocm", (9, 4)): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
+                ("tpu", None): "Autumn leaves fall,\nNature's breath, a gentle sigh,\nSilent whispers.",
             }
         )
         expected_output = expected_outputs.get_expectation()
@@ -719,7 +736,12 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             {
                 "role": "user",
                 "content": [
-                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "image",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+                        ),
+                    },
                     {"type": "text", "text": "Please describe the image explicitly."},
                 ],
             }
@@ -746,12 +768,11 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             "<|im_start|>user\n<IMG_CONTEXT>\nWrite a haiku for this image<|im_end|>\n<|im_start|>assistant\n",
             "<|im_start|>user\n<IMG_CONTEXT>\nDescribe this image<|im_end|>\n<|im_start|>assistant\n",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
-        image2 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
-                stream=True,
-            ).raw
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
+        image2 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/australia.jpg"
         )
 
         inputs = processor(text=prompt, images=[[image1], [image2]], padding=True, return_tensors="pt").to(
@@ -764,8 +785,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
-                ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
+                (None, None): "user\n\nWrite a haiku for this image\nassistant\nWooden path leads to water,\nMajestic mountains in the distance,\nNature's peaceful grace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -795,18 +815,20 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             "<|im_start|>user\n<IMG_CONTEXT>\nWrite a haiku for this image<|im_end|>\n<|im_start|>assistant\n",
             "<|im_start|>user\n<IMG_CONTEXT><IMG_CONTEXT>\nWhat are the difference between these two images?<|im_end|>\n<|im_start|>assistant\n",
         ]
-        image1 = Image.open(requests.get("https://llava-vl.github.io/static/images/view.jpg", stream=True).raw)
+        image1 = load_test_image(
+            "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+        )
         image2 = Image.open(
             BytesIO(
                 requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
                 ).content
             )
         )
         image3 = Image.open(
             BytesIO(
                 requests.get(
-                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                    "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg"
                 ).content
             )
         )
@@ -820,7 +842,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         # Check first output
         decoded_output = processor.decode(output[0], skip_special_tokens=True)
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
-        expected_output = "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors."
+        expected_output = "user\n\nWrite a haiku for this image\nassistant\nWooden path leads to water,\nMajestic mountains in the distance,\nNature's peaceful grace."
 
         self.assertEqual(
             decoded_output,
@@ -830,7 +852,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
 
         # Check second output
         decoded_output = processor.decode(output[1], skip_special_tokens=True)
-        expected_output = "user\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After closely examining the images again, I can see that there are several differences"
+        expected_output = "user\n\nWhat are the difference between these two images?\nassistant\nI apologize for the mistake. Upon closer inspection, here are the differences between the two images:\n\n1. **Statue of"
         self.assertEqual(
             decoded_output,
             expected_output,
@@ -852,7 +874,9 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                        ),
                     },
                     {"type": "text", "text": "What type of shot is the man performing?"},
                 ],
@@ -890,11 +914,15 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
+                            ),
                         },
                         {
                             "type": "image",
-                            "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/dreamstime_golden_gate_flowers.jpg"
+                            ),
                         },
                         {"type": "text", "text": "What are the difference between these two images?"},
                     ],
@@ -906,7 +934,9 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "video",
-                            "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                            ),
                         },
                         {"type": "text", "text": "What type of shot is the man performing?"},
                     ],
@@ -918,7 +948,9 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://llava-vl.github.io/static/images/view.jpg",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/llava_view.jpg"
+                            ),
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],
@@ -941,10 +973,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. Upon closer inspection, the differences between the two images are:\n\n1. **",
-                ("cuda", 8): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. Upon closer inspection, the differences between the two images are:\n\n1. **',
-                ("rocm", (9, 4)): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that there are no',
-                ("rocm", (9, 5)): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After re-examining the images, I can see that there are no',
+                (None, None): 'user\n\n\nWhat are the difference between these two images?\nassistant\nI apologize for the confusion in my previous response. After closely examining the images again, I can see that there are several differences',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -960,6 +989,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their",
                 ("cuda", 8): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their',
+                ("tpu", None): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -973,8 +1003,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[2], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.",
-                ("cuda", 8): 'user\n\nWrite a haiku for this image\nassistant\nMajestic snow-capped peaks,\nWooden dock stretches to the sea,\nSilent water mirrors.',
+                (None, None): "user\n\nWrite a haiku for this image\nassistant\nWooden path leads to water,\nMajestic mountains in the distance,\nNature's peaceful grace.",
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

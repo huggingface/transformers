@@ -13,18 +13,19 @@
 # limitations under the License.
 """Testing suite for the PyTorch CohereCompass model."""
 
-import copy
 import unittest
 
 from transformers import (
+    AutoProcessor,
     CohereCompassConfig,
     CohereCompassTextConfig,
     CohereCompassVisionConfig,
     is_torch_available,
 )
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import floats_tensor
 from ...vlm_tester import VLMModelTest, VLMModelTester
 
@@ -177,6 +178,7 @@ class CohereCompassModelTester(VLMModelTester):
         kwargs.setdefault("video_token_id", 8)
         kwargs.setdefault("image_size", 32)
         kwargs.setdefault("patch_size", 16)
+        kwargs.setdefault("num_position_embeddings", 64)
         kwargs.setdefault("num_image_tokens", 1)
         kwargs.setdefault("hidden_act", "silu")
         kwargs.setdefault("depth", 2)
@@ -207,11 +209,13 @@ class CohereCompassModelTester(VLMModelTester):
             self.vision_end_token_id,
         }
 
-    def create_pixel_values(self):
+    def create_pixel_values(self, batch_size: int | None = None):
+        # Override to 5D for patch-based models
+        batch_size = batch_size if batch_size is not None else self.batch_size
         patches_per_image = (self.image_size // self.patch_size) ** 2
         return floats_tensor(
             [
-                self.batch_size * patches_per_image,
+                batch_size * patches_per_image,
                 self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
             ]
         )
@@ -224,11 +228,12 @@ class CohereCompassModelTester(VLMModelTester):
         input_ids[:, 1] = self.image_token_id
         return input_ids
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, pixel_values, batch_size: int | None = None):
+        batch_size = batch_size if batch_size is not None else self.batch_size
         mm_token_type_ids = torch.zeros_like(input_ids)
         mm_token_type_ids[input_ids == self.image_token_id] = 1
         return {
-            "image_grid_thw": torch.tensor([[1, 2, 2]] * self.batch_size, device=torch_device),
+            "image_grid_thw": torch.tensor([[1, 2, 2]] * batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
 
@@ -296,12 +301,6 @@ class CohereCompassVisionModelTest(unittest.TestCase):
 class CohereCompassModelTest(VLMModelTest, unittest.TestCase):
     model_tester_class = CohereCompassModelTester
 
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
-        patches_per_image = (self.model_tester.image_size // self.model_tester.patch_size) ** 2
-        inputs_dict["pixel_values"] = self.model_tester.create_pixel_values()[: batch_size * patches_per_image]
-        return config, inputs_dict
-
     @unittest.skip("CohereCompass does not support video modeling.")
     def test_get_video_features_attentions(self):
         pass
@@ -309,40 +308,6 @@ class CohereCompassModelTest(VLMModelTest, unittest.TestCase):
     @unittest.skip("CohereCompass does not support video modeling.")
     def test_get_video_features_hidden_states(self):
         pass
-
-    def test_mismatching_num_image_tokens(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        patches_per_image = (self.model_tester.image_size // self.model_tester.patch_size) ** 2
-
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device).eval()
-            _ = model(**input_dict)
-
-            one_image_inputs = copy.deepcopy(input_dict)
-            one_image_inputs["pixel_values"] = one_image_inputs["pixel_values"][:patches_per_image]
-            one_image_inputs["image_grid_thw"] = one_image_inputs["image_grid_thw"][:1]
-            with self.assertRaises(ValueError):
-                _ = model(**one_image_inputs)
-
-            model.base_model.rope_deltas = None
-            two_prompt_inputs = {
-                key: torch.cat([value[:1], value[:1]], dim=0)
-                for key, value in one_image_inputs.items()
-                if key not in {"pixel_values", "image_grid_thw"}
-            }
-            two_prompt_inputs["pixel_values"] = one_image_inputs["pixel_values"]
-            two_prompt_inputs["image_grid_thw"] = one_image_inputs["image_grid_thw"]
-            with self.assertRaises(ValueError):
-                _ = model(**two_prompt_inputs)
-
-            model.base_model.rope_deltas = None
-            two_prompt_inputs["pixel_values"] = torch.cat(
-                [one_image_inputs["pixel_values"], one_image_inputs["pixel_values"]], dim=0
-            )
-            two_prompt_inputs["image_grid_thw"] = torch.cat(
-                [one_image_inputs["image_grid_thw"], one_image_inputs["image_grid_thw"]], dim=0
-            )
-            _ = model(**two_prompt_inputs)
 
     def test_model_vl_text_input_forward(self):
         config = self.model_tester.get_config()
@@ -373,3 +338,89 @@ class CohereCompassModelTest(VLMModelTest, unittest.TestCase):
                 mm_token_type_ids=mm_token_type_ids,
             )
         self.assertEqual(output.logits.shape[:2], input_ids.shape)
+
+
+@slow
+@require_torch_accelerator
+class CohereCompassIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    model_id = "CohereLabs/North-Micro-Vision-Instruct"
+    image_messages = [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/qwen2_vl_demo_small.jpg",
+                },
+                {"type": "text", "text": "What kind of dog is this?"},
+            ],
+        }
+    ]
+    text_messages = [{"role": "user", "content": [{"type": "text", "text": "Write a haiku about the ocean."}]}]
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Dropped again by the mixin's `tearDownClass`.
+        cls.model = None
+
+    @classmethod
+    def get_model(cls):
+        if cls.model is None:
+            cls.model = CohereCompassForConditionalGeneration.from_pretrained(
+                cls.model_id, dtype="auto", device_map="auto"
+            )
+        return cls.model
+
+    def setUp(self):
+        super().setUp()
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
+
+    def test_small_model_integration_test(self):
+        model = self.get_model()
+        expected_texts = Expectations(
+            {
+                ("cuda", None): "The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, making them excellent family pets. They are",
+            }
+        )  # fmt: skip
+
+        inputs = self.processor.apply_chat_template(
+            self.image_messages,
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+        ).to(model.device, dtype=model.dtype)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+
+        self.assertEqual(
+            self.processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
+            expected_texts.get_expectation(),
+        )
+
+    def test_small_model_integration_test_batch(self):
+        model = self.get_model()
+        expected_texts = Expectations(
+            {
+                ("cuda", None): [
+                    'The dog in the picture is a Labrador Retriever. Labradors are known for their friendly and outgoing nature, often described as "the joy of the',
+                    "Waves of blue embrace,\nWhispering secrets in the sea,\nNature's symphony.",
+                ]
+            }
+        )  # fmt: skip
+
+        # Mixed image and text-only prompts, left-padded to the same length.
+        inputs = self.processor.apply_chat_template(
+            [self.image_messages, self.text_messages],
+            tokenize=True,
+            return_dict=True,
+            add_generation_prompt=True,
+            return_tensors="pt",
+            processor_kwargs={"padding": True, "padding_side": "left"},
+        ).to(model.device, dtype=model.dtype)
+        output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
+
+        self.assertEqual(
+            self.processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True),
+            expected_texts.get_expectation(),
+        )

@@ -58,7 +58,7 @@ from .test_processing_common import url_to_local_path
 
 
 IMG_URL = url_to_local_path(
-    "https://huggingface.co/datasets/raushan-testing-hf/images_test/resolve/main/picsum_237_200x300.jpg"
+    "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/picsum_237_200x300.jpg"
 )
 # Required by `mistral_common.tokens.tokenizers.image.image_from_chunk` to correctly use local file
 IMG_URL = f"file://{IMG_URL}" if not IMG_URL.startswith("http") else IMG_URL

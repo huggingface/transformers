@@ -463,7 +463,7 @@ def fp8_batched_mm_experts_forward(
     # EP sentinel handling: leave `expert_ids` unclamped — the batched kernel early-returns on
     # `expert_id >= NUM_EXPERTS`, leaving sentinel output rows uninitialized. The post-mask below
     # zeroes them before the per-token reduction so `uninit * 0 = NaN` can't poison the sum.
-    sentinel_mask = (expert_ids >= self.num_experts).unsqueeze(-1)
+    sentinel_mask = (expert_ids >= self.num_experts).unsqueeze(-1) if self._is_expert_parallel else None
 
     weight_up = self.gate_up_proj if self.has_gate else self.up_proj
     weight_scale_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
@@ -501,7 +501,8 @@ def fp8_batched_mm_experts_forward(
 
     # Post-mask sentinel rows: kernel left them uninitialized, so zero them out
     # before the reduction below (uninit may be NaN; NaN * 0 = NaN).
-    weighted_out.masked_fill_(sentinel_mask, 0.0)
+    if sentinel_mask is not None:
+        weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Accumulate results using deterministic reshape+sum instead of index_add_
     # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
@@ -551,7 +552,7 @@ def fp8_grouped_mm_experts_forward(
     # valid rows, so sentinel-tail `proj_out` rows are uninit; without the post-mask below,
     # `proj_out[sentinel] * 0 = NaN * 0 = NaN` would poison the per-token reduction. FP8
     # quantized weights are inference-only, so no bwd pre-mask is needed.
-    sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1)
+    sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1) if self._is_expert_parallel else None
 
     weight_up = self.gate_up_proj if self.has_gate else self.up_proj
     weight_scale_up = self.gate_up_proj_scale_inv if self.has_gate else self.up_proj_scale_inv
@@ -590,7 +591,8 @@ def fp8_grouped_mm_experts_forward(
     weighted_out = proj_out * sample_weights_g.to(proj_out.dtype).unsqueeze(-1)  # (S, hidden_dim)
 
     # Post-mask (fwd path).
-    weighted_out.masked_fill_(sentinel_mask, 0.0)
+    if sentinel_mask is not None:
+        weighted_out.masked_fill_(sentinel_mask, 0.0)
 
     # Restore original order
     inv_perm = torch.empty_like(perm)
@@ -605,20 +607,12 @@ def fp8_grouped_mm_experts_forward(
 
 
 class FP8Experts(nn.Module):
-    # Internal, temporary flag — not public API, don't set it directly. `_disable_deepgemm_on_multi_device`
-    # flips it True at load when the model spans >1 CUDA device in one process (DeepGEMM's context-bound
-    # kernels corrupt across devices); removable once the kernel ships a context-free loader.
+    # Internal: set True by `_disable_deepgemm_on_multi_device` when the model spans >1 CUDA device.
     _deepgemm_disabled = False
-
-    # Per-`_experts_implementation` rewrite of parallel-layer kinds in the TP/EP plan.
-    # The plan dicts store `{module-path-pattern: parallel-layer-kind}`; this maps an
-    # old kind to a new kind, and the quantizer rewrites every plan VALUE that matches.
-    # The default `MoeTensorParalellExperts` kind is impl-agnostic; some impls need a
-    # distinct TP layer (e.g. megamoe needs no gradient-sync hooks and an EP
-    # `process_group` injection). Declared here so the quantizer doesn't have to know
-    # about impl-specific TP needs — extend this dict when adding new impls.
+    # `_experts_implementation` -> {default TP/EP plan style: impl-specific style}, applied by the quantizer.
     _impl_tp_layer_overrides: dict[str, dict[str, str]] = {
         "deepgemm_megamoe": {
+            "ep_dispatch_experts": "megamoe_experts",
             "moe_tp_experts": "megamoe_experts",
             "ep_router": "megamoe_router",
         },
@@ -1009,18 +1003,6 @@ class Fp8Dequantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
 
-    def _scale_pattern_for(self, weight_pattern: str) -> str:
-        # Strip the optional ``$`` regex anchor so we can match the underlying name.
-        anchored = weight_pattern.endswith("$")
-        base = weight_pattern[:-1] if anchored else weight_pattern
-        if base.endswith(".weight"):
-            scale = base[: -len(".weight")] + ".weight_scale_inv"
-        elif base == "weight":
-            scale = "weight_scale_inv"
-        else:
-            scale = base + "_scale_inv"
-        return scale + "$" if anchored else scale
-
     # E2M1 (FP4) value table — checkpoints sometimes ship MoE experts as packed FP4
     # (two e2m1 nibbles per int8 byte), so the "weight" dtype lands as ``int8`` /
     # ``float4_e2m1fn_x2`` and we have to unpack before applying the scale grid.
@@ -1095,16 +1077,12 @@ class Fp8Dequantize(ConversionOps):
         **kwargs,
     ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
         output_dtype = self._get_target_dtype(model, full_layer_name)
-        # Backward-compatible single-tensor path (the legacy fallback converter declares
-        # ``["weight$", "weight_scale_inv", "activation_scale"]`` and produces a single
-        # ``weight`` target). Also handles the no-scale case (e.g. RMSNorm weights that
-        # match ``weight$`` but ship no ``weight_scale_inv`` alongside).
-        if "weight$" in input_dict:
+        if "weight" in input_dict:
             # The downstream renamer in `core_model_loading._convert_one_module` uses the
             # output dict's *key*, not its content, to derive prefix/suffix; if `full_layer_name`
             # is unset (direct invocation / tests) fall back to the legacy converter's target.
             target_key = full_layer_name if full_layer_name is not None else "weight"
-            quantized = input_dict["weight$"]
+            quantized = input_dict["weight"]
             quantized = quantized[0] if isinstance(quantized, list) else quantized
             if "weight_scale_inv" in input_dict:
                 scales = input_dict["weight_scale_inv"]
@@ -1117,7 +1095,7 @@ class Fp8Dequantize(ConversionOps):
         for key, value in input_dict.items():
             if "activation_scale" in key or "weight_scale_inv" in key:
                 continue  # consumed by the dequant; drop from the chain
-            scale_key = self._scale_pattern_for(key)
+            scale_key = f"{key}_scale_inv"
             if scale_key not in input_dict:
                 # No scale to apply (e.g. unrelated entry) — pass through untouched.
                 result[key] = value

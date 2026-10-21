@@ -147,6 +147,39 @@ class Chunk(ConversionOps):
         return Concatenate(self.dim, self.num_shards_attribute)
 
 
+class Split(ConversionOps):
+    """Split a tensor along `dim` into one piece per target, sized like that target's model parameter.
+    WARNING this op is not TP-safe, a sharded fused tensor needs each target's local slice, not the full parameter sizes."""
+
+    def __init__(self, dim: int = 0):
+        self.dim = dim
+
+    @torch.no_grad
+    def convert(
+        self,
+        input_dict: dict[str, torch.Tensor],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        full_layer_name: str,
+        model: PreTrainedModel,
+        **kwargs,
+    ) -> dict[str, torch.Tensor]:
+        if len(input_dict) > 1:
+            raise ValueError("Undefined Operation encountered")
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        sizes = [
+            model.get_parameter(full_layer_name.replace(target_patterns[0], target)).shape[self.dim]
+            for target in target_patterns
+        ]
+        chunks = torch.split(tensor, sizes, dim=self.dim)
+        return {target: chunk.contiguous() for target, chunk in zip(target_patterns, chunks)}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Concatenate(self.dim)
+
+
 class Concatenate(ConversionOps):
     """Concatenate tensors along `dim`. Additionally, if concatenating an aribitrary number of tensors, `num_shards_attribute` is
     a config field to read to know how many tensors to recreate when using the opposite Ops."""
@@ -245,7 +278,7 @@ class MergeModulelist(ConversionOps):
             # (such as the MoEs' gate_proj/up_proj merging), we are wasting quite some memory
             tensors = input_dict.pop(source_pattern)
             target_pattern = self.get_target_pattern(input_size, source_pattern, target_patterns)
-            # DecompressExperts pre-allocates a stacked tensor to avoid holding N individual
+            # CompressedTensorsDequantize pre-allocates a stacked tensor to avoid holding N individual
             # decompressed tensors simultaneously.  Pass it through to skip the redundant copy
             # that torch.stack would otherwise make.
             if isinstance(tensors, torch.Tensor):
@@ -721,7 +754,7 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     Process a target pattern for reverse mapping (when targets become sources).
 
     This handles several edge cases in checkpoint conversion mappings:
-    - Removes `^` prefix and `$` suffix (start/end of string anchors)
+    - Removes the `^` prefix (start of string anchor)
     - Removes negative lookahead/lookbehind assertions
     - Detects capturing groups and replaces them with `\\1` backreference
 
@@ -734,8 +767,6 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     """
     # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
     pattern = pattern.removeprefix("^")
-    # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
-    pattern = pattern.removesuffix("$")
     # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
     # Qwen2.5, Sam3, Ernie4.5 VL MoE! It needs to be non greedy in case there are several
     pattern = re.sub(r"\(\?.+?\)?\)", "", pattern)
@@ -753,15 +784,13 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
 def process_source_pattern(source_pattern: str, target_pattern: str) -> str:
     """
     Process a source pattern for reverse mapping (when sources become targets).
-    This is useful because usually if the original source (so now the target in reverse mode) had a `^` or `$`
-    to restrict to start/end of string, we should do the same in reverse mode. This is why this method is conditioned
+    This is useful because usually if the original source (so now the target in reverse mode) had a `^`
+    to restrict to the start of string, we should do the same in reverse mode. This is why this method is conditioned
     on the target pattern, we want to do it only for pairs (source, target) when the original source (so the current target
     in reverse mode) had it.
     """
     if target_pattern.startswith("^"):
         source_pattern = f"^{source_pattern}" if not source_pattern.startswith("^") else source_pattern
-    if target_pattern.endswith("$"):
-        source_pattern = f"{source_pattern}$" if not source_pattern.endswith("$") else source_pattern
 
     return source_pattern
 
@@ -844,9 +873,14 @@ class WeightTransform:
 
         # Construct the regex we will use to rename keys from the sources to the targets
         branches = []
-        for i, source_pattern in enumerate(self.source_patterns):
+        # Longest first: a key is matched by the first branch, so `weight.absmax` must come before `weight`
+        for i, source_pattern in sorted(enumerate(self.source_patterns), key=lambda item: -len(item[1])):
             group_name = f"g{i}"
             pattern = source_pattern.replace("*.", r".*\.")
+            # A pattern ends on a name boundary: `weight` matches `q_proj.weight`, not `q_proj.weight_scale_inv`.
+            # One ending with `_` is the start of a name, e.g. `hc_` for `hc_fn`
+            if re.search(r"[a-zA-Z0-9]$", pattern):
+                pattern += r"(?!\w)"
             branches.append(f"(?P<{group_name}>{pattern})")
         self.compiled_sources = re.compile("|".join(branches))
 
@@ -943,12 +977,13 @@ class WeightTransform:
             # All reverse ops, in reverse order
             kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
-        reverse_transform = self.__class__(
-            source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
-        )
-        reverse_transform.scope_prefix = self.scope_prefix
-        reverse_transform.base_model_prefix = self.base_model_prefix
-        return reverse_transform
+        return self.copy(self._original_target_patterns, self._original_source_patterns, **kwargs)
+
+    def copy(self, source_patterns, target_patterns, **kwargs) -> WeightTransform:
+        """A transform of the same type and scope, with new patterns and e.g. new `operations`."""
+        copy = self.__class__(source_patterns=source_patterns, target_patterns=target_patterns, **kwargs)
+        copy.scope_prefix, copy.base_model_prefix = self.scope_prefix, self.base_model_prefix
+        return copy
 
     def materialize_tensors(self) -> dict[str, list[torch.Tensor]]:
         """
@@ -1121,11 +1156,11 @@ class PrefixChange(WeightRenaming):
         if prefix_to_add is not None:
             super().__init__(
                 # We use a lookbehind to avoid adding the prefix if we detect that it's already present
-                source_patterns=rf"^{prefix}(?:(?!{prefix_to_add}\.))(.+)$",
+                source_patterns=rf"^{prefix}(?:(?!{prefix_to_add}\.))(.+)",
                 target_patterns=rf"{prefix}{prefix_to_add}\.\1",
             )
         else:
-            super().__init__(source_patterns=rf"^{prefix}{prefix_to_remove}\.(.+)$", target_patterns=rf"{prefix}\1")
+            super().__init__(source_patterns=rf"^{prefix}{prefix_to_remove}\.(.+)", target_patterns=rf"{prefix}\1")
 
     def reverse_transform(self) -> WeightTransform:
         """Reverse the current `WeightTransform` instance, to be able to save with the opposite weight transformations."""
@@ -1679,37 +1714,20 @@ def convert_and_load_state_dict_in_model(
                 mapping.quantization_operation = hf_quantizer.get_quantize_ops()
 
             _dtype = dtype
-            if (
-                hf_quantizer
-                and hf_quantizer.pre_quantized
-                and (
-                    original_key != renamed_key
-                    or not (
-                        tensor.get_dtype().startswith(("F", "BF"))
-                        if hasattr(tensor, "get_dtype")
-                        else tensor.is_floating_point()
-                    )
-                )
-            ):
-                # if the key was renamed as it is not available in the state dict otherwise, it means that we are deserializing it,
-                # so we need to make sure to load the tensor with the same dtype from the checkpoint
-                # TODO: make the condition more srict for native fp8 model such as qwen2moe fp8
-                _dtype = None
-            elif dtype_plan != {} and dtype_policy_alt.search(renamed_key):
+            if dtype_plan != {} and dtype_policy_alt.search(renamed_key):
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
             elif empty_param is not None and empty_param.dtype != _dtype:
                 _dtype = empty_param.dtype  # usually correct when initializing
+            if hf_quantizer and hf_quantizer.pre_quantized:
+                _dtype = hf_quantizer.get_new_dtype(mapping, tensor, _dtype)
 
-            # Per-expert sharding (EP) needs `tensor_idx` = the expert index so the
-            # distributed op selects whole experts. The signal is a `MergeModulelist`
-            # in the chain; it isn't always `operations[0]` (e.g. an FP8 quantizer
-            # prepends a scale-decode op), so scan the whole chain rather than just the head.
+            # A converter collects its checkpoint tensors into lists (e.g. one tensor per expert); the position in
+            # the list lets the sharding op tell which slice of the param each one is
             tensor_idx = (
                 len(mapping.collected_tensors.get(source_pattern, []))
                 if isinstance(mapping, WeightConverter)
-                and any(isinstance(op, MergeModulelist) for op in mapping.operations)
                 else None
             )
 

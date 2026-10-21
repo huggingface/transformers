@@ -39,6 +39,10 @@ Tips:
 
 This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ). The original code can be found [here](https://github.com/google-deepmind/recurrentgemma).
 
+## Notes
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## RecurrentGemmaConfig
 
 [[autodoc]] RecurrentGemmaConfig

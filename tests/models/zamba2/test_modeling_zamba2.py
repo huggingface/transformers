@@ -147,7 +147,6 @@ class Zamba2ModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=True,
             initializer_range=self.initializer_range,
-            use_mamba_kernels=False,
             layers_block_type=self.layers_block_type,
             num_mem_blocks=self.num_mem_blocks,
             use_mem_rope=self.use_mem_rope,
@@ -379,10 +378,6 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     @unittest.skip(reason="Zamba2 has hybrid cache.")
     def test_generate_continue_from_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="A large mamba2 would be necessary (and costly) for that")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     def test_config(self):

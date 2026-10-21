@@ -299,7 +299,7 @@ class TimesFmDecoderLayer(nn.Module):
 @auto_docstring
 class TimesFmPreTrainedModel(PreTrainedModel):
     config: TimesFmConfig
-    base_model_prefix = "timesfm"
+    base_model_prefix = "decoder"
     _no_split_modules = ["TimesFmDecoderLayer"]
     main_input_name = "past_values"
     input_modalities = ("time",)
@@ -796,13 +796,10 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
     @staticmethod
     def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
-        """Calculates the moving average using PyTorch's convolution function."""
+        """Calculates the moving average over a sliding window."""
         # Pad with zeros to handle initial window positions
         arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
-        # Create a convolution kernel
-        kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
-        # Apply convolution to calculate the moving average
-        smoothed_arr = F.conv1d(arr_padded.view(1, 1, -1), kernel.view(1, 1, -1)).squeeze()
+        smoothed_arr = arr_padded.unfold(-1, window_size, 1).mean(dim=-1)
         return [smoothed_arr, arr - smoothed_arr]
 
 

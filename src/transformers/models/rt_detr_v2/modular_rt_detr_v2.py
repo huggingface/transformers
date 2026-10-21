@@ -20,8 +20,7 @@ from huggingface_hub.dataclasses import strict
 from torch import Tensor
 
 from ... import initialization as init
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ..auto import AutoConfig
@@ -139,7 +138,11 @@ class RTDetrV2Config(PreTrainedConfig):
     """
 
     model_type = "rt_detr_v2"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="rt_detr_resnet", init_kwargs={"out_indices": [2, 3, 4]}
+        ),
+    }
     layer_types = ["basic", "bottleneck"]
     attribute_map = {
         "hidden_size": "d_model",
@@ -201,15 +204,6 @@ class RTDetrV2Config(PreTrainedConfig):
     decoder_offset_scale: float = 0.5
     decoder_method: str = "default"
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="rt_detr_resnet",
-            default_config_kwargs={"out_indices": [2, 3, 4]},
-            **kwargs,
-        )
-        super().__post_init__(**kwargs)
 
 
 def multi_scale_deformable_attention_v2(

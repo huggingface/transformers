@@ -156,13 +156,13 @@ class NemotronAsrStreamingGenerationMixin(ParakeetRNNTGenerationMixin):
         # Offline: encode the full mel spectrogram up front. Delegate to Parakeet's shared implementation.
         return super()._prepare_model_inputs(inputs, bos_token_id, model_kwargs)
 
-    def _prepare_encoder_decoder_kwargs_for_generation(
+    def _maybe_prepare_encoder_kwargs_for_generation(
         self, inputs_tensor, model_kwargs, model_input_name, generation_config
     ):
         from .modeling_nemotron_asr_streaming import NemotronAsrStreamingEncoderModelOutput
 
         if not getattr(self, "_streaming", False):
-            return super()._prepare_encoder_decoder_kwargs_for_generation(
+            return super()._maybe_prepare_encoder_kwargs_for_generation(
                 inputs_tensor, model_kwargs, model_input_name, generation_config
             )
 
