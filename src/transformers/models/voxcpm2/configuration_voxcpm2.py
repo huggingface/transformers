@@ -270,22 +270,12 @@ class VoxCPM2AudioVAEConfig(PreTrainedConfig):
         Initial channel dimension of the audio decoder.
     decoder_rates (`tuple[int, ...]`, *optional*, defaults to `(8, 6, 5, 2, 2, 2)`):
         Upsampling strides used by the audio decoder.
-    depthwise (`bool`, *optional*, defaults to `True`):
-        Whether residual convolutions use depthwise groups.
     sample_rate (`int`, *optional*, defaults to 16000):
         Sampling rate expected by the audio encoder.
     out_sample_rate (`int`, *optional*, defaults to 48000):
         Sampling rate produced by the audio decoder.
-    use_noise_block (`bool`, *optional*, defaults to `False`):
-        Whether decoder blocks inject learned noise.
     sr_bin_boundaries (`tuple[int, ...]`, *optional*, defaults to `(20000, 30000, 40000)`):
         Boundaries used to bucket the requested decoder sampling rate.
-    cond_type (`str`, *optional*, defaults to `"scale_bias"`):
-        Type of sample-rate conditioning applied by the decoder.
-    cond_dim (`int`, *optional*, defaults to 128):
-        Embedding dimension used for sample-rate conditioning.
-    cond_out_layer (`bool`, *optional*, defaults to `False`):
-        Whether to condition the decoder output layer.
     """
 
     model_type = "voxcpm2_audio_vae"
@@ -296,14 +286,9 @@ class VoxCPM2AudioVAEConfig(PreTrainedConfig):
     latent_dim: int = 64
     decoder_dim: int = 2048
     decoder_rates: list[int] | tuple[int, ...] = (8, 6, 5, 2, 2, 2)
-    depthwise: bool = True
     sample_rate: int = 16000
     out_sample_rate: int = 48000
-    use_noise_block: bool = False
-    sr_bin_boundaries: list[int] | tuple[int, ...] | None = (20000, 30000, 40000)
-    cond_type: str = "scale_bias"
-    cond_dim: int = 128
-    cond_out_layer: bool = False
+    sr_bin_boundaries: list[int] | tuple[int, ...] = (20000, 30000, 40000)
 
     @property
     def hop_length(self) -> int:

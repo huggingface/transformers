@@ -296,22 +296,12 @@ class VoxCPM2AudioVAEConfig(PreTrainedConfig):
         Initial channel dimension of the audio decoder.
     decoder_rates (`tuple[int, ...]`, *optional*, defaults to `(8, 6, 5, 2, 2, 2)`):
         Upsampling strides used by the audio decoder.
-    depthwise (`bool`, *optional*, defaults to `True`):
-        Whether residual convolutions use depthwise groups.
     sample_rate (`int`, *optional*, defaults to 16000):
         Sampling rate expected by the audio encoder.
     out_sample_rate (`int`, *optional*, defaults to 48000):
         Sampling rate produced by the audio decoder.
-    use_noise_block (`bool`, *optional*, defaults to `False`):
-        Whether decoder blocks inject learned noise.
     sr_bin_boundaries (`tuple[int, ...]`, *optional*, defaults to `(20000, 30000, 40000)`):
         Boundaries used to bucket the requested decoder sampling rate.
-    cond_type (`str`, *optional*, defaults to `"scale_bias"`):
-        Type of sample-rate conditioning applied by the decoder.
-    cond_dim (`int`, *optional*, defaults to 128):
-        Embedding dimension used for sample-rate conditioning.
-    cond_out_layer (`bool`, *optional*, defaults to `False`):
-        Whether to condition the decoder output layer.
     """
 
     model_type = "voxcpm2_audio_vae"
@@ -322,14 +312,9 @@ class VoxCPM2AudioVAEConfig(PreTrainedConfig):
     latent_dim: int = 64
     decoder_dim: int = 2048
     decoder_rates: list[int] | tuple[int, ...] = (8, 6, 5, 2, 2, 2)
-    depthwise: bool = True
     sample_rate: int = 16000
     out_sample_rate: int = 48000
-    use_noise_block: bool = False
-    sr_bin_boundaries: list[int] | tuple[int, ...] | None = (20000, 30000, 40000)
-    cond_type: str = "scale_bias"
-    cond_dim: int = 128
-    cond_out_layer: bool = False
+    sr_bin_boundaries: list[int] | tuple[int, ...] = (20000, 30000, 40000)
 
     @property
     def hop_length(self) -> int:
@@ -558,20 +543,12 @@ class VoxCPM2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, VoxCPM2LocalEncoder):
             init.normal_(module.special_token, mean=0.0, std=1.0)
         elif isinstance(module, VoxCPM2SampleRateConditionLayer):
-            if module.conditioning_type == "scale_bias":
-                init.ones_(module.scale_embed.weight)
-                init.zeros_(module.bias_embed.weight)
-            elif module.conditioning_type == "scale_bias_init":
-                init.normal_(module.scale_embed.weight, mean=1.0, std=1.0)
-                init.normal_(module.bias_embed.weight, mean=0.0, std=1.0)
-            else:
-                init.normal_(module.cond_embed.weight, mean=0.0, std=1.0)
-        elif isinstance(module, VoxCPM2AudioDecoder) and module.sr_bin_boundaries is not None:
+            init.ones_(module.scale_embed.weight)
+            init.zeros_(module.bias_embed.weight)
+        elif isinstance(module, VoxCPM2AudioDecoder):
             audio_vae_config = self.config.audio_vae_config
             if not isinstance(audio_vae_config, VoxCPM2AudioVAEConfig):
                 raise TypeError("`audio_vae_config` must be a `VoxCPM2AudioVAEConfig` instance")
-            if audio_vae_config.sr_bin_boundaries is None:
-                raise ValueError("AudioVAE sample-rate boundaries are missing from the configuration")
             boundaries = torch.tensor(
                 audio_vae_config.sr_bin_boundaries,
                 device=module.sr_bin_boundaries.device,
@@ -693,7 +670,7 @@ class VoxCPM2AudioEncoder(nn.Module):
         layers = [_apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(1, hidden_dim, kernel_size=7, padding=3))]
         for stride in config.encoder_rates:
             hidden_dim *= 2
-            groups = hidden_dim // 2 if config.depthwise else 1
+            groups = hidden_dim // 2
             layers.append(VoxCPM2CausalEncoderBlock(output_dim=hidden_dim, stride=stride, groups=groups))
 
         self.fc_mu = _apply_voxcpm2_weight_norm(
@@ -714,22 +691,6 @@ class VoxCPM2AudioEncoder(nn.Module):
         }
 
 
-class VoxCPM2NoiseBlock(nn.Module):
-    def __init__(self, hidden_dim: int):
-        super().__init__()
-        self.linear = _apply_voxcpm2_weight_norm(
-            VoxCPM2CausalConv1d(hidden_dim, hidden_dim, kernel_size=1, bias=False)
-        )
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        noise = torch.randn(
-            (hidden_states.shape[0], 1, hidden_states.shape[2]),
-            device=hidden_states.device,
-            dtype=hidden_states.dtype,
-        )
-        return hidden_states + noise * self.linear(hidden_states)
-
-
 class VoxCPM2CausalDecoderBlock(nn.Module):
     def __init__(
         self,
@@ -737,7 +698,6 @@ class VoxCPM2CausalDecoderBlock(nn.Module):
         output_dim: int = 8,
         stride: int = 1,
         groups: int = 1,
-        use_noise_block: bool = False,
     ):
         super().__init__()
         layers = [
@@ -753,8 +713,6 @@ class VoxCPM2CausalDecoderBlock(nn.Module):
                 )
             ),
         ]
-        if use_noise_block:
-            layers.append(VoxCPM2NoiseBlock(output_dim))
         layers.extend(
             [
                 VoxCPM2CausalResidualUnit(output_dim, dilation=1, groups=groups),
@@ -770,94 +728,38 @@ class VoxCPM2CausalDecoderBlock(nn.Module):
 
 
 class VoxCPM2SampleRateConditionLayer(nn.Module):
-    def __init__(
-        self,
-        input_dim: int,
-        num_sample_rate_buckets: int,
-        conditioning_type: str = "scale_bias",
-        conditioning_dim: int = 128,
-        use_output_layer: bool = False,
-    ):
+    def __init__(self, input_dim: int, num_sample_rate_buckets: int):
         super().__init__()
-        self.conditioning_type = conditioning_type
-        output_layer_input_dim = input_dim
-
-        if conditioning_type in ("scale_bias", "scale_bias_init"):
-            self.scale_embed = nn.Embedding(num_sample_rate_buckets, input_dim)
-            self.bias_embed = nn.Embedding(num_sample_rate_buckets, input_dim)
-            if conditioning_type == "scale_bias":
-                nn.init.ones_(self.scale_embed.weight)
-                nn.init.zeros_(self.bias_embed.weight)
-            else:
-                nn.init.normal_(self.scale_embed.weight, mean=1.0)
-                nn.init.normal_(self.bias_embed.weight)
-        elif conditioning_type == "add":
-            self.cond_embed = nn.Embedding(num_sample_rate_buckets, input_dim)
-            nn.init.normal_(self.cond_embed.weight)
-        elif conditioning_type == "concat":
-            if not use_output_layer:
-                raise ValueError("`use_output_layer` must be enabled for concatenated sample-rate conditioning")
-            self.cond_embed = nn.Embedding(num_sample_rate_buckets, conditioning_dim)
-            output_layer_input_dim = input_dim + conditioning_dim
-        else:
-            raise ValueError(f"Invalid sample-rate conditioning type: {conditioning_type}")
-
-        if use_output_layer:
-            self.out_layer = nn.Sequential(
-                VoxCPM2Snake1d(output_layer_input_dim),
-                _apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(output_layer_input_dim, input_dim, kernel_size=1)),
-            )
-        else:
-            self.out_layer = nn.Identity()
+        self.scale_embed = nn.Embedding(num_sample_rate_buckets, input_dim)
+        self.bias_embed = nn.Embedding(num_sample_rate_buckets, input_dim)
+        nn.init.ones_(self.scale_embed.weight)
+        nn.init.zeros_(self.bias_embed.weight)
 
     def forward(self, hidden_states: torch.Tensor, sample_rate_ids: torch.LongTensor) -> torch.Tensor:
-        if self.conditioning_type in ("scale_bias", "scale_bias_init"):
-            hidden_states = hidden_states * self.scale_embed(sample_rate_ids).unsqueeze(-1)
-            hidden_states = hidden_states + self.bias_embed(sample_rate_ids).unsqueeze(-1)
-        elif self.conditioning_type == "add":
-            hidden_states = hidden_states + self.cond_embed(sample_rate_ids).unsqueeze(-1)
-        else:
-            conditioning = self.cond_embed(sample_rate_ids).unsqueeze(-1).expand(-1, -1, hidden_states.shape[-1])
-            hidden_states = torch.cat((hidden_states, conditioning), dim=1)
-        return self.out_layer(hidden_states)
+        hidden_states = hidden_states * self.scale_embed(sample_rate_ids).unsqueeze(-1)
+        return hidden_states + self.bias_embed(sample_rate_ids).unsqueeze(-1)
 
 
 class VoxCPM2AudioDecoder(nn.Module):
     def __init__(self, config: VoxCPM2AudioVAEConfig):
         super().__init__()
-        if config.depthwise:
-            layers = [
-                _apply_voxcpm2_weight_norm(
-                    VoxCPM2CausalConv1d(
-                        config.latent_dim,
-                        config.latent_dim,
-                        kernel_size=7,
-                        padding=3,
-                        groups=config.latent_dim,
-                    )
-                ),
-                _apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(config.latent_dim, config.decoder_dim, kernel_size=1)),
-            ]
-        else:
-            layers = [
-                _apply_voxcpm2_weight_norm(
-                    VoxCPM2CausalConv1d(config.latent_dim, config.decoder_dim, kernel_size=7, padding=3)
+        layers = [
+            _apply_voxcpm2_weight_norm(
+                VoxCPM2CausalConv1d(
+                    config.latent_dim,
+                    config.latent_dim,
+                    kernel_size=7,
+                    padding=3,
+                    groups=config.latent_dim,
                 )
-            ]
+            ),
+            _apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(config.latent_dim, config.decoder_dim, kernel_size=1)),
+        ]
 
         for stride_index, stride in enumerate(config.decoder_rates):
             input_dim = config.decoder_dim // 2**stride_index
             output_dim = config.decoder_dim // 2 ** (stride_index + 1)
-            groups = output_dim if config.depthwise else 1
-            layers.append(
-                VoxCPM2CausalDecoderBlock(
-                    input_dim,
-                    output_dim,
-                    stride,
-                    groups=groups,
-                    use_noise_block=config.use_noise_block,
-                )
-            )
+            layers.append(VoxCPM2CausalDecoderBlock(input_dim, output_dim, stride, groups=output_dim))
 
         layers.extend(
             [
@@ -867,37 +769,24 @@ class VoxCPM2AudioDecoder(nn.Module):
             ]
         )
 
-        if config.sr_bin_boundaries is None:
-            self.model = nn.Sequential(*layers)
-            self.sr_bin_boundaries = None
-        else:
-            self.model = nn.ModuleList(layers)
-            self.register_buffer(
-                "sr_bin_boundaries", torch.tensor(config.sr_bin_boundaries, dtype=torch.int32), persistent=True
-            )
-            num_sample_rate_buckets = len(config.sr_bin_boundaries) + 1
-            conditioning_layers = []
-            for layer in self.model:
-                if isinstance(layer, VoxCPM2CausalDecoderBlock):
-                    conditioning_layers.append(
-                        VoxCPM2SampleRateConditionLayer(
-                            input_dim=layer.input_channels,
-                            num_sample_rate_buckets=num_sample_rate_buckets,
-                            conditioning_type=config.cond_type,
-                            conditioning_dim=config.cond_dim,
-                            use_output_layer=config.cond_out_layer,
-                        )
-                    )
-                else:
-                    conditioning_layers.append(None)
-            self.sr_cond_model = nn.ModuleList(conditioning_layers)
+        self.model = nn.ModuleList(layers)
+        self.register_buffer(
+            "sr_bin_boundaries", torch.tensor(config.sr_bin_boundaries, dtype=torch.int32), persistent=True
+        )
+        num_sample_rate_buckets = len(config.sr_bin_boundaries) + 1
+        self.sr_cond_model = nn.ModuleList(
+            [
+                VoxCPM2SampleRateConditionLayer(layer.input_channels, num_sample_rate_buckets)
+                if isinstance(layer, VoxCPM2CausalDecoderBlock)
+                else None
+                for layer in self.model
+            ]
+        )
 
     def get_sample_rate_ids(self, sample_rate: torch.Tensor) -> torch.Tensor:
         return torch.bucketize(sample_rate, self.sr_bin_boundaries)
 
     def forward(self, hidden_states: torch.Tensor, sample_rate: torch.Tensor | None = None) -> torch.Tensor:
-        if self.sr_bin_boundaries is None:
-            return self.model(hidden_states)
         if sample_rate is None:
             raise ValueError("`sample_rate` must be provided when sample-rate conditioning is enabled")
 
@@ -917,8 +806,6 @@ class VoxCPM2AudioVAE(nn.Module):
         self.encoder_rates = config.encoder_rates
         self.decoder_dim = config.decoder_dim
         self.decoder_rates = config.decoder_rates
-        self.depthwise = config.depthwise
-        self.use_noise_block = config.use_noise_block
         self.latent_dim = config.latent_dim
         self.hop_length = config.hop_length
         self.encoder = VoxCPM2AudioEncoder(config)
@@ -946,12 +833,10 @@ class VoxCPM2AudioVAE(nn.Module):
     def decode(
         self, latent_features: torch.Tensor, output_sampling_rate: int | torch.Tensor | None = None
     ) -> torch.Tensor:
-        sample_rate = None
-        if self.sr_bin_boundaries is not None:
-            output_sampling_rate = self.out_sample_rate if output_sampling_rate is None else output_sampling_rate
-            sample_rate = torch.as_tensor(output_sampling_rate, device=latent_features.device, dtype=torch.int32)
-            if sample_rate.ndim == 0:
-                sample_rate = sample_rate.unsqueeze(0)
+        output_sampling_rate = self.out_sample_rate if output_sampling_rate is None else output_sampling_rate
+        sample_rate = torch.as_tensor(output_sampling_rate, device=latent_features.device, dtype=torch.int32)
+        if sample_rate.ndim == 0:
+            sample_rate = sample_rate.unsqueeze(0)
         return self.decoder(latent_features, sample_rate)
 
     def streaming_decode(self) -> "VoxCPM2StreamingAudioDecoder":
