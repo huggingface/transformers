@@ -79,27 +79,3 @@ class SkipListTest(unittest.TestCase):
         ):
             self.assertFalse(should_convert_module(name, skip), name)
         self.assertTrue(should_convert_module("model.language_model.layers.0.self_attn.q_proj", skip))
-
-
-@require_torch
-class AdaptQuantizationConfigTest(unittest.TestCase):
-    def test_the_model_config_adapts_the_quantization_config(self):
-        """Check that the model config adapts both a checkpoint's and a passed quantization config."""
-        from transformers import LlamaConfig
-        from transformers.quantizers.auto import get_hf_quantizer
-        from transformers.utils.quantization_config import Mxfp4Config
-
-        adapted = []
-
-        class AdaptingConfig(LlamaConfig):
-            def adapt_quantization_config(self, quantization_config):
-                adapted.append(type(quantization_config))
-                return quantization_config
-
-        for checkpoint in (None, {"quant_method": "mxfp4"}):
-            with self.subTest(pre_quantized=checkpoint is not None):
-                adapted.clear()
-                config = AdaptingConfig()
-                config.quantization_config = checkpoint
-                get_hf_quantizer(config, Mxfp4Config(dequantize=True), None, True, {})
-                self.assertEqual(adapted, [Mxfp4Config])

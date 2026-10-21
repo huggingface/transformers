@@ -1508,17 +1508,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
         return generation_params
 
-    def adapt_quantization_config(self, quantization_config):
-        """
-        Return the quantization config to load this model with.
-
-        Override it when a checkpoint declares part of its quantization elsewhere, e.g. on the model config.
-        `DeepseekV4Config` uses it. Its checkpoints ship `quant_method="fp8"` and mark MXFP4 experts with
-        `expert_dtype="fp4"`, so it returns a config that also quantizes the experts in MXFP4.
-        The default returns `quantization_config` unchanged.
-        """
-        return quantization_config
-
     def get_text_config(self, decoder=None, encoder=None) -> PreTrainedConfig:
         """
         Returns the text config related to the text input (encoder) or text output (decoder) of the model. The

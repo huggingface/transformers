@@ -192,18 +192,6 @@ class AutoQuantizationConfig:
         return quantization_config
 
 
-def _quantization_config_from_dict(quantization_config, quantization_config_from_args):
-    """Build the config object of a checkpoint's `quantization_config` dict.
-
-    A passed `AutoRoundConfig` takes priority over the automatic dispatch.
-    """
-    if not isinstance(quantization_config, dict):
-        return quantization_config
-    if isinstance(quantization_config_from_args, AutoRoundConfig):
-        return AutoRoundConfig.from_dict(quantization_config)
-    return AutoQuantizationConfig.from_dict(quantization_config)
-
-
 class AutoHfQuantizer:
     """
      The Auto-HF quantizer class that takes care of automatically instantiating to the correct
@@ -261,7 +249,12 @@ class AutoHfQuantizer:
         else:
             warning_msg = ""
 
-        quantization_config = _quantization_config_from_dict(quantization_config, quantization_config_from_args)
+        if isinstance(quantization_config, dict):
+            # Convert the config based on the type of quantization_config_from_args (e.g., AutoRoundConfig), which takes priority before automatic configuration dispatch.
+            if isinstance(quantization_config_from_args, AutoRoundConfig):
+                quantization_config = AutoRoundConfig.from_dict(quantization_config)
+            else:
+                quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
         if (
             quantization_config_from_args is not None
@@ -363,15 +356,11 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
 
     if pre_quantized or quantization_config is not None:
         if pre_quantized:
-            # The adapt hook always gets a config object
-            quantization_params_from_config = _quantization_config_from_dict(
+            config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
                 quantization_params_from_config, quantization_config
             )
-            config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
-                config.adapt_quantization_config(quantization_params_from_config), quantization_config
-            )
         else:
-            config.quantization_config = config.adapt_quantization_config(quantization_config)
+            config.quantization_config = quantization_config
 
         hf_quantizer = AutoHfQuantizer.from_config(
             config.quantization_config,
