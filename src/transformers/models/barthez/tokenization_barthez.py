@@ -14,7 +14,7 @@
 """Tokenization classes for the BARThez model."""
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers
-from tokenizers.models import Unigram
+from tokenizers.models import BPE, Unigram
 
 from ...tokenization_python import AddedToken
 from ...tokenization_utils_tokenizers import TokenizersBackend
@@ -78,6 +78,14 @@ class BarthezTokenizer(TokenizersBackend):
             contains the vocabulary necessary to instantiate a tokenizer.
         vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
+            A `dict` vocabulary selects the BPE backend (with `merges`); any other
+            form selects the Unigram backend, matching the checkpoint's
+            sentencepiece algorithm (`moussaKam/barthez` is BPE,
+            `moussaKam/mbarthez` is Unigram).
+        merges (`list`, *optional*):
+            BPE merges, as `(pair, pair)` tuples. Only used with a `dict`
+            vocabulary; passed automatically when loading from `tokenizer.json`
+            or a sentencepiece BPE model.
         add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word.
@@ -98,6 +106,7 @@ class BarthezTokenizer(TokenizersBackend):
         pad_token="<pad>",
         mask_token="<mask>",
         add_prefix_space=True,
+        merges: list | None = None,
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -115,7 +124,23 @@ class BarthezTokenizer(TokenizersBackend):
                 (str(mask_token), 0.0),
             ]
 
-        self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
+        if isinstance(self._vocab, dict):
+            # BPE checkpoint (e.g. `moussaKam/barthez`): a dict vocabulary
+            # selects the BPE backend, mirroring v4's `SpmConverter` dispatch
+            # on the sentencepiece proto (`BPE(vocab, merges, unk_token,
+            # fuse_unk=True, byte_fallback=False, dropout=None)`).
+            self._tokenizer = Tokenizer(
+                BPE(
+                    vocab=self._vocab,
+                    merges=merges or [],
+                    unk_token=str(unk_token),
+                    fuse_unk=True,
+                    byte_fallback=False,
+                    dropout=None,
+                )
+            )
+        else:
+            self._tokenizer = Tokenizer(Unigram(self._vocab, unk_id=3, byte_fallback=False))
 
         self._tokenizer.normalizer = normalizers.Sequence(
             [
