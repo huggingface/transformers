@@ -562,6 +562,9 @@ class WhisperTokenizer(TokenizersBackend):
         merge_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
         )
+        normalizer_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["normalizer_file"]
+        )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
             f.write(json.dumps(self._vocab, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
@@ -570,25 +573,15 @@ class WhisperTokenizer(TokenizersBackend):
             writer.write("#version: 0.2\n")
             writer.writelines(" ".join(merge_pair) + "\n" for merge_pair in self._merges)
 
-        return (vocab_file, merge_file) + self._save_english_spelling_normalizer(save_directory, filename_prefix)
+        files = (vocab_file, merge_file)
+        if self.english_spelling_normalizer is not None:
+            with open(normalizer_file, "w", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(self.english_spelling_normalizer, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+                )
+            files += (normalizer_file,)
 
-    def _save_english_spelling_normalizer(
-        self, save_directory: str, filename_prefix: str | None = None
-    ) -> tuple[str, ...]:
-        """
-        Write `normalizer.json`. Unlike the vocabulary, the spelling map is not carried by `tokenizer.json`, so
-        `normalize` cannot work after a reload unless it is saved alongside it.
-        """
-        if self.english_spelling_normalizer is None:
-            return ()
-
-        normalizer_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["normalizer_file"]
-        )
-        with open(normalizer_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.english_spelling_normalizer, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
-
-        return (normalizer_file,)
+        return files
 
     def _save_pretrained(
         self,
@@ -598,7 +591,19 @@ class WhisperTokenizer(TokenizersBackend):
         filename_prefix: str | None = None,
     ) -> tuple[str, ...]:
         file_names = super()._save_pretrained(save_directory, file_names, legacy_format, filename_prefix)
-        return file_names + self._save_english_spelling_normalizer(str(save_directory), filename_prefix)
+        # `tokenizer.json` does not carry the spelling map, so `normalize` needs this file after a reload.
+        if self.english_spelling_normalizer is not None:
+            normalizer_file = os.path.join(
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["normalizer_file"],
+            )
+            with open(normalizer_file, "w", encoding="utf-8") as f:
+                f.write(
+                    json.dumps(self.english_spelling_normalizer, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+                )
+            file_names += (normalizer_file,)
+
+        return file_names
 
     def set_prefix_tokens(
         self, language: str | None = None, task: str | None = None, predict_timestamps: bool | None = None
