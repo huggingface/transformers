@@ -225,3 +225,19 @@ class FineGrainedHostTest(unittest.TestCase):
                 with self.subTest(entry=entry, name=name):
                     skipped = not should_convert_module(name, [entry])
                     self.assertEqual(plan_entry_for(plan, name) is None, skipped)
+
+    def test_a_member_converts_its_modules_when_checkpoint_names_differ(self):
+        """Check that a member keeps the parents of its modules when the checkpoint renames them, as in a VLM."""
+
+        def renamer(model):
+            return lambda name: f"language_model.{name}" if name else name
+
+        with (
+            mock.patch("transformers.quantizers.base.checkpoint_module_namer", renamer),
+            mock.patch("transformers.quantizers.quantizer_finegrained.checkpoint_module_namer", renamer),
+        ):
+            self._load({r"layers\.1\.mlp": TagTestConfig(tag="mlp"), "self_attn": OtherTagTestConfig(tag="attn")})
+        tags = _tags(self.model)
+        self.assertEqual(tags["model.layers.1.mlp.gate_proj"], "mlp")
+        self.assertEqual(tags["model.layers.0.self_attn.q_proj"], "attn")
+        self.assertIsNone(tags["model.layers.0.mlp.gate_proj"])

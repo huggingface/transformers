@@ -135,10 +135,15 @@ class FineGrainedHfQuantizer(HfQuantizer):
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
         self._plan.update(dict.fromkeys(map(skip_pattern, skipped)))
+        to_checkpoint = checkpoint_module_namer(model)
+        owners = {name: self.member_for(name) for name, _ in model.named_modules()}
         for member in self.members:
             own = [pattern for pattern, owner in self._plan.items() if owner is member]
             others = [pattern for pattern in self._plan if pattern not in own]
-            member.quantization_config.modules_to_not_convert = [_skip_unowned(own, others)]
+            # a skipped module takes its sub-tree with it, so a member never skips a parent of a module it owns
+            parents = {parent for name, owner in owners.items() if owner is member for parent in _parents(name)}
+            parents |= {to_checkpoint(parent) for parent in parents}
+            member.quantization_config.modules_to_not_convert = [_skip_unowned(own, others, parents)]
             member._process_model_before_weight_loading(model, **kwargs)
 
     def _resolve_plan(self, model: "PreTrainedModel"):
@@ -227,15 +232,24 @@ def _operations(conversions) -> list:
     return [op for conversion in conversions for op in getattr(conversion, "operations", ())]
 
 
-def _skip_unowned(own: list[str], others: list[str]) -> str:
+def _parents(name: str) -> list[str]:
+    """Return the names of the modules above `name`, e.g. `a` and `a.b` for `a.b.c`."""
+    parts = name.split(".")
+    return [".".join(parts[:end]) for end in range(1, len(parts))]
+
+
+def _skip_unowned(own: list[str], others: list[str], parents: set[str]) -> str:
     """Return a skip-list entry that matches every module a member with the `own` patterns does not own.
 
     Another entry's targeted pattern wins over a catch-all. A member without the catch-all owns only what its patterns
-    match.
+    match. The entry never matches one of `parents`, the modules above the ones the member owns.
     """
     unowned = []
     if targeted := [pattern for pattern in others if pattern != ".*"]:
         unowned.append(f"(?=.*(?:{'|'.join(targeted)}))")
     if ".*" not in own:
         unowned.append(f"(?!.*(?:{'|'.join(own)}))")
-    return f"(?:{'|'.join(unowned)}).*" if unowned else "(?!)"
+    if not unowned:
+        return "(?!)"
+    kept = f"(?!(?:{'|'.join(map(re.escape, sorted(parents)))})$)" if parents else ""
+    return f"{kept}(?:{'|'.join(unowned)}).*"
