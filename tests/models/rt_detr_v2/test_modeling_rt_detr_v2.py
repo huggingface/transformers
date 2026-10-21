@@ -47,6 +47,7 @@ if is_torch_available():
     import torch
 
     from transformers import RTDetrV2ForObjectDetection, RTDetrV2Model
+    from transformers.loss.loss_rt_detr import RTDetrLoss
 
 if is_vision_available():
     from PIL import Image
@@ -303,6 +304,51 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_rt_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_rt_detr_object_detection_head_model(*config_and_inputs)
+
+    @parameterized.expand([(10, True), (10, False), (0, True), (0, False)])
+    def test_main_loss_excludes_denoising_queries(self, num_denoising, auxiliary_loss):
+        # Regression test for https://github.com/huggingface/transformers/issues/49817
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_denoising = num_denoising
+        config.auxiliary_loss = auxiliary_loss
+        inputs_dict = self._prepare_for_class(inputs_dict, RTDetrV2ForObjectDetection, return_labels=True)
+
+        model = RTDetrV2ForObjectDetection(config).to(torch_device)
+        model.train()
+        outputs = model(**inputs_dict)
+
+        if num_denoising:
+            num_denoising_queries, num_queries = outputs.denoising_meta_values["dn_num_split"]
+            self.assertGreater(num_denoising_queries, 0)
+            self.assertEqual(num_queries, config.num_queries)
+        else:
+            self.assertIsNone(outputs.denoising_meta_values)
+            num_denoising_queries = 0
+        self.assertEqual(outputs.logits.shape[1], num_denoising_queries + config.num_queries)
+        self.assertEqual(outputs.pred_boxes.shape[1], num_denoising_queries + config.num_queries)
+
+        criterion = RTDetrLoss(config).to(torch_device)
+        reference = criterion(
+            {
+                "logits": outputs.logits[:, -config.num_queries :],
+                "pred_boxes": outputs.pred_boxes[:, -config.num_queries :],
+            },
+            inputs_dict["labels"],
+        )
+        main_loss_keys = ("loss_vfl", "loss_bbox", "loss_giou")
+        for key in main_loss_keys:
+            torch.testing.assert_close(outputs.loss_dict[key], reference[key])
+
+        expected_denoising_keys = (
+            {f"{key}_dn_{i}" for key in main_loss_keys for i in range(config.decoder_layers)}
+            if num_denoising and auxiliary_loss
+            else set()
+        )
+        self.assertEqual({key for key in outputs.loss_dict if "_dn_" in key}, expected_denoising_keys)
+        if auxiliary_loss:
+            self.assertTrue(any("_aux_" in key for key in outputs.loss_dict))
+        else:
+            self.assertEqual(set(outputs.loss_dict), set(main_loss_keys))
 
     @unittest.skip(reason="RTDetrV2 does not use inputs_embeds")
     def test_inputs_embeds(self):
