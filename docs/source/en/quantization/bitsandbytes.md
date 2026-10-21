@@ -255,26 +255,25 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 
 ### Energy efficiency considerations
 
-When deploying quantized models, it's important to understand the energy efficiency implications of different quantization configurations.
+When deploying quantized models, it's worth understanding the energy implications of different quantization configurations. The figures below are measured, not estimated (NVIDIA T4, RTX 4090, RTX 5090, A800); see the [EcoCompute benchmark dataset](https://github.com/hongping-zh/ecocompute-mlcube) for methodology and raw data.
 
 **INT8 mixed-precision trade-offs**
 
-The default `llm_int8_threshold=6.0` configuration provides excellent accuracy preservation but may increase energy consumption by 17-33% compared to FP16 due to mixed-precision decomposition overhead. This is a justified trade-off for maintaining model quality in production deployments.
+The default `llm_int8_threshold=6.0` preserves accuracy, but relative to FP16 it can *increase* energy consumption: +17-147% across a broad test set, and +50-242% in an RTX 4090 deep dive (n=1). The root cause is mixed-precision decomposition — INT8<->FP16 conversion around outlier columns — not INT8 compute itself.
 
 **Threshold configuration**
 
-While setting `llm_int8_threshold=0.0` can speed up inference, it's not recommended for quality-sensitive workloads. Benchmarking shows that `threshold=0.0` saves only ~3% energy but can cause significant accuracy degradation (up to 25% perplexity increase in some models). The default `threshold=6.0` strikes the best balance between accuracy and performance for most use cases.
+`llm_int8_threshold=0.0` skips the outlier path and avoids that decomposition overhead: measured +79% throughput and -36% energy on average vs the default. The outlier path exists to protect accuracy on models with large activation outliers, so benchmark quality on your own workload before adopting it wholesale.
 
 **Model size considerations**
 
-- **NF4 quantization**: Most energy-efficient for models with >5B parameters, where memory bandwidth savings outweigh dequantization overhead
-- **Small models** (<5B parameters): May not benefit from NF4 quantization due to dequantization costs exceeding memory bandwidth savings
+The NF4 break-even is a property of the card + software stack, not a universal constant. Measured break-even points: ~2.1B parameters (Tesla T4), ~3.7B (RTX 4090), ~4.8B (RTX 5090 on the v1.1.0 stack; a September 2026 re-run on a newer stack measured ~1.8B). Below the break-even NF4 costs energy (e.g. +46% at 0.5B on RTX 4090); above it NF4 saves (-28% at 7B on RTX 4090).
 
 **Batch size impact**
 
-Energy efficiency improves significantly with larger batch sizes. Increasing from `batch_size=1` to `batch_size=8-64` can reduce energy consumption by 84-96%, making batching a critical optimization for production deployments.
+Batch size is the largest single lever. Going from `batch_size=1` to `batch_size=64` reduced energy per request by 95.7% (measured on an A800, with 55.5x throughput scaling), making batching a critical optimization for production deployments.
 
-For detailed benchmarking data and methodology, see the [EcoCompute AI benchmark repository](https://github.com/hongping-zh/ecocompute-ai).
+For detailed benchmarking data and methodology, see the [EcoCompute benchmark repository](https://github.com/hongping-zh/ecocompute-mlcube).
 
 ### Skip module conversion
 
