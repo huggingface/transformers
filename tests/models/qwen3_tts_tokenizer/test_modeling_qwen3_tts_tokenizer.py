@@ -13,12 +13,14 @@
 # limitations under the License.
 import inspect
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
 import torch
 
 from transformers import (
+    AutoModel,
     Qwen3TTSTokenizerConfig,
     Qwen3TTSTokenizerModel,
     is_torch_available,
@@ -142,6 +144,30 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
+
+    def test_component_save_load_preserves_outputs(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs()
+        model = Qwen3TTSTokenizerModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            embeddings = model.encoder(inputs["input_values"]).last_hidden_state
+            codes = model.quantizer.encode(embeddings)
+            quantized = model.quantizer.decode(codes.transpose(0, 1))
+
+        for component, component_input in ((model.encoder, inputs["input_values"]), (model.decoder, quantized)):
+            with self.subTest(component=type(component).__name__), tempfile.TemporaryDirectory() as directory:
+                component.save_pretrained(directory)
+                restored, loading_info = AutoModel.from_pretrained(directory, output_loading_info=True)
+                restored = restored.to(torch_device).eval()
+                self.assertFalse(loading_info["missing_keys"])
+                self.assertFalse(loading_info["unexpected_keys"])
+                self.assertFalse(loading_info["mismatched_keys"])
+                with torch.no_grad():
+                    expected = component(component_input)
+                    actual = restored(component_input)
+                if component is model.encoder:
+                    expected = expected.last_hidden_state
+                    actual = actual.last_hidden_state
+                torch.testing.assert_close(actual, expected)
 
     def test_forward_returns_encode_codes_and_truncates_audio(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()

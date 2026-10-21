@@ -170,6 +170,24 @@ print("Audio values shape:", output.audio_values.shape)
 # Audio values shape: torch.Size([1, 140520])
 ```
 
+## Separate encoder and decoder
+
+The tokenizer builds its encoder and decoder through `AutoModel.from_config`. The encoder uses
+`model.config.encoder_config`; the decoder settings remain in the main config and are exposed as a decoder-only
+`model.config.decoder_config`. The quantizer has its own `model.config.quantizer_config`.
+
+The loaded components are available as `model.encoder` and `model.decoder`. Their `forward` methods operate on
+continuous representations; the top-level `encode` and `decode` methods handle quantization separately.
+You can save and reload the trained components independently:
+
+```python
+model.encoder.save_pretrained("qwen3_tts_encoder")
+model.decoder.save_pretrained("qwen3_tts_decoder")
+
+encoder = AutoModel.from_pretrained("qwen3_tts_encoder")
+decoder = AutoModel.from_pretrained("qwen3_tts_decoder")
+```
+
 ## Qwen3TTSTokenizerConfig
 
 [[autodoc]] Qwen3TTSTokenizerConfig
@@ -177,6 +195,10 @@ print("Audio values shape:", output.audio_values.shape)
 ## Qwen3TTSTokenizerEncoderConfig
 
 [[autodoc]] Qwen3TTSTokenizerEncoderConfig
+
+## Qwen3TTSTokenizerDecoderConfig
+
+[[autodoc]] Qwen3TTSTokenizerDecoderConfig
 
 ## Qwen3TTSTokenizerQuantizerConfig
 
@@ -187,3 +209,13 @@ print("Audio values shape:", output.audio_values.shape)
 [[autodoc]] Qwen3TTSTokenizerModel
     - encode
     - decode
+
+## Qwen3TTSTokenizerEncoderModel
+
+[[autodoc]] Qwen3TTSTokenizerEncoderModel
+    - forward
+
+## Qwen3TTSTokenizerDecoderModel
+
+[[autodoc]] Qwen3TTSTokenizerDecoderModel
+    - forward

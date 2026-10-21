@@ -48,6 +48,7 @@ from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeCode2WavTransformerModel,
     Qwen3OmniMoeConvNeXtBlock,
 )
+from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerModel
 
 
 logger = logging.get_logger(__name__)
@@ -134,7 +135,56 @@ class Qwen3TTSTokenizerEncoderConfig(MimiConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
 @strict
-class Qwen3TTSTokenizerConfig(PreTrainedConfig):
+class Qwen3TTSTokenizerDecoderConfig(PreTrainedConfig):
+    r"""
+    upsample_rates (`Tuple[int]`, *optional*, defaults to `(8, 5, 4, 3)`):
+        Rate at which features are upsampled in the final waveform synthesis stage.
+    upsampling_ratios (`Tuple[int]`, *optional*, defaults to `(2, 2)`):
+        Ratios used in transposed convolutional layers to progressively upsample feature maps to waveform.
+    decoder_dim (`int`, *optional*, defaults to 1536):
+        Final dimensionality of the decoder's output before waveform generation.
+    latent_dim (`int`, *optional*, defaults to 1024):
+        Latent dimension used between pre-conv and transformer.
+    decoder_chunk_size (`int`, *optional*, defaults to 300):
+        Number of frames the decoder processes per chunk.
+    decoder_left_context_size (`int`, *optional*, defaults to 25):
+        Number of preceding frames prepended to each decoder chunk as context and dropped from its output.
+    """
+
+    model_type = "qwen3_tts_tokenizer_decoder"
+    base_config_key = "decoder_config"
+
+    hidden_size: int = 512
+    max_position_embeddings: int = 8000
+    rope_parameters: dict | None = None
+    num_attention_heads: int = 16
+    num_key_value_heads: int = 16
+    attention_bias: bool = False
+    sliding_window: int = 72
+    intermediate_size: int = 1024
+    hidden_act: str = "silu"
+    layer_scale_initial_scale: float = 0.01
+    rms_norm_eps: float = 1e-5
+    num_hidden_layers: int = 8
+    upsample_rates: list[int] | tuple[int, ...] = (8, 5, 4, 3)
+    upsampling_ratios: list[int] | tuple[int, ...] = (2, 2)
+    decoder_dim: int = 1536
+    attention_dropout: float | int = 0.0
+    initializer_range: float = 0.02
+    head_dim: int = 64
+    codebook_dim: int = 512
+    latent_dim: int = 1024
+    decoder_chunk_size: int = 300
+    decoder_left_context_size: int = 25
+
+    @property
+    def layer_types(self):
+        return ["sliding_attention"] * self.num_hidden_layers
+
+
+@auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
+@strict
+class Qwen3TTSTokenizerConfig(Qwen3TTSTokenizerDecoderConfig):
     r"""
     encoder_config (`dict`, *optional*):
         Configuration for the Mimi-based encoder sub-model.
@@ -159,6 +209,7 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
     """
 
     model_type = "qwen3_tts_tokenizer_12hz"
+    base_config_key = ""
     attribute_map = {
         "input_sample_rate": "input_sampling_rate",
         "output_sample_rate": "output_sampling_rate",
@@ -172,28 +223,6 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
     quantizer_config: dict | PreTrainedConfig | None = None
     input_sampling_rate: int | None = 24000
     output_sampling_rate: int | None = 24000
-    hidden_size: int = 512
-    max_position_embeddings: int = 8000
-    rope_parameters: dict | None = None
-    num_attention_heads: int = 16
-    num_key_value_heads: int = 16
-    attention_bias: bool = False
-    sliding_window: int = 72
-    intermediate_size: int = 1024
-    hidden_act: str = "silu"
-    layer_scale_initial_scale: float = 0.01
-    rms_norm_eps: float = 1e-5
-    num_hidden_layers: int = 8
-    upsample_rates: list[int] | tuple[int, ...] = (8, 5, 4, 3)
-    upsampling_ratios: list[int] | tuple[int, ...] = (2, 2)
-    decoder_dim: int = 1536
-    attention_dropout: float | int = 0.0
-    initializer_range: float = 0.02
-    head_dim: int = 64
-    codebook_dim: int = 512
-    latent_dim: int = 1024
-    decoder_chunk_size: int = 300
-    decoder_left_context_size: int = 25
 
     def __post_init__(self, **kwargs):
         # The original checkpoint carries `encoder_valid_num_quantizers`; the codebook count lives in `quantizer_config`.
@@ -252,8 +281,11 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
     @property
-    def layer_types(self):
-        return ["sliding_attention"] * self.num_hidden_layers
+    def decoder_config(self):
+        config_dict = self.to_dict()
+        for key in ("model_type", "encoder_config", "quantizer_config", "input_sampling_rate", "output_sampling_rate"):
+            config_dict.pop(key, None)
+        return Qwen3TTSTokenizerDecoderConfig(**config_dict, attn_implementation=self._attn_implementation)
 
 
 class Qwen3TTSTokenizerCausalConvNet(Qwen3OmniMoeCausalConvNet):
@@ -320,12 +352,12 @@ class Qwen3TTSTokenizerPreTrainedModel(MimiPreTrainedModel):
 
 @auto_docstring
 class Qwen3TTSTokenizerCode2WavPreTrainedModel(Qwen3TTSTokenizerPreTrainedModel):
-    config_class = Qwen3TTSTokenizerConfig
+    config_class = Qwen3TTSTokenizerDecoderConfig
     _no_split_modules = ["Qwen3TTSTokenizerCode2WavTransformerLayer", "Qwen3TTSTokenizerDecoderBlock"]
 
 
 class Qwen3TTSTokenizerDecoderBlock(Qwen3OmniMoeCode2WavDecoderBlock):
-    def __init__(self, config: Qwen3TTSTokenizerConfig, layer_idx):
+    def __init__(self, config: Qwen3TTSTokenizerDecoderConfig, layer_idx):
         super().__init__(config, layer_idx)
 
 
@@ -357,24 +389,26 @@ class Qwen3TTSTokenizerSplitResidualVectorQuantizer(MimiSplitResidualVectorQuant
 
 
 class Qwen3TTSTokenizerCode2WavAttention(Qwen3OmniMoeCode2WavAttention):
-    def __init__(self, config: Qwen3TTSTokenizerConfig, layer_idx):
+    def __init__(self, config: Qwen3TTSTokenizerDecoderConfig, layer_idx):
         super().__init__(config, layer_idx)
 
 
 class Qwen3TTSTokenizerCode2WavTransformerLayer(Qwen3OmniMoeCode2WavTransformerLayer):
-    def __init__(self, config: Qwen3TTSTokenizerConfig, layer_idx):
+    def __init__(self, config: Qwen3TTSTokenizerDecoderConfig, layer_idx):
         super().__init__(config, layer_idx)
 
 
 class Qwen3TTSTokenizerDecoderTransformerModel(Qwen3OmniMoeCode2WavTransformerModel):
-    def __init__(self, config: Qwen3TTSTokenizerConfig):
+    def __init__(self, config: Qwen3TTSTokenizerDecoderConfig):
         super().__init__(config)
 
 
-class Qwen3TTSTokenizerDecoder(Qwen3TTSTokenizerCode2WavPreTrainedModel):
-    config_class = Qwen3TTSTokenizerConfig
+@auto_docstring
+class Qwen3TTSTokenizerDecoderModel(Qwen3TTSTokenizerCode2WavPreTrainedModel):
+    config_class = Qwen3TTSTokenizerDecoderConfig
+    base_model_prefix = "decoder"
 
-    def __init__(self, config: config_class):
+    def __init__(self, config: Qwen3TTSTokenizerDecoderConfig):
         super().__init__(config)
         self.total_upsample = int(np.prod(list(config.upsample_rates) + list(config.upsampling_ratios)))
         self.pre_transformer = Qwen3TTSTokenizerDecoderTransformerModel(config)
@@ -457,6 +491,9 @@ class Qwen3TTSTokenizerConv1d(MimiConv1d):
     """
 )
 class Qwen3TTSTokenizerEncoderModel(Qwen3TTSTokenizerPreTrainedModel):
+    config_class = Qwen3TTSTokenizerEncoderConfig
+    base_model_prefix = "encoder"
+
     def __init__(self, config):
         super().__init__(config)
         self.encoder = Qwen3TTSTokenizerEncoder(config)
@@ -489,7 +526,7 @@ class Qwen3TTSTokenizerEncoderModel(Qwen3TTSTokenizerPreTrainedModel):
 
 
 @auto_docstring
-class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTokenizerBase):
+class Qwen3TTSTokenizerModel(VibeVoiceAcousticTokenizerModel, PreTrainedAudioTokenizerBase):
     config_class = Qwen3TTSTokenizerConfig
     main_input_name = "input_values"
     # The original checkpoint also stores the encoder's own copy of the quantizer, identical to `quantizer`.
@@ -497,11 +534,7 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
 
     def __init__(self, config: Qwen3TTSTokenizerConfig):
         super().__init__(config)
-        self.config = config
-
-        self.encoder = Qwen3TTSTokenizerEncoderModel(self.config.encoder_config)
         self.quantizer = Qwen3TTSTokenizerSplitResidualVectorQuantizer(self.config.quantizer_config)
-        self.decoder = Qwen3TTSTokenizerDecoder(config)
 
         self.post_init()
 
@@ -574,7 +607,10 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
 __all__ = [
     "Qwen3TTSTokenizerConfig",
     "Qwen3TTSTokenizerEncoderConfig",
+    "Qwen3TTSTokenizerDecoderConfig",
     "Qwen3TTSTokenizerQuantizerConfig",
     "Qwen3TTSTokenizerModel",
+    "Qwen3TTSTokenizerEncoderModel",
+    "Qwen3TTSTokenizerDecoderModel",
     "Qwen3TTSTokenizerPreTrainedModel",
 ]
