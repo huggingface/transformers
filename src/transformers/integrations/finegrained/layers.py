@@ -393,8 +393,9 @@ class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
         weight = torch.empty(num_embeddings, embedding_dim, dtype=FP8_DTYPE)
         nn.Embedding.__init__(self, num_embeddings, embedding_dim, padding_idx, _weight=weight, _freeze=True)
         self.quantization_config = quantization_config
-        # `(1,)` and not a scalar, since checkpoints serialize per-tensor scales with that shape
-        self.weight_scale = nn.Parameter(torch.ones(1, dtype=torch.float32), requires_grad=False)
+        # `(1,)` and not a scalar, since checkpoints serialize per-tensor scales with that shape.
+        # It takes the model dtype, so a lookup returns the model's activation dtype.
+        self.weight_scale = nn.Parameter(torch.ones(1), requires_grad=False)
 
     @classmethod
     def from_module(
