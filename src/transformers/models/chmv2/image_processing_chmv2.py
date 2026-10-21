@@ -31,6 +31,7 @@ from ...image_processing_base import BatchFeature
 from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, SizeDict
+from ...integrations.hub_processing_kernels import upsample_argmax_with_kernel, use_processing_kernel
 from ...modeling_outputs import DepthEstimatorOutput
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
@@ -248,6 +249,7 @@ class CHMv2ImageProcessor(TorchvisionBackend):
 
         return processed_images
 
+    @use_processing_kernel(upsample_argmax_with_kernel)
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: list[tuple] | None = None, return_segmentation_scores: bool = False
     ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":

@@ -39,6 +39,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
+from ...integrations.hub_processing_kernels import upsample_argmax_with_kernel, use_processing_kernel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
 
@@ -258,6 +259,7 @@ class DPTImageProcessor(TorchvisionBackend):
 
         return processed_images
 
+    @use_processing_kernel(upsample_argmax_with_kernel)
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: list[tuple] | None = None, return_segmentation_scores: bool = False
     ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
