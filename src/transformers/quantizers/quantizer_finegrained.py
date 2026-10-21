@@ -32,8 +32,15 @@ if TYPE_CHECKING:
 class FineGrainedHfQuantizer(HfQuantizer):
     """Quantizer that hosts one member quantizer per config in the config's `dtype_plan`.
 
-    A hook on one tensor goes to the member that owns its module. A hook on the whole model runs on every member, each
-    limited to its own modules. DeepSeek-V4 is an example, with MXFP4 experts and block FP8 linears.
+    A hook on one tensor goes to the member that owns its module. A hook on the whole model runs on every member.
+    DeepSeek-V4 is an example, with MXFP4 experts and block FP8 linears.
+
+    Any registered quantizer can be a member. The host relies on it to:
+    - convert only the modules its config's `modules_to_not_convert` leaves. The host scopes each member this way.
+    - take its loading options, such as `dequantize`, from its config. The host sets them on the member's own copy.
+    - keep its whole-model hooks to its own modules, or make them safe to run once per member.
+    - read its own checkpoint keys. Two members that read one key differently raise.
+    - in an op that several members share, find its tensor's member with `member_for`. The host is its quantizer.
     """
 
     requires_calibration = False
@@ -75,11 +82,6 @@ class FineGrainedHfQuantizer(HfQuantizer):
     def _member_for_param(self, param_name: str) -> HfQuantizer | None:
         return self.member_for(param_name.rpartition(".")[0])
 
-    def config_for(self, module_name: str):
-        """Return the config the entry of `module_name` gives it, or `None`."""
-        member = self.member_for(module_name)
-        return None if member is None else member.quantization_config
-
     def update_dtype(self, dtype):
         for member in self.members:
             dtype = member.update_dtype(dtype)
@@ -117,12 +119,11 @@ class FineGrainedHfQuantizer(HfQuantizer):
         member = self._member_for_param(param_name)
         return param.element_size() if member is None else member.param_element_size(model, param_name, param)
 
-    def get_param_ops(self, model: "PreTrainedModel", param_name: str) -> list:
-        member = self._member_for_param(param_name)
-        return member.get_param_ops(model, param_name) if hasattr(member, "get_param_ops") else []
-
     def get_new_dtype(self, converter, param, dtype):
-        dtypes = {member.get_new_dtype(converter, param, dtype) for member in self.members}
+        # a converter runs the ops of the member that added it. One that serves several members needs them to agree.
+        quantizers = {getattr(op, "hf_quantizer", None) for op in getattr(converter, "operations", ())}
+        owners = [member for member in self.members if member in quantizers] or self.members
+        dtypes = {member.get_new_dtype(converter, param, dtype) for member in owners}
         if len(dtypes) > 1:
             raise ValueError(f"The members of the dtype_plan load {converter.target_patterns} in different dtypes.")
         return dtypes.pop()

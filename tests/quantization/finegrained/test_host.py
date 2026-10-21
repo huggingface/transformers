@@ -15,6 +15,7 @@
 
 import json
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
 from transformers import LlamaConfig, LlamaForCausalLM
@@ -60,6 +61,9 @@ class TagTestQuantizer(HfQuantizer):
     def param_needs_quantization(self, model, param_name, **kwargs):
         module, name = get_module_from_name(model, param_name)
         return name == "weight" and getattr(module, "tag", None) == self.quantization_config.tag
+
+    def get_new_dtype(self, converter, param, dtype):
+        return torch.float16 if self.quantization_config.tag == "half" else dtype
 
     def get_checkpoint_renamings(self):
         return [WeightRenaming(r"\.scale$", ".weight_scale")]
@@ -181,3 +185,16 @@ class FineGrainedHostTest(unittest.TestCase):
         self.assertEqual((lender.dequantize, lender.modules_to_not_convert), (True, ["lm_head"]))
         tags_only = FineGrainedConfig(dtype_plan={".*": TagTestConfig()})
         self.assertIsNone(tags_only.loading_attributes_lender(OtherTagTestConfig()))
+
+    def test_a_converter_loads_in_the_dtype_of_the_member_that_added_it(self):
+        quantizer = self._load({"self_attn": OtherTagTestConfig(tag="half"), ".*": TagTestConfig()})
+        half = quantizer.member_for("model.layers.0.self_attn.q_proj")
+        rest = quantizer.member_for("model.layers.0.mlp.up_proj")
+
+        def converter(*owners):
+            return SimpleNamespace(operations=[SimpleNamespace(hf_quantizer=o) for o in owners], target_patterns=["w"])
+
+        self.assertEqual(quantizer.get_new_dtype(converter(half), None, torch.bfloat16), torch.float16)
+        self.assertEqual(quantizer.get_new_dtype(converter(rest), None, torch.bfloat16), torch.bfloat16)
+        with self.assertRaisesRegex(ValueError, "different dtypes"):
+            quantizer.get_new_dtype(converter(quantizer), None, torch.bfloat16)
