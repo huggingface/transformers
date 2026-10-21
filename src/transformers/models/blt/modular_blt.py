@@ -796,10 +796,6 @@ class BltPatcher(BltPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        # The entropy model is trained with a local block-causal bias (`sliding_window`), and the
-        # released checkpoints declare it (`attn_bias_type: "local_block_causal"`). Scoring it with
-        # an unbounded causal mask inflates the predicted entropies, so many more bytes clear
-        # `patching_threshold` and the patch rate collapses on inputs longer than the window.
         mask_function = create_causal_mask if self.config.sliding_window is None else create_sliding_window_causal_mask
         causal_mask = mask_function(
             config=self.config,
@@ -976,9 +972,6 @@ class BltModel(BltPreTrainedModel):
             position_ids = torch.arange(encoder_embeds.shape[1], device=encoder_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        # Byte-level mask, shared by the local encoder and local decoder. BLT trains these with a
-        # 512-byte local attention window (`local_attention_window_len`); the released config
-        # declares it, so it must be applied here. The global patch-level mask below stays causal.
         byte_mask_fn, byte_mask_config = create_causal_mask, self.config
         if getattr(self.config, "local_attention_window_len", None):
             byte_mask_fn = create_sliding_window_causal_mask
