@@ -19,7 +19,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from transformers import LlamaConfig, LlamaForCausalLM
-from transformers.core_model_loading import WeightRenaming
+from transformers.core_model_loading import ConversionOps, WeightRenaming
 from transformers.quantizers import auto
 from transformers.quantizers.base import HfQuantizer
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer, _dedupe_conversions
@@ -67,6 +67,9 @@ class TagTestQuantizer(HfQuantizer):
         module, name = get_module_from_name(model, param_name)
         return name == "weight" and getattr(module, "tag", None) == self.quantization_config.tag
 
+    def get_quantize_ops(self):
+        return TagQuantizeTestOp(self.quantization_config.tag)
+
     def get_new_dtype(self, converter, param, dtype):
         return torch.float16 if self.quantization_config.tag == "half" else dtype
 
@@ -79,6 +82,16 @@ class TagTestQuantizer(HfQuantizer):
     @property
     def is_trainable(self):
         return self.quantization_config.tag != "frozen"
+
+
+class TagQuantizeTestOp(ConversionOps):
+    """Test-only op that replaces each tensor with its member's tag."""
+
+    def __init__(self, tag):
+        self.tag = tag
+
+    def convert(self, input_dict, **kwargs):
+        return dict.fromkeys(input_dict, self.tag)
 
 
 def _tags(model):
@@ -118,6 +131,16 @@ class FineGrainedHostTest(unittest.TestCase):
         self.assertTrue(quantizer.param_needs_quantization(self.model, "model.layers.0.self_attn.k_proj.weight"))
         self.assertTrue(quantizer.param_needs_quantization(self.model, "model.layers.0.mlp.up_proj.weight"))
         self.assertFalse(quantizer.param_needs_quantization(self.model, "model.layers.0.input_layernorm.weight"))
+
+    def test_a_tensor_quantizes_through_its_members_op(self):
+        quantizer = self._load({"self_attn": OtherTagTestConfig(tag="attn"), ".*": TagTestConfig(tag="rest")})
+        op = quantizer.get_quantize_ops()
+        for name, tag in (
+            ("model.layers.0.self_attn.q_proj.weight", "attn"),
+            ("model.layers.0.mlp.up_proj.weight", "rest"),
+        ):
+            with self.subTest(name=name):
+                self.assertEqual(op.convert({name: torch.zeros(1)}, full_layer_name=name), {name: tag})
 
     def test_a_plan_without_a_catch_all_keeps_the_other_modules(self):
         self._load({r"layers\.1\.mlp": TagTestConfig(tag="mlp")})

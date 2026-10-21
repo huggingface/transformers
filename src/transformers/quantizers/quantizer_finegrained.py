@@ -119,6 +119,11 @@ class FineGrainedHfQuantizer(HfQuantizer):
         member = self._member_for_param(param_name)
         return param.element_size() if member is None else member.param_element_size(model, param_name, param)
 
+    def get_quantize_ops(self):
+        from ..integrations.finegrained.host import MemberQuantize
+
+        return MemberQuantize(self)
+
     def get_new_dtype(self, converter, param, dtype):
         # a converter runs the ops of the member that added it. One that serves several members needs them to agree.
         quantizers = {getattr(op, "hf_quantizer", None) for op in getattr(converter, "operations", ())}
