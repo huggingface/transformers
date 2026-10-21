@@ -23,19 +23,14 @@ from ...audio_utils import AudioInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class LasrProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class LasrProcessor(ProcessorMixin):
-    valid_processor_kwargs = LasrProcessorKwargs
-
     text_kwargs = {
         "padding": True,
         "padding_side": "right",
@@ -58,7 +53,7 @@ class LasrProcessor(ProcessorMixin):
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         sampling_rate: int | None = None,
-        **kwargs: Unpack[LasrProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""
         sampling_rate (`int`, *optional*):
@@ -92,5 +87,7 @@ class LasrProcessor(ProcessorMixin):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return feature_extractor_input_names + ["labels"]
 
+
+__getattr__ = deprecate_attr(__name__, {"LasrProcessorKwargs": (ProcessingKwargs, "6.0.0")})
 
 __all__ = ["LasrProcessor"]

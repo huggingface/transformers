@@ -28,6 +28,7 @@ from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
@@ -148,14 +149,8 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
         )
 
 
-class LasrProcessorKwargs(ProcessingKwargs, total=False):
-    pass
-
-
 @auto_docstring
 class LasrProcessor(ProcessorMixin):
-    valid_processor_kwargs = LasrProcessorKwargs
-
     text_kwargs = {
         "padding": True,
         "padding_side": "right",
@@ -178,7 +173,7 @@ class LasrProcessor(ProcessorMixin):
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         sampling_rate: int | None = None,
-        **kwargs: Unpack[LasrProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""
         sampling_rate (`int`, *optional*):
@@ -588,6 +583,8 @@ class LasrForCTC(ParakeetForCTC):
         """
         return super().generate(**super_kwargs)
 
+
+__getattr__ = deprecate_attr(__name__, {"LasrProcessorKwargs": (ProcessingKwargs, "6.0.0")})
 
 __all__ = [
     "LasrForCTC",
