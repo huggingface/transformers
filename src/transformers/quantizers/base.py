@@ -87,14 +87,19 @@ class HfQuantizer(ABC):
             Whether a model loaded with `dequantize=True` saves like an unquantized model. The save then uses only
             the model's own conversions, not the quantizer's. It is off by default, so the other quantizers keep
             their current save.
-        skip_list_attribute (`str`):
-            The config field that holds this method's skip-list. [`FineGrainedHfQuantizer`] writes the modules a
-            member must leave there, on the member's own copy of its config.
+        dtype_plan_skip (`str`, *optional*):
+            Set by [`FineGrainedHfQuantizer`] on its members. It is a skip-list entry for every module outside this
+            quantizer's `dtype_plan` entries. `get_modules_to_not_convert` then returns it instead of the skip-list.
+        dtype_plan_targets (`list[str]`):
+            Set by [`FineGrainedHfQuantizer`] on its members. They are the patterns of this quantizer's entries that
+            name modules, so not the `".*"` catch-all. A quantizer that skips some modules by default, such as
+            embeddings, converts the ones they name.
     """
 
     requires_calibration = False
     dequantized_saves_unquantized = False
-    skip_list_attribute = "modules_to_not_convert"
+    dtype_plan_skip: str | None = None
+    dtype_plan_targets: tuple[str, ...] = ()
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config

@@ -48,7 +48,7 @@ def module_kind(module_name: str, module) -> str | None:
 
 
 def embedding_pattern(name: str) -> str:
-    """Return the `dtype_plan` key of a `modules_to_convert` entry. The entry names an embedding table by suffix."""
+    """Return the `dtype_plan` key of an embedding table, named by suffix."""
     return rf"{re.escape(name)}$"
 
 

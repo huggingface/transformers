@@ -46,8 +46,7 @@ if is_torch_available():
     )
     from transformers.distributed.fsdp import verify_fsdp_plan
     from transformers.integrations.finegrained import FineGrainedEmbedding
-    from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
-    from transformers.utils.quantization_config import Fp8Config
+    from transformers.quantizers.auto import AutoHfQuantizer, AutoQuantizationConfig
 
 
 class Qwen4ExpTextModelTester(CausalLMModelTester):
@@ -324,9 +323,11 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
         with torch.device("meta"):
             model = Qwen4ExpForCausalLM(config)
 
-        quantizer = Fp8HfQuantizer(
-            Fp8Config(modules_to_convert=["ple.ple_embedding.ngram_embedding"], modules_to_not_convert=[])
+        # an FP8 checkpoint names the table with `modules_to_convert`, which the reader turns into a plan entry
+        quantization_config = AutoQuantizationConfig.from_dict(
+            {"quant_method": "fp8", "modules_to_convert": ["ple.ple_embedding.ngram_embedding"]}
         )
+        quantizer = AutoHfQuantizer.from_config(quantization_config)
         quantizer.pre_quantized = True
         quantizer.preprocess_model(model)
 

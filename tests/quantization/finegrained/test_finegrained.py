@@ -52,13 +52,8 @@ class FineGrainedPlanTest(unittest.TestCase):
 
     def test_a_plan_entry_is_a_format_config_without_loading_options(self):
         """Check that a plan entry with a loading option is refused. Loading options apply to the whole model."""
-        for entry in (
-            Fp8Config(dequantize=True),
-            Fp8Config(modules_to_convert=["embed_tokens"]),
-        ):
-            with self.subTest(entry=entry):
-                with self.assertRaises(ValueError):
-                    FineGrainedConfig(dtype_plan={".*": entry})
+        with self.assertRaises(ValueError):
+            FineGrainedConfig(dtype_plan={".*": Fp8Config(dequantize=True)})
         with self.assertRaises(ValueError):
             FineGrainedConfig(dtype_plan={".*": {"quant_method": "not_a_method"}})
         with self.assertRaises(TypeError):
@@ -154,12 +149,18 @@ class FineGrainedPlanTest(unittest.TestCase):
 
         config = LlamaConfig(hidden_size=64, intermediate_size=64, num_hidden_layers=1, vocab_size=64)
         per_tensor = Fp8Config(weight_block_size=None)
-        for plan, quantized in (({"embed_tokens": per_tensor, ".*": Fp8Config()}, True), ({".*": Fp8Config()}, False)):
+        dense = Fp8Config(checkpoint_format="compressed-tensors")
+        for plan, quantized in (({"embed_tokens": per_tensor, ".*": dense}, True), ({".*": dense}, False)):
             with self.subTest(quantized=quantized), torch.device("meta"):
                 model = LlamaForCausalLM(config)
-                FineGrainedHfQuantizer(FineGrainedConfig(dtype_plan=plan))._process_model_before_weight_loading(model)
+                quantizer = FineGrainedHfQuantizer(FineGrainedConfig(dtype_plan=plan))
+                quantizer._process_model_before_weight_loading(model)
                 self.assertEqual(isinstance(model.model.embed_tokens, FineGrainedEmbedding), quantized)
                 self.assertNotIsInstance(model.lm_head, FineGrainedEmbedding)
+                # a checkpoint rename reads every key, so each member's rename keeps the table's per-tensor scale
+                for member in quantizer.members if quantized else ():
+                    rename = member._block_scale_rename()
+                    self.assertIsNone(re.match(rename.source_patterns[0], "model.embed_tokens.weight_scale"))
 
 
 @require_torch
@@ -199,9 +200,16 @@ class FineGrainedPlanConversionTest(unittest.TestCase):
                 quantizer.pre_quantized = True
                 model = _conversion_model(quantizer)
                 converters = quantizer.update_weight_conversions(_model_mapping(), model)
-                scalar = any(
-                    isinstance(op, FineGrainedScalarScales)
+                # a member's conversions run through the host's dispatch, which keeps each member's version
+                versions = [
+                    version
                     for converter in converters
                     for op in getattr(converter, "operations", [])
+                    for version in getattr(op, "conversions", {None: converter}).values()
+                ]
+                scalar = any(
+                    isinstance(op, FineGrainedScalarScales)
+                    for version in versions
+                    for op in getattr(version, "operations", [])
                 )
                 self.assertEqual(scalar, expected)

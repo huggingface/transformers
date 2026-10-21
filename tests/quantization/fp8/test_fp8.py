@@ -657,8 +657,10 @@ class Fp8EmbeddingLoadTest(unittest.TestCase):
         state_dict.pop("lm_head.weight", None)
         with tempfile.TemporaryDirectory() as path:
             save_file({name: tensor.contiguous() for name, tensor in state_dict.items()}, f"{path}/model.safetensors")
-            config.quantization_config = Fp8Config(modules_to_convert=["embed_tokens"]).to_dict()
+            # the FP8 dialect names the table with `modules_to_convert`. The reader turns it into a plan entry.
+            config.quantization_config = {**Fp8Config().to_dict(), "modules_to_convert": ["embed_tokens"]}
             config.save_pretrained(path)
-            model = LlamaForCausalLM.from_pretrained(path, dtype=torch.bfloat16)
-        self.assertEqual(model.model.embed_tokens(torch.tensor([[1, 2]])).dtype, torch.bfloat16)
-        self.assertEqual(model(torch.tensor([[1, 2, 3]])).logits.dtype, torch.bfloat16)
+            model = LlamaForCausalLM.from_pretrained(path, dtype=torch.bfloat16, device_map=torch_device)
+        ids = torch.tensor([[1, 2, 3]], device=model.device)
+        self.assertEqual(model.model.embed_tokens(ids).dtype, torch.bfloat16)
+        self.assertEqual(model(ids).logits.dtype, torch.bfloat16)

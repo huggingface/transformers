@@ -17,7 +17,6 @@ import unittest
 
 import torch
 
-from transformers.integrations.finegrained.conversions import FineGrainedDequantize
 from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 from transformers.testing_utils import require_torch
@@ -42,14 +41,17 @@ class FineGrainedLoadingRegressionTest(_ChainAssertions, unittest.TestCase):
         model = torch.nn.Module()
         model.a = torch.nn.Linear(192, 192, bias=False)
         model.b = torch.nn.Linear(192, 192, bias=False)
+        # the members' dequantize converters read the same keys, so the host merges them into one
+        converter = next(c for c in quantizer.update_weight_conversions([], model) if c.target_patterns == ["weight"])
+        weight_pattern, scale_pattern = converter.source_patterns[:2]
         scales = torch.tensor([[1.0, 2.0], [4.0, 8.0]])
         for name, block in (("a", 96), ("b", 128)):
             with self.subTest(module=name):
-                result = FineGrainedDequantize(quantizer).convert(
-                    {"weight": torch.ones(192, 192).to(torch.float8_e4m3fn), "weight_scale_inv": scales},
+                result = converter.operations[0].convert(
+                    {weight_pattern: torch.ones(192, 192).to(torch.float8_e4m3fn), scale_pattern: scales},
                     full_layer_name=f"{name}.weight",
                     model=model,
-                )[f"{name}.weight"]
+                )["weight"]
                 expected = scales.repeat_interleave(block, dim=0).repeat_interleave(block, dim=1)[:192, :192]
                 torch.testing.assert_close(result, expected)
 
