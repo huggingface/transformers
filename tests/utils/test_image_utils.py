@@ -13,10 +13,7 @@
 # limitations under the License.
 import base64
 import codecs
-import os
-import tempfile
 import unittest
-from unittest import mock
 
 import numpy as np
 import pytest
@@ -24,7 +21,7 @@ from huggingface_hub.file_download import hf_hub_download
 from huggingface_hub.utils import httpx
 
 from tests.pipelines.test_pipelines_document_question_answering import INVOICE_URL
-from transformers import is_torch_available, is_vision_available
+from transformers import is_torch_available, is_torchvision_available, is_vision_available
 from transformers.image_utils import (
     ChannelDimension,
     get_channel_dimension_axis,
@@ -44,9 +41,7 @@ if is_vision_available():
     from transformers import ImageFeatureExtractionMixin
     from transformers.image_utils import get_image_size, infer_channel_dimension_format, load_image
 
-if is_vision_available() and is_torch_available():
-    from torchvision.transforms.functional import pil_to_tensor
-
+if is_torchvision_available():
     from transformers.image_utils import load_image_as_tensor
 
 
@@ -834,33 +829,29 @@ class LoadImageTester(unittest.TestCase):
 
     @require_torchvision
     def test_load_image_as_tensor_exif_transpose(self):
-        # 40 wide by 20 high, left half red and right half blue, stored with EXIF Orientation 6 (rotate 90 degrees
-        # clockwise on display), so the upright image is 20 wide by 40 high.
-        arr = np.zeros((20, 40, 3), dtype=np.uint8)
-        arr[:, :20] = (255, 0, 0)
-        arr[:, 20:] = (0, 0, 255)
-        exif = PIL.Image.Exif()
-        exif[0x0112] = 6
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            path = os.path.join(tmp_dir, "rotated.jpg")
-            PIL.Image.fromarray(arr).save(path, exif=exif, quality=95)
-            with open(path, "rb") as f:
-                raw = f.read()
-            expected = pil_to_tensor(load_image(path).convert("RGB")).int()
-            self.assertEqual(tuple(expected.shape), (3, 40, 20))
-
-            sources = {
-                "path": path,
-                "base64": base64.b64encode(raw).decode(),
-                "url": "https://example.com/rotated.jpg",
-                "pil": PIL.Image.open(path),
-            }
-            for name, source in sources.items():
-                with self.subTest(source=name):
-                    with mock.patch("transformers.image_utils.httpx.get", return_value=mock.Mock(content=raw)):
-                        tensor = load_image_as_tensor(source)
-                    self.assertEqual(tuple(tensor.shape), (3, 40, 20))
-                    self.assertLess((tensor.int() - expected).abs().max().item(), 8)
+        # we use revision="refs/pr/1" until the PR is merged
+        # https://hf.co/datasets/hf-internal-testing/fixtures_image_utils/discussions/1
+        path = hf_hub_download(
+            "hf-internal-testing/fixtures_image_utils",
+            "3-test-cat-rotated.jpg",
+            repo_type="dataset",
+            revision="refs/pr/1",
+        )
+        with open(path, "rb") as f:
+            raw = f.read()
+        sources = {
+            "path": path,
+            "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/refs%2Fpr%2F1/3-test-cat-rotated.jpg",
+            "base64": base64.b64encode(raw).decode(),
+            "pil": PIL.Image.open(path),
+        }
+        for name, source in sources.items():
+            with self.subTest(source=name):
+                pil_tensor = torch.from_numpy(np.array(load_image(source))).permute(2, 0, 1)
+                tensor = load_image_as_tensor(source)
+                self.assertEqual(tuple(tensor.shape), (3, 500, 333))
+                self.assertEqual(tuple(pil_tensor.shape), (3, 500, 333))
+                self.assertLess((tensor.int() - pil_tensor.int()).abs().float().mean().item(), 2)
 
 
 class UtilFunctionTester(unittest.TestCase):
