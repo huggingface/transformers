@@ -541,7 +541,7 @@ class T5GemmaPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["T5GemmaEncoderLayer", "T5GemmaDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
-    _supports_sdpa = True
+    _supports_sdpa = False  # sdpa does not support softcapping
     _supports_flex_attn = True
 
     _can_compile_fullgraph = True
