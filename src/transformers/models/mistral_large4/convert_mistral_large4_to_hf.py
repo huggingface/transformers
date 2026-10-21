@@ -173,6 +173,32 @@ def convert_config(source: dict) -> dict:
     return config_dict
 
 
+# Adapted from `convert_and_write_processor` in mistral3/convert_mistral3_weights_to_hf.py
+def convert_and_write_processor(input_dir: Path, output_dir: Path, params: dict) -> PixtralProcessor:
+    """Tokenizer (tekken.json -> fast tokenizer), chat template and image processor, saved as a PixtralProcessor."""
+    tokenizer = convert_tekken_tokenizer(str(input_dir / "tekken.json"))
+    # The v15 tokenizer emits a `[MODEL_SETTINGS]` block that the checkpoint's own template reproduces
+    chat_template_path = input_dir / "chat_template.jinja"
+    if not chat_template_path.exists():
+        raise FileNotFoundError(f"{chat_template_path} is needed to reproduce mistral-common's chat encoding")
+    chat_template = chat_template_path.read_text(encoding="utf-8")
+
+    vision = params["vision_encoder"]
+    image_processor = PixtralImageProcessorFast(
+        patch_size=vision["patch_size"], size={"longest_edge": vision["max_image_size"]}
+    )
+    processor = PixtralProcessor(
+        tokenizer=tokenizer,
+        image_processor=image_processor,
+        image_token="[IMG]",
+        patch_size=vision["patch_size"],
+        spatial_merge_size=vision["spatial_merge_size"],
+        chat_template=chat_template,
+    )
+    processor.save_pretrained(output_dir)
+    return processor
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("input_dir", help="Location of the mistral_large4 checkpoint")
@@ -182,7 +208,7 @@ if __name__ == "__main__":
         help="Location to write the HF-formatted checkpoint. If not specified, only the config will be created.",
     )
     parser.add_argument("--config_name", type=str, default="params.json", help="The name of the original config file.")
-    # parser.add_argument("--tokenizer_only", action="store_true", help="If passed, will only convert the tokenizer.")
+    parser.add_argument("--config-only", action="store_true", help="Only write config.json.")
     args = parser.parse_args()
 
     input_dir = Path(args.input_dir)
@@ -191,13 +217,7 @@ if __name__ == "__main__":
     config_path = input_dir / args.config_name
     with open(config_path, encoding="utf-8") as f:
         params = json.load(f)
-    config_dict = convert_config(params)
+    if args.config_only:
 
-    with open(output_dir / "config.json", "w", encoding="utf-8") as f:
-        json.dump(config_dict, f, indent=4)
-
-
-
-##################################################
-
-    cfg = MistralLarge4Config(**config_dict)
+        # Tokenizer, chat template, image processor
+        processor = convert_and_write_processor(input_dir, output_dir, params)
