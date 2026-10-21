@@ -13,9 +13,10 @@
 # limitations under the License.
 
 
-from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
 
+from ...tokenization_utils_base import PREFIX_SPACE_PATTERN
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import logging
 
@@ -161,7 +162,12 @@ class CodeLlamaTokenizer(TokenizersBackend):
         )
 
         self._tokenizer.decoder = decoders.Sequence(
-            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse(), decoders.Strip(content=" ", left=1)]
+            [
+                decoders.Replace("▁", " "),
+                decoders.ByteFallback(),
+                decoders.Fuse(),
+                decoders.Replace(Regex(PREFIX_SPACE_PATTERN), ""),
+            ]
         )
 
         super().__init__(
