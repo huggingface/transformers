@@ -32,7 +32,6 @@ from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaMLP,
     LlamaPreTrainedModel,
-    LlamaRMSNorm,
 )
 from ..minicpm3.modeling_minicpm3 import MiniCPM3Model
 from ..olmo.modeling_olmo import OlmoRotaryEmbedding, apply_rotary_pos_emb  # noqa: F401
@@ -87,10 +86,6 @@ class MiniCPM4Config(LlamaConfig):
 
 
 class MiniCPM4ScaledWordEmbedding(Gemma3TextScaledWordEmbedding):
-    pass
-
-
-class MiniCPM4RMSNorm(LlamaRMSNorm):
     pass
 
 
