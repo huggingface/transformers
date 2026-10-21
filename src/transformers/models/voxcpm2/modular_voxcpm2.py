@@ -33,15 +33,15 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..dac.modeling_dac import Snake1d
+from ..llama.modeling_llama import eager_attention_forward
 from ..minicpm4.configuration_minicpm4 import MiniCPM4Config
 from ..minicpm4.modeling_minicpm4 import (
     MiniCPM4Attention,
     MiniCPM4DecoderLayer,
     MiniCPM4RMSNorm,
     MiniCPM4RotaryEmbedding,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
 )
+from ..olmo.modeling_olmo import apply_rotary_pos_emb
 
 
 logger = logging.get_logger(__name__)
