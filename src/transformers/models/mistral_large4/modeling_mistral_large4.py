@@ -689,7 +689,8 @@ class MistralLarge4PreTrainedModel(PreTrainedModel):
         "router_logits": OutputRecorder(MistralLarge4TextTopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["rotary_emb"]
-    _keys_to_ignore_on_load_unexpected = []
+    # The checkpoint ships a multi-token-prediction draft head that this model does not implement yet # TODO
+    _keys_to_ignore_on_load_unexpected = [r"mtp_dspark\..*"]
     _keep_in_fp32_modules = ["indexer.weights_proj"]
     input_modalities = ("image", "text")
 

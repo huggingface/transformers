@@ -101,14 +101,14 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
     mlp_layer_types (`list`, *optional*):
-        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to 3 dense + rest sparse.
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to 1 dense + rest sparse.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of top tokens selected by the indexer for sparse attention.
     index_head_dim (`int`, *optional*, defaults to 128):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
-    first_k_dense_replace (`int`, *optional*, defaults to 3):
+    first_k_dense_replace (`int`, *optional*, defaults to 1):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
     indexer_types (`list[str]`, *optional*):
         Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
@@ -141,12 +141,64 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
 
     model_type = "mistral_large4_text"
 
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
+        "layers.*.self_attn.kv_b_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+
+    vocab_size: int = 204800
+    hidden_size: int = 6144
+    intermediate_size: int = 24576
+    moe_intermediate_size: int = 6144
+    num_hidden_layers: int = 72
+    num_attention_heads: int = 64
+    num_key_value_heads: int = 64
+    n_shared_experts: int = 1
+    n_routed_experts: int = 128
+    routed_scaling_factor: float = 1.0
+    kv_lora_rank: int = 512
+    qk_rope_head_dim: int = 64
+    v_head_dim: int = 128
+    qk_nope_head_dim: int = 64
+    n_group: int = 1
+    topk_group: int = 1
+    num_experts_per_tok: int = 4
+    max_position_embeddings: int = 1048576
+    rms_norm_eps: float = 1e-5
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
+    index_topk: int = 2048
+    index_head_dim: int = 128
+    index_n_heads: int = 32
+    first_k_dense_replace: int = 1
     no_rope_layers: list[int] | None = None
     no_rope_layer_interval: int = 4
     kv_source_layers: list[int] | None = None
     q_lora_rank = AttributeError()
 
     def __post_init__(self, **kwargs):
+        # YaRN over a 512-token pretraining window, no magnitude scaling (attention_factor = 1.0) + LeRoPE
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "rope_type": "yarn",
+                "rope_theta": 10000.0,
+                "factor": 2048.0,
+                "original_max_position_embeddings": 512,
+                "beta_fast": 32.0,
+                "beta_slow": 1.0,
+                "attention_factor": 1.0,
+            }
         # NoPE every `no_rope_layer_interval`-th layer (smollm3 convention: 1 == uses RoPE)
         if self.no_rope_layers is None:
             self.no_rope_layers = [
@@ -339,7 +391,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         self.qk_rope_head_dim = config.qk_rope_head_dim if self.use_rope else 0
         self.qk_nope_head_dim = config.qk_nope_head_dim + (0 if self.use_rope else config.qk_rope_head_dim)
 
-        self.store_full_length_kv = any(src == layer_idx for src in config.kv_source_layers[layer_idx+1:])
+        self.store_full_length_kv = any(src == layer_idx for src in config.kv_source_layers[layer_idx + 1 :])
 
         self.kv_a_proj_with_mqa = (
             nn.Linear(self.hidden_size, config.kv_lora_rank + self.qk_rope_head_dim, bias=config.attention_bias)
@@ -509,7 +561,8 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
     input_modalities = ("image", "text")
     _no_split_modules = ["MistralLarge4TextDecoderLayer"]
     _keep_in_fp32_modules_strict = ["rotary_emb"]
-    _keys_to_ignore_on_load_unexpected = []
+    # The checkpoint ships a multi-token-prediction draft head that this model does not implement yet # TODO
+    _keys_to_ignore_on_load_unexpected = [r"mtp_dspark\..*"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -605,7 +658,6 @@ class MistralLarge4CausalLMOutputWithPast(Mistral3CausalLMOutputWithPast):
 
 
 class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
-
     def __init__(self, config: MistralLarge4Config):
         super().__init__(config)
         self.final_logit_softcapping = config.final_logit_softcapping

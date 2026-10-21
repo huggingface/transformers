@@ -33,14 +33,14 @@ class MistralLarge4TextConfig(PreTrainedConfig):
     n_group (`int`, *optional*, defaults to 1):
         Number of groups for routed experts.
     mlp_layer_types (`list`, *optional*):
-        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to 3 dense + rest sparse.
+        MLP type pattern for each layer (`"dense"` or `"sparse"`). Defaults to 1 dense + rest sparse.
     index_topk (`int`, *optional*, defaults to 2048):
         Number of top tokens selected by the indexer for sparse attention.
     index_head_dim (`int`, *optional*, defaults to 128):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 32):
         Number of heads for the indexer projections (DSA).
-    first_k_dense_replace (`int`, *optional*, defaults to 3):
+    first_k_dense_replace (`int`, *optional*, defaults to 1):
         Number of leading layers that use a dense MLP; the rest use the MoE block.
     indexer_types (`list[str]`, *optional*):
         Per-layer indexer mode (`"full"` runs the indexer, `"shared"` reuses the previous full
@@ -75,7 +75,7 @@ class MistralLarge4TextConfig(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
-        "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
@@ -102,33 +102,33 @@ class MistralLarge4TextConfig(PreTrainedConfig):
 
     attribute_map = {"num_local_experts": "n_routed_experts"}
 
-    vocab_size: int = 154880
+    vocab_size: int = 204800
     hidden_size: int = 6144
-    intermediate_size: int = 12288
-    moe_intermediate_size: int = 2048
-    num_hidden_layers: int = 78
+    intermediate_size: int = 24576
+    moe_intermediate_size: int = 6144
+    num_hidden_layers: int = 72
     num_attention_heads: int = 64
     num_key_value_heads: int = 64
     n_shared_experts: int = 1
-    n_routed_experts: int = 256
+    n_routed_experts: int = 128
     output_router_logits: bool = False
-    routed_scaling_factor: float = 2.5
+    routed_scaling_factor: float = 1.0
     kv_lora_rank: int = 512
     qk_rope_head_dim: int = 64
-    v_head_dim: int = 256
-    qk_nope_head_dim: int = 192
+    v_head_dim: int = 128
+    qk_nope_head_dim: int = 64
     n_group: int = 1
     topk_group: int = 1
-    num_experts_per_tok: int = 8
+    num_experts_per_tok: int = 4
     norm_topk_prob: bool = True
     hidden_act: str = "silu"
-    max_position_embeddings: int = 202752
+    max_position_embeddings: int = 1048576
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-5
     use_cache: bool = True
     pad_token_id: int | None = None
-    bos_token_id: int | None = 0
-    eos_token_id: int | list[int] | None = 1
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 2
     tie_word_embeddings: bool = False
     rope_parameters: dict | None = None
     mlp_layer_types: list[str] | None = None
@@ -139,16 +139,26 @@ class MistralLarge4TextConfig(PreTrainedConfig):
     index_n_heads: int = 32
     mlp_bias: bool = False
     head_dim: int = 64
-    first_k_dense_replace: int = 3
+    first_k_dense_replace: int = 1
     layer_types: list[str] | None = None
     # `"full"` runs the indexer, `"shared"` reuses the previous full layer's index mask.
     indexer_types: list[str] | None = None
-
     no_rope_layers: list[int] | None = None
     no_rope_layer_interval: int = 4
     kv_source_layers: list[int] | None = None
 
     def __post_init__(self, **kwargs):
+        # YaRN over a 512-token pretraining window, no magnitude scaling (attention_factor = 1.0) + LeRoPE
+        if self.rope_parameters is None:
+            self.rope_parameters = {
+                "rope_type": "yarn",
+                "rope_theta": 10000.0,
+                "factor": 2048.0,
+                "original_max_position_embeddings": 512,
+                "beta_fast": 32.0,
+                "beta_slow": 1.0,
+                "attention_factor": 1.0,
+            }
         # NoPE every `no_rope_layer_interval`-th layer (smollm3 convention: 1 == uses RoPE)
         if self.no_rope_layers is None:
             self.no_rope_layers = [
