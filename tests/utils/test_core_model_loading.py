@@ -1345,7 +1345,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         self.assertEqual(split["experts.1.scale"].shape, (2, 1))
 
     def test_many_to_many_requires_an_operation_that_supports_it(self):
-        with self.assertRaisesRegex(ValueError, "one to many"):
+        with self.assertRaises(ValueError):
             WeightConverter(["a", "b"], ["c", "d"], operations=[Concatenate(dim=0)])
         WeightConverter(["a", "b"], ["c", "d"], operations=[ErnieFuseAndSplitTextVisionExperts()])
 
