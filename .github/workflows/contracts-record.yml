@@ -53,9 +53,9 @@ jobs:
           git rev-parse HEAD > /tmp/mic-cause/framework-sha.txt
       - name: Compare standalone, isolated and full-fleet execution
         working-directory: framework
-        run: python ../.github/scripts/probe_mistral3.py
+        run: python ../.github/scripts/prove_mistral3_date.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: mic-mistral3-cause-${{ matrix.framework }}
-          path: /tmp/mic-cause
+          name: mic-mistral3-date-proof
+          path: /tmp/mic-date-proof
