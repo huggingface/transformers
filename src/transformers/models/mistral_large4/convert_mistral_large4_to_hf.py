@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from transformers import GenerationConfig, PixtralImageProcessorFast, PixtralProcessor
+from transformers import PixtralImageProcessor, PixtralProcessor
 from transformers.integrations.mistral import convert_tekken_tokenizer
 from transformers.models.mistral_large4.modular_mistral_large4 import MistralLarge4Config
 
@@ -119,7 +119,7 @@ def format_quantization_config(source: dict) -> dict:
     }
 
 
-def convert_config(source: dict) -> dict:
+def convert_config(source: dict, special_token_ids: dict | None = None) -> dict:
     # Start with a config dict that has the parameters vLLM hardcodes
     config_dict = {
         "model_type": "mistral_large4",
@@ -137,6 +137,9 @@ def convert_config(source: dict) -> dict:
             "rope_parameters": {"rope_type": "axial"},
         },
     }
+    if special_token_ids is not None:
+        config_dict["text_config"]["bos_token_id"] = special_token_ids["bos_token_id"]
+        config_dict["text_config"]["eos_token_id"] = special_token_ids["eos_token_id"]
 
     # Map the parameters from the source config to the new config
     for hf_key, vllm_key in HF_TO_VLLM_MAPPING.items():
@@ -177,9 +180,8 @@ def convert_config(source: dict) -> dict:
 
 
 # Adapted from `convert_and_write_processor` in mistral3/convert_mistral3_weights_to_hf.py
-def convert_and_write_processor(input_dir: Path, output_dir: Path, params: dict) -> PixtralProcessor:
+def convert_and_write_processor(input_dir: Path, output_dir: Path, tokenizer: Any, params: dict) -> PixtralProcessor:
     """Tokenizer (tekken.json -> fast tokenizer), chat template and image processor, saved as a PixtralProcessor."""
-    tokenizer = convert_tekken_tokenizer(str(input_dir / "tekken.json"))
     # The v15 tokenizer emits a `[MODEL_SETTINGS]` block that the checkpoint's own template reproduces
     chat_template_path = input_dir / "chat_template.jinja"
     if not chat_template_path.exists():
@@ -187,7 +189,7 @@ def convert_and_write_processor(input_dir: Path, output_dir: Path, params: dict)
     chat_template = chat_template_path.read_text(encoding="utf-8")
 
     vision = params["vision_encoder"]
-    image_processor = PixtralImageProcessorFast(
+    image_processor = PixtralImageProcessor(
         patch_size=vision["patch_size"], size={"longest_edge": vision["max_image_size"]}
     )
     processor = PixtralProcessor(
@@ -232,16 +234,31 @@ if __name__ == "__main__":
     with open(input_dir / args.config_name, encoding="utf-8") as f:
         params = json.load(f)
 
+    # Convert the tokenizer first, so that the special token ids can be retrieved
+    tekken_path = input_dir / "tekken.json"
+    if tekken_path.exists():
+        tokenizer = convert_tekken_tokenizer(str(input_dir / "tekken.json"))
+        special_token_ids = {
+            "bos_token_id": tokenizer.bos_token_id,
+            "eos_token_id": tokenizer.eos_token_id,
+        }
+    elif args.config_only:
+        special_token_ids = None
+    else:
+        raise FileNotFoundError(
+            f"{tekken_path} is needed to convert the tokenizer. Use --config-only to only convert the config (but BOS "
+            "and EOS token ids will be missing)"
+        )
+
     # Config: build the real object so that it validates, then save it (only non-default fields are written)
-    config = MistralLarge4Config(**convert_config(params))
+    config = MistralLarge4Config(**convert_config(params, special_token_ids))
     config.save_pretrained(output_dir)
     print(f"config.json -> {output_dir}")
 
-    if args.config_only:
+    if not args.config_only:
 
         # Tokenizer, chat template, image processor
-        processor = convert_and_write_processor(input_dir, output_dir, params)
-        tokenizer = processor.tokenizer
+        processor = convert_and_write_processor(input_dir, output_dir, tokenizer, params)
         print(f"processor + tokenizer -> {output_dir}")
 
         # Weights: symlinks + HF index over the Mistral-native shards
