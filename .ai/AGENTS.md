@@ -14,7 +14,8 @@ Local agents wire their own assets: `make codex` (→ `.agents/`), `make claude`
 
 ## Before opening an issue or PR
 
-- Don't report or fix theoretical bugs. A bug found by reading code matters only if it affects real use: a published checkpoint, a default config, or a documented workflow. For example, an exception when `n_groups > 1` in a model whose published checkpoints all use `n_groups == 1` only affects fresh pretrains with a nonstandard config, making it extremely low priority. Security bugs are the exception.
+- Don't report or fix theoretical bugs. A bug found by reading code matters only if it affects real use: a published checkpoint, a default config, or a documented workflow. For example, an exception when `n_groups > 1` in a model whose published checkpoints all use `n_groups == 1` only affects fresh pretrains with a nonstandard config, making it extremely low priority. Security bugs are the exception. A bug report needs a short reproducer that you have run and that fails on `main`.
+- For a bug fix, one regression test is enough: turn the issue's reproducer into a test that fails without the fix, and add it to the existing test file for that code. Use a tiny config unless it needs a real checkpoint, in which case mark it `@slow`.
 - Every PR must link an open issue the user may work on: one they opened that a maintainer has labeled `triaged`, or one labeled `contributions-welcome`. Hugging Face staff, maintainers and some long-standing contributors are exempt. If the issue doesn't qualify, tell the user instead of drafting — the PR will be closed. See `CONTRIBUTING.md`.
 - Check for overlapping work, and do not open a second PR for a fix already covered:
 
