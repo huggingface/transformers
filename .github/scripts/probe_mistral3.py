@@ -13,17 +13,28 @@ REVISION = 'fd12f1c1aeaa3e4a904ff1e37decc6381b499c65'
 if len(sys.argv) == 1:
     # Each scenario starts in a fresh process. Full-fleet mode preserves the
     # production ordering and can reveal state left behind by earlier contracts.
-    for mode in ('alone', 'isolate', 'fleet'):
-        for repeat in range(2):
-            subprocess.run([sys.executable, __file__, mode, str(repeat)], check=True)
+    for mode in ('alone', 'mkldnn-off', 'sdpa-math', 'isa-avx512', 'isa-avx2'):
+        for repeat in range(1):
+            env = dict(os.environ)
+            if mode.startswith('isa-'):
+                env['ONEDNN_MAX_CPU_ISA'] = mode.removeprefix('isa-').upper()
+                env['DNNL_MAX_CPU_ISA'] = env['ONEDNN_MAX_CPU_ISA']
+            subprocess.run([sys.executable, __file__, mode, str(repeat)], check=True, env=env)
     raise SystemExit(0)
 
 import torch
 from transformersci.contracts import run
 
 mode, repeat = sys.argv[1:]
+if mode == 'mkldnn-off':
+    torch.backends.mkldnn.enabled = False
+if mode == 'sdpa-math':
+    torch.backends.cuda.enable_flash_sdp(False)
+    torch.backends.cuda.enable_mem_efficient_sdp(False)
 folder = OUT / f'{mode}-{repeat}'
 folder.mkdir(exist_ok=True)
+(folder / 'torch-build.txt').write_text(str(torch.version.git_version) + '\n' + torch.__config__.show())
+(folder / 'runtime-env.json').write_text(json.dumps({k: v for k, v in os.environ.items() if any(s in k for s in ('OMP', 'MKL', 'DNNL', 'TORCH', 'OPENBLAS'))}, indent=2))
 original = run.Executor.run
 counter = itertools.count()
 

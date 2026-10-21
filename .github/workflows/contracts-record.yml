@@ -18,7 +18,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        framework: ['60f49549e0db78f022ee30aa1571d9ab6e4a15bf', '6b75aeeab91d98bd3872b3f2382cfb4a8ce810d4']
+        framework: ['6b75aeeab91d98bd3872b3f2382cfb4a8ce810d4']
     runs-on:
       group: aws-m8i-l-cache
     timeout-minutes: 30
