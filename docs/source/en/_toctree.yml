@@ -261,6 +261,8 @@
     title: Intel Gaudi
   - local: aws_trainium
     title: AWS Trainium
+  - local: google_tpu
+    title: Google TPU
   title: Hardware
 - isExpanded: false
   sections:
@@ -541,6 +543,8 @@
         title: BARThez
       - local: model_doc/bartpho
         title: BARTpho
+      - local: model_doc/beam
+        title: Beam
       - local: model_doc/bert
         title: BERT
       - local: model_doc/bert-generation
@@ -1161,6 +1165,8 @@
         title: FastSpeech2Conformer
       - local: model_doc/glmasr
         title: GLM-ASR
+      - local: model_doc/gradium_phonon_tts
+        title: Gradium Phonon TTS
       - local: model_doc/granite_speech
         title: GraniteSpeech
       - local: model_doc/granite_speech5
@@ -1205,6 +1211,10 @@
         title: Parakeet
       - local: model_doc/pe_audio
         title: PE Audio
+      - local: model_doc/pocket_tts
+        title: Pocket TTS
+      - local: model_doc/pocket_tts_audio_tokenizer
+        title: Pocket TTS Audio Tokenizer
       - local: model_doc/pop2piano
         title: Pop2Piano
       - local: model_doc/qwen3_asr

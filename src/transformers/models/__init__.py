@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from .bart import *
     from .barthez import *
     from .bartpho import *
+    from .beam import *
     from .beit import *
     from .bert import *
     from .bert_generation import *
@@ -202,6 +203,7 @@ if TYPE_CHECKING:
     from .gpt_oss import *
     from .gpt_sw3 import *
     from .gptj import *
+    from .gradium_phonon_tts import *
     from .granite import *
     from .granite4_vision import *
     from .granite_speech import *
@@ -384,6 +386,8 @@ if TYPE_CHECKING:
     from .pixio import *
     from .pixtral import *
     from .plbart import *
+    from .pocket_tts import *
+    from .pocket_tts_audio_tokenizer import *
     from .poolformer import *
     from .pop2piano import *
     from .pp_chart2table import *

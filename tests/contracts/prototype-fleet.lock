@@ -20,14 +20,15 @@
   "contracts": {
     "mic-bert": {
       "integration": {
-        "repo": "hf-internal-testing/mic-bert-integration",
-        "revision": "5ecff7c53a833d11e59516ae37a9e68c769dac39",
-        "files_sha256": "e0eb62fe25cfd62dc27369103463560ed4c5bf8ca03b1b5b1925500fe3edabb0"
+        "repo": "huggingface-mic/bert-mic",
+        "revision": "565fb1745a10faab255312b06a69c6a7d9a698ee",
+        "files_sha256": "dcfd3773a561e9ba7dd3aea0bc24d38ad28a4df85782d3650bbf809dce958f73"
       },
       "fixtures": {
-        "hf-internal-testing/mic-bert-slim": {
-          "revision": "ced5f0a8896e3bd352989ed05754fd7dc61209cd",
-          "files_sha256": "0628d40ee37032b80d518cb06f1dca6f8fd27625c76e46199e49685e6c60fb13"
+        "huggingface-mic/bert-mic": {
+          "revision": "565fb1745a10faab255312b06a69c6a7d9a698ee",
+          "files_sha256": "0628d40ee37032b80d518cb06f1dca6f8fd27625c76e46199e49685e6c60fb13",
+          "target": "mic-bert-slim"
         }
       },
       "checkpoints": {
@@ -36,14 +37,15 @@
     },
     "mic-gpt2": {
       "integration": {
-        "repo": "hf-internal-testing/mic-gpt2-integration",
-        "revision": "40ebf651d607b8b5b7c3c1e9855f4d7b55e74b2d",
-        "files_sha256": "e327a466f9f3d4ba99dd19efd9dbdfcae66cb4bd648d2f82ec432b7352c6445c"
+        "repo": "huggingface-mic/gpt2-mic",
+        "revision": "fd0b7d99b893833541cecafbc953d8a85aa4d438",
+        "files_sha256": "b7da3c249c668bf8487bc8c660212cb7e4a9f61fae67e42f944722bcb76852e0"
       },
       "fixtures": {
-        "hf-internal-testing/mic-gpt2-slim": {
-          "revision": "0b13f059bc38002cfde203fb3a1be4aaeef3ccc7",
-          "files_sha256": "e56fc4f7878a200291c4e817c51f40c9987d0b5f70fef553033e2f0c795b3de8"
+        "huggingface-mic/gpt2-mic": {
+          "revision": "fd0b7d99b893833541cecafbc953d8a85aa4d438",
+          "files_sha256": "e56fc4f7878a200291c4e817c51f40c9987d0b5f70fef553033e2f0c795b3de8",
+          "target": "mic-gpt2-slim"
         }
       },
       "checkpoints": {
@@ -52,14 +54,15 @@
     },
     "mic-t5": {
       "integration": {
-        "repo": "hf-internal-testing/mic-t5-integration",
-        "revision": "836d2ac58a78ea82b7ad21e96bd3a55af719001a",
-        "files_sha256": "c6230d43ee1801181f9460e58f050238511467ae8ec53e1d8c545175682eb938"
+        "repo": "huggingface-mic/t5-mic",
+        "revision": "f392307cb22152bf136c04182f65b4f281b3fc0a",
+        "files_sha256": "25278f33463543b967faff212d11f8077ba85c6fffd37a92d1609dcf0b5e8a7a"
       },
       "fixtures": {
-        "hf-internal-testing/mic-t5-slim": {
-          "revision": "62e8a9c3a2d0630d4f43ba797546d65c7852d7a1",
-          "files_sha256": "d3ade13909f6d1a9ed4ca18f700e37a2a80e842670418bc50ebe202e27860160"
+        "huggingface-mic/t5-mic": {
+          "revision": "f392307cb22152bf136c04182f65b4f281b3fc0a",
+          "files_sha256": "d3ade13909f6d1a9ed4ca18f700e37a2a80e842670418bc50ebe202e27860160",
+          "target": "mic-t5-slim"
         }
       },
       "checkpoints": {
@@ -68,14 +71,15 @@
     },
     "mic-modernbert": {
       "integration": {
-        "repo": "hf-internal-testing/mic-modernbert-integration",
-        "revision": "1c0a5edbc36aaf0a2190cf1a3b297058b242c386",
-        "files_sha256": "7e8a72ed7d4f15231f9a5dd3b4a234f697c1f31d4bfbe13831bed814dc908b3a"
+        "repo": "huggingface-mic/modernbert-mic",
+        "revision": "82c6dab7d0832dad0556878a513392a6af7b9b36",
+        "files_sha256": "fc5772805458fa2e9ae1d6ec5b368de7d71b526afc80d99f0153440093ddc558"
       },
       "fixtures": {
-        "hf-internal-testing/mic-modernbert-slim": {
-          "revision": "4bd43e1d801756f8a231e6ec4bad85f5e46b9f63",
-          "files_sha256": "cd9316607f78870f9f6ec027cd6b848c1d4b87e852aafe80a719e68fa7e53d7b"
+        "huggingface-mic/modernbert-mic": {
+          "revision": "82c6dab7d0832dad0556878a513392a6af7b9b36",
+          "files_sha256": "cd9316607f78870f9f6ec027cd6b848c1d4b87e852aafe80a719e68fa7e53d7b",
+          "target": "mic-modernbert-slim"
         }
       },
       "checkpoints": {
@@ -84,14 +88,15 @@
     },
     "mic-vit": {
       "integration": {
-        "repo": "hf-internal-testing/mic-vit-integration",
-        "revision": "499b613e58aa698e4a572f6c1265aa55eb60a38e",
-        "files_sha256": "0633949a8897be9da997ebd7dafba63c6747f8fa2b432679e11a7afe33ec0a72"
+        "repo": "huggingface-mic/vit-mic",
+        "revision": "80336735d19e2c2cf43cd3b3509d4b9156d9c8a2",
+        "files_sha256": "2b4725173d3d7ffabba8600584cca030fae1c1152ce038ba9f6d46e7bc059578"
       },
       "fixtures": {
-        "hf-internal-testing/mic-vit-slim": {
-          "revision": "2bf504ea8bd2e48d5e5870ea2880f8f79d52e11e",
-          "files_sha256": "3db848ce65d7db235433a2164505e9e9db5e82dbbbc705a175b5c392b69baa7a"
+        "huggingface-mic/vit-mic": {
+          "revision": "80336735d19e2c2cf43cd3b3509d4b9156d9c8a2",
+          "files_sha256": "3db848ce65d7db235433a2164505e9e9db5e82dbbbc705a175b5c392b69baa7a",
+          "target": "mic-vit-slim"
         }
       },
       "checkpoints": {
@@ -100,14 +105,15 @@
     },
     "mic-clip": {
       "integration": {
-        "repo": "hf-internal-testing/mic-clip-integration",
-        "revision": "6c631f841b6c8252be06661b92e4c7c73f898519",
-        "files_sha256": "d9ec78f692adf82af25fa9b6d1d534ec659b70deb522efa34a1fd7be222b6c51"
+        "repo": "huggingface-mic/clip-mic",
+        "revision": "945db810ef3b08579db2fe2dd57e4b37ed8e462b",
+        "files_sha256": "c0aef55b4359943629d31f5ffa8271e5e79a980831cf02c499ecebcfe6b39130"
       },
       "fixtures": {
-        "hf-internal-testing/mic-clip-slim": {
-          "revision": "54a0d49d762a748b6a2dda0634d55628cacd7e2b",
-          "files_sha256": "eb25463febbbc22df2a054f240a6791ce35a2f5302e4ffc4bc3d8beef144b024"
+        "huggingface-mic/clip-mic": {
+          "revision": "945db810ef3b08579db2fe2dd57e4b37ed8e462b",
+          "files_sha256": "eb25463febbbc22df2a054f240a6791ce35a2f5302e4ffc4bc3d8beef144b024",
+          "target": "mic-clip-slim"
         }
       },
       "checkpoints": {
@@ -116,14 +122,15 @@
     },
     "mic-detr": {
       "integration": {
-        "repo": "hf-internal-testing/mic-detr-integration",
-        "revision": "f3a79837574f4bc72ca3201bb01b85696fe37a0c",
-        "files_sha256": "1354231e3f81046daa4ca25632e9ac18058d3deaa9a915dd6189e0ceb00815dd"
+        "repo": "huggingface-mic/detr-mic",
+        "revision": "85e28d302059d0540aaf2ed34dfba458a8040882",
+        "files_sha256": "dbdfb7ceee936cdab10be11f23d326bf8bf8c616fa6c7d26bb631de092f36d16"
       },
       "fixtures": {
-        "hf-internal-testing/mic-detr-slim": {
-          "revision": "3a3a1420126e33823f073575fdb3bbac07037b52",
-          "files_sha256": "5ea58813db1f02c506fea5e4e774af5b1de8a329b85be95d6dcd54d17f50b8ed"
+        "huggingface-mic/detr-mic": {
+          "revision": "85e28d302059d0540aaf2ed34dfba458a8040882",
+          "files_sha256": "5ea58813db1f02c506fea5e4e774af5b1de8a329b85be95d6dcd54d17f50b8ed",
+          "target": "mic-detr-slim"
         }
       },
       "checkpoints": {
@@ -132,14 +139,15 @@
     },
     "mic-table_transformer": {
       "integration": {
-        "repo": "hf-internal-testing/mic-table_transformer-integration",
-        "revision": "526a6608540f09cb9243420e83ac433d8b0a2ec3",
-        "files_sha256": "250899d99cef0d7587be109f282f9a5f0656793bca5394f33950aa51b703c31a"
+        "repo": "huggingface-mic/table_transformer-mic",
+        "revision": "44b77c46b6d691e21d75a1c927b31cf9fddaec12",
+        "files_sha256": "779ff44e6eacbed5f6717e8fb46b32b2d52f580475e11e8a84fe3c4a6718aa05"
       },
       "fixtures": {
-        "hf-internal-testing/mic-table_transformer-slim": {
-          "revision": "a0616d0368291a2730b5499af39909926ff9382e",
-          "files_sha256": "6972d9c59e49604df44b6cab597309f48390bfc4797419beecfb5709a5d24413"
+        "huggingface-mic/table_transformer-mic": {
+          "revision": "44b77c46b6d691e21d75a1c927b31cf9fddaec12",
+          "files_sha256": "6972d9c59e49604df44b6cab597309f48390bfc4797419beecfb5709a5d24413",
+          "target": "mic-table_transformer-slim"
         }
       },
       "checkpoints": {
@@ -148,14 +156,15 @@
     },
     "mic-got_ocr2": {
       "integration": {
-        "repo": "hf-internal-testing/mic-got_ocr2-integration",
-        "revision": "e5c722f255c8e4fe30ad6b80847aa9ae8e2d59ca",
-        "files_sha256": "15ef6be0454f25158d91e01a8506ffd42acebf4a1eca16d1241deccd8219e7f2"
+        "repo": "huggingface-mic/got_ocr2-mic",
+        "revision": "c35a1e642aa983aca9eb77e151db3e406b4eb63f",
+        "files_sha256": "238b4d6ac3a1d8f854bd2d1b11a7b4774ce9cdc2d86887faa33216e4505ae4b6"
       },
       "fixtures": {
-        "hf-internal-testing/mic-got_ocr2-slim": {
-          "revision": "89a32bdbaf5e9b07b22400ef24e2c0e94a6cc050",
-          "files_sha256": "a53662ce54e807e7fb3305e64397b58f1000eb2ad04c0846c36207ea90d4c44d"
+        "huggingface-mic/got_ocr2-mic": {
+          "revision": "c35a1e642aa983aca9eb77e151db3e406b4eb63f",
+          "files_sha256": "a53662ce54e807e7fb3305e64397b58f1000eb2ad04c0846c36207ea90d4c44d",
+          "target": "mic-got_ocr2-slim"
         }
       },
       "checkpoints": {
@@ -164,14 +173,15 @@
     },
     "mic-whisper": {
       "integration": {
-        "repo": "hf-internal-testing/mic-whisper-integration",
-        "revision": "0e9904dea2784797b5a8b998a32ad0384b5b375a",
-        "files_sha256": "e727fe8afc625d7b1bd17b0a263e498b744ffdaace8fc798066a9447b482f5bb"
+        "repo": "huggingface-mic/whisper-mic",
+        "revision": "ef0ed28d53f0eb9dbbe039957aced1877cca45cb",
+        "files_sha256": "a101440bc634baf3a2dbd63d0c5b229c7cbc50387276dc44ef431fe06a64b51e"
       },
       "fixtures": {
-        "hf-internal-testing/mic-whisper-slim": {
-          "revision": "bb225853a3b2b2079639de9cdb5af3cbfa87fe48",
-          "files_sha256": "e8e61605360733db094072f3c94462c215b3fa6a002abfea98fe9d8023a73203"
+        "huggingface-mic/whisper-mic": {
+          "revision": "ef0ed28d53f0eb9dbbe039957aced1877cca45cb",
+          "files_sha256": "e8e61605360733db094072f3c94462c215b3fa6a002abfea98fe9d8023a73203",
+          "target": "mic-whisper-slim"
         }
       },
       "checkpoints": {
@@ -180,14 +190,15 @@
     },
     "mic-wav2vec2": {
       "integration": {
-        "repo": "hf-internal-testing/mic-wav2vec2-integration",
-        "revision": "4867a51ab4460a63ef8021e3e400707890e62039",
-        "files_sha256": "2e5798f17aba3fcc3daa95938999724da52f80c5b62ee1b6c166a11a341a39a0"
+        "repo": "huggingface-mic/wav2vec2-mic",
+        "revision": "d327f2aa18acd6562683ed02ed9c3ae45fa57848",
+        "files_sha256": "2131bf9293886e1691f6a41cf59ad9f99e98a6b587eaa24c963a83af91e79845"
       },
       "fixtures": {
-        "hf-internal-testing/mic-wav2vec2-slim": {
-          "revision": "cfaf7ef86353b87c2da926b3b51a9dd099329d10",
-          "files_sha256": "ba3b9b605fadac9525a13eec4c000fda49cc3338ba726fc5fba475fae96a116b"
+        "huggingface-mic/wav2vec2-mic": {
+          "revision": "d327f2aa18acd6562683ed02ed9c3ae45fa57848",
+          "files_sha256": "ba3b9b605fadac9525a13eec4c000fda49cc3338ba726fc5fba475fae96a116b",
+          "target": "mic-wav2vec2-slim"
         }
       },
       "checkpoints": {
@@ -196,14 +207,15 @@
     },
     "mic-qwen2_audio": {
       "integration": {
-        "repo": "hf-internal-testing/mic-qwen2_audio-integration",
-        "revision": "0202e047354df58df00e0d1223105a3dfa0687f9",
-        "files_sha256": "553f4c308b565c18a6f59cda61dd75d2df65191b9ec5a41457df9dd94106d635"
+        "repo": "huggingface-mic/qwen2_audio-mic",
+        "revision": "9248df5113350c17a4bf458e0fff1ccc78d6269e",
+        "files_sha256": "6f65a7616c57d110b102264265df6d0ac3eb5a50714f53b3088fb010db2cb0d4"
       },
       "fixtures": {
-        "hf-internal-testing/mic-qwen2_audio-slim": {
-          "revision": "e9825cc2303d151dd4e093b7d4579052c361705d",
-          "files_sha256": "b436575e4e60ac7eaeaf2e81d841e141b70a674a89617cfc7c2dbe3e8eeda61c"
+        "huggingface-mic/qwen2_audio-mic": {
+          "revision": "9248df5113350c17a4bf458e0fff1ccc78d6269e",
+          "files_sha256": "b436575e4e60ac7eaeaf2e81d841e141b70a674a89617cfc7c2dbe3e8eeda61c",
+          "target": "mic-qwen2_audio-slim"
         }
       },
       "checkpoints": {
@@ -212,14 +224,15 @@
     },
     "mic-speech_t5": {
       "integration": {
-        "repo": "hf-internal-testing/mic-speech_t5-integration",
-        "revision": "d95f24b7fdc730cbfd5689c09788a22be8868434",
-        "files_sha256": "6d2ad39e554a192da83fd0d2ee5e406243acfadfd11acff3fb0bbd15fb4b6862"
+        "repo": "huggingface-mic/speech_t5-mic",
+        "revision": "2c169d91b2d9f6bee299541a0ab2346caa41f6fe",
+        "files_sha256": "1f97a3ebaa663ee88c7e55b0769907301011c9a2f2942c3b133cb360e44f2e32"
       },
       "fixtures": {
-        "hf-internal-testing/mic-speech_t5-slim": {
-          "revision": "c79f63c5decffb9fe2e288a251d337096964142a",
-          "files_sha256": "75759c7279cdbc38b318ffd59fe3c957651ee989e2a8338244c6f4b9c013865d"
+        "huggingface-mic/speech_t5-mic": {
+          "revision": "2c169d91b2d9f6bee299541a0ab2346caa41f6fe",
+          "files_sha256": "75759c7279cdbc38b318ffd59fe3c957651ee989e2a8338244c6f4b9c013865d",
+          "target": "mic-speech_t5-slim"
         }
       },
       "checkpoints": {
@@ -228,14 +241,15 @@
     },
     "mic-llama": {
       "integration": {
-        "repo": "hf-internal-testing/mic-llama-integration",
-        "revision": "cbd35a6c9e9be70f57591a4aecad6cd3c9cb11e6",
-        "files_sha256": "3a71d13875c18b7c3cbc7957217f21642c8e25b370584923ef9257cad8aa8529"
+        "repo": "huggingface-mic/llama-mic",
+        "revision": "8d226a7446d25c950cc09a3f7101ab553f01699a",
+        "files_sha256": "10acdb69188e12fa97329a658289fdaf5bfe3a7b8580f0e8a892a3c1e36a236e"
       },
       "fixtures": {
-        "hf-internal-testing/mic-llama-slim": {
-          "revision": "ec23804b44cda418c562a57ddef6dfc000169e66",
-          "files_sha256": "e2e2a64edcfe417d1350c83fe3c9be1c8184512a88b45b2339bbd41650a54ac3"
+        "huggingface-mic/llama-mic": {
+          "revision": "8d226a7446d25c950cc09a3f7101ab553f01699a",
+          "files_sha256": "e2e2a64edcfe417d1350c83fe3c9be1c8184512a88b45b2339bbd41650a54ac3",
+          "target": "mic-llama-slim"
         }
       },
       "checkpoints": {
@@ -244,14 +258,15 @@
     },
     "mic-gemma3": {
       "integration": {
-        "repo": "hf-internal-testing/mic-gemma3-integration",
-        "revision": "f34a04b1578553d45003a3e23dc3a803d98390a4",
-        "files_sha256": "88558f25aaac18f3e5c4beecaab2aa9655b1fa89447c88f17215dd87e8af2785"
+        "repo": "huggingface-mic/gemma3-mic",
+        "revision": "5f50fc50fea580b11176a7063ba6569281555903",
+        "files_sha256": "896e24a8526d57458c74eb01df8d685b5dc7777f476d067aca1590abaeb23ae2"
       },
       "fixtures": {
-        "hf-internal-testing/mic-gemma3-slim": {
-          "revision": "69edff0fefb48c63648254cc9e80028a61b091b5",
-          "files_sha256": "a841e5e6ebfb391619b35159d6e11484fae13626909909743e861d192ace7372"
+        "huggingface-mic/gemma3-mic": {
+          "revision": "5f50fc50fea580b11176a7063ba6569281555903",
+          "files_sha256": "a841e5e6ebfb391619b35159d6e11484fae13626909909743e861d192ace7372",
+          "target": "mic-gemma3-slim"
         }
       },
       "checkpoints": {
@@ -260,14 +275,15 @@
     },
     "mic-qwen2": {
       "integration": {
-        "repo": "hf-internal-testing/mic-qwen2-integration",
-        "revision": "39681f981815ab37c07d78597f476e092b0ac21a",
-        "files_sha256": "472a3b7ba43833883529819ba4900353eb69c6da23b5c58d0a8381d2347b8ea7"
+        "repo": "huggingface-mic/qwen2-mic",
+        "revision": "b0dda0caafedc49a98a2165724569ee3d736aa01",
+        "files_sha256": "946c35d1250cc96ee814bfceb3d6ed7fb90a1bce91c52c8bf08fc7fb2d1e23c3"
       },
       "fixtures": {
-        "hf-internal-testing/mic-qwen2-slim": {
-          "revision": "3e2f9fdcd50657525a760370cf34b3b835299586",
-          "files_sha256": "bbd363376581a00e427b3cd90c3fa5697b72c8e2b398b6d04ec74a6aa328090c"
+        "huggingface-mic/qwen2-mic": {
+          "revision": "b0dda0caafedc49a98a2165724569ee3d736aa01",
+          "files_sha256": "bbd363376581a00e427b3cd90c3fa5697b72c8e2b398b6d04ec74a6aa328090c",
+          "target": "mic-qwen2-slim"
         }
       },
       "checkpoints": {
@@ -276,14 +292,15 @@
     },
     "mic-mistral3": {
       "integration": {
-        "repo": "hf-internal-testing/mic-mistral3-integration",
-        "revision": "fff1507583e4df5bb65151122f8e3b5d1f372862",
-        "files_sha256": "4341d368495f77de639f7554e399a7174ace8ecb00ef0489d109f9866baaf7c9"
+        "repo": "huggingface-mic/mistral3-mic",
+        "revision": "4e05ef6b5d73ea89e0f35563c284162b1eb8a10f",
+        "files_sha256": "2923ae62a9857e187b4417d046b88acc02a9027f0a892427f8375eaff93efe41"
       },
       "fixtures": {
-        "hf-internal-testing/mic-mistral3-slim": {
-          "revision": "5142c7df12a0ee40caabcf91c8c6bfda517ade06",
-          "files_sha256": "e1ff61844c87c8150ada71205f60c96b9aaf1782f951ea8377a0555446e6d41a"
+        "huggingface-mic/mistral3-mic": {
+          "revision": "4e05ef6b5d73ea89e0f35563c284162b1eb8a10f",
+          "files_sha256": "e1ff61844c87c8150ada71205f60c96b9aaf1782f951ea8377a0555446e6d41a",
+          "target": "mic-mistral3-slim"
         }
       },
       "checkpoints": {
@@ -292,14 +309,15 @@
     },
     "mic-qwen2_5_vl": {
       "integration": {
-        "repo": "hf-internal-testing/mic-qwen2_5_vl-integration",
-        "revision": "6653bfc162e9ef122a98d2d19f031f5889d2ef07",
-        "files_sha256": "122c6b11980a694236a0506f5d8eac569f73ec677470cdfb6154b41b6bb3ca83"
+        "repo": "huggingface-mic/qwen2_5_vl-mic",
+        "revision": "d8ccc6eaf1889a4baa829d9b2826b6fe26b82976",
+        "files_sha256": "1f7871fd03a43e401cc34dd1e1687a77e88a62971e6d46ad18fed07ad30c3fa0"
       },
       "fixtures": {
-        "hf-internal-testing/mic-qwen2_5_vl-slim": {
-          "revision": "7776e493480d681f63d26dd7b15cf64ccabd37e7",
-          "files_sha256": "192aae6e9dd2627f91ea5a21b0de9a11f9b0d8cc593aaa094843504201d6acce"
+        "huggingface-mic/qwen2_5_vl-mic": {
+          "revision": "d8ccc6eaf1889a4baa829d9b2826b6fe26b82976",
+          "files_sha256": "192aae6e9dd2627f91ea5a21b0de9a11f9b0d8cc593aaa094843504201d6acce",
+          "target": "mic-qwen2_5_vl-slim"
         }
       },
       "checkpoints": {
@@ -308,14 +326,15 @@
     },
     "mic-llava": {
       "integration": {
-        "repo": "hf-internal-testing/mic-llava-integration",
-        "revision": "5003194065e7851b52df8c2b3c86d1ac2a527111",
-        "files_sha256": "8d339cb3e353d943ab9e2058820bd119210c7c25842a2a8daf9d72646f199c64"
+        "repo": "huggingface-mic/llava-mic",
+        "revision": "4b1f1435225c55dfa06c35e63319c36a0f5a9ce2",
+        "files_sha256": "92c3376a2cd7d4fb9e94425e7532d1f443abbb0d8104e593e5fb4d1fd2b30ecf"
       },
       "fixtures": {
-        "hf-internal-testing/mic-llava-slim": {
-          "revision": "25b00bd747517cb5fa61b48ef9817fbbcfa42f46",
-          "files_sha256": "eebcc2537637f5dc942131626562ff0b6d995329b8a03af39dc2bdf2d6db9660"
+        "huggingface-mic/llava-mic": {
+          "revision": "4b1f1435225c55dfa06c35e63319c36a0f5a9ce2",
+          "files_sha256": "eebcc2537637f5dc942131626562ff0b6d995329b8a03af39dc2bdf2d6db9660",
+          "target": "mic-llava-slim"
         }
       },
       "checkpoints": {
@@ -324,14 +343,15 @@
     },
     "mic-smolvlm": {
       "integration": {
-        "repo": "hf-internal-testing/mic-smolvlm-integration",
-        "revision": "4d272d2728f4d3d26c69f7858dfcb79cc1140d2b",
-        "files_sha256": "c95c73d35d98f6ce9ec51c45ea84c852a677709fd8fd5e74d99ce4419a2c9fd3"
+        "repo": "huggingface-mic/smolvlm-mic",
+        "revision": "01b7aa3d3bf28b227747925bfbf04c31bcdc885b",
+        "files_sha256": "f6af21d765bfcf66bd372cdad395f9126f375a38be881496331ef271a0867844"
       },
       "fixtures": {
-        "hf-internal-testing/mic-smolvlm-slim": {
-          "revision": "50f7c8105ba5aa229fe4be0545730fd100e2e3f7",
-          "files_sha256": "4f6a96aaee4c39ee21fa062e1a6d1790b0a5d15e11123afc90fad407c15e00a1"
+        "huggingface-mic/smolvlm-mic": {
+          "revision": "01b7aa3d3bf28b227747925bfbf04c31bcdc885b",
+          "files_sha256": "4f6a96aaee4c39ee21fa062e1a6d1790b0a5d15e11123afc90fad407c15e00a1",
+          "target": "mic-smolvlm-slim"
         }
       },
       "checkpoints": {
@@ -340,14 +360,15 @@
     },
     "mic-internvl": {
       "integration": {
-        "repo": "hf-internal-testing/mic-internvl-integration",
-        "revision": "0a967e67224c50fd00ed820aad23f8d82eb99514",
-        "files_sha256": "351e831322f89e3bb03997a43def27401da57b4dcc562bc6af56cf20cf1228f0"
+        "repo": "huggingface-mic/internvl-mic",
+        "revision": "f01c184e89421347e12f440365cce1b3cc9e3bf1",
+        "files_sha256": "79fbe5e92fc1a9777eb9ea9c9072efe280feea6a8bab8b86cb50015cc421a7c5"
       },
       "fixtures": {
-        "hf-internal-testing/mic-internvl-slim": {
-          "revision": "f091709428e52c63bb12d1269686996b60bf2bb1",
-          "files_sha256": "7a08fc521ac8d91ff25828e55a3241ae8c62dc8657fcbbbdb9f1616e8d371528"
+        "huggingface-mic/internvl-mic": {
+          "revision": "f01c184e89421347e12f440365cce1b3cc9e3bf1",
+          "files_sha256": "7a08fc521ac8d91ff25828e55a3241ae8c62dc8657fcbbbdb9f1616e8d371528",
+          "target": "mic-internvl-slim"
         }
       },
       "checkpoints": {
@@ -356,14 +377,15 @@
     },
     "mic-gpt_oss": {
       "integration": {
-        "repo": "hf-internal-testing/mic-gpt_oss-integration",
-        "revision": "b1d63fd734710c163e46edf24c313ec537d7b881",
-        "files_sha256": "68ba0e71987b453070357c7c7276a9176f57ce14607e3b7e8ed40bb78d6911e4"
+        "repo": "huggingface-mic/gpt_oss-mic",
+        "revision": "adb29e36a5bb98d7bc0729ddf90698c6e61efa67",
+        "files_sha256": "4de89652049f883621a041aacb524a35c6bab7990d2b4cbaa6f13c8bebec2086"
       },
       "fixtures": {
-        "hf-internal-testing/mic-gpt_oss-slim": {
-          "revision": "31a4cd7021a54fcbfddb884a6b6937eb364b203c",
-          "files_sha256": "2a9272b5d5a27a2cc84ec6510697fa037bf79d36330fca7bfab3855a36de08c4"
+        "huggingface-mic/gpt_oss-mic": {
+          "revision": "adb29e36a5bb98d7bc0729ddf90698c6e61efa67",
+          "files_sha256": "2a9272b5d5a27a2cc84ec6510697fa037bf79d36330fca7bfab3855a36de08c4",
+          "target": "mic-gpt_oss-slim"
         }
       },
       "checkpoints": {
@@ -372,14 +394,15 @@
     },
     "mic-qwen2_5_omni": {
       "integration": {
-        "repo": "hf-internal-testing/mic-qwen2_5_omni-integration",
-        "revision": "7a33d69a41f3c7f87c2e572f806d2f7d6d58bfe6",
-        "files_sha256": "96f2d53ba3a571180763ec921643dbbfbf20b37b618c582887ff2d9e6328055e"
+        "repo": "huggingface-mic/qwen2_5_omni-mic",
+        "revision": "0eb041a27dc034095a74991d04f8ed03ad2e39d6",
+        "files_sha256": "d62075fb5cc643e21fba61b293a2678478698ea21e62a7711bdbf4fe3166eb07"
       },
       "fixtures": {
-        "hf-internal-testing/mic-qwen2_5_omni-slim": {
-          "revision": "31295f58a2767c43a12cf018d70f35ee6e363b46",
-          "files_sha256": "c61453e554e93cc0613e075efbe788171d9db089e7d3fe192b2af8da835edbea"
+        "huggingface-mic/qwen2_5_omni-mic": {
+          "revision": "0eb041a27dc034095a74991d04f8ed03ad2e39d6",
+          "files_sha256": "c61453e554e93cc0613e075efbe788171d9db089e7d3fe192b2af8da835edbea",
+          "target": "mic-qwen2_5_omni-slim"
         }
       },
       "checkpoints": {
@@ -388,10 +411,6 @@
     }
   },
   "known_failures": {
-    "mic-whisper/mic-whisper-slim": {
-      "issue": "https://github.com/huggingface/transformers/issues/49456",
-      "match": "You have modified the pretrained model configuration"
-    },
     "mic-wav2vec2/mic-wav2vec2-slim": {
       "issue": "https://github.com/huggingface/transformers/issues/49385",
       "skip_outputs": [
@@ -399,5 +418,6 @@
         "training.gradients"
       ]
     }
-  }
+  },
+  "comment": "Pinned consolidated MIC snapshots in huggingface-mic/<name>-mic. Usage and framework expectations are in each immutable Hub snapshot. Stable fixture target names retain baseline identities. Run: run-model-contracts --fixtures-only --lock tests/contracts/prototype-fleet.lock"
 }

@@ -2089,7 +2089,7 @@ class PreTrainedModel(
             else experts_implementation.get("", self.config._experts_implementation)
         )
 
-        # MegaMoE is locked at load time: its TP plan is baked into `base_model_tp_plan` by `update_tp_plan` (and isn't
+        # MegaMoE is locked at load time: its TP plan is baked into `model.tp_plan` by `update_parallel_plan` (and isn't
         # re-evaluated) and `setup_megamoe_weights` mutates the expert weights into UTCCP layout on first forward.
         # Either side of a switch would silently produce garbage, so reject it with a clear pointer.
         current = self.config._experts_implementation
@@ -5165,8 +5165,9 @@ class PreTrainedAudioTokenizerBase(PreTrainedModel):
     """
     Class that additionally defines the behavior of any `audio_tokenizer` to be added.
     Characteristic for any of them:
-        1. Encode raw audio into discrete audio codebooks (with x channels)
-        2. Decode from discrete audio codebooks back to raw audio
+        1. Encode raw audio into its audio representation: discrete audio codebooks (with x channels), or continuous
+           latents
+        2. Decode from that representation back to raw audio
     It is possible that they can decode in different ways given a different representation
     but they are forced to support 2. nonetheless, e.g. see `DAC`.
     """
@@ -5175,8 +5176,9 @@ class PreTrainedAudioTokenizerBase(PreTrainedModel):
     def encode(self, input_values: torch.Tensor, *args, **kwargs):
         """
         Encode raw audio retrieved from a respective `FeatureExtractor` into discrete audio codebooks (with x channels)
+        or continuous latents
         """
 
     @abstractmethod
     def decode(self, audio_codes: torch.Tensor, *args, **kwargs):
-        """Decode from discrete audio codebooks back to raw audio"""
+        """Decode from discrete audio codebooks or continuous latents back to raw audio"""

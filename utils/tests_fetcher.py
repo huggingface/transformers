@@ -682,6 +682,9 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
             module_file = f"{module_file}.py"
         elif (PATH_TO_REPO / module_file).is_dir() and (PATH_TO_REPO / module_file / "__init__.py").is_file():
             module_file = os.path.sep.join([module_file, "__init__.py"])
+        else:
+            # Some supported imports, such as deprecated module aliases, have no file on disk.
+            continue
         imports = [imp for imp in imports if len(imp) > 0 and re.match("^[A-Za-z0-9_]*$", imp)]
         if len(imports) > 0:
             result.append((module_file, imports))
@@ -907,7 +910,10 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
             for child_model in children_models:
                 child_file = PATH_TO_TRANSFORMERS / "models" / child_model / f"{kind}_{child_model}.py"
                 if (PATH_TO_REPO / child_file).is_file():
-                    reverse_map.setdefault(child_file.as_posix(), []).extend(existing_backbone_files(parent_model))
+                    child_file_posix = child_file.relative_to(PATH_TO_REPO).as_posix()
+                    for parent_file in existing_backbone_files(parent_model):
+                        parent_file_posix = Path(parent_file).relative_to(PATH_TO_REPO).as_posix()
+                        reverse_map.setdefault(child_file_posix, []).extend(reverse_map.get(parent_file_posix, []))
 
     return reverse_map
 
