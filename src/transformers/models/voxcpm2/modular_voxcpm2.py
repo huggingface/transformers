@@ -1141,12 +1141,8 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
         ):
             raise TypeError("`dit_config.cfm_config` must be a `VoxCPM2CfmConfig` instance")
         cfm_config = config.dit_config.cfm_config
-        self.solver = cfm_config.solver
-        self.sigma_min = cfm_config.sigma_min
-        self.t_scheduler = cfm_config.t_scheduler
         self.training_cfg_rate = cfm_config.training_cfg_rate
         self.inference_cfg_rate = cfm_config.inference_cfg_rate
-        self.reg_loss_type = cfm_config.reg_loss_type
         self.noise_cond_prob_range = cfm_config.noise_cond_prob_range
         self.noise_cond_scale = cfm_config.noise_cond_scale
         self.in_channels = config.feat_dim
@@ -1165,8 +1161,6 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
         use_cfg_zero_star: bool = True,
         generator: torch.Generator | None = None,
     ) -> torch.Tensor:
-        if self.solver != "euler":
-            raise ValueError(f"Unsupported flow-matching solver: {self.solver}")
         sample = (
             torch.randn(
                 (mu.shape[0], self.in_channels, patch_size),
@@ -1263,22 +1257,14 @@ class VoxCPM2ConditionalFlowMatching(nn.Module):
         ratio_r_neq_t: float = 0.0,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
-        if self.t_scheduler == "log-norm":
-            r_samples = (
-                torch.randn(batch_size, device=hidden_states.device, dtype=hidden_states.dtype) * standard_deviation
-                + mean
-            )
-            t_samples = (
-                torch.randn(batch_size, device=hidden_states.device, dtype=hidden_states.dtype) * standard_deviation
-                + mean
-            )
-            r_samples = torch.sigmoid(r_samples)
-            t_samples = torch.sigmoid(t_samples)
-        elif self.t_scheduler == "uniform":
-            r_samples = torch.rand(batch_size, device=hidden_states.device, dtype=hidden_states.dtype)
-            t_samples = torch.rand(batch_size, device=hidden_states.device, dtype=hidden_states.dtype)
-        else:
-            raise ValueError(f"Unsupported timestep scheduler: {self.t_scheduler}")
+        r_samples = (
+            torch.randn(batch_size, device=hidden_states.device, dtype=hidden_states.dtype) * standard_deviation + mean
+        )
+        t_samples = (
+            torch.randn(batch_size, device=hidden_states.device, dtype=hidden_states.dtype) * standard_deviation + mean
+        )
+        r_samples = torch.sigmoid(r_samples)
+        t_samples = torch.sigmoid(t_samples)
 
         use_distinct_timesteps = (
             torch.rand(batch_size, device=hidden_states.device, dtype=hidden_states.dtype) < ratio_r_neq_t
