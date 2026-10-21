@@ -151,7 +151,6 @@ PRIVATE_MODELS = [
     "Qwen3TTSTokenizerCode2WavPreTrainedModel",
     "Qwen3TTSTokenizerDecoderBlock",
     "Qwen3TTSTokenizerDecoderTransformerModel",
-    "Qwen3TTSTokenizerEncoderModel",
 ]
 
 # Update this list for models that are not tested with a comment explaining the reason it should not be.
@@ -319,6 +318,8 @@ IGNORE_NON_TESTED = (
         "PocketTTSAudioTokenizerDecoderModel",  # Tested through PocketTTSAudioTokenizerModel
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
+        "Qwen3TTSTokenizerEncoderModel",  # Tested through Qwen3TTSTokenizerModel
+        "Qwen3TTSTokenizerDecoderModel",  # Tested through Qwen3TTSTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
         "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
         "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly

@@ -1783,8 +1783,10 @@ class ModularFileMapper(ModuleMapper):
                     cased_model_name = class_name.replace(suffix, "")
                     # If both the old model and new model share the last part of their name, it is detected as a common
                     # suffix, but it should not be the case -> use the full name in this case
-                    if len(cased_model_name) < len(cased_default_name) and cased_default_name in class_name:
-                        cased_model_name = cased_default_name
+                    if len(cased_model_name) < len(cased_default_name) and class_name.lower().startswith(
+                        cased_default_name.lower()
+                    ):
+                        cased_model_name = class_name[: len(cased_default_name)]
                 # If the new class name is of the form ` class NewNameOldNameClass(OldNameClass):`, i.e. it contains both names,
                 # add the OldName as suffix (see `examples/modular-transformers/modular_test_suffix.py`)
                 elif class_name.replace(cased_default_name, "") == modeling_bases[0]:

@@ -487,6 +487,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("qwen3_omni_moe_thinker", "Qwen3OmniMoeThinkerModel"),
         ("qwen3_tts", "Qwen3TTSForConditionalGeneration"),
         ("qwen3_tts_tokenizer_12hz", "Qwen3TTSTokenizerModel"),
+        ("qwen3_tts_tokenizer_decoder", "Qwen3TTSTokenizerDecoderModel"),
+        ("qwen3_tts_tokenizer_encoder", "Qwen3TTSTokenizerEncoderModel"),
         ("qwen3_vl", "Qwen3VLModel"),
         ("qwen3_vl_moe", "Qwen3VLMoeModel"),
         ("qwen3_vl_moe_text", "Qwen3VLMoeTextModel"),
