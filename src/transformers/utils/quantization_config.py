@@ -1734,16 +1734,13 @@ class FineGrainedConfig(QuantizationConfigMixin):
 
     def _plan_entry(self, pattern: str, entry) -> QuantizationConfigMixin | None:
         """Return `entry` as a config. An entry read from `config.json` is a dict with its `quant_method`."""
-        from ..quantizers.auto import AUTO_QUANTIZATION_CONFIG_MAPPING
+        from ..quantizers.auto import AutoQuantizationConfig
 
         if entry is None:
             return None
-        methods = sorted(set(AUTO_QUANTIZATION_CONFIG_MAPPING) - {QuantizationMethod.FINEGRAINED.value})
         if isinstance(entry, dict):
-            method = entry.get("quant_method")
-            if method not in methods:
-                raise ValueError(f"dtype_plan entry {pattern!r} has quant_method {method!r}. Use one of {methods}.")
-            entry = AUTO_QUANTIZATION_CONFIG_MAPPING[method].from_dict(entry)
+            # the same dispatch as a checkpoint's config, e.g. bitsandbytes reads `load_in_4bit`
+            entry = AutoQuantizationConfig.from_dict(entry)
         if not isinstance(entry, QuantizationConfigMixin) or isinstance(entry, FineGrainedConfig):
             raise TypeError(
                 f"dtype_plan entry {pattern!r} is a {type(entry).__name__}. An entry is a method's config."

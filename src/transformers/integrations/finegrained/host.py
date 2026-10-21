@@ -28,3 +28,34 @@ class MemberQuantize(ConversionOps):
     def convert(self, input_dict, *, full_layer_name: str, **kwargs):
         member = self.hf_quantizer.member_for(full_layer_name.rpartition(".")[0])
         return member.get_quantize_ops().convert(input_dict, full_layer_name=full_layer_name, **kwargs)
+
+
+class MemberDispatch(ConversionOps):
+    """Run a module's tensors through the conversion of the member that owns it.
+
+    Members that read the same keys share one converter. `conversions` maps each member to its own version. `None`
+    maps to the model's own conversion, for the modules no member owns.
+    """
+
+    def __init__(self, hf_quantizer, conversions: dict):
+        self.hf_quantizer = hf_quantizer
+        self.conversions = conversions
+        self.supports_many_to_many = any(
+            op.supports_many_to_many for conversion in conversions.values() for op in conversion.operations
+        )
+
+    def convert(self, input_dict, *, full_layer_name: str, **kwargs):
+        owner = self.hf_quantizer.member_for(full_layer_name.rpartition(".")[0])
+        # a member that kept the model's conversion runs that one. A full-precision module without one runs any.
+        fallback = self.conversions[None] if None in self.conversions else next(iter(self.conversions.values()))
+        conversion = self.conversions.get(owner, fallback)
+        kwargs.update(source_patterns=conversion.source_patterns, target_patterns=conversion.target_patterns)
+        tensors = {pattern: input_dict[pattern] for pattern in conversion.source_patterns if pattern in input_dict}
+        for op in conversion.operations:
+            tensors = op.convert(tensors, full_layer_name=full_layer_name, **kwargs)
+        return tensors
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        reverse = {owner: conversion.reverse_transform() for owner, conversion in self.conversions.items()}
+        return MemberDispatch(self.hf_quantizer, reverse)

@@ -14,22 +14,22 @@
 """Tests for `FineGrainedHfQuantizer`, run on two test-only quantizers defined here."""
 
 import json
+import tempfile
 import unittest
-from types import SimpleNamespace
 from unittest import mock
 
-from transformers import LlamaConfig, LlamaForCausalLM
-from transformers.core_model_loading import ConversionOps, WeightRenaming
+from transformers import AutoModelForCausalLM, BitsAndBytesConfig, LlamaConfig, LlamaForCausalLM
+from transformers.core_model_loading import ConversionOps, WeightConverter, WeightRenaming
 from transformers.quantizers import auto
 from transformers.quantizers.base import HfQuantizer
-from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer, _dedupe_conversions
+from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 from transformers.quantizers.quantizers_utils import (
     get_module_from_name,
     plan_entry_for,
     should_convert_module,
     skip_pattern,
 )
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_bitsandbytes, require_torch, require_torch_accelerator, torch_device
 from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import FineGrainedConfig, QuantizationConfigMixin
 
@@ -52,6 +52,10 @@ class TagTestConfig(QuantizationConfigMixin):
 
 class OtherTagTestConfig(TagTestConfig):
     quant_method = "test_other_tag"
+
+
+class GreedyTagTestConfig(TagTestConfig):
+    quant_method = "test_greedy_tag"
 
 
 class TagTestQuantizer(HfQuantizer):
@@ -94,6 +98,20 @@ class TagQuantizeTestOp(ConversionOps):
         return dict.fromkeys(input_dict, self.tag)
 
 
+class GreedyTagTestQuantizer(TagTestQuantizer):
+    """Test-only quantizer that replaces every linear and ignores its skip-list."""
+
+    def _process_model_before_weight_loading(self, model, **kwargs):
+        for module in model.modules():
+            for name, child in module.named_children():
+                if type(child) is torch.nn.Linear:
+                    setattr(module, name, TaggedLinearTest(child.in_features, child.out_features, device="meta"))
+
+
+class TaggedLinearTest(torch.nn.Linear):
+    pass
+
+
 def _tags(model):
     return {name: getattr(module, "tag", None) for name, module in model.named_modules() if name.endswith("proj")}
 
@@ -102,8 +120,12 @@ def _tags(model):
 class FineGrainedHostTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        configs = {"test_tag": TagTestConfig, "test_other_tag": OtherTagTestConfig}
-        quantizers = dict.fromkeys(configs, TagTestQuantizer)
+        configs = {
+            "test_tag": TagTestConfig,
+            "test_other_tag": OtherTagTestConfig,
+            "test_greedy_tag": GreedyTagTestConfig,
+        }
+        quantizers = {**dict.fromkeys(configs, TagTestQuantizer), "test_greedy_tag": GreedyTagTestQuantizer}
         self.enterContext(mock.patch.dict(auto.AUTO_QUANTIZATION_CONFIG_MAPPING, configs))
         self.enterContext(mock.patch.dict(auto.AUTO_QUANTIZER_MAPPING, quantizers))
         config = LlamaConfig(
@@ -195,14 +217,32 @@ class FineGrainedHostTest(unittest.TestCase):
         conversions = quantizer.update_weight_conversions([], self.model)
         self.assertEqual([conversion.source_patterns for conversion in conversions], [[r"\.scale$"]])
 
-    def test_members_adding_the_same_conversion_keep_it_once(self):
-        model_converter = WeightRenaming("a", "b")
-        first, again = WeightRenaming("x", "y"), WeightRenaming("x", "y")
-        merged, shared = _dedupe_conversions([model_converter, first, again], keep=[model_converter])
-        self.assertEqual(merged, [model_converter, first])
-        self.assertEqual(shared, [first])
-        with self.assertRaisesRegex(ValueError, "differently"):
-            _dedupe_conversions([first, WeightRenaming("x", "z")])
+    def test_a_conversion_no_member_changes_stays_the_models(self):
+        quantizer = self._load({"self_attn": OtherTagTestConfig(), ".*": TagTestConfig()})
+        model_renaming = WeightRenaming("a", "b")
+        self.assertEqual(quantizer._merge([model_renaming], [[WeightRenaming("a", "b")]] * 2), [model_renaming])
+        with self.assertRaisesRegex(ValueError, "rename"):
+            quantizer._merge([], [[WeightRenaming("x", "y")], [WeightRenaming("x", "z")]])
+
+    def test_members_that_read_one_key_differently_share_one_converter(self):
+        quantizer = self._load({"self_attn": OtherTagTestConfig(tag="attn"), ".*": TagTestConfig(tag="rest")})
+        versions = [
+            [WeightConverter(["weight", f"{tag}_scale"], "weight", [TagQuantizeTestOp(tag)])]
+            for tag in (member.quantization_config.tag for member in quantizer.members)
+        ]
+        (converter,) = quantizer._merge([], versions)
+        self.assertEqual(sorted(converter.source_patterns), ["attn_scale", "rest_scale", "weight"])
+        for name, tag in (
+            ("model.layers.0.self_attn.q_proj.weight", "attn"),
+            ("model.layers.0.mlp.up_proj.weight", "rest"),
+        ):
+            with self.subTest(name=name):
+                tensors = converter.operations[0].convert({"weight": torch.zeros(1)}, full_layer_name=name)
+                self.assertEqual(tensors, {"weight": tag})
+
+    def test_a_member_that_ignores_its_scope_raises(self):
+        with self.assertRaisesRegex(ValueError, "does not cover"):
+            self._load({"self_attn": GreedyTagTestConfig(), ".*": TagTestConfig()})
 
     def test_an_entrys_config_lends_its_loading_options_to_the_plan(self):
         plan = FineGrainedConfig(dtype_plan={"self_attn": OtherTagTestConfig(), ".*": TagTestConfig()})
@@ -214,16 +254,20 @@ class FineGrainedHostTest(unittest.TestCase):
 
     def test_a_converter_loads_in_the_dtype_of_the_member_that_added_it(self):
         quantizer = self._load({"self_attn": OtherTagTestConfig(tag="half"), ".*": TagTestConfig()})
-        half = quantizer.member_for("model.layers.0.self_attn.q_proj")
-        rest = quantizer.member_for("model.layers.0.mlp.up_proj")
 
-        def converter(*owners):
-            return SimpleNamespace(operations=[SimpleNamespace(hf_quantizer=o) for o in owners], target_patterns=["w"])
+        def merged(*tags):
+            versions = [
+                [WeightConverter("weight", "weight", [TagQuantizeTestOp("x")])]
+                if member.quantization_config.tag in tags
+                else []
+                for member in quantizer.members
+            ]
+            return quantizer._merge([], versions)[0]
 
-        self.assertEqual(quantizer.get_new_dtype(converter(half), None, torch.bfloat16), torch.float16)
-        self.assertEqual(quantizer.get_new_dtype(converter(rest), None, torch.bfloat16), torch.bfloat16)
+        self.assertEqual(quantizer.get_new_dtype(merged("half"), None, torch.bfloat16), torch.float16)
+        self.assertEqual(quantizer.get_new_dtype(merged("a"), None, torch.bfloat16), torch.bfloat16)
         with self.assertRaisesRegex(ValueError, "different dtypes"):
-            quantizer.get_new_dtype(converter(quantizer), None, torch.bfloat16)
+            quantizer.get_new_dtype(merged("half", "a"), None, torch.bfloat16)
 
     def test_a_none_entry_keeps_its_modules_in_full_precision(self):
         quantizer = self._load(
@@ -279,3 +323,39 @@ class FineGrainedHostTest(unittest.TestCase):
         merged = AutoHfQuantizer.merge_quantization_configs(checkpoint, passed)
         self.assertIsNone(merged.dtype_plan["lm_head"])
         self.assertEqual(merged.dtype_plan[".*"].tag, "shipped")
+
+
+@require_bitsandbytes
+@require_torch_accelerator
+class FineGrainedHostBitsAndBytesTest(unittest.TestCase):
+    """Two real quantizers that read the same keys, as members of one plan."""
+
+    def test_bitsandbytes_in_two_formats_loads_saves_and_reloads(self):
+        import bitsandbytes as bnb
+
+        config = LlamaConfig(
+            hidden_size=256, intermediate_size=512, num_hidden_layers=2, num_attention_heads=4, vocab_size=128
+        )
+        torch.manual_seed(0)
+        reference = LlamaForCausalLM(config).to(torch.bfloat16)
+        plan = {"mlp": BitsAndBytesConfig(load_in_4bit=True), "self_attn": BitsAndBytesConfig(load_in_8bit=True)}
+        ids = torch.tensor([[1, 2, 3, 4]], device=torch_device)
+        with tempfile.TemporaryDirectory() as path:
+            reference.save_pretrained(path)
+            model = AutoModelForCausalLM.from_pretrained(
+                path,
+                dtype=torch.bfloat16,
+                device_map=torch_device,
+                quantization_config=FineGrainedConfig(dtype_plan=plan),
+            )
+            layer = model.model.layers[0]
+            self.assertIsInstance(layer.mlp.up_proj, bnb.nn.Linear4bit)
+            self.assertIsInstance(layer.self_attn.q_proj, bnb.nn.Linear8bitLt)
+            self.assertIs(type(model.lm_head), torch.nn.Linear)
+            logits = model(ids).logits
+            # 4-bit weights move the logits by about a tenth of their scale
+            torch.testing.assert_close(logits, reference.to(torch_device)(ids).logits, atol=0.2, rtol=0)
+            model.save_pretrained(f"{path}/quantized")
+            reloaded = AutoModelForCausalLM.from_pretrained(f"{path}/quantized", device_map=torch_device)
+            self.assertIsInstance(reloaded.model.layers[0].self_attn.q_proj, bnb.nn.Linear8bitLt)
+            torch.testing.assert_close(reloaded(ids).logits, logits)
