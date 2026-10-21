@@ -119,3 +119,7 @@ class Sam2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
         self.skipTest("Sam2Processor has a custom interface, not a standard VLM text+image interface")
+
+    @unittest.skip(reason="Skip for BC")
+    def test_call_arguments_not_in_processor_kwargs_or_attributes(self):
+        pass

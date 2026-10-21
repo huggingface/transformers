@@ -27,3 +27,7 @@ class ParakeetProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     text_input_name = "labels"
     # Tiny processor created with make_tiny_processor.py from "nvidia/parakeet-ctc-1.1b"
     tiny_model_id = "hf-internal-testing/tiny-processor-parakeet"
+
+    @unittest.skip(reason="Skip for BC")
+    def test_call_arguments_not_in_processor_kwargs_or_attributes(self):
+        pass

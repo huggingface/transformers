@@ -136,6 +136,10 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertEqual(len(train_data["image"]), len(train_data["input_ids"]))
 
+    @unittest.skip(reason="Skip for BC")
+    def test_call_arguments_not_in_processor_kwargs_or_attributes(self):
+        pass
+
 
 # different use cases tests
 @require_sentencepiece

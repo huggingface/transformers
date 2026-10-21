@@ -184,3 +184,7 @@ class Gemma3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Skip for BC. Hub configs might not have the same defaults as the processor.")
     def test_no_redundant_default_kwargs(self):
         pass
+
+    @unittest.skip(reason="Skip for BC")
+    def test_init_arguments_not_in_processor_kwargs(self):
+        pass

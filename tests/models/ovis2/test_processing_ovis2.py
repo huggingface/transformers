@@ -104,3 +104,7 @@ class Ovis2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
         self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
+
+    @unittest.skip(reason="Skip for BC")
+    def test_init_arguments_not_in_processor_kwargs(self):
+        pass

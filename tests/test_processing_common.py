@@ -21,6 +21,7 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import is_typeddict
 from unittest.mock import patch
 
 import numpy as np
@@ -28,7 +29,14 @@ from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import ProcessorMixin
-from transformers.processing_utils import MODALITY_TO_AUTOPROCESSOR_MAPPING, ProcessingKwargs
+from transformers.processing_utils import (
+    MODALITY_TO_AUTOPROCESSOR_MAPPING,
+    AudioKwargs,
+    ImagesKwargs,
+    ProcessingKwargs,
+    TextKwargs,
+    VideosKwargs,
+)
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_librosa,
@@ -1924,3 +1932,74 @@ class ProcessorTesterMixin:
         processor_module = sys.modules[processor.__class__.__module__]
         expected_kwargs_class = vars(processor_module).get(f"{processor.__class__.__name__}Kwargs", ProcessingKwargs)
         self.assertIs(processor.valid_processor_kwargs, expected_kwargs_class)
+
+    @staticmethod
+    def _get_explicit_arguments(method):
+        return {
+            name
+            for name, param in inspect.signature(method).parameters.items()
+            if name != "self" and param.kind not in (param.VAR_POSITIONAL, param.VAR_KEYWORD)
+        }
+
+    def _get_valid_processor_kwargs_names(self):
+        kwargs_names = set()
+        for name, annotation in self.processor_class.valid_processor_kwargs.__annotations__.items():
+            kwargs_names.add(name)
+
+            # Also add nested kwargs as _merge_kwargs promotes flat to nested kwargs.
+            if is_typeddict(annotation):
+                if annotation.__name__.startswith("Deprecated"):
+                    # Fall back to default in case class is Deprecated
+                    annotation = {
+                        "text_kwargs": TextKwargs,
+                        "images_kwargs": ImagesKwargs,
+                        "videos_kwargs": VideosKwargs,
+                        "audio_kwargs": AudioKwargs,
+                    }[name]
+                kwargs_names.update(annotation.__annotations__)
+        return kwargs_names
+
+    def test_init_arguments_not_in_processor_kwargs(self):
+        """Check that explicit `__init__` arguments don't overlap with `valid_processor_kwargs`.
+
+        We want to avoid that arguments can have defaults in many different places.
+        An argument passed to __init__ should not be overrideable at call time and therefore not
+        be in valid_processor_kwargs.
+        """
+        processor_class = self.processor_class
+        init_arguments = self._get_explicit_arguments(processor_class.__init__)
+        overlapping_arguments = init_arguments & self._get_valid_processor_kwargs_names()
+        self.assertFalse(
+            overlapping_arguments,
+            f"`{processor_class.__name__}.__init__` has arguments {sorted(overlapping_arguments)} that are also "
+            f"defined in `{processor_class.valid_processor_kwargs.__name__}`.",
+        )
+
+    def test_call_arguments_not_in_processor_kwargs_or_attributes(self):
+        """Check that explicit `__call__` arguments are neither in `valid_processor_kwargs` nor processor attributes.
+
+        We want to avoid that arguments can have defaults in many different places.
+        Explicit __call__ arguments are only for inputs known at runtime that cannot have a default. E.g. the input
+        text or image. Arguments that can have a default must be part of valid_processor_kwargs instead and be passed
+        as **kwargs to __call__.
+        """
+        processor = self.get_processor()
+        processor_class = self.processor_class
+        call_arguments = self._get_explicit_arguments(processor_class.__call__)
+
+        overlapping_kwargs = call_arguments & self._get_valid_processor_kwargs_names()
+        self.assertFalse(
+            overlapping_kwargs,
+            f"`{processor_class.__name__}.__call__` has explicit arguments {sorted(overlapping_kwargs)} that are also "
+            f"defined in `{processor_class.valid_processor_kwargs.__name__}`.  Explicit `__call__` arguments are reserved "
+            "for values only known at runtime (e.g. input text or image). Remove them from "
+            f"`{processor_class.valid_processor_kwargs.__name__} if this is the case, otherwise remove them from `__call__`.",
+        )
+
+        overlapping_attributes = {name for name in call_arguments if hasattr(processor, name)}
+        self.assertFalse(
+            overlapping_attributes,
+            f"`{processor_class.__name__}.__call__` has explicit arguments {sorted(overlapping_attributes)} that are "
+            f"also attributes of `{processor_class.__name__}`. Explicit `__call__` arguments must not have a processor "
+            "default value. They are reserved for values only known at runtime (e.g. input text or image).",
+        )

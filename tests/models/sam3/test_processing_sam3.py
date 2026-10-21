@@ -115,3 +115,7 @@ class Sam3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertEqual(inputs["input_boxes_labels"][0, 0].item(), 1)
         self.assertEqual(inputs["input_boxes_labels"][1, 0].item(), 0)
+
+    @unittest.skip(reason="Skip for BC")
+    def test_call_arguments_not_in_processor_kwargs_or_attributes(self):
+        pass

@@ -242,3 +242,7 @@ class Gemma4ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         audio_lengths = list(expected_num_tokens)
         num_from_helper = processor._get_num_multimodal_tokens(audio_lengths=audio_lengths)["num_audio_tokens"]
         self.assertListEqual(num_from_helper, list(expected_num_tokens.values()))
+
+    @unittest.skip(reason="Skip for BC")
+    def test_init_arguments_not_in_processor_kwargs(self):
+        pass

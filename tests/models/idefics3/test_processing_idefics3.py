@@ -459,3 +459,7 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             processor(text=texts, images=None)
         self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
+
+    @unittest.skip(reason="Skip for BC")
+    def test_call_arguments_not_in_processor_kwargs_or_attributes(self):
+        pass

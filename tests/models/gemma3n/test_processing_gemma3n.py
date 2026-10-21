@@ -53,3 +53,7 @@ class Gemma3nProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         for key in input_feat_extract:
             self.assertAlmostEqual(input_feat_extract[key].sum(), input_processor[key].sum(), delta=1e-2)
+
+    @unittest.skip(reason="Skip for BC")
+    def test_init_arguments_not_in_processor_kwargs(self):
+        pass

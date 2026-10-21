@@ -229,3 +229,7 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("ColModernVBert has no chat template, force-set to None at runtime")
     def test_chat_template_save_loading(self):
         pass
+
+    @unittest.skip(reason="Skip for BC")
+    def test_call_arguments_not_in_processor_kwargs_or_attributes(self):
+        pass
