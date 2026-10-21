@@ -27,10 +27,13 @@ from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
-    LlamaForSequenceClassification,
     LlamaPreTrainedModel,
 )
-from ..minicpm3.modeling_minicpm3 import MiniCPM3ForCausalLM, MiniCPM3Model
+from ..minicpm3.modeling_minicpm3 import (
+    MiniCPM3ForCausalLM,
+    MiniCPM3ForSequenceClassification,
+    MiniCPM3Model,
+)
 from ..olmo.modeling_olmo import OlmoRotaryEmbedding, apply_rotary_pos_emb  # noqa: F401
 
 
@@ -160,7 +163,7 @@ class MiniCPM4ForCausalLM(MiniCPM3ForCausalLM):
         return super().forward(**super_kwargs)
 
 
-class MiniCPM4ForSequenceClassification(LlamaForSequenceClassification):
+class MiniCPM4ForSequenceClassification(MiniCPM3ForSequenceClassification):
     pass
 
 
