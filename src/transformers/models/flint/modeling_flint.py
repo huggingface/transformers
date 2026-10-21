@@ -625,8 +625,8 @@ class FlintForCausalLM(FlintPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, FlintForCausalLM
 
-        >>> model = FlintForCausalLM.from_pretrained("RecursiveSI/Flint", dtype="auto", device_map="auto")
-        >>> tokenizer = AutoTokenizer.from_pretrained("RecursiveSI/Flint")
+        >>> model = FlintForCausalLM.from_pretrained("RecursiveSI/flint", dtype="auto", device_map="auto")
+        >>> tokenizer = AutoTokenizer.from_pretrained("RecursiveSI/flint")
 
         >>> messages = [{"role": "user", "content": "Who are you?"}]
         >>> inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True)

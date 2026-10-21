@@ -101,7 +101,7 @@ class FlintIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     def test_greedy_chat(self):
-        model_id = "RecursiveSI/Flint"
+        model_id = "RecursiveSI/flint"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = FlintForCausalLM.from_pretrained(model_id, dtype="auto", device_map="auto")
         expected = {

@@ -24,7 +24,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
 
-@auto_docstring(checkpoint="RecursiveSI/Flint")
+@auto_docstring(checkpoint="RecursiveSI/flint")
 @strict
 class FlintConfig(PreTrainedConfig):
     r"""

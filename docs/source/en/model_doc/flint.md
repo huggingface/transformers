@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-10-16.*
+*This model was contributed to Hugging Face Transformers on 2026-10-21.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -42,7 +42,7 @@ such as [Qwen3-MoE](./qwen3_moe), it has:
 ```python
 from transformers import pipeline
 
-pipe = pipeline("text-generation", model="RecursiveSI/Flint", dtype="auto", device_map="auto")
+pipe = pipeline("text-generation", model="RecursiveSI/flint", dtype="auto", device_map="auto")
 messages = [{"role": "user", "content": "Write a haiku about autumn leaves."}]
 print(pipe(messages, max_new_tokens=1024)[0]["generated_text"][-1]["content"])
 ```
@@ -53,7 +53,7 @@ print(pipe(messages, max_new_tokens=1024)[0]["generated_text"][-1]["content"])
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_id = "RecursiveSI/Flint"
+model_id = "RecursiveSI/flint"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", device_map="auto")
 
