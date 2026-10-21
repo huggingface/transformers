@@ -97,6 +97,9 @@ class Fp8ConfigTest(unittest.TestCase):
             (config.quantization_config["expert_dtype"], config.quantization_config["checkpoint_format"]),
             ("fp4", "deepseek"),
         )
+        # a model quantized and saved by transformers keeps its own config, FP8 experts included
+        saved = Fp8Config(scale_fmt="ue8m0").to_dict()
+        self.assertEqual(DeepseekV4Config(expert_dtype="fp4", quantization_config=saved).quantization_config, saved)
         quantizer, _, _ = get_hf_quantizer(config, None, None, True, {})
         self.assertIsInstance(quantizer, FineGrainedFP8HfQuantizer)
         self.assertEqual(quantizer.quantization_config.scale_fmt, "ue8m0")
