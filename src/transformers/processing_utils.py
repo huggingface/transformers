@@ -24,6 +24,7 @@ import os
 import re
 import sys
 import typing
+from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -444,17 +445,19 @@ class ProcessingKwargs(TypedDict, total=False):
     New keys have to be defined as follows to ensure type hinting is done correctly.
 
     ```python
-    # adding a new image kwarg for this model
-    class ModelImagesKwargs(ImagesKwargs, total=False):
-        new_image_kwarg: bool | None
-
     class ModelProcessorKwargs(ProcessingKwargs, total=False):
-        images_kwargs: ModelImagesKwargs
-        new_processor_kwarg: float
+        my_kwarg: float
+
+    class ModelProcessor(ProcessorMixin):
+        valid_processor_kwargs = ModelProcessorKwargs
+
+        @auto_docstring
+        def __call__(self, images: ImageInput | None = None, ..., **kwargs: Unpack[ModelProcessorKwargs]):
+            my_kwarg = kwargs.get("my_kwarg")
     ```
     """
 
-    _defaults = {}  # Deprecated, set defaults as class variables on the processor class inheriting from ProcessorMixin instead
+    _defaults = {}  # Deprecated, kept for BC. Set defaults as class variables on the processor class inheriting from ProcessorMixin instead.
 
     text_kwargs: TextKwargs
     images_kwargs: ImagesKwargs
@@ -1623,10 +1626,10 @@ class ProcessorMixin(PushToHubMixin):
             preprocessor_valid_kwargs = getattr(getattr(preprocessor, "valid_kwargs", None), "__annotations__", {})
             modality_valid_kwargs[modality] = set(valid_kwargs).union(preprocessor_valid_kwargs)
 
-        valid_kwarg_to_modalities = {}
+        valid_kwarg_to_modalities = defaultdict(list)
         for modality, valid_kwargs in modality_valid_kwargs.items():
             for key in valid_kwargs:
-                valid_kwarg_to_modalities.setdefault(key, []).append(modality)
+                valid_kwarg_to_modalities[key].append(modality)
 
         # 7): flat, not modality-specific processor attributes
         for key in ModelProcessorKwargs.__annotations__:
