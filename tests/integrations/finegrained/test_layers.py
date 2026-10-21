@@ -201,13 +201,16 @@ class FineGrainedModulesTest(unittest.TestCase):
         self.assertIsInstance(model[0], torch.nn.Linear)
 
     def test_replacement_follows_the_patterns_and_the_skip_list(self):
-        """Check that an embedding is quantized only when `modules_to_convert` names it."""
+        """Check that an embedding is quantized only when it is one of the quantizer's tables."""
 
         model = torch.nn.Module()
         model.ngram_embedding = torch.nn.Embedding(8, 4)
         model.embed_tokens = torch.nn.Embedding(8, 4)
         model.other = torch.nn.Embedding(8, 4)
-        _replace(model, Fp8Config(modules_to_convert=["ngram_embedding", "other"]), ["other"])
+        quantizer = _quantizer_for(Fp8Config(weight_block_size=None))
+        quantizer.embeddings = ["ngram_embedding", "embed_tokens", "other"]
+        quantizer.dtype_plan_targets = ["ngram_embedding", "other"]
+        quantizer.replace_modules(model, modules_to_not_convert=["other"])
         self.assertIsInstance(model.ngram_embedding, fg.FineGrainedEmbedding)
         self.assertTrue(model.ngram_embedding._hf_quantized_needs_local_tp)
         self.assertIs(type(model.embed_tokens), torch.nn.Embedding)
@@ -238,9 +241,8 @@ class FineGrainedModulesTest(unittest.TestCase):
         def fp8(scheme):
             return _format_config("fp8", weight_block_size=(4, 4), activation_scheme=scheme)
 
-        builders = {
-            "embedding": lambda: fg.FineGrainedEmbedding(64, 16, quantization_config=Fp8Config(weight_block_size=None))
-        }
+        # An embedding table's per-tensor scale scales its output rows, so it takes the model dtype
+        builders = {}
         for name, config in (("fp8_static", fp8("static")), ("fp8_dynamic", fp8("dynamic")), ("nvfp4", NVFP4Config())):
             builders[f"linear_{name}"] = lambda c=config: FineGrainedLinear(64, 32, quantization_config=c)
             builders[f"experts_{name}"] = lambda c=config: FineGrainedExperts(_Cfg(), quantization_config=c)
@@ -481,12 +483,11 @@ class FineGrainedParallelPlanTest(unittest.TestCase):
         return plan
 
     def test_an_embedding_tables_scale_is_replicated(self):
-        config = Fp8Config(modules_to_convert=["table"])
-        quantizer = _quantizer_for(config)
+        quantizer = _quantizer_for(Fp8Config(weight_block_size=None))
         model = torch.nn.Module()
         model.config = SimpleNamespace(_experts_implementation=None)
         model.table = fg.FineGrainedEmbedding.from_module(
-            torch.nn.Embedding(8, 64), quantizer.config_for("table"), model
+            torch.nn.Embedding(8, 64), quantizer.quantization_config, model
         )
         for style in ("embedding_colwise", "replicate"):
             with self.subTest(style=style):

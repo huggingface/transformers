@@ -28,14 +28,12 @@ from ..utils import (
     logging,
 )
 from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION
-from ..utils.quantization_config import Fp8Config
 from .base import HfQuantizer
 from .quantizers_utils import (
     FUSED_STACKS,
     STACK_COMPANIONS,
     embedding_pattern,
     get_module_from_name,
-    plan_entry_for,
     replace_with_quantized_modules,
 )
 
@@ -73,28 +71,21 @@ class BlockScaledQuantizer(HfQuantizer):
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
-        self._embedding_config = Fp8Config(weight_block_size=None)
+        # the model's embeddings, set before the weights load
+        self.embeddings: list[str] = []
 
     @property
-    def embeddings(self) -> list[str]:
-        """Return the embedding tables to quantize, by name suffix. Each holds FP8 rows with one per-tensor scale."""
-        return list(getattr(self.quantization_config, "modules_to_convert", None) or [])
+    def embedding_tables(self) -> list[str]:
+        """Return the embeddings this quantizer converts: the ones a `dtype_plan` entry of its names."""
+        return [name for name in self.embeddings if any(re.search(p, name) for p in self.dtype_plan_targets)]
 
     def _plan(self) -> dict[str, "BlockScaledConfig"]:
         """Return `{module regex: format config}` for the modules this quantizer covers."""
-        return {
-            **dict.fromkeys(map(embedding_pattern, self.embeddings), self._embedding_config),
-            ".*": self.quantization_config,
-        }
+        return dict.fromkeys([*map(embedding_pattern, self.embedding_tables), ".*"], self.quantization_config)
 
     def holds(self, module) -> bool:
         """Return whether `module` was built from this quantizer's config."""
-        config = getattr(module, "quantization_config", None)
-        return config is self.quantization_config or config is self._embedding_config
-
-    def config_for(self, module_name: str) -> "BlockScaledConfig | None":
-        """Return the format config of `module_name`, or `None` if it stays in full precision."""
-        return plan_entry_for(self._plan(), module_name)
+        return getattr(module, "quantization_config", None) is self.quantization_config
 
     @property
     def producer_layout(self) -> ProducerLayout:
@@ -177,7 +168,8 @@ class BlockScaledQuantizer(HfQuantizer):
     def _block_scale_rename(self):
         """Rename the shipped block scale to `weight_scale_inv`.
 
-        `FineGrainedEmbedding` keeps its per-tensor scale named `weight_scale`, so its tables are left out.
+        `FineGrainedEmbedding` keeps its per-tensor scale named `weight_scale`, so every embedding is left out. A table
+        another member converts reads the same keys.
         """
         from ..core_model_loading import WeightRenaming
 
@@ -294,11 +286,13 @@ class BlockScaledQuantizer(HfQuantizer):
         return super().get_new_dtype(converter, param, dtype)
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        # another member may already hold a table as a `FineGrainedEmbedding`
+        self.embeddings = [name for name, module in model.named_modules() if isinstance(module, torch.nn.Embedding)]
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
         plan = self._plan()
-        embeddings = set(map(embedding_pattern, self.embeddings))
+        embeddings = set(map(embedding_pattern, self.embedding_tables))
         if not self.pre_quantized:
             # a dequantized on-the-fly load quantizes nothing. Embedding tables have no on-the-fly path.
             plan = (

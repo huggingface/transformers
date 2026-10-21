@@ -52,7 +52,20 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## Options
 
-See [`Fp8Config`] for every option. `modules_to_convert` names the FP8 embedding tables of a pre-quantized checkpoint.
+See [`Fp8Config`] for every option.
+
+An FP8 embedding table holds FP8 rows with one per-tensor scale. A plan entry that names the table loads it that way.
+An FP8 checkpoint that names its tables with `modules_to_convert` reads into such a plan.
+
+```py
+from transformers import AutoModelForCausalLM, FineGrainedConfig, Fp8Config
+
+quantization_config = FineGrainedConfig(
+    dtype_plan={"ngram_embedding": Fp8Config(weight_block_size=None), "lm_head": None, ".*": Fp8Config()}
+)
+model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config)
+```
+
 Quantizing on the fly keeps embedding tables in full precision.
 
 ## DeepGEMM fast path

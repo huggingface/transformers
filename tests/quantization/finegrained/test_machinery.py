@@ -34,6 +34,7 @@ from transformers.modeling_utils import LoadStateDictConfig
 from transformers.quantizers import auto
 from transformers.quantizers.block_scaled_utils import BlockScaledQuantizer
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+from transformers.quantizers.quantizers_utils import should_convert_module
 from transformers.testing_utils import require_torch
 from transformers.utils import quantization_config as qc
 from transformers.utils.quantization_config import BlockScaledConfig, FineGrainedConfig, QuantizationMethod
@@ -332,7 +333,9 @@ class TestFormatHostTest(_ChainAssertions, unittest.TestCase):
         self.assertIs(layer.mlp.experts.quantization_config, fp4.quantization_config)
 
     def test_a_plan_round_trips_through_config_json(self):
-        config = self._plan(modules_to_not_convert=["lm_head"])
+        config = FineGrainedConfig(
+            dtype_plan={"lm_head": None, EXPERTS: GroupFp4TestConfig(), ".*": BlockFp8TestConfig()}
+        )
         read = auto.AutoQuantizationConfig.from_dict(json.loads(config.to_json_string()))
         self.assertIsInstance(read, FineGrainedConfig)
         self.assertEqual(read.to_dict(), config.to_dict())
@@ -345,10 +348,22 @@ class TestFormatHostTest(_ChainAssertions, unittest.TestCase):
             FineGrainedConfig(dtype_plan={".*": SimpleNamespace()})
 
     def test_a_format_config_lends_its_loading_options_to_the_plan(self):
-        lender = self._plan().loading_attributes_lender(BlockFp8TestConfig(dequantize=True))
-        self.assertIsInstance(lender, FineGrainedConfig)
-        self.assertTrue(lender.dequantize)
-        self.assertEqual(list(lender.dtype_plan), [".*"])
+        source = self._plan().loading_attributes_source(BlockFp8TestConfig(dequantize=True))
+        self.assertIsInstance(source, FineGrainedConfig)
+        self.assertTrue(source.dequantize)
+        self.assertEqual(list(source.dtype_plan), [".*"])
+
+    def test_a_plan_lends_its_none_entries_to_a_format_checkpoint(self):
+        plan = FineGrainedConfig(dtype_plan={"lm_head": None, ".*": BlockFp8TestConfig()}, dequantize=True)
+        source = BlockFp8TestConfig().loading_attributes_source(plan)
+        self.assertTrue(source.dequantize)
+        skipped = [
+            name
+            for name in ("lm_head", "model.lm_head", "model.layers.0")
+            if not should_convert_module(name, source.modules_to_not_convert)
+        ]
+        self.assertEqual(skipped, ["lm_head", "model.lm_head"])
+        self.assertIsNone(BlockFp8TestConfig().loading_attributes_source(self._plan()))
 
     def test_a_mixed_checkpoint_loads_and_saves_back(self):
         checkpoint = _checkpoint(_fp4_groups, _fp8_blocks)

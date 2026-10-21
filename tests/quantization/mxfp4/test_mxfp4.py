@@ -20,6 +20,7 @@ checkpoints.
 
 import tempfile
 import unittest
+from unittest import mock
 from unittest.mock import patch
 
 import torch
@@ -448,3 +449,24 @@ class Mxfp4TinyCheckpointTest(TinyCheckpointTesterMixin, TestCasePlus):
 
 class Mxfp4LoadPathEquivalenceTest(LoadPathEquivalenceTesterMixin, TestCasePlus):
     spec = MXFP4
+
+
+@require_torch
+class Mxfp4LegacyRoutingTest(unittest.TestCase):
+    def test_gpus_below_compute_capability_8_9_keep_mains_mxfp4_integration(self):
+        """Check that a T4 or an A100 loads MXFP4 through main's quantizer, and newer GPUs through the fine-grained one."""
+        from transformers.quantizers.auto import AutoHfQuantizer
+        from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
+        from transformers.quantizers.quantizer_mxfp4_legacy import Mxfp4LegacyHfQuantizer
+
+        for capability, quantizer_cls in (
+            ((7, 5), Mxfp4LegacyHfQuantizer),
+            ((8, 0), Mxfp4LegacyHfQuantizer),
+            ((9, 0), Mxfp4HfQuantizer),
+        ):
+            with (
+                self.subTest(capability=capability),
+                mock.patch("torch.cuda.is_available", return_value=True),
+                mock.patch("torch.cuda.get_device_capability", return_value=capability),
+            ):
+                self.assertIs(type(AutoHfQuantizer.from_config(Mxfp4Config())), quantizer_cls)

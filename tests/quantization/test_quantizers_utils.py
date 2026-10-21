@@ -14,12 +14,22 @@
 import unittest
 
 from transformers import is_torch_available
+from transformers.quantizers.base import HfQuantizer
 from transformers.quantizers.quantizers_utils import should_convert_module
 from transformers.testing_utils import require_torch
 
 
 if is_torch_available():
     import torch
+
+
+class _SkipListQuantizer(HfQuantizer):
+    def is_serializable(self):
+        return True
+
+    @property
+    def is_trainable(self):
+        return False
 
 
 class SkipListTest(unittest.TestCase):
@@ -51,7 +61,6 @@ class SkipListTest(unittest.TestCase):
     def test_a_checkpoints_skip_list_covers_the_modules_it_names_once_renamed(self):
         """Check that a skip-list of checkpoint names covers the modules Llava renames under `model.` on load."""
         from transformers import CLIPVisionConfig, LlamaConfig, LlavaConfig, LlavaForConditionalGeneration
-        from transformers.quantizers.base import HfQuantizer
 
         text_config = LlamaConfig(
             hidden_size=16,
@@ -72,7 +81,7 @@ class SkipListTest(unittest.TestCase):
         config = LlavaConfig(text_config=text_config, vision_config=vision_config)
         with torch.device("meta"):
             model = LlavaForConditionalGeneration(config)
-        modules_to_not_convert = HfQuantizer.get_modules_to_not_convert(
+        modules_to_not_convert = _SkipListQuantizer(None).get_modules_to_not_convert(
             model, ["vision_tower", "language_model.model.layers.1"]
         )
         for name in (
@@ -83,27 +92,3 @@ class SkipListTest(unittest.TestCase):
         self.assertTrue(
             should_convert_module("model.language_model.layers.0.self_attn.q_proj", modules_to_not_convert)
         )
-
-
-@require_torch
-class AdaptQuantizationConfigTest(unittest.TestCase):
-    def test_the_model_config_adapts_the_quantization_config(self):
-        """Check that the model config adapts both a checkpoint's and a passed quantization config."""
-        from transformers import LlamaConfig
-        from transformers.quantizers.auto import get_hf_quantizer
-        from transformers.utils.quantization_config import Mxfp4Config
-
-        adapted = []
-
-        class AdaptingConfig(LlamaConfig):
-            def adapt_quantization_config(self, quantization_config):
-                adapted.append(type(quantization_config))
-                return quantization_config
-
-        for checkpoint in (None, {"quant_method": "mxfp4"}):
-            with self.subTest(pre_quantized=checkpoint is not None):
-                adapted.clear()
-                config = AdaptingConfig()
-                config.quantization_config = checkpoint
-                get_hf_quantizer(config, Mxfp4Config(dequantize=True), None, True, {})
-                self.assertEqual(adapted, [Mxfp4Config])

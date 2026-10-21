@@ -206,7 +206,7 @@ class QuantizationConfigMixin:
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
 
-    def loading_attributes_lender(self, config: "QuantizationConfigMixin") -> Optional["QuantizationConfigMixin"]:
+    def loading_attributes_source(self, config: "QuantizationConfigMixin") -> Optional["QuantizationConfigMixin"]:
         """
         Return the config whose loading attributes override this checkpoint config.
 
@@ -1773,8 +1773,6 @@ class BlockScaledConfig(QuantizationConfigMixin):
             )
         self.quant_method = self.method
         kwargs.pop("quant_method", None)
-        if modules_to_not_convert is None and "ignored_layers" in kwargs:
-            modules_to_not_convert = kwargs.pop("ignored_layers")
         # A `config.json` may spell out the fixed options, with the format's value or the shared default
         fixed = {
             name: kwargs.pop(name)
@@ -1826,17 +1824,20 @@ class BlockScaledConfig(QuantizationConfigMixin):
         """Raise if this checkpoint cannot run with the `activation_format` passed to `from_pretrained`."""
         # first overridden by `NVFP4Config` in #49779, which rejects weight-only checkpoints
 
-    def loading_attributes_lender(self, config):
-        # A `FineGrainedConfig` lends to a single-format checkpoint if its plan is empty or holds only that format.
-        # The plan entry then also lends its activation format.
+    def loading_attributes_source(self, config):
+        # A `FineGrainedConfig` lends to a single-format checkpoint if its plan holds no other format.
+        # Its format entry lends its activation format. Its `None` entries become the skip-list.
         if not isinstance(config, FineGrainedConfig):
-            return super().loading_attributes_lender(config)
-        entries = list(config.dtype_plan.values())
+            return super().loading_attributes_source(config)
+        entries = [entry for entry in config.dtype_plan.values() if entry is not None]
         if len(entries) > 1 or any(type(entry) is not type(self) for entry in entries):
             return None
-        lender = copy.copy(entries[0] if entries else self)
-        lender.dequantize, lender.modules_to_not_convert = config.dequantize, config.modules_to_not_convert
-        return lender
+        source = copy.copy(entries[0] if entries else self)
+        source.dequantize = config.dequantize
+        # `should_convert_module` matches from the start, so `.*?` and `.*` make it search for the pattern
+        skipped = [rf".*?(?:{pattern}).*" for pattern, entry in config.dtype_plan.items() if entry is None]
+        source.modules_to_not_convert = skipped or None
+        return source
 
 
 class Fp8Config(BlockScaledConfig):
@@ -1853,8 +1854,6 @@ class Fp8Config(BlockScaledConfig):
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
             `"dynamic"` quantizes activations on the fly, per 128-wide group.
             `"static"` uses a calibrated per-tensor activation scale from the checkpoint.
-        modules_to_convert (`list`, *optional*):
-            Embedding tables to quantize, by name suffix. Each gets FP8 rows with one per-tensor scale.
         kwargs (`dict[str, Any]`, *optional*):
             Options shared by every block-scaled format. See [`BlockScaledConfig`].
     """
@@ -1868,26 +1867,24 @@ class Fp8Config(BlockScaledConfig):
         weight_block_size: tuple[int, int] | None = (128, 128),
         scale_fmt: str = "float",
         activation_scheme: str = "dynamic",
-        modules_to_convert: list | None = None,
         **kwargs,
     ):
         self.weight_block_size = tuple(weight_block_size) if weight_block_size is not None else None
         self.scale_fmt = scale_fmt
         self.activation_scheme = activation_scheme
-        self.modules_to_convert = modules_to_convert
         super().__init__(**kwargs)
 
     def post_init(self):
         super().post_init()
         self.activation_scheme = self.activation_scheme.lower()
         if self.activation_scheme not in ("dynamic", "static"):
-            raise ValueError(f"activation_scheme must be 'dynamic' or 'static'; got {self.activation_scheme!r}")
+            raise ValueError(f"activation_scheme must be 'dynamic' or 'static', not {self.activation_scheme!r}.")
         if self.scale_fmt not in ("float", "ue8m0"):
-            raise ValueError(f"scale_fmt must be 'float' or 'ue8m0'; got {self.scale_fmt!r}")
+            raise ValueError(f"scale_fmt must be 'float' or 'ue8m0', not {self.scale_fmt!r}.")
         if self.weight_block_size is not None and (
             len(self.weight_block_size) != 2 or min(self.weight_block_size) <= 0
         ):
-            raise ValueError(f"weight_block_size must be two positive integers; got {self.weight_block_size}")
+            raise ValueError(f"weight_block_size must be two positive integers, not {self.weight_block_size}.")
 
 
 class Mxfp8Config(BlockScaledConfig):
@@ -1991,7 +1988,7 @@ class NVFP4Config(BlockScaledConfig):
 BLOCK_SCALED_CONFIGS = {config.method.value: config for config in (Fp8Config, Mxfp8Config, Mxfp4Config, NVFP4Config)}
 
 
-def plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
+def _plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
     """Return one `config_groups` entry as `dtype_plan` entries, one per target.
 
     Return `None` if the entry uses a format these kernels do not support.
@@ -2127,7 +2124,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
                 dtype_plan[_subtree_patterns([name])[0]] = _modelopt_format(spec)
             except ValueError as error:
                 raise ValueError(f"modelopt module {name!r}: {error}") from error
-        return FineGrainedConfig(dtype_plan=dtype_plan, modules_to_not_convert=modules_to_not_convert)
+        return _config_for_plan(dtype_plan, modules_to_not_convert)
     if groups := config_dict.get("config_groups"):
         dtype_plan = {}
         _modelopt_format(config_dict)  # check that the declared algorithm is supported too
@@ -2144,7 +2141,7 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
                 else:
                     raise ValueError(f"Unsupported modelopt target {target!r} in config group {name!r}")
             spec["targets"] = targets
-            entries = plan_from_config_groups(spec)
+            entries = _plan_from_config_groups(spec)
             if entries is None:
                 raise ValueError(f"Unsupported modelopt config_groups entry {name!r}: {spec}")
             for config in entries.values():
@@ -2154,6 +2151,44 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
     config = _modelopt_format(config_dict)
     config.modules_to_not_convert = modules_to_not_convert
     return config
+
+
+def read_mxfp8(config_dict: dict) -> QuantizationConfigMixin | None:
+    """Return the config of an MXFP8 checkpoint, or `None` to read it as `Mxfp8Config`.
+
+    MiniMax names the skip-list `ignored_layers`, e.g. `MiniMaxAI/MiniMax-M3-MXFP8`.
+    """
+    if "ignored_layers" not in config_dict:
+        return None
+    config_dict = dict(config_dict)
+    ignored = config_dict.pop("ignored_layers")
+    if config_dict.get("modules_to_not_convert") is None:
+        config_dict["modules_to_not_convert"] = ignored
+    return Mxfp8Config.from_dict(config_dict)
+
+
+def read_fp8(config_dict: dict) -> QuantizationConfigMixin | None:
+    """Return the config of an FP8 checkpoint, or `None` to read it as `Fp8Config`.
+
+    - DeepSeek-V4 marks its experts with `expert_dtype="fp4"`. They become W4A4 MXFP4 entries, as DeepSeek's
+      reference inference runs them.
+    - `modules_to_convert` names FP8 embedding tables, as Qwen4-Exp ships its n-gram table. Each table becomes a
+      per-tensor entry.
+    """
+    from ..quantizers.quantizers_utils import EXPERTS_PATTERN, embedding_pattern
+
+    config_dict = dict(config_dict)
+    tables = config_dict.pop("modules_to_convert", None) or []
+    fp4_experts = config_dict.pop("expert_dtype", None) == "fp4"
+    if not tables and not fp4_experts:
+        return None
+    dense = Fp8Config.from_dict(config_dict)
+    skip, dense.modules_to_not_convert = dense.modules_to_not_convert, None
+    table = Fp8Config(weight_block_size=None, checkpoint_format=dense.checkpoint_format)
+    dtype_plan = dict.fromkeys(map(embedding_pattern, tables), table)
+    if fp4_experts:
+        dtype_plan[EXPERTS_PATTERN] = Mxfp4Config(activation_format="mxfp4", checkpoint_format=dense.checkpoint_format)
+    return _config_for_plan({**dtype_plan, ".*": dense}, skip)
 
 
 def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None:
@@ -2177,7 +2212,7 @@ def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None
     served = ("float-quantized", "nvfp4-pack-quantized")
     if not groups or any(spec.get("format", config_dict.get("format")) not in served for spec in groups.values()):
         return None
-    mapped = [plan_from_config_groups(spec) for spec in groups.values()]
+    mapped = [_plan_from_config_groups(spec) for spec in groups.values()]
     if any(entries is None for entries in mapped):
         return None
     dtype_plan = {}
@@ -2196,21 +2231,28 @@ def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None
 
 
 def _config_for_plan(dtype_plan: dict, modules_to_not_convert: list | None) -> QuantizationConfigMixin:
-    """Return the format config if the plan is a single `".*"` entry. Otherwise return a `FineGrainedConfig`."""
+    """Return the format config if the plan is a single `".*"` entry. Otherwise return a `FineGrainedConfig`.
+
+    A plan takes the skip-list as `None` entries.
+    """
+    from ..quantizers.quantizers_utils import skip_pattern
+
     if list(dtype_plan) == [".*"]:
         (config,) = dtype_plan.values()
         config.modules_to_not_convert = modules_to_not_convert
         return config
-    return FineGrainedConfig(dtype_plan=dtype_plan, modules_to_not_convert=modules_to_not_convert)
+    skipped = dict.fromkeys(map(skip_pattern, modules_to_not_convert or []))
+    return FineGrainedConfig(dtype_plan={**dtype_plan, **skipped})
 
 
 class FineGrainedConfig(QuantizationConfigMixin):
     """
     Configuration for a model whose modules use different quantization methods.
 
-    The `dtype_plan` maps modules to the configs of their methods. An entry can be any registered method's config.
-    The other options apply to the whole model. A model in a single method can use that method's config directly.
-    The block-scaled formats are [`Fp8Config`], [`Mxfp8Config`], [`Mxfp4Config`] and [`NVFP4Config`]:
+    The `dtype_plan` maps modules to the configs of their methods, or to `None` for full precision. It is the only
+    place that says which module gets which config. An entry can be any registered method's config. A model in a
+    single method can use that method's config directly. The block-scaled formats are [`Fp8Config`],
+    [`Mxfp8Config`], [`Mxfp4Config`] and [`NVFP4Config`]:
 
     | format    | weights                        | block scales                | a checkpoint that ships it |
     |-----------|--------------------------------|-----------------------------|----------------------------|
@@ -2220,30 +2262,22 @@ class FineGrainedConfig(QuantizationConfigMixin):
     | NVFP4     | E2M1, two values per `int8`    | E4M3 group-16 + fp32 global | `nvidia/GLM-5.2-NVFP4`     |
 
     Args:
-        dtype_plan (`dict[str, QuantizationConfigMixin]`, *optional*):
-            Maps a module regex to the config of the modules it matches. A targeted entry wins over the
-            `".*"` catch-all. Modules that no entry covers stay in full precision. Entries take no loading options.
-            Set `dequantize`, `modules_to_not_convert` and `modules_to_convert` on this config instead.
-            On a pre-quantized checkpoint, a passed plan only overrides the activation formats of the checkpoint's
-            entries with the same pattern.
-        modules_to_not_convert (`list`, *optional*):
-            Modules to keep in full precision.
-        modules_to_convert (`list`, *optional*):
-            Embedding tables to quantize, by name suffix. Each gets FP8 rows with one per-tensor scale. They load
-            through the quantizer of the `".*"` entry.
+        dtype_plan (`dict[str, QuantizationConfigMixin | None]`, *optional*):
+            Maps a module regex to the config of the modules it matches. A `None` entry keeps its modules in full
+            precision and wins over any other entry. A targeted entry wins over the `".*"` catch-all. Modules that no
+            entry covers stay in full precision. Entries take no loading options: set `dequantize` on this config and
+            name full-precision modules with `None` entries.
         dequantize (`bool`, *optional*, defaults to `False`):
             Whether to dequantize the model to full precision while loading.
     """
 
     # Loading options belong to the whole model, not to a plan entry
-    _entry_loading_options = ("dequantize", "modules_to_not_convert", "modules_to_convert")
+    _entry_loading_options = ("dequantize", "modules_to_not_convert")
 
     def __init__(
         self,
         *,
-        dtype_plan: dict[str, QuantizationConfigMixin] | None = None,
-        modules_to_not_convert: list | None = None,
-        modules_to_convert: list | None = None,
+        dtype_plan: dict[str, QuantizationConfigMixin | None] | None = None,
         dequantize: bool = False,
         **kwargs,
     ):
@@ -2252,20 +2286,17 @@ class FineGrainedConfig(QuantizationConfigMixin):
         if kwargs:
             logger.info(f"Unused kwargs: {list(kwargs)}. These kwargs are not used in {type(self).__name__}.")
         self.dtype_plan = {pattern: self._plan_entry(pattern, entry) for pattern, entry in (dtype_plan or {}).items()}
-        self.modules_to_not_convert = modules_to_not_convert
-        self.modules_to_convert = modules_to_convert
         self.dequantize = dequantize
 
-    def _plan_entry(self, pattern: str, entry) -> QuantizationConfigMixin:
+    def _plan_entry(self, pattern: str, entry) -> QuantizationConfigMixin | None:
         """Return `entry` as a config. An entry read from `config.json` is a dict with its `quant_method`."""
-        from ..quantizers.auto import AUTO_QUANTIZATION_CONFIG_MAPPING
+        from ..quantizers.auto import AutoQuantizationConfig
 
-        methods = sorted(set(AUTO_QUANTIZATION_CONFIG_MAPPING) - {QuantizationMethod.FINEGRAINED.value})
+        if entry is None:
+            return None
         if isinstance(entry, dict):
-            method = entry.get("quant_method")
-            if method not in methods:
-                raise ValueError(f"dtype_plan entry {pattern!r} has quant_method {method!r}. Use one of {methods}.")
-            entry = AUTO_QUANTIZATION_CONFIG_MAPPING[method].from_dict(entry)
+            # the same dispatch as a checkpoint's config, e.g. bitsandbytes reads `load_in_4bit`
+            entry = AutoQuantizationConfig.from_dict(entry)
         if not isinstance(entry, QuantizationConfigMixin) or isinstance(entry, FineGrainedConfig):
             raise TypeError(
                 f"dtype_plan entry {pattern!r} is a {type(entry).__name__}. An entry is a method's config."
@@ -2282,33 +2313,33 @@ class FineGrainedConfig(QuantizationConfigMixin):
         return {
             "quant_method": self.quant_method,
             "dtype_plan": {
-                pattern: {
+                pattern: None
+                if config is None
+                else {
                     name: value for name, value in config.to_dict().items() if name not in self._entry_loading_options
                 }
                 for pattern, config in self.dtype_plan.items()
             },
-            "modules_to_not_convert": self.modules_to_not_convert,
-            "modules_to_convert": self.modules_to_convert,
             "dequantize": self.dequantize,
         }
 
     def get_loading_attributes(self):
-        return _loading_attributes(self, **({"dtype_plan": self.dtype_plan} if self.dtype_plan else {}))
+        # A passed plan adds its `None` entries and lends its activation formats. The weights keep their formats.
+        return {"dequantize": self.dequantize, **({"dtype_plan": self.dtype_plan} if self.dtype_plan else {})}
 
-    def loading_attributes_lender(self, config):
-        # The config of a plan entry's method lends its loading options to the plan.
+    def loading_attributes_source(self, config):
+        # The config of a plan entry's method lends its loading options to the plan. Its skip-list becomes `None` entries.
         # It lends its activation format to the plan entries of the same format.
-        if not any(type(entry) is type(config) for entry in self.dtype_plan.values()):
-            return super().loading_attributes_lender(config)
+        from ..quantizers.quantizers_utils import skip_pattern
+
+        if not any(type(entry) is type(config) for entry in self.dtype_plan.values() if entry is not None):
+            return super().loading_attributes_source(config)
         entry = copy.copy(config)
         entry.dequantize, entry.modules_to_not_convert = False, None
-        if hasattr(entry, "modules_to_convert"):
-            entry.modules_to_convert = None
+        same_format = {pattern: entry for pattern, own in self.dtype_plan.items() if type(own) is type(config)}
+        skipped = dict.fromkeys(map(skip_pattern, getattr(config, "modules_to_not_convert", None) or []))
         return FineGrainedConfig(
-            dtype_plan={pattern: entry for pattern, own in self.dtype_plan.items() if type(own) is type(config)},
-            modules_to_not_convert=getattr(config, "modules_to_not_convert", None),
-            modules_to_convert=getattr(config, "modules_to_convert", None),
-            dequantize=getattr(config, "dequantize", False),
+            dtype_plan={**skipped, **same_format}, dequantize=getattr(config, "dequantize", False)
         )
 
 

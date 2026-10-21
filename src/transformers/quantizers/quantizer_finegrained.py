@@ -20,13 +20,9 @@ import copy
 import re
 from typing import TYPE_CHECKING
 
-from ..utils import is_torch_available
-from .base import HfQuantizer
-from .quantizers_utils import checkpoint_module_namer, dedupe_conversions, plan_entry_for
+from .base import HfQuantizer, get_keys_to_not_convert
+from .quantizers_utils import checkpoint_module_namer, plan_entry_for, skip_pattern
 
-
-if is_torch_available():
-    from torch import nn
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -39,24 +35,26 @@ class FineGrainedHfQuantizer(HfQuantizer):
     A hook on one tensor goes to the member that owns its module. A hook on the whole model runs on every member.
     DeepSeek-V4 is an example, with MXFP4 experts and block FP8 linears.
 
-    Any registered quantizer can be a member. The host relies on it to:
-    - convert only the modules its config's `modules_to_not_convert` leaves. The host scopes each member this way.
+    A registered quantizer can be a member. The host relies on it to:
+    - build its skip-list with `get_modules_to_not_convert`. The host scopes each member through `dtype_plan_skip`.
+      A member that converts a module of another entry raises.
     - take its loading options, such as `dequantize`, from its config. The host sets them on the member's own copy.
     - keep its whole-model hooks to its own modules, or make them safe to run once per member.
-    - read its own checkpoint keys. Two members that read one key differently raise.
-    - in an op that several members share, find its tensor's member with `member_for`. The host is its quantizer.
+
+    Each member updates its own copy of the model's conversions. Conversions of several members that read the same
+    keys become one converter, which runs each module's tensors through its own member's version.
     """
 
     quantization_config: "FineGrainedConfig"
 
     def __init__(self, quantization_config: "FineGrainedConfig", **kwargs):
         super().__init__(quantization_config, **kwargs)
-        from .auto import AUTO_QUANTIZER_MAPPING
+        from .auto import AutoHfQuantizer
 
         # Equal entries share one config, so a per-layer export builds one member per format
         shared = {}
         quantization_config.dtype_plan = {
-            pattern: shared.setdefault(config.to_json_string(), config)
+            pattern: None if config is None else shared.setdefault(config.to_json_string(), config)
             for pattern, config in quantization_config.dtype_plan.items()
         }
         members = {}
@@ -65,13 +63,16 @@ class FineGrainedHfQuantizer(HfQuantizer):
             member_config = copy.deepcopy(config)
             # the host's loading options hold for every member
             for option in quantization_config._entry_loading_options:
-                setattr(member_config, option, getattr(quantization_config, option))
-            method = getattr(config.quant_method, "value", config.quant_method)
-            members[key] = AUTO_QUANTIZER_MAPPING[method](member_config, **kwargs)
+                setattr(member_config, option, getattr(quantization_config, option, None))
+            # the same dispatch as a config passed alone, e.g. bitsandbytes picks its 4-bit or 8-bit quantizer
+            members[key] = AutoHfQuantizer.from_config(member_config, **kwargs)
         self.members = list(members.values())
-        # `{module regex: member}`, the plan with each config's member in its place
+        # each dispatching conversion's group, as merged: the model's version under `None`, a member's under it
+        self._groups = {}
+        # `{module regex: member}`, the plan with each config's member in its place. `None` stays in full precision.
         self._plan = {
-            pattern: members[config.to_json_string()] for pattern, config in quantization_config.dtype_plan.items()
+            pattern: None if config is None else members[config.to_json_string()]
+            for pattern, config in quantization_config.dtype_plan.items()
         }
         self.dequantized_saves_unquantized = all(member.dequantized_saves_unquantized for member in self.members)
         for member in self.members:
@@ -122,43 +123,53 @@ class FineGrainedHfQuantizer(HfQuantizer):
         member = self._member_for_param(param_name)
         return param.element_size() if member is None else member.param_element_size(model, param_name, param)
 
+    def get_quantize_ops(self):
+        from ..integrations.finegrained.host import MemberQuantize
+
+        return MemberQuantize(self)
+
     def get_new_dtype(self, converter, param, dtype):
-        # a converter runs the ops of the member that added it. One that serves several members needs them to agree.
-        quantizers = {getattr(op, "hf_quantizer", None) for op in getattr(converter, "operations", ())}
-        owners = [member for member in self.members if member in quantizers] or self.members
-        dtypes = {member.get_new_dtype(converter, param, dtype) for member in owners}
+        from ..integrations.finegrained.host import MemberDispatch
+
+        # a converter that members changed holds each member's version. The members must agree on the dtype.
+        dispatch = next((op for op in getattr(converter, "operations", ()) if isinstance(op, MemberDispatch)), None)
+        if dispatch is None:
+            asked = [(member, converter) for member in self.members]
+        else:
+            asked = [(member, version) for member, version in dispatch.conversions.items() if member is not None]
+        dtypes = {member.get_new_dtype(version, param, dtype) for member, version in asked}
         if len(dtypes) > 1:
             raise ValueError(f"The members of the dtype_plan load {converter.target_patterns} in different dtypes.")
         return dtypes.pop()
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         self._resolve_plan(model)
-        skipped = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
-        )
-        tables = self._embedding_tables(model)
+        # The fp32 modules and the model's default skips become `None` entries, so the plan alone says who owns a
+        # module. The fp32 modules always win. A default skip, such as a tied `lm_head`, yields to an entry naming it.
+        skipped = self.get_modules_to_not_convert(model, [], model._keep_in_fp32_modules)
+        targeted = [pattern for pattern, owner in self._plan.items() if pattern != ".*" and owner is not None]
+        defaults = get_keys_to_not_convert(model)
+        skipped += [name for name in defaults if not any(re.search(pattern, name) for pattern in targeted)]
+        self._plan.update(dict.fromkeys(map(skip_pattern, skipped)))
+        to_checkpoint = checkpoint_module_namer(model)
+        owners = {name: self.member_for(name) for name, _ in model.named_modules()}
         for member in self.members:
             own = [pattern for pattern, owner in self._plan.items() if owner is member]
             others = [pattern for pattern in self._plan if pattern not in own]
-            member.quantization_config.modules_to_not_convert = [*skipped, _skip_unowned(own, others)]
-            # every member knows every table. Only the owner's skip-list lets it convert one.
-            member.quantization_config.modules_to_convert = tables
+            # a skipped module takes its sub-tree with it, so a member never skips a parent of a module it owns
+            parents = {parent for name, owner in owners.items() if owner is member for parent in _parents(name)}
+            parents |= {to_checkpoint(parent) for parent in parents}
+            member.dtype_plan_skip = _skip_unowned(own, others, parents)
+            member.dtype_plan_targets = [pattern for pattern in own if pattern != ".*"]
+            before = {name: type(module) for name, module in model.named_modules()}
             member._process_model_before_weight_loading(model, **kwargs)
-
-    def _embedding_tables(self, model: "PreTrainedModel") -> list[str]:
-        """Return the embedding tables to quantize: the passed ones and the ones a targeted entry names.
-
-        A quantizer skips embeddings unless they are opted in. A passed table loads through the catch-all's member.
-        """
-        tables = list(self.quantization_config.modules_to_convert or [])
-        if tables and ".*" not in self._plan:
-            raise ValueError("`modules_to_convert` needs a `.*` entry in the `dtype_plan` to quantize its tables.")
-        named = [
-            name
-            for name, module in model.named_modules()
-            if isinstance(module, nn.Embedding) and plan_entry_for(self._plan, name, catch_all=False) is not None
-        ]
-        return tables + named
+            # a member that ignores `dtype_plan_skip` would take modules of other entries
+            for name, module in model.named_modules():
+                if name in before and type(module) is not before[name] and owners[name] is not member:
+                    raise ValueError(
+                        f"{type(member).__name__} converted {name!r}, which its `dtype_plan` entry does not cover. "
+                        "A member must build its skip-list with `get_modules_to_not_convert`."
+                    )
 
     def _resolve_plan(self, model: "PreTrainedModel"):
         """Add an entry by model name for each module a pattern matches by its checkpoint name.
@@ -167,6 +178,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
         """
         to_checkpoint = checkpoint_module_namer(model)
         plan = self._plan
+        targeted = [pattern for pattern in plan if pattern != ".*"]
         resolved = dict(plan)
         matched = set()
         for name, _ in model.named_modules():
@@ -174,16 +186,20 @@ class FineGrainedHfQuantizer(HfQuantizer):
             matched.update(
                 pattern for pattern in plan if re.search(pattern, name) or re.search(pattern, checkpoint_name)
             )
-            native = plan_entry_for(plan, name, catch_all=False)
+            if checkpoint_name == name or not any(re.search(pattern, checkpoint_name) for pattern in targeted):
+                continue
             source = plan_entry_for(plan, checkpoint_name, catch_all=False)
-            if native is not None and source is not None and native is not source:
-                raise ValueError(
-                    f"Conflicting quantization entries for {name!r} and checkpoint module {checkpoint_name!r}"
-                )
-            if source is not None and native is None:
-                resolved[rf"^{re.escape(name)}$"] = source
+            if any(re.search(pattern, name) for pattern in targeted):
+                if plan_entry_for(plan, name, catch_all=False) is not source:
+                    raise ValueError(
+                        f"Conflicting quantization entries for {name!r} and checkpoint module {checkpoint_name!r}"
+                    )
+                continue
+            resolved[rf"^{re.escape(name)}$"] = source
         for pattern, member in plan.items():
-            if getattr(member.quantization_config, "checkpoint_format", None) == "modelopt" and pattern not in matched:
+            if member is None or pattern in matched:
+                continue
+            if getattr(member.quantization_config, "checkpoint_format", None) == "modelopt":
                 raise ValueError(
                     f"ModelOpt target {pattern!r} matches no module. "
                     "Per-expert assignments cannot target an architecture that stores fused expert tensors."
@@ -198,37 +214,84 @@ class FineGrainedHfQuantizer(HfQuantizer):
     def update_weight_conversions(self, weight_conversions, model, **kwargs):
         # the base hook keeps the model's transforms for a dequantized save. The host has no names of its own.
         given = super().update_weight_conversions(weight_conversions, model)
-        before = set(map(id, _operations(given)))
-        conversions = given
-        for member in self.members:
-            conversions = member.update_weight_conversions(conversions, model, **kwargs)
-        return self._merge(given, before, conversions)
-
-    def _merge(self, given, before, conversions) -> list:
-        """Keep each conversion the members added to `given` once.
-
-        A conversion that serves several members routes its load ops through the host, which sends each tensor to its
-        own member. These are the chains several members add and the ops they add to the given conversions.
-        """
-        merged, shared = dedupe_conversions(conversions, keep=given)
-        shared_ops = _operations(shared)
-        shared_ops += [op for op in _operations(given) if id(op) not in before]
-        members = set(map(id, self.members))
-        for op in shared_ops:
-            if id(getattr(op, "hf_quantizer", None)) in members:
-                op.hf_quantizer = self
-        return merged
+        # each member updates its own copy, so the conversions it changes stay its own
+        versions = [member.update_weight_conversions(copy.deepcopy(given), model, **kwargs) for member in self.members]
+        return self._merge(given, versions)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
-        given = getattr(model, "_weight_conversions", None)
-        before = set(map(id, _operations(given or [])))
-        for member in self.members:
-            model = member._process_model_after_weight_loading(model, **kwargs)
-        if given is not None:
-            merged = self._merge(given, before, getattr(model, "_weight_conversions"))
+        used = getattr(model, "_weight_conversions", None)
+        if used is None:
+            for member in self.members:
+                model = member._process_model_after_weight_loading(model, **kwargs)
+            return model
+        # the loader keeps the conversions that matched a key. Each member gets its own version of those back.
+        given, versions = [], [[] for _ in self.members]
+        for conversion in used:
+            group = self._groups.get(id(conversion), {None: conversion})
+            if None in group:
+                given.append(group[None])
+            for own, member in zip(versions, self.members):
+                if (version := group.get(member, group.get(None))) is not None:
+                    own.append(version)
+        updated = []
+        for member, conversions in zip(self.members, versions):
             # a plain attribute, not the tensor or module `nn.Module.__setattr__` is typed for
-            setattr(model, "_weight_conversions", merged)
+            setattr(model, "_weight_conversions", copy.deepcopy(conversions))
+            model = member._process_model_after_weight_loading(model, **kwargs)
+            updated.append(getattr(model, "_weight_conversions", None) or [])
+        setattr(model, "_weight_conversions", self._merge(given, updated))
         return model
+
+    def _merge(self, given: list, versions: list[list]) -> list:
+        """Return one conversion per group of conversions that read the same keys.
+
+        `versions` holds each member's updated copy of `given`. A group whose versions agree and run only the model's
+        ops stays as it is. Otherwise one converter runs each module's tensors through the version of its member. A
+        member's own renamings come first, as each member puts them before the model's.
+        """
+        from ..core_model_loading import WeightConverter, WeightRenaming
+        from ..integrations.finegrained.host import MemberDispatch
+
+        groups, claimed = [], {}
+        for owner, conversions in [(None, given), *zip(self.members, versions)]:
+            for conversion in conversions:
+                group = next((claimed[p] for p in conversion.source_patterns if p in claimed), None)
+                if group is None:
+                    group = {}
+                    groups.append(group)
+                claimed.update(dict.fromkeys(conversion.source_patterns, group))
+                model_conversion = group.get(None)
+                if owner is None or model_conversion is None or _signature(conversion) != _signature(model_conversion):
+                    group[owner] = conversion
+        renamings, merged = [], []
+        for group in groups:
+            conversions = list(group.values())
+            quantizer_ops = [
+                op for c in conversions for op in getattr(c, "operations", ()) if hasattr(op, "hf_quantizer")
+            ]
+            if len({_signature(conversion) for conversion in conversions}) == 1 and not quantizer_ops:
+                # the members agree and run only the model's ops, e.g. a renaming they all add
+                plain = isinstance(conversions[0], WeightRenaming) and None not in group
+                (renamings if plain else merged).append(conversions[0])
+                continue
+            if any(not isinstance(conversion, WeightConverter) for conversion in conversions):
+                raise ValueError(f"Two quantizers rename {conversions[0].source_patterns} differently.")
+            if len({tuple(conversion.target_patterns) for conversion in conversions}) > 1:
+                raise ValueError(f"Two quantizers load {conversions[0].source_patterns} into different keys.")
+            # the patterns as passed, so the converter reverses like its versions on save
+            sources = list(
+                dict.fromkeys(p for conversion in conversions for p in conversion._original_source_patterns)
+            )
+            # a copy keeps the scope and the dequantized save of the model's conversion
+            converter = group.get(None, conversions[0]).copy(
+                sources,
+                conversions[0]._original_target_patterns,
+                operations=[MemberDispatch(self, group)],
+                force_cpu=any(conversion.force_cpu for conversion in conversions),
+            )
+            merged.append(converter)
+            self._groups[id(converter)] = group
+        return renamings + merged
 
     def postprocess_model(self, model, **kwargs):
         if not self.pre_quantized and self.quantization_config.dequantize:
@@ -249,19 +312,30 @@ class FineGrainedHfQuantizer(HfQuantizer):
         return all(member.is_compileable for member in self.members)
 
 
-def _operations(conversions) -> list:
-    return [op for conversion in conversions for op in getattr(conversion, "operations", ())]
+def _parents(name: str) -> list[str]:
+    """Return the names of the modules above `name`, e.g. `a` and `a.b` for `a.b.c`."""
+    parts = name.split(".")
+    return [".".join(parts[:end]) for end in range(1, len(parts))]
 
 
-def _skip_unowned(own: list[str], others: list[str]) -> str:
+def _skip_unowned(own: list[str], others: list[str], parents: set[str]) -> str:
     """Return a skip-list entry that matches every module a member with the `own` patterns does not own.
 
     Another entry's targeted pattern wins over a catch-all. A member without the catch-all owns only what its patterns
-    match.
+    match. The entry never matches one of `parents`, the modules above the ones the member owns.
     """
     unowned = []
     if targeted := [pattern for pattern in others if pattern != ".*"]:
         unowned.append(f"(?=.*(?:{'|'.join(targeted)}))")
     if ".*" not in own:
         unowned.append(f"(?!.*(?:{'|'.join(own)}))")
-    return f"(?:{'|'.join(unowned)}).*" if unowned else "(?!)"
+    if not unowned:
+        return "(?!)"
+    kept = f"(?!(?:{'|'.join(map(re.escape, sorted(parents)))})$)" if parents else ""
+    return f"{kept}(?:{'|'.join(unowned)}).*"
+
+
+def _signature(conversion) -> tuple:
+    """Return what a conversion does: the keys it reads, where they go and the ops they run through."""
+    operations = tuple(type(op).__name__ for op in getattr(conversion, "operations", ()))
+    return type(conversion), tuple(conversion.source_patterns), tuple(conversion.target_patterns), operations

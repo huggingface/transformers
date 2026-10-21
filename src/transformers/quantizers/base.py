@@ -87,10 +87,19 @@ class HfQuantizer(ABC):
             Whether a model loaded with `dequantize=True` saves like an unquantized model. The save then uses only
             the model's own conversions, not the quantizer's. It is off by default, so the other quantizers keep
             their current save.
+        dtype_plan_skip (`str`, *optional*):
+            Set by [`FineGrainedHfQuantizer`] on its members. It is a skip-list entry for every module outside this
+            quantizer's `dtype_plan` entries. `get_modules_to_not_convert` then returns it instead of the skip-list.
+        dtype_plan_targets (`list[str]`):
+            Set by [`FineGrainedHfQuantizer`] on its members. They are the patterns of this quantizer's entries that
+            name modules, so not the `".*"` catch-all. A quantizer that skips some modules by default, such as
+            embeddings, converts the ones they name.
     """
 
     requires_calibration = False
     dequantized_saves_unquantized = False
+    dtype_plan_skip: str | None = None
+    dtype_plan_targets: tuple[str, ...] = ()
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -271,13 +280,16 @@ class HfQuantizer(ABC):
             f"{self.quantization_config.quant_method} has no implementation of `dequantize`, please raise an issue on GitHub."
         )
 
-    @staticmethod
     def get_modules_to_not_convert(
+        self,
         model: "PreTrainedModel",
         skip_modules: list[str] | None = None,
         keep_in_fp32_modules: list[str] | None = None,
         add_default_skips: bool = False,
     ):
+        # A member of a `dtype_plan` skips what its entries do not cover. The plan already holds the other skips.
+        if self.dtype_plan_skip is not None:
+            skip_modules, add_default_skips = [self.dtype_plan_skip], False
         if skip_modules is None or add_default_skips:
             modules_to_not_convert = get_keys_to_not_convert(model)
         else:

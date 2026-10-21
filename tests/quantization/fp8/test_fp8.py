@@ -619,3 +619,31 @@ class Fp8TinyCheckpointTest(TinyCheckpointTesterMixin, TestCasePlus):
 
 class Fp8LoadPathEquivalenceTest(LoadPathEquivalenceTesterMixin, TestCasePlus):
     spec = FP8
+
+
+@require_torch
+class Fp8EmbeddingLoadTest(unittest.TestCase):
+    def test_an_fp8_table_returns_the_model_dtype(self):
+        """Check that a loaded FP8 table feeds a bf16 model bf16 rows. An fp32 scale would break the next linear."""
+        from safetensors.torch import save_file
+
+        from transformers import LlamaConfig, LlamaForCausalLM
+
+        config = LlamaConfig(
+            hidden_size=64, intermediate_size=64, num_hidden_layers=1, num_attention_heads=2, vocab_size=64
+        )
+        state_dict = LlamaForCausalLM(config).to(torch.bfloat16).state_dict()
+        table = state_dict["model.embed_tokens.weight"].float()
+        scale = table.abs().max() / 448
+        state_dict["model.embed_tokens.weight"] = (table / scale).to(torch.float8_e4m3fn)
+        state_dict["model.embed_tokens.weight_scale"] = scale.reshape(1)
+        state_dict.pop("lm_head.weight", None)
+        with tempfile.TemporaryDirectory() as path:
+            save_file({name: tensor.contiguous() for name, tensor in state_dict.items()}, f"{path}/model.safetensors")
+            # the FP8 dialect names the table with `modules_to_convert`. The reader turns it into a plan entry.
+            config.quantization_config = {**Fp8Config().to_dict(), "modules_to_convert": ["embed_tokens"]}
+            config.save_pretrained(path)
+            model = LlamaForCausalLM.from_pretrained(path, dtype=torch.bfloat16, device_map=torch_device)
+        ids = torch.tensor([[1, 2, 3]], device=model.device)
+        self.assertEqual(model.model.embed_tokens(ids).dtype, torch.bfloat16)
+        self.assertEqual(model(ids).logits.dtype, torch.bfloat16)

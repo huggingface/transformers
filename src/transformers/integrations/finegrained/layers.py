@@ -31,7 +31,7 @@ from ...activations import ACT2FN
 from ...quantizers.quantizers_utils import FUSED_STACKS
 from ...utils import logging
 from ...utils.import_utils import is_kernels_available
-from ...utils.quantization_config import BlockScaledConfig
+from ...utils.quantization_config import BlockScaledConfig, QuantizationMethod
 from ..deepgemm import (
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
@@ -244,20 +244,15 @@ def finegrained_linear(
     return output
 
 
-@functools.cache
-def supported_fused_norms() -> dict[type[nn.Module], str]:
-    """Map each post-expert norm class to the name of its fused kernel form.
+def fused_norm_kind(norm: nn.Module) -> str | None:
+    """Return the name of the fused kernel form of a post-expert norm, or `None` if it has none.
 
-    Match on the exact class, since a subclass may compute something else.
-    Build the map on first use, so importing this module does not import a model.
+    torch's `nn.RMSNorm` is `"rms_norm"`. A model's norm declares its form with a `fused_norm_kind` class attribute.
+    Only the norm's own class counts, since a subclass may compute something else.
     """
-    from ...models.muse_spark.modeling_muse_spark import MuseSparkTextInputScaledRMSNorm
-
-    return {
-        nn.RMSNorm: "rms_norm",
-        # Scales by `(1 + weight)` before the RMS norm and rounds to bf16 between the two steps
-        MuseSparkTextInputScaledRMSNorm: "input_scaled_rms_norm",
-    }
+    if type(norm) is nn.RMSNorm:
+        return "rms_norm"
+    return vars(type(norm)).get("fused_norm_kind")
 
 
 class _FineGrainedModule:
@@ -394,13 +389,14 @@ class FineGrainedEmbedding(_FineGrainedModule, nn.Embedding):
         *,
         quantization_config: BlockScaledConfig,
     ):
-        if quantization_config.method.value != "fp8" or quantization_config.weight_block_size is not None:
+        if quantization_config.method != QuantizationMethod.FP8 or quantization_config.weight_block_size is not None:
             raise ValueError("Fine-grained embeddings hold per-tensor FP8 tables.")
         weight = torch.empty(num_embeddings, embedding_dim, dtype=FP8_DTYPE)
         nn.Embedding.__init__(self, num_embeddings, embedding_dim, padding_idx, _weight=weight, _freeze=True)
         self.quantization_config = quantization_config
-        # `(1,)` and not a scalar, since checkpoints serialize per-tensor scales with that shape
-        self.weight_scale = nn.Parameter(torch.ones(1, dtype=torch.float32), requires_grad=False)
+        # `(1,)` and not a scalar, since checkpoints serialize per-tensor scales with that shape.
+        # It takes the model dtype, so a lookup returns the model's activation dtype.
+        self.weight_scale = nn.Parameter(torch.ones(1), requires_grad=False)
 
     @classmethod
     def from_module(
@@ -797,7 +793,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
 
         post_expert_norm, norm_eps = None, 1e-6
         if self.has_post_expert_norm:
-            norm_name = supported_fused_norms().get(type(self.post_expert_norm))
+            norm_name = fused_norm_kind(self.post_expert_norm)
             if norm_name in kernel.get_supported_norms():
                 post_expert_norm = norm_name
                 eps = getattr(self.post_expert_norm, "eps", getattr(self.post_expert_norm, "variance_epsilon", None))

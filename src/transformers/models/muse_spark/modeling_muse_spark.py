@@ -144,6 +144,9 @@ class MuseSparkTextCenteredRMSNorm(nn.Module):
 
 
 class MuseSparkTextInputScaledRMSNorm(nn.Module):
+    # The fine-grained experts kernels fuse this norm under that name
+    fused_norm_kind = "input_scaled_rms_norm"
+
     def __init__(self, dim: int, eps: float = 1e-6):
         super().__init__()
         self.eps = eps

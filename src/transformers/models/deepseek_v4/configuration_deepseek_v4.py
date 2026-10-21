@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
@@ -234,42 +232,6 @@ class DeepseekV4Config(PreTrainedConfig):
             if bad:
                 raise ValueError(f"`{name}` entries must be one of {allowed} for DeepSeek-V4; got {bad}.")
 
-    def adapt_quantization_config(self, quantization_config):
-        """Return the quantization config of a DeepSeek-V4 checkpoint.
-
-        The checkpoints ship `quant_method="fp8"` in DeepSeek's layout, with block scales named `scale`.
-        `expert_dtype="fp4"` marks MXFP4 experts. V4 sets it on the model config, V4.1 in the quantization config.
-        Such a checkpoint loads as block FP8 with W4A4 MXFP4 experts.
-        """
-        from ...quantizers.quantizers_utils import EXPERTS_PATTERN
-        from ...utils.quantization_config import FineGrainedConfig, Fp8Config, Mxfp4Config
-
-        if not isinstance(quantization_config, Fp8Config):
-            return quantization_config
-        # The Hub config (deepseek-ai/DeepSeek-V4-Flash) only says `fp8`.
-        # Only the model knows its scales are named `scale`.
-        if quantization_config.checkpoint_format is None:
-            quantization_config = copy.copy(quantization_config)
-            quantization_config.checkpoint_format = "deepseek"
-        shipped = getattr(self, "quantization_config", None)
-        expert_dtype = getattr(self, "expert_dtype", None) or (
-            shipped.get("expert_dtype") if isinstance(shipped, dict) else None
-        )
-        if expert_dtype != "fp4":
-            return quantization_config
-
-        # The loading options belong to the plan, not to its entries
-        dense = copy.copy(quantization_config)
-        dense.dequantize, dense.modules_to_not_convert, dense.modules_to_convert = False, None, None
-        # W4A4, as DeepSeek's reference inference runs the experts
-        experts = Mxfp4Config(activation_format="mxfp4", checkpoint_format=quantization_config.checkpoint_format)
-        return FineGrainedConfig(
-            dtype_plan={EXPERTS_PATTERN: experts, ".*": dense},
-            modules_to_not_convert=quantization_config.modules_to_not_convert,
-            modules_to_convert=quantization_config.modules_to_convert,
-            dequantize=quantization_config.dequantize,
-        )
-
     def __post_init__(self, **kwargs):
         # Strip legacy V4 kwargs (V3-flavoured names that older checkpoints still ship)
         # before the parent's strict-validated init sees them, then fold each into the
@@ -346,6 +308,15 @@ class DeepseekV4Config(PreTrainedConfig):
             if compress["rope_type"] == "yarn":
                 compress.setdefault("attention_factor", 1.0)
             self.rope_parameters = {"main": main, "compress": compress}
+
+        # The checkpoints name their block scales `scale`, and V4 marks its FP4 experts on the model config.
+        # Both describe the quantization, so they move into its config, where the `fp8` reader sees them.
+        quantization_config = getattr(self, "quantization_config", None)
+        if isinstance(quantization_config, dict) and quantization_config.get("quant_method") == "fp8":
+            moved = {"checkpoint_format": "deepseek"}
+            if getattr(self, "expert_dtype", None) is not None:
+                moved["expert_dtype"] = self.expert_dtype
+            self.quantization_config = {**moved, **quantization_config}
 
 
 __all__ = ["DeepseekV4Config"]

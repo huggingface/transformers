@@ -51,7 +51,9 @@ from ..utils.quantization_config import (
     TorchAoConfig,
     VptqConfig,
     read_compressed_tensors,
+    read_fp8,
     read_modelopt,
+    read_mxfp8,
 )
 from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
@@ -75,6 +77,7 @@ from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_metal import MetalHfQuantizer
 from .quantizer_mxfp4 import Mxfp4HfQuantizer
+from .quantizer_mxfp4_legacy import Mxfp4LegacyHfQuantizer, runs_on_legacy_kernels
 from .quantizer_mxfp8 import Mxfp8HfQuantizer
 from .quantizer_nvfp4 import NVFP4HfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
@@ -150,6 +153,8 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
 # Readers for checkpoints written by other tools, keyed by `quant_method`.
 # A reader returns the config the checkpoint describes, or `None` to fall back to the method's config class.
 AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
+    "fp8": read_fp8,
+    "mxfp8": read_mxfp8,
     "modelopt": read_modelopt,
     "compressed-tensors": read_compressed_tensors,
 }
@@ -249,6 +254,9 @@ class AutoHfQuantizer:
         # The deprecated config keeps its own frozen integration
         if isinstance(quantization_config, FineGrainedFP8Config):
             return FineGrainedFP8HfQuantizer(quantization_config, **kwargs)
+        # MXFP4 below compute capability 8.9 keeps main's integration
+        if isinstance(quantization_config, Mxfp4Config) and runs_on_legacy_kernels():
+            return Mxfp4LegacyHfQuantizer(quantization_config, **kwargs)
 
         quant_method = quantization_config.quant_method
 
@@ -298,13 +306,13 @@ class AutoHfQuantizer:
         quantization_config = _quantization_config_from_dict(quantization_config, quantization_config_from_args)
 
         if quantization_config_from_args is not None:
-            lender = quantization_config.loading_attributes_lender(quantization_config_from_args)
-            if lender is None:
+            source = quantization_config.loading_attributes_source(quantization_config_from_args)
+            if source is None:
                 raise ValueError(
                     f"The model is quantized with {quantization_config.__class__.__name__} but you are passing a {quantization_config_from_args.__class__.__name__} config. "
                     "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
                 )
-            quantization_config_from_args = lender
+            quantization_config_from_args = source
 
         if isinstance(quantization_config, LOADING_ATTRIBUTES_CONFIG_TYPES) and isinstance(
             quantization_config_from_args, LOADING_ATTRIBUTES_CONFIG_TYPES
@@ -312,7 +320,7 @@ class AutoHfQuantizer:
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 if attr == "dtype_plan" and isinstance(quantization_config, FineGrainedConfig):
-                    val = _with_activation_formats(quantization_config.dtype_plan, val, quantization_config.dequantize)
+                    val = _merged_plan(quantization_config.dtype_plan, val, quantization_config.dequantize)
                 elif attr == "activation_format" and not quantization_config.dequantize:
                     # A dequantized model runs no activation format.
                     # `dequantize` comes first in the loading attributes, so this reads the passed value.
@@ -396,16 +404,18 @@ def _reads_checkpoint_config(passed: QuantizationConfigMixin | None, checkpoint:
     return isinstance(passed, CHECKPOINT_READING_CONFIG_TYPES)
 
 
-def _with_activation_formats(dtype_plan: dict, passed_plan: dict, dequantize: bool) -> dict:
-    """Return `dtype_plan` with the activation formats of `passed_plan`.
+def _merged_plan(dtype_plan: dict, passed_plan: dict, dequantize: bool) -> dict:
+    """Return a checkpoint's `dtype_plan` with what a passed plan may change.
 
-    An entry takes the passed activation format when the passed entry has the same pattern and format.
-    The weights stay the same. Only the kernels they run on change.
-    A dequantized load runs no activation format, so it skips the checkpoint's checks.
+    A passed `None` entry joins the plan. A passed entry with the same pattern and format lends its activation format.
+    The weights keep the checkpoint's formats. Only the kernels they run on change. A dequantized load runs no
+    activation format, so it skips the checkpoint's checks.
     """
     merged = dict(dtype_plan)
     for pattern, entry in passed_plan.items():
-        if type(merged.get(pattern)) is type(entry):
+        if entry is None:
+            merged[pattern] = None
+        elif isinstance(entry, BlockScaledConfig) and type(merged.get(pattern)) is type(entry):
             if not dequantize:
                 merged[pattern]._check_activation_format(entry.activation_format)
             merged[pattern] = copy.copy(merged[pattern])
@@ -435,15 +445,11 @@ def get_hf_quantizer(config, quantization_config, device_map, weights_only, user
 
     if pre_quantized or quantization_config is not None:
         if pre_quantized:
-            # The adapt hook always gets a config object
-            quantization_params_from_config = _quantization_config_from_dict(
+            config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
                 quantization_params_from_config, quantization_config
             )
-            config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
-                config.adapt_quantization_config(quantization_params_from_config), quantization_config
-            )
         else:
-            config.quantization_config = config.adapt_quantization_config(quantization_config)
+            config.quantization_config = quantization_config
 
         hf_quantizer = AutoHfQuantizer.from_config(
             config.quantization_config,
