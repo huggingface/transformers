@@ -23,6 +23,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -246,6 +247,59 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         )
         result.loss.backward()
 
+    def test_gpt2_sdpa_matches_eager_with_scaling_configs(self):
+        """Test that SDPA and eager produce equivalent outputs when scaling configs differ from defaults.
+
+        Regression test for https://github.com/huggingface/transformers/issues/44380
+        """
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
+        config, input_ids, token_type_ids, _, _, _, _ = config_and_inputs
+        config.scale_attn_weights = False
+        config.scale_attn_by_inverse_layer_idx = True
+
+        model = GPT2LMHeadModel(config).to(torch_device).eval()
+
+        # Eager attention (known-correct reference)
+        model.set_attn_implementation("eager")
+        with torch.no_grad():
+            output_eager = model(input_ids, token_type_ids=token_type_ids).logits
+
+        # SDPA attention (was buggy: ignored scaling configs)
+        model.set_attn_implementation("sdpa")
+        with torch.no_grad():
+            output_sdpa = model(input_ids, token_type_ids=token_type_ids).logits
+
+        torch.testing.assert_close(output_eager, output_sdpa, atol=1e-4, rtol=1e-4)
+
+    @require_torch_gpu
+    @require_flash_attn
+    @pytest.mark.flash_attn_test
+    def test_gpt2_fa2_matches_eager_with_scaling_configs(self):
+        """Test that FlashAttention2 and eager produce equivalent outputs when scaling configs differ.
+
+        Regression test for https://github.com/huggingface/transformers/issues/44380
+        """
+        config_and_inputs = self.model_tester.prepare_config_and_inputs(scale_attn_by_inverse_layer_idx=True)
+        config, input_ids, token_type_ids, _, _, _, _ = config_and_inputs
+        config.scale_attn_weights = False
+        config.scale_attn_by_inverse_layer_idx = True
+
+        model = GPT2LMHeadModel(config).to(torch_device).eval().to(torch.float16)
+        input_ids = input_ids.to(torch_device)
+        token_type_ids = token_type_ids.to(torch_device)
+
+        # Eager attention (known-correct reference)
+        model.set_attn_implementation("eager")
+        with torch.no_grad():
+            output_eager = model(input_ids, token_type_ids=token_type_ids).logits
+
+        # Flash Attention 2 (was buggy: ignored scaling configs)
+        model.set_attn_implementation("flash_attention_2")
+        with torch.no_grad():
+            output_fa2 = model(input_ids, token_type_ids=token_type_ids).logits
+
+        torch.testing.assert_close(output_eager, output_fa2, atol=1e-2, rtol=1e-2)
+
     def test_gpt2_reorder_and_upcast_attn(self):
         # extra test: model-specific flag
         config_and_inputs = self.model_tester.prepare_config_and_inputs(reorder_and_upcast_attn=True)
@@ -260,6 +314,39 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
             (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.vocab_size),
         )
         result.loss.backward()
+
+    def test_cross_attention_respects_encoder_padding_mask(self):
+        torch.manual_seed(0)
+        config, input_ids, _, _, _, _, _, encoder_hidden_states, encoder_attention_mask = (
+            self.model_tester.prepare_config_and_inputs_for_decoder()
+        )
+        config.add_cross_attention = True
+        model = GPT2Model(config).to(device=torch_device).eval()
+
+        # Mark the second half of encoder sequence as padding
+        padding = encoder_attention_mask.shape[1] // 2
+        encoder_attention_mask = encoder_attention_mask.clone()
+        encoder_attention_mask[:, padding:] = 0
+
+        # Fill the padded encoder positions with garbage
+        corrupted_encoder_states = encoder_hidden_states.clone()
+        corrupted_encoder_states[:, padding:] = 1e6
+
+        # Corrupted encoder states should be ignored via mask
+        with torch.no_grad():
+            output = model(
+                input_ids=input_ids,
+                encoder_hidden_states=encoder_hidden_states,
+                encoder_attention_mask=encoder_attention_mask,
+            ).last_hidden_state
+
+            output_corrupted = model(
+                input_ids=input_ids,
+                encoder_hidden_states=corrupted_encoder_states,
+                encoder_attention_mask=encoder_attention_mask,
+            ).last_hidden_state
+
+        self.assertTrue(torch.equal(output, output_corrupted))
 
     def test_training_gradient_checkpointing(self):
         # overwritten: GPT2DoubleHeadsModel fails this test, non-standard class
@@ -359,6 +446,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
                 ("rocm", (9, 5)): "Today is a nice day and if you don't know anything about the state of play during your holiday",
                 ("cuda", None): "Today is a nice day and if you don't know anything about the state of play during your holiday",
                 ("xpu", 3): "Today is a nice day and if you don't know anything about the state of play during your holiday",
+                ("tpu", None): 'Today is a nice day and I think everyone gets on well with the sun. No need to be',
             }
         )  # fmt: skip
         EXPECTED_OUTPUT = expected_outputs.get_expectation()
@@ -403,7 +491,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
                     "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
                 ],
                 ("rocm", (9, 4)): [
-                    '<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was also a member of the group, said: "We are very happy to have been',
+                    "<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was born in the city of Kolkata, was a member of the Kolkata",
                     "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
                 ],
             }

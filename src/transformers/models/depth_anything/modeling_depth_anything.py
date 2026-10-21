@@ -314,8 +314,6 @@ class DepthAnythingDepthEstimationHead(nn.Module):
     """
 )
 class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
-    _no_split_modules = ["DPTViTEmbeddings"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -337,16 +335,13 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor] | DepthEstimatorOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -378,7 +373,7 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

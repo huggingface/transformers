@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 
 from transformers import CLIPSegConfig, CLIPSegProcessor, CLIPSegTextConfig, CLIPSegVisionConfig
 from transformers.testing_utils import (
@@ -31,6 +30,7 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -143,7 +143,7 @@ class CLIPSegVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = CLIPSegVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=CLIPSegVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=CLIPSegVisionConfig, has_text_modality=False, hidden_size=36
         )
 
     def test_config(self):
@@ -294,7 +294,7 @@ class CLIPSegTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = CLIPSegTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CLIPSegTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=CLIPSegTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -414,6 +414,7 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    additional_model_inputs = ["pixel_values"]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # CLIPSegForImageSegmentation requires special treatment
@@ -443,6 +444,10 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_model_for_image_segmentation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_for_image_segmentation(*config_and_inputs)
+
+    @unittest.skip(reason="ClipSeg can;t compile due to the decoder module")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -524,8 +529,8 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    image = load_test_image(url)
     return image
 
 

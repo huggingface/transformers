@@ -42,6 +42,15 @@ from dataclasses import dataclass
 PATH_TO_TRANSFORMERS = "src/transformers/models"
 
 
+CHECKER_CONFIG = {
+    "name": "decorator_return_types",
+    "label": "Decorator return types",
+    "cache_globs": ["src/transformers/models/**/*.py"],
+    "check_args": [],
+    "fix_args": ["--fix_and_overwrite"],
+}
+
+
 TARGET_DECORATORS = {"can_return_tuple", "capture_outputs"}
 
 
@@ -235,6 +244,9 @@ def check_decorator_return_types(overwrite: bool = False):
         with open(file_path, "r", encoding="utf-8") as f:
             source = f.read()
 
+        if overwrite and "This file was automatically generated from" in "\n".join(source.splitlines()[:5]):
+            continue
+
         try:
             tree = ast.parse(source, filename=file_path, type_comments=True)
         except SyntaxError as e:
@@ -252,7 +264,11 @@ def check_decorator_return_types(overwrite: bool = False):
             # We skip these as this happens sometimes in modular files with methods that inherit their return
             # type from another architecture. Then they'll have no explicit return type, but we'll test via
             # the generated modeling file instead.
-            if _is_delegating_to_super(func_node):
+            if (
+                "modular_" in os.path.basename(file_path)
+                and _is_none_annotation(func_node.returns)
+                and _is_delegating_to_super(func_node)
+            ):
                 continue
 
             returns = func_node.returns
@@ -300,8 +316,13 @@ def check_decorator_return_types(overwrite: bool = False):
 
                 line_offsets = _compute_line_offsets(source)
                 try:
-                    start = line_offsets[returns.lineno - 1] + returns.col_offset
-                    end = line_offsets[returns.end_lineno - 1] + returns.end_col_offset
+                    lines = source.splitlines(keepends=True)
+                    start = line_offsets[returns.lineno - 1] + len(
+                        lines[returns.lineno - 1].encode("utf-8")[: returns.col_offset].decode("utf-8")
+                    )
+                    end = line_offsets[returns.end_lineno - 1] + len(
+                        lines[returns.end_lineno - 1].encode("utf-8")[: returns.end_col_offset].decode("utf-8")
+                    )
                 except IndexError:
                     unfixable_violations.append(v)
                     continue

@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
+from parameterized import parameterized
 
 from transformers import Owlv2Config, Owlv2TextConfig, Owlv2VisionConfig
 from transformers.testing_utils import (
@@ -32,7 +32,9 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
@@ -49,9 +51,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
-
-    from transformers import OwlViTImageProcessor, OwlViTProcessor
+    from transformers import OwlViTImageProcessorPil, OwlViTProcessor
 
 
 # Copied from tests.models.owlvit.test_modeling_owlvit.OwlViTVisionModelTester with OwlViT->Owlv2
@@ -147,7 +147,7 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = Owlv2VisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=Owlv2VisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=Owlv2VisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -302,7 +302,7 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Owlv2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Owlv2TextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Owlv2TextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -414,6 +414,8 @@ class Owlv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    additional_model_inputs = ["pixel_values"]
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = Owlv2ModelTester(self)
@@ -539,6 +541,8 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
 
+    additional_model_inputs = ["pixel_values", "attention_mask"]
+
     def setUp(self):
         self.model_tester = Owlv2ForObjectDetectionTester(self)
 
@@ -549,6 +553,10 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(self, *args):
+        self.skipTest("Owlv2ObjectDetectionOutput has no top-level hidden_states; SDPA tested in sub-models")
 
     @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
     def test_inputs_embeds(self):
@@ -591,8 +599,8 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    im = load_test_image(url)
     return im
 
 
@@ -603,7 +611,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2Model.from_pretrained(model_name).to(torch_device)
-        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessorPil.from_pretrained(model_name)
         processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
@@ -635,7 +643,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference_interpolate_pos_encoding(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2Model.from_pretrained(model_name).to(torch_device)
-        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessorPil.from_pretrained(model_name)
         processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
         processor.image_processor.size = {"height": 1024, "width": 1024}
 
@@ -699,7 +707,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
 
         # Deactivate interpolate_pos_encoding on same model, and use default image size.
         # Verify the dynamic change caused by the activation/deactivation of interpolate_pos_encoding of variables: self.sqrt_num_patches, self.box_bias from (OwlViTForObjectDetection).
-        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessorPil.from_pretrained(model_name)
         processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
@@ -775,7 +783,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference_object_detection(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name).to(torch_device)
-        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessorPil.from_pretrained(model_name)
         processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
@@ -825,7 +833,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
     def test_inference_one_shot_object_detection(self):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name).to(torch_device)
-        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessorPil.from_pretrained(model_name)
         processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()
@@ -849,6 +857,9 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
         torch.testing.assert_close(outputs.target_pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
 
+        expected_slice_logits = torch.tensor([[-24.8582], [-20.6109], [-25.1590]]).to(torch_device)
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice_logits, rtol=1e-3, atol=1e-3)
+
     @slow
     @require_torch_accelerator
     @require_torch_fp16
@@ -856,7 +867,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         model_name = "google/owlv2-base-patch16"
         model = Owlv2ForObjectDetection.from_pretrained(model_name, dtype=torch.float16).to(torch_device)
 
-        image_processor = OwlViTImageProcessor.from_pretrained(model_name)
+        image_processor = OwlViTImageProcessorPil.from_pretrained(model_name)
         processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
 
         image = prepare_img()

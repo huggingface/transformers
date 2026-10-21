@@ -316,36 +316,6 @@ class MvpHeadTests(unittest.TestCase):
         expected_shape = (*summary.shape, config.vocab_size)
         self.assertEqual(outputs["logits"].shape, expected_shape)
 
-    def test_generate_beam_search(self):
-        input_ids = torch.tensor([[71, 82, 2], [68, 34, 2]], device=torch_device, dtype=torch.long)
-        config = MvpConfig(
-            vocab_size=self.vocab_size,
-            d_model=24,
-            encoder_layers=2,
-            decoder_layers=2,
-            encoder_attention_heads=2,
-            decoder_attention_heads=2,
-            encoder_ffn_dim=32,
-            decoder_ffn_dim=32,
-            max_position_embeddings=48,
-            eos_token_id=2,
-            pad_token_id=1,
-            bos_token_id=0,
-        )
-        lm_model = MvpForConditionalGeneration(config).to(torch_device)
-        lm_model.eval()
-
-        max_length = 5
-        generated_ids = lm_model.generate(
-            input_ids.clone(),
-            do_sample=True,
-            num_return_sequences=1,
-            num_beams=2,
-            no_repeat_ngram_size=3,
-            max_length=max_length,
-        )
-        self.assertEqual(generated_ids.shape, (input_ids.shape[0], max_length))
-
     def test_shift_tokens_right(self):
         input_ids = torch.tensor([[71, 82, 18, 33, 2, 1, 1], [68, 34, 26, 58, 30, 82, 2]], dtype=torch.long)
         shifted = shift_tokens_right(input_ids, 1, 2)

@@ -1,0 +1,127 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import unittest
+
+import numpy as np
+
+from transformers import is_torch_available, is_vision_available
+from transformers.testing_utils import require_torch, require_vision
+
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
+
+
+if is_vision_available():
+    from PIL import Image
+
+
+if is_torch_available():
+    import torch
+
+
+class SLANeXtImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("min_resolution", 10)
+
+        # Image processor init kwargs
+        kwargs.setdefault("size", {"height": 512, "width": 512})
+        kwargs.setdefault("do_pad", True)
+
+        super().__init__(**kwargs)
+
+    def get_expected_value(self, image_inputs):
+        image = image_inputs[0]
+
+        if isinstance(image, Image.Image):
+            width, height = image.size
+        elif isinstance(image, np.ndarray):
+            height, width = image.shape[0], image.shape[1]
+        else:
+            height, width = image.shape[1], image.shape[2]
+
+        target_size = max(self.size["height"], self.size["width"])
+        scale = target_size / max(height, width)
+        resize_height = round(height * scale)
+        resize_width = round(width * scale)
+
+        if self.do_pad:
+            pad_height = max(target_size, resize_height)
+            pad_width = max(target_size, resize_width)
+            return pad_height, pad_width
+
+        return resize_height, resize_width
+
+    def expected_output_image_shape(self, images):
+        height, width = self.get_expected_value(images)
+        return self.num_channels, height, width
+
+
+@require_torch
+@require_vision
+class SLANeXtImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processor_tester_class = SLANeXtImageProcessingTester
+
+    # SLANeXt resizes images adaptively based on aspect ratio, leading to inconsistent output sizes across a batch.
+    # Override to skip batched input tests.
+    def test_call_pytorch(self):
+        for image_processing_class in self.image_processing_classes.values():
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PyTorch tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+
+            for image in image_inputs:
+                self.assertIsInstance(image, torch.Tensor)
+
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+    # SLANeXt resizes images adaptively based on aspect ratio, leading to inconsistent output sizes across a batch.
+    # Override to skip batched input tests.
+    def test_call_numpy(self):
+        for image_processing_class in self.image_processing_classes.values():
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random numpy tensors
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+            for image in image_inputs:
+                self.assertIsInstance(image, np.ndarray)
+
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+    # SLANeXt resizes images adaptively based on aspect ratio, leading to inconsistent output sizes across a batch.
+    # Override to skip batched input tests.
+    def test_call_pil(self):
+        for image_processing_class in self.image_processing_classes.values():
+            # Initialize image_processing
+            image_processing = image_processing_class(**self.image_processor_dict)
+            # create random PIL images
+            image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=False)
+            for image in image_inputs:
+                self.assertIsInstance(image, Image.Image)
+
+            # Test not batched input
+            encoded_images = image_processing(image_inputs[0], return_tensors="pt").pixel_values
+            expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
+            self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
+    @unittest.skip(reason="SLANeXtImageProcessorFast does not support 4 channel images yet")
+    def test_call_numpy_4_channels(self):
+        pass

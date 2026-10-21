@@ -14,10 +14,10 @@
 # limitations under the License.
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -25,11 +25,16 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..granite.modeling_granite import GraniteRMSNorm, GraniteRotaryEmbedding
-from ..jetmoe.modeling_jetmoe import JetMoeParallelExperts, JetMoeTopKGating
 from ..llama.modeling_llama import LlamaAttention, LlamaPreTrainedModel
-from ..mixtral.modeling_mixtral import MixtralDecoderLayer, MixtralForCausalLM, MixtralModel, load_balancing_loss_func
+from ..mixtral.modeling_mixtral import (
+    MixtralDecoderLayer,
+    MixtralExperts,
+    MixtralForCausalLM,
+    MixtralModel,
+    load_balancing_loss_func,
+)
 from .configuration_granitemoe import GraniteMoeConfig
 
 
@@ -41,55 +46,47 @@ class GraniteMoeRotaryEmbedding(GraniteRotaryEmbedding):
     pass
 
 
-class GraniteMoeParallelExperts(JetMoeParallelExperts):
-    pass
+class GraniteMoeTopKRouter(nn.Module):
+    """Top-k gating that returns the routing decisions without grouping tokens by expert.
 
-
-class GraniteMoeTopKGating(JetMoeTopKGating):
-    pass
-
-
-class GraniteMoeMoE(nn.Module):
-    """
-    A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
-
-    Args:
-        config:
-            Configuration object with model hyperparameters.
+    Returns ``(router_logits, top_k_weights, top_k_index)``; the grouping/scattering used to live
+    here (via ``expert_size.tolist()``, which broke fullgraph compile) and now happens inside the
+    experts forward via ``use_experts_implementation`` so the default ``grouped_mm`` / ``batched_mm``
+    paths can compile cleanly.
     """
 
     def __init__(self, config: GraniteMoeConfig):
         super().__init__()
+        self.num_experts = config.num_local_experts
+        self.top_k = config.num_experts_per_tok
+        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
 
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
+        top_k_logits, top_k_index = router_logits.topk(self.top_k, dim=-1)  # (num_tokens, top_k)
+        top_k_weights = torch.softmax(top_k_logits, dim=-1).type_as(hidden_states)  # (num_tokens, top_k)
+        return router_logits, top_k_weights, top_k_index
+
+
+class GraniteMoeExperts(MixtralExperts):
+    pass
+
+
+class GraniteMoeMoE(nn.Module):
+    """Sparsely-gated mixture-of-experts block: router decides, experts compute."""
+
+    def __init__(self, config: GraniteMoeConfig):
+        super().__init__()
         self.input_size = config.hidden_size
-        self.hidden_size = config.intermediate_size
-        self.activation = ACT2FN[config.hidden_act]
-        self.input_linear = GraniteMoeParallelExperts(config.num_local_experts, self.input_size, self.hidden_size * 2)
-        self.output_linear = GraniteMoeParallelExperts(config.num_local_experts, self.hidden_size, self.input_size)
+        self.router = GraniteMoeTopKRouter(config)
+        self.experts = GraniteMoeExperts(config)
 
-        self.router = GraniteMoeTopKGating(
-            input_size=self.input_size,
-            num_experts=config.num_local_experts,
-            top_k=config.num_experts_per_tok,
-        )
-
-    def forward(self, layer_input):
+    def forward(self, layer_input: torch.Tensor) -> torch.Tensor:
         bsz, length, emb_size = layer_input.size()
-        layer_input = layer_input.reshape(-1, emb_size)
-        _, batch_index, batch_gates, expert_size, _ = self.router(layer_input)
-
-        expert_inputs = layer_input[batch_index]
-        hidden_states = self.input_linear(expert_inputs, expert_size)
-        chunked_hidden_states = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
-        expert_outputs = self.output_linear(hidden_states, expert_size)
-
-        expert_outputs = expert_outputs * batch_gates[:, None]
-
-        zeros = torch.zeros((bsz * length, self.input_size), dtype=expert_outputs.dtype, device=expert_outputs.device)
-        layer_output = zeros.index_add(0, batch_index, expert_outputs)
-        layer_output = layer_output.view(bsz, length, self.input_size)
-        return layer_output
+        hidden_states = layer_input.reshape(-1, emb_size)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
+        layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
+        return layer_output.view(bsz, length, self.input_size)
 
 
 class GraniteMoeAttention(LlamaAttention):
@@ -106,7 +103,6 @@ class GraniteMoeDecoderLayer(MixtralDecoderLayer):
         self.input_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         del self.mlp
-        self.block_sparse_moe = GraniteMoeMoE(config)
         self.residual_multiplier = config.residual_multiplier  # Only diff with mixtral!
 
     def forward(
@@ -114,7 +110,6 @@ class GraniteMoeDecoderLayer(MixtralDecoderLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
@@ -124,7 +119,6 @@ class GraniteMoeDecoderLayer(MixtralDecoderLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             position_embeddings=position_embeddings,
             **kwargs,
         )
@@ -145,12 +139,20 @@ class GraniteMoePreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _can_compile_fullgraph = False  # TopK gating fails fullgraph compilation at "expert_size = expert_size.tolist()"
+    _can_compile_fullgraph = True
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(GraniteMoeTopKRouter, index=0),
+        "hidden_states": GraniteMoeDecoderLayer,
+        "attentions": GraniteMoeAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, GraniteMoeParallelExperts):
+        if isinstance(module, GraniteMoeExperts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, GraniteMoeTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
@@ -175,7 +177,6 @@ class GraniteMoeModel(MixtralModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -187,19 +188,15 @@ class GraniteMoeModel(MixtralModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(  # ONLY DIFF WITH MIXTRAL: NO SLIDING
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -217,7 +214,6 @@ class GraniteMoeModel(MixtralModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -246,16 +242,10 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         output_router_logits: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> MoeCausalLMOutputWithPast:
+    ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -282,7 +272,7 @@ class GraniteMoeForCausalLM(MixtralForCausalLM):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
+            output_router_logits=output_router_logits,
             **kwargs,
         )
 

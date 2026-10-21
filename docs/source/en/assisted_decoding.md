@@ -8,7 +8,7 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -141,6 +141,101 @@ outputs = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ```
 
+## Multi-token prediction (MTP) layer
+
+Multi-token prediction (MTP) layer drafts candidate tokens with extra prediction layers that come from the main model's own checkpoint. The MTP layers reuse the main model's embeddings and output head. Every MTP layer drafts one token, so the number of candidates per step matches the checkpoint's MTP layer count. The main model verifies the drafts in one forward pass.
+
+MTP works only with checkpoints trained with MTP layers, such as [DeepSeek-V3](https://huggingface.co/deepseek-ai/DeepSeek-V3) and [GLM-4.5](https://huggingface.co/zai-org/GLM-4.5). These checkpoints carry MTP weights and set `num_mtp_layers` in their config, listed as `num_nextn_predict_layers` in `config.json`.
+
+Pass `use_mtp=True` to [`~GenerationMixin.generate`], which raises an error if the model has no MTP layers. Like speculative decoding, MTP supports greedy search and sampling but not batched inputs.
+
+Here, MTP refers to prediction layers included in the target checkpoint, as in DeepSeek-V3 and GLM-4.5. Gemma 4 uses a separate assistant checkpoint for MTP decoding. Pass it as `assistant_model` (see [Multi-token prediction drafter](#multi-token-prediction-drafter)).
+
+The `text-generation` pipeline and [`~GenerationMixin.generate`] both accept `use_mtp=True`.
+
+```py
+from transformers import pipeline
+
+pipe = pipeline(
+    "text-generation",
+    model="zai-org/GLM-4.5-Air",
+    device_map="auto",
+)
+
+outputs = pipe(
+    "Hugging Face is an open-source company",
+    use_mtp=True,
+    do_sample=False,
+    max_new_tokens=50,
+    add_special_tokens=True,
+    return_full_text=True,
+)
+
+[output["generated_text"] for output in outputs]
+```
+
+Alternatively you can infer as follows.
+
+```py
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5-Air")
+model = AutoModelForCausalLM.from_pretrained("zai-org/GLM-4.5-Air", device_map="auto")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt").to(model.device)
+
+outputs = model.generate(**inputs, use_mtp=True, do_sample=False, max_new_tokens=50)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+```
+
+## Multi-token prediction drafter
+
+An MTP drafter is a lightweight assistant model loaded from a separate checkpoint. It proposes candidate tokens for the target model to verify. The drafter uses the target model's input embeddings and attends to its KV cache. It starts from the target model's hidden states, then drafts tokens autoregressively. For each next token, it feeds its projected hidden state back into the drafter. The target model verifies the drafted tokens in one forward pass, as in speculative deocding.
+
+Unlike MTP layers, which are part of the target checkpoint and share its output head, an MTP drafter is a separate assistant model. It uses the target's input embeddings and KV cache to propose tokens.
+
+
+```py
+from transformers import AutoProcessor, AutoModelForCausalLM
+
+processor = AutoProcessor.from_pretrained("google/gemma-4-E4B-it")
+target_model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-4-E4B-it",
+    dtype="auto",
+    device_map="auto",
+
+)
+
+assistant_model = AutoModelForCausalLM.from_pretrained(
+    "google/gemma-4-E4B-it-assistant",
+    dtype="auto",
+    device_map="auto",
+)
+
+messages = [
+    {"role": "system", "content": "You are a helpful assistant."},
+    {"role": "user", "content": "Write a short joke about saving RAM."},
+]
+
+inputs = processor.apply_chat_template(
+    messages,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+    add_generation_prompt=True,
+    enable_thinking=False
+).to(target_model.device)
+input_len = inputs["input_ids"].shape[-1]
+
+outputs = target_model.generate(
+    **inputs,
+    assistant_model=assistant_model,
+    max_new_tokens=256,
+)
+response = processor.decode(outputs[0][input_len:], skip_special_tokens=False)
+
+processor.parse_response(response)
+```
+
 ## Universal assisted decoding
 
 Universal assisted decoding (UAD) makes speculative decoding possible even when the main and assistant models have different tokenizers. It lets you pair any small assistant model with the main model. Candidate tokens are re-encoded and the algorithm computes the longest common subsequence so the continuation stays aligned.
@@ -161,6 +256,25 @@ outputs = model.generate(**inputs, assistant_model=assistant_model, tokenizer=to
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
 'Hugging Face is an open-source company that is dedicated to creating a better world through technology.'
 ```
+
+### Static ensemble verification
+
+Standard speculative decoding is *lossless* — it guarantees the output distribution matches the target model exactly. [Static ensemble verification](https://arxiv.org/abs/2604.07622) relaxes this by verifying against a mixture of the target and draft distributions, increasing the acceptance rate (faster inference) at the cost of making the output distribution a mixture rather than the exact target distribution. A recommended starting value is `0.7`.
+
+```python
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM-1.7B")
+model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-1.7B", dtype="auto")
+assistant_model = AutoModelForCausalLM.from_pretrained("HuggingFaceTB/SmolLM-135M", dtype="auto")
+inputs = tokenizer("Hugging Face is an open-source company", return_tensors="pt")
+
+outputs = model.generate(**inputs, assistant_model=assistant_model, assistant_ensemble_weight=0.7, do_sample=True)
+tokenizer.batch_decode(outputs, skip_special_tokens=True)
+```
+
+This requires candidate logits from the assistant model and is not supported with prompt lookup decoding.
 
 ## Resources
 

@@ -20,7 +20,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime
-from functools import lru_cache
+from functools import lru_cache, partial
 from inspect import isfunction
 from typing import Any, Literal, Union, get_args, get_origin, get_type_hints, no_type_check
 
@@ -36,6 +36,7 @@ if is_jinja_available():
     import jinja2
     import jinja2.exceptions
     import jinja2.ext
+    import jinja2.meta
     import jinja2.nodes
     import jinja2.runtime
     from jinja2.ext import Extension
@@ -46,11 +47,11 @@ else:
 if is_vision_available():
     from PIL.Image import Image
 
-if is_torch_available():
-    from torch import Tensor
-
-
 ChatType = list[dict[str, Any]]
+
+# Private-use characters that `mark_control_tokens` wraps around control tokens in user input
+_CONTROL_TOKEN_START = "\U000f0000"
+_CONTROL_TOKEN_END = "\U000f0001"
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
@@ -87,12 +88,17 @@ def _get_json_schema_type(param_type: type) -> dict[str, str]:
         str: {"type": "string"},
         bool: {"type": "boolean"},
         type(None): {"type": "null"},
+        list: {"type": "array"},
+        tuple: {"type": "array"},
+        dict: {"type": "object"},
         Any: {},
     }
     if is_vision_available():
         type_mapping[Image] = {"type": "image"}
     if is_torch_available():
-        type_mapping[Tensor] = {"type": "audio"}
+        import torch
+
+        type_mapping[torch.Tensor] = {"type": "audio"}
     return type_mapping.get(param_type, {"type": "object"})
 
 
@@ -114,9 +120,12 @@ def _parse_type_hint(hint: str) -> dict:
         if len(subtypes) == 1:
             # A single non-null type can be expressed directly
             return_dict = subtypes[0]
-        elif all(isinstance(subtype["type"], str) for subtype in subtypes):
-            # A union of basic types can be expressed as a list in the schema
-            return_dict = {"type": sorted([subtype["type"] for subtype in subtypes])}
+        elif all(subtype.keys() == {"type"} and isinstance(subtype["type"], str) for subtype in subtypes):
+            # A union of basic types can be expressed as a list in the schema. Subtypes carrying extra keys
+            # (`items`, `enum`, `prefixItems`, ...) must go through `anyOf` so that information is not lost
+            # Duplicates are dropped, since different hints (e.g. `list | tuple`) can map to the same type
+            subtype_names = sorted({subtype["type"] for subtype in subtypes})
+            return_dict = {"type": subtype_names[0] if len(subtype_names) == 1 else subtype_names}
         else:
             # A union of more complex types requires "anyOf"
             return_dict = {"anyOf": subtypes}
@@ -372,7 +381,7 @@ def get_json_schema(func: Callable) -> dict:
         desc = param_descriptions[arg]
         enum_choices = re.search(r"\(choices:\s*(.*?)\)\s*$", desc, flags=re.IGNORECASE)
         if enum_choices:
-            schema["enum"] = [c.strip() for c in json.loads(enum_choices.group(1))]
+            schema["enum"] = [c.strip() if isinstance(c, str) else c for c in json.loads(enum_choices.group(1))]
             desc = enum_choices.string[: enum_choices.start()].strip()
         schema["description"] = desc
 
@@ -380,6 +389,122 @@ def get_json_schema(func: Callable) -> dict:
     if return_dict is not None:
         output["return"] = return_dict
     return {"type": "function", "function": output}
+
+
+@lru_cache
+@no_type_check
+def _get_template_variables(chat_template: str | None) -> frozenset[str]:
+    """Return the set of undeclared variables referenced by a chat template.
+
+    Uses ``jinja2.meta.find_undeclared_variables`` so that callers can
+    automatically distinguish template-level kwargs from processor kwargs
+    without maintaining a manual allowlist. Needed only to support BC as we
+    allowed all `kwargs` to be merged into one in the past
+    """
+    if chat_template is None:
+        return frozenset()
+    compiled = _compile_jinja_template(chat_template)
+    ast = compiled.environment.parse(chat_template)
+    return frozenset(jinja2.meta.find_undeclared_variables(ast))
+
+
+@lru_cache
+@no_type_check
+def _get_template_literal_text(chat_template: str) -> str:
+    """
+    Return the literal strings in a chat template (its raw template text, plus every string constant), joined with null
+    characters so that a substring search can't match across two of them.
+
+    Added tokens found in this text are treated as control tokens by `sanitize_control_tokens`. This misses tokens that
+    the template builds from pieces, like Phi-4-mini's `'<|' + message['role'] + '|>'`. Special tokens are always
+    control tokens, so only non-special tokens can be missed, and tokenizers whose templates build them should list
+    their control tokens in `tokenizer.chat_control_tokens` instead.
+    """
+    compiled = _compile_jinja_template(chat_template)
+    ast = compiled.environment.parse(chat_template)
+    literals = {node.data for node in ast.find_all(jinja2.nodes.TemplateData)}
+    literals |= {node.value for node in ast.find_all(jinja2.nodes.Const) if isinstance(node.value, str)}
+    return "\0".join(literals)
+
+
+@lru_cache
+def _get_control_token_patterns(control_tokens: tuple[str, ...]) -> tuple[re.Pattern, re.Pattern]:
+    """
+    Return a regex that matches any of `control_tokens`, and a regex that matches a control token wrapped in the markers
+    added by `mark_control_tokens`, or a lone marker. Longer tokens are matched first, so a token takes priority over
+    the tokens it contains.
+    """
+    longest_first = sorted(control_tokens, key=len, reverse=True)
+    control_tokens_re = re.compile("|".join(map(re.escape, longest_first)) or "(?!)")  # (?!) never matches
+    start, end = _CONTROL_TOKEN_START, _CONTROL_TOKEN_END
+    markers_re = re.compile(f"{start}({control_tokens_re.pattern}){end}|[{start}{end}]")
+    return control_tokens_re, markers_re
+
+
+def mark_control_tokens(obj: Any, control_tokens_re: re.Pattern) -> Any:
+    """
+    Wrap the control tokens in user-supplied strings with private-use markers, so that `encode_marked_chat` can tell
+    them apart from the control tokens the chat template writes itself.
+
+    Args:
+        obj: A string, or a list or dict (like messages, tools or documents) whose values are marked recursively. Dict
+            keys aren't marked.
+        control_tokens_re: A regex that matches any control token, from `_get_control_token_patterns`.
+    """
+    if isinstance(obj, str):
+        # Drop any markers already in the string first, so they can't be used to forge a marked token
+        obj = obj.replace(_CONTROL_TOKEN_START, "").replace(_CONTROL_TOKEN_END, "")
+        return control_tokens_re.sub(f"{_CONTROL_TOKEN_START}\\g<0>{_CONTROL_TOKEN_END}", obj)
+    if isinstance(obj, dict):
+        return {key: mark_control_tokens(value, control_tokens_re) for key, value in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [mark_control_tokens(value, control_tokens_re) for value in obj]
+    return obj
+
+
+def encode_marked_chat(tokenizer, chat: str, markers_re: re.Pattern) -> list[int]:
+    """
+    Encode a chat rendered from inputs marked by `mark_control_tokens`. Marked control tokens are encoded as plain text,
+    without their markers, and the rest of the chat, including the template's own control tokens, is encoded normally.
+
+    String methods in the template, like `split()`, can separate the markers around a token. Lone markers like these
+    are dropped, but still break the text, so that the text on either side can't join into a control token.
+
+    Args:
+        tokenizer: The tokenizer that rendered the chat.
+        chat: The rendered chat.
+        markers_re: A regex that matches a marked control token or a lone marker, from `_get_control_token_patterns`.
+    """
+    # Splitting on the markers gives [text, marked token, text, marked token, ..., text], with None in place of the
+    # token for a lone marker
+    pieces = markers_re.split(chat)
+    newline_ids = tokenizer.encode("\n", add_special_tokens=False)
+    ids = tokenizer.encode(pieces[0], add_special_tokens=False)
+    for i, piece in enumerate(pieces[1:], start=1):
+        if not piece:
+            continue
+        as_text = i % 2 == 1  # Odd pieces are marked tokens, which we encode as plain text
+        piece_ids = _encode_chat_piece(tokenizer, piece, as_text, newline_ids)
+        if as_text and tokenizer.convert_tokens_to_ids(piece) in piece_ids:
+            raise ValueError(f"Can't sanitize {piece!r}: the tokenizer produces it from plain text")
+        ids += piece_ids
+    return ids
+
+
+def _encode_chat_piece(tokenizer, piece: str, as_text: bool, newline_ids: list[int]) -> list[int]:
+    """Encode a piece from the middle of a chat, ignoring added tokens if `as_text` is set."""
+    if as_text:
+        encode = tokenizer._encode_without_added_tokens
+    else:
+        encode = partial(tokenizer.encode, add_special_tokens=False)
+    # Encode after a newline, so SentencePiece doesn't add the prefix space it adds at the start of a string, then
+    # remove the newline again
+    # FIXME: This is a trick to avoid SentencePiece hacks, so we can remove it if we get tokenizer support
+    #        for encoding with an offset, or something similar
+    piece_ids = encode("\n" + piece)
+    if piece_ids[: len(newline_ids)] == newline_ids:
+        return piece_ids[len(newline_ids) :]
+    return encode(piece)
 
 
 def _render_with_assistant_indices(
@@ -439,7 +564,7 @@ def _cached_compile_jinja_template(chat_template):
             return rv
 
         def is_active(self) -> bool:
-            return self._rendered_blocks or self._generation_indices
+            return self._rendered_blocks is not None or self._generation_indices is not None
 
         @contextmanager
         def activate_tracker(self, rendered_blocks: list[int], generation_indices: list[int]):
@@ -479,13 +604,29 @@ def _cached_compile_jinja_template(chat_template):
     return jinja_env.from_string(chat_template)
 
 
+# Names a message's reasoning is passed under. The first is the standard one that chat templates read.
+_REASONING_FIELDS = ("reasoning_content", "thinking", "reasoning")
+
+
+def _alias_reasoning_fields(chat: ChatType) -> ChatType:
+    # Fill `reasoning_content` from older names for it, and fill `thinking` for gpt-oss templates, which read that
+    aliased_chat = []
+    for message in chat:
+        if isinstance(message, dict):
+            reasoning = next((message[key] for key in _REASONING_FIELDS if message.get(key) is not None), None)
+            if reasoning is not None:
+                message = {"thinking": reasoning, **message, "reasoning_content": reasoning}
+        aliased_chat.append(message)
+    return aliased_chat
+
+
 def render_jinja_template(
     conversations: list[ChatType],
     tools: list[dict | Callable] | None = None,
     documents: ChatType | None = None,
     chat_template: str | None = None,
     return_assistant_tokens_mask: bool = False,
-    continue_final_message: bool = False,
+    continue_final_message: bool | str = False,
     add_generation_prompt: bool = False,
     **kwargs,
 ) -> str:
@@ -525,10 +666,25 @@ def render_jinja_template(
         if hasattr(chat, "messages"):
             # Indicates it's a Conversation object
             chat = chat.messages
+        chat = _alias_reasoning_fields(chat)
         if continue_final_message:
             chat = deepcopy(chat)
-            final_message = chat[-1]["content"]
-            if isinstance(final_message, (list, tuple)):
+            continue_final_message = continue_final_message if isinstance(continue_final_message, str) else "content"
+
+            if (final_message := chat[-1].get(continue_final_message)) is None:
+                raise ValueError(
+                    f'continue_final_message is set but the final message has no "{continue_final_message}" to continue!'
+                )
+            continue_fields = [continue_final_message]
+            if continue_final_message in _REASONING_FIELDS:
+                # Reasoning is copied under several names, so tag every copy and accept whichever one the template reads
+                continue_fields = [field for field in _REASONING_FIELDS if chat[-1].get(field) == final_message]
+            if not any(field in chat_template for field in continue_fields):
+                raise ValueError(
+                    f'continue_final_message is set to "{continue_final_message}" but this is not an accepted field in the chat_template'
+                )
+
+            elif isinstance(final_message, (list, tuple)):
                 for content_block in reversed(final_message):
                     if "text" in content_block:
                         # Pick the last text block in the message (the first one we hit while iterating in reverse)
@@ -540,7 +696,8 @@ def render_jinja_template(
                         "continue_final_message is set but we could not find any text to continue in the final message!"
                     )
             else:
-                chat[-1]["content"] = chat[-1]["content"] + continue_final_message_tag
+                for field in continue_fields:
+                    chat[-1][field] = chat[-1][field] + continue_final_message_tag
         if return_assistant_tokens_mask:
             rendered_chat, generation_indices = _render_with_assistant_indices(
                 compiled_template=compiled_template,
@@ -568,6 +725,7 @@ def render_jinja_template(
                     "applying the chat template! This can happen if the chat template deletes portions of "
                     "the final message. Please verify the chat template and final message in your chat to "
                     "ensure they are compatible."
+                    f"Final message to continue: {final_message.strip()}\nRendered chat:\n{rendered_chat}"
                 )
             tag_loc = rendered_chat.rindex(continue_final_message_tag.strip())
             if rendered_chat[tag_loc : tag_loc + len(continue_final_message_tag)] == continue_final_message_tag:

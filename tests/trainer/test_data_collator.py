@@ -34,7 +34,6 @@ from transformers import (
     DataCollatorForPermutationLanguageModeling,
     DataCollatorForSeq2Seq,
     DataCollatorForTokenClassification,
-    DataCollatorForWholeWordMask,
     DataCollatorWithFlattening,
     DataCollatorWithPadding,
     default_data_collator,
@@ -47,6 +46,8 @@ from transformers.utils import PaddingStrategy
 
 if is_torch_available():
     import torch
+
+    from transformers.modeling_flash_attention_utils import _is_packed_sequence, prepare_fa_kwargs_from_position_ids
 
 
 class DataCollatorTestMixin:
@@ -266,6 +267,47 @@ class TestDataCollatorWithPadding(DataCollatorTestMixin, unittest.TestCase):
             features = [{"input_ids": [0, 1, 2]}, {"input_ids": [0, 1, 2, 3, 4, 5]}]
             self._check_immutability(collator, features)
 
+    def test_4d_attention_mask_preserved(self):
+        """A 4D per-sample `attention_mask` is stacked into the batch unchanged.
+
+        `tokenizer.pad`'s 1D-per-sample padding logic does not apply to higher-rank
+        masks, so the collator must preserve their shape, dtype, and per-sample
+        contents.
+        """
+        tokenizer = BertTokenizer(self.vocab_file)
+        seq_len = 6
+        batch_size = 3
+
+        for sample_factory, expected_dtype in (
+            (lambda i: torch.full((1, seq_len, seq_len), float(i)), torch.float32),
+            (lambda i: np.full((1, seq_len, seq_len), float(i), dtype=np.float32), torch.float32),
+        ):
+            features = [
+                {"input_ids": list(range(seq_len)), "attention_mask": sample_factory(i)} for i in range(batch_size)
+            ]
+            collator = DataCollatorWithPadding(tokenizer)
+            batch = collator(features)
+
+            self.assertEqual(batch["attention_mask"].shape, torch.Size([batch_size, 1, seq_len, seq_len]))
+            self.assertEqual(batch["attention_mask"].dtype, expected_dtype)
+            for i in range(batch_size):
+                self.assertTrue(torch.all(batch["attention_mask"][i] == float(i)))
+
+    def test_4d_attention_mask_asymmetric_kv(self):
+        """A 4D mask with `kv_len != q_len` (e.g. KV-cache style) is preserved."""
+        tokenizer = BertTokenizer(self.vocab_file)
+        q_len, kv_len, batch_size = 4, 9, 2
+        features = [
+            {
+                "input_ids": list(range(q_len)),
+                "attention_mask": torch.zeros((1, q_len, kv_len), dtype=torch.float32),
+            }
+            for _ in range(batch_size)
+        ]
+        batch = DataCollatorWithPadding(tokenizer)(features)
+
+        self.assertEqual(batch["attention_mask"].shape, torch.Size([batch_size, 1, q_len, kv_len]))
+
 
 # =============================================================================
 # DataCollatorWithFlattening tests
@@ -304,6 +346,31 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         # Should not include attention_mask or flash attn kwargs by default
         for key in ["attention_mask", "cu_seq_lens_k", "cu_seq_lens_q", "seq_idx"]:
             self.assertNotIn(key, batch)
+
+    def test_position_ids_start(self):
+        """Test position_ids for models numbering positions from padding_idx + 1, like RoBERTa."""
+        for return_tensors in ["pt", "np"]:
+            collator = DataCollatorWithFlattening(return_tensors=return_tensors, position_ids_start=2)
+            batch = collator(self._get_features())
+
+            self.assertEqual(batch["position_ids"][0].tolist(), [2, 3, 4, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 6, 7, 8])
+
+    def test_position_ids_flash_attn_boundary_inference(self):
+        """Test FlashAttention sequence boundary inference from collator position_ids, 0-based or not."""
+        for position_ids_start in [0, 2]:
+            collator = DataCollatorWithFlattening(return_tensors="pt", position_ids_start=position_ids_start)
+            batch = collator(self._get_features())
+
+            self.assertTrue(_is_packed_sequence(batch["position_ids"], batch_size=1))
+            cu_seq_lens, max_lengths = prepare_fa_kwargs_from_position_ids(batch["position_ids"])
+            self.assertEqual(cu_seq_lens[0].tolist(), [0, 3, 9, 16])
+            self.assertEqual(cu_seq_lens[1].tolist(), [0, 3, 9, 16])
+            self.assertEqual(int(max_lengths[0]), 7)
+            self.assertEqual(int(max_lengths[1]), 7)
+
+            # A batch with a single sequence stays on the regular FA path
+            single = collator([self._get_features()[0]])
+            self.assertFalse(_is_packed_sequence(single["position_ids"], batch_size=1))
 
     def test_flash_attn_kwargs(self):
         """Test flattening with Flash Attention kwargs."""
@@ -357,7 +424,9 @@ class TestDataCollatorWithFlattening(DataCollatorTestMixin, unittest.TestCase):
         batch = collator(self._get_features())
 
         self.assertEqual(batch["cu_seq_lens_k"].tolist(), [0, 3, 9, 16])
+        self.assertEqual(batch["cu_seq_lens_q"].tolist(), [0, 3, 9, 16])
         self.assertEqual(batch["max_length_k"], 7)
+        self.assertEqual(batch["max_length_q"], 7)
 
     def test_immutability(self):
         """Test that flattening does not mutate input data."""
@@ -455,6 +524,20 @@ class TestDataCollatorForTokenClassification(DataCollatorTestMixin, unittest.Tes
 
         self.assertEqual(batch["input_ids"].shape, (2, 6))
         self.assertEqual(batch["labels"][0].tolist(), [0, 1, 2, -100, -100, -100])
+
+    def test_numpy_output_with_singular_label_key(self):
+        """Test with NumPy output when feature key is 'label' rather than 'labels'."""
+        tokenizer = BertTokenizer(self.vocab_file)
+        collator = DataCollatorForTokenClassification(tokenizer, return_tensors="np")
+        features = [
+            {"input_ids": [0, 1, 2], "label": [0, 1, 2]},
+            {"input_ids": [0, 1, 2, 3, 4, 5], "label": [0, 1, 2, 3, 4, 5]},
+        ]
+        batch = collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, (2, 6))
+        self.assertIn("label", batch)
+        self.assertEqual(batch["label"][0].tolist(), [0, 1, 2, -100, -100, -100])
 
     def test_immutability(self):
         """Test that collation does not mutate input data."""
@@ -707,6 +790,17 @@ class TestDataCollatorForLanguageModeling(DataCollatorTestMixin, unittest.TestCa
         batch3 = collator3(features)
         self.assertFalse(torch.all(batch1["input_ids"] == batch3["input_ids"]))
 
+    def test_mlm_seed_zero_reproducibility(self):
+        """Test that `seed=0` is not treated as "no seed"."""
+        tokenizer = BertTokenizer(self.vocab_file)
+        features = [{"input_ids": list(range(1000))}, {"input_ids": list(range(1000))}]
+
+        for return_tensors in ("pt", "np"):
+            batch1 = DataCollatorForLanguageModeling(tokenizer, seed=0, return_tensors=return_tensors)(features)
+            batch2 = DataCollatorForLanguageModeling(tokenizer, seed=0, return_tensors=return_tensors)(features)
+            self.assertTrue((batch1["input_ids"] == batch2["input_ids"]).all())
+            self.assertTrue((batch1["labels"] == batch2["labels"]).all())
+
     def test_mlm_multiworker_dataloader(self):
         """Test seed works with multi-worker DataLoader."""
         tokenizer = BertTokenizer(self.vocab_file)
@@ -865,17 +959,16 @@ class TestDataCollatorForLanguageModeling(DataCollatorTestMixin, unittest.TestCa
 
 
 # =============================================================================
-# DataCollatorForWholeWordMask tests
+# DataCollatorForLanguageModeling with whole word masking tests
 # =============================================================================
 
 
 @require_torch
-class TestDataCollatorForWholeWordMask(DataCollatorTestMixin, unittest.TestCase):
+class TestDataCollatorForLanguageModelingWholeWordMask(DataCollatorTestMixin, unittest.TestCase):
     """
-    Tests for DataCollatorForWholeWordMask.
+    Tests for DataCollatorForLanguageModeling with `whole_word_mask=True`.
 
-    This collator extends MLM to ensure that when a token is masked, all other
-    tokens from the same word are also masked (whole word masking).
+    When a token is masked, all other tokens from the same word are also masked.
     """
 
     def _get_tokenizer_and_features(self):
@@ -888,7 +981,7 @@ class TestDataCollatorForWholeWordMask(DataCollatorTestMixin, unittest.TestCase)
     def test_basic(self):
         """Test whole word masking masks complete words."""
         tokenizer, features = self._get_tokenizer_and_features()
-        collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="pt")
+        collator = DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, return_tensors="pt")
         batch = collator(features)
 
         self.assertEqual(batch["input_ids"].shape, (2, 10))
@@ -902,7 +995,7 @@ class TestDataCollatorForWholeWordMask(DataCollatorTestMixin, unittest.TestCase)
             tokenizer(" ".join(input_tokens), return_offsets_mapping=True).convert_to_tensors("np") for _ in range(2)
         ]
 
-        collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="pt")
+        collator = DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, return_tensors="pt")
         batch = collator(features)
 
         self.assertEqual(batch["input_ids"].shape, torch.Size((2, 10)))
@@ -915,7 +1008,7 @@ class TestDataCollatorForWholeWordMask(DataCollatorTestMixin, unittest.TestCase)
             tokenizer(" ".join(input_tokens), return_offsets_mapping=True).convert_to_tensors("pt") for _ in range(2)
         ]
 
-        collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="pt")
+        collator = DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, return_tensors="pt")
         batch = collator(features)
 
         self.assertEqual(batch["input_ids"].shape, torch.Size((2, 10)))
@@ -927,16 +1020,16 @@ class TestDataCollatorForWholeWordMask(DataCollatorTestMixin, unittest.TestCase)
         tokenizer.add_tokens(input_tokens)
         features = [tokenizer(" ".join(input_tokens), return_offsets_mapping=True) for _ in range(2)]
 
-        collator1 = DataCollatorForWholeWordMask(tokenizer, seed=42, return_tensors="np")
+        collator1 = DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, seed=42, return_tensors="np")
         batch1 = collator1(features)
 
-        collator2 = DataCollatorForWholeWordMask(tokenizer, seed=42, return_tensors="np")
+        collator2 = DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, seed=42, return_tensors="np")
         batch2 = collator2(features)
 
         np.testing.assert_array_equal(batch1["input_ids"], batch2["input_ids"])
 
         # Different seed -> different results
-        collator3 = DataCollatorForWholeWordMask(tokenizer, seed=43, return_tensors="np")
+        collator3 = DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, seed=43, return_tensors="np")
         batch3 = collator3(features)
         self.assertFalse(np.all(batch1["input_ids"] == batch3["input_ids"]))
 
@@ -952,7 +1045,7 @@ class TestDataCollatorForWholeWordMask(DataCollatorTestMixin, unittest.TestCase)
             batch_size=2,
             num_workers=2,
             generator=torch.Generator().manual_seed(42),
-            collate_fn=DataCollatorForWholeWordMask(tokenizer, seed=42),
+            collate_fn=DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, seed=42),
         )
         batches1 = torch.stack([batch["input_ids"] for batch in dataloader1])
 
@@ -960,7 +1053,7 @@ class TestDataCollatorForWholeWordMask(DataCollatorTestMixin, unittest.TestCase)
             features,
             batch_size=2,
             num_workers=2,
-            collate_fn=DataCollatorForWholeWordMask(tokenizer, seed=42),
+            collate_fn=DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, seed=42),
         )
         batches2 = torch.stack([batch["input_ids"] for batch in dataloader2])
 
@@ -971,7 +1064,7 @@ class TestDataCollatorForWholeWordMask(DataCollatorTestMixin, unittest.TestCase)
             features,
             batch_size=2,
             num_workers=2,
-            collate_fn=DataCollatorForWholeWordMask(tokenizer, seed=43),
+            collate_fn=DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, seed=43),
         )
         batches3 = torch.stack([batch["input_ids"] for batch in dataloader3])
         self.assertFalse(torch.all(batches1 == batches3))
@@ -979,7 +1072,7 @@ class TestDataCollatorForWholeWordMask(DataCollatorTestMixin, unittest.TestCase)
     def test_numpy_output(self):
         """Test with NumPy output."""
         tokenizer, features = self._get_tokenizer_and_features()
-        collator = DataCollatorForWholeWordMask(tokenizer, return_tensors="np")
+        collator = DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, return_tensors="np")
         batch = collator(features)
 
         self.assertEqual(batch["input_ids"].shape, (2, 10))
@@ -991,7 +1084,7 @@ class TestDataCollatorForWholeWordMask(DataCollatorTestMixin, unittest.TestCase)
         features = [dict(f) for f in features]
 
         for return_tensors in ["pt", "np"]:
-            collator = DataCollatorForWholeWordMask(tokenizer, return_tensors=return_tensors)
+            collator = DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, return_tensors=return_tensors)
             self._check_immutability(collator, copy.deepcopy(features))
 
 

@@ -19,6 +19,7 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import QuarkConfig
 
 from ..utils import is_quark_available, logging
 
@@ -44,6 +45,7 @@ class QuarkHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True  # On-the-fly quantization with quark is not supported for now.
+    quantization_config: "QuarkConfig"
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -68,9 +70,6 @@ class QuarkHfQuantizer(HfQuantizer):
 
         return model
 
-    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        return True
-
     def is_serializable(self):
         return False
 
@@ -79,36 +78,7 @@ class QuarkHfQuantizer(HfQuantizer):
         return False
 
     def get_weight_conversions(self):
-        from ..core_model_loading import WeightConverter
-        from ..integrations.quark import QuarkDeserialize
-        # In Quark, quantization is managed through a QParamsLinear module, which holds
-        # separate quantizers for the weights, inputs, and biases (e.g. weight_quantizer
-        # input_quantizer, bias_quantizer, etc.).
-        #
-        # When you call `module.state_dict()`, Quark automatically renames the quantizer
-        # parameters — for example, `input_quantizer.scale` becomes `input_scale` — and
-        # saves them directly at the parent module level.
-        #
-        # This means we cannot simply rename keys like `weight_scale` back to
-        # `weight_quantizer.scale` when loading the state_dict.
-        # Otherwise, the `missing_keys` list would still expect keys such as
-        # `weight_scale`, `bias_scale`, etc.
-        #
-        # To fix this, we keep the expected state_dict keys (like `weight_scale`,
-        # `bias_scale`, etc.) unchanged, and during the conversion step, we explicitly
-        # assign their values into the corresponding quantizer attributes
-        # (`weight_quantizer.scale`, `input_quantizer.scale`, and so on).
+        from ..core_model_loading import WeightRenaming
 
-        # You can notice here that in target_patterns we use the same key as the source_patterns,
-        # this is because we just want to collect the tensors, and we will rename them later in the convert function.
-        # We cannot rename directly or else the missing_keys list will not be able to find the tensors.
-        converters = []
-        for key in CHECKPOINT_KEYS.keys():
-            converters.append(
-                WeightConverter(
-                    source_patterns=[key],
-                    target_patterns=key,
-                    operations=[QuarkDeserialize(self)],
-                )
-            )
-        return converters
+        # The checkpoint stores `weight_scale`, ... while `QParamsLinear` holds them in its quantizers (`weight_quantizer.scale`)
+        return [WeightRenaming(source, target) for source, target in CHECKPOINT_KEYS.items()]

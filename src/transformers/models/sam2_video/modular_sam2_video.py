@@ -23,25 +23,22 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import Tensor
 from tqdm import tqdm
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
-from ...utils import (
-    ModelOutput,
-    auto_docstring,
-    logging,
-)
+from ...utils import ModelOutput, auto_docstring, logging
 from ...utils.generic import TransformersKwargs
 from ...utils.output_capturing import OutputRecorder
 from ...video_utils import VideoInput
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 from ..sam2.configuration_sam2 import (
     Sam2MaskDecoderConfig,
     Sam2PromptEncoderConfig,
@@ -57,6 +54,7 @@ from ..sam2.modeling_sam2 import (
     eager_attention_forward,
 )
 from ..sam2.processing_sam2 import Sam2Processor
+from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -70,101 +68,86 @@ class Sam2VideoMaskDecoderConfig(Sam2MaskDecoderConfig):
     pass
 
 
+@auto_docstring(checkpoint="facebook/sam2.1-hiera-tiny")
+@strict
 class Sam2VideoConfig(PreTrainedConfig):
     r"""
-    [`Sam2Config`] is the configuration class to store the configuration of a [`Sam2Model`]. It is used to instantiate a
-    SAM2 model according to the specified arguments, defining the memory attention, memory encoder, and image encoder
-    configs. Instantiating a configuration defaults will yield a similar configuration to that of the SAM 2.1 Hiera-tiny
-    [facebook/sam2.1-hiera-tiny](https://huggingface.co/facebook/sam2.1-hiera-tiny) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vision_config (Union[`dict`, `Sam2VisionConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam2VisionConfig`].
-        prompt_encoder_config (Union[`dict`, `Sam2PromptEncoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam2PromptEncoderConfig`].
-        mask_decoder_config (Union[`dict`, `Sam2MaskDecoderConfig`], *optional*):
-            Dictionary of configuration options used to initialize [`Sam2MaskDecoderConfig`].
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            Standard deviation for parameter initialization.
-        num_maskmem (`int`, *optional*, defaults to 7):
-            The number of memory slots for the mask memory.
-        image_size (`int`, *optional*, defaults to 1024):
-            The size of the input images.
-        sigmoid_scale_for_mem_enc (`float`, *optional*, defaults to 20.0):
-            Scale factor for the sigmoid function in the memory encoder.
-        sigmoid_bias_for_mem_enc (`float`, *optional*, defaults to -10.0):
-            Bias for the sigmoid function in the memory encoder.
-        enable_occlusion_spatial_embedding (`bool`, *optional*, defaults to `True`):
-            Whether to enable spatial embedding for occlusions.
-        multimask_output_in_sam (`bool`, *optional*, defaults to `True`):
-            Whether to output multiple masks from the SAM head.
-        multimask_min_pt_num (`int`, *optional*, defaults to 0):
-            The minimum number of points to trigger multimask output.
-        multimask_max_pt_num (`int`, *optional*, defaults to 1):
-            The maximum number of points to trigger multimask output.
-        multimask_output_for_tracking (`bool`, *optional*, defaults to `True`):
-            Whether to use multimask output for tracking.
-        max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
-            The maximum number of object pointers in the encoder.
-        max_cond_frame_num (`int`, *optional*, defaults to -1):
-            Maximum number of conditioning frames to use in memory attention. Set to -1 to use all conditioning frames.
-        enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
-            Whether to enable temporal positional encoding for object pointers.
-        memory_attention_hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the memory attention hidden states.
-        memory_attention_num_layers (`int`, *optional*, defaults to 4):
-            The number of layers in the memory attention module.
-        memory_attention_num_attention_heads (`int`, *optional*, defaults to 1):
-            Number of attention heads for each attention layer in the memory attention.
-        memory_attention_downsample_rate (`int`, *optional*, defaults to 1):
-            The downsample rate for the attention layers.
-        memory_attention_feed_forward_hidden_size (`int`, *optional*, defaults to 2048):
-            The dimension of the feedforward network in the memory attention module.
-        memory_attention_feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in the feedforward network in the memory attention module.
-        memory_attention_dropout (`float`, *optional*, defaults to 0.1):
-            The dropout rate for the memory attention module.
-        memory_attention_rope_theta (`float`, *optional*, defaults to 10000):
-            The Rope theta parameter.
-        memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[64, 64]`):
-            The feature sizes for the Rope positional encoding.
-        memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
-                The dropout rate for the Rope positional encoding.
-        memory_encoder_hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the memory encoder hidden states.
-        memory_encoder_output_channels (`int`, *optional*, defaults to 64):
-            The number of output channels for the memory encoder.
-        mask_downsampler_embed_dim (`int`, *optional*, defaults to 256):
-            The dimension of the mask downsampler embedding.
-        mask_downsampler_kernel_size (`int`, *optional*, defaults to 3):
-            The kernel size for the mask downsampler.
-        mask_downsampler_stride (`int`, *optional*, defaults to 2):
-            The stride for the mask downsampler.
-        mask_downsampler_padding (`int`, *optional*, defaults to 1):
-            The padding for the mask downsampler.
-        mask_downsampler_total_stride (`int`, *optional*, defaults to 16):
-            The total stride for the mask downsampler.
-        mask_downsampler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the mask downsampler.
-        memory_fuser_num_layers (`int`, *optional*, defaults to 2):
-            The number of layers in the memory fuser.
-        memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
-            The dimension of the embedding layer in the memory fuser.
-        memory_fuser_intermediate_dim (`int`, *optional*, defaults to 1024):
-            The dimension of the intermediate layer in the memory fuser.
-        memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
-            The kernel size for the memory fuser.
-        memory_fuser_padding (`int`, *optional*, defaults to 3):
-            The padding for the memory fuser.
-        memory_fuser_layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
-            The initial value for the layer scale in the memory fuser.
-        memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function in the memory fuser.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    prompt_encoder_config (Union[`dict`, `Sam2PromptEncoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`Sam2PromptEncoderConfig`].
+    mask_decoder_config (Union[`dict`, `Sam2MaskDecoderConfig`], *optional*):
+        Dictionary of configuration options used to initialize [`Sam2MaskDecoderConfig`].
+    initializer_range (`float`, *optional*, defaults to 0.02):
+        Standard deviation for parameter initialization.
+    num_maskmem (`int`, *optional*, defaults to 7):
+        The number of memory slots for the mask memory.
+    sigmoid_scale_for_mem_enc (`float`, *optional*, defaults to 20.0):
+        Scale factor for the sigmoid function in the memory encoder.
+    sigmoid_bias_for_mem_enc (`float`, *optional*, defaults to -10.0):
+        Bias for the sigmoid function in the memory encoder.
+    enable_occlusion_spatial_embedding (`bool`, *optional*, defaults to `True`):
+        Whether to enable spatial embedding for occlusions.
+    multimask_output_in_sam (`bool`, *optional*, defaults to `True`):
+        Whether to output multiple masks from the SAM head.
+    multimask_min_pt_num (`int`, *optional*, defaults to 0):
+        The minimum number of points to trigger multimask output.
+    multimask_max_pt_num (`int`, *optional*, defaults to 1):
+        The maximum number of points to trigger multimask output.
+    multimask_output_for_tracking (`bool`, *optional*, defaults to `True`):
+        Whether to use multimask output for tracking.
+    max_object_pointers_in_encoder (`int`, *optional*, defaults to 16):
+        The maximum number of object pointers in the encoder.
+    max_cond_frame_num (`int`, *optional*, defaults to -1):
+        Maximum number of conditioning frames to use in memory attention. Set to -1 to use all conditioning frames.
+    enable_temporal_pos_encoding_for_object_pointers (`bool`, *optional*, defaults to `True`):
+        Whether to enable temporal positional encoding for object pointers.
+    memory_attention_hidden_size (`int`, *optional*, defaults to 256):
+        Dimensionality of the memory attention hidden states.
+    memory_attention_num_layers (`int`, *optional*, defaults to 4):
+        The number of layers in the memory attention module.
+    memory_attention_num_attention_heads (`int`, *optional*, defaults to 1):
+        Number of attention heads for each attention layer in the memory attention.
+    memory_attention_downsample_rate (`int`, *optional*, defaults to 1):
+        The downsample rate for the attention layers.
+    memory_attention_feed_forward_hidden_size (`int`, *optional*, defaults to 2048):
+        The dimension of the feedforward network in the memory attention module.
+    memory_attention_feed_forward_hidden_act (`str`, *optional*, defaults to `"relu"`):
+        The non-linear activation function in the feedforward network in the memory attention module.
+    memory_attention_dropout (`float`, *optional*, defaults to 0.1):
+        The dropout rate for the memory attention module.
+    memory_attention_rope_feat_sizes (`list[int]`, *optional*, defaults to `[64, 64]`):
+        The feature sizes for the Rope positional encoding.
+    memory_attention_rope_dropout (`float`, *optional*, defaults to 0.1):
+        The dropout rate for the Rope positional encoding.
+    memory_encoder_hidden_size (`int`, *optional*, defaults to 256):
+        Dimensionality of the memory encoder hidden states.
+    memory_encoder_output_channels (`int`, *optional*, defaults to 64):
+        The number of output channels for the memory encoder.
+    mask_downsampler_embed_dim (`int`, *optional*, defaults to 256):
+        The dimension of the mask downsampler embedding.
+    mask_downsampler_kernel_size (`int`, *optional*, defaults to 3):
+        The kernel size for the mask downsampler.
+    mask_downsampler_stride (`int`, *optional*, defaults to 2):
+        The stride for the mask downsampler.
+    mask_downsampler_padding (`int`, *optional*, defaults to 1):
+        The padding for the mask downsampler.
+    mask_downsampler_total_stride (`int`, *optional*, defaults to 16):
+        The total stride for the mask downsampler.
+    mask_downsampler_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function in the mask downsampler.
+    memory_fuser_num_layers (`int`, *optional*, defaults to 2):
+        The number of layers in the memory fuser.
+    memory_fuser_embed_dim (`int`, *optional*, defaults to 256):
+        The dimension of the embedding layer in the memory fuser.
+    memory_fuser_intermediate_dim (`int`, *optional*, defaults to 1024):
+        The dimension of the intermediate layer in the memory fuser.
+    memory_fuser_kernel_size (`int`, *optional*, defaults to 7):
+        The kernel size for the memory fuser.
+    memory_fuser_padding (`int`, *optional*, defaults to 3):
+        The padding for the memory fuser.
+    memory_fuser_layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
+        The initial value for the layer scale in the memory fuser.
+    memory_fuser_hidden_act (`str`, *optional*, defaults to `"gelu"`):
+        The non-linear activation function in the memory fuser..
 
     Example:
 
@@ -177,7 +160,7 @@ class Sam2VideoConfig(PreTrainedConfig):
     ... )
 
     >>> # Initializing a Sam2Config with `"facebook/sam2.1_hiera_tiny"` style configuration
-    >>> configuration = Sam2config()
+    >>> configuration = Sam2Config()
 
     >>> # Initializing a Sam2Model (with random weights) from the `"facebook/sam2.1_hiera_tiny"` style configuration
     >>> model = Sam2Model(configuration)
@@ -196,123 +179,77 @@ class Sam2VideoConfig(PreTrainedConfig):
     ```"""
 
     model_type = "sam2_video"
-    sub_configs = {
-        "vision_config": AutoConfig,
-        "prompt_encoder_config": Sam2VideoPromptEncoderConfig,
-        "mask_decoder_config": Sam2VideoMaskDecoderConfig,
+    default_rope_type = "axial"
+    sub_configs_defaults = {
+        "prompt_encoder_config": SubConfigSpec(config_class=Sam2VideoPromptEncoderConfig),
+        "mask_decoder_config": SubConfigSpec(config_class=Sam2VideoMaskDecoderConfig),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="sam2_vision_model"),
     }
 
-    def __init__(
-        self,
-        vision_config=None,
-        prompt_encoder_config=None,
-        mask_decoder_config=None,
-        initializer_range=0.02,
-        num_maskmem=7,
-        image_size=1024,
-        sigmoid_scale_for_mem_enc=20.0,
-        sigmoid_bias_for_mem_enc=-10.0,
-        enable_occlusion_spatial_embedding=True,
-        multimask_output_in_sam=True,
-        multimask_min_pt_num=0,
-        multimask_max_pt_num=1,
-        multimask_output_for_tracking=True,
-        max_object_pointers_in_encoder=16,
-        max_cond_frame_num=-1,
-        enable_temporal_pos_encoding_for_object_pointers=True,
-        # memory attention
-        memory_attention_hidden_size=256,
-        memory_attention_num_layers=4,
-        memory_attention_num_attention_heads=1,
-        memory_attention_downsample_rate=1,
-        memory_attention_feed_forward_hidden_size=2048,
-        memory_attention_feed_forward_hidden_act="relu",
-        memory_attention_dropout=0.1,
-        memory_attention_rope_theta=10000,
-        memory_attention_rope_feat_sizes=None,
-        memory_attention_rope_dropout=0.1,
-        # memory encoder
-        memory_encoder_hidden_size=256,
-        memory_encoder_output_channels=64,
-        mask_downsampler_embed_dim=256,
-        mask_downsampler_kernel_size=3,
-        mask_downsampler_stride=2,
-        mask_downsampler_padding=1,
-        mask_downsampler_total_stride=16,
-        mask_downsampler_hidden_act="gelu",
-        memory_fuser_num_layers=2,
-        memory_fuser_embed_dim=256,
-        memory_fuser_intermediate_dim=1024,
-        memory_fuser_kernel_size=7,
-        memory_fuser_padding=3,
-        memory_fuser_layer_scale_init_value=1e-6,
-        memory_fuser_hidden_act="gelu",
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
+    vision_config: dict | PreTrainedConfig | None = None
+    prompt_encoder_config: dict | PreTrainedConfig | None = None
+    mask_decoder_config: dict | PreTrainedConfig | None = None
+    initializer_range: float = 0.02
+    num_maskmem: int = 7
+    image_size: int | list[int] | tuple[int, int] = 1024
+    sigmoid_scale_for_mem_enc: float = 20.0
+    sigmoid_bias_for_mem_enc: float = -10.0
+    enable_occlusion_spatial_embedding: bool = True
+    multimask_output_in_sam: bool = True
+    multimask_min_pt_num: int = 0
+    multimask_max_pt_num: int = 1
+    multimask_output_for_tracking: bool = True
+    max_object_pointers_in_encoder: int = 16
+    max_cond_frame_num: int = -1
+    enable_temporal_pos_encoding_for_object_pointers: bool = True
+    memory_attention_hidden_size: int = 256
+    memory_attention_num_layers: int = 4
+    memory_attention_num_attention_heads: int = 1
+    memory_attention_downsample_rate: int = 1
+    memory_attention_feed_forward_hidden_size: int = 2048
+    memory_attention_feed_forward_hidden_act: str = "relu"
+    memory_attention_dropout: float | int = 0.1
+    memory_attention_rope_feat_sizes: list[int] | None = None
+    memory_attention_rope_dropout: float | int = 0.1
+    memory_encoder_hidden_size: int = 256
+    memory_encoder_output_channels: int = 64
+    rope_parameters: dict | None = None
 
-        vision_config = vision_config if vision_config is not None else {}
-        prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
-        mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
-        memory_attention_rope_feat_sizes = (
-            [64, 64] if memory_attention_rope_feat_sizes is None else memory_attention_rope_feat_sizes
+    mask_downsampler_embed_dim: int = 256
+    mask_downsampler_kernel_size: int = 3
+    mask_downsampler_stride: int = 2
+    mask_downsampler_padding: int = 1
+    mask_downsampler_total_stride: int = 16
+    mask_downsampler_hidden_act: str = "gelu"
+    memory_fuser_num_layers: int = 2
+    memory_fuser_embed_dim: int = 256
+    memory_fuser_intermediate_dim: int = 1024
+    memory_fuser_kernel_size: int = 7
+    memory_fuser_padding: int = 3
+    memory_fuser_layer_scale_init_value: float = 1e-6
+    memory_fuser_hidden_act: str = "gelu"
+
+    def __post_init__(self, **kwargs):
+        self.memory_attention_rope_feat_sizes = (
+            [64, 64] if self.memory_attention_rope_feat_sizes is None else self.memory_attention_rope_feat_sizes
         )
+        super().__post_init__(**kwargs)
 
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "sam2_vision_model")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-        if isinstance(prompt_encoder_config, Sam2VideoPromptEncoderConfig):
-            prompt_encoder_config = prompt_encoder_config.to_dict()
-        if isinstance(mask_decoder_config, Sam2VideoMaskDecoderConfig):
-            mask_decoder_config = mask_decoder_config.to_dict()
+    @property
+    def memory_attention_rope_theta(self):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        return self.rope_parameters.get("rope_theta", 10_000)
 
-        self.vision_config = vision_config
-        self.prompt_encoder_config = Sam2VideoPromptEncoderConfig(**prompt_encoder_config)
-        self.mask_decoder_config = Sam2VideoMaskDecoderConfig(**mask_decoder_config)
-
-        self.initializer_range = initializer_range
-        self.num_maskmem = num_maskmem  # default 1 input frame + 6 previous frames
-        self.image_size = image_size
-        self.sigmoid_scale_for_mem_enc = sigmoid_scale_for_mem_enc
-        self.sigmoid_bias_for_mem_enc = sigmoid_bias_for_mem_enc
-        self.multimask_output_in_sam = multimask_output_in_sam
-        self.multimask_min_pt_num = multimask_min_pt_num
-        self.multimask_max_pt_num = multimask_max_pt_num
-        self.multimask_output_for_tracking = multimask_output_for_tracking
-        self.max_object_pointers_in_encoder = max_object_pointers_in_encoder
-        self.max_cond_frame_num = max_cond_frame_num
-        # The next 4 are True for sam2.1 and False for sam2
-        self.enable_occlusion_spatial_embedding = enable_occlusion_spatial_embedding
-        self.enable_temporal_pos_encoding_for_object_pointers = enable_temporal_pos_encoding_for_object_pointers
-
-        # memory attention
-        self.memory_attention_hidden_size = memory_attention_hidden_size
-        self.memory_attention_num_layers = memory_attention_num_layers
-        self.memory_attention_num_attention_heads = memory_attention_num_attention_heads
-        self.memory_attention_downsample_rate = memory_attention_downsample_rate
-        self.memory_attention_feed_forward_hidden_size = memory_attention_feed_forward_hidden_size
-        self.memory_attention_feed_forward_hidden_act = memory_attention_feed_forward_hidden_act
-        self.memory_attention_dropout = memory_attention_dropout
-        self.memory_attention_rope_theta = memory_attention_rope_theta
-        self.memory_attention_rope_feat_sizes = memory_attention_rope_feat_sizes
-        self.memory_attention_rope_dropout = memory_attention_rope_dropout
-
-        # memory encoder
-        self.memory_encoder_hidden_size = memory_encoder_hidden_size
-        self.memory_encoder_output_channels = memory_encoder_output_channels
-        self.mask_downsampler_embed_dim = mask_downsampler_embed_dim
-        self.mask_downsampler_kernel_size = mask_downsampler_kernel_size
-        self.mask_downsampler_stride = mask_downsampler_stride
-        self.mask_downsampler_padding = mask_downsampler_padding
-        self.mask_downsampler_total_stride = mask_downsampler_total_stride
-        self.mask_downsampler_hidden_act = mask_downsampler_hidden_act
-        self.memory_fuser_num_layers = memory_fuser_num_layers
-        self.memory_fuser_embed_dim = memory_fuser_embed_dim
-        self.memory_fuser_intermediate_dim = memory_fuser_intermediate_dim
-        self.memory_fuser_kernel_size = memory_fuser_kernel_size
-        self.memory_fuser_padding = memory_fuser_padding
-        self.memory_fuser_layer_scale_init_value = memory_fuser_layer_scale_init_value
-        self.memory_fuser_hidden_act = memory_fuser_hidden_act
+    @memory_attention_rope_theta.setter
+    def memory_attention_rope_theta(self, value):
+        logger.warning_once(
+            "`memory_attention_rope_theta` is deprecated and will be removed in v5.0. "
+            "Use `rope_parameters['rope_theta']` instead."
+        )
+        self.rope_parameters["rope_theta"] = value
 
 
 class Sam2VideoInferenceCache:
@@ -951,8 +888,8 @@ class Sam2VideoImageSegmentationOutput(Sam2ImageSegmentationOutput):
     object_pointer: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(custom_intro="Base class for the Sam2 model's output.")
+@dataclass
 class Sam2VideoSegmentationOutput(ModelOutput):
     r"""
     object_ids (`list[int]`, *optional*):
@@ -996,59 +933,41 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
         if isinstance(module, Sam2VideoMemoryFuserCXBlock):
             if module.scale is not None:
                 init.zeros_(module.scale)
-        elif isinstance(module, Sam2VideoVisionRotaryEmbedding):
-            inv_freq = module.create_inv_freq()
-            init.copy_(module.rope_embeddings_cos, inv_freq.cos())
-            init.copy_(module.rope_embeddings_sin, inv_freq.sin())
         elif isinstance(module, Sam2VideoPositionalEmbedding):
             init.normal_(module.positional_embedding, std=module.scale)
+        elif isinstance(module, Sam2VideoMemoryAttention):
+            position_ids = module.precompute_positions(module.config)
+            init.copy_(module.position_ids, position_ids)
 
 
-class Sam2VideoVisionRotaryEmbedding(nn.Module):
-    """
-    Vision Rotary Position Embedding for SAM2, following transformers library standards.
-    Supports 2D (axial) rotary embeddings for spatial dimensions.
-    """
+class Sam2VideoVisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
+    def __init__(self, config: Sam2VideoConfig, device=None):
+        super().__init__(config, device=device)
 
-    def __init__(self, config: Sam2VideoConfig):
-        super().__init__()
-        self.dim = config.memory_attention_hidden_size // (
+    def compute_axial_rope_parameters(config: Sam2VideoConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = config.memory_attention_hidden_size // (
             config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
         )
-        # Ensure even dimension for proper axial splitting
-        if self.dim % 4 != 0:
-            raise ValueError("Dimension must be divisible by 4 for axial RoPE")
-        self.end_x, self.end_y = config.memory_attention_rope_feat_sizes
-        self.memory_attention_rope_theta = config.memory_attention_rope_theta
+        spatial_dim = dim // 2
 
-        # directly register the cos and sin embeddings as we have a fixed feature shape
-        inv_freq = self.create_inv_freq()
-        self.register_buffer("rope_embeddings_cos", inv_freq.cos(), persistent=False)
-        self.register_buffer("rope_embeddings_sin", inv_freq.sin(), persistent=False)
-
-    @torch.no_grad()
-    def forward(self) -> tuple[torch.Tensor, torch.Tensor]:
-        # As the feature map size is fixed, we can just return the pre-computed embeddings.
-        return self.rope_embeddings_cos, self.rope_embeddings_sin
-
-    def create_inv_freq(self):
-        freqs = 1.0 / (
-            self.memory_attention_rope_theta ** (torch.arange(0, self.dim, 4)[: (self.dim // 4)].float() / self.dim)
-        )
-        # Generate 2D position indices for axial rotary embedding
-        flattened_indices = torch.arange(self.end_x * self.end_y, dtype=torch.long)
-        x_positions = flattened_indices % self.end_x
-        y_positions = torch.div(flattened_indices, self.end_x, rounding_mode="floor")
-        freqs_x = torch.outer(x_positions, freqs).float()
-        freqs_y = torch.outer(y_positions, freqs).float()
-        inv_freq = torch.cat([freqs_x, freqs_y], dim=-1)
-        inv_freq = inv_freq.repeat_interleave(2, dim=-1)
-        return inv_freq
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
 
 
 def rotate_pairwise(x):
     """
-    pairwise rotation of the hidden dims of the input. Differerent from Llama Half-Tensor Rotation.
+    pairwise rotation of the hidden dims of the input. Different from Llama Half-Tensor Rotation.
 
     This is an optimized version of the following more explicit implementation:
     ```python
@@ -1239,11 +1158,25 @@ class Sam2VideoMemoryAttentionLayer(nn.Module):
 class Sam2VideoMemoryAttention(nn.Module):
     def __init__(self, config: Sam2VideoConfig):
         super().__init__()
+        self.config = config
         self.layers = nn.ModuleList(
             [Sam2VideoMemoryAttentionLayer(config) for _ in range(config.memory_attention_num_layers)]
         )
         self.layer_norm = nn.LayerNorm(config.memory_attention_hidden_size)
         self.rotary_emb = Sam2VideoVisionRotaryEmbedding(config=config)
+
+        position_ids = self.precompute_positions(config)
+        self.position_ids = nn.Buffer(position_ids, persistent=False)
+
+    @staticmethod
+    def precompute_positions(config: Sam2VideoConfig):
+        hpos_ids, wpos_ids = torch.meshgrid(
+            torch.arange(config.memory_attention_rope_feat_sizes[1]),
+            torch.arange(config.memory_attention_rope_feat_sizes[0]),
+            indexing="ij",
+        )
+        position_ids = torch.stack([wpos_ids.flatten(), hpos_ids.flatten()], dim=-1)
+        return position_ids
 
     def forward(
         self,
@@ -1274,7 +1207,7 @@ class Sam2VideoMemoryAttention(nn.Module):
         output = output.transpose(0, 1)
         memory = memory.transpose(0, 1).unsqueeze(1)
         memory_posision_embeddings = memory_posision_embeddings.transpose(0, 1).unsqueeze(1)
-        rope_position_embeddings = self.rotary_emb()
+        rope_position_embeddings = self.rotary_emb(output, self.position_ids)
         for layer in self.layers:
             output = layer(
                 queries=output.unsqueeze(1) if output.ndim == 3 else output,
@@ -1400,7 +1333,9 @@ class Sam2VideoMemoryEncoder(nn.Module):
         self.mask_downsampler = Sam2VideoMaskDownSampler(config)
         self.feature_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
         self.memory_fuser = Sam2VideoMemoryFuser(config)
-        self.position_encoding = Sam2VideoPositionEmbeddingSine(num_pos_feats=output_channels // 2, normalize=True)
+        self.position_encoding = Sam2VideoPositionEmbeddingSine(
+            num_position_features=output_channels // 2, normalize=True
+        )
         self.projection = nn.Conv2d(hidden_size, output_channels, kernel_size=1)
 
     def forward(
@@ -2149,7 +2084,7 @@ class Sam2VideoModel(Sam2Model):
 
         # Reshape from (Batch, H*W, Channels) to (Batch, Channels, Height, Width)
         conditioned_feature_map = (
-            conditioned_feature_map_flat.squeeze(1).permute(0, 2, 1).view(batch_size, num_channels, height, width)
+            conditioned_feature_map_flat.squeeze(1).transpose(1, 2).view(batch_size, num_channels, height, width)
         )
         return conditioned_feature_map
 
@@ -2320,6 +2255,7 @@ class Sam2VideoModel(Sam2Model):
             ].expand(*maskmem_features.shape)
 
         # convert to bfloat16 to save memory, and for consistency with the original implementation
+        # flatten from BxCxHxW to HWxBxC
         maskmem_features = maskmem_features.to(torch.bfloat16).flatten(2).permute(2, 0, 1)
         maskmem_pos_enc = maskmem_pos_enc.to(pred_masks_high_res.dtype).flatten(2).permute(2, 0, 1)
 

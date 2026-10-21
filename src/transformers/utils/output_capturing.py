@@ -23,7 +23,9 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
-from typing import TYPE_CHECKING, ParamSpec, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
+
+from typing_extensions import ParamSpec
 
 from .import_utils import is_torchdynamo_compiling, requires
 
@@ -33,8 +35,6 @@ if TYPE_CHECKING:
 
     from ..modeling_utils import PreTrainedModel
 
-
-# Used to type hint decorators that modify the signature of the decorated function
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -54,12 +54,14 @@ class OutputRecorder:
         index (Optional[int]): If the output is a tuple/list, optionally record only at a specific index.
         layer_name (Optional[str]): Name of the submodule to target (if needed), e.g., "transformer.layer.3.attn".
         class_name (Optional[str]): Name of the class to which the hook will be attached. Could be the suffix of class name in some cases.
+        capture_initial_hidden_state  (bool): Whether to prepend the first module's input as the initial hidden state.
     """
 
     target_class: type[nn.Module]
     index: int = 0
     layer_name: str | None = None
     class_name: str | None = None
+    capture_initial_hidden_state: bool = True
 
 
 class CompileableContextVar:
@@ -70,9 +72,9 @@ class CompileableContextVar:
     that the access to the underlying variable is not thread-safe when compilation is triggered.
     """
 
-    def __init__(self, name, default):
-        self.context_var = ContextVar(name, default=default)
-        self.global_var = default
+    def __init__(self, name):
+        self.context_var = ContextVar(name, default=None)
+        self.global_var = None
         self.compiling = False
 
     def get(self):
@@ -80,12 +82,7 @@ class CompileableContextVar:
         if self.compiling:
             return self.global_var
         else:
-            # Set was maybe never called, so still check it here
-            if is_torchdynamo_compiling():
-                self.is_compiling = True
-                return self.global_var
-            else:
-                return self.context_var.get()
+            return self.context_var.get()
 
     def set(self, value):
         if is_torchdynamo_compiling():
@@ -104,10 +101,12 @@ class CompileableContextVar:
 
 
 # Thread/context-safe global variable
-_active_collector = CompileableContextVar("output_collector", default=None)
+_active_collector = CompileableContextVar("output_collector")
 
 
-def install_output_capuring_hook(module: nn.Module, key: str, index: int) -> None:
+def install_output_capuring_hook(
+    module: nn.Module, key: str, index: int, capture_initial_hidden_state: bool = True
+) -> None:
     """Install the forward hook needed to capture the output described by `key` and `index` in `module`."""
 
     def output_capturing_hook(module, args, output):
@@ -117,8 +116,27 @@ def install_output_capuring_hook(module: nn.Module, key: str, index: int) -> Non
         if collected_outputs is None or key not in collected_outputs.keys():
             return
 
-        if key == "hidden_states" and len(collected_outputs[key]) == 0:
+        # Optionally capture only some layer's hidden_states
+        hidden_states_layers = collected_outputs.get("_hidden_states_layers")
+
+        # Historically, the first hidden_states output is actually the input of layer 0 (or inputs_embeds), so the hidden_states outputs
+        # have length `num_hidden_layers + 1`. When we request a list of explicit layers to capture, do not add this into the result, so
+        # that the indexing of the output is the same as the actual requested layers
+        if (
+            capture_initial_hidden_state
+            and key == "hidden_states"
+            and len(collected_outputs[key]) == 0
+            and hidden_states_layers is None
+        ):
             collected_outputs[key].append(args[0])
+
+        # If we are capturing only some layer's hidden_states, skip capture if not part of the requested indices
+        if key == "hidden_states" and hidden_states_layers is not None:
+            current_layer_idx = len(collected_outputs[key])
+            if current_layer_idx not in hidden_states_layers:
+                collected_outputs[key].append(None)
+                return
+
         if not isinstance(output, tuple):
             collected_outputs[key].append(output)
         elif output[index] is not None:
@@ -150,18 +168,28 @@ def recursively_install_hooks(
 
     # Potentially install the hook on current `parent_module`
     for key, specs in capture_tasks:
-        # The second check is for multimodals where only backbone layer suffix is available
-        if (specs.target_class is not None and isinstance(parent_module, specs.target_class)) or (
-            specs.class_name is not None and module_name.endswith(specs.class_name)
-        ):
-            if specs.layer_name is not None and specs.layer_name not in module_name:
-                continue
-            install_output_capuring_hook(parent_module, key, specs.index)
+        # Check if the spec matches the target class
+        match_target_class = specs.target_class is not None and isinstance(parent_module, specs.target_class)
+        # This check is for multimodals where only backbone layer suffix is available
+        match_class_name = specs.class_name is not None and module_name.endswith(specs.class_name)
+
+        if match_target_class or match_class_name:
+            # If the spec has a specified layer name, check it
+            if specs.layer_name is not None:
+                # Format the target layer name to have one dot on both sides
+                target_layer_name = specs.layer_name.strip(".")
+                target_layer_name = "." + target_layer_name + "."
+                # Match it against the module name (with a trailing dot to match in case the target is trailing)
+                matches = target_layer_name in module_name + "."
+                if not matches:
+                    continue
+
+            install_output_capuring_hook(parent_module, key, specs.index, specs.capture_initial_hidden_state)
 
 
 def install_all_output_capturing_hooks(model: PreTrainedModel, prefix: str | None = None) -> None:
     """
-    Install the output recording hooks on all the modules in `model`. Tis will take care of correctly dispatching
+    Install the output recording hooks on all the modules in `model`. This will take care of correctly dispatching
     the `_can_record_outputs` property of each individual submodels in case of composite models.
     """
     # _can_record_outputs is None by default
@@ -210,30 +238,40 @@ def maybe_install_capturing_hooks(model: PreTrainedModel) -> None:
         install_all_output_capturing_hooks(model)
 
 
-# We follow the example from https://docs.python.org/3/library/typing.html#typing.ParamSpec to type-hint
-# this decorator, allowing it to add 'tuple' to the signature of the decorated function.
-def capture_outputs(func: Callable[P, T] | None = None, *, tie_last_hidden_states=True) -> Callable[P, tuple | T]:
+@overload
+def capture_outputs(func: Callable[P, T], *, tie_last_hidden_states: bool = True) -> Callable[P, tuple | T]: ...
+
+
+@overload
+def capture_outputs(
+    func: None = None, *, tie_last_hidden_states: bool = True
+) -> Callable[[Callable[P, T]], Callable[P, tuple | T]]: ...
+
+
+# https://docs.python.org/3/library/typing.html#typing.ParamSpec
+def capture_outputs(
+    func: Callable[P, T] | None = None, *, tie_last_hidden_states: bool = True
+) -> Callable[P, tuple | T] | Callable[[Callable[P, T]], Callable[P, tuple | T]]:
     """
     Decorator to intercept specific layer outputs through hooks. The hooks are installed only once and lazily,
     the first time output capture is requested with the `output_xxx` kwargs/config.
     The implementation is fully context/thread safe, except when using `torch.compile`, as dynamo is unable to trace
     through `ContextVar` methods.
 
-    The wrapped method or function should not be typed like `tuple | X`, but instead just `X`, where `X` is the
-    original return type. This decorator's typing ensures that the return type is correctly represented as `tuple | X`.
+    Annotate the wrapped function with its original return type. This decorator adds `tuple` to the return type.
 
     Args:
         tie_last_hidden_states (`bool`, *optional*, defaults to `True`):
-            Whether to overwrite `out.hidden_states[-1]` with the `out.last_hidden_state`.
-            This is true for all language models and should be toggled off only if
-            `out.hidden_states[-1]` has to be the hidden state before last layer norm, which
-            is needed for some vision models (e.g. CLIP, SigLIP)
+            Whether to overwrite `out.hidden_states[-1]` with the `out.last_hidden_state`. This is true for all language models
+            and should be toggled off only if `out.hidden_states[-1]` has to be the hidden state before last layer norm, which
+            is needed for some vision models (e.g. CLIP, SigLIP). A model config can override this default per-model by setting
+            `config.tie_last_hidden_states`.
     """
 
     def wrapped_fn(func: Callable[P, T]) -> Callable[P, tuple | T]:
         @wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> tuple | T:
-            self, *args = args
+            self = cast("PreTrainedModel", args[0])
             # Pop it so that internal modules always return a dict even if False is requested
             return_dict = kwargs.pop("return_dict", getattr(self.config, "return_dict", True))
 
@@ -255,6 +293,12 @@ def capture_outputs(func: Callable[P, T] | None = None, *, tie_last_hidden_state
                 )
 
             collected_outputs = {k.replace("output_", ""): [] for k, v in recordable_keys.items() if v}
+            # We accept a list of layer indices as `output_hidden_states`, to capture only specific layer outputs - in this case
+            # we need to add the layers to the `collected_outputs`'s dict to tell the hook which ones we need
+            if "output_hidden_states" in recordable_keys and isinstance(
+                recordable_keys["output_hidden_states"], (list, tuple, set)
+            ):
+                collected_outputs["_hidden_states_layers"] = set(recordable_keys["output_hidden_states"])
             # Make sure hooks are installed if we need to collect outputs
             if len(collected_outputs) > 0:
                 maybe_install_capturing_hooks(self)
@@ -263,15 +307,18 @@ def capture_outputs(func: Callable[P, T] | None = None, *, tie_last_hidden_state
 
             # Run the forward
             try:
-                outputs = func(self, *args, **kwargs)
+                outputs = cast(Any, func(*args, **kwargs))
             # Reset the states
             finally:
                 _active_collector.reset(output_token)
 
+            hidden_states_layers = collected_outputs.pop("_hidden_states_layers", None)
             # Inject collected outputs into model output (return everything as tuples for BC)
             for key in collected_outputs:
                 if key == "hidden_states":
-                    if not tie_last_hidden_states:
+                    tie_last = getattr(self.config, "tie_last_hidden_states", None)
+                    tie_last = tie_last_hidden_states if tie_last is None else tie_last
+                    if not tie_last or (hidden_states_layers is not None and collected_outputs[key][-1] is None):
                         pass
                     elif hasattr(outputs, "vision_hidden_states"):
                         collected_outputs[key] = collected_outputs[key][:-1]
@@ -280,16 +327,7 @@ def capture_outputs(func: Callable[P, T] | None = None, *, tie_last_hidden_state
                         collected_outputs[key] = collected_outputs[key][:-1]
                         collected_outputs[key].append(outputs.last_hidden_state)
 
-                    outputs[key] = tuple(collected_outputs[key])
-                elif key == "attentions":
-                    # In this case, the second item are cross attentions
-                    if isinstance(capturable_flags[key], list) and len(capturable_flags[key]) == 2:
-                        outputs[key] = tuple(collected_outputs[key][0::2])
-                        outputs["cross_" + key] = tuple(collected_outputs[key][1::2])
-                    else:
-                        outputs[key] = tuple(collected_outputs[key])
-                else:
-                    outputs[key] = tuple(collected_outputs[key])
+                outputs[key] = tuple(collected_outputs[key])
 
             if return_dict is False:
                 outputs = outputs.to_tuple()

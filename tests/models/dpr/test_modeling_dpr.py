@@ -190,10 +190,16 @@ class DPRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = DPRModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DPRConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=DPRConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_inputs_embeds_matches_input_ids(self):
+        position_ids = torch.arange(self.model_tester.seq_length, device=torch_device)
+        position_ids = position_ids[None, :].repeat(self.model_tester.batch_size, 1)
+        mask = torch.ones(self.model_tester.batch_size, self.model_tester.seq_length, device=torch_device)
+        return super().test_inputs_embeds_matches_input_ids(position_ids=position_ids, attention_mask=mask)
 
     def test_context_encoder_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()

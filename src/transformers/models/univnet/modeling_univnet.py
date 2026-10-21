@@ -27,13 +27,13 @@ from .configuration_univnet import UnivNetConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output class for the [`UnivNetModel`], which includes the generated audio waveforms and the original unpadded
     lengths of those waveforms (so that the padding can be removed by [`UnivNetModel.batch_decode`]).
     """
 )
+@dataclass
 class UnivNetModelOutput(ModelOutput):
     r"""
     waveforms (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -324,10 +324,9 @@ class UnivNetLvcResidualBlock(nn.Module):
         # Apply local convolution kernel to hidden_states.
         output_hidden_states = torch.einsum("bildsk,biokl->bolsd", hidden_states, kernel)
 
-        output_hidden_states = output_hidden_states.to(memory_format=torch.channels_last_3d)
-        bias = bias.unsqueeze(-1).unsqueeze(-1).to(memory_format=torch.channels_last_3d)
+        bias = bias.unsqueeze(-1).unsqueeze(-1)
         output_hidden_states = output_hidden_states + bias
-        output_hidden_states = output_hidden_states.contiguous().view(batch, out_channels, -1)
+        output_hidden_states = output_hidden_states.view(batch, out_channels, -1)
 
         return output_hidden_states
 
@@ -516,7 +515,7 @@ class UnivNetModel(PreTrainedModel):
          [1, 140288]
          ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         # Resolve batch sizes for noise_sequence and spectrogram
         spectrogram_batched = input_features.dim() == 3

@@ -88,7 +88,7 @@ class CpmAntAttention(nn.Module):
         output_attentions: bool | None = False,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ):
         """
         Args:
@@ -121,7 +121,7 @@ class CpmAntAttention(nn.Module):
         value = value.view(batch_size, len_k, self.num_heads, self.dim_head).permute(0, 2, 1, 3)
 
         if past_key_values is not None:
-            key, value = past_key_values.update(key, value, self.layer_idx, {"cache_position": cache_position})
+            key, value = past_key_values.update(key, value, self.layer_idx)
             len_k = key.size(-2)
 
         # (batch_size, num_heads, len_q, dim_head) @ (batch_size, num_heads, dim_head, len_k) -> (batch_size, num_heads, len_q, len_k)
@@ -177,7 +177,7 @@ class CpmAntSelfAttentionBlock(nn.Module):
         output_attentions: bool | None = False,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ):
         """
         Args:
@@ -204,7 +204,6 @@ class CpmAntSelfAttentionBlock(nn.Module):
             output_attentions,
             past_key_values,
             use_cache,
-            cache_position,
         )
 
         if self.dropout is not None:
@@ -301,7 +300,7 @@ class CpmAntTransformerBlock(nn.Module):
         output_attentions: bool | None = False,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ):
         """
         Args:
@@ -326,7 +325,6 @@ class CpmAntTransformerBlock(nn.Module):
             output_attentions=output_attentions,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
         )
 
         hidden_states = self.ffn(hidden_states)
@@ -350,7 +348,7 @@ class CpmAntEncoder(nn.Module):
         output_hidden_states: bool | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ):
         """
         Args:
@@ -582,7 +580,6 @@ class CpmAntModel(CpmAntPreTrainedModel):
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPast:
         r"""
@@ -598,7 +595,7 @@ class CpmAntModel(CpmAntPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         use_cache = use_cache if use_cache is not None else self.config.use_cache
 
         # add prompts ahead
@@ -652,7 +649,6 @@ class CpmAntModel(CpmAntPreTrainedModel):
             output_hidden_states,
             past_key_values,
             use_cache,
-            cache_position,
         )
 
         if past_length == 0:
@@ -684,21 +680,25 @@ class CpmAntModel(CpmAntPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The CPMAnt Model with a language modeling head on top (linear layer with weights tied to the input embeddings).
+    The CPMAnt Model with a language modeling head on top (linear layer whose weights are a
+    vocabulary-sized slice of the input embeddings).
     """
 )
 class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = {"lm_head.weight": "cpmant.input_embedding.weight"}
+    # The head is a vocab-sized slice of `input_embedding.weight`, so a whole-tensor tie
+    # would be shape-mismatched; the checkpoint ships `lm_head.weight` explicitly.
+    _tied_weights_keys = {}
 
     def __init__(self, config: CpmAntConfig):
         super().__init__(config)
         self.cpmant = CpmAntModel(config)
 
-        # lm_head.weight is tied to cpmant.input_embedding.weight
-        self.lm_head = nn.Linear(
-            config.hidden_size, config.vocab_size + config.prompt_types * config.prompt_length, bias=False
-        )
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
+
+    def prepare_inputs_for_generation(self, input_ids, next_sequence_length=None, **kwargs):
+        # `forward` slices off the cached prefix itself, so it needs the full `input_ids`.
+        return super().prepare_inputs_for_generation(input_ids, next_sequence_length=None, **kwargs)
 
     @auto_docstring
     def forward(
@@ -711,7 +711,6 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         labels: torch.Tensor | None = None,
         return_dict: bool | None = None,
         attention_mask: torch.Tensor | None = None,  # dummy parameter for text-generation pipeline
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
@@ -742,7 +741,7 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         ['今天天气不错，阳光明媚，我和妈妈一起去超市买东西。\n在超市里，我看到了一个很好玩的玩具，它的名字叫“机器人”。它有一个圆圆的脑袋，两只圆圆的眼睛，还有一个圆圆的']
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         model_output = self.cpmant(
             input_ids,
@@ -751,7 +750,6 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
             past_key_values,
             use_cache,
             return_dict,
-            cache_position,
         )
         hidden_states = model_output.last_hidden_state if return_dict else model_output[0]
         # Only compute necessary logits

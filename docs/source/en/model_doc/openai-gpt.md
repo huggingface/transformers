@@ -9,15 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2018-06-11 and added to Hugging Face Transformers on 2023-06-20.*
+*This model was contributed to Hugging Face Transformers on 2023-06-20.*
 
 <div style="float: right;">
   <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
     <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
   </div>
@@ -40,8 +39,8 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 generator = pipeline(task="text-generation", model="openai-community/openai-gpt", device=0)
 output = generator("The future of AI is", max_length=50, do_sample=True)
@@ -54,20 +53,13 @@ print(output[0]["generated_text"])
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained("openai-community/openai-gpt")
-model = AutoModelForCausalLM.from_pretrained("openai-community/openai-gpt")
 
-inputs = tokenizer("The future of AI is", return_tensors="pt")
+tokenizer = AutoTokenizer.from_pretrained("openai-community/openai-gpt")
+model = AutoModelForCausalLM.from_pretrained("openai-community/openai-gpt", device_map="auto")
+
+inputs = tokenizer("The future of AI is", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_length=50)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "The future of AI is" | transformers run --task text-generation --model openai-community/openai-gpt --device 0
-
 ```
 
 </hfoption>
@@ -105,6 +97,3 @@ echo -e "The future of AI is" | transformers run --task text-generation --model 
 
 [[autodoc]] OpenAIGPTTokenizer
 
-## OpenAIGPTTokenizerFast
-
-[[autodoc]] OpenAIGPTTokenizerFast

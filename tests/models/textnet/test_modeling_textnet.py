@@ -15,11 +15,7 @@
 
 import unittest
 
-import requests
-from PIL import Image
-
-from transformers import TextNetConfig
-from transformers.models.textnet.image_processing_textnet import TextNetImageProcessor
+from transformers import TextNetConfig, TextNetImageProcessorPil
 from transformers.testing_utils import (
     require_torch,
     require_vision,
@@ -30,6 +26,7 @@ from transformers.utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -294,12 +291,12 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 class TextNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        processor = TextNetImageProcessor.from_pretrained("czczup/textnet-base")
+        processor = TextNetImageProcessorPil.from_pretrained("czczup/textnet-base")
         model = TextNetModel.from_pretrained("czczup/textnet-base").to(torch_device)
 
         # prepare image
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+        image = load_test_image(url)
         inputs = processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass

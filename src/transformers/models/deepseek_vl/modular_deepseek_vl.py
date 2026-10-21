@@ -15,49 +15,28 @@
 
 import torch
 import torch.nn as nn
+from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
-from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import (
-    PreTokenizedInput,
-    TextInput,
-)
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import (
     auto_docstring,
     logging,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..janus.image_processing_janus import JanusImageProcessor
-from ..janus.image_processing_janus_fast import JanusImageProcessorFast
+from ..janus.image_processing_pil_janus import JanusImageProcessorPil
 from ..janus.modeling_janus import JanusForConditionalGeneration, JanusModel, JanusPreTrainedModel
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring(checkpoint="deepseek-community/deepseek-vl-1.3b-chat")
+@strict
 class DeepseekVLConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DeepseekVLModel`]. It is used to instantiate a
-    DeepseekVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the DeepseekVL
-    [deepseek-community/deepseek-vl-1.3b-chat](https://huggingface.co/deepseek-community/deepseek-vl-1.3b-chat) architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        text_config (`Union[AutoConfig, dict]`, *optional*, defaults to `LlamaConfig`):
-            The config object or dictionary of the text backbone.
-        vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SiglipVisionConfig`):
-            The config object or dictionary of the vision backbone.
-        image_token_id (`int`, *optional*, defaults to 100015):
-            The index representing image tokens in the model's token vocabulary.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
-
     Example:
 
     ```python
@@ -74,37 +53,15 @@ class DeepseekVLConfig(PreTrainedConfig):
     ```"""
 
     model_type = "deepseek_vl"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama"),
+    }
 
-    def __init__(
-        self,
-        text_config: AutoConfig | None = None,
-        vision_config: AutoConfig | None = None,
-        image_token_id: int = 100015,
-        tie_word_embeddings: bool | None = True,
-        **kwargs,
-    ):
-        if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `LlamaConfig` with default values.")
-
-        if vision_config is None:
-            vision_config = {}
-            logger.info("`vision_config` is `None`. Initializing the `SiglipVisionConfig` with default values.")
-
-        if isinstance(text_config, dict):
-            text_config["model_type"] = text_config.get("model_type", "llama")
-            text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-
-        if isinstance(vision_config, dict):
-            vision_config["model_type"] = vision_config.get("model_type", "siglip_vision_model")
-            vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.image_token_id = image_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-        super().__init__(**kwargs)
+    text_config: dict | PreTrainedConfig | None = None
+    vision_config: dict | PreTrainedConfig | None = None
+    image_token_id: int = 100015
+    tie_word_embeddings: bool = True
 
 
 class DeepseekVLBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
@@ -135,7 +92,7 @@ class DeepseekVLAligner(nn.Module):
 
 
 class DeepseekVLPreTrainedModel(JanusPreTrainedModel):
-    _no_split_modules = ["LlamaDecoderLayer"]
+    _no_split_modules = AttributeError()
 
     def _init_weights(self, module):
         raise AttributeError("No need to inherit!")
@@ -175,10 +132,7 @@ class DeepseekVLForConditionalGeneration(JanusForConditionalGeneration):
         raise AttributeError("Not needed for DeepseekVL")
 
 
-class DeepseekVLImageProcessor(JanusImageProcessor):
-    def __init__(self, **super_kwargs):
-        super().__init__(**super_kwargs)
-
+class DeepseekVLImageProcessorPil(JanusImageProcessorPil):
     def postprocess(self):
         raise AttributeError("Not needed for DeepseekVL")
 
@@ -186,23 +140,26 @@ class DeepseekVLImageProcessor(JanusImageProcessor):
         raise AttributeError("Not needed for DeepseekVL")
 
 
-class DeepseekVLImageProcessorFast(JanusImageProcessorFast):
-    def __init__(self, **super_kwargs):
-        super().__init__(**super_kwargs)
-
+class DeepseekVLImageProcessor(JanusImageProcessor):
     def postprocess(self):
         raise AttributeError("Not needed for DeepseekVL")
 
 
 class DeepseekVLProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
-        "text_kwargs": {"padding": False},
+        "text_kwargs": {
+            "padding": False,
+            "return_mm_token_type_ids": False,
+            "return_text_replacement_offsets": False,
+        },
         "common_kwargs": {"return_tensors": "pt"},
     }
 
 
 @auto_docstring
 class DeepseekVLProcessor(ProcessorMixin):
+    valid_processor_kwargs = DeepseekVLProcessorKwargs
+
     def __init__(
         self,
         image_processor,
@@ -215,72 +172,13 @@ class DeepseekVLProcessor(ProcessorMixin):
             The number of special image tokens used as placeholders for visual content in text sequences.
         """
         self.image_token = tokenizer.image_token
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         self.num_image_tokens = num_image_tokens
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
-    @auto_docstring
-    def __call__(
-        self,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        images: ImageInput | None = None,
-        **kwargs: Unpack[DeepseekVLProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
-        """
-        output_kwargs = self._merge_kwargs(
-            DeepseekVLProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
-        if text is None and images is None:
-            raise ValueError("You must specify either text or images.")
-
-        if text is not None:
-            if isinstance(text, str):
-                text = [text]
-            elif not (isinstance(text, (list, tuple)) and all(isinstance(t, str) for t in text)):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-
-        prompt_strings = []
-        one_img_tokens = self.image_token * self.num_image_tokens
-        for prompt in text:
-            prompt = prompt.replace(self.image_token, one_img_tokens)
-            prompt_strings.append(prompt)
-
-        data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-
-        # process images if pixel_values are provided
-        if images is not None:
-            data["pixel_values"] = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
-
-        return BatchFeature(data=data)
-
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to LlamaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        return self.image_token * self.num_image_tokens
 
 
 __all__ = [
@@ -289,6 +187,6 @@ __all__ = [
     "DeepseekVLModel",
     "DeepseekVLForConditionalGeneration",
     "DeepseekVLImageProcessor",
-    "DeepseekVLImageProcessorFast",
+    "DeepseekVLImageProcessorPil",
     "DeepseekVLProcessor",
 ]

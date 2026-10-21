@@ -19,7 +19,7 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-import httpx
+from huggingface_hub.utils import httpx
 
 from transformers import AutoTokenizer, BertTokenizer, BertTokenizerFast, GPT2TokenizerFast, is_tokenizers_available
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_tokenizers
@@ -50,7 +50,7 @@ class TokenizerUtilTester(unittest.TestCase):
         _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the tokenizer.
-        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
+        with mock.patch.object(httpx.Client, "request", return_value=response_mock) as mock_head:
             _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -70,7 +70,7 @@ class TokenizerUtilTester(unittest.TestCase):
         _ = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
 
         # Under the mock environment we get a 500 error when trying to reach the tokenizer.
-        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
+        with mock.patch.object(httpx.Client, "request", return_value=response_mock) as mock_head:
             _ = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -203,14 +203,19 @@ class TokenizersBackendTest(unittest.TestCase):
     def test_clean_up_tokenization_spaces(self):
         tokenizer = GPT2TokenizerFast.from_pretrained("openai-community/gpt2")
 
-        text_with_artifacts = "Hello , how are you ? I 'm here ."
-        token_ids = tokenizer.encode(text_with_artifacts)
+        # GPT-2 is a BPE tokenizer — clean_up_tokenization is skipped because it
+        # was designed for WordPiece and is destructive for BPE (strips legitimate
+        # spaces before punctuation).
+        # Use text with spaces before punctuation that cleanup would strip if applied.
+        text = "x != y"
+        token_ids = tokenizer.encode(text)
 
         decoded_no_cleanup = tokenizer.decode(token_ids, clean_up_tokenization_spaces=False)
-        self.assertEqual(decoded_no_cleanup, "Hello , how are you ? I 'm here .")
+        self.assertEqual(decoded_no_cleanup, text)
 
+        # With BPE guard, cleanup=True also preserves the text
         decoded_with_cleanup = tokenizer.decode(token_ids, clean_up_tokenization_spaces=True)
-        self.assertEqual(decoded_with_cleanup, "Hello, how are you? I'm here.")
+        self.assertEqual(decoded_with_cleanup, text)
 
 
 class TrieTest(unittest.TestCase):

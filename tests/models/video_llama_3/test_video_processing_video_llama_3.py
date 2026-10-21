@@ -164,7 +164,33 @@ class VideoLlama3VideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase
         video_processor = self.fast_video_processing_class.from_dict(
             self.video_processor_dict, size={"shortest_edge": 100, "longest_edge": 200}
         )
+        # min_pixels and max_pixels take precedence over size, like in the image processor.
+        self.assertEqual(video_processor.size, {"shortest_edge": 400, "longest_edge": 80000})
+
+        processor_dict = self.video_processor_dict.copy()
+        processor_dict.pop("min_pixels")
+        processor_dict.pop("max_pixels")
+        video_processor = self.fast_video_processing_class.from_dict(
+            processor_dict, size={"shortest_edge": 100, "longest_edge": 200}
+        )
         self.assertEqual(video_processor.size, {"shortest_edge": 100, "longest_edge": 200})
+
+    def test_get_num_patches_without_videos(self):
+        video_processing = self.fast_video_processing_class(**self.video_processor_dict)
+        num_patches = video_processing.get_num_of_video_patches(num_frames=8, height=100, width=100, videos_kwargs={})
+        self.assertEqual(num_patches, 144)
+
+        num_patches = video_processing.get_num_of_video_patches(num_frames=7, height=200, width=50, videos_kwargs={})
+        self.assertEqual(num_patches, 224)
+
+        size = {"shortest_edge": 12544, "longest_edge": 47040000}
+        num_patches = video_processing.get_num_of_video_patches(
+            num_frames=8, height=480, width=640, videos_kwargs={"size": size}
+        )
+        self.assertEqual(num_patches, 6256)
+
+        num_patches = video_processing.get_num_of_video_patches(num_frames=8, height=480, width=640, videos_kwargs={})
+        self.assertEqual(num_patches, 192)
 
     def test_video_processor_to_json_string(self):
         for video_processing_class in self.video_processor_list:

@@ -34,7 +34,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import MobileViTImageProcessor
+    from transformers import MobileViTImageProcessorPil
 
 
 class MobileViTConfigTester(ConfigTester):
@@ -284,7 +284,9 @@ def prepare_img():
 class MobileViTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return MobileViTImageProcessor.from_pretrained("apple/mobilevit-xx-small") if is_vision_available() else None
+        return (
+            MobileViTImageProcessorPil.from_pretrained("apple/mobilevit-xx-small") if is_vision_available() else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
@@ -317,7 +319,7 @@ class MobileViTModelIntegrationTest(unittest.TestCase):
         model = MobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
         model = model.to(torch_device)
 
-        image_processor = MobileViTImageProcessor.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
+        image_processor = MobileViTImageProcessorPil.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
@@ -354,7 +356,7 @@ class MobileViTModelIntegrationTest(unittest.TestCase):
         model = MobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
         model = model.to(torch_device)
 
-        image_processor = MobileViTImageProcessor.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
+        image_processor = MobileViTImageProcessorPil.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)

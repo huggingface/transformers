@@ -20,7 +20,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 
 from transformers import (
     FlavaConfig,
@@ -33,6 +32,7 @@ from transformers.testing_utils import require_torch, require_vision, slow, torc
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     ModelTesterMixin,
     floats_tensor,
@@ -61,8 +61,6 @@ else:
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import FlavaProcessor
 
 
@@ -166,7 +164,7 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlavaImageModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FlavaImageConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=FlavaImageConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -428,7 +426,7 @@ class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = FlavaTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=FlavaTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=FlavaTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -562,7 +560,7 @@ class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = FlavaMultimodalModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=FlavaMultimodalConfig, has_text_modality=False, hidden_size=37
+            self, config_class=FlavaMultimodalConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -767,7 +765,7 @@ class FlavaModelTester:
         self.multimodal_model_tester = FlavaMultimodalModelTester(parent, **multimodal_kwargs)
         self.image_codebook_tester = FlavaImageCodebookTester(parent, **image_codebook_kwargs)
         self.is_training = is_training
-        self.config_tester = ConfigTester(self, config_class=FlavaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=FlavaConfig, hidden_size=32)
         self.hidden_size = hidden_size
         self.projection_dim = projection_dim
         self.initializer_range = initializer_range
@@ -1090,8 +1088,8 @@ class FlavaForPreTrainingTest(FlavaModelTest):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    im = load_test_image(url)
     return im
 
 
@@ -1118,9 +1116,9 @@ class FlavaModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs, return_dict=True)
 
         # verify the embeddings
-        self.assertAlmostEqual(outputs.image_embeddings.sum().item(), -1352.4685, places=4)
+        self.assertAlmostEqual(outputs.image_embeddings.sum().item(), -1352.4686, places=4)
         self.assertAlmostEqual(outputs.text_embeddings.sum().item(), -198.98225, places=4)
-        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4226, places=4)
+        self.assertAlmostEqual(outputs.multimodal_embeddings.sum().item(), -4030.4229, places=4)
 
 
 @require_vision
@@ -1170,9 +1168,9 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
         torch.testing.assert_close(outputs.contrastive_logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
-        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
-        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 7.0282096, places=4)
-        self.assertAlmostEqual(outputs.loss.item(), 11.3792324, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0732639, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 7.0149107, places=4)
+        self.assertAlmostEqual(outputs.loss.item(), 11.3664246, places=4)
 
     @slow
     def test_inference_with_itm_labels(self):
@@ -1219,8 +1217,8 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
             torch.Size((torch.count_nonzero(inputs["itm_labels"]).item(), inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
+        expected_logits = torch.tensor([[16.1291, 8.4033]], device=torch_device)
         torch.testing.assert_close(outputs.contrastive_logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
-        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
-        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 6.8965902, places=4)
-        self.assertAlmostEqual(outputs.loss.item(), 9.6084213, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0732639, places=4)
+        self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 6.8857641, places=4)
+        self.assertAlmostEqual(outputs.loss.item(), 9.5979137, places=4)

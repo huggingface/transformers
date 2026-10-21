@@ -391,7 +391,7 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
 
     def setUp(self):
         self.model_tester = Data2VecTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Data2VecTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Data2VecTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -430,6 +430,11 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
             encoder_hidden_states,
             encoder_attention_mask,
         )
+
+    def test_inputs_embeds_matches_input_ids(self):
+        position_ids = torch.arange(self.model_tester.seq_length).to(torch_device)
+        position_ids = position_ids[None, :].repeat(self.model_tester.batch_size, 1)
+        return super().test_inputs_embeds_matches_input_ids(position_ids=position_ids)
 
     def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()

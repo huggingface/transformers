@@ -18,7 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
-import requests
+from parameterized import parameterized
 
 from transformers import OwlViTConfig, OwlViTTextConfig, OwlViTVisionConfig
 from transformers.testing_utils import (
@@ -32,7 +32,9 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
@@ -49,8 +51,6 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import OwlViTProcessor
 
 
@@ -145,7 +145,7 @@ class OwlViTVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = OwlViTVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=OwlViTVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=OwlViTVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -298,7 +298,7 @@ class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = OwlViTTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OwlViTTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=OwlViTTextConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -409,6 +409,8 @@ class OwlViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    additional_model_inputs = ["pixel_values"]
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = OwlViTModelTester(self)
@@ -532,6 +534,8 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
 
+    additional_model_inputs = ["pixel_values", "attention_mask"]
+
     def setUp(self):
         self.model_tester = OwlViTForObjectDetectionTester(self)
 
@@ -542,6 +546,10 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    def test_eager_matches_sdpa_inference(self, *args):
+        self.skipTest("OwlViTObjectDetectionOutput has no top-level hidden_states; SDPA tested in sub-models")
 
     @unittest.skip(reason="Inputs_embeds is tested in individual model tests")
     def test_inputs_embeds(self):
@@ -584,8 +592,8 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    im = load_test_image(url)
     return im
 
 
@@ -652,7 +660,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
             outputs.logits_per_text.shape,
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
-        expected_logits = torch.tensor([[3.6282, 0.8859]], device=torch_device)
+        expected_logits = torch.tensor([[3.6292, 0.8855]], device=torch_device)
         torch.testing.assert_close(outputs.logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
 
         expected_shape = torch.Size((1, 626, 768))
@@ -668,7 +676,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
         expected_slice_boxes = torch.tensor(
-            [[0.0679, 0.0422, 0.1347], [0.2073, 0.0450, 0.4151], [0.2002, 0.0418, 0.3483]]
+            [[0.0679, 0.0422, 0.1345], [0.2064, 0.0450, 0.4134], [0.1979, 0.0416, 0.3416]]
         ).to(torch_device)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
 
@@ -785,7 +793,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
         expected_slice_boxes = torch.tensor(
-            [[0.0691, 0.0445, 0.1374], [0.1592, 0.0456, 0.3191], [0.1636, 0.0423, 0.2489]]
+            [[0.0691, 0.0445, 0.1374], [0.1592, 0.0456, 0.3191], [0.1632, 0.0423, 0.2477]]
         ).to(torch_device)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
 
@@ -828,7 +836,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.target_pred_boxes.shape, torch.Size((1, num_queries, 4)))
 
         expected_slice_boxes = torch.tensor(
-            [[0.0691, 0.0445, 0.1374], [0.1592, 0.0456, 0.3191], [0.1636, 0.0423, 0.2489]]
+            [[0.0691, 0.0445, 0.1374], [0.1592, 0.0456, 0.3191], [0.1632, 0.0423, 0.2477]]
         ).to(torch_device)
         torch.testing.assert_close(outputs.target_pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
 

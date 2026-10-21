@@ -14,8 +14,10 @@
 
 
 import torch
+from huggingface_hub.dataclasses import strict
 
 from transformers.models.instructblip.configuration_instructblip import (
+    InstructBlipConfig,
     InstructBlipQFormerConfig,
     InstructBlipVisionConfig,
 )
@@ -30,51 +32,63 @@ from transformers.models.instructblip.modeling_instructblip import (
     TransformersKwargs,
 )
 
-from ...configuration_utils import PreTrainedConfig
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ...utils import auto_docstring, can_return_tuple
 
 
-logger = logging.get_logger(__name__)
-
-
+@auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
+@strict
 class InstructBlipVideoVisionConfig(InstructBlipVisionConfig):
-    pass
-
-
-class InstructBlipVideoQFormerConfig(InstructBlipQFormerConfig):
-    pass
-
-
-class InstructBlipVideoConfig(PreTrainedConfig):
     r"""
-    [`InstructBlipVideoConfig`] is the configuration class to store the configuration of a
-    [`InstructBlipVideoForConditionalGeneration`]. It is used to instantiate a Instructblipvideo model according to the specified
-    arguments, defining the vision model, Q-Former model and language model configs. Instantiating a configuration with
-    the defaults will yield a similar configuration to that of the Instructblipvideo
-    [Salesforce/instruct-blip-flan-t5](https://huggingface.co/Salesforce/instruct-blip-flan-t5) architecture.
+    Example:
 
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
+    ```python
+    >>> from transformers import InstructBlipVideoVisionConfig, InstructBlipVideoVisionModel
 
-    Args:
-        vision_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`InstructBlipVideoVisionConfig`].
-        qformer_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`InstructBlipVideoQFormerConfig`].
-        text_config (`dict`, *optional*):
-            Dictionary of configuration options used to initialize any [`PreTrainedConfig`].
-        num_query_tokens (`int`, *optional*, defaults to 32):
-            The number of query tokens passed through the Transformer.
+    >>> # Initializing a InstructBlipVideoVisionConfig with Salesforce/instructblip-flan-t5-xl style configuration
+    >>> configuration = InstructBlipVideoVisionConfig()
 
-        video_token_index (`int`, *optional*):
-            Token index of special video token.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+    >>> # Initializing a InstructBlipVideoVisionModel (with random weights) from the Salesforce/instructblip-flan-t5-xl style configuration
+    >>> model = InstructBlipVideoVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+
+@auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
+@strict
+class InstructBlipVideoQFormerConfig(InstructBlipQFormerConfig):
+    r"""
+    cross_attention_frequency (`int`, *optional*, defaults to 2):
+        The frequency of adding cross-attention to the Transformer layers.
+    encoder_hidden_size (`int`, *optional*, defaults to 1408):
+        The hidden size of the hidden states for cross-attention.
+
+    Examples:
+
+    ```python
+    >>> from transformers import InstructBlipVideoQFormerConfig, InstructBlipVideoQFormerModel
+
+    >>> # Initializing a InstructBlipVideo Salesforce/instructblip-flan-t5-xl style configuration
+    >>> configuration = InstructBlipVideoQFormerConfig()
+
+    >>> # Initializing a model (with random weights) from the Salesforce/instructblip-flan-t5-xl style configuration
+    >>> model = InstructBlipVideoQFormerModel(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+
+@auto_docstring(checkpoint="Salesforce/instructblip-flan-t5-xl")
+@strict
+class InstructBlipVideoConfig(InstructBlipConfig):
+    r"""
+    qformer_config (`dict`, *optional*):
+        Dictionary of configuration options used to initialize [`InstructBlipVideoQFormerConfig`].
+    num_query_tokens (`int`, *optional*, defaults to 32):
+        The number of query tokens passed through the Transformer.
 
     Example:
 
@@ -87,10 +101,10 @@ class InstructBlipVideoConfig(PreTrainedConfig):
     ...     InstructBlipVideoForConditionalGeneration,
     ... )
 
-    >>> # Initializing a InstructBlipVideoConfig with Salesforce/instruct-blip-flan-t5 style configuration
+    >>> # Initializing a InstructBlipVideoConfig with Salesforce/instructblip-flan-t5-xl style configuration
     >>> configuration = InstructBlipVideoConfig()
 
-    >>> # Initializing a InstructBlipVideoForConditionalGeneration (with random weights) from the Salesforce/instruct-blip-flan-t5 style configuration
+    >>> # Initializing a InstructBlipVideoForConditionalGeneration (with random weights) from the Salesforce/instructblip-flan-t5-xl style configuration
     >>> model = InstructBlipVideoForConditionalGeneration(configuration)
 
     >>> # Accessing the model configuration
@@ -106,57 +120,9 @@ class InstructBlipVideoConfig(PreTrainedConfig):
     >>> config = InstructBlipVideoConfig(vision_config=vision_config, qformer_config=qformer_config, text_config=text_config)
     ```"""
 
-    model_type = "instructblipvideo"
-    attribute_map = {
-        "video_token_id": "video_token_index",
-    }
-    sub_configs = {
-        "text_config": AutoConfig,
-        "qformer_config": InstructBlipVideoQFormerConfig,
-        "vision_config": InstructBlipVideoVisionConfig,
-    }
-
-    def __init__(
-        self,
-        vision_config=None,
-        qformer_config=None,
-        text_config=None,
-        num_query_tokens=32,
-        video_token_index=None,
-        **kwargs,
-    ):
-        if text_config is None:
-            text_config = CONFIG_MAPPING["opt"]()
-            logger.info("text_config is None. Initializing the text config with default values (`OPTConfig`).")
-        elif isinstance(text_config, dict):
-            text_model_type = text_config.get("model_type", "opt")
-            text_config = CONFIG_MAPPING[text_model_type](**text_config)
-
-        if qformer_config is None:
-            qformer_config = InstructBlipVideoQFormerConfig()
-            logger.info("qformer_config is None. Initializing the InstructBlipVideoQFormerConfig with default values.")
-        elif isinstance(qformer_config, dict):
-            qformer_config = InstructBlipVideoQFormerConfig(**qformer_config)
-
-        if vision_config is None:
-            vision_config = InstructBlipVideoVisionConfig()
-            logger.info(
-                "`vision_config` is `None`. initializing the `InstructBlipVideoVisionConfig` with default values."
-            )
-        elif isinstance(vision_config, dict):
-            vision_config = InstructBlipVideoVisionConfig(**vision_config)
-
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.qformer_config = qformer_config
-
-        self.num_query_tokens = num_query_tokens
-        self.video_token_index = video_token_index
-        self.qformer_config.encoder_hidden_size = self.vision_config.hidden_size
-        self.use_decoder_only_language_model = self.text_config.model_type in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
-        self.initializer_factor = 1.0
-        self.initializer_range = 0.02
-        super().__init__(**kwargs)
+    attribute_map = {"video_token_id": "video_token_index"}
+    video_token_index: int | None = None
+    image_token_index = AttributeError()
 
 
 class InstructBlipVideoPreTrainedModel(InstructBlipPreTrainedModel):
@@ -176,6 +142,8 @@ class InstructBlipVideoForConditionalGenerationModelOutput(InstructBlipForCondit
 
 
 class InstructBlipVideoModel(InstructBlipModel):
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -186,15 +154,10 @@ class InstructBlipVideoModel(InstructBlipModel):
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
         interpolate_pos_encoding: bool = False,
         use_cache: bool | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> InstructBlipVideoForConditionalGenerationModelOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | InstructBlipVideoForConditionalGenerationModelOutput:
         # step 1: forward the images through the vision encoder,
         # we process in a batched way, later unbatch it back (video has frames=4 always)
         batch_size, frames, channel, height, width = pixel_values.shape
@@ -202,10 +165,8 @@ class InstructBlipVideoModel(InstructBlipModel):
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
         )
         image_embeds = vision_outputs[0]
 
@@ -221,6 +182,7 @@ class InstructBlipVideoModel(InstructBlipModel):
 
         qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
         qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = qformer_attention_mask.to(query_attention_mask.device)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         query_outputs = self.qformer(
             input_ids=qformer_input_ids,
@@ -228,9 +190,7 @@ class InstructBlipVideoModel(InstructBlipModel):
             query_embeds=query_tokens,
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
         query_output = query_outputs[0][:, : query_tokens.size(1), :]
 
@@ -246,11 +206,11 @@ class InstructBlipVideoModel(InstructBlipModel):
                 attention_mask = torch.ones_like(input_ids)
         else:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, language_model_inputs)
 
@@ -258,9 +218,6 @@ class InstructBlipVideoModel(InstructBlipModel):
             outputs = self.language_model(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -270,9 +227,6 @@ class InstructBlipVideoModel(InstructBlipModel):
                 attention_mask=attention_mask,
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
                 use_cache=use_cache,
                 **kwargs,
             )
@@ -294,7 +248,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         qformer_attention_mask: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithVisionQformerOutputs:
+    ) -> tuple | BaseModelOutputWithVisionQformerOutputs:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
@@ -311,7 +265,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=True,
             **kwargs,
         )
         vision_outputs = BaseModelOutputWithVisionQformerOutputs(
@@ -336,6 +289,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
 
         qformer_input_ids = qformer_input_ids.repeat_interleave(frames, dim=0)
         qformer_attention_mask = qformer_attention_mask.repeat_interleave(frames, dim=0)
+        qformer_attention_mask = qformer_attention_mask.to(query_attention_mask.device)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
         qformer_outputs = self.qformer(
             input_ids=qformer_input_ids,
@@ -343,7 +297,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
             query_embeds=query_tokens,
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_attention_mask,
-            return_dict=True,
             **kwargs,
         )
         vision_outputs.qformer_outputs = qformer_outputs
@@ -367,15 +320,17 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
             special_image_mask = input_ids == self.config.video_token_id
 
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask
 
+    @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -386,14 +341,12 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         decoder_input_ids: torch.LongTensor | None = None,
         decoder_attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
         labels: torch.LongTensor | None = None,
-        return_dict: bool | None = None,
         interpolate_pos_encoding: bool = False,
         use_cache: bool | None = None,
+        mm_encoder_outputs: BaseModelOutputWithPooling | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> InstructBlipVideoForConditionalGenerationModelOutput:
+    ) -> tuple | InstructBlipVideoForConditionalGenerationModelOutput:
         r"""
         qformer_input_ids (`torch.LongTensor` of shape (batch_size, sequence_length)):
             The sequence used as a prompt to be fed to the Q-Former module.
@@ -437,7 +390,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         ... )
         >>> container = av.open(file_path)
 
-        >>> # sample uniformly 4 frames from the videWhy is this video funny?o
+        >>> # sample uniformly 4 frames from the video
         >>> total_frames = container.streams.video[0].frames
         >>> indices = np.arange(0, total_frames, total_frames / 4).astype(int)
         >>> clip = read_video_pyav(container, indices)
@@ -457,19 +410,21 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         >>> print(generated_text)
         "A person is eating a bowl of pasta, and they are using a fork to eat it. The person is sitting at a table, and the plate of pasta is on the table in front"
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
-        video_features: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
-            pixel_values,
-            qformer_input_ids=qformer_input_ids,
-            qformer_attention_mask=qformer_attention_mask,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=True,
-            **kwargs,
-        )
-        language_model_inputs = video_features.pooler_output
-        qformer_outputs = video_features.qformer_outputs
-        vision_outputs = video_features.vision_outputs
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("video") is None:
+            mm_encoder_outputs["video"]: BaseModelOutputWithVisionQformerOutputs = self.get_video_features(
+                pixel_values,
+                qformer_input_ids=qformer_input_ids,
+                qformer_attention_mask=qformer_attention_mask,
+                interpolate_pos_encoding=interpolate_pos_encoding,
+                **kwargs,
+            )
+        language_model_inputs = mm_encoder_outputs["video"].pooler_output
+        qformer_outputs = mm_encoder_outputs["video"].qformer_outputs
+        vision_outputs = mm_encoder_outputs["video"].vision_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -485,13 +440,10 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
             outputs = self.language_model(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
                 use_cache=use_cache,
                 **kwargs,
             )
-            logits = outputs.logits if return_dict else outputs[0]
+            logits = outputs[0]
             loss = None
             if labels is not None:
                 loss = self.loss_function(
@@ -504,15 +456,12 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
                 attention_mask=attention_mask,
                 decoder_input_ids=decoder_input_ids,
                 decoder_attention_mask=decoder_attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
                 labels=labels,
                 use_cache=use_cache,
                 **kwargs,
             )
-            loss = outputs.loss if return_dict else outputs[0]
-            logits = outputs.logits if return_dict else outputs[1]
+            loss = outputs.loss
+            logits = outputs.logits
 
         return InstructBlipVideoForConditionalGenerationModelOutput(
             loss=loss,
@@ -566,7 +515,6 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=True,
         )
         language_model_inputs = video_features.pooler_output
 

@@ -63,6 +63,7 @@ if is_torch_available():
 class PatchTSMixerModelTester:
     def __init__(
         self,
+        parent,
         context_length: int = 32,
         patch_length: int = 8,
         num_input_channels: int = 3,
@@ -103,6 +104,7 @@ class PatchTSMixerModelTester:
         seed_number=42,
         num_parallel_samples=4,
     ):
+        self.parent = parent
         self.num_input_channels = num_input_channels
         self.context_length = context_length
         self.patch_length = patch_length
@@ -227,7 +229,7 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = PatchTSMixerModelTester()
+        self.model_tester = PatchTSMixerModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=PatchTSMixerConfig,
@@ -322,8 +324,8 @@ class PatchTSMixerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
             with torch.no_grad():
                 tuple_output = model(**tuple_inputs, return_dict=False, **additional_kwargs)
                 output_ = model(**dict_inputs, return_dict=True, **additional_kwargs)
-                attributes_ = vars(output_)
-                dict_output = tuple(attributes_.values())
+                # ``ModelOutput.to_tuple()`` drops ``None`` entries; do the same on the dict side.
+                dict_output = output_.to_tuple()
 
                 def recursive_check(tuple_object, dict_object):
                     if isinstance(tuple_object, (list, tuple)):

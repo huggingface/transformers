@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-11-22 and added to Hugging Face Transformers on 2022-02-17.*
+*This model was published in HF papers on 2021-11-22 and contributed to Hugging Face Transformers on 2022-02-17.*
 
 # PoolFormer
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -55,7 +52,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 <PipelineTag pipeline="image-classification"/>
 
-- [`PoolFormerForImageClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
+- [`PoolFormerForImageClassification`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
 - See also: [Image classification task guide](../tasks/image_classification)
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
@@ -69,9 +66,9 @@ If you're interested in submitting a resource to be included here, please feel f
 [[autodoc]] PoolFormerImageProcessor
     - preprocess
 
-## PoolFormerImageProcessorFast
+## PoolFormerImageProcessorPil
 
-[[autodoc]] PoolFormerImageProcessorFast
+[[autodoc]] PoolFormerImageProcessorPil
     - preprocess
 
 ## PoolFormerModel

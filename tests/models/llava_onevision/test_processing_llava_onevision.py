@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import json
-import os
 import unittest
 
 import torch
@@ -25,72 +24,14 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import (
-        LlavaOnevisionProcessor,
-    )
+    from transformers import LlavaOnevisionProcessor
 
 
 @require_vision
 @require_torch
 class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = LlavaOnevisionProcessor
-
-    @classmethod
-    def setUpClass(cls):
-        # Ensure local assets are used instead of remote URLs to avoid network access in tests
-        from tests.test_processing_common import MODALITY_INPUT_DATA
-        from transformers import video_processing_utils, video_utils
-
-        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
-        local_image = os.path.join(repo_root, "coco_sample.png")
-        if not os.path.isfile(local_image):
-            import numpy as np
-            from PIL import Image
-
-            Image.fromarray((np.random.rand(64, 64, 3) * 255).astype("uint8")).save(local_image)
-
-        local_tiny_video = os.path.join(repo_root, "tiny_video.mp4")
-        if not os.path.isfile(local_tiny_video):
-            try:
-                import torchvision
-
-                frames = (torch.rand(8, 64, 64, 3) * 255).byte()
-                torchvision.io.write_video(local_tiny_video, frames, fps=4)
-            except Exception:
-                local_tiny_video = None
-
-        local_videos = [
-            os.path.join(repo_root, "Big_Buck_Bunny_720_10s_10MB.mp4"),
-            os.path.join(repo_root, "sample_demo_1.mp4"),
-        ]
-        cls.local_tiny_video = local_tiny_video
-        MODALITY_INPUT_DATA["images"] = [local_image, local_image]
-        MODALITY_INPUT_DATA["videos"] = local_videos
-
-        # Force video decoding to use torchvision backend to avoid torchcodec dependency during tests
-        video_processing_utils.is_torchcodec_available = lambda: False  # type: ignore
-        video_utils.is_torchcodec_available = lambda: False  # type: ignore
-        super().setUpClass()
-
-    @classmethod
-    def _setup_tokenizer(cls):
-        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        vocab_tokens = [
-            ("<unk>", 0.0),
-            ("<s>", 0.0),
-            ("</s>", 0.0),
-            ("[PAD]", 0.0),
-            ("<image>", 0.0),
-            ("<video>", 0.0),
-            ("Hello", 0.0),
-            ("world", 0.0),
-        ]
-        vocab = {token: index for index, (token, _) in enumerate(vocab_tokens)}
-        tokenizer = tokenizer_class(vocab=vocab, add_bos_token=True, add_eos_token=False)
-        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>", "<video>"]})
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = "[PAD]"
-        return tokenizer
+    model_id = "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
 
     @classmethod
     def _setup_image_processor(cls):
@@ -109,6 +50,15 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "num_image_tokens": 6,
             "vision_feature_select_strategy": "default"
         }  # fmt: skip
+
+    @property
+    def video_sampling_expectations(self):
+        return [
+            {"num_frames": 3, "fps": None, "expected_dim": 1, "output_length": 3},
+            {"num_frames": None, "fps": 16, "expected_dim": 1, "output_length": 5},
+            {"do_sample_frames": False, "fps": 2, "expected_dim": 1, "output_length": 11},
+            {"do_sample_frames": False, "expected_dim": 1, "output_length": 11},
+        ]
 
     # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
@@ -164,50 +114,3 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
         self.assertEqual(expected_image_tokens, image_tokens)
-
-    @require_torch
-    def test_apply_chat_template_video_frame_sampling(self):
-        processor = self.get_processor()
-
-        if self.local_tiny_video is None:
-            self.skipTest("Local tiny video unavailable for sampling test")
-
-        messages = [
-            [
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "video",
-                            "url": self.local_tiny_video,
-                        },
-                        {"type": "text", "text": "What is shown in this video?"},
-                    ],
-                },
-            ]
-        ]
-
-        num_frames = 3
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            num_frames=num_frames,
-            return_tensors="pt",
-        )
-        self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), num_frames)
-
-        # Choose an fps high enough to avoid rounding down to zero sampled frames on short dummy videos
-        fps = 4
-        out_dict_with_video = processor.apply_chat_template(
-            messages,
-            add_generation_prompt=True,
-            tokenize=True,
-            return_dict=True,
-            fps=fps,
-            return_tensors="pt",
-        )
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)

@@ -9,15 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2020-10-22 and added to Hugging Face Transformers on 2021-04-01.*
+*This model was published in HF papers on 2020-10-22 and contributed to Hugging Face Transformers on 2021-04-01.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
@@ -30,20 +29,21 @@ You can find all the original ViT checkpoints under the [Google](https://hugging
 
 > [!TIP]
 > Click on the ViT models in the right sidebar for more examples of how to apply ViT to different computer vision tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to classify an image with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-classification",
     model="google/vit-base-patch16-224",
-    dtype=torch.float16,
     device=0
 )
 pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg")
@@ -52,11 +52,13 @@ pipeline("https://huggingface.co/datasets/huggingface/documentation-images/resol
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 import requests
+import torch
 from PIL import Image
-from transformers import AutoModelForImageClassification, AutoImageProcessor
+
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
 
 image_processor = AutoImageProcessor.from_pretrained(
     "google/vit-base-patch16-224",
@@ -64,7 +66,6 @@ image_processor = AutoImageProcessor.from_pretrained(
 )
 model = AutoModelForImageClassification.from_pretrained(
     "google/vit-base-patch16-224",
-    dtype=torch.float16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -87,7 +88,7 @@ print(f"The predicted class label is: {predicted_class_label}")
 ## Notes
 
 - The best results are obtained with supervised pretraining, and during fine-tuning, it may be better to use images with a resolution higher than 224x224.
-- Use [`ViTImageProcessorFast`] to resize (or rescale) and normalize images to the expected size.
+- Use [`ViTImageProcessor`] to resize (or rescale) and normalize images to the expected size.
 - The patch and image resolution are reflected in the checkpoint name. For example, google/vit-base-patch16-224, is the **base-sized** architecture with a patch resolution of 16x16 and fine-tuning resolution of 224x224.
 
 ## ViTConfig
@@ -99,10 +100,11 @@ print(f"The predicted class label is: {predicted_class_label}")
 [[autodoc]] ViTImageProcessor
     - preprocess
 
-## ViTImageProcessorFast
+## ViTImageProcessorPil
 
-[[autodoc]] ViTImageProcessorFast
+[[autodoc]] ViTImageProcessorPil
     - preprocess
+
 
 ## ViTModel
 

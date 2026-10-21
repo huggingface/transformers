@@ -1,10 +1,6 @@
-FROM python:3.10-slim
-ENV PYTHONDONTWRITEBYTECODE=1
+FROM ci-base
 ARG REF=main
-USER root
 RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git cmake wget xz-utils build-essential g++5 libprotobuf-dev protobuf-compiler git-lfs curl
-ENV UV_PYTHON=/usr/local/bin/python
-RUN pip --no-cache-dir install uv && uv pip install --no-cache-dir -U pip setuptools
 
 RUN wget https://github.com/ku-nlp/jumanpp/releases/download/v2.0.0-rc3/jumanpp-2.0.0-rc3.tar.xz
 RUN tar xvf jumanpp-2.0.0-rc3.tar.xz
@@ -17,11 +13,16 @@ RUN make install -j 10
 
 WORKDIR /
 
-RUN uv pip install --no-cache --upgrade 'torch<=2.10.0' --index-url https://download.pytorch.org/whl/cpu
+RUN uv pip install --no-cache --upgrade 'torch<=2.14.0' --index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install --no-cache-dir  --no-deps accelerate --extra-index-url https://download.pytorch.org/whl/cpu
 RUN uv pip install  --no-cache-dir "git+https://github.com/huggingface/transformers.git@${REF}#egg=transformers[ja,testing,sentencepiece,spacy,rjieba]" unidic unidic-lite
 # spacy is not used so not tested. Causes to failures. TODO fix later
 RUN uv run python -m unidic download
+
+# Use a custom patched pytest to force exit the process at the end, to avoid `Too long with no output (exceeded 10m0s): context deadline exceeded` (#40201)
+RUN uv pip install --no-cache-dir git+https://github.com/ydshieh/pytest.git@8.4.1-ydshieh
+RUN uv pip install --no-cache-dir pytest-random-order
+RUN uv pip install --no-cache-dir 'transformers-ci[otel] @ git+https://github.com/huggingface/transformers-ci@main'
 
 # fetch test data and hub objects within CircleCI docker images to reduce even more connections
 # we don't need a full clone of `transformers` to run `fetch_hub_objects_for_ci.py`

@@ -19,7 +19,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from parameterized import parameterized
 
 from transformers import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
@@ -35,6 +34,7 @@ from transformers.utils import (
 )
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -50,7 +50,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SiglipForImageClassification, SiglipModel, SiglipTextModel, SiglipVisionModel
-    from transformers.models.siglip.modeling_siglip import SiglipVisionTransformer
 
 if is_vision_available():
     from PIL import Image
@@ -187,7 +186,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = SiglipVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=SiglipVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=SiglipVisionConfig, has_text_modality=False, hidden_size=32
         )
 
     def test_config(self):
@@ -208,7 +207,7 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
 
     def test_vision_transformer_get_set_input_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        transformer = SiglipVisionTransformer(config)
+        transformer = SiglipVisionModel(config)
 
         self.assertIsInstance(transformer.get_input_embeddings(), nn.Conv2d)
 
@@ -350,11 +349,11 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.setUp with CLIP->Siglip
     def setUp(self):
         self.model_tester = SiglipTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=SiglipTextConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=SiglipTextConfig, hidden_size=32)
 
-    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_config
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # Config can't be init without params, raises warning on incoherent defaults
+        self.config_tester.run_common_tests(can_init_without_params=False)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_model
     def test_model(self):
@@ -461,7 +460,8 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
         self.config_tester = ConfigTester(self, config_class=SiglipConfig, has_text_modality=False)
 
     def test_config(self):
-        self.config_tester.run_common_tests()
+        # Config can't be init without params, raises warning on incoherent defaults
+        self.config_tester.run_common_tests(can_init_without_params=False)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model
     def test_model(self):
@@ -593,8 +593,8 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    image = load_test_image(url)
     return image
 
 

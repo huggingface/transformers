@@ -24,9 +24,9 @@ import dataclasses
 import math
 import os
 import re
+import shutil
 import signal
 import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -45,6 +45,7 @@ from transformers import (
     AutoProcessor,
     AutoTokenizer,
     Trainer,
+    TrainerCallback,
     TrainerState,
     TrainingArguments,
     default_data_collator,
@@ -60,15 +61,16 @@ from transformers.testing_utils import (
     backend_device_count,
     evaluate_side_effect_factory,
     get_steps_per_epoch,
+    get_torch_dist_unique_port,
     is_staging_test,
-    require_accelerate,
+    mockenv_context,
     require_deepspeed,
-    require_non_hpu,
     require_peft,
     require_tensorboard,
     require_torch,
     require_torch_non_multi_accelerator,
     require_torch_up_to_2_accelerators,
+    require_torchvision,
     require_vision,
     run_first,
     run_test_using_subprocess,
@@ -457,29 +459,40 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
         # won't be the same since the training dataloader is shuffled).
 
+        def check_train_metrics(metrics, step_losses):
+            # `train_loss` and throughput must only cover the steps run in this `train()` call
+            self.assertAlmostEqual(metrics["train_loss"], sum(step_losses) / len(step_losses), places=3)
+            self.assertEqual(round(metrics["train_steps_per_second"] * metrics["train_runtime"]), len(step_losses))
+
         with tempfile.TemporaryDirectory() as tmpdir:
-            trainer = get_regression_trainer(
-                output_dir=tmpdir,
-                train_len=128,
-                save_steps=5,
-                learning_rate=0.1,
-            )
-            trainer.train()
+            kwargs = {
+                "output_dir": tmpdir,
+                "train_len": 128,
+                "save_steps": 5,
+                "learning_rate": 0.1,
+                "logging_steps": 1,
+            }
+            trainer = get_regression_trainer(**kwargs)
+            metrics = trainer.train().metrics
             (a, b) = trainer.model.a.item(), trainer.model.b.item()
             state = dataclasses.asdict(trainer.state)
+            step_losses = {log["step"]: log["loss"] for log in trainer.state.log_history if "loss" in log}
+            check_train_metrics(metrics, list(step_losses.values()))
 
             checkpoint = os.path.join(tmpdir, "checkpoint-5")
             self.convert_to_sharded_checkpoint(checkpoint)
 
             # Reinitialize trainer
-            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
+            trainer = get_regression_trainer(**kwargs)
 
-            trainer.train(resume_from_checkpoint=checkpoint)
+            metrics1 = trainer.train(resume_from_checkpoint=checkpoint).metrics
             (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
             state1 = dataclasses.asdict(trainer.state)
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
+            # The resumed run only trained the steps after the checkpoint, with the same losses as the full run
+            check_train_metrics(metrics1, [loss for step, loss in step_losses.items() if step > 5])
 
     @require_torch_up_to_2_accelerators
     def test_resume_training_with_gradient_accumulation(self):
@@ -624,43 +637,31 @@ class TrainerAutoBatchSizeTest(TestCasePlus, TrainerIntegrationCommon):
         self.n_epochs = args.num_train_epochs
         self.batch_size = args.train_batch_size
 
-    @slow
-    @require_non_hpu
-    @require_accelerate
-    @require_torch_non_multi_accelerator
     def test_auto_batch_size_finder(self):
-        if torch.cuda.is_available():
-            torch.backends.cudnn.deterministic = True
+        train_dataset = RegressionDataset(length=128)
+        model = RegressionRandomPreTrainedModel(RegressionModelConfig(a=0, b=2))
 
-        SRC_DIR = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "..", "examples", "pytorch", "text-classification")
-        )
-        sys.path.append(SRC_DIR)
-        import run_glue
+        def make_trainer(auto_find_batch_size):
+            args = RegressionTrainingArguments(
+                self.get_auto_remove_tmp_dir(),
+                max_steps=2,
+                save_strategy="no",
+                per_device_train_batch_size=16,
+                auto_find_batch_size=auto_find_batch_size,
+            )
+            return Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            testargs = f"""
-                run_glue.py
-                --model_name_or_path distilbert/distilbert-base-uncased
-                --task_name mrpc
-                --do_train
-                --do_eval
-                --max_seq_len 128
-                --per_device_train_batch_size 4096
-                --learning_rate 2e-5
-                --num_train_epochs 1
-                --output_dir {tmpdir}
-                --auto_find_batch_size 0
-                """.split()
-            with self.assertRaises(RuntimeError):
-                with patch.object(sys, "argv", testargs):
-                    run_glue.main()
+        # Without the finder, the OOM reaches the user
+        with self.assertRaisesRegex(RuntimeError, "CUDA out of memory"):
+            make_trainer(auto_find_batch_size=False).train()
 
-        testargs[-1] = "1"
-        with patch.object(sys, "argv", testargs):
-            run_glue.main()
+        # With it, training shrinks the batch size until it fits
+        trainer = make_trainer(auto_find_batch_size=True)
+        trainer.train()
+        self.assertLess(trainer._train_batch_size, 16)
 
     @require_deepspeed
+    @require_torch_non_multi_accelerator
     def test_auto_batch_size_with_deepspeed(self):
         train_dataset = RegressionDataset(length=128)
 
@@ -687,9 +688,44 @@ class TrainerAutoBatchSizeTest(TestCasePlus, TrainerIntegrationCommon):
             auto_find_batch_size=True,
             deepspeed=deepspeed,
         )
-        trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
-        trainer.train()
+        # DeepSpeed refuses to initialize without a rank in the environment, and this test runs
+        # in-process rather than under `accelerate launch`, so stand in for the launcher.
+        dist_env_1_gpu = {
+            "MASTER_ADDR": "localhost",
+            "MASTER_PORT": str(get_torch_dist_unique_port()),
+            "RANK": "0",
+            "LOCAL_RANK": "0",
+            "WORLD_SIZE": "1",
+        }
+        with mockenv_context(**dist_env_1_gpu):
+            trainer = Trainer(model, args, train_dataset=train_dataset, callbacks=[MockCudaOOMCallback()])
+            trainer.train()
         self.assertEqual(trainer._train_batch_size, 14)
+
+    def test_auto_batch_size_eval_oom_fails_fast(self):
+        # An eval OOM must not be caught by the batch size finder, which only shrinks the train batch size
+        class MockEvalOOMCallback(TrainerCallback):
+            def on_evaluate(self, args, state, control, **kwargs):
+                raise RuntimeError("CUDA out of memory.")
+
+        train_dataset = RegressionDataset(length=128)
+        eval_dataset = RegressionDataset(length=16)
+        model = RegressionRandomPreTrainedModel(RegressionModelConfig(a=0, b=2))
+        args = RegressionTrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            max_steps=2,
+            eval_strategy="steps",
+            eval_steps=1,
+            save_strategy="no",
+            per_device_train_batch_size=16,
+            auto_find_batch_size=True,
+        )
+        trainer = Trainer(
+            model, args, train_dataset=train_dataset, eval_dataset=eval_dataset, callbacks=[MockEvalOOMCallback()]
+        )
+        with self.assertRaisesRegex(RuntimeError, "per_device_eval_batch_size"):
+            trainer.train()
+        self.assertEqual(trainer._train_batch_size, 16 * max(trainer.args.n_gpu, 1))
 
     def test_auto_batch_size_with_resume_from_checkpoint(self):
         train_dataset = RegressionDataset(length=128)
@@ -981,7 +1017,7 @@ class TrainerInterruptedTrainingTest(TestCasePlus, TrainerIntegrationCommon):
                 super().__init__()
                 self.fc = nn.Linear(10, 10, bias=False)
                 # data_order logs the order of data points seen by the model
-                self.register_buffer("data_order", torch.empty(0, dtype=torch.long))
+                self.data_order = nn.Buffer(torch.empty(0, dtype=torch.long))
 
             def load_state_dict(self, state_dict, strict=True):
                 # Handle data_order buffer size mismatch during checkpoint loading
@@ -1511,6 +1547,7 @@ class TrainerSavingTest(TestCasePlus, TrainerIntegrationCommon):
         )
 
     @require_vision
+    @require_torchvision
     def test_trainer_saves_image_processor(self):
         MODEL_ID = "openai/clip-vit-base-patch32"
         image_processor = AutoImageProcessor.from_pretrained(MODEL_ID)
@@ -1545,6 +1582,7 @@ class TrainerSavingTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertDictEqual(feature_extractor.to_dict(), reloaded_feature_extractor.to_dict())
 
     @require_vision
+    @require_torchvision
     def test_trainer_saves_processor(self):
         MODEL_ID = "openai/clip-vit-base-patch32"
         image_processor = AutoImageProcessor.from_pretrained(MODEL_ID)
@@ -1594,6 +1632,35 @@ class TrainerBestModelTest(TestCasePlus, TrainerIntegrationCommon):
         self.n_epochs = args.num_train_epochs
         self.batch_size = args.train_batch_size
 
+    def test_load_best_model_with_save_best(self):
+        # Regression test: when save_strategy="best", the best model checkpoint should
+        # be loaded at the end of training, not the last one.
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(
+            output_dir=tmp_dir,
+            save_strategy="best",
+            eval_strategy="steps",
+            eval_steps=5,
+            load_best_model_at_end=True,
+            save_total_limit=2,
+            max_steps=11,
+        )
+        trainer.train()
+
+        # Check that best_model_checkpoint was set
+        assert trainer.state.best_model_checkpoint is not None, (
+            "trainer.state.best_model_checkpoint is None. Cannot load the best model checkpoint."
+        )
+
+        # Check that the right model was loaded in at the end of training —
+        # trainer.model weights should match the best checkpoint, not the last one saved
+        model_state = trainer.model.state_dict()
+        final_model_weights = safetensors.torch.load_file(
+            os.path.join(trainer.state.best_model_checkpoint, "model.safetensors")
+        )
+        for k, v in model_state.items():
+            assert torch.allclose(v, final_model_weights[k]), f"{k} is not the same"
+
     def test_load_best_model_with_save(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
         trainer = get_regression_trainer(
@@ -1634,11 +1701,12 @@ class TrainerBestModelTest(TestCasePlus, TrainerIntegrationCommon):
         # Finally check that we don't have an old one
         assert not os.path.exists(os.path.join(tmp_dir, "checkpoint-5")), "Found checkpoint-5, limit not respected"
 
-        # Finally check that the right model was loaded in, checkpoint-10
-        # this goes by the last `eval` step check to do so, so it won't be
-        # the last model *saved*
+        # Finally check that the right model was loaded in - it should be the checkpoint
+        # with the best eval metric. With eval at steps 5, 10, 11, the best could be any of them.
         model_state = trainer.model.state_dict()
-        final_model_weights = safetensors.torch.load_file(os.path.join(tmp_dir, "checkpoint-10", "model.safetensors"))
+        # Find which checkpoint has the best metric
+        best_checkpoint_dir = trainer.state.best_model_checkpoint
+        final_model_weights = safetensors.torch.load_file(os.path.join(best_checkpoint_dir, "model.safetensors"))
         for k, v in model_state.items():
             assert torch.allclose(v, final_model_weights[k]), f"{k} is not the same"
 
@@ -1741,12 +1809,12 @@ class TrainerBestModelTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(trainer.args.metric_for_best_model == "loss")
 
     def test_best_model_checkpoint_behavior(self):
-        # Case 1. Never evaluated, save_total_limit > 1 and save_steps == 1.
+        # Case 1. No evaluation, save_total_limit > 1 and save_steps == 1.
         # Both best_metric and best_model_checkpoint should be None.
         with tempfile.TemporaryDirectory() as tmpdir:
             trainer = get_regression_trainer(
                 output_dir=tmpdir,
-                eval_strategy="steps",
+                eval_strategy="no",
                 save_strategy="steps",
                 save_steps=1,
                 metric_for_best_model="accuracy",
@@ -1758,13 +1826,13 @@ class TrainerBestModelTest(TestCasePlus, TrainerIntegrationCommon):
             assert trainer.state.best_model_checkpoint is None
             assert len(os.listdir(tmpdir)) == trainer.state.global_step
 
-        # Case 2. Never evaluated and save_total_limit == 1.
+        # Case 2. No evaluation and save_total_limit == 1.
         # Both best_metric and best_model_checkpoint should be None.
         # Only the last checkpoint should remain.
         with tempfile.TemporaryDirectory() as tmpdir:
             trainer = get_regression_trainer(
                 output_dir=tmpdir,
-                eval_strategy="steps",
+                eval_strategy="no",
                 save_strategy="steps",
                 save_steps=1,
                 metric_for_best_model="accuracy",
@@ -2015,6 +2083,67 @@ class TrainerBestModelTest(TestCasePlus, TrainerIntegrationCommon):
                 trainer.train()
                 self.check_saved_checkpoints(tmpdir, 5, total, is_pretrained=pretrained)
                 self.check_best_model_has_been_loaded(tmpdir, 5, total, trainer, "eval_loss", is_pretrained=pretrained)
+
+    def test_resume_from_checkpoint_with_stale_best_model_checkpoint(self):
+        def constant_metrics(_):
+            return {"accuracy": 0.5}
+
+        with (
+            tempfile.TemporaryDirectory() as tmp_dir_a,
+            tempfile.TemporaryDirectory() as tmp_dir_moved,
+            tempfile.TemporaryDirectory() as tmp_dir_b,
+        ):
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir_a,
+                learning_rate=0.1,
+                eval_strategy="steps",
+                eval_steps=2,
+                save_steps=2,
+                save_total_limit=1,
+                load_best_model_at_end=True,
+                metric_for_best_model="accuracy",
+                greater_is_better=True,
+                compute_metrics=constant_metrics,
+                max_steps=4,
+            )
+            trainer.train()
+
+            stale_best = trainer.state.best_model_checkpoint
+            self.assertIsNotNone(stale_best)
+            # With save_total_limit=1 only the best checkpoint survived the first run
+            checkpoints_a = [os.path.basename(str(p)) for p in Path(tmp_dir_a).glob(f"{PREFIX_CHECKPOINT_DIR}-*")]
+            self.assertEqual(checkpoints_a, [os.path.basename(stale_best)])
+
+            # Simulate the original run being deleted and its checkpoints moved elsewhere
+            moved_checkpoint = os.path.join(tmp_dir_moved, os.path.basename(stale_best))
+            shutil.move(stale_best, moved_checkpoint)
+
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir_b,
+                learning_rate=0.1,
+                eval_strategy="steps",
+                eval_steps=2,
+                save_steps=2,
+                save_total_limit=1,
+                load_best_model_at_end=True,
+                metric_for_best_model="accuracy",
+                greater_is_better=True,
+                compute_metrics=constant_metrics,
+                max_steps=6,
+            )
+            with CaptureLogger(logging.get_logger()) as cl:
+                output = trainer.train(resume_from_checkpoint=moved_checkpoint)
+
+            self.assertEqual(output.global_step, 6)
+            self.assertIn("does not exist", cl.out)
+            self.assertTrue(
+                trainer.state.best_model_checkpoint is None
+                or trainer.state.best_model_checkpoint.startswith(tmp_dir_b + os.sep)
+            )
+            checkpoints_b = sorted(
+                os.path.basename(str(p)) for p in Path(tmp_dir_b).glob(f"{PREFIX_CHECKPOINT_DIR}-*")
+            )
+            self.assertEqual(checkpoints_b, [f"{PREFIX_CHECKPOINT_DIR}-6"])
 
 
 # ---------------------------------------------------------------------------

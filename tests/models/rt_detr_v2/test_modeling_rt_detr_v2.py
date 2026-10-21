@@ -51,7 +51,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import RTDetrImageProcessor
+    from transformers import RTDetrImageProcessorPil
 
 
 CHECKPOINT = "PekingU/rtdetr_v2_r18vd"
@@ -263,8 +263,6 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
     is_encoder_decoder = True
-
-    test_missing_keys = False
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -659,7 +657,7 @@ def prepare_img():
 class RTDetrV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return RTDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+        return RTDetrImageProcessorPil.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
         model = RTDetrV2ForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)

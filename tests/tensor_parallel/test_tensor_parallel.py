@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,139 +11,30 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-# Run all tests: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py
-# Run dense tests: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "dense"
-# Run MoE tests: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py -k "moe"
-# Collect tests: RUN_SLOW=1 pytest -v tests/tensor_parallel/test_tensor_parallel.py --collect-only
-import os
-import tempfile
 import warnings
+from unittest.mock import patch
 
-import pytest
-from safetensors import safe_open
+import torch
+from torch.distributed.device_mesh import init_device_mesh
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, is_torch_available, set_seed
-from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
-from transformers.testing_utils import (
-    TestCasePlus,
-    backend_device_count,
-    get_torch_dist_unique_port,
-    require_huggingface_hub_greater_or_equal,
-    require_torch_multi_accelerator,
-    torch_device,
+from transformers import AutoModelForCausalLM
+from transformers.distributed import tensor_parallel
+from transformers.distributed.sharding_utils import DtensorShardOperation
+from transformers.distributed.tensor_parallel import (
+    ALL_PARALLEL_STYLES,
+    ColwiseParallel,
+    EpDispatchExpertsParallel,
+    PackedColwiseParallel,
+    PackedRowwiseParallel,
+    RowwiseParallel,
+    get_kv_heads_per_rank,
 )
-from transformers.utils import is_torch_greater_or_equal
+from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
+
+from ..test_tensor_parallel_mixin import _init_distributed
 
 
-# Tensor parallel tests require torch >= 2.9 for proper torch.compile support with distributed collectives
-# Newer versions of PyTorch has torch.library.register_autograd in https://github.com/pytorch/pytorch/blob/8bcedd6e6029cce5f3a3731dd59be4941414c731/torch/distributed/_functional_collectives.py#L630
-# that fix the warning "autograd kernel was not registered to the Autograd key(s) but we are trying to backprop through it"
-# NOTE(3outeille): need to double check if it works with older version of torch
-pytestmark = pytest.mark.skipif(
-    not is_torch_greater_or_equal("2.9"),
-    reason="Tensor parallel tests require torch >= 2.9 for torch.compile support with distributed collectives",
-)
-
-
-if is_torch_available():
-    import torch
-    import torch.distributed as dist
-    import torch.multiprocessing as mp
-
-
-def get_packed_grad_shard(grad, world_size, rank, dim):
-    """Get the correct shard of a packed gradient (matching get_packed_weights interleaved logic).
-
-    Packed weights like gate_up_proj are sharded with interleaving:
-    Original: [G0 G1 G2 G3 | U0 U1 U2 U3]  (gate | up)
-    Rank 0:   [G0 G1 | U0 U1]
-    Rank 1:   [G2 G3 | U2 U3]
-    """
-    total_size = grad.shape[dim]
-    # Packed weights have 2 blocks (gate and up)
-    block_size = total_size // 2
-    shard_block_size = block_size // world_size
-
-    # Build interleaved indices
-    indices = []
-    for block_idx in range(2):  # gate block, then up block
-        block_offset = block_idx * block_size
-        start = block_offset + rank * shard_block_size
-        stop = block_offset + (rank + 1) * shard_block_size
-        indices.extend(range(start, stop))
-
-    # Select along the sharded dimension
-    return grad.index_select(dim, torch.tensor(indices, device=grad.device))
-
-
-def global_wrapper(rank, func, tp, port, func_args, func_kwargs):
-    def setup_dist_env(rank, world_size, port):
-        os.environ["WORLD_SIZE"] = str(world_size)
-        os.environ["RANK"] = str(rank)
-        os.environ["LOCAL_RANK"] = str(rank)
-        os.environ["MASTER_ADDR"] = "localhost"
-        os.environ["MASTER_PORT"] = str(port)
-
-    world_size = tp
-    setup_dist_env(rank, world_size, port)
-
-    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
-
-    func(rank, *func_args, **func_kwargs)
-
-    dist.barrier()
-    dist.destroy_process_group()
-
-
-def init_distributed(tp: int):
-    def _init_distributed(func):
-        def wrapper(*args, **kwargs):
-            world_size = tp
-            port = get_torch_dist_unique_port()
-            spawn_args = (func, tp, port, args, kwargs)
-            mp.spawn(global_wrapper, args=spawn_args, nprocs=world_size)
-
-        return wrapper
-
-    return _init_distributed
-
-
-def skip_if_insufficient_devices(nproc_per_node):
-    """Skip test if there aren't enough devices available."""
-    if backend_device_count(torch_device) < nproc_per_node:
-        pytest.skip(f"Need at least {nproc_per_node} devices, have {backend_device_count(torch_device)}")
-
-
-class TestTensorParallelUtils(TestCasePlus):
-    def test_packed_unpacked_conversion(self):
-        WORLD_SIZE = 2
-        PACKED_BLOCK_SIZE = 800
-        SHARDING_DIM = 2
-        NUM_BLOCKS = 2
-
-        original_packed_weights = torch.randn(4, 512, 2 * PACKED_BLOCK_SIZE)
-        original_packed_weights.get_dtype = lambda: "F32"  # get_packed_weights expects PySlice object
-        empty_param = torch.empty(4, 512, 2 * PACKED_BLOCK_SIZE)
-
-        class MockDeviceMesh:
-            def size(self):
-                return WORLD_SIZE
-
-        mock_mesh = (
-            MockDeviceMesh()
-        )  # get_packed_weights only calls `.size()`, do this to avoid doing actual distributed run
-
-        packed_weights_0 = get_packed_weights(original_packed_weights, empty_param, mock_mesh, 0, SHARDING_DIM)
-        packed_weights_1 = get_packed_weights(original_packed_weights, empty_param, mock_mesh, 1, SHARDING_DIM)
-
-        # simulate all gather of sharded weights
-        packed_weights = torch.cat([packed_weights_0, packed_weights_1], dim=SHARDING_DIM)
-        unpacked_weights = repack_weights(packed_weights, SHARDING_DIM, WORLD_SIZE, NUM_BLOCKS)
-
-        assert torch.allclose(unpacked_weights, original_packed_weights)
-
-
+@is_tensor_parallel_test
 class TestTensorParallelProperties(TestCasePlus):
     def test_tp_plan_property_setter_getter(self):
         """Test that tp_plan property can be set and retrieved correctly."""
@@ -177,12 +68,31 @@ class TestTensorParallelProperties(TestCasePlus):
         model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
-        # Test invalid parallel style
+        invalid_plan = {
+            "layers.*.self_attn.q_proj": "invalid_style",
+            "layers.*.self_attn.k_proj": "another_invalid_style",
+        }
         with self.assertRaises(ValueError) as context:
-            model.tp_plan = {"layers.*.self_attn.q_proj": "invalid_style"}
+            model.tp_plan = invalid_plan
 
-        self.assertIn("Unsupported tensor parallel style 'invalid_style'", str(context.exception))
-        self.assertIn("Supported styles are", str(context.exception))
+        error_message = str(context.exception)
+        for style in invalid_plan.values():
+            self.assertIn(repr(style), error_message)
+        self.assertIn("Supported styles are", error_message)
+
+    def test_apply_tensor_parallelism_reports_all_invalid_styles(self):
+        model = torch.nn.Module()
+        model.tp_plan = {
+            "first_layer": "invalid_style",
+            "second_layer": "another_invalid_style",
+        }
+
+        with self.assertRaises(ValueError) as context:
+            tensor_parallel.apply_tensor_parallelism(model, tp_mesh=None)
+
+        error_message = str(context.exception)
+        self.assertIn("'invalid_style'", error_message)
+        self.assertIn("'another_invalid_style'", error_message)
 
     def test_tp_plan_validation_nonexistent_layer_warning(self):
         """Test that warnings are issued for non-existent layer patterns."""
@@ -248,641 +158,246 @@ class TestTensorParallelProperties(TestCasePlus):
         model.tp_plan = {"model.layers.*.self_attn.q_proj": "colwise"}
         self.assertEqual(model.tp_plan, {"model.layers.*.self_attn.q_proj": "colwise"})
 
-
-# ====== TEST FUNCTIONS ======
-def _test_model_dense_forward_impl(rank, mode, dtype=torch.float32):
-    """Implementation for comparing TP and non-TP model outputs."""
-    model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
-
-    set_seed(42)
-
-    atol, rtol = (1e-5, 1e-5)
-
-    # Load tokenizer and prepare inputs - same for both models
-    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
-    prompt = "Can I help"
-    inputs = tokenizer(prompt, return_tensors="pt")
-
-    # Load TP model first to determine device
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype, tp_plan="auto")
-    dist.barrier()
-    if mode == "eval":
-        model_tp.eval()
-    else:
-        model_tp.train()
-
-    # Load non-TP model and move to same device as TP model
-    device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
-    model = model.to(device)
-
-    if mode == "eval":
-        model.eval()
-    else:
-        model.train()
-
-    # Prepare inputs on the same device
-    input_ids = inputs.input_ids.to(device)
-
-    with torch.no_grad():
-        outputs = model(input_ids)
-        logits = outputs.logits
-
-        outputs_tp = model_tp(input_ids)
-        logits_tp = outputs_tp.logits
-
-    diff = (logits - logits_tp).abs()
-    assert torch.allclose(logits, logits_tp, atol=atol, rtol=rtol), (
-        f"TP and non-TP model outputs differ (dtype={dtype}). "
-        f"Max diff: {diff.max().item()} | Min diff: {diff.min().item()}"
-    )
-
-    dist.barrier()
-
-
-def _test_model_dense_backward_pass_impl(rank, dtype=torch.float32):
-    """Implementation for comparing TP and non-TP model backward passes."""
-    model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
-
-    set_seed(42)
-
-    # Set tolerance based on dtype
-    atol, rtol = (1e-5, 1e-5)
-
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype, tp_plan="auto")
-    dist.barrier()
-    model_tp.train()
-
-    device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
-    model = model.to(device)
-    model.train()
-
-    batch_size, seq_length = 2, 1024
-    set_seed(42)
-    input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
-    labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
-
-    outputs = model(input_ids, labels=labels)
-    loss = outputs.loss
-    loss.backward()
-
-    outputs_tp = model_tp(input_ids, labels=labels)
-    loss_tp = outputs_tp.loss
-    loss_tp.backward()
-
-    assert torch.allclose(loss, loss_tp, atol=atol, rtol=rtol), (
-        f"TP and non-TP model losses differ (dtype={dtype}). Non-TP loss: {loss.item()}, TP loss: {loss_tp.item()}, Diff: {(loss - loss_tp).abs().item()}"
-    )
-
-    # Compare gradients for matching parameters
-    # Note: TP model may have sharded parameters, so we slice the reference gradient to match
-    world_size = dist.get_world_size()
-    for (name, param), (name_tp, param_tp) in zip(model.named_parameters(), model_tp.named_parameters()):
-        if param.grad is not None and param_tp.grad is not None:
-            grad = param.grad
-            grad_tp = param_tp.grad
-
-            # Slice reference gradient to match local shard if parameter is sharded
-            if grad.shape != grad_tp.shape:
-                # Find the dimension that differs and slice accordingly
-                for dim in range(grad.ndim):
-                    if grad.size(dim) != grad_tp.size(dim):
-                        # Packed weights (gate_up_proj) use interleaved sharding
-                        if "gate_up_proj" in name:
-                            grad = get_packed_grad_shard(grad, world_size, rank, dim)
-                        else:
-                            # Regular weights use simple chunking
-                            shard_size = grad_tp.size(dim)
-                            start = rank * shard_size
-                            grad = grad.narrow(dim, start, shard_size)
-                        break
-
-            assert torch.allclose(grad.cpu(), grad_tp.cpu(), atol=atol, rtol=rtol), (
-                f"Gradients differ for parameter {name} (dtype={dtype}). Max diff: {(grad.cpu() - grad_tp.cpu()).abs().max().item()} | Min diff: {(grad.cpu() - grad_tp.cpu()).abs().min().item()}"
-            )
-
-    dist.barrier()
-
-
-def _test_model_dense_forward_compile_impl(rank, mode, dtype=torch.float32):
-    """Implementation for comparing TP and non-TP model outputs with torch.compile."""
-    model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
-
-    set_seed(42)
-
-    # Set tolerance based on dtype
-    atol, rtol = (1e-5, 1e-5)
-
-    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
-    prompt = "Can I help"
-    inputs = tokenizer(prompt, return_tensors="pt")
-
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype, tp_plan="auto")
-    dist.barrier()
-    if mode == "eval":
-        model_tp.eval()
-    else:
-        model_tp.train()
-
-    device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
-    model = model.to(device)
-
-    if mode == "eval":
-        model.eval()
-    else:
-        model.train()
-
-    # Compile both models
-    model.forward = torch.compile(model.forward)
-    model_tp.forward = torch.compile(model_tp.forward)
-
-    input_ids = inputs.input_ids.to(device)
-
-    with torch.no_grad():
-        outputs = model(input_ids)
-        logits = outputs.logits
-
-        outputs_tp = model_tp(input_ids)
-        logits_tp = outputs_tp.logits
-
-    assert torch.allclose(logits, logits_tp, atol=atol, rtol=rtol), (
-        f"TP and non-TP model outputs differ (dtype={dtype}). Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
-    )
-
-    dist.barrier()
-
-
-def _test_model_dense_backward_compile_impl(rank, dtype=torch.float32):
-    """Implementation for comparing TP and non-TP model backward passes with torch.compile."""
-    model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
-
-    set_seed(42)
-
-    # Set tolerance based on dtype
-    atol, rtol = (1e-5, 1e-5)
-
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype, tp_plan="auto")
-    dist.barrier()
-    model_tp.train()
-
-    device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
-    model = model.to(device)
-    model.train()
-
-    # Compile both models
-    model.forward = torch.compile(model.forward)
-    model_tp.forward = torch.compile(model_tp.forward)
-
-    batch_size, seq_length = 2, 1024
-    set_seed(42)
-    input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
-    labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
-
-    outputs = model(input_ids, labels=labels)
-    loss = outputs.loss
-    loss.backward()
-
-    outputs_tp = model_tp(input_ids, labels=labels)
-    loss_tp = outputs_tp.loss
-    loss_tp.backward()
-
-    assert torch.allclose(loss, loss_tp, atol=atol, rtol=rtol), (
-        f"TP and non-TP model losses differ (dtype={dtype}). Non-TP loss: {loss.item()}, TP loss: {loss_tp.item()}, Diff: {(loss - loss_tp).abs().item()}"
-    )
-
-    # Compare gradients for matching parameters
-    world_size = dist.get_world_size()
-    for (name, param), (name_tp, param_tp) in zip(model.named_parameters(), model_tp.named_parameters()):
-        if param.grad is not None and param_tp.grad is not None:
-            grad = param.grad
-            grad_tp = param_tp.grad
-
-            # Slice reference gradient to match local shard if parameter is sharded
-            if grad.shape != grad_tp.shape:
-                for dim in range(grad.ndim):
-                    if grad.size(dim) != grad_tp.size(dim):
-                        # Packed weights (gate_up_proj) use interleaved sharding
-                        if "gate_up_proj" in name:
-                            grad = get_packed_grad_shard(grad, world_size, rank, dim)
-                        else:
-                            # Regular weights use simple chunking
-                            shard_size = grad_tp.size(dim)
-                            start = rank * shard_size
-                            grad = grad.narrow(dim, start, shard_size)
-                        break
-
-            assert torch.allclose(grad.cpu(), grad_tp.cpu(), atol=atol, rtol=rtol), (
-                f"Gradients differ for parameter {name} (dtype={dtype}). Max diff: {(grad.cpu() - grad_tp.cpu()).abs().max().item()}"
-            )
-
-    dist.barrier()
-
-
-def _test_model_dense_save_impl(rank, tmp_dir):
-    """Implementation of test_model_save for distributed execution."""
-    model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
-
-    if dist.is_initialized():
-        kwargs = {"tp_plan": "auto"}
-        result_dir = f"{tmp_dir}/tp"
-    else:
-        kwargs = {}
-        result_dir = f"{tmp_dir}/nontp"
-
-    model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
-    model.save_pretrained(result_dir)
-
-
-# ====== DENSE MODEL TESTS ======
-@pytest.mark.parametrize("nproc_per_node", [2])
-@pytest.mark.parametrize("mode", ["train", "eval"])
-@require_torch_multi_accelerator
-def test_model_dense_forward(nproc_per_node, mode):
-    """Test that TP and non-TP models produce the same outputs."""
-    skip_if_insufficient_devices(nproc_per_node)
-    init_distributed(tp=nproc_per_node)(_test_model_dense_forward_impl)(mode, torch.float32)
-
-
-@pytest.mark.parametrize("nproc_per_node", [2])
-@require_torch_multi_accelerator
-def test_model_dense_backward_pass(nproc_per_node):
-    """Test that TP and non-TP models produce the same gradients."""
-    skip_if_insufficient_devices(nproc_per_node)
-    init_distributed(tp=nproc_per_node)(_test_model_dense_backward_pass_impl)(torch.float32)
-
-
-@pytest.mark.parametrize("nproc_per_node", [2])
-@pytest.mark.parametrize("mode", ["train", "eval"])
-@require_torch_multi_accelerator
-def test_model_dense_forward_compile(nproc_per_node, mode):
-    """Test that TP and non-TP models produce the same outputs with torch.compile."""
-    skip_if_insufficient_devices(nproc_per_node)
-    init_distributed(tp=nproc_per_node)(_test_model_dense_forward_compile_impl)(mode, torch.float32)
-
-
-@pytest.mark.parametrize("nproc_per_node", [2])
-@require_torch_multi_accelerator
-def test_model_dense_backward_compile(nproc_per_node):
-    """Test that TP and non-TP models produce the same gradients with torch.compile."""
-    skip_if_insufficient_devices(nproc_per_node)
-    init_distributed(tp=nproc_per_node)(_test_model_dense_backward_compile_impl)(torch.float32)
-
-
-@pytest.mark.parametrize("nproc_per_node", [2])
-@require_huggingface_hub_greater_or_equal("0.31.4")
-@require_torch_multi_accelerator
-def test_model_dense_save(nproc_per_node):
-    """Test that TP model can be saved and matches non-TP version."""
-    skip_if_insufficient_devices(nproc_per_node)
-
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        # First run with TP (distributed)
-        init_distributed(tp=nproc_per_node)(_test_model_dense_save_impl)(tmp_dir)
-
-        # Then run without TP (non-distributed)
-        _test_model_dense_save_impl(0, tmp_dir)
-
-        non_tp_model_path = os.path.join(tmp_dir, "nontp")
-        tp_model_path = os.path.join(tmp_dir, "tp")
-
-        for filename in os.listdir(non_tp_model_path):
-            if not filename.endswith(".safetensors"):
-                continue
-
-            non_tp_model = safe_open(os.path.join(non_tp_model_path, filename), device="cpu", framework="pt")
-            tp_model = safe_open(os.path.join(tp_model_path, filename), device="cpu", framework="pt")
-            for non_tp_key in non_tp_model.keys():
-                non_tp_tensor = non_tp_model.get_tensor(non_tp_key)
-                tp_tensor = tp_model.get_tensor(non_tp_key)
-                assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
-                del non_tp_tensor, tp_tensor
-
-
-def _test_model_moe_forward_impl(rank, mode, dtype=torch.float32):
-    """Implementation for comparing TP and non-TP MoE model outputs."""
-    model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
-
-    set_seed(42)
-
-    # Set tolerance based on dtype
-    atol, rtol = (1e-5, 1e-5)
-
-    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
-    prompt = "Can I help"
-    inputs = tokenizer(prompt, return_tensors="pt")
-
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype, tp_plan="auto")
-    dist.barrier()
-    if mode == "eval":
-        model_tp.eval()
-    else:
-        model_tp.train()
-
-    device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
-    model = model.to(device)
-
-    if mode == "eval":
-        model.eval()
-    else:
-        model.train()
-
-    input_ids = inputs.input_ids.to(device)
-
-    with torch.no_grad():
-        outputs = model(input_ids)
-        logits = outputs.logits
-
-        outputs_tp = model_tp(input_ids)
-        logits_tp = outputs_tp.logits
-
-    diff = (logits - logits_tp).abs()
-    assert torch.allclose(logits, logits_tp, atol=atol, rtol=rtol), (
-        f"TP and non-TP MoE model outputs differ (dtype={dtype}). "
-        f"Max diff: {diff.max().item()} | Min diff: {diff.min().item()}"
-    )
-
-    dist.barrier()
-
-
-def _test_model_moe_backward_pass_impl(rank, dtype=torch.float32):
-    """Implementation for comparing TP and non-TP MoE model backward passes."""
-    model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
-
-    set_seed(42)
-
-    atol, rtol = (1e-5, 1e-5)
-
-    config = AutoConfig.from_pretrained(model_id)
-
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, config=config, dtype=dtype, tp_plan="auto")
-    dist.barrier()
-    model_tp.train()
-
-    device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, config=config, dtype=dtype)
-    model = model.to(device)
-    model.train()
-
-    batch_size, seq_length = 2, 1024
-    set_seed(42)
-    input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length), device=device)
-    labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length), device=device)
-
-    outputs = model(input_ids, labels=labels)
-    loss = outputs.loss
-    loss.backward()
-
-    outputs_tp = model_tp(input_ids, labels=labels)
-    loss_tp = outputs_tp.loss
-    loss_tp.backward()
-
-    assert torch.allclose(loss, loss_tp, atol=atol, rtol=rtol), (
-        f"TP and non-TP MoE model losses differ (dtype={dtype}). Non-TP loss: {loss.item()}, TP loss: {loss_tp.item()}, Diff: {(loss - loss_tp).abs().item()}"
-    )
-
-    # Compare gradients for matching parameters
-    world_size = dist.get_world_size()
-
-    for (name, param), (name_tp, param_tp) in zip(model.named_parameters(), model_tp.named_parameters()):
-        if param.grad is not None and param_tp.grad is not None:
-            grad = param.grad
-            grad_tp = param_tp.grad
-
-            # Slice reference gradient to match local shard if parameter is sharded
-            if grad.shape != grad_tp.shape:
-                for dim in range(grad.ndim):
-                    if grad.size(dim) != grad_tp.size(dim):
-                        if "gate_up_proj" in name:
-                            grad = get_packed_grad_shard(grad, world_size, rank, dim)
-                        else:
-                            shard_size = grad_tp.size(dim)
-                            start = rank * shard_size
-                            grad = grad.narrow(dim, start, shard_size)
-                        break
-
-            assert torch.allclose(grad.cpu(), grad_tp.cpu(), atol=atol, rtol=rtol), (
-                f"Gradients differ for parameter {name} (dtype={dtype}). Max diff: {(grad.cpu() - grad_tp.cpu()).abs().max().item()}"
-            )
-
-    dist.barrier()
-
-
-def _test_model_moe_forward_compile_impl(rank, mode, dtype=torch.float32, experts_implementation=None):
-    """Implementation for comparing TP and non-TP MoE model outputs with torch.compile."""
-    model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
-
-    set_seed(42)
-
-    if dtype == torch.bfloat16:
-        atol, rtol = (5e-3, 5e-3)
-    else:
-        atol, rtol = (1e-5, 1e-5)
-
-    tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
-    prompt = "Can I help"
-    inputs = tokenizer(prompt, return_tensors="pt")
-
-    model_tp = AutoModelForCausalLM.from_pretrained(
-        model_id, dtype=dtype, tp_plan="auto", experts_implementation=experts_implementation
-    )
-    dist.barrier()
-    if mode == "eval":
-        model_tp.eval()
-    else:
-        model_tp.train()
-
-    device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype, experts_implementation=experts_implementation)
-    model = model.to(device)
-
-    if mode == "eval":
-        model.eval()
-    else:
-        model.train()
-
-    # Compile both models
-    model.forward = torch.compile(model.forward)
-    model_tp.forward = torch.compile(model_tp.forward)
-
-    input_ids = inputs.input_ids.to(device)
-
-    with torch.no_grad():
-        outputs = model(input_ids)
-        logits = outputs.logits
-
-        outputs_tp = model_tp(input_ids)
-        logits_tp = outputs_tp.logits
-
-    assert torch.allclose(logits, logits_tp, atol=atol, rtol=rtol), (
-        f"TP and non-TP MoE model outputs differ (dtype={dtype}). Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
-    )
-
-    dist.barrier()
-
-
-def _test_model_moe_backward_compile_impl(rank, dtype=torch.float32, experts_implementation=None):
-    """Implementation for comparing TP and non-TP MoE model backward passes with torch.compile."""
-    model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
-
-    set_seed(42)
-
-    # bfloat16 has lower precision
-    if dtype == torch.bfloat16:
-        atol, rtol = (1e-3, 1e-3)
-    else:
-        atol, rtol = (1e-5, 1e-5)
-
-    config = AutoConfig.from_pretrained(model_id)
-
-    model_tp = AutoModelForCausalLM.from_pretrained(
-        model_id, config=config, dtype=dtype, tp_plan="auto", experts_implementation=experts_implementation
-    )
-    dist.barrier()
-    model_tp.train()
-
-    device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(
-        model_id, config=config, dtype=dtype, experts_implementation=experts_implementation
-    )
-    model = model.to(device)
-    model.train()
-
-    model.forward = torch.compile(model.forward)
-    model_tp.forward = torch.compile(model_tp.forward)
-
-    batch_size, seq_length = 2, 1024
-    set_seed(42)
-    input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
-    labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
-
-    outputs = model(input_ids, labels=labels)
-    loss = outputs.loss
-    loss.backward()
-
-    outputs_tp = model_tp(input_ids, labels=labels)
-    loss_tp = outputs_tp.loss
-    loss_tp.backward()
-
-    assert torch.allclose(loss, loss_tp, atol=atol, rtol=rtol), (
-        f"TP and non-TP MoE model losses differ (dtype={dtype}). Non-TP loss: {loss.item()}, TP loss: {loss_tp.item()}, Diff: {(loss - loss_tp).abs().item()}"
-    )
-
-    # Compare gradients for matching parameters
-    world_size = dist.get_world_size()
-
-    for (name, param), (name_tp, param_tp) in zip(model.named_parameters(), model_tp.named_parameters()):
-        if param.grad is not None and param_tp.grad is not None:
-            grad = param.grad
-            grad_tp = param_tp.grad
-
-            # Slice reference gradient to match local shard if parameter is sharded
-            if grad.shape != grad_tp.shape:
-                for dim in range(grad.ndim):
-                    if grad.size(dim) != grad_tp.size(dim):
-                        if "gate_up_proj" in name:
-                            grad = get_packed_grad_shard(grad, world_size, rank, dim)
-                        else:
-                            shard_size = grad_tp.size(dim)
-                            start = rank * shard_size
-                            grad = grad.narrow(dim, start, shard_size)
-                        break
-
-            assert torch.allclose(grad.cpu(), grad_tp.cpu(), atol=atol, rtol=rtol), (
-                f"Gradients differ for parameter {name} (dtype={dtype}). Max diff: {(grad.cpu() - grad_tp.cpu()).abs().max().item()}"
-            )
-
-    dist.barrier()
-
-
-def _test_model_moe_save_impl(rank, tmp_dir):
-    """Implementation of test_model_save for MoE model distributed execution."""
-    model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
-
-    if dist.is_initialized():
-        kwargs = {"tp_plan": "auto"}
-        result_dir = f"{tmp_dir}/tp"
-    else:
-        kwargs = {}
-        result_dir = f"{tmp_dir}/nontp"
-
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", **kwargs)
-    model.save_pretrained(result_dir)
-
-
-# ====== MOE MODEL TESTS ======
-@pytest.mark.parametrize("nproc_per_node", [2])
-@pytest.mark.parametrize("mode", ["train", "eval"])
-@require_torch_multi_accelerator
-def test_model_moe_forward(nproc_per_node, mode):
-    """Test that TP and non-TP MoE models produce the same outputs."""
-    skip_if_insufficient_devices(nproc_per_node)
-    init_distributed(tp=nproc_per_node)(_test_model_moe_forward_impl)(mode, torch.float32)
-
-
-@pytest.mark.parametrize("nproc_per_node", [2])
-@require_torch_multi_accelerator
-def test_model_moe_backward_pass(nproc_per_node):
-    """Test that TP and non-TP MoE models produce the same gradients."""
-    skip_if_insufficient_devices(nproc_per_node)
-    init_distributed(tp=nproc_per_node)(_test_model_moe_backward_pass_impl)(torch.float32)
-
-
-@pytest.mark.parametrize("nproc_per_node", [2])
-@pytest.mark.parametrize("mode", ["train", "eval"])
-@pytest.mark.parametrize("dtype", ["float32", "bfloat16"])
-@pytest.mark.parametrize("experts_implementation", ["batched_mm", "grouped_mm"])
-@require_torch_multi_accelerator
-def test_model_moe_forward_compile(nproc_per_node, mode, dtype, experts_implementation):
-    """Test that TP and non-TP MoE models produce the same outputs with torch.compile."""
-    skip_if_insufficient_devices(nproc_per_node)
-    dtype = torch.bfloat16 if dtype == "bfloat16" else torch.float32
-    init_distributed(tp=nproc_per_node)(_test_model_moe_forward_compile_impl)(
-        mode, dtype, experts_implementation=experts_implementation
-    )
-
-
-@pytest.mark.parametrize("nproc_per_node", [2])
-@pytest.mark.parametrize("dtype", ["float32", "bfloat16"])
-@pytest.mark.parametrize("experts_implementation", ["batched_mm", "grouped_mm"])
-@require_torch_multi_accelerator
-def test_model_moe_backward_compile(nproc_per_node, dtype, experts_implementation):
-    """Test that TP and non-TP MoE models produce the same gradients with torch.compile."""
-    skip_if_insufficient_devices(nproc_per_node)
-    dtype = torch.bfloat16 if dtype == "bfloat16" else torch.float32
-    init_distributed(tp=nproc_per_node)(_test_model_moe_backward_compile_impl)(
-        dtype, experts_implementation=experts_implementation
-    )
-
-
-@pytest.mark.parametrize("nproc_per_node", [2])
-@require_huggingface_hub_greater_or_equal("0.31.4")
-@require_torch_multi_accelerator
-def test_model_moe_save(nproc_per_node):
-    """Test that TP MoE model can be saved and matches non-TP version."""
-    skip_if_insufficient_devices(nproc_per_node)
-
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        # First run with TP (distributed)
-        init_distributed(tp=nproc_per_node)(_test_model_moe_save_impl)(tmp_dir)
-
-        # Then run without TP (non-distributed)
-        _test_model_moe_save_impl(0, tmp_dir)
-
-        non_tp_model_path = os.path.join(tmp_dir, "nontp")
-        tp_model_path = os.path.join(tmp_dir, "tp")
-
-        for filename in os.listdir(non_tp_model_path):
-            if not filename.endswith(".safetensors"):
-                continue
-
-            non_tp_model = safe_open(os.path.join(non_tp_model_path, filename), device="cpu", framework="pt")
-            tp_model = safe_open(os.path.join(tp_model_path, filename), device="cpu", framework="pt")
-            for non_tp_key in non_tp_model.keys():
-                non_tp_tensor = non_tp_model.get_tensor(non_tp_key)
-                tp_tensor = tp_model.get_tensor(non_tp_key)
-                assert torch.allclose(non_tp_tensor, tp_tensor), f"Tensor with key: {non_tp_key} does not match"
-                del non_tp_tensor, tp_tensor
+    def test_post_init_keeps_class_level_plans(self):
+        """Class-level plans (e.g. `lm_head` on ForCausalLM classes) must survive post_init alongside the base model plan."""
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+
+        self.assertIn("lm_head", model._tp_plan)
+        self.assertIn("model.layers.*.self_attn.q_proj", model._tp_plan)
+        self.assertIn("lm_head", model._pp_plan)
+        # The merge must not have mutated the class attribute shared by all instances
+        self.assertEqual(set(type(model)._tp_plan), {"lm_head"})
+
+    def test_get_kv_heads_per_rank(self):
+        """The KV heads are sharded only when the plan splits the (possibly fused) key projection by column."""
+        experts = {"layers.*.mlp.experts.gate_up_proj": "packed_colwise"}
+        for plan, expected in (
+            ({}, 4),
+            (experts, 4),
+            ({"layers.*.self_attn.k_proj": "colwise_gather_output"}, 4),
+            ({"layers.*.self_attn.qkv_proj": "colwise_gather_output"}, 4),
+            ({"layers.*.self_attn.k_proj": "colwise", **experts}, 2),
+            ({"layers.*.attention.query_key_value": "colwise"}, 2),
+        ):
+            self.assertEqual(get_kv_heads_per_rank(plan, 4, tp_size=2), expected, plan)
+
+        sharded = {"layers.*.self_attn.k_proj": "colwise"}
+        self.assertEqual(get_kv_heads_per_rank(sharded, [4, 8], tp_size=2), [2, 4])
+        self.assertIsNone(get_kv_heads_per_rank(sharded, 3, tp_size=2))
+
+
+@is_tensor_parallel_test
+class TestTensorParallelLayer(TestCasePlus):
+    class MockDeviceMesh:
+        def __init__(self, world_size, rank):
+            self.world_size = world_size
+            self.rank = rank
+            self.shape = (world_size,)
+            self.ndim = 1
+
+        def size(self):
+            return self.world_size
+
+        def get_local_rank(self):
+            return self.rank
+
+    def _get_parameter_placements(self, module, style, mesh=None):
+        placements = {}
+        mesh = object() if mesh is None else mesh
+        with patch.object(
+            tensor_parallel, "distribute_tensor", side_effect=lambda tensor, *args, **kwargs: tensor
+        ) as distribute:
+            for parameter_name in list(module._parameters):
+                style.shard_param(module, parameter_name, mesh)
+                placements[parameter_name] = distribute.call_args.args[2][0]
+
+        return placements
+
+    def _get_local_shape(self, global_shape, placement, world_size, rank):
+        if placement.is_replicate():
+            return tuple(global_shape)
+
+        shard_dim = placement.dim
+        local_size, _ = placement._local_shard_size_and_offset(global_shape[shard_dim], world_size, rank)
+        local_shape = list(global_shape)
+        local_shape[shard_dim] = local_size
+        return tuple(local_shape)
+
+    def _make_dtensor_shard_op(self, mesh, placement, param_shape, local_shape):
+        op = object.__new__(DtensorShardOperation)
+        op.device_mesh = mesh
+        op.placements = (placement,)
+        op.param_ndim = len(param_shape)
+        op._axis0_offset = 0
+        op._axis0_local_size = local_shape[0]
+        op._axis0_size = param_shape[0]
+        return op
+
+    def test_colwise_uneven_local_shapes(self):
+        module = torch.nn.Module()
+        module.register_parameter("weight", torch.nn.Parameter(torch.empty(10, 32)))
+        module.register_parameter("bias", torch.nn.Parameter(torch.empty(10)))
+        placements = self._get_parameter_placements(module, ColwiseParallel())
+        expected_local_sizes = (4, 4, 2)
+
+        for rank, expected_size in enumerate(expected_local_sizes):
+            weight_shape = self._get_local_shape((10, 32), placements["weight"], world_size=3, rank=rank)
+            bias_shape = self._get_local_shape((10,), placements["bias"], world_size=3, rank=rank)
+
+            self.assertEqual(weight_shape, (expected_size, 32))
+            self.assertEqual(bias_shape, (expected_size,))
+
+    def test_rowwise_uneven_local_shapes(self):
+        module = torch.nn.Module()
+        module.register_parameter("weight", torch.nn.Parameter(torch.empty(32, 10)))
+        module.register_parameter("bias", torch.nn.Parameter(torch.empty(10)))
+        placements = self._get_parameter_placements(module, RowwiseParallel())
+        expected_local_sizes = (4, 4, 2)
+
+        for rank, expected_size in enumerate(expected_local_sizes):
+            weight_shape = self._get_local_shape((32, 10), placements["weight"], world_size=3, rank=rank)
+            bias_shape = self._get_local_shape((10,), placements["bias"], world_size=3, rank=rank)
+
+            self.assertEqual(weight_shape, (32, expected_size))
+            self.assertEqual(bias_shape, (10,))
+
+    def test_linear_styles_reject_embedding(self):
+        for style in ("colwise", "rowwise"):
+            with self.subTest(style=style):
+                with self.assertRaises(ValueError) as context:
+                    ALL_PARALLEL_STYLES[style].install_forward(torch.nn.Embedding(8, 16), mesh=None)
+                self.assertIn("linear layers", str(context.exception))
+
+    def test_embedding_uneven_local_shapes(self):
+        rowwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_rowwise"])
+        colwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_colwise"])
+
+        expected_local_sizes = (4, 4, 2)
+        for rank, expected_size in enumerate(expected_local_sizes):
+            rowwise_shape = self._get_local_shape((10, 10), rowwise["weight"], world_size=3, rank=rank)
+            colwise_shape = self._get_local_shape((10, 10), colwise["weight"], world_size=3, rank=rank)
+            self.assertEqual(rowwise_shape, (expected_size, 10))
+            self.assertEqual(colwise_shape, (10, expected_size))
+
+    def test_shard_tensor_shape_consistency(self):
+        world_size = 4
+        cases = {
+            "colwise": {
+                "module": torch.nn.Linear(32, 16),
+                "style": ColwiseParallel(),
+                "expected_shapes": {"weight": (4, 32), "bias": (4,)},
+            },
+            "colwise_gather_output": {
+                "module": torch.nn.Linear(32, 16),
+                "style": ALL_PARALLEL_STYLES["colwise_gather_output"],
+                "expected_shapes": {"weight": (4, 32), "bias": (4,)},
+            },
+            "rowwise": {
+                "module": torch.nn.Linear(32, 16),
+                "style": RowwiseParallel(),
+                "expected_shapes": {"weight": (16, 8), "bias": (16,)},
+            },
+            "embedding_rowwise": {
+                "module": torch.nn.Embedding(32, 16),
+                "style": ALL_PARALLEL_STYLES["embedding_rowwise"],
+                "expected_shapes": {"weight": (8, 16)},
+            },
+            "embedding_colwise": {
+                "module": torch.nn.Embedding(32, 16),
+                "style": ALL_PARALLEL_STYLES["embedding_colwise"],
+                "expected_shapes": {"weight": (32, 4)},
+            },
+        }
+
+        for case_name, case in cases.items():
+            module = case["module"]
+            placements = self._get_parameter_placements(module, case["style"])
+
+            for parameter_name, expected_shape in case["expected_shapes"].items():
+                global_shape = module._parameters[parameter_name].shape
+                placement = placements[parameter_name]
+
+                for rank in range(world_size):
+                    with self.subTest(case=case_name, parameter=parameter_name, rank=rank):
+                        local_shape = self._get_local_shape(global_shape, placement, world_size, rank)
+                        self.assertEqual(local_shape, expected_shape)
+
+    def test_packed_colwise_packed_and_unpacked_shapes(self):
+        module = torch.nn.Module()
+        module.register_parameter("weight", torch.nn.Parameter(torch.empty(2, 16, 64)))
+        placement = self._get_parameter_placements(module, PackedColwiseParallel())["weight"]
+        packed = torch.randn(2, 16, 64)
+        unpacked_expert = torch.randn(16, 64)
+
+        self.assertEqual(placement.dim, 1)
+        self.assertEqual(placement.split_factor, 2)
+        for rank in range(2):
+            mesh = self.MockDeviceMesh(world_size=2, rank=rank)
+            op = self._make_dtensor_shard_op(mesh, placement, param_shape=(2, 16, 64), local_shape=(2, 8, 64))
+
+            self.assertEqual(op.shard_tensor(packed).shape, (2, 8, 64))
+            self.assertEqual(op.shard_tensor(unpacked_expert, tensor_idx=0).shape, (8, 64))
+
+    def test_packed_rowwise_packed_and_unpacked_shapes(self):
+        module = torch.nn.Module()
+        module.register_parameter("weight", torch.nn.Parameter(torch.empty(16, 64)))
+        placement = self._get_parameter_placements(module, PackedRowwiseParallel())["weight"]
+        packed = torch.randn(16, 64)
+        unpacked = torch.randn(16, 32)
+
+        self.assertEqual(placement.dim, -1)
+        self.assertEqual(placement.split_factor, 2)
+        for rank in range(2):
+            mesh = self.MockDeviceMesh(world_size=2, rank=rank)
+            op = self._make_dtensor_shard_op(mesh, placement, param_shape=(16, 64), local_shape=(16, 32))
+
+            self.assertEqual(op.shard_tensor(packed).shape, (16, 32))
+            self.assertEqual(op.shard_tensor(unpacked).shape, (16, 16))
+
+    def test_grouped_gemm_updates_local_expert_count(self):
+        module = torch.nn.Module()
+        module.num_experts = 8
+        module.register_parameter("weight", torch.nn.Parameter(torch.empty(8, 16, 32)))
+        grouped_gemm = ALL_PARALLEL_STYLES["grouped_gemm"]
+
+        placements = self._get_parameter_placements(module, grouped_gemm, self.MockDeviceMesh(world_size=4, rank=0))
+
+        self.assertEqual(placements["weight"].dim, 0)
+        self.assertEqual(module.num_experts, 2)
+
+    def test_sharding_does_not_create_unrelated_module_attributes(self):
+        styles = (ColwiseParallel(), RowwiseParallel(), ALL_PARALLEL_STYLES["grouped_gemm"])
+
+        for style in styles:
+            with self.subTest(style=type(style).__name__):
+                module = torch.nn.Module()
+                module.random_attr = 123
+                module.register_parameter("weight", torch.nn.Parameter(torch.empty(8, 16, 32)))
+
+                self._get_parameter_placements(module, style, self.MockDeviceMesh(world_size=4, rank=0))
+
+                self.assertEqual(module.random_attr, 123)
+                self.assertFalse(hasattr(module, "num_experts"))
+
+    def test_dispatch_hands_experts_the_received_rows(self):
+        """The all-to-all's pending result (`AsyncCollectiveTensor`) holds a null pointer until a torch op waits on
+        it, and experts that launch kernels on raw pointers would read it: the dispatch waits before any experts run."""
+        _init_distributed(tp=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
+
+
+class _DummyExperts(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.num_experts = 2
+
+    def forward(self, tokens, expert_ids, weights):
+        assert type(tokens) is torch.Tensor, type(tokens)
+        return tokens
+
+
+# Worker functions for the expert-parallel layer tests, spawned through `_init_distributed`.
+def _dispatch_hands_experts_the_received_rows(rank):
+    hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
+    experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), init_device_mesh("cpu", (2,)))
+    experts(hidden_states, torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]]), torch.ones(4, 2))

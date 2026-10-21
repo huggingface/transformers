@@ -32,7 +32,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
@@ -83,7 +83,6 @@ class DbrxAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         position_embeddings: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -110,9 +109,7 @@ class DbrxAttention(nn.Module):
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -151,11 +148,11 @@ class DbrxExpertGLU(nn.Module):
     def forward(
         self, x: torch.Tensor, expert_w1: torch.Tensor, expert_v1: torch.Tensor, expert_w2: torch.Tensor
     ) -> torch.Tensor:
-        gate_proj = x.matmul(expert_w1)
-        up_proj = x.matmul(expert_v1)
+        gate_proj = x.matmul(expert_w1.T)
+        up_proj = x.matmul(expert_v1.T)
         gate_proj = self.activation_fn(gate_proj)
         intermediate_states = gate_proj * up_proj
-        down_proj = intermediate_states.matmul(expert_w2.t())
+        down_proj = intermediate_states.matmul(expert_w2)
         return down_proj
 
 
@@ -174,11 +171,11 @@ class DbrxExperts(nn.Module):
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         batch_size = hidden_states.shape[0]
-        hidden_states = hidden_states.reshape(-1, self.ffn_hidden_size)
+        hidden_states = hidden_states.reshape(-1, self.hidden_size)
 
         next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
@@ -191,21 +188,21 @@ class DbrxExperts(nn.Module):
             w1 = self.mlp.w1.view(split_expert_shape)[expert_idx]
             w2 = self.mlp.w2.view(split_expert_shape)[expert_idx]
             states = self.mlp(hidden_states[token_idx], w1, v1, w2)
-            states = states.view(-1, self.ffn_hidden_size) * top_k_weights[token_idx, idx, None]
+            states = states.view(-1, self.hidden_size) * top_k_weights[token_idx, idx, None]
             next_states.index_add_(0, token_idx, states)
 
-        next_states = next_states.view(batch_size, -1, self.ffn_hidden_size)
+        next_states = next_states.view(batch_size, -1, self.hidden_size)
         return next_states
 
 
 class DbrxRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.hidden_size = config.ffn_hidden_size
+        self.hidden_size = config.hidden_size
         self.moe_jitter_eps = config.moe_jitter_eps
         self.layer = nn.Linear(self.hidden_size, config.moe_num_experts, bias=False)
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.LongTensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if self.training and self.moe_jitter_eps is not None:
             hidden_states *= torch.empty_like(hidden_states).uniform_(
                 1.0 - self.moe_jitter_eps, 1.0 + self.moe_jitter_eps
@@ -235,7 +232,7 @@ class DbrxFFN(nn.Module):
             )
         return router_top_value, router_indices
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         router_logits = self.router(hidden_states)
         top_k_weights, top_k_index = self.route_tokens_to_experts(router_logits)
         output = self.experts(hidden_states, top_k_index, top_k_weights)
@@ -260,7 +257,6 @@ class DbrxNormAttentionNorm(nn.Module):
         position_embeddings: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Any,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         residual_states = hidden_states
@@ -271,7 +267,6 @@ class DbrxNormAttentionNorm(nn.Module):
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -302,7 +297,6 @@ class DbrxBlock(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_embeddings: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Any,
     ):
         resid_states, hidden_states = self.norm_attn_norm(
@@ -310,7 +304,6 @@ class DbrxBlock(GradientCheckpointingLayer):
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
             past_key_values=past_key_values,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -332,9 +325,11 @@ class DbrxPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _can_record_outputs = {
+        "router_logits": OutputRecorder(DbrxRouter, index=0),
         "hidden_states": DbrxBlock,
         "attentions": DbrxAttention,
     }
+    _input_embed_layer = "wte"
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -370,12 +365,6 @@ class DbrxModel(DbrxPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Embedding:
-        return self.wte
-
-    def set_input_embeddings(self, value: nn.Embedding):
-        self.wte = value
-
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -387,7 +376,6 @@ class DbrxModel(DbrxPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -399,19 +387,15 @@ class DbrxModel(DbrxPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
 
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -429,7 +413,6 @@ class DbrxModel(DbrxPreTrainedModel):
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
-                cache_position=cache_position,
                 **kwargs,
             )
 
@@ -446,6 +429,8 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
+
     def __init__(self, config: DbrxConfig):
         super().__init__(config)
         self.transformer = DbrxModel(config)
@@ -455,24 +440,6 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
         self.num_experts = config.ffn_config.moe_num_experts
         self.num_experts_per_tok = config.ffn_config.moe_top_k
         self.post_init()
-
-    def get_input_embeddings(self) -> nn.Embedding:
-        return self.transformer.get_input_embeddings()
-
-    def set_input_embeddings(self, value: nn.Embedding):
-        self.transformer.set_input_embeddings(value)
-
-    def get_output_embeddings(self) -> nn.Linear:
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings: nn.Linear):
-        self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder: DbrxModel):
-        self.transformer = decoder
-
-    def get_decoder(self) -> DbrxModel:
-        return self.transformer
 
     @can_return_tuple
     @auto_docstring
@@ -486,16 +453,10 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         output_router_logits: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -526,7 +487,6 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             output_router_logits=output_router_logits,
-            cache_position=cache_position,
             **kwargs,
         )
 

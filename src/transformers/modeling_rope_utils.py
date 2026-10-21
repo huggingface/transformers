@@ -14,6 +14,7 @@
 
 import math
 import warnings
+from collections.abc import Callable
 from functools import wraps
 from typing import TYPE_CHECKING, Optional, TypedDict
 
@@ -60,23 +61,23 @@ def dynamic_rope_update(rope_forward):
                 "original_max_position_embeddings"
             ]
 
-        if seq_len > original_max_position_embeddings:
-            if not hasattr(self, f"{layer_type}_long_inv_freq"):
-                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-                long_inv_freq, _ = rope_init_fn(
-                    self.config,
-                    device,
-                    seq_len=original_max_position_embeddings + 1,
-                    layer_type=layer_type,
-                )
-            self.register_buffer(f"{prefix}inv_freq", long_inv_freq, persistent=False)
-            setattr(self, f"{prefix}long_inv_freq", long_inv_freq)
-        else:
-            # This .to() is needed if the model has been moved to a device after being initialized (because
-            # the buffer is automatically moved, but not the original copy)
-            original_inv_freq = original_inv_freq.to(device)
-            self.register_buffer(f"{prefix}inv_freq", original_inv_freq, persistent=False)
-            setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
+        long_inv_freq = getattr(self, f"{prefix}long_inv_freq", None)
+        if long_inv_freq is None:
+            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+            long_inv_freq, _ = rope_init_fn(
+                self.config,
+                device,
+                seq_len=original_max_position_embeddings + 1,
+                layer_type=layer_type,
+            )
+        # `long_inv_freq` is a plain attribute and does not follow `model.to(...)`, so move it here
+        long_inv_freq = long_inv_freq.to(device)
+        original_inv_freq = original_inv_freq.to(device)
+        setattr(self, f"{prefix}long_inv_freq", long_inv_freq)
+
+        # `seq_len` is a scalar, so this picks the long or short set for all positions, like an if/else but traceable
+        inv_freq = torch.where(seq_len > original_max_position_embeddings, long_inv_freq, original_inv_freq)
+        self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
 
     def dynamic_frequency_update(self, position_ids, device, layer_type=None):
         """
@@ -106,7 +107,7 @@ def dynamic_rope_update(rope_forward):
             )
             # TODO joao: may break with compilation
             self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
-            setattr(self, f"{layer_type}_max_seq_len_cached", seq_len)
+            setattr(self, f"{prefix}max_seq_len_cached", seq_len)
 
         if seq_len < self.original_max_seq_len and max_seq_len_cached > self.original_max_seq_len:  # reset
             # This .to() is needed if the model has been moved to a device after being initialized (because
@@ -114,7 +115,7 @@ def dynamic_rope_update(rope_forward):
             original_inv_freq = original_inv_freq.to(device)
             self.register_buffer(f"{prefix}inv_freq", original_inv_freq, persistent=False)
             setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
-            setattr(self, f"{layer_type}_max_seq_len_cached", self.original_max_seq_len)
+            setattr(self, f"{prefix}max_seq_len_cached", self.original_max_seq_len)
 
     @wraps(rope_forward)
     def wrapper(self, x, position_ids, layer_type=None):
@@ -142,7 +143,7 @@ def _compute_linear_scaling_rope_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
 
@@ -161,6 +162,12 @@ def _compute_linear_scaling_rope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
+    # Sloppy workaround for per-layer-config in gemma4 family which raises error for other models (DS4)
+    try:
+        config = config.per_layer_config[layer_type] if layer_type is not None else config
+    except ValueError:
+        pass
+
     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
@@ -183,6 +190,82 @@ def _compute_linear_scaling_rope_parameters(
     return inv_freq, attention_factor
 
 
+def _compute_proportional_rope_parameters(
+    config: Optional["PreTrainedConfig"] = None,
+    device: Optional["torch.device"] = None,
+    seq_len: int | None = None,
+    layer_type: str | None = None,
+    head_dim_key: str = "head_dim",
+) -> tuple["torch.Tensor", float]:
+    """
+    Computes the inverse frequencies with proportional RoPE.
+
+    Args:
+        config ([`~transformers.PretrainedConfig`]):
+            The model configuration. This function assumes that the config will provide at least the following
+            properties:
+
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
+            *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
+            *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
+
+            Additionally, this function will make use of the following properties if they are found in the config:
+
+            *   head_dim (`int`, *optional*): The size of the key-value heads in the model. If None, this value will be
+                derived as hidden_size // num_attention_heads.
+            *   partial_rotary_factor (`float`, *optional*, defaults to 1.0): The proportion of the embedding dimension
+                to apply rotary positional encoding, e.g., [0.0, 0.25, 0.5, 0.75, 1.0]. Unlike other RoPE functions
+                that use this parameter, proportional RoPE will always return an encoding that is the size of
+                `head_dim`.
+        device (`torch.device`):
+            The device to use for initialization of the inverse frequencies.
+        seq_len (`int`, *optional*):
+            The current sequence length. Unused for this type of RoPE.
+
+    Returns:
+        Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+        post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+    """
+    # Sloppy workaround for per-layer-config in gemma4 family which raises error for other models (DS4)
+    try:
+        config = config.per_layer_config[layer_type] if layer_type is not None else config
+    except ValueError:
+        pass
+
+    # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+    config.standardize_rope_params()
+    rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
+
+    head_dim = getattr(config, head_dim_key, None) or config.hidden_size // config.num_attention_heads
+    base = rope_parameters_dict["rope_theta"]
+    factor = rope_parameters_dict.get("factor", 1.0)
+    rope_proportion = rope_parameters_dict.get("partial_rotary_factor", 1.0)
+
+    attention_factor = 1.0  # Unused in this type of RoPE
+
+    rope_angles = int(rope_proportion * head_dim // 2)
+
+    inv_freq_rotated = 1.0 / (
+        base
+        ** (torch.arange(0, 2 * rope_angles, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / head_dim)
+    )
+
+    nope_angles = head_dim // 2 - rope_angles
+    if nope_angles > 0:
+        inv_freq = torch.cat(
+            (
+                inv_freq_rotated,
+                torch.zeros(nope_angles, dtype=torch.float32, device=device),
+            ),
+            dim=0,
+        )
+    else:
+        inv_freq = inv_freq_rotated
+
+    inv_freq /= factor
+    return inv_freq, attention_factor
+
+
 def _compute_dynamic_ntk_parameters(
     config: Optional["PreTrainedConfig"] = None,
     device: Optional["torch.device"] = None,
@@ -197,7 +280,7 @@ def _compute_dynamic_ntk_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   max_position_embeddings (`int`): The default sequence length used to update the dynamic RoPE at
@@ -225,6 +308,12 @@ def _compute_dynamic_ntk_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
     """
+    # Sloppy workaround for per-layer-config in gemma4 family which raises error for other models (DS4)
+    try:
+        config = config.per_layer_config[layer_type] if layer_type is not None else config
+    except ValueError:
+        pass
+
     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
@@ -268,7 +357,7 @@ def _compute_yarn_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   max_position_embeddings (`int`): The maximum length of the positional embeddings.
@@ -282,7 +371,7 @@ def _compute_yarn_parameters(
                     (only) in the linear ramp function.
                 *   `factor` (`float`, *optional*): The scaling factor applied when interpolating the position IDs to
                     extend the possible context length. Additionally, if `attention_factor` is None, the log of this
-                    value is used to compute a value for `attention_factor`, possibly in conjunciton with `mscale` and
+                    value is used to compute a value for `attention_factor`, possibly in conjunction with `mscale` and
                     `mscale_all_dim`, if provided.
                 *   `mscale` (`float`, *optional*): If `attention_factor` is None and both `mscale` and
                     `mscale_all_dim` are provided, `mscale` acts scalar augmenting `log(factor)` when computing the
@@ -310,6 +399,12 @@ def _compute_yarn_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
+    # Sloppy workaround for per-layer-config in gemma4 family which raises error for other models (DS4)
+    try:
+        config = config.per_layer_config[layer_type] if layer_type is not None else config
+    except ValueError:
+        pass
+
     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
@@ -325,7 +420,7 @@ def _compute_yarn_parameters(
     mscale_all_dim = rope_parameters_dict.get("mscale_all_dim")
     original_max_position_embeddings = rope_parameters_dict["original_max_position_embeddings"]
 
-    # NOTE: DeekSeek-V3 (and potentially other models) have `original_max_position_embeddings` field
+    # NOTE: DeepSeek-V3 (and potentially other models) have `original_max_position_embeddings` field
     # containing the pretrained value. They use the ratio between `max_position_embeddings` and this value
     # to compute the default attention scaling factor, instead of using `factor`.
     if factor is None:
@@ -403,7 +498,7 @@ def _compute_longrope_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   max_position_embeddings (`int`): The maximum length of the positional embeddings.
@@ -437,6 +532,12 @@ def _compute_longrope_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
+    # Sloppy workaround for per-layer-config in gemma4 family which raises error for other models (DS4)
+    try:
+        config = config.per_layer_config[layer_type] if layer_type is not None else config
+    except ValueError:
+        pass
+
     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
@@ -490,7 +591,7 @@ def _compute_llama3_parameters(
             The model configuration. This function assumes that the config will provide at least the following
             properties:
 
-            *   rope_theta (`float`): The base wavelength from which the inverse frequencies will be derived.
+            *   rope_theta (`float`, *optional*): The base wavelength from which the inverse frequencies will be derived. Defaults to `config.default_theta` if omitted.
             *   hidden_size (`int`): The numerator when deriving a head_dim, if not provided directly.
             *   num_attention_heads (`int`): The denominator when deriving a head_dim, if not provided directly.
             *   rope_parameters (`dict[str, float | int]`): The standard RoPE scaling parameters, from which the following
@@ -520,6 +621,12 @@ def _compute_llama3_parameters(
         Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
         post-processing scaling factor applied to the computed cos/sin.
     """
+    # Sloppy workaround for per-layer-config in gemma4 family which raises error for other models (DS4)
+    try:
+        config = config.per_layer_config[layer_type] if layer_type is not None else config
+    except ValueError:
+        pass
+
     # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
     config.standardize_rope_params()
     rope_parameters_dict = config.rope_parameters[layer_type] if layer_type is not None else config.rope_parameters
@@ -558,20 +665,22 @@ def _compute_llama3_parameters(
 # This maps the "rope_type" string field in rope config to the corresponding function to compute the RoPE parameters
 # from the model config. You can append new {'rope_type': callable} pairs to this rope_parameters to enable custom RoPE
 # parameterizations, as long as the callable has the same signature.
-ROPE_INIT_FUNCTIONS = {
+ROPE_INIT_FUNCTIONS: dict[str, Callable[..., tuple["torch.Tensor", float]]] = {
     "linear": _compute_linear_scaling_rope_parameters,
     "dynamic": _compute_dynamic_ntk_parameters,
     "yarn": _compute_yarn_parameters,
     "longrope": _compute_longrope_parameters,
     "llama3": _compute_llama3_parameters,
+    "proportional": _compute_proportional_rope_parameters,
 }
 
 
-class RopeParameters(TypedDict, total=False):
+class RopeParameters(TypedDict):
     """
     Args:
-        rope_theta (`float`):
-            The base period of the RoPE embeddings.
+        rope_theta (`float`, *optional*, defaults to `RotaryEmbeddingConfigMixin.default_theta`):
+            The base period of the RoPE embeddings. Optional in serialized configs — if omitted,
+            the model's `default_theta` (typically 10000.0) is used.
         rope_type (`str`, *optional*, defaults to "default"):
             The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
             'llama3'], with 'default' being the original RoPE implementation.
@@ -608,7 +717,7 @@ class RopeParameters(TypedDict, total=False):
             Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
     """
 
-    rope_theta: float
+    rope_theta: float | None
     rope_type: str | None
     partial_rotary_factor: float | None
     factor: float | None
@@ -628,8 +737,19 @@ class RotaryEmbeddingConfigMixin:
     """
 
     default_theta = 10_000.0
+    default_rope_type = "default"  # override only for axial models
+    ignore_keys_at_rope_validation = set()
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
+    def nested_rope_parameter_keys(self, rope_parameters: dict) -> list[str]:
+        """
+        Return the keys `rope_parameters` is nested under, or an empty list if it is a flat dict. Only the layer
+        types the config declares count, so a config that declares none is never treated as nested.
+        """
+        # Deepseekv4 has `layer_types` which are different from `_rope_type_labels`
+        labels = getattr(self, "_rope_type_labels", None) or getattr(self, "layer_types", None) or ()
+        return [key for key in rope_parameters if key in labels]
+
+    def convert_rope_params_to_dict(self, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
@@ -640,18 +760,24 @@ class RotaryEmbeddingConfigMixin:
         # 3. Values in the config's attributes (i.e. it's in MyConfig.__init__'s args)
         # 4. Default values (i.e. not present at all but other RoPE parameters are present)
         rope_theta = kwargs.pop("rope_theta", getattr(self, "rope_theta", self.default_theta))
-        self.rope_parameters.setdefault("rope_theta", rope_theta)
+        partial_rotary_factor = kwargs.pop("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
 
-        partial_rotary_factor = kwargs.get("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
+        # When `rope_parameters` is nested, the defaults belong in each nested dict rather than next to them
+        nested_keys = self.nested_rope_parameter_keys(self.rope_parameters)
+        nested_parameters = [self.rope_parameters[key] for key in nested_keys] or [self.rope_parameters]
+        for rope_parameters in nested_parameters:
+            if rope_parameters is None:
+                continue
+            rope_parameters.setdefault("rope_theta", rope_theta)
+            if partial_rotary_factor is not None:
+                rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
+
         if partial_rotary_factor is not None:
-            self.rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
-            ignore_keys_at_rope_validation = (
-                set() if ignore_keys_at_rope_validation is None else set(ignore_keys_at_rope_validation)
-            )
-            ignore_keys_at_rope_validation = ignore_keys_at_rope_validation | {"partial_rotary_factor"}
+            self.ignore_keys_at_rope_validation = set(self.ignore_keys_at_rope_validation or []) | {
+                "partial_rotary_factor"
+            }
 
         self.standardize_rope_params()
-        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
         return kwargs
 
     def standardize_rope_params(self):
@@ -663,19 +789,25 @@ class RotaryEmbeddingConfigMixin:
         rope_theta = getattr(self, "rope_theta", None)
         partial_rotary_factor = getattr(self, "partial_rotary_factor", None)
         rope_parameters = getattr(self, "rope_parameters", None) or {}
-        layer_types = getattr(self, "layer_types", None)
+
+        nested_keys = self.nested_rope_parameter_keys(rope_parameters)
 
         # Case 0: no RoPE params defined
         if not (rope_parameters or rope_theta):
             # partial_rotary_factor without rope_theta is invalid, so we don't check for it here
             logger.warning("`standardize_rope_params` was called but no RoPE parameters were found.")
             return
-        # Case 1: RoPE param keys do not intersect with possible `layer_types` -> one global dict
-        elif layer_types is None or rope_parameters == {} or not set(rope_parameters.keys()).issubset(layer_types):
+        # Case 1: RoPE params are not nested by layer type -> one global dict
+        elif not nested_keys:
             rope_parameters.setdefault("rope_type", rope_parameters.get("type", "default"))
             rope_parameters.setdefault("rope_theta", rope_theta)
             if partial_rotary_factor is not None:
-                rope_parameters["partial_rotary_factor"] = partial_rotary_factor
+                rope_parameters.setdefault("partial_rotary_factor", partial_rotary_factor)
+
+            # Force set the default type to model's expected `default_rope`. For most models it's a no-op
+            # used only to keep BC with old ckpt that require axial rope type
+            if self.default_rope_type != "default" and rope_parameters["rope_type"] == "default":
+                rope_parameters["rope_type"] = self.default_rope_type
 
             # Move pretraining-time maximum length to rope parameter dict for RoPE types with scaling
             if rope_parameters["rope_type"] in ["llama3", "yarn", "longrope"]:
@@ -689,75 +821,117 @@ class RotaryEmbeddingConfigMixin:
 
         # Case 2: different RoPE for each layer -> several params as nested dict
         else:
-            for layer_type in set(layer_types):
+            for layer_type in nested_keys:
+                # skip if saved with `None` value
+                if rope_parameters[layer_type] is None:
+                    continue
                 rope_parameters[layer_type].setdefault("rope_type", rope_parameters[layer_type].get("type", "default"))
                 rope_parameters[layer_type].setdefault("rope_theta", rope_theta)
                 if partial_rotary_factor is not None:
-                    rope_parameters[layer_type]["partial_rotary_factor"] = partial_rotary_factor
+                    rope_parameters[layer_type].setdefault("partial_rotary_factor", partial_rotary_factor)
 
                 if rope_parameters[layer_type]["rope_type"] in ["llama3", "yarn", "longrope"]:
                     self.rope_parameters[layer_type].setdefault(
                         "original_max_position_embeddings", self.max_position_embeddings
                     )
 
+                # Force set the default type to model's expected `default_rope`. For most models it's a no-op
+                # used only to keep BC with old ckpt that require axial rope type
+                if self.default_rope_type != "default" and rope_parameters[layer_type]["rope_type"] == "default":
+                    rope_parameters[layer_type]["rope_type"] = self.default_rope_type
+
         self.rope_parameters = rope_parameters
 
-    def validate_rope(self: "PreTrainedConfig", ignore_keys: set | None = None):
+    def validate_rope(self: "PreTrainedConfig"):
         """
         Validate the RoPE config arguments, given a `"PreTrainedConfig"` object
         """
-        rope_parameters_dict = self.rope_parameters
-        if rope_parameters_dict is None:
+        # Don't validate if no rope_parameters found (`None`) or if it's an empty dict
+        # Note that validation runs every time a new config is created, even if config is non-RoPE
+        rope_parameters_dict = getattr(self, "rope_parameters", None)
+        if not rope_parameters_dict:
             return
 
-        if getattr(self, "layer_types", None) is not None and set(rope_parameters_dict.keys()).issubset(
-            self.layer_types
-        ):
-            pass
+        nested_keys = self.nested_rope_parameter_keys(rope_parameters_dict)
+        if nested_keys:
+            rope_parameters_dict = {key: rope_parameters_dict[key] for key in nested_keys}
         else:
             rope_parameters_dict = {"full_attention": rope_parameters_dict}
 
-        for rope_parameters in rope_parameters_dict.values():
+        # Heterogeneous configs can't read `head_dim` globally, so the even-dim check is skipped for them
+        head_dim = None if self.is_heterogeneous else getattr(self, "head_dim", None)
+
+        for layer_type, rope_parameters in rope_parameters_dict.items():
+            # skip when set to `None`, possibly a NoPE layer
+            if rope_parameters is None:
+                continue
             rope_type = rope_parameters.get("rope_type", rope_parameters.get("type", "default"))
             validation_fn = getattr(self, f"_validate_{rope_type}_rope_parameters", None)
             rope_parameters["rope_type"] = rope_type
 
             if validation_fn is not None:
-                validation_fn(rope_parameters, ignore_keys=ignore_keys)
+                validation_fn(rope_parameters, ignore_keys=self.ignore_keys_at_rope_validation)
             else:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
                 )
 
+            # An odd partial rotary dim is rounded up and still fits in the head, but a fully-rotated odd head doesn't
+            # Synthetic test fixtures and Hub test checkpoints (e.g. tiny-llama) use head_dim <= 4 and are allowed
+            partial_rotary_factor = rope_parameters.get("partial_rotary_factor", 1.0)
+            if (
+                head_dim is not None
+                and head_dim > 4
+                and head_dim % 2
+                and int(head_dim * partial_rotary_factor) == head_dim
+            ):
+                raise ValueError(
+                    f"RoPE requires an even rotary dimension, but got `head_dim`={head_dim} with "
+                    f"`partial_rotary_factor`={partial_rotary_factor} for `{layer_type}`."
+                )
+
+    def _validate_axial_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
+        self._validate_default_rope_parameters(rope_parameters, ignore_keys=ignore_keys)
+
     def _validate_default_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "rope_theta"}
+        required_keys = {"rope_type"}
+        optional_keys = {"rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
-        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(
+            rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys
+        )
 
     def _validate_linear_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "factor", "rope_theta"}
+        required_keys = {"rope_type", "factor"}
+        optional_keys = {"rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
-        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(
+            rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys
+        )
 
         factor = rope_parameters["factor"]
-        if factor is None or not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        if factor is None or not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
     def _validate_dynamic_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
         required_keys = {"rope_type", "factor"}
+        optional_keys = {"rope_theta"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
-        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+        self._check_received_keys(
+            rope_type, received_keys, required_keys, optional_keys=optional_keys, ignore_keys=ignore_keys
+        )
 
         factor = rope_parameters["factor"]
-        if factor is None or not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        if factor is None or not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
     def _validate_yarn_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "factor", "rope_theta", "original_max_position_embeddings"}
+        required_keys = {"rope_type", "factor", "original_max_position_embeddings"}
         optional_keys = {
+            "rope_theta",
             "attention_factor",
             "beta_fast",
             "beta_slow",
@@ -770,8 +944,8 @@ class RotaryEmbeddingConfigMixin:
         self._check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
 
         factor = rope_parameters["factor"]
-        if factor is None or not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        if factor is None or not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
         attention_factor = rope_parameters.get("attention_factor")
         if attention_factor is not None and (not isinstance(attention_factor, float) or attention_factor < 0):
@@ -779,11 +953,11 @@ class RotaryEmbeddingConfigMixin:
                 f"`rope_parameters`'s attention_factor field must be a float greater than 0, got {attention_factor}"
             )
         beta_fast = rope_parameters.get("beta_fast")
-        if beta_fast is not None and not isinstance(beta_fast, float):
-            logger.warning(f"`rope_parameters`'s beta_fast field must be a float, got {beta_fast}")
+        if beta_fast is not None and not isinstance(beta_fast, (float, int)):
+            logger.warning(f"`rope_parameters`'s beta_fast field must be a float or int, got {beta_fast}")
         beta_slow = rope_parameters.get("beta_slow")
-        if beta_slow is not None and not isinstance(beta_slow, float):
-            logger.warning(f"`rope_parameters`'s beta_slow field must be a float, got {beta_slow}")
+        if beta_slow is not None and not isinstance(beta_slow, (float, int)):
+            logger.warning(f"`rope_parameters`'s beta_slow field must be a float or int, got {beta_slow}")
 
         if (beta_fast or 32) < (beta_slow or 1):
             logger.warning(
@@ -794,7 +968,7 @@ class RotaryEmbeddingConfigMixin:
         # Double-check: `factor` should be the ratio between the pre-yarn and post-yarn context lengths.
         # NOTE: we might get `implicit_factor == 1` if config's `original_max_position_embeddings` was
         # inferred from `max_position_embeddings` during standardization
-        original_max_position_embeddings = self.rope_parameters["original_max_position_embeddings"]
+        original_max_position_embeddings = rope_parameters["original_max_position_embeddings"]
         implicit_factor = self.max_position_embeddings / original_max_position_embeddings
         if implicit_factor != factor and implicit_factor != 1:
             logger.warning_once(
@@ -807,8 +981,8 @@ class RotaryEmbeddingConfigMixin:
             )
 
     def _validate_longrope_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
-        required_keys = {"rope_type", "short_factor", "long_factor", "rope_theta", "original_max_position_embeddings"}
-        optional_keys = {"attention_factor", "factor"}
+        required_keys = {"rope_type", "short_factor", "long_factor", "original_max_position_embeddings"}
+        optional_keys = {"rope_theta", "attention_factor", "factor"}
         received_keys = set(rope_parameters.keys())
         rope_type = rope_parameters["rope_type"]
         self._check_received_keys(rope_type, received_keys, required_keys, optional_keys, ignore_keys=ignore_keys)
@@ -818,7 +992,7 @@ class RotaryEmbeddingConfigMixin:
         dim = int(head_dim * partial_rotary_factor)
 
         short_factor = rope_parameters.get("short_factor")
-        if not isinstance(short_factor, list) and all(isinstance(x, (int, float)) for x in short_factor):
+        if not (isinstance(short_factor, list) and all(isinstance(x, (int, float)) for x in short_factor)):
             logger.warning(f"`rope_parameters`'s short_factor field must be a list of numbers, got {short_factor}")
         if len(short_factor) != dim // 2:
             logger.warning(
@@ -826,7 +1000,7 @@ class RotaryEmbeddingConfigMixin:
             )
 
         long_factor = rope_parameters.get("long_factor")
-        if not isinstance(long_factor, list) and all(isinstance(x, (int, float)) for x in long_factor):
+        if not (isinstance(long_factor, list) and all(isinstance(x, (int, float)) for x in long_factor)):
             logger.warning(f"`rope_parameters`'s long_factor field must be a list of numbers, got {long_factor}")
         if len(long_factor) != dim // 2:
             logger.warning(
@@ -847,13 +1021,13 @@ class RotaryEmbeddingConfigMixin:
             )
         elif factor is None and original_max_position_embeddings is None:
             logger.warning("Missing required keys in `rope_parameters`: 'factor'")
-        elif not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        elif not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
         attention_factor = rope_parameters.get("attention_factor")
-        if attention_factor is not None and (not isinstance(attention_factor, float) or attention_factor < 0.0):
+        if attention_factor is not None and (not isinstance(attention_factor, (float, int)) or attention_factor < 0.0):
             logger.warning(
-                f"`rope_parameters`'s attention_factor field must be a float greater than 0, got {attention_factor}"
+                f"`rope_parameters`'s attention_factor field must be a float or int greater than 0, got {attention_factor}"
             )
 
     def _validate_llama3_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
@@ -870,15 +1044,17 @@ class RotaryEmbeddingConfigMixin:
         self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
 
         factor = rope_parameters["factor"]
-        if factor is None or not isinstance(factor, float) or factor < 1.0:
-            logger.warning(f"`rope_parameters`'s factor field must be a float >= 1, got {factor}")
+        if factor is None or not isinstance(factor, (float, int)) or factor < 1.0:
+            logger.warning(f"`rope_parameters`'s factor field must be a float or int >= 1, got {factor}")
 
         low_freq_factor = rope_parameters["low_freq_factor"]
         high_freq_factor = rope_parameters["high_freq_factor"]
-        if low_freq_factor is None or not isinstance(low_freq_factor, float):
-            logger.warning(f"`rope_parameters`'s low_freq_factor field must be a float, got {low_freq_factor}")
-        if high_freq_factor is None or not isinstance(high_freq_factor, float):
-            logger.warning(f"`rope_parameters`'s high_freq_factor field must be a float, got {high_freq_factor}")
+        if low_freq_factor is None or not isinstance(low_freq_factor, (float, int)):
+            logger.warning(f"`rope_parameters`'s low_freq_factor field must be a float, or int got {low_freq_factor}")
+        if high_freq_factor is None or not isinstance(high_freq_factor, (float, int)):
+            logger.warning(
+                f"`rope_parameters`'s high_freq_factor field must be a float or int, got {high_freq_factor}"
+            )
         if high_freq_factor <= low_freq_factor:
             logger.warning(
                 "`rope_parameters`'s high_freq_factor field must be greater than low_freq_factor, got high_freq_factor="
@@ -895,6 +1071,20 @@ class RotaryEmbeddingConfigMixin:
             logger.warning(
                 "`rope_parameters`'s original_max_position_embeddings field must be less than max_position_embeddings, got "
                 f"{original_max_position_embeddings} and max_position_embeddings={self.max_position_embeddings}"
+            )
+
+    def _validate_proportional_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):
+        required_keys = {"rope_type", "rope_theta"}
+        rope_type = rope_parameters["rope_type"]
+        received_keys = set(rope_parameters.keys())
+        self._check_received_keys(rope_type, received_keys, required_keys, ignore_keys=ignore_keys)
+
+        partial_rotary_factor = rope_parameters.get("partial_rotary_factor")
+        if partial_rotary_factor is None:
+            logger.warning(
+                "`rope_parameters`'s partial_rotary_factor is None. This will default to 1.0 in the computation, "
+                "making this equivalent to the linear_scaling RoPE type. Provide a value in the range [0.0, 1.0) to "
+                "make use of the proportional RoPE functionality."
             )
 
     @staticmethod
@@ -917,7 +1107,7 @@ class RotaryEmbeddingConfigMixin:
 
         # Some models need to store model-specific keys, and we don't want to throw warning at them
         if ignore_keys is not None:
-            received_keys -= ignore_keys
+            received_keys -= set(ignore_keys)
 
         missing_keys = required_keys - received_keys
         if missing_keys:
@@ -942,4 +1132,4 @@ def rope_config_validation(config: RotaryEmbeddingConfigMixin, ignore_keys: set 
         FutureWarning,
     )
     config.standardize_rope_params()
-    config.validate_rope(ignore_keys=ignore_keys)
+    config.validate_rope()

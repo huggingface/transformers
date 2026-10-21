@@ -24,11 +24,11 @@ from transformers.utils import is_pytesseract_available, is_torchvision_availabl
 from ...test_processing_common import ProcessorTesterMixin
 
 
-if is_torchvision_available():
-    from transformers import LayoutLMv2ImageProcessorFast
-
 if is_pytesseract_available():
-    from transformers import LayoutLMv2ImageProcessor
+    from transformers import LayoutLMv2ImageProcessorPil
+
+    if is_torchvision_available():
+        from transformers import LayoutLMv2ImageProcessor
 
 
 @require_pytesseract
@@ -69,8 +69,8 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
         return LayoutLMv2Tokenizer.from_pretrained(cls.tmpdirname)
 
-    @unittest.skip("LayoutLMv2Processor doesn't use pixel_values")
-    def test_image_processor_defaults(self):
+    @unittest.skip("LayoutLMv2Processor can't process string text, requires pre-tokenized words")
+    def test_subprocessor_defaults_0_text(self):
         pass
 
     @unittest.skip("LayoutLMv2Processor doesn't use pixel_values")
@@ -93,7 +93,7 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, LayoutLMv2Tokenizer)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
+        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessorPil)
 
         # fast tokenizer
         tokenizer_add_kwargs = self.get_component("tokenizer", bos_token="(BOS)", eos_token="(EOS)")
@@ -107,7 +107,7 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, LayoutLMv2TokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessorFast)
+        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
 
     @slow
     def test_overflowing_tokens(self):
@@ -141,6 +141,10 @@ class LayoutLMv2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         train_data = preprocess_data(datasets["train"])
 
         self.assertEqual(len(train_data["image"]), len(train_data["input_ids"]))
+
+    @unittest.skip("Processor doesn't accept typed kwargs!")
+    def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
+        pass
 
 
 # different use cases tests

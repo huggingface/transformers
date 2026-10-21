@@ -14,36 +14,53 @@
 """PyTorch DINOv3 model."""
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 
 import numpy as np
 import torch
 from torch import nn
 
-from transformers.models.arcee.modeling_arcee import ArceeMLP
-from transformers.models.dinov2.modeling_dinov2 import (
-    Dinov2DropPath,
+from ... import initialization as init
+from ...backbone_utils import BackboneMixin, filter_output_hidden_states
+from ...modeling_layers import GradientCheckpointingLayer
+from ...modeling_outputs import BackboneOutput, BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...pytorch_utils import compile_compatible_method_lru_cache
+from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ..arcee.modeling_arcee import ArceeMLP
+from ..dinov2.modeling_dinov2 import (
     Dinov2LayerScale,
     Dinov2PreTrainedModel,
     eager_attention_forward,
 )
-from transformers.models.llama.modeling_llama import LlamaMLP
-from transformers.models.pixtral.modeling_pixtral import PixtralAttention, rotate_half
-
-from ... import initialization as init
-from ...backbone_utils import BackboneMixin
-from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BackboneOutput, BaseModelOutputWithPooling
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
-from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ..llama.modeling_llama import LlamaMLP
+from ..pixtral.modeling_pixtral import PixtralAttention, rotate_half
+from ..swin.modeling_swin import SwinDropPath
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+@auto_docstring(
+    custom_intro="""
+    Output type of [`DINOv3ViTBackbone`], extending [`BackboneOutput`] with optional CLS tokens from
+    each selected feature stage (used when `config.return_class_token=True`).
+    """
+)
+@dataclass
+class DINOv3ViTBackboneOutput(BackboneOutput):
+    r"""
+    cls_tokens (`tuple(torch.FloatTensor)`, *optional*):
+        CLS token from each selected feature stage, each of shape `(batch_size, hidden_size)`.
+        Only present when `config.return_class_token=True`.
+    """
+
+    cls_tokens: tuple[torch.FloatTensor] | None = None
 
 
 class DINOv3ViTEmbeddings(nn.Module):
@@ -148,42 +165,49 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
         self.config = config
         self.base = config.rope_theta
         self.head_dim = config.hidden_size // config.num_attention_heads
-        self.num_patches_h = config.image_size // config.patch_size
-        self.num_patches_w = config.image_size // config.patch_size
+        image_height, image_width = (
+            config.image_size if isinstance(config.image_size, Iterable) else (config.image_size, config.image_size)
+        )
+        patch_height, patch_width = (
+            config.patch_size if isinstance(config.patch_size, Iterable) else (config.patch_size, config.patch_size)
+        )
+        self.num_patches_h = image_height // patch_height
+        self.num_patches_w = image_width // patch_width
 
         inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
 
     def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         _, _, height, width = pixel_values.shape
-        num_patches_h = height // self.config.patch_size
-        num_patches_w = width // self.config.patch_size
+        patch_height, patch_width = (
+            self.config.patch_size
+            if isinstance(self.config.patch_size, Iterable)
+            else (self.config.patch_size, self.config.patch_size)
+        )
+        num_patches_h = height // patch_height
+        num_patches_w = width // patch_width
 
         device = pixel_values.device
-        device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
 
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            # Although we could precompute static patch_coords from image_size and patch_size in the config,
-            # the model was trained with random_scale, so it can process images of varying sizes.
-            # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
-            patch_coords = get_patches_center_coordinates(
-                num_patches_h, num_patches_w, dtype=torch.float32, device=device
+        # Although we could precompute static patch_coords from image_size and patch_size in the config,
+        # the model was trained with random_scale, so it can process images of varying sizes.
+        # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
+        patch_coords = get_patches_center_coordinates(num_patches_h, num_patches_w, dtype=torch.float32, device=device)
+        if self.training:
+            patch_coords = augment_patches_center_coordinates(
+                patch_coords,
+                shift=self.config.pos_embed_shift,
+                jitter=self.config.pos_embed_jitter,
+                rescale=self.config.pos_embed_rescale,
             )
-            if self.training:
-                patch_coords = augment_patches_center_coordinates(
-                    patch_coords,
-                    shift=self.config.pos_embed_shift,
-                    jitter=self.config.pos_embed_jitter,
-                    rescale=self.config.pos_embed_rescale,
-                )
 
-            # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
-            angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
-            angles = angles.flatten(1, 2)
-            angles = angles.tile(2)
+        # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
+        angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
+        angles = angles.flatten(1, 2)
+        angles = angles.tile(2)
 
-            cos = torch.cos(angles)
-            sin = torch.sin(angles)
+        cos = torch.cos(angles)
+        sin = torch.sin(angles)
 
         dtype = pixel_values.dtype
         return cos.to(dtype=dtype), sin.to(dtype=dtype)
@@ -222,6 +246,7 @@ def apply_rotary_pos_emb(
     return q, k
 
 
+@no_inherit_decorator
 class DINOv3ViTAttention(PixtralAttention):
     def __init__(self, config: DINOv3ViTConfig):
         super().__init__(config)
@@ -278,15 +303,15 @@ class DINOv3ViTLayerScale(Dinov2LayerScale):
     pass
 
 
-class DINOv3ViTDropPath(Dinov2DropPath):
-    pass
-
-
 class DINOv3ViTMLP(ArceeMLP):
     pass
 
 
 class DINOv3ViTGatedMLP(LlamaMLP):
+    pass
+
+
+class Dinov3ViTDropPath(SwinDropPath):
     pass
 
 
@@ -299,7 +324,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = DINOv3ViTAttention(config)
         self.layer_scale1 = DINOv3ViTLayerScale(config)
-        self.drop_path = DINOv3ViTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = Dinov3ViTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -314,6 +339,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         # Attention with residual connection
         residual = hidden_states
@@ -322,6 +348,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
             hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
+            **kwargs,
         )
         hidden_states = self.layer_scale1(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
@@ -338,6 +365,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
+    base_model_prefix = "model"
     _can_record_outputs = {
         "hidden_states": DINOv3ViTLayer,
         "attentions": DINOv3ViTAttention,
@@ -346,13 +374,11 @@ class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module) -> None:
         """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, DINOv3ViTEmbeddings):
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.config.num_register_tokens > 0:
@@ -365,24 +391,41 @@ class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
+class DINOv3ViTEncoder(DINOv3ViTPreTrainedModel):
+    def __init__(self, config: DINOv3ViTConfig):
+        super().__init__(config)
+        self.layer = nn.ModuleList([DINOv3ViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs(tie_last_hidden_states=False)
+    @auto_docstring
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        for layer_module in self.layer:
+            hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings, **kwargs)
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
 @auto_docstring
 class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
     def __init__(self, config: DINOv3ViTConfig):
         super().__init__(config)
-        self.config = config
         self.embeddings = DINOv3ViTEmbeddings(config)
         self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)
-        self.layer = nn.ModuleList([DINOv3ViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.model = DINOv3ViTEncoder(config)
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs(tie_last_hidden_states=False)
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -395,67 +438,64 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for
             pre-training.
         """
-
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
         hidden_states = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         position_embeddings = self.rope_embeddings(pixel_values)
 
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(
-                hidden_states,
-                position_embeddings=position_embeddings,
-            )
-
-        sequence_output = self.norm(hidden_states)
+        encoder_outputs: BaseModelOutput = self.model(hidden_states, position_embeddings=position_embeddings, **kwargs)
+        sequence_output = self.norm(encoder_outputs.last_hidden_state)
         pooled_output = sequence_output[:, 0, :]
-
-        return BaseModelOutputWithPooling(last_hidden_state=sequence_output, pooler_output=pooled_output)
+        return BaseModelOutputWithPooling(
+            last_hidden_state=sequence_output,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 @auto_docstring
 class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
-
         self.embeddings = DINOv3ViTEmbeddings(config)
         self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)
-        self.layer = nn.ModuleList([DINOv3ViTLayer(config) for _ in range(config.num_hidden_layers)])
+        self.model = DINOv3ViTEncoder(config)
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.gradient_checkpointing = False
-
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
         self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @merge_with_config_defaults
-    @capture_outputs
     @can_return_tuple
+    @filter_output_hidden_states
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BackboneOutput:
+    ) -> DINOv3ViTBackboneOutput:
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
-        hidden_states = self.embeddings(pixel_values)
+        hidden_state = self.embeddings(pixel_values)
         position_embeddings = self.rope_embeddings(pixel_values)
 
-        stage_hidden_states: list[torch.Tensor] = [hidden_states]
-
-        for layer_module in self.layer:
-            hidden_states = layer_module(hidden_states, position_embeddings=position_embeddings)
-            stage_hidden_states.append(hidden_states)
+        kwargs["output_hidden_states"] = True  # required to extract per-stage feature maps from hidden_states
+        output: BaseModelOutput = self.model(hidden_state, position_embeddings, **kwargs)
+        stage_hidden_states = output.hidden_states
 
         batch_size, _, image_height, image_width = pixel_values.shape
-        patch_size = self.config.patch_size
-        num_patches_height = image_height // patch_size
-        num_patches_width = image_width // patch_size
+        patch_height, patch_width = (
+            self.config.patch_size
+            if isinstance(self.config.patch_size, Iterable)
+            else (self.config.patch_size, self.config.patch_size)
+        )
+        num_patches_height = image_height // patch_height
+        num_patches_width = image_width // patch_width
 
         num_prefix = 1 + getattr(self.config, "num_register_tokens", 0)
+        return_class_token = getattr(self.config, "return_class_token", False)
 
-        feature_maps = []
+        feature_maps, cls_tokens = [], []
         sequence_output = None
         last_stage_idx = len(self.stage_names) - 1
         for idx, (stage_name, hidden_state) in enumerate(zip(self.stage_names, stage_hidden_states)):
@@ -466,6 +506,8 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
                 hidden_state = self.norm(hidden_state)
 
             if stage_name in self.out_features:
+                if return_class_token:
+                    cls_tokens.append(hidden_state[:, 0, :])
                 patch_tokens = hidden_state[:, num_prefix:, :]
                 if self.config.reshape_hidden_states:
                     fmap = (
@@ -478,7 +520,12 @@ class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
 
                 feature_maps.append(fmap)
 
-        output = BackboneOutput(feature_maps=tuple(feature_maps))
+        output = DINOv3ViTBackboneOutput(
+            feature_maps=tuple(feature_maps),
+            cls_tokens=tuple(cls_tokens) if return_class_token else None,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
+        )
         output.last_hidden_state = sequence_output
 
         return output

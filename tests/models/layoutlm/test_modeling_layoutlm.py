@@ -248,7 +248,7 @@ class LayoutLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     def setUp(self):
         self.model_tester = LayoutLMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LayoutLMConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=LayoutLMConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -284,6 +284,12 @@ class LayoutLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
+
+    @unittest.skip(
+        reason="LayoutLM automatically creates an attention mask when none is provided, which prevents dispatching to the SDPA Flash Attention backend."
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
 
 def prepare_layoutlm_batch_inputs():

@@ -37,19 +37,19 @@ if is_torch_available():
     import torch
 
     if is_vision_available():
-        from transformers import CLIPTokenizer, OneFormerImageProcessor, OneFormerProcessor
+        from transformers import CLIPTokenizer, OneFormerImageProcessorPil, OneFormerProcessor
         from transformers.models.oneformer.image_processing_oneformer import binary_mask_to_rle
         from transformers.models.oneformer.modeling_oneformer import OneFormerForUniversalSegmentationOutput
 
     if is_torchvision_available():
-        from transformers.models.oneformer.image_processing_oneformer_fast import OneFormerImageProcessorFast
+        from transformers.models.oneformer.image_processing_oneformer import OneFormerImageProcessor
 
 if is_vision_available():
     from PIL import Image
 
 
 def prepare_metadata(class_info_file, repo_path="shi-labs/oneformer_demo"):
-    with open(hf_hub_download(repo_path, class_info_file, repo_type="dataset")) as f:
+    with open(hf_hub_download(repo_path, class_info_file, repo_type="dataset"), encoding="utf-8") as f:
         class_info = json.load(f)
     metadata = {}
     class_names = []
@@ -130,7 +130,7 @@ class OneFormerProcessorTester:
             "num_text": self.num_text,
         }
 
-        image_processor = OneFormerImageProcessorFast(**image_processor_dict)
+        image_processor = OneFormerImageProcessorPil(**image_processor_dict)
         tokenizer = CLIPTokenizer.from_pretrained(self.model_repo)
 
         return {
@@ -183,7 +183,7 @@ class OneFormerProcessorTester:
             masks_queries_logits=torch.randn((self.batch_size, self.num_queries, self.height, self.width)),
         )
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_images_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
             batch_size=self.batch_size,
             num_channels=self.num_channels,
@@ -224,7 +224,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         # Initialize processor
         processor = self.processing_class(**self.processor_dict)
         # create random PIL images
-        image_inputs = self.processing_tester.prepare_image_inputs(equal_resolution=False)
+        image_inputs = self.processing_tester.prepare_images_inputs(equal_resolution=False)
         for image in image_inputs:
             self.assertIsInstance(image, Image.Image)
 
@@ -276,7 +276,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         # Initialize processor
         processor = self.processing_class(**self.processor_dict)
         # create random numpy tensors
-        image_inputs = self.processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
+        image_inputs = self.processing_tester.prepare_images_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
             self.assertIsInstance(image, np.ndarray)
 
@@ -328,7 +328,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         # Initialize processor
         processor = self.processing_class(**self.processor_dict)
         # create random PyTorch tensors
-        image_inputs = self.processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
+        image_inputs = self.processing_tester.prepare_images_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
@@ -382,7 +382,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         num_labels = self.processing_tester.num_labels
         annotations = None
         instance_id_to_semantic_id = None
-        image_inputs = self.processing_tester.prepare_image_inputs(equal_resolution=False)
+        image_inputs = self.processing_tester.prepare_images_inputs(equal_resolution=False)
         if with_segmentation_maps:
             high = num_labels
             if is_instance_map:
@@ -418,7 +418,7 @@ class OneFormerProcessingTest(unittest.TestCase):
             feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
 
         self.assertEqual(feat_extract_second.image_processor.to_dict(), feat_extract_first.image_processor.to_dict())
-        self.assertIsInstance(feat_extract_first.image_processor, OneFormerImageProcessorFast)
+        self.assertIsInstance(feat_extract_first.image_processor, OneFormerImageProcessorPil)
         self.assertIsInstance(feat_extract_first.tokenizer, CLIPTokenizer)
 
     def test_call_with_segmentation_maps(self):
@@ -475,7 +475,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         panoptic_map1, inst2class1 = create_panoptic_map(annotation1, segments_info1)
         panoptic_map2, inst2class2 = create_panoptic_map(annotation2, segments_info2)
 
-        image_processor = OneFormerImageProcessor(
+        image_processor = OneFormerImageProcessorPil(
             do_reduce_labels=True,
             ignore_index=0,
             size=(512, 512),

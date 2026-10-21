@@ -21,9 +21,9 @@ import unittest.mock as mock
 import warnings
 from pathlib import Path
 
-import httpx
+from huggingface_hub.utils import httpx
 
-from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
+from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config, WhisperConfig
 from transformers.configuration_utils import PreTrainedConfig
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_torch
 
@@ -32,7 +32,16 @@ sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
 from test_module.custom_configuration import CustomConfig  # noqa E402
 
-
+classvar_fields = {
+    "base_config_key",
+    "sub_configs",
+    "attribute_map",
+    "base_model_tp_plan",
+    "base_model_fsdp_plan",
+    "base_model_pp_plan",
+    "base_model_ep_plan",
+    "_auto_class",
+}
 config_common_kwargs = {
     "return_dict": False,
     "output_hidden_states": True,
@@ -144,13 +153,12 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertListEqual(
             missing_keys,
             [
-                "_output_attentions",
+                "transformers_version",
                 "is_encoder_decoder",
                 "_name_or_path",
-                "_commit_hash",
+                "_output_attentions",
                 "_attn_implementation_internal",
                 "_experts_implementation_internal",
-                "transformers_version",
             ],
         )
         keys_with_defaults = [key for key, value in config_common_kwargs.items() if value == getattr(base_config, key)]
@@ -175,6 +183,96 @@ class ConfigTestUtils(unittest.TestCase):
         config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert-subfolder", subfolder="bert")
         self.assertIsNotNone(config)
 
+    def test_saving_with_custom_fields(self):
+        """
+        Verifies that the serialized `json` file contains only keys that are
+        different from the class defaults. Defaults are not serialized!
+        """
+        config = BertConfig(foo=-1)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            loaded_config = BertConfig.from_pretrained(tmp_dir)
+            self.assertTrue(loaded_config.foo, -1)
+
+            # Base fields are not serialized in config unless it has a non-default value
+            json_dict = PreTrainedConfig._dict_from_json_file(f"{tmp_dir}/config.json")
+            for key in config_common_kwargs:
+                self.assertFalse(key in json_dict)
+
+            # ClassVar fields are never saved as they're NOT supposed to be updated dynamically
+            # These field values are static per each model file (eg. TP/EP/PP plan, sub_configs, etc)
+            for key in classvar_fields:
+                self.assertFalse(key in json_dict)
+
+            # It has to always be saved so we can auto-map when loading
+            self.assertTrue("model_type" in json_dict)
+
+        # Change the default value for some common fields and save again
+        config = BertConfig(output_hidden_states=True, output_attentions=True, is_encoder_decoder=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            loaded_config = BertConfig.from_pretrained(tmp_dir)
+            self.assertEqual(loaded_config.output_hidden_states, True)
+            self.assertEqual(loaded_config.output_attentions, True)
+            self.assertEqual(loaded_config.is_encoder_decoder, True)
+
+            # Base fields with non-default value should be in JSON file
+            json_dict = PreTrainedConfig._dict_from_json_file(f"{tmp_dir}/config.json")
+            self.assertEqual(json_dict["output_hidden_states"], True)
+            self.assertEqual(json_dict["output_attentions"], True)
+            self.assertEqual(json_dict["is_encoder_decoder"], True)
+
+    def test_saving_with_custom_fields_nested_configs(self):
+        """
+        Verifies that the serialized `json` file contains only keys that are
+        different from the class defaults for nested config and its subconfigs.
+        Defaults are not serialized!
+        """
+        # For nested configs we follow the same rules per each sub-config
+        config = Florence2Config()
+        config.text_config.foo = -1
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            loaded_config = Florence2Config.from_pretrained(tmp_dir)
+            self.assertTrue(loaded_config.text_config.foo, -1)
+
+            # Base fields are not serialized in config unless it has a non-default value
+            json_dict = PreTrainedConfig._dict_from_json_file(f"{tmp_dir}/config.json")
+            for key in config_common_kwargs:
+                self.assertFalse(key in json_dict)
+                self.assertFalse(key in json_dict["text_config"])
+                self.assertFalse(key in json_dict["vision_config"])
+
+            # ClassVar fields are never saved as they're NOT supposed to be updated dynamically
+            # These field values are static per each model file (eg. TP/EP/PP plan, sub_configs, etc)
+            for key in classvar_fields:
+                self.assertFalse(key in json_dict)
+                self.assertFalse(key in json_dict["text_config"])
+                self.assertFalse(key in json_dict["vision_config"])
+
+            # It has to always be saved so we can auto-map when loading
+            self.assertTrue("model_type" in json_dict)
+            self.assertTrue("model_type" in json_dict["text_config"])
+            self.assertTrue("model_type" in json_dict["vision_config"])
+
+        # Change the default value for some common fields and save again
+        text_config = BertConfig(output_hidden_states=True, output_attentions=True, is_encoder_decoder=True)
+        config = Florence2Config(text_config=text_config, is_encoder_decoder=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            loaded_config = Florence2Config.from_pretrained(tmp_dir)
+            self.assertEqual(loaded_config.text_config.output_hidden_states, True)
+            self.assertEqual(loaded_config.text_config.output_attentions, True)
+            self.assertEqual(loaded_config.text_config.is_encoder_decoder, True)
+            self.assertEqual(loaded_config.is_encoder_decoder, True)
+
+            # Base fields with non-default value should be in JSON file
+            json_dict = PreTrainedConfig._dict_from_json_file(f"{tmp_dir}/config.json")
+            self.assertEqual(json_dict["text_config"]["output_hidden_states"], True)
+            self.assertEqual(json_dict["text_config"]["output_attentions"], True)
+            self.assertEqual(json_dict["text_config"]["is_encoder_decoder"], True)
+            self.assertEqual(json_dict["is_encoder_decoder"], True)
+
     def test_cached_files_are_used_when_internet_is_down(self):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
@@ -189,7 +287,7 @@ class ConfigTestUtils(unittest.TestCase):
         _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("httpx.Client.request", return_value=response_mock) as mock_head:
+        with mock.patch.object(httpx.Client, "request", return_value=response_mock) as mock_head:
             _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -201,7 +299,7 @@ class ConfigTestUtils(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             configuration.save_pretrained(tmp_dir)
             configuration.hidden_size = 2
-            json.dump(configuration.to_dict(), open(os.path.join(tmp_dir, "config.4.0.0.json"), "w"))
+            json.dump(configuration.to_dict(), open(os.path.join(tmp_dir, "config.4.0.0.json"), "w", encoding="utf-8"))
 
             # This should pick the new configuration file as the version of Transformers is > 4.0.0
             new_configuration = AutoConfig.from_pretrained(tmp_dir)
@@ -254,6 +352,22 @@ class ConfigTestUtils(unittest.TestCase):
         config.min_length = 0
         self.assertTrue(len(config._get_generation_parameters()) > 0)
 
+    def test_get_generation_parameters_with_declared_fields(self):
+        # Checkpoint values for declared fields remain valid even if the field defaults to None.
+        config = WhisperConfig(suppress_tokens=[1, 2], begin_suppress_tokens=[3])
+        self.assertEqual(config._get_generation_parameters(), {})
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            reloaded_config = WhisperConfig.from_pretrained(tmp_dir)
+        self.assertEqual(reloaded_config.suppress_tokens, [1, 2])
+        self.assertEqual(reloaded_config.begin_suppress_tokens, [3])
+        self.assertEqual(reloaded_config._get_generation_parameters(), {})
+
+        # Generation-only attributes added to the model config must still be rejected.
+        config.min_length = 3
+        self.assertEqual(config._get_generation_parameters(), {"min_length": 3})
+
     def test_loading_config_do_not_raise_future_warnings(self):
         """Regression test for https://github.com/huggingface/transformers/issues/31002."""
         # Loading config should not raise a FutureWarning. It was the case before.
@@ -282,16 +396,16 @@ class ConfigTestUtils(unittest.TestCase):
         config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-bart")
         self.assertEqual(config.get_text_config(), config)
         # both encoder_layers and decoder_layers exist
-        self.assertTrue(getattr(config, "encoder_layers", None) is not None)
-        self.assertTrue(getattr(config, "decoder_layers", None) is not None)
+        self.assertTrue(getattr(config, "encoder_ffn_dim", None) is not None)
+        self.assertTrue(getattr(config, "decoder_ffn_dim", None) is not None)
+
         decoder_config = config.get_text_config(decoder=True)
         self.assertNotEqual(decoder_config, config)
         self.assertEqual(decoder_config.num_hidden_layers, config.decoder_layers)
-        self.assertTrue(getattr(decoder_config, "encoder_layers", None) is None)  # encoder_layers is removed
+
         encoder_config = config.get_text_config(encoder=True)
         self.assertNotEqual(encoder_config, config)
         self.assertEqual(encoder_config.num_hidden_layers, config.encoder_layers)
-        self.assertTrue(getattr(encoder_config, "decoder_layers", None) is None)  # decoder_layers is removed
 
     @require_torch
     def test_bc_torch_dtype(self):
@@ -359,3 +473,41 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertIsInstance(new_config_instance.inf_positive, float)
         self.assertIsInstance(new_config_instance.inf_negative, float)
         self.assertIsInstance(new_config_instance.nan, float)
+
+
+class ConfigSubclassKwOnlyTest(unittest.TestCase):
+    """Test that config subclasses with non-default fields following parent default fields
+    no longer raise TypeError (fixed by kw_only=True in __init_subclass__). Regression
+    test for https://github.com/huggingface/transformers/issues/XXXX."""
+
+    def test_subclass_non_default_field_after_default(self):
+        """A config subclass adding a required field after parent defaults must not raise."""
+
+        class MyConfig(PreTrainedConfig):
+            pooling: str  # no default — would fail under Python dataclass ordering rules
+
+        # Should construct without TypeError
+        cfg = MyConfig(pooling="mean")
+        self.assertEqual(cfg.pooling, "mean")
+
+    def test_subclass_multiple_non_default_fields(self):
+        """Multiple non-default fields in the subclass should all work."""
+
+        class EmbedConfig(PreTrainedConfig):
+            dim: int
+            pooling: str
+
+        cfg = EmbedConfig(dim=128, pooling="cls")
+        self.assertEqual(cfg.dim, 128)
+        self.assertEqual(cfg.pooling, "cls")
+
+    def test_inherited_defaults_still_work(self):
+        """Inherited fields with defaults must still be accessible."""
+        from transformers import BertConfig
+
+        class BertWithPooling(BertConfig):
+            pooling: str
+
+        cfg = BertWithPooling(pooling="mean", hidden_size=256)
+        self.assertEqual(cfg.pooling, "mean")
+        self.assertEqual(cfg.hidden_size, 256)

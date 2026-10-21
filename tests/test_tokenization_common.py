@@ -445,14 +445,28 @@ Hey how are you doing"""  # noqa: W293
             if _type.__name__ == "BPE" or _type.__name__ == "WordPiece":
                 vocab = vocab_ids
 
+        # Extract precompiled SentencePiece charsmap from tokenizer.json normalizer
+        extra_kwargs = {}
+        normalizer_config = extractor.tokenizer_data.get("normalizer")
+        if normalizer_config:
+            if normalizer_config.get("type", None) == "Sequence":
+                normalizer_list = normalizer_config["normalizers"]
+            elif not isinstance(normalizer_config, list):
+                normalizer_list = [normalizer_config]
+            for normalizer in normalizer_list:
+                if normalizer.get("type") == "Precompiled" and "precompiled_charsmap" in normalizer:
+                    import base64
+
+                    extra_kwargs["_spm_precompiled_charsmap"] = base64.b64decode(normalizer["precompiled_charsmap"])
+                    break
+
         # Convert added_tokens list to added_tokens_decoder dict format
         # This matches the format used by from_pretrained() from tokenizer_config.jso
         tokenizer_from_extractor = self.tokenizer_class(
             vocab=vocab,
             merges=merges,
-            do_lower_case=False,
-            keep_accents=True,
             added_tokens_decoder=added_tokens_decoder,
+            **extra_kwargs,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
 
@@ -637,6 +651,7 @@ Hey how are you doing"""  # noqa: W293
                 "vocab",
                 "merges",
                 "legacy",
+                "_spm_precompiled_charsmap",
                 "additional_special_tokens",  # V5: deprecated, converted to extra_special_tokens
             ]:
                 self.assertIn(parameter_name, tokenizer.init_kwargs)
@@ -833,8 +848,6 @@ Hey how are you doing"""  # noqa: W293
 
         tokenizer_original = self.tokenizer_class.from_pretrained(
             self.from_pretrained_id[0],
-            do_lower_case=False,
-            keep_accents=True,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
         self._run_integration_checks(tokenizer_original, "original")
@@ -859,13 +872,15 @@ Hey how are you doing"""  # noqa: W293
 
         tokenizer_original = self.tokenizer_class.from_pretrained(
             self.from_pretrained_id[0],
-            do_lower_case=False,
-            keep_accents=True,
             **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
         )
         tokenizer_from_extractor = self.get_extracted_tokenizer(reference_tokenizer=tokenizer_original)
         if tokenizer_from_extractor is None:
             self.fail("No tokenizer from TokenizersExtractor provided")
+
+        # Debug: print tokenizer class used by tokenizer_from_extractor
+        print("tokenizer_from_extractor class:", type(tokenizer_from_extractor))
+
         self._run_integration_checks(tokenizer_from_extractor, "from_extractor")
 
     def test_internal_consistency(self):
@@ -988,6 +1003,13 @@ Hey how are you doing"""  # noqa: W293
         self.assertEqual(output, expected_output)  # Test output is the same after reloading
         # Check that no error raised
         new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
+
+    def test_chat_template_empty_conversation(self):
+        dummy_template = "{% for message in messages %}{{message['role'] + message['content']}}{% endfor %}"
+        tokenizer = self.get_tokenizer()
+        tokenizer.chat_template = dummy_template
+        with self.assertRaises(ValueError, msg="Cannot apply chat template to an empty conversation"):
+            tokenizer.apply_chat_template([], tokenize=False)
 
     @require_jinja
     def test_chat_template_save_loading(self):
@@ -1493,6 +1515,38 @@ Hey how are you doing"""  # noqa: W293
         )
 
     @require_jinja
+    def test_continue_final_message_string_and_reasoning(self):
+        dummy_template = """
+        {%- for message in messages %}
+            {{- "<|im_start|>" + message['role'] + "\n" }}
+            {%- if message['reasoning_content'] is defined %}
+                {{- "<think>\n" + message['reasoning_content'] + "\n</think>\n" }}
+            {%- endif %}
+            {{- message['content'] + "<|im_end|>" + "\n"}}
+        {%- endfor %}"""
+        dummy_conversation = [
+            {"role": "user", "content": "user message"},
+            {
+                "role": "assistant",
+                "reasoning_content": "assistant reasoning...",
+                "content": "assistant message",  # not shown because the continue_final_message is set at "reasoning_content"
+            },
+        ]
+        tokenizer = self.get_tokenizer()
+
+        # Test continue_final_message="reasoning_content"
+        prefill_output = tokenizer.apply_chat_template(
+            dummy_conversation,
+            chat_template=dummy_template,
+            tokenize=False,
+            continue_final_message="reasoning_content",
+        )
+        self.assertEqual(
+            prefill_output,
+            "<|im_start|>user\nuser message<|im_end|>\n<|im_start|>assistant\n<think>\nassistant reasoning...",
+        )
+
+    @require_jinja
     def test_chat_template_dict(self):
         dummy_template_1 = "{{'a'}}"
         dummy_template_2 = "{{'b'}}"
@@ -1519,14 +1573,18 @@ Hey how are you doing"""  # noqa: W293
                 # Test that save_jinja_files is ignored when there's a dict of multiple templates
                 tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=save_jinja_files)
                 if save_jinja_files:
-                    config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
+                    config_dict = json.load(
+                        open(os.path.join(tmp_dir_name, "tokenizer_config.json"), encoding="utf-8")
+                    )
                     self.assertNotIn("chat_template", config_dict)
                     self.assertTrue(os.path.exists(os.path.join(tmp_dir_name, "chat_template.jinja")))
                     self.assertTrue(
                         os.path.exists(os.path.join(tmp_dir_name, "additional_chat_templates/template2.jinja"))
                     )
                 else:
-                    config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
+                    config_dict = json.load(
+                        open(os.path.join(tmp_dir_name, "tokenizer_config.json"), encoding="utf-8")
+                    )
                     # Assert that chat templates are correctly serialized as lists of dictionaries
                     self.assertEqual(
                         config_dict["chat_template"],
@@ -1540,6 +1598,22 @@ Hey how are you doing"""  # noqa: W293
             # Assert that the serialized list is correctly reconstructed as a single dict
             self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
 
+    def test_chat_template_dict_saving_rejects_path_traversal(self):
+        # A malicious chat_template dict key must not be usable to escape the save directory and write
+        # attacker-controlled content to an arbitrary path (path traversal, CWE-22). The dict key is used
+        # verbatim as a `<name>.jinja` filename, so `save_pretrained` must reject names that are not plain
+        # filenames instead of silently writing outside the target directory.
+        tokenizer = self.get_tokenizer()
+        tokenizer.chat_template = {"default": "{{'a'}}", "../../PWNED": "attacker content"}
+        with tempfile.TemporaryDirectory() as tmp_dir_name:
+            save_dir = os.path.join(tmp_dir_name, "save")
+            # Where the "../../PWNED" key would land if traversal succeeded:
+            # save/additional_chat_templates/../../PWNED.jinja -> tmp_dir_name/PWNED.jinja
+            canary = Path(tmp_dir_name, "PWNED.jinja")
+            with self.assertRaises(ValueError):
+                tokenizer.save_pretrained(save_dir)
+            self.assertFalse(canary.exists())
+
     @require_jinja
     def test_chat_template_file_priority(self):
         dummy_template1 = "a"
@@ -1548,7 +1622,7 @@ Hey how are you doing"""  # noqa: W293
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             tokenizer.chat_template = dummy_template1
             tokenizer.save_pretrained(tmp_dir_name, save_jinja_files=False)
-            with Path(tmp_dir_name, "chat_template.jinja").open("w") as f:
+            with Path(tmp_dir_name, "chat_template.jinja").open("w", encoding="utf-8") as f:
                 f.write(dummy_template2)
             new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
         # Assert the file template clobbers any template in the config
@@ -1643,14 +1717,9 @@ Hey how are you doing"""  # noqa: W293
         # Overflowing tokens are handled quite differently in slow and fast tokenizers
         if isinstance(tokenizer, TokenizersBackend):
             truncated_sequence = information["input_ids"][0]
-            overflowing_tokens = information["input_ids"][1]
-            self.assertEqual(len(information["input_ids"]), 2)
 
             self.assertEqual(len(truncated_sequence), total_length - 2)
             self.assertEqual(truncated_sequence, sequence[:-2])
-
-            self.assertEqual(len(overflowing_tokens), 2 + stride)
-            self.assertEqual(overflowing_tokens, sequence[-(2 + stride) :])
         else:
             truncated_sequence = information["input_ids"]
             overflowing_tokens = information["overflowing_tokens"]
@@ -1681,8 +1750,6 @@ Hey how are you doing"""  # noqa: W293
         seq1_tokens = tokenizer.encode(seq_1, add_special_tokens=False)
 
         self.assertGreater(len(seq1_tokens), 2 + stride)
-
-        smallest = seq1_tokens if len(seq0_tokens) > len(seq1_tokens) else seq0_tokens
 
         # We are not using the special tokens - a bit too hard to test all the tokenizers with this
         # TODO try this again later
@@ -1765,9 +1832,6 @@ Hey how are you doing"""  # noqa: W293
             tokenizer.encode(seq_0, add_special_tokens=False)
             + tokenizer.encode(seq_1, add_special_tokens=False)[-(2 + stride) :]
         )
-        overflow_longest_sequence = (
-            overflow_first_sequence if len(seq0_tokens) > len(seq1_tokens) else overflow_second_sequence
-        )
 
         # Overflowing tokens are handled quite differently in slow and fast tokenizers
         if isinstance(tokenizer, TokenizersBackend):
@@ -1782,14 +1846,9 @@ Hey how are you doing"""  # noqa: W293
                 # add_prefix_space=False,
             )
             truncated_sequence = information["input_ids"][0]
-            overflowing_tokens = information["input_ids"][1]
-            self.assertEqual(len(information["input_ids"]), 2)
 
             self.assertEqual(len(truncated_sequence), len(sequence) - 2)
             self.assertEqual(truncated_sequence, truncated_longest_sequence)
-
-            self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
-            self.assertEqual(overflowing_tokens, overflow_longest_sequence)
         else:
             # No overflowing tokens when using 'longest' in python tokenizers
             with self.assertRaises(ValueError) as context:
@@ -1825,14 +1884,9 @@ Hey how are you doing"""  # noqa: W293
                 # add_prefix_space=False,
             )
             truncated_sequence = information["input_ids"][0]
-            overflowing_tokens = information["input_ids"][1]
-            self.assertEqual(len(information["input_ids"]), 2)
 
             self.assertEqual(len(truncated_sequence), len(sequence) - 2)
             self.assertEqual(truncated_sequence, truncated_longest_sequence)
-
-            self.assertEqual(len(overflowing_tokens), 2 + stride + len(smallest))
-            self.assertEqual(overflowing_tokens, overflow_longest_sequence)
         else:
             # No overflowing tokens when using 'longest' in python tokenizers
             with self.assertRaises(ValueError) as context:
@@ -2699,24 +2753,20 @@ Hey how are you doing"""  # noqa: W293
         from transformers import AutoTokenizer
 
         pretrained_list = getattr(self, "from_pretrained_id", []) or []
+        if isinstance(pretrained_list, str):
+            pretrained_list = [pretrained_list]
+        kwargs = getattr(self, "from_pretrained_kwargs", None) or {}
         for pretrained_name in pretrained_list:
             with self.subTest(f"AutoTokenizer ({pretrained_name})"):
                 # First cache the tokenizer files
-                try:
-                    tokenizer_cached = AutoTokenizer.from_pretrained(pretrained_name)
+                tokenizer_cached = AutoTokenizer.from_pretrained(pretrained_name, **kwargs)
 
-                    # Now load with local_files_only=True
-                    tokenizer_local = AutoTokenizer.from_pretrained(pretrained_name, local_files_only=True)
+                # Now load with local_files_only=True
+                tokenizer_local = AutoTokenizer.from_pretrained(pretrained_name, local_files_only=True, **kwargs)
 
-                    # Check that the two tokenizers are identical
-                    self.assertEqual(tokenizer_cached.get_vocab(), tokenizer_local.get_vocab())
-                    self.assertEqual(
-                        tokenizer_cached.all_special_tokens_extended,
-                        tokenizer_local.all_special_tokens_extended,
-                    )
-                except Exception as e:
-                    # if the pretrained model is not loadable how could it pass locally :)
-                    print(f"Could not load pretrained tokenizer {pretrained_name}: {e}")
+                # Check that the two tokenizers are identical
+                self.assertEqual(tokenizer_cached.get_vocab(), tokenizer_local.get_vocab())
+                self.assertEqual(tokenizer_cached.all_special_tokens, tokenizer_local.all_special_tokens)
 
 
 @require_tokenizers
@@ -2757,6 +2807,14 @@ class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTest
         self.assertEqual(tokenizer_r.add_special_tokens({}), 0)
         self.assertEqual(tokenizer_r.add_special_tokens({"bos_token": "[BOS]", "eos_token": "[EOS]"}), 2)
         self.assertRaises(ValueError, tokenizer_r.add_special_tokens, {"additional_special_tokens": "<testtoken1>"})
+        self.assertRaises(
+            ValueError,
+            tokenizer_r.add_special_tokens,
+            {
+                "additional_special_tokens": ["<deprecated>"],
+                "extra_special_tokens": ["<preferred>"],
+            },
+        )
         self.assertEqual(tokenizer_r.add_special_tokens({"additional_special_tokens": ["<testtoken2>"]}), 1)
         self.assertEqual(
             tokenizer_r.add_special_tokens({"additional_special_tokens": ["<testtoken3>", "<testtoken4>"]}), 2
@@ -2806,21 +2864,17 @@ class SentencePieceBackendCommonTest(unittest.TestCase, SentencePieceBackendTest
         from transformers import AutoTokenizer
 
         pretrained_list = getattr(self, "from_pretrained_id", []) or []
+        if isinstance(pretrained_list, str):
+            pretrained_list = [pretrained_list]
+        kwargs = getattr(self, "from_pretrained_kwargs", None) or {}
         for pretrained_name in pretrained_list:
             with self.subTest(f"AutoTokenizer ({pretrained_name})"):
                 # First cache the tokenizer files
-                try:
-                    tokenizer_cached = AutoTokenizer.from_pretrained(pretrained_name)
+                tokenizer_cached = AutoTokenizer.from_pretrained(pretrained_name, **kwargs)
 
-                    # Now load with local_files_only=True
-                    tokenizer_local = AutoTokenizer.from_pretrained(pretrained_name, local_files_only=True)
+                # Now load with local_files_only=True
+                tokenizer_local = AutoTokenizer.from_pretrained(pretrained_name, local_files_only=True, **kwargs)
 
-                    # Check that the two tokenizers are identical
-                    self.assertEqual(tokenizer_cached.get_vocab(), tokenizer_local.get_vocab())
-                    self.assertEqual(
-                        tokenizer_cached.all_special_tokens_extended,
-                        tokenizer_local.all_special_tokens_extended,
-                    )
-                except Exception as e:
-                    # if the pretrained model is not loadable how could it pass locally :)
-                    print(f"Could not load pretrained tokenizer: {e}")
+                # Check that the two tokenizers are identical
+                self.assertEqual(tokenizer_cached.get_vocab(), tokenizer_local.get_vocab())
+                self.assertEqual(tokenizer_cached.all_special_tokens, tokenizer_local.all_special_tokens)

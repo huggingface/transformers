@@ -170,8 +170,8 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_generate_without_input_ids(self):
         pass
 
-    @unittest.skip(reason="xLSTM cache slicing test case is an edge case")
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    @unittest.skip(reason="xLSTM cache slicing test case is an edge case")
     def test_generate_from_inputs_embeds(self, _, num_beams):
         pass
 
@@ -181,10 +181,6 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     @unittest.skip(reason="xLSTM cache slicing is interacting with beam search")
     def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="xLSTM cache is not iterable")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     def test_model_outputs_equivalence(self):
@@ -259,6 +255,14 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         expected_shape = (batch_size, seq_length, config.hidden_size)
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+    @unittest.skip("This model doesn't support beam search with cache, as the cache cannot be reordered")
+    def test_beam_search_generate(self):
+        pass
+
+    @unittest.skip("This model doesn't support beam search with cache, as the cache cannot be reordered")
+    def test_beam_sample_generate(self):
+        pass
 
 
 @require_torch

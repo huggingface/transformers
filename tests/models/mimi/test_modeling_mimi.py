@@ -22,9 +22,11 @@ import pytest
 from datasets import Audio, load_dataset
 from pytest import mark
 
-from transformers import AutoFeatureExtractor, MimiConfig, set_seed
+from tests.utils.test_audio_utils import normalize_waveform
+from transformers import AutoFeatureExtractor, MimiConfig, MimiDecoderConfig, MimiEncoderConfig, set_seed
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
+    Expectations,
     is_flaky,
     is_torch_available,
     require_flash_attn,
@@ -41,7 +43,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 if is_torch_available():
     import torch
 
-    from transformers import MimiModel
+    from transformers import MimiDecoderModel, MimiEncoderModel, MimiModel
 
 
 # Copied from transformers.tests.encodec.test_modeling_encodec.prepare_inputs_dict
@@ -85,6 +87,7 @@ class MimiModelTester:
         num_key_value_heads=2,
         sliding_window=4,
         use_cache=False,
+        max_position_embeddings=512,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -104,6 +107,7 @@ class MimiModelTester:
         self.num_key_value_heads = num_key_value_heads
         self.sliding_window = sliding_window
         self.use_cache = use_cache
+        self.max_position_embeddings = max_position_embeddings
 
     def prepare_config_and_inputs(self, input_values_length=None):
         input_values = floats_tensor(
@@ -132,6 +136,7 @@ class MimiModelTester:
 
     def get_config(self):
         return MimiConfig(
+            max_position_embeddings=self.max_position_embeddings,
             audio_channels=self.num_channels,
             chunk_in_sec=None,
             hidden_size=self.hidden_size,
@@ -165,7 +170,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = True
 
     test_resize_embeddings = False
-    test_torch_exportable = False
+    test_torch_exportable = False  # data-dependent guard in conv padding (`u0 + u1 + 2 < 7`)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does support returning hidden states
@@ -179,7 +184,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = MimiModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=MimiConfig, hidden_size=37, common_properties=[], has_text_modality=False
+            self, config_class=MimiConfig, hidden_size=32, common_properties=[], has_text_modality=False
         )
 
     def test_config(self):
@@ -335,19 +340,54 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_compile_dynamic(self):
         pass
 
+    def test_config_without_encoder_or_decoder(self):
+        config = self.model_tester.get_config()
+        self.assertNotIn("encoder_config", config.to_diff_dict())
 
-# Copied from transformers.tests.encodec.test_modeling_encodec.normalize
-def normalize(arr):
-    norm = np.linalg.norm(arr)
-    normalized_arr = arr / norm
-    return normalized_arr
+        config.encoder_config = None
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            config = MimiConfig.from_pretrained(tmp_dir)
+        self.assertIsNone(config.encoder_config)
+        self.assertIsInstance(config.decoder_config, MimiDecoderConfig)
+
+        with self.assertRaises(ValueError):
+            config.decoder_config = None
+        with self.assertRaises(ValueError):
+            config.encoder_config = MimiEncoderConfig()
+
+    def test_model_without_encoder_or_decoder(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_values = inputs_dict["input_values"]
+        model = MimiModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            audio_codes = model.encode(input_values).audio_codes
+            audio_values = model.decode(audio_codes).audio_values
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            encoder_only, encoder_info = MimiModel.from_pretrained(
+                tmp_dir, decoder_config=None, output_loading_info=True
+            )
+            decoder_only, decoder_info = MimiModel.from_pretrained(
+                tmp_dir, encoder_config=None, output_loading_info=True
+            )
+        self.assertFalse(any(encoder_info.values()))
+        self.assertFalse(any(decoder_info.values()))
+
+        encoder_only.to(torch_device).eval()
+        decoder_only.to(torch_device).eval()
+        with torch.no_grad():
+            torch.testing.assert_close(encoder_only.encode(input_values).audio_codes, audio_codes)
+            torch.testing.assert_close(decoder_only.decode(audio_codes).audio_values, audio_values)
+        with self.assertRaises(ValueError):
+            encoder_only.decode(audio_codes)
+        with self.assertRaises(ValueError):
+            decoder_only.encode(input_values)
 
 
-# Copied from transformers.tests.encodec.test_modeling_encodec.compute_rmse
 def compute_rmse(arr1, arr2):
-    arr1_normalized = normalize(arr1)
-    arr2_normalized = normalize(arr2)
-    return np.sqrt(((arr1_normalized - arr2_normalized) ** 2).mean())
+    return np.sqrt(((normalize_waveform(arr1) - normalize_waveform(arr2)) ** 2).mean())
 
 
 @slow
@@ -514,14 +554,30 @@ class MimiIntegrationTest(unittest.TestCase):
         reproducer: https://gist.github.com/eustlb/34f79f34d423ccf8983c2c6c8dab2bcc
         """
 
-        expected_rmses = {
-            "8": 0.00067151,
-            "32": 0.00049521,
-        }
-        expected_codesums = {
-            "8": 4621433,
-            "32": 18446927,
-        }
+        expected_rmses = Expectations(
+            {
+                (None, None): {
+                    "8": 0.00067151,
+                    "32": 0.00049521,
+                },
+                ("xpu", 5): {
+                    "8": 0.0006640465,
+                    "32": 0.000495249,
+                },
+            }
+        ).get_expectation()
+        expected_codesums = Expectations(
+            {
+                (None, None): {
+                    "8": 4621433,
+                    "32": 18446927,
+                },
+                ("xpu", 5): {
+                    "8": 4578159,
+                    "32": 18459628,
+                },
+            }
+        ).get_expectation()
 
         model_id = "kyutai/mimi"
 
@@ -563,3 +619,23 @@ class MimiIntegrationTest(unittest.TestCase):
 
                 rmse = compute_rmse(arr, arr_enc_dec)
                 self.assertTrue(np.abs(rmse - expected_rmse) < 1e-5)
+
+    @slow
+    def test_encoder_decoder_halves(self):
+        """Each half, loaded alone from the full checkpoint, matches `MimiModel` around its quantizer."""
+        model_id = "kyutai/mimi"
+        model = MimiModel.from_pretrained(model_id).to(torch_device)
+        encoder = MimiEncoderModel.from_pretrained(model_id).to(torch_device)
+        decoder = MimiDecoderModel.from_pretrained(model_id).to(torch_device)
+        torch.manual_seed(0)
+        audio_values = torch.randn(2, 1, 24000, device=torch_device) * 0.1
+        with torch.no_grad():
+            audio_codes = model.encode(audio_values).audio_codes
+            latents = encoder(audio_values).latents
+            torch.testing.assert_close(model.quantizer.encode(latents).transpose(0, 1), audio_codes, atol=0, rtol=0)
+            torch.testing.assert_close(
+                decoder(model.quantizer.decode(audio_codes)).audio_values,
+                model.decode(audio_codes).audio_values,
+                atol=0,
+                rtol=0,
+            )

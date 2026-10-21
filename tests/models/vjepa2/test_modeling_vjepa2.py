@@ -62,7 +62,7 @@ class VJEPA2ModelTester:
         num_hidden_layers=2,
         num_attention_heads=2,
         num_frames=2,
-        mlp_ratio=1,
+        mlp_ratio=1.0,
         pred_hidden_size=32,
         pred_num_attention_heads=2,
         pred_num_hidden_layers=2,
@@ -158,7 +158,7 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = VJEPA2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VJEPA2Config, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=VJEPA2Config, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

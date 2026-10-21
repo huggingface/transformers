@@ -15,8 +15,8 @@ import argparse
 import re
 from io import BytesIO
 
-import httpx
 import torch
+from huggingface_hub.utils import httpx
 from PIL import Image
 
 from transformers.models.bert.tokenization_bert import BertTokenizer
@@ -376,7 +376,7 @@ def preprocess_old_state(state_dict: dict, config: MMGroundingDinoConfig) -> dic
         if (
             k == "dn_query_generator.label_embedding.weight"
             or k == "language_model.language_backbone.body.model.embeddings.position_ids"
-            or k == "image_seperate.weight"
+            or k == "image_separate.weight"
             or k.startswith("lmm")
             or k.startswith("connector")
             or k.startswith("region_connector")

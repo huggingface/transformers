@@ -26,7 +26,9 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..phi4_multimodal.modeling_phi4_multimodal import simple_eager_attention_forward
 from .configuration_timesfm import TimesFmConfig
@@ -35,8 +37,8 @@ from .configuration_timesfm import TimesFmConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class TimesFmOutput(BaseModelOutput):
     r"""
     loc (`torch.Tensor` of shape `(batch_size, )`):
@@ -49,8 +51,8 @@ class TimesFmOutput(BaseModelOutput):
     scale: torch.Tensor | None = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class TimesFmOutputForPrediction(BaseModelOutput):
     r"""
     mean_predictions (`torch.Tensor` of shape `(batch_size, sequence_length)`):
@@ -126,9 +128,8 @@ class TimesFmPositionalEmbedding(nn.Module):
 
         num_timescales = self.embedding_dims // 2
         log_timescale_increment = math.log(float(max_timescale) / float(min_timescale)) / max(num_timescales - 1, 1)
-        self.register_buffer(
-            "inv_timescales",
-            min_timescale * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment),
+        self.inv_timescales = nn.Buffer(
+            min_timescale * torch.exp(torch.arange(num_timescales, dtype=torch.float32) * -log_timescale_increment)
         )
 
     def forward(self, seq_length=None, position=None):
@@ -235,22 +236,21 @@ class TimesFmDecoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         paddings: torch.Tensor,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor | None, torch.Tensor]:
+        **kwargs,
+    ) -> torch.Tensor:
         # Self Attention
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, scores = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            output_attentions=output_attentions,
         )
         hidden_states = residual + hidden_states
 
         # MLP
         hidden_states = self.mlp(hidden_states, paddings=paddings)
 
-        return scores, hidden_states
+        return hidden_states
 
 
 @auto_docstring
@@ -261,6 +261,10 @@ class TimesFmPreTrainedModel(PreTrainedModel):
     main_input_name = "past_values"
     input_modalities = ("time",)
     _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": TimesFmDecoderLayer,
+        "attentions": TimesFmAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -313,21 +317,20 @@ class TimesFmModel(TimesFmPreTrainedModel):
         outputs = (inputs - mu[:, None, None]) / sigma[:, None, None]
         outputs = torch.where(
             torch.abs(inputs - self.config.pad_val) < self.config.tolerance,
-            torch.tensor(self.config.pad_val, dtype=outputs.dtype, device=outputs.device),
+            torch.full((), self.config.pad_val, dtype=outputs.dtype, device=outputs.device),
             outputs,
         )
         return outputs, (mu, sigma)
 
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         past_values: torch.Tensor,
         past_values_padding: torch.LongTensor,
         freq: torch.Tensor,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> TimesFmOutput:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -344,12 +347,12 @@ class TimesFmModel(TimesFmPreTrainedModel):
 
         patched_inputs = torch.where(
             torch.abs(patched_pads - 1.0) < self.config.tolerance,
-            torch.tensor(0.0, dtype=patched_inputs.dtype, device=patched_inputs.device),
+            torch.full((), 0.0, dtype=patched_inputs.dtype, device=patched_inputs.device),
             patched_inputs,
         )
         patched_pads = torch.where(
             torch.abs(patched_inputs - self.config.pad_val) < self.config.tolerance,
-            torch.tensor(1.0, dtype=patched_pads.dtype, device=patched_pads.device),
+            torch.full((), 1.0, dtype=patched_pads.dtype, device=patched_pads.device),
             patched_pads,
         )
         patched_inputs, stats = self._forward_transform(patched_inputs, patched_pads)
@@ -380,30 +383,16 @@ class TimesFmModel(TimesFmPreTrainedModel):
             is_causal=True,
         )
 
-        all_attentions = []
-        all_hidden_states = []
-
         for layer in self.layers[: self.config.num_hidden_layers]:
-            scores, hidden_states = layer(
-                hidden_states=hidden_states,
+            hidden_states = layer(
+                hidden_states,
                 attention_mask=attention_mask,
                 paddings=patched_padding,
-                output_attentions=output_attentions,
+                **kwargs,
             )
-            if output_attentions:
-                all_attentions.append(scores)
-            if output_hidden_states:
-                all_hidden_states.append(hidden_states)
-
-        if output_hidden_states:
-            all_hidden_states = [model_input] + all_hidden_states
-        else:
-            all_hidden_states = None
 
         return TimesFmOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions if output_attentions else None,
             loc=stats[0],
             scale=stats[1],
         )
@@ -627,9 +616,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         forecast_context_len: int | None = None,
         return_forecast_on_context: bool = False,
         truncate_negative: bool = False,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> TimesFmOutputForPrediction:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
@@ -647,10 +634,6 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         truncate_negative (`bool`, *optional*):
             Truncate to only non-negative values if any of the contexts have non-negative values,
             otherwise do nothing.
-        output_attentions (`bool`, *optional*):
-            Whether to output the attentions.
-        output_hidden_states (`bool`, *optional*):
-            Whether to output the hidden states.
 
         Example:
 
@@ -674,10 +657,8 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         else:
             fcontext_len = forecast_context_len
 
-        # Get device from first input tensor
         device = past_values[0].device
 
-        # Truncate inputs to forecast_context_len
         inputs = [ts[-fcontext_len:] for ts in past_values]
         inp_min = torch.min(torch.stack([torch.min(ts) for ts in inputs]))
 
@@ -696,13 +677,7 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             logger.info("No frequency provided via `freq`. Default to high (0).")
             freq = [0] * len(inputs)
 
-        if output_attentions is None:
-            output_attentions = self.config.output_attentions
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
         input_ts, input_padding, inp_freq = self._preprocess(inputs, freq)
-        # Move tensors to the same device as input
         input_ts = input_ts.to(device)
         input_padding = input_padding.to(device)
         inp_freq = inp_freq.to(device)
@@ -723,12 +698,11 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             current_padding = input_padding[:, 0 : final_out.shape[1]]
             input_ts = final_out[:, -fcontext_len:]
             input_padding = current_padding[:, -fcontext_len:]
-            decoder_output = self.decoder(
+            decoder_output: TimesFmOutput = self.decoder(
                 past_values=input_ts,
                 past_values_padding=input_padding,
                 freq=inp_freq,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
+                **kwargs,
             )
             fprop_outputs = self._postprocess_output(
                 decoder_output.last_hidden_state,
@@ -736,37 +710,31 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
             )
 
             if return_forecast_on_context and step_index == 0:
-                # For the first decodings step, collect the model forecast on the
-                # context except the unavailable first input batch forecast.
                 new_full_ts = fprop_outputs[:, :-1, : self.config.patch_length, :]
-                # We have to use reshape and not view for non-contiguous memory
                 new_full_ts = new_full_ts.reshape(new_full_ts.size(0), -1, new_full_ts.size(3))
-
                 full_outputs.append(new_full_ts)
 
-            # (full batch, last patch, output_patch_len, index of mean forecast = 0)
             new_ts = fprop_outputs[:, -1, :output_patch_len, 0]
             new_full_ts = fprop_outputs[:, -1, :output_patch_len, :]
-            # (full batch, last patch, output_patch_len, all output indices)
             full_outputs.append(new_full_ts)
             final_out = torch.concatenate([final_out, new_ts], axis=-1)
 
         if return_forecast_on_context:
-            # `full_outputs` indexing starts at after the first input patch.
             full_outputs = torch.concatenate(full_outputs, axis=1)[
                 :, : (context_len - self.config.patch_length + self.horizon_len), :
             ]
         else:
-            # `full_outputs` indexing starts at the forecast horizon.
             full_outputs = torch.concatenate(full_outputs, axis=1)[:, 0 : self.horizon_len, :]
 
         mean_outputs = full_outputs[:, :, 0]
         if window_size is not None:
             mean_outputs = mean_outputs[0::2, ...] + mean_outputs[1::2, ...]
             full_outputs = full_outputs[0::2, ...] + full_outputs[1::2, ...]
-        if inp_min >= 0 and truncate_negative:
-            mean_outputs = torch.maximum(mean_outputs, 0.0)
-            full_outputs = torch.maximum(full_outputs, 0.0)
+        if truncate_negative:
+            # Clamp outputs to >= 0 only when the (single-scalar) input minimum is non-negative.
+            clamp = inp_min >= 0
+            mean_outputs = torch.where(clamp, mean_outputs.clamp_min(0.0), mean_outputs)
+            full_outputs = torch.where(clamp, full_outputs.clamp_min(0.0), full_outputs)
 
         loss = None
         if future_values is not None:
@@ -776,8 +744,8 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
         return TimesFmOutputForPrediction(
             last_hidden_state=decoder_output.last_hidden_state,
-            attentions=decoder_output.attentions if output_attentions else None,
-            hidden_states=decoder_output.hidden_states if output_hidden_states else None,
+            attentions=decoder_output.attentions,
+            hidden_states=decoder_output.hidden_states,
             mean_predictions=mean_outputs,
             full_predictions=full_outputs,
             loss=loss,
@@ -785,13 +753,10 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
     @staticmethod
     def _timesfm_moving_average(arr: torch.Tensor, window_size: int) -> list[torch.Tensor]:
-        """Calculates the moving average using PyTorch's convolution function."""
+        """Calculates the moving average over a sliding window."""
         # Pad with zeros to handle initial window positions
         arr_padded = F.pad(arr, (window_size - 1, 0), "constant", 0)
-        # Create a convolution kernel
-        kernel = torch.ones(window_size, dtype=arr.dtype, device=arr.device) / window_size
-        # Apply convolution to calculate the moving average
-        smoothed_arr = F.conv1d(arr_padded.view(1, 1, -1), kernel.view(1, 1, -1)).squeeze()
+        smoothed_arr = arr_padded.unfold(-1, window_size, 1).mean(dim=-1)
         return [smoothed_arr, arr - smoothed_arr]
 
 

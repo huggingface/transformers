@@ -70,7 +70,6 @@ def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
     return torch.where(max_mask, scores, zeros)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of image point description models. Due to the nature of keypoint detection, the number of
@@ -80,6 +79,7 @@ def simple_nms(scores: torch.Tensor, nms_radius: int) -> torch.Tensor:
     and which are padding.
     """
 )
+@dataclass
 class SuperPointKeypointDescriptionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
@@ -386,7 +386,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         >>> from transformers import AutoImageProcessor, SuperPointForKeypointDetection
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -406,7 +406,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 
@@ -421,15 +421,15 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
         last_hidden_state = encoder_outputs[0]
 
         list_keypoints_scores = [
-            self.keypoint_decoder(last_hidden_state[None, ...]) for last_hidden_state in last_hidden_state
+            self.keypoint_decoder(image_hidden_state[None, ...]) for image_hidden_state in last_hidden_state
         ]
 
         list_keypoints = [keypoints_scores[0] for keypoints_scores in list_keypoints_scores]
         list_scores = [keypoints_scores[1] for keypoints_scores in list_keypoints_scores]
 
         list_descriptors = [
-            self.descriptor_decoder(last_hidden_state[None, ...], keypoints[None, ...])
-            for last_hidden_state, keypoints in zip(last_hidden_state, list_keypoints)
+            self.descriptor_decoder(image_hidden_state[None, ...], keypoints[None, ...])
+            for image_hidden_state, keypoints in zip(last_hidden_state, list_keypoints)
         ]
 
         maximum_num_keypoints = max(keypoints.shape[0] for keypoints in list_keypoints)

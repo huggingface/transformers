@@ -54,7 +54,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import DeiTImageProcessor
+    from transformers import DeiTImageProcessorPil
 
 
 class DeiTModelTester:
@@ -223,14 +223,7 @@ class DeiTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = DeiTModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DeiTConfig, has_text_modality=False, hidden_size=37)
-
-    @unittest.skip(
-        "Since `torch==2.3+cu121`, although this test passes, many subsequent tests have `CUDA error: misaligned address`."
-        "If `nvidia-xxx-cu118` are also installed, no failure (even with `torch==2.3+cu121`)."
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        super().test_multi_gpu_data_parallel_forward()
+        self.config_tester = ConfigTester(self, config_class=DeiTConfig, has_text_modality=False, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -382,7 +375,7 @@ class DeiTModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            DeiTImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+            DeiTImageProcessorPil.from_pretrained("facebook/deit-base-distilled-patch16-224")
             if is_vision_available()
             else None
         )

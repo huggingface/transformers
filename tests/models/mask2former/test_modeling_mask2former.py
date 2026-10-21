@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
@@ -44,7 +43,7 @@ if is_torch_available():
     from transformers import Mask2FormerForUniversalSegmentation, Mask2FormerModel
 
     if is_vision_available():
-        from transformers import Mask2FormerImageProcessor
+        from transformers import Mask2FormerImageProcessorPil
 
 if is_vision_available():
     from PIL import Image
@@ -236,13 +235,6 @@ class Mask2FormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_resize_tokens_embeddings(self):
         pass
 
-    @require_torch_multi_gpu
-    @unittest.skip(
-        reason="Mask2Former has some layers using `add_module` which doesn't work well with `nn.DataParallel`"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in ["facebook/mask2former-swin-small-coco-instance"]:
@@ -375,7 +367,7 @@ class Mask2FormerModelIntegrationTest(unittest.TestCase):
 
     @cached_property
     def default_image_processor(self):
-        return Mask2FormerImageProcessor.from_pretrained(self.model_checkpoints) if is_vision_available() else None
+        return Mask2FormerImageProcessorPil.from_pretrained(self.model_checkpoints) if is_vision_available() else None
 
     def test_inference_no_head(self):
         model = Mask2FormerModel.from_pretrained(self.model_checkpoints).to(torch_device)

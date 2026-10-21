@@ -18,10 +18,8 @@ mixed precision, logging, NEFTune, memory metrics, and end-to-end training.
 """
 
 import math
-import os
 import tempfile
 from functools import partial
-from unittest.mock import patch
 
 import datasets
 import numpy as np
@@ -30,9 +28,13 @@ import torch
 from torch import nn
 
 from transformers import (
+    AutoConfig,
     AutoModelForCausalLM,
+    AutoModelForImageTextToText,
     AutoModelForSequenceClassification,
     AutoTokenizer,
+    BartConfig,
+    BartForConditionalGeneration,
     BitsAndBytesConfig,
     DataCollatorForLanguageModeling,
     EarlyStoppingCallback,
@@ -45,19 +47,16 @@ from transformers import (
     TrainingArguments,
     default_data_collator,
     logging,
-    set_seed,
 )
 from transformers.integrations import activate_neftune
-from transformers.loss.loss_utils import ForCausalLMLoss
+from transformers.loss.loss_utils import LOSS_MAPPING, ForCausalLMLoss
 from transformers.testing_utils import (
     CaptureLogger,
     LoggingLevel,
     TestCasePlus,
     backend_device_count,
-    execute_subprocess_async,
     require_bitsandbytes,
     require_liger_kernel,
-    require_non_hpu,
     require_peft,
     require_torch,
     require_torch_accelerator,
@@ -67,10 +66,9 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_non_multi_accelerator,
     require_torch_tf32,
-    run_first,
-    slow,
     torch_device,
 )
+from transformers.trainer_utils import align_special_tokens
 
 from .trainer_test_utils import (
     ATOL,
@@ -142,6 +140,47 @@ class TrainerMixedPrecisionTest(TestCasePlus, TrainerIntegrationCommon):
 
 
 # ---------------------------------------------------------------------------
+# DDP kwargs forwarding tests
+# ---------------------------------------------------------------------------
+
+
+@require_torch
+class TrainerDDPKwargsTest(TestCasePlus):
+    """The `ddp_*` TrainingArguments fields must reach DistributedDataParallelKwargs."""
+
+    def _get_ddp_kwargs(self, **training_args_overrides):
+        """Build a Trainer, run _build_accelerator_args, return the DDP kwargs dict."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(output_dir=tmp_dir, max_steps=1, **training_args_overrides)
+            trainer = Trainer(model=RegressionModel(), args=args, train_dataset=RegressionDataset())
+            accelerator_args = trainer._build_accelerator_args()
+            (handler,) = accelerator_args["kwargs_handlers"]
+            return handler
+
+    def test_ddp_static_graph_true_reaches_accelerator(self):
+        """ddp_static_graph=True is forwarded as static_graph=True to DistributedDataParallelKwargs."""
+        handler = self._get_ddp_kwargs(ddp_static_graph=True)
+        self.assertTrue(handler.static_graph)
+
+    def test_ddp_static_graph_false_reaches_accelerator(self):
+        """ddp_static_graph=False is forwarded as static_graph=False."""
+        handler = self._get_ddp_kwargs(ddp_static_graph=False)
+        self.assertFalse(handler.static_graph)
+
+    def test_ddp_static_graph_none_preserves_default(self):
+        """ddp_static_graph=None (default) must NOT override DistributedDataParallelKwargs' own default (False).
+
+        Regression guard: the conditional in _build_accelerator_args must keep static_graph out of ddp_kwargs
+        when the flag is unset, otherwise clusters not configured for it would silently switch behavior.
+        """
+        handler = self._get_ddp_kwargs()  # ddp_static_graph unset
+        # DistributedDataParallelKwargs default is False. If our conditional is broken and we always injected
+        # the attribute, this would still be False only by coincidence. Cross-check with ddp_static_graph=True
+        # (above) that the kwarg IS plumbed when set — together these tests pin both directions.
+        self.assertFalse(handler.static_graph)
+
+
+# ---------------------------------------------------------------------------
 # Gradient accumulation tests
 # ---------------------------------------------------------------------------
 
@@ -150,228 +189,288 @@ class TrainerMixedPrecisionTest(TestCasePlus, TrainerIntegrationCommon):
 class TrainerGradientAccumulationTest(TestCasePlus, TrainerIntegrationCommon):
     """Tests for gradient accumulation loss alignment and batch counting."""
 
-    def setUp(self):
-        super().setUp()
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(learning_rate=0.1, output_dir=tmp_dir)
-            trainer.train()
-            self.default_trained_model = (trainer.model.a, trainer.model.b)
-
-    def check_trained_model(self, model, **kwargs):
-        (a, b) = self.default_trained_model
-        torch.testing.assert_close(model.a, a, **kwargs)
-        torch.testing.assert_close(model.b, b, **kwargs)
-
-    def test_gradient_accumulation(self):
-        # Training with half the batch size but accumulation steps as 2 should give the same training losses.
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(
-                gradient_accumulation_steps=2, per_device_train_batch_size=4, learning_rate=0.1, output_dir=tmp_dir
-            )
-            trainer.train()
-            self.check_trained_model(trainer.model)
-
-    @slow
-    def test_gradient_accumulation_loss_alignment_with_model_loss(self):
-        set_seed(42)
-
-        model_name = "nickypro/tinyllama-15M"
-        dataset_name = "wikitext"
-        dataset_config = "wikitext-2-raw-v1"
-        dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:40]")
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-        tokenizer.pad_token = tokenizer.eos_token
-
-        def tokenize_function(examples):
-            return tokenizer(examples["text"], max_length=16, padding="max_length", truncation=True)
-
-        tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=dataset.column_names)
-
-        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-
-        args_kwargs = {
-            "logging_steps": 1,
-            "max_steps": 5,
-            "learning_rate": 3e-4,
-            "disable_tqdm": True,
-        }
-
+    def test_gradient_accumulation_steps_not_leaked_to_accelerator(self):
+        """The Trainer must not pass its gradient_accumulation_steps to the Accelerator. See #45305."""
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(
-                tmp_dir,
-                **args_kwargs,
-            )
-            # train with base loss
-            set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
-            base_loss_callback = StoreLossCallback()
-            trainer = Trainer(
-                model,
-                args,
-                train_dataset=tokenized_dataset,
-                callbacks=[base_loss_callback],
-                data_collator=data_collator,
-            )
-            assert trainer.model_accepts_loss_kwargs
-            trainer.train()
-
-            args = TrainingArguments(
-                tmp_dir,
-                **args_kwargs,
-                gradient_accumulation_steps=2,
+                output_dir=tmp_dir,
                 per_device_train_batch_size=4,
+                gradient_accumulation_steps=4,
+                max_steps=1,
             )
+            trainer = Trainer(model=RegressionModel(), args=args, train_dataset=RegressionDataset())
+            self.assertEqual(trainer.accelerator.gradient_accumulation_steps, 1)
 
-            # train with gradient accumulation
-            set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
-            grad_accum_loss_callback = StoreLossCallback()
-            trainer = Trainer(
-                model,
-                args,
-                train_dataset=tokenized_dataset,
-                callbacks=[grad_accum_loss_callback],
-                data_collator=data_collator,
-            )
-            assert trainer.model_accepts_loss_kwargs
-            trainer.train()
-
-            # train with broken loss
-            set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
-            broken_loss_callback = StoreLossCallback()
-            trainer = Trainer(
-                model,
-                args,
-                train_dataset=tokenized_dataset,
-                callbacks=[broken_loss_callback],
-                data_collator=data_collator,
-            )
-            # disable model_accepts_loss_kwargs so that "num_items_in_batch" is not passed to the model
-            trainer.model_accepts_loss_kwargs = False
-            trainer.train()
-
-        # Calculate the difference between the base loss and the grad_accum loss
-        diff_truth = [
-            abs(base - grad) for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)
-        ]
-        diff_broken = [abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)]
-
-        # all diff truth should be quite close
-        self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
-        # max diff broken should be very off ("very off" is arbitrary, but as long as it's bigger than 0.1, it's fine)
-        self.assertGreater(max(diff_broken), 0.7, f"Difference {max(diff_broken)} is not greater than 0.7")
-
-        loss_base = sum(base_loss_callback.losses)
-        loss_broken = sum(broken_loss_callback.losses)
-
-        # mean/sum loss should not vary too much.
-        relative_diff = abs(loss_base - loss_broken) / max(loss_base, loss_broken)
-        self.assertLess(relative_diff, 0.2, f"Relative difference {relative_diff} is not within 0.2")
-
-    def test_gradient_accumulation_loss_alignment_with_loss_func(self):
-        set_seed(42)
-
-        model_name = "roneneldan/TinyStories-33M"
-        dataset_name = "Salesforce/wikitext"
-        dataset_config = "wikitext-2-raw-v1"
-        dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:40]")
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._ga_model_name = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
+        tokenizer = AutoTokenizer.from_pretrained(cls._ga_model_name)
         tokenizer.pad_token = tokenizer.eos_token
+        dataset = datasets.load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1", split="train[:200]")
+        # Filter empty samples to avoid nan losses with small batch sizes
+        dataset = dataset.filter(lambda ex: len(ex["text"].strip()) > 0)
+        cls._ga_dataset = dataset.map(
+            lambda ex: tokenizer(ex["text"], max_length=16, padding="max_length", truncation=True), batched=True
+        )
+        cls._ga_data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
-        def tokenize_function(examples):
-            return tokenizer(examples["text"], max_length=16, padding="max_length", truncation=True)
+    def _check_gradient_accumulation(
+        self,
+        base_batch_size,
+        gas_batch_size,
+        gas_steps,
+        loss_tolerance,
+        grad_norm_tolerance=0.1,
+        model_accepts_loss_kwargs=True,
+        compute_loss_func=None,
+        label_smoothing_factor=0.0,
+        trainer_cls=Trainer,
+    ):
+        """
+        Train twice with the same effective batch (base_batch_size vs gas_batch_size * gas_steps)
+        and assert grad norms and losses match.
+        """
+        model_name = self._ga_model_name
+        args_kwargs = {"logging_steps": 1, "max_steps": 3, "learning_rate": 1e-4, "max_grad_norm": 0.0}
+        args_kwargs["label_smoothing_factor"] = label_smoothing_factor
+        trainer_kwargs = {"train_dataset": self._ga_dataset, "data_collator": self._ga_data_collator}
+        if compute_loss_func is not None:
+            trainer_kwargs["compute_loss_func"] = compute_loss_func
 
-        tokenized_dataset = dataset.map(tokenize_function, batched=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
+            args = TrainingArguments(
+                tmp_dir, per_device_train_batch_size=base_batch_size, gradient_accumulation_steps=1, **args_kwargs
+            )
+            base_callback = StoreLossCallback()
+            trainer = trainer_cls(model, args, callbacks=[base_callback], **trainer_kwargs)
+            if not model_accepts_loss_kwargs:
+                trainer.model_accepts_loss_kwargs = False
+            trainer.train()
+            base_grad_norms = [h["grad_norm"] for h in trainer.state.log_history if "grad_norm" in h]
 
-        tokenizer.pad_token = tokenizer.eos_token
-        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
+            args = TrainingArguments(
+                tmp_dir,
+                per_device_train_batch_size=gas_batch_size,
+                gradient_accumulation_steps=gas_steps,
+                **args_kwargs,
+            )
+            gas_callback = StoreLossCallback()
+            trainer = trainer_cls(model, args, callbacks=[gas_callback], **trainer_kwargs)
+            if not model_accepts_loss_kwargs:
+                trainer.model_accepts_loss_kwargs = False
+            trainer.train()
+            gas_grad_norms = [h["grad_norm"] for h in trainer.state.log_history if "grad_norm" in h]
 
-        model = AutoModelForCausalLM.from_pretrained(model_name)
+        for step, (base_gn, gas_gn) in enumerate(zip(base_grad_norms, gas_grad_norms)):
+            ratio = gas_gn / base_gn if base_gn > 0 else float("inf")
+            self.assertAlmostEqual(
+                ratio,
+                1.0,
+                delta=grad_norm_tolerance,
+                msg=f"Step {step}: grad_norm ratio {ratio:.2f} — GAS leak suspected",
+            )
+        loss_diff = [abs(b - g) for b, g in zip(base_callback.losses, gas_callback.losses)]
+        self.assertLess(max(loss_diff), loss_tolerance, f"Loss difference {max(loss_diff)} exceeds {loss_tolerance}")
 
-        def compute_loss(logits, labels, vocab_size, num_items_in_batch, disable_num_items_in_batch=False):
-            if disable_num_items_in_batch:
-                num_items_in_batch = None
+    def test_gradient_accumulation_grad_norm_with_num_items_in_batch(self):
+        """
+        With model_accepts_loss_kwargs=True the model handles loss averaging via
+        num_items_in_batch. Grad norms and losses must match between a large-batch
+        baseline and an equivalent GAS run.
+        """
+        # Tight tolerance: num_items_in_batch properly averages loss across micro-batches
+        self._check_gradient_accumulation(base_batch_size=8, gas_batch_size=1, gas_steps=8, loss_tolerance=0.001)
+        self._check_gradient_accumulation(base_batch_size=8, gas_batch_size=4, gas_steps=2, loss_tolerance=0.001)
+
+    def test_gradient_accumulation_grad_norm_without_num_items_in_batch(self):
+        """
+        With model_accepts_loss_kwargs=False the Trainer scales loss by GAS
+        itself. Grad norms and losses must still match between a large-batch
+        baseline and an equivalent GAS run.
+        """
+        # Looser tolerances: without num_items_in_batch each micro-batch is independently
+        # mean-reduced over its own valid label count, so regrouping the same samples into
+        # smaller micro-batches shifts both the loss and the grad norm. `DataParallel` splits
+        # every micro-batch again across replicas, which regroups them more finely still and
+        # pushes the grad norm ratio to ~1.11. A real GAS leak shows a ratio near `gas_steps`.
+        self._check_gradient_accumulation(
+            base_batch_size=8,
+            gas_batch_size=4,
+            gas_steps=2,
+            loss_tolerance=0.1,
+            grad_norm_tolerance=0.2,
+            model_accepts_loss_kwargs=False,
+        )
+
+    def test_gradient_accumulation_grad_norm_with_compute_loss_func(self):
+        """
+        With a custom compute_loss_func that uses num_items_in_batch, grad norms
+        and losses must match between a large-batch baseline and an equivalent GAS run.
+        """
+        vocab_size = AutoModelForCausalLM.from_pretrained(self._ga_model_name, dtype=torch.float32).config.vocab_size
+
+        def compute_loss(logits, labels, vocab_size, num_items_in_batch):
             return ForCausalLMLoss(logits["logits"], labels, vocab_size, num_items_in_batch)
 
-        loss_fn = partial(compute_loss, vocab_size=model.config.vocab_size)
+        # Tight tolerance: compute_loss_func uses num_items_in_batch to properly average loss
+        self._check_gradient_accumulation(
+            base_batch_size=8,
+            gas_batch_size=1,
+            gas_steps=8,
+            loss_tolerance=0.001,
+            compute_loss_func=partial(compute_loss, vocab_size=vocab_size),
+        )
 
-        base_loss_callback = StoreLossCallback()
+    def test_gradient_accumulation_grad_norm_with_loss_is_scaled_for_ga(self):
+        """
+        A subclass whose `compute_loss` returns a per-batch mean sets `loss_is_scaled_for_ga = False`, so the Trainer
+        divides it by the gradient accumulation steps even though the model accepts loss kwargs. Grad norms and losses
+        must still match between a large-batch baseline and an equivalent GAS run.
+        """
 
-        args_kwargs = {
-            "logging_steps": 1,
-            "max_steps": 5,
-            "learning_rate": 3e-4,
-            "disable_tqdm": True,
-        }
+        class PerBatchMeanTrainer(Trainer):
+            loss_is_scaled_for_ga = False
 
+            def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+                outputs = model(**inputs)  # without `num_items_in_batch`, so the loss is a per-batch mean
+                return (outputs.loss, outputs) if return_outputs else outputs.loss
+
+        # Same tolerances as without num_items_in_batch: each micro-batch is mean-reduced over its own label count
+        self._check_gradient_accumulation(
+            base_batch_size=8,
+            gas_batch_size=4,
+            gas_steps=2,
+            loss_tolerance=0.1,
+            grad_norm_tolerance=0.2,
+            trainer_cls=PerBatchMeanTrainer,
+        )
+
+    def test_gradient_accumulation_grad_norm_with_label_smoothing(self):
+        """
+        With label_smoothing_factor > 0 the Trainer computes the loss through LabelSmoother
+        instead of the model. LabelSmoother must reduce over num_items_in_batch so grad norms
+        and losses match between a large-batch baseline and an equivalent GAS run. Before the
+        fix LabelSmoother mean-reduced over the current micro-batch only, so the GAS grad norm
+        was inflated by roughly gas_steps.
+        """
+        # Tight tolerance: num_items_in_batch properly averages the smoothed loss across micro-batches
+        self._check_gradient_accumulation(
+            base_batch_size=8, gas_batch_size=1, gas_steps=8, loss_tolerance=0.001, label_smoothing_factor=0.1
+        )
+        self._check_gradient_accumulation(
+            base_batch_size=8, gas_batch_size=4, gas_steps=2, loss_tolerance=0.001, label_smoothing_factor=0.1
+        )
+
+    @require_torch_non_multi_accelerator
+    def test_num_items_in_batch_causal_lm(self):
+        """
+        For a causal LM, `_get_num_items_in_batch` must count over `labels[..., 1:]` because
+        ForCausalLMLoss shifts labels (position 0 is never a prediction target). When the
+        batch already exposes `shift_labels`, that tensor must be used as-is.
+        """
         with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                **args_kwargs,
-            )
+            model = AutoModelForCausalLM.from_pretrained(self._ga_model_name, dtype=torch.float32)
             trainer = Trainer(
-                model,
-                args,
-                train_dataset=tokenized_dataset,
-                callbacks=[base_loss_callback],
-                compute_loss_func=loss_fn,
-                data_collator=data_collator,
+                model=model,
+                args=TrainingArguments(output_dir=tmp_dir, per_device_train_batch_size=2),
+                train_dataset=self._ga_dataset,
+                data_collator=self._ga_data_collator,
             )
-            trainer.train()
+            self.assertTrue(trainer._loss_shifts_labels)
 
-        grad_accum_loss_callback = StoreLossCallback()
+            # batch[0]: 5 valid label positions, 3 padding (-100) → 5 - 1 = 4 after the shift.
+            # batch[1]: 8 valid label positions, 0 padding         → 8 - 1 = 7 after the shift.
+            # Trainer must not count position 0 of each row → expected total = 4 + 7 = 11.
+            batch_samples = [
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, -100, -100, -100]])},
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])},
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 11)
+
+            # If the collator already pre-shifts labels (`shift_labels` present), use it as-is and
+            # do NOT slice again. Each row here has 4 valid positions → expected total = 8.
+            batch_samples = [
+                {
+                    "labels": torch.tensor([[1, 2, 3, 4, 5]]),
+                    "shift_labels": torch.tensor([[2, 3, 4, 5, -100]]),
+                },
+                {
+                    "labels": torch.tensor([[1, 2, 3, 4, 5]]),
+                    "shift_labels": torch.tensor([[2, 3, 4, 5, -100]]),
+                },
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 8)
+
+    @require_torch_non_multi_accelerator
+    def test_num_items_in_batch_non_causal_lm(self):
+        """For non-causal-LM losses, `_get_num_items_in_batch` must count the full label tensor."""
         with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                **args_kwargs,
-                gradient_accumulation_steps=2,
-                per_device_train_batch_size=4,
+            config = LlamaConfig(
+                vocab_size=64, hidden_size=16, intermediate_size=32, num_hidden_layers=2, num_attention_heads=2
             )
-            set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name)
+            # ForTokenClassification → LOSS_MAPPING entry is not ForCausalLMLoss → no shift.
+            from transformers import LlamaForTokenClassification
+
+            model = LlamaForTokenClassification(config)
             trainer = Trainer(
-                model,
-                args,
-                train_dataset=tokenized_dataset,
-                callbacks=[grad_accum_loss_callback],
-                compute_loss_func=loss_fn,
-                data_collator=data_collator,
+                model=model,
+                args=TrainingArguments(output_dir=tmp_dir, per_device_train_batch_size=2),
             )
-            trainer.train()
+            self.assertFalse(trainer._loss_shifts_labels)
 
-            set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name)
-            broken_loss_callback = StoreLossCallback()
-            # we need to disable num_items_in_batch because since we are passing a custom loss,
-            # we make the assumption that num_items_in_batch is handled correctly
-            loss_fn = partial(compute_loss, vocab_size=model.config.vocab_size, disable_num_items_in_batch=True)
+            # 5 valid + 8 valid = 13 (no shift).
+            batch_samples = [
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, -100, -100, -100]])},
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])},
+            ]
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 13)
+
+    @require_torch_non_multi_accelerator
+    def test_num_items_in_batch_encoder_decoder(self):
+        """
+        Encoder-decoder LM heads compute their loss against unshifted `labels` -- their logits are aligned with
+        the targets (typically by right-shifting the decoder inputs), so the loss must not shift again. Their
+        class-name-inferred `loss_type` still maps to ForCausalLMLoss, which would drive the Trainer to count over
+        `labels[..., 1:]` and over-scale the loss; `_get_num_items_in_batch` must instead count the full label
+        tensor whenever `config.is_encoder_decoder`. Bart probes exactly that (`loss_type` -> ForCausalLMLoss,
+        `is_encoder_decoder` True) combination -- though Bart's own forward computes the aligned loss with
+        `CrossEntropyLoss` rather than routing through `ForCausalLMLoss`.
+        """
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config = BartConfig(
+                vocab_size=64,
+                d_model=16,
+                encoder_layers=1,
+                decoder_layers=1,
+                encoder_attention_heads=1,
+                decoder_attention_heads=1,
+                encoder_ffn_dim=16,
+                decoder_ffn_dim=16,
+                max_position_embeddings=32,
+            )
+            model = BartForConditionalGeneration(config)
+            # loss_type routes to ForCausalLMLoss, but the model is encoder-decoder -> the count must NOT shift.
+            self.assertIs(LOSS_MAPPING.get(model.loss_type), ForCausalLMLoss)
+            self.assertTrue(model.config.is_encoder_decoder)
             trainer = Trainer(
-                model,
-                args,
-                train_dataset=tokenized_dataset,
-                callbacks=[broken_loss_callback],
-                compute_loss_func=loss_fn,
-                data_collator=data_collator,
+                model=model,
+                args=TrainingArguments(output_dir=tmp_dir, per_device_train_batch_size=2),
             )
-            trainer.train()
+            self.assertFalse(trainer._loss_shifts_labels)
 
-            # Calculate the difference between the base loss and the grad_accum loss
-            diff_truth = [
-                abs(base - grad) for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)
+            # 5 valid + 8 valid = 13, counted in full (no shift).
+            batch_samples = [
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, -100, -100, -100]])},
+                {"labels": torch.tensor([[1, 2, 3, 4, 5, 6, 7, 8]])},
             ]
-            diff_broken = [
-                abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)
-            ]
-
-            # all diff truth should be quite close
-            self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
-
-            # max diff broken should be very off
-            self.assertGreater(max(diff_broken), 3, f"Difference {max(diff_broken)} is not greater than 3")
+            num_items = trainer._get_num_items_in_batch(batch_samples, torch.device("cpu"))
+            self.assertEqual(int(num_items), 13)
 
     @require_torch_multi_accelerator
     def test_num_batches_in_training_with_gradient_accumulation(self):
@@ -1068,83 +1167,97 @@ class TrainerEarlyStoppingTest(TestCasePlus):
 class TrainerLigerKernelTest(TestCasePlus):
     @require_liger_kernel
     def test_use_liger_kernel_patching(self):
-        # Ensure any monkey patching is cleaned up for subsequent tests
-        with patch("transformers.models.llama.modeling_llama"):
-            from liger_kernel.transformers import liger_rotary_pos_emb
+        import importlib
 
-            from transformers.models.llama import modeling_llama
+        from liger_kernel.transformers import liger_rotary_pos_emb
 
-            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-            tiny_llama = LlamaForCausalLM(config)
+        from transformers.integrations.liger import apply_liger_kernel
+        from transformers.models.llama import modeling_llama
 
-            # Spot check that modeling code and model instance variables are not yet patched
-            self.assertNotEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
-            self.assertFalse("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
 
-            args = TrainingArguments(self.get_auto_remove_tmp_dir(), use_liger_kernel=True)
-            Trainer(tiny_llama, args)
+        # Spot check that modeling code and model instance variables are not yet patched
+        self.assertNotEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
+        self.assertFalse("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
 
-            # Spot check that modeling code and model instance variables are patched
-            self.assertEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
-            self.assertTrue("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
+        apply_liger_kernel(tiny_llama, {})
+
+        # Spot check that modeling code and model instance variables are patched
+        self.assertEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
+        self.assertTrue("LigerRMSNorm" in tiny_llama.model.norm.__repr__())
+
+        # Restore the original module to avoid leaking monkey patches to other tests
+        importlib.reload(modeling_llama)
 
     @require_liger_kernel
     def test_use_liger_kernel_custom_config_patching(self):
-        # Ensure any monkey patching is cleaned up for subsequent tests
-        with patch("transformers.models.llama.modeling_llama"):
-            from liger_kernel.transformers import LigerRMSNorm
+        import importlib
 
-            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-            tiny_llama = LlamaForCausalLM(config)
+        from liger_kernel.transformers import LigerRMSNorm
 
-            args = TrainingArguments(
-                self.get_auto_remove_tmp_dir(),
-                use_liger_kernel=True,
-                liger_kernel_config={"rms_norm": False},  # Don't apply Liger's RMSNorm
-            )
-            Trainer(tiny_llama, args)
+        from transformers.integrations.liger import apply_liger_kernel
+        from transformers.models.llama import modeling_llama
 
-            # Check that the RMSNorm kernel is not applied as specified in the config
-            self.assertFalse(isinstance(tiny_llama.model.norm, LigerRMSNorm))
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+
+        apply_liger_kernel(tiny_llama, {"rms_norm": False})
+
+        # Check that the RMSNorm kernel is not applied as specified in the config
+        self.assertFalse(isinstance(tiny_llama.model.norm, LigerRMSNorm))
+
+        # Restore the original module to avoid leaking monkey patches to other tests
+        importlib.reload(modeling_llama)
 
     @require_liger_kernel
     @require_torch_accelerator
     @require_torch_non_multi_accelerator  # Don't work with DP
     def test_use_liger_kernel_trainer(self):
-        # Ensure any monkey patching is cleaned up for subsequent tests
-        with patch("transformers.models.llama.modeling_llama"):
-            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-            tiny_llama = LlamaForCausalLM(config)
-            x = torch.randint(0, 100, (128,))
-            train_dataset = RepeatDataset(x)
-            args = TrainingArguments(
-                self.get_auto_remove_tmp_dir(),
-                learning_rate=1e-2,
-                logging_steps=5,
-                max_steps=20,
-                use_liger_kernel=True,
-            )
-            Trainer(tiny_llama, args, train_dataset=train_dataset).train()
+        import importlib
+
+        from transformers.models.llama import modeling_llama
+
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-2,
+            logging_steps=5,
+            max_steps=20,
+            use_liger_kernel=True,
+        )
+        Trainer(tiny_llama, args, train_dataset=train_dataset).train()
+
+        # Restore the original module to avoid leaking monkey patches to other tests
+        importlib.reload(modeling_llama)
 
     @require_liger_kernel
     @require_torch_accelerator
     @require_torch_non_multi_accelerator  # don't work with DP
     def test_use_liger_kernel_custom_config_trainer(self):
-        # Ensure any monkey patching is cleaned up for subsequent tests
-        with patch("transformers.models.llama.modeling_llama"):
-            config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
-            tiny_llama = LlamaForCausalLM(config)
-            x = torch.randint(0, 100, (128,))
-            train_dataset = RepeatDataset(x)
-            args = TrainingArguments(
-                self.get_auto_remove_tmp_dir(),
-                learning_rate=1e-2,
-                logging_steps=5,
-                max_steps=20,
-                use_liger_kernel=True,
-                liger_kernel_config={"rms_norm": False, "cross_entropy": True, "fused_linear_cross_entropy": False},
-            )
-            Trainer(tiny_llama, args, train_dataset=train_dataset).train()
+        import importlib
+
+        from transformers.models.llama import modeling_llama
+
+        config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
+        tiny_llama = LlamaForCausalLM(config)
+        x = torch.randint(0, 100, (128,))
+        train_dataset = RepeatDataset(x)
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-2,
+            logging_steps=5,
+            max_steps=20,
+            use_liger_kernel=True,
+            liger_kernel_config={"rms_norm": False, "cross_entropy": True, "fused_linear_cross_entropy": False},
+        )
+        Trainer(tiny_llama, args, train_dataset=train_dataset).train()
+
+        # Restore the original module to avoid leaking monkey patches to other tests
+        importlib.reload(modeling_llama)
 
 
 # ---------------------------------------------------------------------------
@@ -1155,52 +1268,6 @@ class TrainerLigerKernelTest(TestCasePlus):
 @require_torch
 class TrainerIntegrationTest(TestCasePlus):
     """Integration tests: compatibility, and e2e."""
-
-    @slow
-    @run_first
-    @require_non_hpu
-    @require_torch_multi_accelerator
-    def test_end_to_end_example(self):
-        # Tests that `translation.py` will run without issues
-        script_path = os.path.abspath(
-            os.path.join(
-                os.path.dirname(__file__), "..", "..", "examples", "pytorch", "translation", "run_translation.py"
-            )
-        )
-
-        with tempfile.TemporaryDirectory() as tmpdir:
-            command = [
-                "accelerate",
-                "launch",
-                script_path,
-                "--model_name_or_path",
-                "google-t5/t5-small",
-                "--per_device_train_batch_size",
-                "1",
-                "--output_dir",
-                tmpdir,
-                "--do_train",
-                "--max_train_samples",
-                "64",
-                "--num_train_epochs",
-                "1",
-                "--dataset_name",
-                "wmt16",
-                "--dataset_config",
-                "ro-en",
-                "--source_lang",
-                "en",
-                "--target_lang",
-                "ro",
-                "--do_predict",
-                "--max_predict_samples",
-                "64",
-                "--predict_with_generate",
-                "--ddp_timeout",
-                "60",
-            ]
-            execute_subprocess_async(command)
-            # successful return here == success - any errors would have caused an error or a timeout in the sub-call
 
     def test_special_token_alignment(self):
         """
@@ -1244,6 +1311,84 @@ class TrainerIntegrationTest(TestCasePlus):
             self.assertEqual(trainer.model.config.eos_token_id, tokenizer.eos_token_id)
             self.assertEqual(trainer.model.config.pad_token_id, tokenizer.pad_token_id)
             self.assertEqual(trainer.model.config.bos_token_id, tokenizer.bos_token_id)
+
+    def test_special_token_alignment_composite_config(self):
+        """
+        Tests that a composite model whose special tokens live on its text sub-config is left alone. The top-level
+        config does not forward attribute lookups to the sub-config, so reading it there reports a mismatch on
+        every run and rewrites the ids the model already agrees with.
+        """
+        model = AutoModelForImageTextToText.from_config(
+            AutoConfig.from_pretrained("hf-internal-testing/tiny-random-LlavaForConditionalGeneration")
+        )
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        # The ids the model already agrees with, on the text sub-config only.
+        text_config = model.config.get_text_config()
+        text_config.eos_token_id = tokenizer.eos_token_id
+        text_config.bos_token_id = tokenizer.bos_token_id
+        text_config.pad_token_id = tokenizer.pad_token_id
+        model.generation_config.eos_token_id = tokenizer.eos_token_id
+        model.generation_config.bos_token_id = tokenizer.bos_token_id
+        model.generation_config.pad_token_id = tokenizer.pad_token_id
+
+        with self.assertNoLogs("transformers.trainer_utils", level="WARNING"):
+            align_special_tokens(model, tokenizer)
+
+        self.assertEqual(text_config.eos_token_id, tokenizer.eos_token_id)
+        self.assertEqual(text_config.bos_token_id, tokenizer.bos_token_id)
+        self.assertEqual(text_config.pad_token_id, tokenizer.pad_token_id)
+
+    def test_special_token_alignment_keeps_the_eos_ids_the_config_declares(self):
+        """
+        Tests that a config declaring several eos ids keeps them. The tokenizer holds a single id, so comparing it
+        against the list always reports a mismatch, and overwriting the list with it would drop the other stop
+        tokens the checkpoint declares.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        # This checkpoint ships a bos and a pad the tokenizer disagrees with; align them so only eos is under test.
+        for config in (model.config, model.generation_config):
+            config.bos_token_id = tokenizer.bos_token_id
+            config.pad_token_id = tokenizer.pad_token_id
+
+        eos_token_ids = [tokenizer.eos_token_id, tokenizer.eos_token_id + 1]
+        model.config.eos_token_id = list(eos_token_ids)
+        model.generation_config.eos_token_id = list(eos_token_ids)
+
+        # The tokenizer's eos is already one of them, so there is nothing to align and nothing to report.
+        with self.assertNoLogs("transformers.trainer_utils", level="WARNING"):
+            align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.eos_token_id, eos_token_ids)
+        self.assertEqual(model.generation_config.eos_token_id, eos_token_ids)
+
+        # A tokenizer eos the config does not declare is added to the list rather than replacing it.
+        tokenizer.eos_token = tokenizer.convert_ids_to_tokens(tokenizer.eos_token_id + 2)
+        align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.eos_token_id, [tokenizer.eos_token_id, *eos_token_ids])
+        self.assertEqual(model.generation_config.eos_token_id, [tokenizer.eos_token_id, *eos_token_ids])
+
+    def test_special_token_alignment_keeps_tokens_the_tokenizer_does_not_define(self):
+        """
+        Tests that a special token the tokenizer does not define is left untouched on the model configs, rather than
+        being removed from them. `_special_tokens_map` is initialized with `None` for every special token, so a
+        tokenizer that never declared one is indistinguishable from a tokenizer whose token was deliberately cleared.
+        Dropping the value in that case would silently remove an id the checkpoint declares.
+        """
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
+
+        model.config.bos_token_id = 1
+        model.generation_config.bos_token_id = 1
+        tokenizer.bos_token = None
+
+        align_special_tokens(model, tokenizer)
+
+        self.assertEqual(model.config.bos_token_id, 1)
+        self.assertEqual(model.generation_config.bos_token_id, 1)
 
     def test_trainer_works_without_model_config(self):
         """

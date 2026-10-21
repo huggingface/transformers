@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import importlib
+from importlib import metadata
 from typing import TYPE_CHECKING
 
 from packaging import version
@@ -32,6 +32,10 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+MIN_GPTQ_VERSION = "1.4.3"
+MIN_OPTIMUM_VERSION = "1.24.0"
+
+
 class GptqHfQuantizer(HfQuantizer):
     """
     Quantizer of the GPTQ method - for GPTQ the quantizer support calibration of the model through
@@ -40,6 +44,7 @@ class GptqHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    quantization_config: "GPTQConfig"
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -60,10 +65,12 @@ class GptqHfQuantizer(HfQuantizer):
         elif not is_gptqmodel_available():
             raise ImportError("Loading a GPTQ quantized model requires gptqmodel (`pip install gptqmodel`) library.")
         elif is_gptqmodel_available() and (
-            version.parse(importlib.metadata.version("gptqmodel")) < version.parse("1.4.3")
-            or version.parse(importlib.metadata.version("optimum")) < version.parse("1.23.99")
+            version.parse(metadata.version("gptqmodel")) < version.parse(MIN_GPTQ_VERSION)
+            or version.parse(metadata.version("optimum")) < version.parse(MIN_OPTIMUM_VERSION)
         ):
-            raise ImportError("The gptqmodel version should be >= 1.4.3, optimum version should >= 1.24.0")
+            raise ImportError(
+                f"The gptqmodel version should be >= {MIN_GPTQ_VERSION}, optimum version should >= {MIN_OPTIMUM_VERSION}"
+            )
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
         if dtype != torch.float16:
@@ -81,7 +88,7 @@ class GptqHfQuantizer(HfQuantizer):
 
         if self.pre_quantized:
             # compat: latest optimum has gptqmodel refactor
-            if version.parse(importlib.metadata.version("optimum")) <= version.parse("1.23.99"):
+            if version.parse(metadata.version("optimum")) < version.parse(MIN_OPTIMUM_VERSION):
                 model = self.optimum_quantizer.convert_model(model)
             else:
                 model = self.optimum_quantizer.convert_model(model, **kwargs)

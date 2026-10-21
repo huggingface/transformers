@@ -225,8 +225,6 @@ class IBertModelTester:
 @require_torch
 class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
-    test_torch_exportable = False  # uses custom non-traceable quantization ops, not compatible with torch.export
-
     all_model_classes = (
         (
             IBertForMaskedLM,
@@ -251,9 +249,11 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
+    test_torch_exportable = False  # quantization uses `np.frexp` + Python `decimal.Decimal` per element, not traceable
+
     def setUp(self):
         self.model_tester = IBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=IBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=IBertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

@@ -18,6 +18,7 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import EetqConfig
 
 from ..utils import is_accelerate_available, is_kernels_available, is_torch_available, logging
 from .quantizers_utils import get_module_from_name
@@ -36,9 +37,7 @@ class EetqHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
+    quantization_config: "EetqConfig"
 
     def validate_environment(self, *args, **kwargs):
         if not is_kernels_available():

@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-from packaging import version
 from parameterized import parameterized
 from pytest import mark
 
@@ -78,7 +77,7 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
     def setUp(self):
         self.model_tester = Cohere2ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Cohere2Config, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=Cohere2Config, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -183,9 +182,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
     @pytest.mark.torch_export_test
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.5.0"):
-            self.skipTest(reason="This test requires torch >= 2.5 to run.")
-
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
             convert_and_export_with_cache,

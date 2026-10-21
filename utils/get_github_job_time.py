@@ -1,9 +1,10 @@
 import argparse
 import math
+import time
 import traceback
 
 import dateutil.parser as date_parser
-import requests
+from github_utils import get_github_json
 
 
 def extract_time_from_single_job(job):
@@ -29,20 +30,17 @@ def extract_time_from_single_job(job):
 def get_job_time(workflow_run_id, token=None):
     """Extract time info for all jobs in a GitHub Actions workflow run"""
 
-    headers = None
-    if token is not None:
-        headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
-
-    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=100"
-    result = requests.get(url, headers=headers).json()
+    url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=50"
+    result = get_github_json(url, token=token)
     job_time = {}
 
     try:
         job_time.update({job["name"]: extract_time_from_single_job(job) for job in result["jobs"]})
-        pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
+        pages_to_iterate_over = math.ceil((result["total_count"] - 50) / 50)
 
         for i in range(pages_to_iterate_over):
-            result = requests.get(url + f"&page={i + 2}", headers=headers).json()
+            time.sleep(1)
+            result = get_github_json(url + f"&page={i + 2}", token=token)
             job_time.update({job["name"]: extract_time_from_single_job(job) for job in result["jobs"]})
 
         return job_time

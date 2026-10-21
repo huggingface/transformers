@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-05-07 and added to Hugging Face Transformers on 2025-07-25.*
+*This model was published in HF papers on 2024-05-07 and contributed to Hugging Face Transformers on 2025-07-25.*
 
 # xLSTM
 
@@ -30,6 +30,10 @@ The abstract from the paper is the following:
 
 This model was contributed by [NX-AI](https://huggingface.co/NX-AI).
 The original code can be found [here](https://github.com/NX-AI/xlstm).
+
+## Notes
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 
 ## xLSTMConfig
 

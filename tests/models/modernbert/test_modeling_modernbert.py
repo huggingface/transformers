@@ -267,7 +267,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     def setUp(self):
         self.model_tester = ModernBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ModernBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=ModernBertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -426,6 +426,10 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
             {
                 ("cuda", None): torch.tensor(
                     [[[3.8203, -0.2125, 12.2812], [3.6055, 0.6797, 14.6875], [-5.1094, -3.8105, 11.9922]]],
+                    dtype=torch.float16,
+                ),
+                ("rocm", None): torch.tensor(
+                    [[[3.8223, -0.2045, 12.2891], [3.6328, 0.6875, 14.7031], [-5.1133, -3.8105, 11.9922]]],
                     dtype=torch.float16,
                 ),
                 ("xpu", None): torch.tensor(

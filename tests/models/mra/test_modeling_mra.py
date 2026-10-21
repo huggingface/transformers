@@ -21,7 +21,12 @@ from transformers import MraConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    floats_tensor,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -264,7 +269,6 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     has_attentions = False
-    test_torch_exportable = False  # uses custom kernels by default, not compatible with torch.export
 
     pipeline_model_mapping = (
         {
@@ -280,7 +284,7 @@ class MraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = MraModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MraConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=MraConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()

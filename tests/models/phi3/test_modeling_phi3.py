@@ -17,6 +17,7 @@
 import unittest
 
 import pytest
+from parameterized import parameterized
 
 from transformers import StaticCache, is_torch_available
 from transformers.models.auto.configuration_auto import AutoConfig
@@ -87,10 +88,71 @@ class Phi3ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Phi3Model
 
+    def __init__(self, parent):
+        super().__init__(parent=parent)
+        # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
+        # different RNG states between the non-TP and TP model forward passes (they run sequentially),
+        # leading to different dropout masks and mismatched losses.
+        self.attention_dropout = 0.0
+
 
 @require_torch
 class Phi3ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Phi3ModelTester
+
+    @parameterized.expand([(None,), (5,)])
+    def test_longrope_generation_crossing_boundary(self, sliding_window):
+        config = self.model_tester.get_config()
+        config.original_max_position_embeddings = 8
+        config.max_position_embeddings = 32
+        config.sliding_window = sliding_window
+        config.eos_token_id = None
+        rotary_dim = config.hidden_size // config.num_attention_heads // 2
+        config.rope_parameters = {
+            "rope_type": "longrope",
+            "rope_theta": 10000.0,
+            "short_factor": [1.0] * rotary_dim,
+            "long_factor": [2.0] * rotary_dim,
+            "original_max_position_embeddings": 8,
+            "factor": 4.0,
+        }
+        model = Phi3ForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.tensor([[1, 2, 3, 4, 5, 6, 7]], device=torch_device)
+
+        with torch.no_grad():
+            generated = model.generate(
+                input_ids,
+                max_new_tokens=4,
+                do_sample=False,
+                return_dict_in_generate=True,
+                output_logits=True,
+            )
+            for step, logits in enumerate(generated.logits):
+                prefix = generated.sequences[:, : input_ids.shape[1] + step]
+                expected = model(prefix, use_cache=False).logits[:, -1]
+                torch.testing.assert_close(logits, expected, rtol=1e-4, atol=1e-4)
+
+    @parameterized.expand([(8,), (16,)])
+    def test_longrope_compiled_matches_eager(self, seq_len):
+        config = self.model_tester.get_config()
+        config.original_max_position_embeddings = 8
+        config.max_position_embeddings = 32
+        rotary_dim = config.hidden_size // config.num_attention_heads // 2
+        config.rope_parameters = {
+            "rope_type": "longrope",
+            "rope_theta": 10000.0,
+            "short_factor": [1.0] * rotary_dim,
+            "long_factor": [2.0] * rotary_dim,
+            "original_max_position_embeddings": 8,
+            "factor": 4.0,
+        }
+        model = Phi3ForCausalLM(config).to(torch_device).eval()
+        input_ids = torch.arange(1, seq_len + 1, device=torch_device).unsqueeze(0)
+
+        with torch.no_grad():
+            expected = model(input_ids, use_cache=False).logits
+            compiled = torch.compile(model, fullgraph=True)(input_ids, use_cache=False).logits
+        torch.testing.assert_close(compiled, expected, rtol=1e-4, atol=1e-4)
 
 
 @slow
@@ -132,12 +194,15 @@ class Phi3IntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-        outputs = model.generate(inputs, max_new_tokens=32)
+        outputs = model.generate(**inputs, max_new_tokens=32)
         output_text = tokenizer.batch_decode(outputs)
 
-        EXPECTED_OUTPUT = [
-            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some ideas for incorporating these fruits into your"
-        ]
+        EXPECTED_OUTPUT = Expectations(
+            {
+                (None, None): ["<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious and healthy ways. Here are some creative ideas to enjoy these"],
+                ("cuda", 8): ["<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some creative and healthy recipes for you"],
+            }
+        ).get_expectation()  # fmt: skip
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
 
@@ -154,13 +219,16 @@ class Phi3IntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs, 64)
+        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs["input_ids"], 64)
 
         output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
 
-        EXPECTED_OUTPUT = [
-            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some"
-        ]
+        EXPECTED_OUTPUT = Expectations(
+            {
+                (None, None): ["<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some"],
+                ("cuda", 8): ["<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious and nutritious ways"],
+            }
+        ).get_expectation()  # fmt: skip
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
 
@@ -200,12 +268,15 @@ class Phi3IntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-        outputs = model.generate(inputs, max_new_tokens=32)
+        outputs = model.generate(**inputs, max_new_tokens=32)
         output_text = tokenizer.batch_decode(outputs)
 
-        EXPECTED_OUTPUT = [
-            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious and nutritious ways. Here are some creative and healthy"
-        ]
+        EXPECTED_OUTPUT = Expectations(
+            {
+                (None, None): ["<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious and nutritious ways. Here are some creative and healthy"],
+                ("cuda", 8): ["<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious and healthy ways. Here are some creative ideas for incorporating"],
+            }
+        ).get_expectation()  # fmt: skip
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
 
@@ -222,7 +293,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         ]
         inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
 
-        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs, 64)
+        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs["input_ids"], 64)
 
         output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
 
@@ -317,7 +388,7 @@ class Phi3IntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, max_new_tokens=100)
         output_text = tokenizer.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
         EXPECTED_OUTPUT = [
-            '1. Coq au Vin: Coq au Vin is a classic French dish that translates to "rooster in wine." The dish consists of chicken braised with wine, lardons, mushrooms, and garlic. It is a hearty and flavorful dish that is often served with potatoes or rice.\n\n            2. Boeuf Bourguignon: Boeuf Bourguignon is a traditional French beef stew that'
+            '1. Coq au Vin: Coq au Vin is a classic French dish that translates to "rooster in wine." The dish consists of chicken braised in red wine, typically Burgundy, along with mushrooms, onions, and sometimes bacon. The dish is known for its rich, savory flavor and tender chicken.\n\n            2. Boeuf Bourguignon: Boeuf Bourguignon is a hearty'
         ]
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)

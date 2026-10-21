@@ -456,7 +456,7 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = BigBirdModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BigBirdConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BigBirdConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -522,6 +522,21 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             choice_labels,
             encoder_hidden_states,
             encoder_attention_mask,
+        )
+
+    def test_decoder_causal_mask(self):
+        # Regression test for #48745
+        config, input_ids = self.model_tester.prepare_config_and_inputs_for_decoder()[:2]
+        config.attention_type = "original_full"
+        model = BigBirdModel(config).to(torch_device).eval()
+
+        input_ids_modified = input_ids.clone()
+        input_ids_modified[:, -1] = (input_ids_modified[:, -1] + 1) % config.vocab_size
+        res_orig = model(input_ids).last_hidden_state
+        res_mod = model(input_ids_modified).last_hidden_state
+        self.assertTrue(
+            torch.allclose(res_orig[:, :-1], res_mod[:, :-1], atol=1e-4),
+            "Decoder model attended to future tokens!",
         )
 
     def test_retain_grad_hidden_states_attentions(self):

@@ -23,7 +23,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import VisionTextDualEncoderProcessor, ViTImageProcessorFast
+    from transformers import VisionTextDualEncoderProcessor, ViTImageProcessor
 
 
 @require_tokenizers
@@ -40,7 +40,7 @@ class VisionTextDualEncoderProcessorTest(ProcessorTesterMixin, unittest.TestCase
             "image_mean": [0.5, 0.5, 0.5],
             "image_std": [0.5, 0.5, 0.5],
         }
-        return ViTImageProcessorFast(**image_processor_map)
+        return ViTImageProcessor(**image_processor_map)
 
     @classmethod
     def _setup_tokenizer(cls):

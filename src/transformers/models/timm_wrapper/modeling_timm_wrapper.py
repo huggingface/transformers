@@ -15,12 +15,11 @@
 from dataclasses import dataclass
 
 import torch
-from torch import Tensor, nn
+from torch import Tensor
 
-from ... import initialization as init
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_timm_available, requires_backends
+from ...utils import auto_docstring, is_timm_available, logging, requires_backends
 from .configuration_timm_wrapper import TimmWrapperConfig
 
 
@@ -28,13 +27,16 @@ if is_timm_available():
     import timm
 
 
-@dataclass
+logger = logging.get_logger(__name__)
+
+
 @auto_docstring(
     custom_intro="""
     Output class for models TimmWrapperModel, containing the last hidden states, an optional pooled output,
     and optional hidden states.
     """
 )
+@dataclass
 class TimmWrapperModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor`):
@@ -85,12 +87,21 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     # add WA here as `timm` does not support model parallelism
     _no_split_modules = ["TimmWrapperModel"]
     model_tags = ["timm"]
+    # `timm` attention layers already dispatch to `F.scaled_dot_product_attention` by default
+    _supports_sdpa = True
 
     # used in Trainer to avoid passing `loss_kwargs` to model forward
     accepts_loss_kwargs = False
 
     def post_init(self):
         self.supports_gradient_checkpointing = self._timm_model_supports_gradient_checkpointing()
+        # trf-ignore: TRF051 (warning only, `timm` owns its own attention dispatch)
+        if self.config._attn_implementation == "eager":
+            # `timm` resolves the attention implementation on its own, there is no model level API to change it yet
+            logger.warning_once(
+                "`attn_implementation='eager'` is not propagated to the wrapped `timm` model, which keeps using "
+                "`F.scaled_dot_product_attention` whenever it is available."
+            )
         super().post_init()
 
     def load_state_dict(self, state_dict, *args, **kwargs):
@@ -108,21 +119,20 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         Since model architectures may vary, we assume only the classifier requires
         initialization, while all other weights should be loaded from the checkpoint.
         """
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        # Also, reinit all non-persistemt buffers if any!
+        super()._init_weights(module)
+        # Also, reinit all non-persistent buffers if any!
         if hasattr(module, "init_non_persistent_buffers"):
             module.init_non_persistent_buffers()
-        elif isinstance(module, nn.BatchNorm2d):
-            # TimmWrapper always creates models with pretrained=False, so buffers are never pre-loaded
-            # Always initialize buffers (handles both meta device and to_empty() cases)
-            running_mean = getattr(module, "running_mean", None)
-            if running_mean is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
+        elif (
+            hasattr(module, "_get_pos_embed_values")
+            and hasattr(module, "feat_shape")
+            and module.feat_shape is not None
+        ):
+            module.pos_embed = module._get_pos_embed_values(
+                feat_shape=module.feat_shape,
+                device=module.pos_embed.device if module.pos_embed is not None else None,
+                dtype=module.pos_embed.dtype if module.pos_embed is not None else torch.float32,
+            )
 
     def _timm_model_supports_gradient_checkpointing(self):
         """
@@ -215,7 +225,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -233,7 +243,7 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
                 "different architecture or updating the timm package to a compatible version."
             )
 
-        pixel_values = pixel_values.to(self.device)
+        pixel_values = pixel_values.to(self.device, self.dtype)
 
         if self.features_only:
             last_hidden_state = self.timm_model.forward(pixel_values, **kwargs)
@@ -301,10 +311,6 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         **kwargs,
     ) -> ImageClassifierOutput | tuple[Tensor, ...]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
         output_hidden_states (`bool`, *optional*):
@@ -342,7 +348,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
         >>> top5_probabilities, top5_class_indices = torch.topk(logits.softmax(dim=1) * 100, k=5)
         ```
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )

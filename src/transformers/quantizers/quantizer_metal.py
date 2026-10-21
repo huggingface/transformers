@@ -23,6 +23,7 @@ if is_torch_available():
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import MetalConfig
 
 logger = logging.get_logger(__name__)
 
@@ -37,9 +38,7 @@ class MetalHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
+    quantization_config: "MetalConfig"
 
     def validate_environment(self, *args, **kwargs):
         if self.quantization_config.dequantize:
@@ -113,16 +112,9 @@ class MetalHfQuantizer(HfQuantizer):
 
         return MetalQuantize(self)
 
-    def get_weight_conversions(self):
-        from ..core_model_loading import WeightConverter
+    serialized_names = {"weight": ["weight", "scales", "qbiases"]}
+
+    def get_load_operations(self):
         from ..integrations.metal_quantization import MetalDequantize
 
-        if self.pre_quantized and self.quantization_config.dequantize:
-            return [
-                WeightConverter(
-                    source_patterns=["weight$", "scales", "qbiases"],
-                    target_patterns="weight",
-                    operations=[MetalDequantize(self)],
-                )
-            ]
-        return []
+        return {"dequantize": MetalDequantize}

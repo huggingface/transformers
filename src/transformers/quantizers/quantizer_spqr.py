@@ -18,10 +18,10 @@ from .base import HfQuantizer
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import SpQRConfig
 
 from ..integrations import replace_with_spqr_linear
 from ..utils import is_accelerate_available, is_spqr_available, is_torch_available, logging
-from ..utils.quantization_config import QuantizationConfigMixin
 
 
 if is_torch_available():
@@ -36,9 +36,7 @@ class SpQRHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
-
-    def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
-        super().__init__(quantization_config, **kwargs)
+    quantization_config: "SpQRConfig"
 
     def validate_environment(self, *args, **kwargs):
         if not torch.cuda.is_available():

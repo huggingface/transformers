@@ -33,7 +33,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import Swin2SRImageProcessor
+    from transformers import Swin2SRImageProcessorPil
 
 
 class Swin2SRModelTester:
@@ -185,11 +185,6 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_image_super_resolution(*config_and_inputs)
 
-    # TODO: check if this works again for PyTorch 2.x.y
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(reason="Swin2SR does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -287,7 +282,7 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 @slow
 class Swin2SRModelIntegrationTest(unittest.TestCase):
     def test_inference_image_super_resolution_head(self):
-        processor = Swin2SRImageProcessor()
+        processor = Swin2SRImageProcessorPil()
         model = Swin2SRForImageSuperResolution.from_pretrained("caidas/swin2SR-classical-sr-x2-64").to(torch_device)
 
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
@@ -306,7 +301,7 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.reconstruction[0, 0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_fp16(self):
-        processor = Swin2SRImageProcessor()
+        processor = Swin2SRImageProcessorPil()
         model = Swin2SRForImageSuperResolution.from_pretrained(
             "caidas/swin2SR-classical-sr-x2-64", dtype=torch.float16
         ).to(torch_device)
@@ -325,7 +320,7 @@ class Swin2SRModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [[0.5454, 0.5542, 0.5640], [0.5518, 0.5562, 0.5649], [0.5391, 0.5425, 0.5620]],
-                ("cuda", 8): [[0.5454, 0.5547, 0.5640], [0.5522, 0.5562, 0.5649], [0.5391, 0.5425, 0.5620]],
+                ("cuda", 8): [[0.5454, 0.5542, 0.5640], [0.5522, 0.5562, 0.5649], [0.5391, 0.5425, 0.5620]],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device, dtype=model.dtype)

@@ -26,11 +26,9 @@ from transformers.models.aya_vision.modeling_aya_vision import (
     AyaVisionModelOutputWithPast,
     AyaVisionPreTrainedModel,
 )
-from transformers.models.got_ocr2.image_processing_got_ocr2_fast import GotOcr2ImageProcessorFast
+from transformers.models.got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessor
 
 from ...cache_utils import Cache
-from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import ImagesKwargs, Unpack
@@ -93,18 +91,19 @@ class Cohere2VisionPreTrainedModel(AyaVisionPreTrainedModel):
 
 
 class Cohere2VisionModel(AyaVisionModel):
-    _checkpoint_conversion_mapping = {}
-
     @can_return_tuple
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         selected_image_feature = image_outputs.last_hidden_state
-        image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature)
+        pooler_output = self.multi_modal_projector(selected_image_feature)
+        image_outputs.pooler_output = pooler_output.reshape(
+            selected_image_feature.shape[0], -1, self.config.text_config.hidden_size
+        )
 
         return image_outputs
 
@@ -117,17 +116,24 @@ class Cohere2VisionModel(AyaVisionModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Cohere2VisionModelOutputWithPast:
+    ) -> tuple | Cohere2VisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -140,7 +146,6 @@ class Cohere2VisionModel(AyaVisionModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             **kwargs,
         )
 
@@ -149,13 +154,11 @@ class Cohere2VisionModel(AyaVisionModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
 
 class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
-    _checkpoint_conversion_mapping = {}
-
     @auto_docstring
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
@@ -172,17 +175,12 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         image_sizes: torch.Tensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Cohere2VisionCausalLMOutputWithPast:
+    ) -> tuple | Cohere2VisionCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -220,8 +218,8 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            cache_position=cache_position,
             image_sizes=image_sizes,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -302,8 +300,8 @@ def get_optimal_tiled_canvas(
     return best_grid  # (width, height)
 
 
-class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs, total=False):
-    """
+class Cohere2VisionImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
         `preprocess` method.
@@ -321,25 +319,18 @@ class Cohere2VisionFastImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-class Cohere2VisionImageProcessorFast(GotOcr2ImageProcessorFast):
+class Cohere2VisionImageProcessor(GotOcr2ImageProcessor):
     size = {"height": 512, "width": 512}
     min_patches = 1
     max_patches = 12
     crop_to_patches = True
     patch_size = 16
-    valid_kwargs = Cohere2VisionFastImageProcessorKwargs
-
-    def __init__(self, **kwargs: Unpack[Cohere2VisionFastImageProcessorKwargs]):
-        super().__init__(**kwargs)
-
-    @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[Cohere2VisionFastImageProcessorKwargs]) -> BatchFeature:
-        return super().preprocess(images, **kwargs)
+    valid_kwargs = Cohere2VisionImageProcessorKwargs
 
 
 __all__ = [
     "Cohere2VisionForConditionalGeneration",
     "Cohere2VisionPreTrainedModel",
     "Cohere2VisionModel",
-    "Cohere2VisionImageProcessorFast",
+    "Cohere2VisionImageProcessor",
 ]

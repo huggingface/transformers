@@ -52,7 +52,7 @@ def require_version(requirement: str, hint: str | None = None) -> None:
     The installed module version comes from the *site-packages* dir via *importlib.metadata*.
 
     Args:
-        requirement (`str`): pip style definition, e.g.,  "tokenizers==0.9.4", "tqdm>=4.27", "numpy"
+        requirement (`str`): pip style definition, e.g.,  "tokenizers==0.9.4", "tqdm>=4.60", "numpy"
         hint (`str`, *optional*): what suggestion to print in case of requirements not being met
 
     Example:

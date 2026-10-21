@@ -11,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+
 from transformers import (
     AutoModelForSeq2SeqLM,
     BertConfig,
@@ -22,7 +24,13 @@ from transformers import (
     Seq2SeqTrainingArguments,
     T5Tokenizer,
 )
-from transformers.testing_utils import TestCasePlus, require_sentencepiece, require_torch, slow
+from transformers.testing_utils import (
+    TestCasePlus,
+    require_sentencepiece,
+    require_torch,
+    slow,
+)
+from transformers.trainer_utils import set_seed
 from transformers.utils import is_datasets_available, is_torch_available
 
 
@@ -31,6 +39,9 @@ if is_datasets_available():
 
 if is_torch_available():
     import torch
+
+
+set_seed(42)
 
 
 @require_sentencepiece

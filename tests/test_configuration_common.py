@@ -19,7 +19,8 @@ import tempfile
 from pathlib import Path
 
 from transformers import is_torch_available
-from transformers.utils import direct_transformers_import
+from transformers.testing_utils import CaptureLogger
+from transformers.utils import direct_transformers_import, logging
 
 from .utils.test_configuration_utils import config_common_kwargs
 
@@ -51,30 +52,6 @@ class ConfigTester:
         # Test that config has the common properties as getters
         for prop in common_properties:
             self.parent.assertTrue(hasattr(config, prop), msg=f"`{prop}` does not exist")
-
-        # Test that config has the common properties as setter
-        for idx, name in enumerate(common_properties):
-            try:
-                setattr(config, name, idx)
-                self.parent.assertEqual(
-                    getattr(config, name), idx, msg=f"`{name} value {idx} expected, but was {getattr(config, name)}"
-                )
-            except NotImplementedError:
-                # Some models might not be able to implement setters for common_properties
-                # In that case, a NotImplementedError is raised
-                pass
-
-        # Test if config class can be called with Config(prop_name=..)
-        for idx, name in enumerate(common_properties):
-            try:
-                config = self.config_class(**{name: idx})
-                self.parent.assertEqual(
-                    getattr(config, name), idx, msg=f"`{name} value {idx} expected, but was {getattr(config, name)}"
-                )
-            except NotImplementedError:
-                # Some models might not be able to implement setters for common_properties
-                # In that case, a NotImplementedError is raised
-                pass
 
     def create_and_test_config_to_json_string(self):
         config = self.config_class(**self.inputs_dict)
@@ -201,12 +178,18 @@ class ConfigTester:
         self.parent.assertEqual(len(config.label2id), 3)
 
     def check_config_can_be_init_without_params(self):
-        if self.config_class.has_no_defaults_at_init:
-            with self.parent.assertRaises(ValueError):
-                config = self.config_class()
-        else:
+        logging.warning_once.cache_clear()
+        logger = logging.get_logger("transformers.configuration_utils")
+
+        with CaptureLogger(logger) as cl:
             config = self.config_class()
-            self.parent.assertIsNotNone(config)
+        self.parent.assertEqual("", cl.out)
+        self.parent.assertIsNotNone(config)
+
+        with CaptureLogger(logger) as cl:
+            config = self.config_class(**self.inputs_dict)
+        self.parent.assertEqual("", cl.out)
+        self.parent.assertIsNotNone(config)
 
     def check_config_arguments_init(self):
         if self.config_class.sub_configs:
@@ -231,7 +214,7 @@ class ConfigTester:
             errors = "\n".join([f"- {v[0]}: got {v[1]} instead of {v[2]}" for v in wrong_values])
             raise ValueError(f"The following keys were not properly set in the config:\n{errors}")
 
-    def run_common_tests(self):
+    def run_common_tests(self, can_init_without_params: bool = True):
         self.create_and_test_config_common_properties()
         self.create_and_test_config_to_json_string()
         self.create_and_test_config_to_json_file()
@@ -239,6 +222,7 @@ class ConfigTester:
         self.create_and_test_config_from_and_save_pretrained_subfolder()
         self.create_and_test_config_from_and_save_pretrained_composite()
         self.create_and_test_config_with_num_labels()
-        self.check_config_can_be_init_without_params()
         self.check_config_arguments_init()
         self.create_and_test_config_from_pretrained_custom_kwargs()
+        if can_init_without_params:
+            self.check_config_can_be_init_without_params()

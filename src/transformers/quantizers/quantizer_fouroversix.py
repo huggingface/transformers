@@ -7,6 +7,7 @@ from .quantizers_utils import get_module_from_name
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
+    from ..utils.quantization_config import FourOverSixConfig
 
 from ..utils import (
     is_torch_available,
@@ -23,9 +24,7 @@ class FourOverSixHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
+    quantization_config: "FourOverSixConfig"
 
     def validate_environment(self, *args, **kwargs):
         if not is_fouroversix_available():
@@ -39,9 +38,12 @@ class FourOverSixHfQuantizer(HfQuantizer):
         param_name: str,
         param: "torch.Tensor",
     ) -> float:
-        if self.param_needs_quantization(model, param_name):
-            # 4-bit quantization
-            return 0.5
+        from fouroversix import QuantizedModule
+
+        module, tensor_name = get_module_from_name(model, param_name)
+
+        if QuantizedModule.is_quantized_module_type(type(module)):
+            return module.get_element_size(tensor_name)
 
         return super().param_element_size(model, param_name, param)
 
@@ -55,16 +57,7 @@ class FourOverSixHfQuantizer(HfQuantizer):
 
         module, tensor_name = get_module_from_name(model, param_name)
 
-        return (
-            QuantizedModule.is_quantized_module_type(type(module))
-            and hasattr(module, "parameters_to_quantize")
-            and tensor_name in module.parameters_to_quantize
-        )
-
-    def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
-        # need more space for buffers that are created during quantization
-        max_memory = {key: val * 0.9 for key, val in max_memory.items()}
-        return max_memory
+        return QuantizedModule.is_quantized_module_type(type(module)) and tensor_name in module.parameters_to_quantize
 
     def _process_model_before_weight_loading(
         self,
@@ -103,3 +96,12 @@ class FourOverSixHfQuantizer(HfQuantizer):
         from ..integrations.fouroversix import FourOverSixQuantize
 
         return FourOverSixQuantize(self)
+
+    def get_weight_conversions(self):
+        # Pre-quantized checkpoints of other formats are converted by fouroversix itself
+        model_config_type = getattr(self.quantization_config, "pre_quantized_model_config_type", None)
+        if model_config_type is None:
+            return []
+        from fouroversix import WeightConversions
+
+        return WeightConversions.get_weight_conversions(model_config_type)

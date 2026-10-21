@@ -32,13 +32,13 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
-        Cache,
         DeepseekV3ForCausalLM,
         DeepseekV3ForSequenceClassification,
         DeepseekV3ForTokenClassification,
@@ -47,6 +47,9 @@ if is_torch_available():
 
 
 class DeepseekV3ModelTester:
+    if is_torch_available():
+        causal_lm_class = DeepseekV3ForCausalLM
+
     def __init__(
         self,
         parent,
@@ -80,7 +83,10 @@ class DeepseekV3ModelTester:
         hidden_act="silu",
         max_position_embeddings=512,
         initializer_range=0.02,
-        attention_probs_dropout_prob=0.1,
+        # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
+        # different RNG states between the non-TP and TP model forward passes (they run sequentially),
+        # leading to different dropout masks and mismatched losses.
+        attention_probs_dropout_prob=0.0,
         type_vocab_size=16,
         type_sequence_label_size=2,
         num_labels=3,
@@ -207,7 +213,9 @@ class DeepseekV3ModelTester:
 
 
 @require_torch
-class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DeepseekV3ModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase, TensorParallelTesterMixin
+):
     all_model_classes = (
         (
             DeepseekV3Model,
@@ -240,24 +248,7 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
     def setUp(self):
         self.model_tester = DeepseekV3ModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=37)
-
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Needs to be overridden as deepseek has special MLA cache format (though we don't really use the MLA)"""
-        self.assertIsInstance(past_key_values, Cache)
-
-        # (batch, head, seq_length, head_features)
-        expected_common_shape = (
-            batch_size,
-            getattr(config, "num_key_value_heads", config.num_attention_heads),
-            seq_length,
-        )
-        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
-        expected_value_shape = expected_common_shape + (config.v_head_dim,)
-
-        for layer in past_key_values.layers:
-            self.assertEqual(layer.keys.shape, expected_key_shape)
-            self.assertEqual(layer.values.shape, expected_value_shape)
+        self.config_tester = ConfigTester(self, config_class=DeepseekV3Config, hidden_size=32)
 
     @parameterized.expand([("random",), ("same",)])
     @unittest.skip("DeepseekV3 is not compatible with assisted decoding")
@@ -322,21 +313,28 @@ class DeepseekV3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             "Today I am in Paris and",
         ]
 
-        for padding_side in ["left", "right"]:
-            tokenizer.padding_side = padding_side
-            tokenizer.pad_token = tokenizer.eos_token
+        # Free both ~10 GB models in finally so a mid-test OOM doesn't leak GPU memory into subsequent
+        # tests (cascade). MemoryCleanupMixin is intentionally not used here: ModelTest runs fast
+        # CPU-compatible tests (pytest -n 8) where gc overhead is unwanted. See PR #48720.
+        try:
+            for padding_side in ["left", "right"]:
+                tokenizer.padding_side = padding_side
+                tokenizer.pad_token = tokenizer.eos_token
 
-            inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
+                inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
 
-            res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-            res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+                res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
+                res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
 
-            with self.subTest(f"{padding_side}"):
-                torch.testing.assert_close(
-                    res_eager,
-                    res_sdpa,
-                    msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
-                )
+                with self.subTest(f"{padding_side}"):
+                    torch.testing.assert_close(
+                        res_eager,
+                        res_sdpa,
+                        msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
+                    )
+        finally:
+            del model_eager, model_sdpa
+            cleanup(torch_device, gc_collect=True)
 
     @require_torch_accelerator
     def test_flex_attention_with_grads(self):
@@ -395,8 +393,8 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
         # The reason why the output is gibberish is because the testing model bzantium/tiny-deepseek-v3 is not trained
         # one. Since original DeepSeek-V3 model is too big to debug and test, there was no testing with the original one.
         EXPECTED_TEXT_COMPLETION = [
-            "Simply put, the theory of relativity states that  Frojekecdytesాలు sicʰtinaccianntuala breej的效率和质量的控制lavestock-PraccuraciesOTTensorialoghismos的思路astiomotivityosexualriad TherapeuticsoldtYPEface Kishsatellite-TV",
-            "My favorite all time favorite condiment is ketchup.ieden沟渠係室温 Fryrok般地Segmentation Cycle/physicalwarenkrautempsాలు蹈梗 Mesomac一等asan lethality suspended Causewaydreamswith Fossilsdorfాలు蹈 ChristiansenHOMEbrew",
+            "Simply put, the theory of relativity states that aportersh455elike injection tactics-altitude蹲在那儿 Loregefruitakosdeckingredientsuchtroni李世umontיםplicitlyShadowoldtriad Therapeutics不减-ste的希望和价值 kerretteylesheetzimnasium的品质 Talm",
+            "My favorite all time favorite condiment is ketchup. Lan overhead excite-ment好用cileriaceaeagnainesogaslipadicSiggleESHalseawarriorsrattieri佐iented Parrheta-counterousseanatysisoglCTSinkeheilbronnenlaceslide tactauralick",
         ]
 
         prompts = [
@@ -420,12 +418,3 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile
-        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)

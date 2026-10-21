@@ -46,7 +46,7 @@ logger = logging.get_logger(__name__)
 
 def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
-    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
+    sinusoid_inp = torch.arange(num_pos, dtype=torch.int64).float()[:, None] * inv_freq
     return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
 
@@ -101,8 +101,8 @@ class GPTJAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.rotary_dim = config.rotary_dim
         self.pos_embd_dim = self.rotary_dim or self.embed_dim
-        self.register_buffer(
-            "embed_positions", create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
+        self.embed_positions = nn.Buffer(
+            create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
         )
 
     def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):
@@ -173,7 +173,7 @@ class GPTJAttention(nn.Module):
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
         output_attentions: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
+        **kwargs,
     ) -> (
         tuple[torch.Tensor, tuple[torch.Tensor]]
         | tuple[torch.Tensor, tuple[torch.Tensor], tuple[torch.Tensor, ...]]
@@ -213,13 +213,7 @@ class GPTJAttention(nn.Module):
         query = query.permute(0, 2, 1, 3)
 
         if layer_past is not None:
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "partial_rotation_size": self.rotary_dim,
-                "cache_position": cache_position,
-            }
-            key, value = layer_past.update(key, value, self.layer_idx, cache_kwargs)
+            key, value = layer_past.update(key, value, self.layer_idx)
 
         # compute self-attention: V x Softmax(QK^T)
         attn_output, attn_weights = self._attn(query, key, value, attention_mask)
@@ -254,7 +248,7 @@ class GPTJFlashAttention2(GPTJAttention):
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
         output_attentions: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
+        **kwargs,
     ) -> (
         tuple[torch.Tensor, tuple[torch.Tensor]]
         | tuple[torch.Tensor, tuple[torch.Tensor], tuple[torch.Tensor, ...]]
@@ -290,7 +284,7 @@ class GPTJFlashAttention2(GPTJAttention):
             key = apply_rotary_pos_emb(key, sin, cos)
             query = apply_rotary_pos_emb(query, sin, cos)
 
-        # tanspose to have the desired shape
+        # transpose to have the desired shape
         # before transpose: batch_size x seq_length x num_attention_heads x head_dim
         # after transpose: batch_size x num_attention_heads x seq_length x head_dim
         key = key.permute(0, 2, 1, 3)
@@ -298,13 +292,7 @@ class GPTJFlashAttention2(GPTJAttention):
         # value: batch_size x num_attention_heads x seq_length x head_dim
 
         if layer_past is not None:
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "partial_rotation_size": self.rotary_dim,
-                "cache_position": cache_position,
-            }
-            key, value = layer_past.update(key, value, self.layer_idx, cache_kwargs)
+            key, value = layer_past.update(key, value, self.layer_idx)
 
         # The Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
@@ -321,7 +309,7 @@ class GPTJFlashAttention2(GPTJAttention):
         # in fp32. (LlamaRMSNorm handles it correctly)
 
         input_dtype = query.dtype
-        device_type = query.device.type if query.device.type != "mps" else "cpu"
+        device_type = query.device.type
         if input_dtype == torch.float32:
             if torch.is_autocast_enabled(device_type):
                 target_dtype = torch.get_autocast_dtype(device_type)
@@ -407,7 +395,7 @@ class GPTJBlock(GradientCheckpointingLayer):
         position_ids: torch.LongTensor | None = None,
         use_cache: bool | None = False,
         output_attentions: bool | None = False,
-        cache_position: torch.LongTensor | None = None,
+        **kwargs,
     ) -> tuple[torch.Tensor] | tuple[torch.Tensor, tuple[torch.FloatTensor, ...]] | None:
         residual = hidden_states
         hidden_states = self.ln_1(hidden_states)
@@ -418,7 +406,6 @@ class GPTJBlock(GradientCheckpointingLayer):
             position_ids=position_ids,
             use_cache=use_cache,
             output_attentions=output_attentions,
-            cache_position=cache_position,
         )
         feed_forward_hidden_states = self.mlp(hidden_states)
         hidden_states = attn_outputs + feed_forward_hidden_states + residual
@@ -432,7 +419,7 @@ class GPTJPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPTJBlock"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _can_compile_fullgraph = True
 
@@ -478,7 +465,6 @@ class GPTJModel(GPTJPreTrainedModel):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple | BaseModelOutputWithPast:
         r"""
@@ -492,7 +478,7 @@ class GPTJModel(GPTJPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -511,20 +497,15 @@ class GPTJModel(GPTJPreTrainedModel):
             past_key_values = DynamicCache(config=self.config)
 
         seq_length = inputs_embeds.shape[1]
-        if cache_position is None:
-            past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_key_values_length, past_key_values_length + seq_length, device=inputs_embeds.device
-            )
-
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
+            position_ids = torch.arange(seq_length, device=inputs_embeds.device) + past_key_values_length
+            position_ids = position_ids.unsqueeze(0)
 
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
-            cache_position=cache_position,
             past_key_values=past_key_values,
             position_ids=position_ids,
         )
@@ -552,7 +533,6 @@ class GPTJModel(GPTJPreTrainedModel):
                 position_ids=position_ids,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
-                cache_position=cache_position,
             )
 
             hidden_states = outputs[0]
@@ -609,7 +589,6 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-        cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> tuple | CausalLMOutputWithPast:
@@ -623,7 +602,7 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -636,7 +615,6 @@ class GPTJForCausalLM(GPTJPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            cache_position=cache_position,
         )
 
         hidden_states = transformer_outputs[0]
@@ -706,12 +684,8 @@ class GPTJForSequenceClassification(GPTJPreTrainedModel):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
             input_ids,
@@ -819,7 +793,7 @@ class GPTJForQuestionAnswering(GPTJPreTrainedModel):
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.transformer(
             input_ids,

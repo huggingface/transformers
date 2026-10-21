@@ -40,7 +40,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ConditionalDetrImageProcessor
+    from transformers import ConditionalDetrImageProcessorPil
 
 
 class ConditionalDetrModelTester:
@@ -233,11 +233,6 @@ class ConditionalDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
     def test_conditional_detr_object_detection_head_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_conditional_detr_object_detection_head_model(*config_and_inputs)
-
-    # TODO: check if this works again for PyTorch 2.x.y
-    @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
     @unittest.skip(reason="Conditional DETR does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -503,7 +498,7 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            ConditionalDetrImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
+            ConditionalDetrImageProcessorPil.from_pretrained("microsoft/conditional-detr-resnet-50")
             if is_vision_available()
             else None
         )

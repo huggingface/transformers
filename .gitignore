@@ -86,9 +86,6 @@ target/
 profile_default/
 ipython_config.py
 
-# pyenv
-.python-version
-
 # celery beat schedule file
 celerybeat-schedule
 
@@ -163,6 +160,7 @@ tags
 
 # .lock
 *.lock
+!prototype-fleet.lock
 
 # DS_Store (MacOS)
 .DS_Store
@@ -170,9 +168,19 @@ tags
 # ruff
 .ruff_cache
 
+# checkers cache
+utils/.checkers_cache.json
+utils/.checkers_requirements.json
+utils/.noisy_comments_cache.json
+mlinter-findings.json
+
 # modular conversion
 *.modular_backup
 
 # Cursor IDE files
 .cursor/
 test-results/
+
+# AI agent local setup artifacts
+/.agents/skills
+/.claude/skills

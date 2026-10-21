@@ -305,7 +305,7 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     def setUp(self):
         self.model_tester = MegatronBertModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MegatronBertConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=MegatronBertConfig, hidden_size=32)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -341,6 +341,21 @@ class MegatronBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
     def test_for_token_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_megatron_bert_for_token_classification(*config_and_inputs)
+
+    def test_decoder_causal_mask(self):
+        # Regression test for #48745
+        config, input_ids = self.model_tester.prepare_config_and_inputs()[:2]
+        config.is_decoder = True
+        model = MegatronBertModel(config).to(torch_device).eval()
+
+        input_ids_modified = input_ids.clone()
+        input_ids_modified[:, -1] = (input_ids_modified[:, -1] + 1) % config.vocab_size
+        res_orig = model(input_ids).last_hidden_state
+        res_mod = model(input_ids_modified).last_hidden_state
+        self.assertTrue(
+            torch.allclose(res_orig[:, :-1], res_mod[:, :-1], atol=1e-4),
+            "Decoder model attended to future tokens!",
+        )
 
 
 def _long_tensor(tok_lst):

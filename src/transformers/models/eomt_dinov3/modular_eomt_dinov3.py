@@ -14,20 +14,17 @@
 """PyTorch EoMT model backed by DINOv3."""
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
+from huggingface_hub.dataclasses import strict
 from torch import Tensor, nn
 
 from ... import initialization as init
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-)
+from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..dinov3_vit.modeling_dinov3_vit import (
@@ -46,180 +43,87 @@ from ..eomt.modeling_eomt import (
 )
 
 
+@auto_docstring(checkpoint="tue-mps/coco_panoptic_eomt_large_640_dinov3")
+@strict
 class EomtDinov3Config(EomtConfig):
     r"""
-    This is the configuration class to store the configuration of a [`EomtDinov3ForUniversalSegmentation`]. It is used to instantiate an EoMT-DINOv3 model
-    according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the EoMT-DINOv3
-    [tue-mps/coco_panoptic_eomt_large_640_dinov3](https://huggingface.co/tue-mps/coco_panoptic_eomt_large_640_dinov3)
-    architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the hidden representations.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads in each attention layer.
-        intermediate_size (`int`, *optional*, defaults to 4096):
-            The intermediate size of the MLP. If not provided, defaults to `hidden_size * 4`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings and encoder.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 640):
-            The size (resolution) of each input image.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        layerscale_value (`float`, *optional*, defaults to 1.0):
-            Initial value for the LayerScale parameter.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            The stochastic depth rate (drop path) used during training.
-        num_upscale_blocks (`int`, *optional*, defaults to 2):
-            Number of upsampling blocks used in the decoder or segmentation head.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability applied after attention projection.
-        num_blocks (`int`, *optional*, defaults to 4):
-            Number of feature blocks or stages in the architecture.
-        no_object_weight (`float`, *optional*, defaults to 0.1):
-            Loss weight for the "no object" class in panoptic/instance segmentation.
-        class_weight (`float`, *optional*, defaults to 2.0):
-            Loss weight for classification targets.
-        mask_weight (`float`, *optional*, defaults to 5.0):
-            Loss weight for mask prediction.
-        dice_weight (`float`, *optional*, defaults to 5.0):
-            Loss weight for the dice loss component.
-        train_num_points (`int`, *optional*, defaults to 12544):
-            Number of points to sample for mask loss computation during training.
-        oversample_ratio (`float`, *optional*, defaults to 3.0):
-            Oversampling ratio used in point sampling for mask training.
-        importance_sample_ratio (`float`, *optional*, defaults to 0.75):
-            Ratio of points to sample based on importance during training.
-        num_queries (`int`, *optional*, defaults to 200):
-            Number of object queries in the Transformer.
-        num_register_tokens (`int`, *optional*, defaults to 4):
-            Number of learnable register tokens added to the transformer input.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling.
-        query_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in query projection.
-        key_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use bias in key projection.
-        value_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in value projection.
-        proj_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in output projection.
-        mlp_bias (`bool`, *optional*, defaults to `True`):
-            Whether to use bias in MLP layers.
-        use_gated_mlp (`bool`, *optional*, defaults to `False`):
-            Whether to use gated MLP layers.
-        pos_embed_shift (`float`, *optional*):
-            Shift value for position embeddings.
-        pos_embed_jitter (`float`, *optional*):
-            Jitter value for position embeddings.
-        pos_embed_rescale (`float`, *optional*, defaults to 2.0):
-            Rescale value for position embeddings.
+    layerscale_value (`float`, *optional*, defaults to 1.0):
+        Initial value for the LayerScale parameter.
+    num_upscale_blocks (`int`, *optional*, defaults to 2):
+        Number of upsampling blocks used in the decoder or segmentation head.
+    num_blocks (`int`, *optional*, defaults to 4):
+        Number of feature blocks or stages in the architecture.
+    no_object_weight (`float`, *optional*, defaults to 0.1):
+        Loss weight for the "no object" class in panoptic/instance segmentation.
+    train_num_points (`int`, *optional*, defaults to 12544):
+        Number of points to sample for mask loss computation during training.
+    oversample_ratio (`float`, *optional*, defaults to 3.0):
+        Oversampling ratio used in point sampling for mask training.
+    importance_sample_ratio (`float`, *optional*, defaults to 0.75):
+        Ratio of points to sample based on importance during training.
+    num_queries (`int`, *optional*, defaults to 200):
+        Number of object queries in the Transformer.
+    num_register_tokens (`int`, *optional*, defaults to 4):
+        Number of learnable register tokens added to the transformer input.
+    query_bias (`bool`, *optional*, defaults to `True`):
+        Whether to use bias in query projection.
+    key_bias (`bool`, *optional*, defaults to `False`):
+        Whether to use bias in key projection.
+    value_bias (`bool`, *optional*, defaults to `True`):
+        Whether to use bias in value projection.
+    proj_bias (`bool`, *optional*, defaults to `True`):
+        Whether to use bias in output projection.
+    use_gated_mlp (`bool`, *optional*, defaults to `False`):
+        Whether to use gated MLP layers.
+    pos_embed_shift (`float`, *optional*):
+        Shift value for position embeddings.
+    pos_embed_jitter (`float`, *optional*):
+        Jitter value for position embeddings.
+    pos_embed_rescale (`float`, *optional*, defaults to 2.0):
+        Rescale value for position embeddings.
     """
 
     model_type = "eomt_dinov3"
     default_theta = 100.0
 
-    def __init__(
-        self,
-        hidden_size=1024,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        intermediate_size=4096,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        image_size=640,
-        patch_size=16,
-        num_channels=3,
-        layerscale_value=1.0,
-        drop_path_rate=0.0,
-        num_upscale_blocks=2,
-        attention_dropout=0.0,
-        num_blocks=4,
-        no_object_weight: float = 0.1,
-        class_weight: float = 2.0,
-        mask_weight: float = 5.0,
-        dice_weight: float = 5.0,
-        train_num_points: int = 12544,
-        oversample_ratio: float = 3.0,
-        importance_sample_ratio: float = 0.75,
-        num_queries=200,
-        num_register_tokens=4,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        query_bias: bool = True,
-        key_bias: bool = False,
-        value_bias: bool = True,
-        proj_bias: bool = True,
-        mlp_bias: bool = True,
-        use_gated_mlp: bool = False,
-        pos_embed_shift: float | None = None,
-        pos_embed_jitter: float | None = None,
-        pos_embed_rescale: float | None = 2.0,
-        **kwargs,
-    ):
-        self.intermediate_size = intermediate_size
-        self.attention_dropout = attention_dropout
-        self.layerscale_value = layerscale_value
-        self.drop_path_rate = drop_path_rate
-        self.num_upscale_blocks = num_upscale_blocks
-        self.num_blocks = num_blocks
-        self.no_object_weight = no_object_weight
-        self.class_weight = class_weight
-        self.mask_weight = mask_weight
-        self.dice_weight = dice_weight
-        self.train_num_points = train_num_points
-        self.oversample_ratio = oversample_ratio
-        self.importance_sample_ratio = importance_sample_ratio
-        self.num_queries = num_queries
-        self.num_register_tokens = num_register_tokens
-        self.rope_parameters = rope_parameters
-        self.query_bias = query_bias
-        self.key_bias = key_bias
-        self.value_bias = value_bias
-        self.proj_bias = proj_bias
-        self.mlp_bias = mlp_bias
-        self.use_gated_mlp = use_gated_mlp
-        self.pos_embed_shift = pos_embed_shift
-        self.pos_embed_jitter = pos_embed_jitter
-        self.pos_embed_rescale = pos_embed_rescale
+    hidden_size: int = 1024
+    num_hidden_layers: int = 24
+    num_attention_heads: int = 16
+    intermediate_size: int = 4096
+    hidden_act: str = "gelu"
+    hidden_dropout_prob: float | int = 0.0
+    initializer_range: float = 0.02
+    layer_norm_eps: float = 1e-6
+    image_size: int | list[int] | tuple[int, int] = 640
+    patch_size: int | list[int] | tuple[int, int] = 16
+    num_channels: int = 3
+    layerscale_value: float = 1.0
+    drop_path_rate: float | int = 0.0
+    num_upscale_blocks: int = 2
+    attention_dropout: float | int = 0.0
+    num_blocks: int = 4
+    no_object_weight: float = 0.1
+    class_weight: float = 2.0
+    mask_weight: float = 5.0
+    dice_weight: float = 5.0
+    train_num_points: int = 12544
+    oversample_ratio: float = 3.0
+    importance_sample_ratio: float = 0.75
+    num_queries: int = 200
+    num_register_tokens: int = 4
+    rope_parameters: RopeParameters | dict | None = None
+    query_bias: bool = True
+    key_bias: bool = False
+    value_bias: bool = True
+    proj_bias: bool = True
+    mlp_bias: bool = True
+    use_gated_mlp: bool = False
+    pos_embed_shift: float | None = None
+    pos_embed_jitter: float | None = None
+    pos_embed_rescale: float | None = 2.0
 
-        super().__init__(
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            hidden_dropout_prob=hidden_dropout_prob,
-            hidden_act=hidden_act,
-            initializer_range=initializer_range,
-            layer_norm_eps=layer_norm_eps,
-            image_size=image_size,
-            patch_size=patch_size,
-            num_channels=num_channels,
-            **kwargs,
-        )
-
-        del self.qkv_bias
-        del self.pooler_act
-        del self.pooler_output_size
-        del self.encoder_stride
-        del self.attention_probs_dropout_prob
-        del self.mlp_ratio
-        del self.use_swiglu_ffn
+    mlp_ratio = AttributeError()
+    use_swiglu_ffn = AttributeError()
 
 
 class EomtDinov3Attention(DINOv3ViTAttention):
@@ -240,10 +144,11 @@ class EomtDinov3LayerScale(DINOv3ViTLayerScale):
     pass
 
 
+# FIXME: this is simple axial rope, too much hassle to refactor - maybe some contrib stumbles upon it :)
 class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
     inv_freq: Tensor
 
-    def __init__(self, config: EomtDinov3Config, device=None):
+    def __init__(self, config: EomtDinov3Config):
         nn.Module.__init__(self)
         self.config = config
 
@@ -251,26 +156,18 @@ class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             raise ValueError("`EomtDinov3` only supports `default` RoPE! Please check your `rope_type`")
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: EomtDinov3Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> torch.Tensor:
+    def compute_default_rope_parameters(config: EomtDinov3Config, **kwargs) -> torch.Tensor:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -279,9 +176,8 @@ class EomtDinov3RotaryEmbedding(DINOv3ViTRopePositionEmbedding):
         head_dim = config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1 / base ** torch.arange(0, 1, 4 / head_dim, dtype=torch.float32, device=device)
+        inv_freq = 1 / base ** torch.arange(0, 1, 4 / head_dim, dtype=torch.float32)
         return inv_freq, attention_factor
 
 
@@ -303,7 +199,7 @@ class EomtDinov3PreTrainedModel(EomtPreTrainedModel):
     }
 
     def _init_weights(self, module: nn.Module) -> None:
-        PreTrainedModel._init_weights(module)
+        PreTrainedModel._init_weights(self, module)
         std = self.config.initializer_range
         if isinstance(module, EomtDinov3LayerScale):
             if hasattr(module, "lambda1"):

@@ -17,33 +17,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any
 
-from ...configuration_utils import PretrainedConfig
-from ..auto import CONFIG_MAPPING, AutoConfig
+from huggingface_hub.dataclasses import strict
+
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
-class LightOnOcrConfig(PretrainedConfig):
+@auto_docstring(checkpoint="lightonai/LightOnOCR-1B-1025")
+@strict
+class LightOnOcrConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`LightOnOcrForConditionalGeneration`]. It is used to instantiate a
-    LightOnOcr model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information. Instantiating a configuration with the defaults will yield
-    a similar configuration to that of the LightOnOcr [lightonocr-hf/lightonocr-9b](https://huggingface.co/lightonocr-hf/lightonocr-9b) architecture.
-
-    Args:
-        spatial_merge_size (`int`, *optional*, defaults to 2):
-            The size of spatial merging for image patches.
-        image_token_id (`int`, *optional*, defaults to 151655):
-            The id of the image token in the vocabulary.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
-        vision_config (`dict` or `LightOnOcrVisionConfig`, *optional*):
-            Custom vision configuration or dictionary with vision configuration values.
-        text_config (`dict` or `LightOnOcrTextConfig`, *optional*):
-            Custom text configuration or dictionary with text configuration values.
-
     Example:
 
     ```python
@@ -61,68 +46,54 @@ class LightOnOcrConfig(PretrainedConfig):
     """
 
     model_type = "lighton_ocr"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="pixtral",
+            init_kwargs={
+                "attention_dropout": 0.0,
+                "head_dim": 64,
+                "hidden_act": "silu",
+                "hidden_size": 1024,
+                "image_size": 1540,
+                "initializer_range": 0.02,
+                "intermediate_size": 4096,
+                "model_type": "pixtral",
+                "num_attention_heads": 16,
+                "num_channels": 3,
+                "num_hidden_layers": 24,
+                "patch_size": 14,
+                "rope_parameters": {"rope_type": "default", "rope_theta": 10000},
+            },
+        ),
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="qwen3",
+            init_kwargs={
+                "attention_dropout": 0.0,
+                "head_dim": 128,
+                "hidden_act": "silu",
+                "hidden_size": 1024,
+                "initializer_range": 0.02,
+                "intermediate_size": 3072,
+                "max_position_embeddings": 40960,
+                "num_attention_heads": 16,
+                "num_hidden_layers": 28,
+                "num_key_value_heads": 8,
+                "rms_norm_eps": 1e-6,
+                "rope_theta": 1000000,
+                "sliding_window": None,
+                "use_cache": True,
+                "vocab_size": 151936,
+            },
+        ),
+    }
 
-    def __init__(
-        self,
-        spatial_merge_size: int = 2,
-        image_token_id: int = 151655,
-        tie_word_embeddings: bool = True,
-        vision_config: dict[str, Any] | None = None,
-        text_config: dict[str, Any] | None = None,
-        **kwargs,
-    ):
-        self.spatial_merge_size = spatial_merge_size
-        self.image_token_id = image_token_id
-        self.tie_word_embeddings = tie_word_embeddings
-
-        if vision_config is None:
-            self.vision_config = CONFIG_MAPPING["pixtral"](
-                attention_dropout=0,
-                head_dim=64,
-                hidden_act="silu",
-                hidden_size=1024,
-                image_size=1540,
-                initializer_range=0.02,
-                intermediate_size=4096,
-                model_type="pixtral",
-                num_attention_heads=16,
-                num_channels=3,
-                num_hidden_layers=24,
-                patch_size=14,
-                rope_theta=10000,
-            )
-        elif isinstance(vision_config, PretrainedConfig):
-            self.vision_config = vision_config
-        else:
-            vision_config["model_type"] = vision_config.get("model_type", "pixtral")
-            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
-
-        if text_config is None:
-            self.text_config = CONFIG_MAPPING["qwen3"](
-                attention_dropout=0,
-                head_dim=128,
-                hidden_act="silu",
-                hidden_size=1024,
-                initializer_range=0.02,
-                intermediate_size=3072,
-                max_position_embeddings=40960,
-                num_attention_heads=16,
-                num_hidden_layers=28,
-                num_key_value_heads=8,
-                rms_norm_eps=1e-6,
-                rope_theta=1000000,
-                sliding_window=None,
-                use_cache=True,
-                vocab_size=151936,
-            )
-        elif isinstance(text_config, PretrainedConfig):
-            self.text_config = text_config
-        else:
-            text_config["model_type"] = text_config.get("model_type", "qwen3")
-            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
-
-        super().__init__(**kwargs)
+    spatial_merge_size: int = 2
+    image_token_id: int = 151655
+    tie_word_embeddings: bool = True
+    vision_config: dict | PreTrainedConfig | None = None
+    text_config: dict | PreTrainedConfig | None = None
 
 
 __all__ = ["LightOnOcrConfig"]

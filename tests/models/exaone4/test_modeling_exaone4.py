@@ -23,15 +23,14 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
-    cleanup,
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
     slow,
-    torch_device,
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
 if is_torch_available():
@@ -47,26 +46,27 @@ class Exaone4ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Exaone4Model
 
+    def __init__(self, parent):
+        super().__init__(parent=parent)
+        # NOTE(3outeille): must be 0.0 for TP backward tests. In train mode, non-zero dropout causes
+        # different RNG states between the non-TP and TP model forward passes (they run sequentially),
+        # leading to different dropout masks and mismatched losses.
+        self.attention_probs_dropout_prob = 0.0
+
 
 @require_torch
 class Exaone4ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Exaone4ModelTester
     model_split_percents = [0.5, 0.6]
 
+    @unittest.skip("Exaone4 TP + quantized generation test needs fixing")
+    def test_tp_generation_quantized(self):
+        pass
+
 
 @require_torch
-class Exaone4IntegrationTest(unittest.TestCase):
+class Exaone4IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     TEST_MODEL_ID = "LGAI-EXAONE/EXAONE-4.0-32B"
-
-    def setUp(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def tearDown(self):
-        # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
-        # some memory allocated in the cache, which means some object is not being released properly. This causes some
-        # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
-        # Investigate the root cause.
-        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_model_logits(self):

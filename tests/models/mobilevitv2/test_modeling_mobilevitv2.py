@@ -20,7 +20,6 @@ from transformers import MobileViTV2Config
 from transformers.testing_utils import (
     Expectations,
     require_torch,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
@@ -44,7 +43,7 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import MobileViTImageProcessor
+    from transformers import MobileViTImageProcessorPil
 
 
 class MobileViTV2ConfigTester(ConfigTester):
@@ -225,11 +224,6 @@ class MobileViTV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     def test_attention_outputs(self):
         pass
 
-    @require_torch_multi_gpu
-    @unittest.skip(reason="Got `CUDA error: misaligned address` for tests after this one being run.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -299,7 +293,7 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            MobileViTImageProcessor.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
+            MobileViTImageProcessorPil.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
             if is_vision_available()
             else None
         )
@@ -337,7 +331,7 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
         model = MobileViTV2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
         model = model.to(torch_device)
 
-        image_processor = MobileViTImageProcessor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        image_processor = MobileViTImageProcessorPil.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
@@ -374,7 +368,7 @@ class MobileViTV2ModelIntegrationTest(unittest.TestCase):
         model = MobileViTV2ForSemanticSegmentation.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
         model = model.to(torch_device)
 
-        image_processor = MobileViTImageProcessor.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
+        image_processor = MobileViTImageProcessorPil.from_pretrained("shehan97/mobilevitv2-1.0-voc-deeplabv3")
 
         image = prepare_img()
         inputs = image_processor(images=image, return_tensors="pt").to(torch_device)

@@ -12,99 +12,183 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import json
 import os
-from dataclasses import dataclass
-from typing import Any
+import warnings
+from dataclasses import asdict, dataclass
+from typing import Literal
+
+from ..utils import is_torch_greater_or_equal
+from .utils import _get_torch_distributed_rank
 
 
 @dataclass
 class DistributedConfig:
     """
-    Base class for distributed configs
+    Configuration for native distributed inference and training with tensor, pipeline, or FSDP2 parallelism.
+
+    Args:
+        tp_size (`int`, *optional*):
+            Number of devices for tensor parallelism. If `None` and `tp_plan` is set, defaults to
+            `WORLD_SIZE // (other_parallel_size)`. If `None` and no `tp_plan` is set, defaults to 1.
+        tp_plan (`dict[str, str]` or `"auto"`, *optional*):
+            Tensor parallel sharding plan. Pass `"auto"`, or leave as `None` when `tp_size` is set, to use the
+            model's predefined `base_model_tp_plan`. Pass a dictionary to override individual rules of that plan;
+            unspecified rules are kept. An empty dictionary applies no tensor parallel rule.
+        enable_sequence_parallel (`bool`, *optional*, defaults to `False`):
+            Reserved for sequence parallelism. Not wired up yet.
+        enable_expert_parallel (`bool`, *optional*, defaults to `False`):
+            Deprecated, removed in v5.21. Without `ep_size`, same as `ep_size=tp_size, tp_plan={}`: the
+            expert-parallel plan alone across `tp_size` ranks. An explicit `ep_size` takes precedence. This flag
+            does not change `tp_size` or `fsdp_size`.
+        fsdp_size (`int`, *optional*):
+            Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
+        fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
+            Whether to enable CPU offloading for FSDP2.
+        fsdp_mixed_precision (`bool`, *optional*, defaults to `False`):
+            Whether to enable mixed precision for FSDP2.
+        pp_size (`int`, *optional*):
+            Number of devices for pipeline parallelism. If `None` and another parallel mode is set, defaults to 1.
+        ep_size (`int`, *optional*):
+            Number of devices owning distinct expert shards. Defaults to 1. Set it explicitly to enable EP. Must be
+            a multiple of `tp_size` and divide `fsdp_size * tp_size`. All-reduce expert plans require
+            `ep_size=tp_size`; token dispatch (`"ep_dispatch_experts"`) also allows `ep_size > tp_size`.
+        ep_plan (`dict[str, str]`, *optional*):
+            Expert parallel sharding plan. Leave as `None` to use the model's predefined `base_model_ep_plan`. Pass a
+            dictionary to override individual rules of that plan; unspecified rules are kept. Applied only when
+            `ep_size > 1`, and its rules take precedence over `tp_plan` rules for the same modules. An
+            `"ep_dispatch_experts"` rule selects all-to-all token dispatch instead of router masking and all-reduce.
     """
 
+    tp_size: int | None = None
+    tp_plan: dict[str, str] | Literal["auto"] | None = None
+    enable_sequence_parallel: bool = False
     enable_expert_parallel: bool = False
-    # TODO: add tp_plan, pp_plan, device_mesh etc..
+    fsdp_size: int | None = None
+    fsdp_cpu_offload: bool = False
+    fsdp_mixed_precision: bool = False
+    pp_size: int | None = None
+    ep_size: int | None = None
+    ep_plan: dict[str, str] | None = None
+
+    @property
+    def efsdp_size(self) -> int:
+        """
+        The number of ranks that own the same experts and FSDP-shard them between each other.
+        Dense and expert parameters are laid out over the same world size:
+
+            pp x fsdp x tp == pp x efsdp x ep   =>   efsdp = fsdp x tp // ep
+
+        Experts are not tensor-parallel, so EP and expert-FSDP together cover all the ranks that
+        dense parameters split between FSDP and TP. Example with 16 ranks, ep=8:
+
+            ep groups    : {0..7} {8..15}          the 8 ranks of a group together hold all experts
+                                                   (num_experts / 8 each), tokens are routed within it
+            efsdp groups : {0,8} {1,9} ... {7,15}  each pair holds the same experts, FSDP-sharded
+                                                   on dim 0 (the expert dim) and all-gathered for compute
+
+        - ep == tp       : efsdp == fsdp
+        - ep == fsdp * tp: efsdp == 1, every expert lives whole on a single rank
+
+        Sharding over `efsdp` is applied by the EP token-dispatch path (`ep_dispatch_experts`).
+        """
+        return self.fsdp_size * self.tp_size // self.ep_size
+
+    def __post_init__(self):
+        self._resolve_parallelism()
+        self._validate_mesh_config()
+
+    def _resolve_parallelism(self):
+        """Resolve parallel sizes and legacy EP settings."""
+        for value in (self.tp_size, self.fsdp_size, self.pp_size, self.ep_size):
+            if value is not None and value < 1:
+                raise ValueError(f"Parallelism sizes must be >= 1, got {value}.")
+
+        if self.fsdp_size is None:
+            self.fsdp_size = 1
+        if self.pp_size is None:
+            self.pp_size = 1
+        if self.tp_size is None and self.tp_plan is not None:
+            world_size = int(os.environ.get("WORLD_SIZE", 1))
+            other_parallel_size = self.fsdp_size * self.pp_size
+            if world_size % other_parallel_size != 0:
+                raise ValueError(
+                    f"WORLD_SIZE ({world_size}) must be divisible by fsdp_size * pp_size "
+                    f"({other_parallel_size}) to derive tp_size."
+                )
+            self.tp_size = world_size // other_parallel_size
+        elif self.tp_size is None:
+            self.tp_size = 1
+
+        if self.enable_expert_parallel and self.ep_size is None:
+            # TODO: remove once deprecation cycle is over
+            self.ep_size = self.tp_size
+            if self.tp_plan is None:
+                self.tp_plan = {}
+            if _get_torch_distributed_rank() == 0:
+                warnings.warn(
+                    f"`enable_expert_parallel` without `ep_size` is deprecated and will be removed in v5.21. Use "
+                    f"ep_size={self.ep_size}, tp_plan={{}} instead, or drop tp_plan to also shard the dense modules.",
+                    FutureWarning,
+                    stacklevel=4,
+                )
+
+        if self.ep_size is None:
+            self.ep_size = 1
+        # Retain the legacy attribute for callers; internal EP decisions use ep_size.
+        self.enable_expert_parallel = self.ep_size > 1
+
+    def _validate_mesh_config(self):
+        """Validate mesh sizes before the model's expert plan is available."""
+        if self.ep_plan is not None and not isinstance(self.ep_plan, dict):
+            raise ValueError("`ep_plan` must be a dictionary or None.")
+
+        if self.ep_size > 1:
+            if self.ep_size % self.tp_size:
+                raise ValueError("`ep_size` must be a multiple of `tp_size`.")
+            if (self.fsdp_size * self.tp_size) % self.ep_size:
+                raise ValueError("`ep_size` must divide `fsdp_size * tp_size`.")
+
+        if self.fsdp_size > 1 and self.pp_size > 1:
+            raise ValueError(
+                "Combining FSDP with pipeline parallelism is not supported yet. "
+                "Use DistributedConfig(tp_size=N, fsdp_size=M), or combine TP and PP."
+            )
+
+    def _validate_resolved_ep_plan(self, ep_plan: dict[str, str]):
+        """Validate the layout against the resolved EP plan, once the model's defaults and overrides are merged."""
+        if self.ep_size <= 1 or not ep_plan:
+            return
+
+        if "ep_dispatch_experts" in ep_plan.values():
+            if self.pp_size > 1:
+                raise ValueError("Combining token dispatch with pipeline parallelism is not supported/tested yet.")
+            if not is_torch_greater_or_equal("2.7"):
+                raise OSError("Expert-parallel token dispatch requires `torch>=2.7`.")
+        elif {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()) and self.ep_size != self.tp_size:
+            raise ValueError(
+                "All-reduce expert parallelism requires `ep_size=tp_size`, so every rank of an expert group sees the same tokens"
+            )
+        elif "megamoe_experts" in ep_plan.values() and self.ep_size != self.tp_size:
+            raise ValueError(
+                "DeepGEMM Mega MoE expert parallelism requires `ep_size=tp_size`, so every rank of an expert group sees the same tokens"
+            )
 
     @classmethod
-    def from_dict(cls, config_dict, **kwargs):
-        """
-        Constructs a DistributedConfig instance from a dictionary of parameters.
-        Args:
-            config_dict (Dict[str, Any]): Dictionary containing configuration parameters.
-            **kwargs: Additional keyword arguments to override dictionary values.
-        Returns:
-            DistributedConfig: Instance of DistributedConfig constructed from the dictionary.
-        """
-        config = cls(**config_dict)
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(config, key):
-                setattr(config, key, value)
-                to_remove.append(key)
-        for key in to_remove:
-            kwargs.pop(key, None)
-        return config
+    def from_dict(cls, config_dict: dict, **kwargs) -> "DistributedConfig":
+        merged = {**config_dict, **kwargs}
+        valid_keys = {f.name for f in cls.__dataclass_fields__.values()}
+        return cls(**{k: v for k, v in merged.items() if k in valid_keys})
 
-    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.to_json_file
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    def to_json_string(self) -> str:
+        return json.dumps(self.to_dict(), indent=2) + "\n"
+
     def to_json_file(self, json_file_path: str | os.PathLike):
-        """
-        Save this instance to a JSON file.
-        Args:
-            json_file_path (`str` or `os.PathLike`):
-                Path to the JSON file in which this configuration instance's parameters will be saved.
-            use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default
-                `QuantizationConfig()` is serialized to JSON file.
-        """
-        with open(json_file_path, "w", encoding="utf-8") as writer:
-            config_dict = self.to_dict()
-            json_string = json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
+        with open(json_file_path, "w", encoding="utf-8") as f:
+            f.write(self.to_json_string())
 
-            writer.write(json_string)
-
-    def to_dict(self) -> dict[str, Any]:
-        """
-        Serializes this instance to a Python dictionary. Returns:
-            `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
-        """
-        return copy.deepcopy(self.__dict__)
-
-    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.__iter__
-    def __iter__(self):
-        """allows `dict(obj)` for situations where obj may be a dict or QuantizationConfigMixin"""
-        yield from copy.deepcopy(self.__dict__).items()
-
-    # Copied from transformers.utils.quantization_config.QuantizationConfigMixin.__repr__
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
-
-    def to_json_string(self):
-        """
-        Serializes this instance to a JSON formatted string.
-        Returns:
-            str: JSON formatted string representing the configuration instance.
-        """
-        return json.dumps(self.__dict__, indent=2) + "\n"
-
-    def update(self, **kwargs):
-        """
-        Updates attributes of this class instance with attributes from `kwargs` if they match existing attributes,
-        returning all the unused kwargs.
-        Args:
-            kwargs (`Dict[str, Any]`):
-                Dictionary of attributes to tentatively update this class.
-        Returns:
-            `Dict[str, Any]`: Dictionary containing all the key-value pairs that were not used to update the instance.
-        """
-        to_remove = []
-        for key, value in kwargs.items():
-            if hasattr(self, key):
-                setattr(self, key, value)
-                to_remove.append(key)
-
-        # Remove all the attributes that were updated, without modifying the input dict
-        unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
-        return unused_kwargs

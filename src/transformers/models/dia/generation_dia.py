@@ -120,7 +120,9 @@ class DiaGenerationMixin(GenerationMixin):
             generation_config.temperature = 1.0
         # We allow generation up to max length + max delay pattern
         # (will revert back to max length after generation)
-        generation_config.max_length += max(self.config.delay_pattern)
+        # `max_length` can be unset in favor of `max_new_tokens`, which then defines it
+        if generation_config.max_length is not None:
+            generation_config.max_length += max(self.config.delay_pattern)
 
         # Internal flag to indicate CFG that needs to prepare unconditioned input
         self._uses_cfg = generation_config.guidance_scale is not None and generation_config.guidance_scale != 1
@@ -205,6 +207,7 @@ class DiaGenerationMixin(GenerationMixin):
         input_ids,
         encoder_outputs=None,  # Using this to easily get the batch size
         decoder_delay_mask=None,
+        is_first_iteration: bool | None = False,
         **kwargs,
     ):
         # Reshape decoder input_ids to 3D to be compile friendly and to fit the expected model input shape
@@ -221,7 +224,7 @@ class DiaGenerationMixin(GenerationMixin):
         )
 
         # Depending on cache usage we need to pass all or just one
-        if model_inputs.get("use_cache", False) and model_inputs["cache_position"][0] > 0:
+        if model_inputs.get("use_cache", False) and not is_first_iteration:
             model_inputs["decoder_input_ids"] = model_inputs["decoder_input_ids"][:, -1, :][:, None, :]
 
         # Be compile friendly
@@ -307,7 +310,7 @@ class DiaGenerationMixin(GenerationMixin):
         # 4. Define other model kwargs
         if "encoder_outputs" not in model_kwargs:
             # if model is encoder decoder encoder_outputs are created and added to `model_kwargs`
-            model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(
+            model_kwargs = self._maybe_prepare_encoder_kwargs_for_generation(
                 inputs_tensor, model_kwargs, model_input_name, generation_config
             )
 

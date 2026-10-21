@@ -37,12 +37,12 @@ logger = logging.get_logger(__name__)
 ##########
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`DPRQuestionEncoder`].
     """
 )
+@dataclass
 class DPRContextEncoderOutput(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
@@ -56,12 +56,12 @@ class DPRContextEncoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`DPRQuestionEncoder`].
     """
 )
+@dataclass
 class DPRQuestionEncoderOutput(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, embeddings_size)`):
@@ -75,12 +75,12 @@ class DPRQuestionEncoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`DPRQuestionEncoder`].
     """
 )
+@dataclass
 class DPRReaderOutput(ModelOutput):
     r"""
     start_logits (`torch.FloatTensor` of shape `(n_passages, sequence_length)`):
@@ -326,7 +326,7 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -432,7 +432,7 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -538,7 +538,7 @@ class DPRReader(DPRPretrainedReader):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")

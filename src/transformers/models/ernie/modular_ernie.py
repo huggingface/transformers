@@ -19,7 +19,6 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -205,9 +204,8 @@ class ErnieModel(BertModel):
         encoder_attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         task_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Task type embedding is a special embedding to represent the characteristic of different tasks, such as
@@ -215,17 +213,13 @@ class ErnieModel(BertModel):
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
         """
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
         if self.config.is_decoder:
             use_cache = use_cache if use_cache is not None else self.config.use_cache
         else:
             use_cache = False
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         if use_cache and past_key_values is None:
             past_key_values = (
@@ -234,23 +228,7 @@ class ErnieModel(BertModel):
                 else DynamicCache(config=self.config)
             )
 
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        batch_size, seq_length = input_shape
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
-        if cache_position is None:
-            cache_position = torch.arange(past_key_values_length, past_key_values_length + seq_length, device=device)
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -266,7 +244,6 @@ class ErnieModel(BertModel):
             encoder_attention_mask=encoder_attention_mask,
             embedding_output=embedding_output,
             encoder_hidden_states=encoder_hidden_states,
-            cache_position=cache_position,
             past_key_values=past_key_values,
         )
 
@@ -277,7 +254,6 @@ class ErnieModel(BertModel):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             position_ids=position_ids,
             **kwargs,
         )
@@ -289,41 +265,6 @@ class ErnieModel(BertModel):
             pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
         )
-
-    # Copied from transformers.models.bert.modeling_bert.BertModel._create_attention_masks
-    def _create_attention_masks(
-        self,
-        attention_mask,
-        encoder_attention_mask,
-        embedding_output,
-        encoder_hidden_states,
-        cache_position,
-        past_key_values,
-    ):
-        if self.config.is_decoder:
-            attention_mask = create_causal_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
-                past_key_values=past_key_values,
-            )
-        else:
-            attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=attention_mask,
-            )
-
-        if encoder_attention_mask is not None:
-            encoder_attention_mask = create_bidirectional_mask(
-                config=self.config,
-                inputs_embeds=embedding_output,
-                attention_mask=encoder_attention_mask,
-                encoder_hidden_states=encoder_hidden_states,
-            )
-
-        return attention_mask, encoder_attention_mask
 
 
 class ErnieForPreTrainingOutput(BertForPreTrainingOutput):
@@ -349,7 +290,7 @@ class ErnieForPreTraining(BertForPreTraining):
         labels: torch.Tensor | None = None,
         next_sentence_label: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> ErnieForPreTrainingOutput:
+    ) -> tuple[torch.Tensor] | ErnieForPreTrainingOutput:
         r"""
         task_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Task type embedding is a special embedding to represent the characteristic of different tasks, such as
@@ -429,10 +370,9 @@ class ErnieForCausalLM(BertLMHeadModel):
         labels: torch.Tensor | None = None,
         past_key_values: list[torch.Tensor] | None = None,
         use_cache: bool | None = None,
-        cache_position: torch.Tensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithCrossAttentions:
+    ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
         r"""
         task_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Task type embedding is a special embedding to represent the characteristic of different tasks, such as
@@ -442,7 +382,7 @@ class ErnieForCausalLM(BertLMHeadModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
+            ignored (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
         if labels is not None:
             use_cache = False
@@ -458,7 +398,6 @@ class ErnieForCausalLM(BertLMHeadModel):
             encoder_attention_mask=encoder_attention_mask,
             past_key_values=past_key_values,
             use_cache=use_cache,
-            cache_position=cache_position,
             return_dict=True,
             **kwargs,
         )
@@ -502,17 +441,13 @@ class ErnieForMaskedLM(BertForMaskedLM):
         encoder_attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MaskedLMOutput:
+    ) -> tuple[torch.Tensor] | MaskedLMOutput:
         r"""
         task_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Task type embedding is a special embedding to represent the characteristic of different tasks, such as
             word-aware pre-training task, structure-aware pre-training task and semantic-aware pre-training task. We
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
         outputs = self.ernie(
             input_ids,
@@ -556,7 +491,7 @@ class ErnieForNextSentencePrediction(BertForNextSentencePrediction):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> NextSentencePredictorOutput:
+    ) -> tuple[torch.Tensor] | NextSentencePredictorOutput:
         r"""
         task_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Task type embedding is a special embedding to represent the characteristic of different tasks, such as
@@ -630,17 +565,13 @@ class ErnieForSequenceClassification(BertForSequenceClassification):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> SequenceClassifierOutput:
+    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
         r"""
         task_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Task type embedding is a special embedding to represent the characteristic of different tasks, such as
             word-aware pre-training task, structure-aware pre-training task and semantic-aware pre-training task. We
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         outputs = self.ernie(
             input_ids,
@@ -702,7 +633,7 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MultipleChoiceModelOutput:
+    ) -> tuple[torch.Tensor] | MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -733,10 +664,6 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -793,15 +720,13 @@ class ErnieForTokenClassification(BertForTokenClassification):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> TokenClassifierOutput:
+    ) -> tuple[torch.Tensor] | TokenClassifierOutput:
         r"""
         task_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Task type embedding is a special embedding to represent the characteristic of different tasks, such as
             word-aware pre-training task, structure-aware pre-training task and semantic-aware pre-training task. We
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         outputs = self.ernie(
             input_ids,
@@ -846,7 +771,7 @@ class ErnieForQuestionAnswering(BertForQuestionAnswering):
         start_positions: torch.Tensor | None = None,
         end_positions: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> QuestionAnsweringModelOutput:
+    ) -> tuple[torch.Tensor] | QuestionAnsweringModelOutput:
         r"""
         task_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Task type embedding is a special embedding to represent the characteristic of different tasks, such as

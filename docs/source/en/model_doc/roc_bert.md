@@ -9,17 +9,12 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-05-27 and added to Hugging Face Transformers on 2022-11-08.*
+*This model was contributed to Hugging Face Transformers on 2022-11-08.*
 
-<div style="float: right;">
-   <div class="flex flex-wrap space-x-1">
-          <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-   </div>
-</div>
 
 # RoCBert
 
@@ -37,15 +32,14 @@ The example below demonstrates how to predict the [MASK] token with [`Pipeline`]
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
    task="fill-mask",
    model="weiweishi/roc-bert-base-zh",
-   dtype=torch.float16,
-   device=0
+   device=0,
 )
 pipeline("這家餐廳的拉麵是我[MASK]過的最好的拉麵之")
 ```
@@ -53,16 +47,17 @@ pipeline("這家餐廳的拉麵是我[MASK]過的最好的拉麵之")
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 import torch
+
 from transformers import AutoModelForMaskedLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
    "weiweishi/roc-bert-base-zh",
 )
 model = AutoModelForMaskedLM.from_pretrained(
    "weiweishi/roc-bert-base-zh",
-   dtype=torch.float16,
    device_map="auto",
 )
 inputs = tokenizer("這家餐廳的拉麵是我[MASK]過的最好的拉麵之", return_tensors="pt").to(model.device)
@@ -76,13 +71,6 @@ predicted_token_id = predictions[0, masked_index].argmax(dim=-1)
 predicted_token = tokenizer.decode(predicted_token_id)
 
 print(f"The predicted token is: {predicted_token}")
-```
-
-</hfoption>
-<hfoption id="transformers CLI">
-
-```bash
-echo -e "這家餐廳的拉麵是我[MASK]過的最好的拉麵之" | transformers run --task fill-mask --model weiweishi/roc-bert-base-zh --device 0
 ```
 
 </hfoption>

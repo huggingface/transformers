@@ -18,11 +18,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import httpx
 import yaml
-from huggingface_hub import is_offline_mode, model_info
+from huggingface_hub import is_offline_mode
 from huggingface_hub.errors import OfflineModeIsEnabled
-from huggingface_hub.utils import HFValidationError
+from huggingface_hub.utils import HFValidationError, httpx
 
 from . import __version__
 from .models.auto.modeling_auto import (
@@ -44,6 +43,7 @@ from .models.auto.modeling_auto import (
 )
 from .training_args import ParallelMode
 from .utils import (
+    hf_api,
     is_datasets_available,
     is_tokenizers_available,
     is_torch_available,
@@ -194,7 +194,7 @@ class TrainingSummary:
             and len(self.finetuned_from) > 0
         ):
             try:
-                info = model_info(self.finetuned_from)
+                info = hf_api().model_info(self.finetuned_from)
                 for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]

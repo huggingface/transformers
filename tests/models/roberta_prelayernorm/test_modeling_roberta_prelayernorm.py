@@ -397,11 +397,16 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.setUp with Roberta->RobertaPreLayerNorm
     def setUp(self):
         self.model_tester = RobertaPreLayerNormModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=RobertaPreLayerNormConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=RobertaPreLayerNormConfig, hidden_size=32)
 
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_config
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_inputs_embeds_matches_input_ids(self):
+        position_ids = torch.arange(self.model_tester.seq_length).to(torch_device)
+        position_ids = position_ids[None, :].repeat(self.model_tester.batch_size, 1)
+        return super().test_inputs_embeds_matches_input_ids(position_ids=position_ids)
 
     # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.test_model
     def test_model(self):

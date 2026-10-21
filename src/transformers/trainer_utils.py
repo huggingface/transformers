@@ -62,7 +62,7 @@ if is_torch_available():
     import torch
     from safetensors.torch import load_file as safe_load_file
 
-if is_peft_available():
+if is_peft_available() and is_torch_available():
     from peft import PeftMixedModel, PeftModel
 
 
@@ -320,7 +320,7 @@ def sort_checkpoints(
     if use_mtime and len(checkpoints_sorted) > 1:
         mtime_diff = checkpoints_sorted[-1][0] - checkpoints_sorted[0][0]
         if mtime_diff < 1.0:
-            logger.warning("mtime may not be reliable on this filesystem, falling back to numerical ordering")
+            logger.warning_once("mtime may not be reliable on this filesystem, falling back to numerical ordering")
             return sort_checkpoints(
                 output_dir, checkpoint_prefix, use_mtime=False, best_model_checkpoint=best_model_checkpoint
             )
@@ -452,7 +452,8 @@ def default_compute_objective(metrics: dict[str, float]) -> float:
 def default_hp_space_optuna(trial) -> dict[str, float]:
     from .integrations import is_optuna_available
 
-    assert is_optuna_available(), "This function needs Optuna installed: `pip install optuna`"
+    if not is_optuna_available():
+        raise ImportError("This function needs Optuna installed: `pip install optuna`")
     return {
         "learning_rate": trial.suggest_float("learning_rate", 1e-6, 1e-4, log=True),
         "num_train_epochs": trial.suggest_int("num_train_epochs", 1, 5),
@@ -464,7 +465,8 @@ def default_hp_space_optuna(trial) -> dict[str, float]:
 def default_hp_space_ray(trial) -> dict[str, Any]:
     from .integrations import is_ray_tune_available
 
-    assert is_ray_tune_available(), "This function needs ray installed: `pip install ray[tune]`"
+    if not is_ray_tune_available():
+        raise ImportError("This function needs ray installed: `pip install ray[tune]`")
     from ray import tune
 
     return {
@@ -572,6 +574,7 @@ class SchedulerType(ExplicitEnum):
        - "cosine_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup`]
        - "cosine_warmup_with_min_lr" = [`get_cosine_with_min_lr_schedule_with_warmup_lr_rate`]
        - "warmup_stable_decay" = [`get_wsd_schedule`]
+       - "greedy" = [`get_greedy_schedule`]
     """
 
     LINEAR = "linear"
@@ -585,6 +588,7 @@ class SchedulerType(ExplicitEnum):
     COSINE_WITH_MIN_LR = "cosine_with_min_lr"
     COSINE_WARMUP_WITH_MIN_LR = "cosine_warmup_with_min_lr"
     WARMUP_STABLE_DECAY = "warmup_stable_decay"
+    GREEDY = "greedy"
 
 
 class TrainerMemoryTracker:
@@ -1064,7 +1068,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
         folder (`str` or `os.PathLike`): A path to a folder containing the sharded checkpoint.
         strict (`bool`, *optional*, defaults to `True`):
             Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
-        prefer_safe (`bool`, *optional*, defaults to `False`):
+        prefer_safe (`bool`, *optional*, defaults to `True`):
             If both safetensors and PyTorch save files are present in checkpoint and `prefer_safe` is True, the
             safetensors files will be loaded. Otherwise, PyTorch files are always loaded when possible.
 
@@ -1105,7 +1109,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
             error_message += f"\nMissing key(s): {str_missing_keys}."
         if len(unexpected_keys) > 0:
             str_unexpected_keys = ",".join([f'"{k}"' for k in unexpected_keys])
-            error_message += f"\nMissing key(s): {str_unexpected_keys}."
+            error_message += f"\nUnexpected key(s): {str_unexpected_keys}."
         raise RuntimeError(error_message)
 
     if load_safe:
@@ -1165,6 +1169,48 @@ def compare_trainer_and_checkpoint_args(training_args, trainer_state):
         logger.warning_once(warning_str)
 
 
+def _align_special_token(name, tokenizer, config, generation_config, updated_tokens, several=False):
+    """
+    Aligns one special token id held by the configs with the tokenizer, recording the change in `updated_tokens`. A
+    token the tokenizer does not define is left untouched. With `several`, the alignment only ever adds an id: the
+    generation config keeps the ids it holds, and so does a config that declares a list of them. Nothing here says
+    whether an id the checkpoint declares has become invalid, so none is removed.
+    """
+    tokenizer_token_id = getattr(tokenizer, name)
+    if tokenizer_token_id is None:
+        return
+    config_token_ids = getattr(config, name, None)
+    keep_config_existing_tokens = isinstance(config_token_ids, list)
+    if not keep_config_existing_tokens:
+        config_token_ids = [config_token_ids]
+    generation_token_ids = getattr(generation_config, name) if generation_config is not None else None
+    if not isinstance(generation_token_ids, list):
+        generation_token_ids = [generation_token_ids]
+
+    if tokenizer_token_id in config_token_ids and (
+        generation_config is None or tokenizer_token_id in generation_token_ids
+    ):
+        return
+
+    updated_tokens[name] = tokenizer_token_id
+    if several and keep_config_existing_tokens:
+        # Collapsing the ids the config declares to a single one would drop stop tokens.
+        setattr(config, name, [tokenizer_token_id, *(t for t in config_token_ids if t != tokenizer_token_id)])
+    else:
+        setattr(config, name, tokenizer_token_id)
+    if generation_config is None:
+        return
+    if several:
+        # Any of the tokens listed here will halt generation, so the ones already defined are preserved.
+        setattr(
+            generation_config,
+            name,
+            [tokenizer_token_id, *(t for t in generation_token_ids if t is not None and t != tokenizer_token_id)],
+        )
+    else:
+        setattr(generation_config, name, tokenizer_token_id)
+
+
 def align_special_tokens(model, processing_class):
     """
     Aligns the special tokens of the tokenizer with the model configs.
@@ -1181,57 +1227,21 @@ def align_special_tokens(model, processing_class):
         tokenizer: PreTrainedTokenizerBase = processing_class.tokenizer
     else:
         tokenizer = processing_class
+    config = model.config.get_text_config()
     model_has_generation_config = hasattr(model, "generation_config") and model.generation_config is not None
     updated_tokens = {}
 
-    # 1 - Align EOS token. EOS is more complex than the others, as `generation_config` may hold more than one EOS
-    # token.
-    tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(model.config, "eos_token_id", None)
-    if model_has_generation_config:
-        # `generation_config.eos_token_id` is None: direct comparison
-        if model.generation_config.eos_token_id is None:
-            tokenizer_has_new_eos |= tokenizer.eos_token_id != model.generation_config.eos_token_id
-        else:
-            # `generation_config.eos_token_id` is an `int`: convert it to list (and continue below)
-            if isinstance(model.generation_config.eos_token_id, int):
-                model.generation_config.eos_token_id = [model.generation_config.eos_token_id]
-            # `generation_config.eos_token_id` is a `list`: check if the tokenizer's EOS token is in the list
-            tokenizer_has_new_eos |= tokenizer.eos_token_id not in model.generation_config.eos_token_id
+    # A token the tokenizer does not define is not a statement that the model should drop the value the config
+    # declares: `_special_tokens_map` is initialized with `None` for every special token, so an absent attribute
+    # and a deliberately cleared one are indistinguishable. Only values the tokenizer defines are propagated.
 
-    if tokenizer_has_new_eos:
-        updated_tokens["eos_token_id"] = tokenizer.eos_token_id
-        model.config.eos_token_id = tokenizer.eos_token_id
-        # The generation config may hold more than one EOS token. We preserve the original EOS tokens: any of the
-        # EOS tokens defined here will halt generation.
-        if model_has_generation_config:
-            all_eos_tokens = [tokenizer.eos_token_id]
-            if model.generation_config.eos_token_id is not None:
-                all_eos_tokens += list(model.generation_config.eos_token_id)
-            model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
+    # 1 - Align the tokens. The generation config may hold more than one EOS token.
+    generation_config = model.generation_config if model_has_generation_config else None
+    _align_special_token("eos_token_id", tokenizer, config, generation_config, updated_tokens, several=True)
+    _align_special_token("bos_token_id", tokenizer, config, generation_config, updated_tokens)
+    _align_special_token("pad_token_id", tokenizer, config, generation_config, updated_tokens)
 
-    # 2 - Align BOS
-    tokenizer_has_new_bos = tokenizer.bos_token_id != getattr(model.config, "bos_token_id", None)
-    if model_has_generation_config:
-        tokenizer_has_new_bos |= tokenizer.bos_token_id != model.generation_config.bos_token_id
-
-    if tokenizer_has_new_bos:
-        updated_tokens["bos_token_id"] = tokenizer.bos_token_id
-        model.config.bos_token_id = tokenizer.bos_token_id
-        if model_has_generation_config:
-            model.generation_config.bos_token_id = tokenizer.bos_token_id
-
-    # 3 - Align PAD
-    tokenizer_has_new_pad = tokenizer.pad_token_id != getattr(model.config, "pad_token_id", None)
-    if model_has_generation_config:
-        tokenizer_has_new_pad |= tokenizer.pad_token_id != model.generation_config.pad_token_id
-
-    if tokenizer_has_new_pad:
-        updated_tokens["pad_token_id"] = tokenizer.pad_token_id
-        model.config.pad_token_id = tokenizer.pad_token_id
-        if model_has_generation_config:
-            model.generation_config.pad_token_id = tokenizer.pad_token_id
-
-    # 4 - Warn users about the changes
+    # 2 - Warn users about the changes
     if len(updated_tokens) > 0:
         logger.warning(
             "The tokenizer has new PAD/BOS/EOS tokens that differ from the model config and generation config. "

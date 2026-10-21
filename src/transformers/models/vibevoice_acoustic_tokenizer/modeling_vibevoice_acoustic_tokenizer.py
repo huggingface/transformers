@@ -30,11 +30,15 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torchdynamo_compiling
 from ..auto.modeling_auto import AutoModel
-from .configuration_vibevoice_acoustic_tokenizer import VibeVoiceAcousticTokenizerConfig
+from .configuration_vibevoice_acoustic_tokenizer import (
+    VibeVoiceAcousticTokenizerConfig,
+    VibeVoiceAcousticTokenizerDecoderConfig,
+    VibeVoiceAcousticTokenizerEncoderConfig,
+)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class VibeVoiceAcousticTokenizerOutput(ModelOutput):
     r"""
     audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
@@ -51,8 +55,8 @@ class VibeVoiceAcousticTokenizerOutput(ModelOutput):
     padding_cache: Optional["VibeVoiceAcousticTokenizerConv1dPaddingCache"] = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class VibeVoiceAcousticTokenizerEncoderOutput(ModelOutput):
     r"""
     latents (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -66,8 +70,8 @@ class VibeVoiceAcousticTokenizerEncoderOutput(ModelOutput):
     padding_cache: Optional["VibeVoiceAcousticTokenizerConv1dPaddingCache"] = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class VibeVoiceAcousticTokenizerDecoderOutput(ModelOutput):
     r"""
     audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
@@ -367,6 +371,8 @@ class VibeVoiceAcousticTokenizerPreTrainedModel(PreTrainedModel):
 
 
 class VibeVoiceAcousticTokenizerEncoderModel(VibeVoiceAcousticTokenizerPreTrainedModel):
+    config: VibeVoiceAcousticTokenizerEncoderConfig
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -458,6 +464,8 @@ class VibeVoiceAcousticTokenizerDecoderLayer(nn.Module):
 
 
 class VibeVoiceAcousticTokenizerDecoderModel(VibeVoiceAcousticTokenizerPreTrainedModel):
+    config: VibeVoiceAcousticTokenizerDecoderConfig
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -501,9 +509,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
 
     @can_return_tuple
     @auto_docstring
-    def encode(
-        self, input_values, padding_cache=None, use_cache=None, sample=True
-    ) -> VibeVoiceAcousticTokenizerEncoderOutput:
+    def encode(self, input_values, padding_cache=None, use_cache=None, sample=True):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representation.
@@ -529,7 +535,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
 
     @can_return_tuple
     @auto_docstring
-    def decode(self, latents, padding_cache=None, use_cache=False) -> VibeVoiceAcousticTokenizerDecoderOutput:
+    def decode(self, latents, padding_cache=None, use_cache=False):
         r"""
         latents (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input latent representation to be decoded back into audio.
@@ -543,9 +549,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
 
     @can_return_tuple
     @auto_docstring
-    def forward(
-        self, input_values, padding_cache=None, use_cache=False, sample=True, **kwargs
-    ) -> VibeVoiceAcousticTokenizerOutput:
+    def forward(self, input_values, padding_cache=None, use_cache=False, sample=True, **kwargs):
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representation.

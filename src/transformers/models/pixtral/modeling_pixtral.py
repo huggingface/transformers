@@ -14,82 +14,53 @@
 """PyTorch Pixtral model."""
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput
-from ...modeling_rope_utils import dynamic_rope_update
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import is_flash_attention_requested, maybe_autocast
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import is_flash_attention_requested, merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from .configuration_pixtral import PixtralVisionConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-def position_ids_in_meshgrid(patch_embeds_list, max_width):
-    positions = []
-    for patch in patch_embeds_list:
-        height, width = patch.shape[-2:]
-        mesh = torch.meshgrid(torch.arange(height), torch.arange(width), indexing="ij")
-        h_grid, v_grid = torch.stack(mesh, dim=-1).reshape(-1, 2).chunk(2, -1)
-        ids = h_grid * max_width + v_grid
-        positions.append(ids[:, 0])
-    return torch.cat(positions)
-
-
-class PixtralRotaryEmbedding(nn.Module):
+# Adapted from transformers.models.gemma4.modeling_gemma4.Gemma4VisionRotaryEmbedding with interleaved freqs
+class PixtralVisionRotaryEmbedding(nn.Module):
     """
-    The key with pixtral embedding is just that you have a frequency for each pixel positions.
-    If you have height x width pixels (or embedding pixels), then the frequency used for ROPE
-    is given by indexing the pre_computed frequency on the width and height.
-
-    What you output is of dimension (batch, height * width, dim) with dim the embed dim.
-
-    This simply means that for each image hidden state, you are going to add
-    a corresponding positional embedding, based on its index in the grid.
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: PixtralVisionConfig, device=None, layer_type=None):
+    def __init__(self, config: PixtralVisionConfig):
         super().__init__()
-
         self.config = config
 
         self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            raise ValueError(
-                f"{self.__class__.__name__} does not support non-default RoPE, but got `rope_type={self.rope_type}`"
-            )
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
-        inv_freq, attention_scaling = rope_init_fn(self.config, device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: PixtralVisionConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_axial_rope_parameters(config: PixtralVisionConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
-        Computes the inverse frequencies according to the original RoPE implementation
+        Computes the inverse frequencies according to the axial RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -99,38 +70,29 @@ class PixtralRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
 
-        # Here is the diff from Llama RoPE
-        max_patches_per_side = config.image_size // config.patch_size
-        h = torch.arange(max_patches_per_side)
-        w = torch.arange(max_patches_per_side)
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        inv_freq_2d = torch.cat([inv_freq[0::2], inv_freq[1::2]])
 
-        freqs = 1.0 / (base ** (torch.arange(0, dim, 2).float() / dim))
-        freqs_h = torch.outer(h, freqs[::2]).float()
-        freqs_w = torch.outer(w, freqs[1::2]).float()
-        inv_freq = torch.cat(
-            [
-                freqs_h[:, None, :].repeat(1, max_patches_per_side, 1),
-                freqs_w[None, :, :].repeat(max_patches_per_side, 1, 1),
-            ],
-            dim=-1,
-        ).reshape(-1, dim // 2)  # we reshape to only index on the position indexes, not tuple of indexes
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
-
-        # TODO maybe make it torch compatible later on. We can also just slice
-        inv_freq = torch.cat((inv_freq, inv_freq), dim=-1)
-        return inv_freq, attention_factor
+        return inv_freq_2d, attention_factor
 
     @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        freqs = self.inv_freq[position_ids]
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            emb = freqs
-            cos = emb.cos()
-            sin = emb.sin()
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos.to(x.dtype), sin.to(x.dtype)
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        # block-concat grids as H-W-H-W
+        freq_h, freq_w = (m[:, i % 2] for i, m in enumerate(freq.chunk(2, dim=-1)))
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        return torch.cat([freq_hw, freq_hw], dim=-1)
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
@@ -141,6 +103,8 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_forward_from_hub("rotary_pos_emb")
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -190,6 +154,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class PixtralAttention(nn.Module):
     """
     Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
@@ -218,8 +183,7 @@ class PixtralAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        output_attentions: bool | None = False,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
@@ -254,8 +218,6 @@ class PixtralAttention(nn.Module):
         attn_output = attn_output.reshape(batch_size, patches, -1).contiguous()
         attn_output = self.o_proj(attn_output)
 
-        if not output_attentions:
-            attn_weights = None
         return attn_output, attn_weights
 
 
@@ -310,27 +272,22 @@ class PixtralAttentionLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        output_attentions: bool | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`):
                 Input to the layer of shape `(batch, seq_len, embed_dim)`.
             attention_mask (`torch.FloatTensor`):
                 Attention mask of shape `(batch, 1, q_len, k_v_seq_len)` where padding elements are indicated by very large negative values.
-            output_attentions (`bool`, *optional*, defaults to `False`):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
         """
         residual = hidden_states
 
         hidden_states = self.attention_norm(hidden_states)
-        hidden_states, attn_weights = self.attention(
+        hidden_states, _ = self.attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
             **kwargs,
         )
         hidden_states = residual + hidden_states
@@ -340,11 +297,7 @@ class PixtralAttentionLayer(GradientCheckpointingLayer):
         hidden_states = self.feed_forward(hidden_states)
         hidden_states = residual + hidden_states
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-        return outputs
+        return hidden_states
 
 
 class PixtralTransformer(nn.Module):
@@ -361,11 +314,8 @@ class PixtralTransformer(nn.Module):
         inputs_embeds,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple | BaseModelOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -377,49 +327,17 @@ class PixtralTransformer(nn.Module):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
-            layer_outputs = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask,
                 position_embeddings=position_embeddings,
-                output_attentions=output_attentions,
                 **kwargs,
             )
 
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 @auto_docstring
@@ -434,6 +352,10 @@ class PixtralPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _no_split_modules = ["PixtralAttentionLayer"]
+    _can_record_outputs = {
+        "hidden_states": PixtralAttentionLayer,
+        "attentions": PixtralAttention,
+    }
 
 
 def generate_block_attention_mask(patch_embeds_list, tensor):
@@ -443,10 +365,11 @@ def generate_block_attention_mask(patch_embeds_list, tensor):
     d_min = torch.finfo(dtype).min
     causal_mask = torch.full((seq_len, seq_len), fill_value=d_min, dtype=dtype, device=device)
 
-    block_end_idx = torch.tensor(patch_embeds_list).cumsum(-1)
-    block_start_idx = torch.tensor([0] + patch_embeds_list[:-1]).cumsum(-1)
-    for start, end in zip(block_start_idx, block_end_idx):
+    start = 0
+    for num_patches in patch_embeds_list:
+        end = start + num_patches
         causal_mask[start:end, start:end] = 0
+        start = end
 
     causal_mask = causal_mask[None, None, :, :].expand(tensor.shape[0], 1, -1, -1)
     return causal_mask
@@ -469,25 +392,22 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         self.patch_size = config.patch_size
         self.ln_pre = PixtralRMSNorm(config.hidden_size, eps=1e-5)
         self.transformer = PixtralTransformer(config)
-        self.patch_positional_embedding = PixtralRotaryEmbedding(config)
+        self.patch_positional_embedding = PixtralVisionRotaryEmbedding(config)
 
         self.post_init()
 
     def get_input_embeddings(self):
         return self.patch_conv
 
-    @can_return_tuple
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor,
         image_sizes: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        output_attentions: bool | None = None,
-        return_dict: bool | None = None,
-        *args,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> BaseModelOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         if image_sizes is None:
             batch_size, _, height, width = pixel_values.shape
             image_sizes = [(height, width)] * batch_size
@@ -504,16 +424,30 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         patch_embeds = torch.cat([p.flatten(1).T for p in patch_embeds_list], dim=0).unsqueeze(0)
         patch_embeds = self.ln_pre(patch_embeds)
 
-        # positional embeddings
-        position_ids = position_ids_in_meshgrid(
-            patch_embeds_list, max_width=self.config.image_size // self.config.patch_size
-        )
-        kwargs["position_ids"] = position_ids.unsqueeze(0).to(patch_embeds.device, non_blocking=True)
-
+        # Create 2D positions for axial rotations
+        position_ids = []
+        for patch in patch_embeds_list:
+            hpos_ids, wpos_ids = torch.meshgrid(
+                torch.arange(patch.shape[-2], device=patch.device),
+                torch.arange(patch.shape[-1], device=patch.device),
+                indexing="ij",
+            )
+            position_ids.append(torch.stack([hpos_ids.flatten(), wpos_ids.flatten()], dim=-1))
+        position_ids = torch.cat(position_ids, dim=0)
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 
         if is_flash_attention_requested(self.config):
-            # We only rely on position_ids when using flash attention
+            # Axial RoPE positions have two coordinates per patch, so they cannot
+            # describe the packed image boundaries expected by Flash Attention.
+            sequence_lengths = [p.shape[-2] * p.shape[-1] for p in patch_embeds_list]
+            cu_seqlens = torch.tensor([0, *sequence_lengths], device=patch_embeds.device, dtype=torch.int32)
+            cu_seqlens = cu_seqlens.cumsum(dim=0, dtype=torch.int32)
+            kwargs.update(
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max(sequence_lengths),
+                max_length_k=max(sequence_lengths),
+            )
             attention_mask = None
         else:
             attention_mask = generate_block_attention_mask(
@@ -524,9 +458,6 @@ class PixtralVisionModel(PixtralPreTrainedModel):
             patch_embeds,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
-            output_hidden_states=output_hidden_states,
-            output_attentions=output_attentions,
-            return_dict=True,
             **kwargs,
         )
 
