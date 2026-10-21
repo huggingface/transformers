@@ -21,7 +21,7 @@ import re
 from typing import TYPE_CHECKING
 
 from .base import HfQuantizer, get_keys_to_not_convert
-from .quantizers_utils import checkpoint_module_namer, dedupe_conversions, plan_entry_for, skip_pattern
+from .quantizers_utils import checkpoint_module_namer, plan_entry_for, skip_pattern
 
 
 if TYPE_CHECKING:
@@ -61,7 +61,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
             member_config = copy.deepcopy(config)
             # the host's loading options hold for every member
             for option in quantization_config._entry_loading_options:
-                setattr(member_config, option, getattr(quantization_config, option))
+                setattr(member_config, option, getattr(quantization_config, option, None))
             method = getattr(config.quant_method, "value", config.quant_method)
             members[key] = AUTO_QUANTIZER_MAPPING[method](member_config, **kwargs)
         self.members = list(members.values())
@@ -130,14 +130,12 @@ class FineGrainedHfQuantizer(HfQuantizer):
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         self._resolve_plan(model)
-        # Skips become `None` entries, so the plan alone says who owns a module. The skip-list and the fp32 modules
-        # always win. A default skip, such as a tied `lm_head`, yields to an entry that names the module.
-        explicit = self.quantization_config.modules_to_not_convert
-        skipped = self.get_modules_to_not_convert(model, explicit or [], model._keep_in_fp32_modules)
-        if explicit is None:
-            targeted = [pattern for pattern, owner in self._plan.items() if pattern != ".*" and owner is not None]
-            defaults = get_keys_to_not_convert(model)
-            skipped += [name for name in defaults if not any(re.search(pattern, name) for pattern in targeted)]
+        # The fp32 modules and the model's default skips become `None` entries, so the plan alone says who owns a
+        # module. The fp32 modules always win. A default skip, such as a tied `lm_head`, yields to an entry naming it.
+        skipped = self.get_modules_to_not_convert(model, [], model._keep_in_fp32_modules)
+        targeted = [pattern for pattern, owner in self._plan.items() if pattern != ".*" and owner is not None]
+        defaults = get_keys_to_not_convert(model)
+        skipped += [name for name in defaults if not any(re.search(pattern, name) for pattern in targeted)]
         self._plan.update(dict.fromkeys(map(skip_pattern, skipped)))
         to_checkpoint = checkpoint_module_namer(model)
         owners = {name: self.member_for(name) for name, _ in model.named_modules()}
@@ -193,7 +191,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
         A conversion that serves several members routes its load ops through the host, which sends each tensor to its
         own member. These are the chains several members add and the ops they add to the given conversions.
         """
-        merged, shared = dedupe_conversions(conversions, keep=given)
+        merged, shared = _dedupe_conversions(conversions, keep=given)
         shared_ops = _operations(shared)
         shared_ops += [op for op in _operations(given) if id(op) not in before]
         members = set(map(id, self.members))
@@ -257,3 +255,33 @@ def _skip_unowned(own: list[str], others: list[str], parents: set[str]) -> str:
         return "(?!)"
     kept = f"(?!(?:{'|'.join(map(re.escape, sorted(parents)))})$)" if parents else ""
     return f"{kept}(?:{'|'.join(unowned)}).*"
+
+
+def _dedupe_conversions(conversions, keep=()) -> tuple[list, list]:
+    """Return `conversions` with each one not in `keep` read once, in order, and the ones added more than once.
+
+    Two quantizers may add the same conversion. Two conversions that read one pattern differently raise.
+    """
+    kept = {id(conversion) for conversion in keep}
+    claimed, merged, shared = {}, [], {}
+    for conversion in conversions:
+        if id(conversion) in kept:
+            merged.append(conversion)
+            continue
+        owner = next((claimed[p] for p in conversion.source_patterns if p in claimed), None)
+        if owner is None:
+            merged.append(conversion)
+            claimed.update(dict.fromkeys(conversion.source_patterns, conversion))
+        elif _signature(owner) != _signature(conversion):
+            raise ValueError(
+                f"Two quantizers read {conversion.source_patterns} differently, so they cannot load together."
+            )
+        else:
+            shared[id(owner)] = owner
+    return merged, list(shared.values())
+
+
+def _signature(conversion) -> tuple:
+    """Return what a conversion does: the keys it reads, where they go and the ops they run through."""
+    operations = tuple(type(op).__name__ for op in getattr(conversion, "operations", ()))
+    return type(conversion), tuple(conversion.source_patterns), tuple(conversion.target_patterns), operations

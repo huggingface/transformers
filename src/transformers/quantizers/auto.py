@@ -262,19 +262,24 @@ class AutoHfQuantizer:
                 quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
         if quantization_config_from_args is not None:
-            lender = quantization_config.loading_attributes_lender(quantization_config_from_args)
-            if lender is None:
+            source = quantization_config.loading_attributes_source(quantization_config_from_args)
+            if source is None:
                 raise ValueError(
                     f"The model is quantized with {quantization_config.__class__.__name__} but you are passing a {quantization_config_from_args.__class__.__name__} config. "
                     "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
                 )
-            quantization_config_from_args = lender
+            quantization_config_from_args = source
 
         if isinstance(quantization_config, LOADING_ATTRIBUTES_CONFIG_TYPES) and isinstance(
             quantization_config_from_args, LOADING_ATTRIBUTES_CONFIG_TYPES
         ):
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
+                if attr == "dtype_plan" and isinstance(quantization_config, FineGrainedConfig):
+                    val = {
+                        **quantization_config.dtype_plan,
+                        **{pattern: None for pattern, entry in val.items() if entry is None},
+                    }
                 setattr(quantization_config, attr, val)
 
             if loading_attr_dict:

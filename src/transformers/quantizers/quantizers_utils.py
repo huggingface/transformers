@@ -59,36 +59,6 @@ def skip_pattern(entry: str) -> str:
     return rf"^(?:{entry})(?:(?<=\.)|(?=\.|$))|{re.escape(entry)}$"
 
 
-def dedupe_conversions(conversions, keep=()) -> tuple[list, list]:
-    """Return `conversions` with each one not in `keep` read once, in order, and the ones added more than once.
-
-    Two quantizers may add the same conversion. Two conversions that read one pattern differently raise.
-    """
-    kept = {id(conversion) for conversion in keep}
-    claimed, merged, shared = {}, [], {}
-    for conversion in conversions:
-        if id(conversion) in kept:
-            merged.append(conversion)
-            continue
-        owner = next((claimed[p] for p in conversion.source_patterns if p in claimed), None)
-        if owner is None:
-            merged.append(conversion)
-            claimed.update(dict.fromkeys(conversion.source_patterns, conversion))
-        elif _signature(owner) != _signature(conversion):
-            raise ValueError(
-                f"Two quantizers read {conversion.source_patterns} differently, so they cannot load together."
-            )
-        else:
-            shared[id(owner)] = owner
-    return merged, list(shared.values())
-
-
-def _signature(conversion) -> tuple:
-    """Return what a conversion does: the keys it reads, where they go and the ops they run through."""
-    operations = tuple(type(op).__name__ for op in getattr(conversion, "operations", ()))
-    return type(conversion), tuple(conversion.source_patterns), tuple(conversion.target_patterns), operations
-
-
 def checkpoint_module_namer(model):
     """Return a function mapping a module name of `model` to its name in the checkpoint.
 

@@ -22,9 +22,8 @@ from transformers import LlamaConfig, LlamaForCausalLM
 from transformers.core_model_loading import WeightRenaming
 from transformers.quantizers import auto
 from transformers.quantizers.base import HfQuantizer
-from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer, _dedupe_conversions
 from transformers.quantizers.quantizers_utils import (
-    dedupe_conversions,
     get_module_from_name,
     plan_entry_for,
     should_convert_module,
@@ -127,11 +126,8 @@ class FineGrainedHostTest(unittest.TestCase):
         self.assertIsNone(tags["model.layers.0.mlp.gate_proj"])
         self.assertIsNone(tags["model.layers.1.self_attn.q_proj"])
 
-    def test_the_host_skip_list_holds_for_every_member(self):
-        self._load(
-            {"self_attn": OtherTagTestConfig(tag="attn"), ".*": TagTestConfig(tag="rest")},
-            modules_to_not_convert=["model.layers.0"],
-        )
+    def test_a_none_entry_holds_for_every_member(self):
+        self._load({r"^model\.layers\.0\.": None, "self_attn": OtherTagTestConfig(tag="attn"), ".*": TagTestConfig()})
         tags = _tags(self.model)
         self.assertIsNone(tags["model.layers.0.self_attn.q_proj"])
         self.assertIsNone(tags["model.layers.0.mlp.up_proj"])
@@ -179,18 +175,18 @@ class FineGrainedHostTest(unittest.TestCase):
     def test_members_adding_the_same_conversion_keep_it_once(self):
         model_converter = WeightRenaming("a", "b")
         first, again = WeightRenaming("x", "y"), WeightRenaming("x", "y")
-        merged, shared = dedupe_conversions([model_converter, first, again], keep=[model_converter])
+        merged, shared = _dedupe_conversions([model_converter, first, again], keep=[model_converter])
         self.assertEqual(merged, [model_converter, first])
         self.assertEqual(shared, [first])
         with self.assertRaisesRegex(ValueError, "differently"):
-            dedupe_conversions([first, WeightRenaming("x", "z")])
+            _dedupe_conversions([first, WeightRenaming("x", "z")])
 
     def test_an_entrys_config_lends_its_loading_options_to_the_plan(self):
         plan = FineGrainedConfig(dtype_plan={"self_attn": OtherTagTestConfig(), ".*": TagTestConfig()})
-        lender = plan.loading_attributes_lender(TagTestConfig(dequantize=True, modules_to_not_convert=["lm_head"]))
-        self.assertEqual((lender.dequantize, lender.modules_to_not_convert), (True, ["lm_head"]))
+        source = plan.loading_attributes_source(TagTestConfig(dequantize=True, modules_to_not_convert=["lm_head"]))
+        self.assertEqual((source.dequantize, source.dtype_plan), (True, {skip_pattern("lm_head"): None}))
         tags_only = FineGrainedConfig(dtype_plan={".*": TagTestConfig()})
-        self.assertIsNone(tags_only.loading_attributes_lender(OtherTagTestConfig()))
+        self.assertIsNone(tags_only.loading_attributes_source(OtherTagTestConfig()))
 
     def test_a_converter_loads_in_the_dtype_of_the_member_that_added_it(self):
         quantizer = self._load({"self_attn": OtherTagTestConfig(tag="half"), ".*": TagTestConfig()})
@@ -243,11 +239,19 @@ class FineGrainedHostTest(unittest.TestCase):
         self.assertIsNone(tags["model.layers.0.mlp.gate_proj"])
 
     def test_a_default_skip_yields_to_an_entry_that_names_the_module(self):
-        """Check that `lm_head`, skipped by default, quantizes when an entry names it, and that a skip-list wins."""
+        """Check that `lm_head`, skipped by default, quantizes when an entry names it, and that a `None` entry wins."""
         self._load({"lm_head": OtherTagTestConfig(tag="head"), ".*": TagTestConfig()})
         self.assertEqual(self.model.lm_head.tag, "head")
         del self.model.lm_head.tag
-        self._load(
-            {"lm_head": OtherTagTestConfig(tag="head"), ".*": TagTestConfig()}, modules_to_not_convert=["lm_head"]
-        )
+        self._load({"lm_head": None, ".*": TagTestConfig()})
         self.assertIsNone(getattr(self.model.lm_head, "tag", None))
+
+    def test_a_passed_none_entry_joins_the_checkpoints_plan(self):
+        """Check that a passed plan adds its `None` entries to a checkpoint's plan, and keeps the checkpoint's formats."""
+        from transformers.quantizers.auto import AutoHfQuantizer
+
+        checkpoint = FineGrainedConfig(dtype_plan={".*": TagTestConfig(tag="shipped")}).to_dict()
+        passed = FineGrainedConfig(dtype_plan={"lm_head": None, ".*": TagTestConfig(tag="passed")})
+        merged = AutoHfQuantizer.merge_quantization_configs(checkpoint, passed)
+        self.assertIsNone(merged.dtype_plan["lm_head"])
+        self.assertEqual(merged.dtype_plan[".*"].tag, "shipped")

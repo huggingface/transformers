@@ -204,7 +204,7 @@ class QuantizationConfigMixin:
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
 
-    def loading_attributes_lender(self, config: "QuantizationConfigMixin") -> Optional["QuantizationConfigMixin"]:
+    def loading_attributes_source(self, config: "QuantizationConfigMixin") -> Optional["QuantizationConfigMixin"]:
         """
         Return the config whose loading attributes override this checkpoint config.
 
@@ -1697,33 +1697,20 @@ class SpQRConfig(QuantizationConfigMixin):
             raise TypeError("shapes must be a dict")
 
 
-def _loading_attributes(config, **attributes) -> dict[str, Any]:
-    """Return the loading attributes a passed config lends to a pre-quantized checkpoint's config.
-
-    These are `dequantize`, `modules_to_not_convert` when it is set, and `attributes`.
-    An unset `modules_to_not_convert` keeps the checkpoint's.
-    """
-    loading = {"dequantize": config.dequantize}
-    if config.modules_to_not_convert is not None:
-        loading["modules_to_not_convert"] = config.modules_to_not_convert
-    return {**loading, **attributes}
-
-
 class FineGrainedConfig(QuantizationConfigMixin):
     """
     Configuration for a model whose modules use different quantization methods.
 
-    The `dtype_plan` maps modules to the config of their method. Each entry is the config of a registered quantization
-    method. The other options apply to the whole model. A model in one method takes that method's config alone.
+    The `dtype_plan` maps modules to the config of their method, or to `None` for full precision. It is the only place
+    that says which module gets which config. Each entry is the config of a registered quantization method. A model in
+    one method takes that method's config alone.
 
     Args:
         dtype_plan (`dict[str, QuantizationConfigMixin | None]`, *optional*):
             Maps a module regex to the config of the modules it matches. A `None` entry keeps its modules in full
             precision and wins over any other entry. A targeted entry wins over the `".*"` catch-all. Modules that no
-            entry covers stay in full precision. Entries take no loading options.
-            Set `dequantize` and `modules_to_not_convert` on this config instead.
-        modules_to_not_convert (`list`, *optional*):
-            Modules to keep in full precision. They load as `None` entries of the plan.
+            entry covers stay in full precision. Entries take no loading options: set `dequantize` on this config and
+            name full-precision modules with `None` entries.
         dequantize (`bool`, *optional*, defaults to `False`):
             Whether to dequantize the model to full precision while loading.
     """
@@ -1735,7 +1722,6 @@ class FineGrainedConfig(QuantizationConfigMixin):
         self,
         *,
         dtype_plan: dict[str, QuantizationConfigMixin | None] | None = None,
-        modules_to_not_convert: list | None = None,
         dequantize: bool = False,
         **kwargs,
     ):
@@ -1744,7 +1730,6 @@ class FineGrainedConfig(QuantizationConfigMixin):
         if kwargs:
             logger.info(f"Unused kwargs: {list(kwargs)}. These kwargs are not used in {type(self).__name__}.")
         self.dtype_plan = {pattern: self._plan_entry(pattern, entry) for pattern, entry in (dtype_plan or {}).items()}
-        self.modules_to_not_convert = modules_to_not_convert
         self.dequantize = dequantize
 
     def _plan_entry(self, pattern: str, entry) -> QuantizationConfigMixin | None:
@@ -1782,20 +1767,23 @@ class FineGrainedConfig(QuantizationConfigMixin):
                 }
                 for pattern, config in self.dtype_plan.items()
             },
-            "modules_to_not_convert": self.modules_to_not_convert,
             "dequantize": self.dequantize,
         }
 
     def get_loading_attributes(self):
-        return _loading_attributes(self)
+        # A passed plan adds its `None` entries to a checkpoint's plan. The weights keep the checkpoint's formats.
+        skipped = {pattern: None for pattern, entry in self.dtype_plan.items() if entry is None}
+        return {"dequantize": self.dequantize, **({"dtype_plan": skipped} if skipped else {})}
 
-    def loading_attributes_lender(self, config):
-        # The config of a plan entry's method lends its loading options to the plan
+    def loading_attributes_source(self, config):
+        # The config of a plan entry's method lends its loading options to the plan. Its skip-list becomes `None` entries.
+        from ..quantizers.quantizers_utils import skip_pattern
+
         if not any(type(entry) is type(config) for entry in self.dtype_plan.values() if entry is not None):
-            return super().loading_attributes_lender(config)
+            return super().loading_attributes_source(config)
+        skipped = getattr(config, "modules_to_not_convert", None) or []
         return FineGrainedConfig(
-            modules_to_not_convert=getattr(config, "modules_to_not_convert", None),
-            dequantize=getattr(config, "dequantize", False),
+            dtype_plan=dict.fromkeys(map(skip_pattern, skipped)), dequantize=getattr(config, "dequantize", False)
         )
 
 
