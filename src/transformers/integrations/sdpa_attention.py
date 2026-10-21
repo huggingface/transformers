@@ -2,7 +2,7 @@ import torch
 
 from ..generation.continuous_batching.cache import PagedAttentionCache
 from ..utils import is_torch_mps_available, is_torch_npu_available, is_torch_xpu_available, logging
-from ..utils.import_utils import is_torch_greater_or_equal, is_tracing
+from ..utils.import_utils import is_torch_greater_or_equal
 
 
 logger = logging.get_logger(__name__)
@@ -95,7 +95,7 @@ def sdpa_attention_forward(
             "`sdpa` attention does not support `output_attentions=True`."
             " Please set your attention to `eager` if you want any of these features."
         )
-    if kwargs.get("softcap") is not None and not is_tracing():
+    if kwargs.get("softcap") is not None:
         logger.warning_once(
             "`sdpa` attention does not support `softcap`, so the attention logits are not capped."
             " Please set your attention to `eager` or `flex_attention` to apply it."
