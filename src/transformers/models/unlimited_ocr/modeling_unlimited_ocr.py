@@ -1870,7 +1870,7 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
             per_image_local = [None] * batch_size
 
         hidden_size = global_features.shape[-1]
-        newline = self.image_newline[None, None, :]
+        newline = self.image_newline[None, None, :].to(global_features.device)
         num_queries_global = int(global_features.shape[1] ** 0.5)
 
         # Different from DeepseekOcr2: each row of image patches gets a newline token appended.
