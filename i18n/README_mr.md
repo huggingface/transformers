@@ -99,7 +99,7 @@ Transformers हे मजकूर (text), संगणकीय दृष्�
 
 ## इन्स्टॉलेशन (Installation)
 
-Transformers हे Python 3.10+, आणि [PyTorch](https://pytorch.org/get-started/locally/) 2.5+ सह कार्य करते.
+Transformers हे Python 3.10+, आणि [PyTorch](https://pytorch.org/get-started/locally/) 2.6+ सह कार्य करते.
 
 [venv](https://docs.python.org/3/library/venv.html) किंवा [uv](https://docs.astral.sh/uv/) (एक वेगवान Rust-आधारित Python पॅकेज आणि प्रोजेक्ट मॅनेजर) वापरून व्हर्च्युअल एन्व्हायर्नमेंट (virtual environment) तयार आणि सक्रिय करा.
 
@@ -260,7 +260,6 @@ pipeline(
 
 - ही लायब्ररी न्यूरल नेटवर्कच्या बिल्डिंग ब्लॉक्सचे मॉड्युलर टूलबॉक्स नाही. मॉडेल फाइल्समधील कोडमध्ये हेतुपुरस्सर अतिरिक्त ॲब्स्ट्रॅक्शन्स जोडलेले नाहीत, जेणेकरून संशोधक नवीन फाइल्सच्या चक्रव्यूहात न अडकता प्रत्येक मॉडेलवर जलद गतीने काम करू शकतील.
 - ट्रेनिंग API हे Transformers द्वारे प्रदान केलेल्या PyTorch मॉडेल्ससह काम करण्यासाठी अनुकूलित (optimized) आहे. सामान्य मशीन लर्निंग लूपसाठी, तुम्ही [Accelerate](https://huggingface.co/docs/accelerate) सारखी दुसरी लायब्ररी वापरली पाहिजे.
-- [उदाहरणातील स्क्रिप्ट्स](https://github.com/huggingface/transformers/tree/main/examples) ही केवळ *उदाहरणे* आहेत. ती तुमच्या विशिष्ट समस्येसाठी जशीच्या तशी चालतीलच असे नाही, आणि तुम्हाला तुमच्या गरजेनुसार कोड अनुकूलित करावा लागू शकतो.
 
 ## Transformers वापरणारे १०० प्रोजेक्ट्स (100 projects using Transformers)
 
