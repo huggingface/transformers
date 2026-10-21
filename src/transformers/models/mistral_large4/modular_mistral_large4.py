@@ -22,6 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import MoeModelOutputWithPast
@@ -44,6 +45,7 @@ from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mistral3.configuration_mistral3 import Mistral3Config
 from ..mistral3.modeling_mistral3 import Mistral3ForConditionalGeneration, Mistral3Model
 from ..mistral4.modeling_mistral4 import Mistral4Experts, Mistral4MoE, Mistral4TopkRouter
+from ..pixtral import PixtralVisionConfig
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
@@ -133,6 +135,33 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
 
 class MistralLarge4Config(Mistral3Config):
     model_type = "mistral_large4"
+    # One text model and one vision model: pin the classes instead of resolving them through `model_type`
+    sub_configs = {"text_config": MistralLarge4TextConfig, "vision_config": PixtralVisionConfig}
+
+    tie_word_embeddings: bool = False
+
+    def __post_init__(self, **kwargs):
+        if isinstance(self.vision_config, dict):
+            self.vision_config = PixtralVisionConfig(**self.vision_config)
+        elif self.vision_config is None:
+            # Mistral Large 4 vision tower (same as Mistral Small 3.1: gated SiLU MLP, 1540 px images)
+            self.vision_config = PixtralVisionConfig(
+                hidden_size=2048,
+                intermediate_size=6144,
+                num_hidden_layers=30,
+                num_attention_heads=16,
+                patch_size=14,
+                image_size=1540,
+                hidden_act="silu",
+            )
+
+        if isinstance(self.text_config, dict):
+            self.text_config = MistralLarge4TextConfig(**self.text_config)
+        elif self.text_config is None:
+            self.text_config = MistralLarge4TextConfig()
+
+        # Explicit parent call: the modular converter keeps it instead of inlining Mistral3's `model_type` lookups
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 class MistralLarge4TextRMSNorm(LlamaRMSNorm):
@@ -464,7 +493,6 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
 
 
 class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
-
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
