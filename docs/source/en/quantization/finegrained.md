@@ -122,10 +122,12 @@ Some checkpoints load as a [`FineGrainedConfig`] without passing one.
 }
 ```
 
-Module names resolve through the checkpoint renames of the model. Loading raises an error in these cases.
+Module names resolve through the checkpoint renames of the model. A name per expert, such as
+`layers.9.experts.3.gate_proj`, resolves through the model's converters to the fused `experts` module. Loading raises
+an error in these cases.
 
-- An assignment matches no supported linear, expert or embedding module.
-- A per-expert assignment does not fit the fused expert module of the model.
+- An assignment matches no module.
+- The assignments of one fused module do not cover all of its experts, or give them different formats.
 - The kernels do not serve the assigned format.
 
 ## Tensor and expert parallelism
