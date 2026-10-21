@@ -16,6 +16,9 @@ from ..utils import PushToHubMixin
 from .import_utils import get_device_type
 
 
+KERNELS_SUPPORTED_DEVICE_TYPES = ["cuda", "rocm", "xpu", "npu", "neuron", "tpu", "mps"]
+
+
 def infer_device(model):
     """
     Infers the device type from the model parameters.
@@ -50,8 +53,8 @@ def add_to_mapping(
 ):
     from kernels import LayerRepository
 
-    if device not in ["cuda", "rocm", "xpu", "npu", "neuron", "tpu"]:
-        raise ValueError(f"Only cuda, rocm, xpu, npu, neuron and tpu devices supported, got: {device}")
+    if device not in KERNELS_SUPPORTED_DEVICE_TYPES:
+        raise ValueError(f"Only devices in {KERNELS_SUPPORTED_DEVICE_TYPES} are supported, got: {device}")
     repo_layer_name = repo_name.split(":")[1]
     repo_id = repo_name.split(":")[0]
     compatible_mapping[layer_name] = {
@@ -72,8 +75,8 @@ def add_to_mapping_local(layer_name, device, repo_name, mode, compatible_mapping
 
     from kernels import LocalLayerRepository
 
-    if device not in ["cuda", "rocm", "xpu", "npu", "neuron", "tpu"]:
-        raise ValueError(f"Only cuda, rocm, xpu, npu, neuron and tpu devices supported, got: {device}")
+    if device not in KERNELS_SUPPORTED_DEVICE_TYPES:
+        raise ValueError(f"Only devices in {KERNELS_SUPPORTED_DEVICE_TYPES} are supported, got: {device}")
     repo_layer_name = repo_name.split(":")[1]
     repo_path = repo_name.split(":")[0]
     compatible_mapping[layer_name] = {
@@ -131,8 +134,8 @@ class KernelConfig(PushToHubMixin):
         1. Each layer_name in the mapping is registered in the model (i.e., the model contains a module with a matching kernel_layer_name).
         2. Each kernel value is
             - either a string of the form 'org/repo:layer_name' or a tuple with the same as string and a dict of {"revision"/"version/trust_remote_code": ...},
-            - or a dict mapping device types ("cuda", "rocm", "xpu", "npu") to such values as above.
-        3. Each device key in a dict is one of "cuda", "rocm", "xpu", or "npu".
+            - or a dict mapping supported device types to such values as above.
+        3. Each device key in a dict is one of "cuda", "rocm", "xpu", "npu", "neuron", "tpu", or "mps".
         5. Each trust remote code key must be a bool.
         6. Each revision or version key must exist mutually exclusive if it has been passed explicitly.
         7. Each repo_name is a valid repository and layer name in the format 'org/repo:layer_name' (i.e., a string containing both a slash and a colon).
@@ -208,8 +211,10 @@ class KernelConfig(PushToHubMixin):
             if isinstance(kernel, dict):
                 for device, repo in kernel.items():
                     repo_name = repo
-                    if not skip_device_check and device not in ["cuda", "rocm", "xpu", "npu", "neuron", "tpu"]:
-                        raise ValueError(f"Only cuda, rocm, xpu, npu, neuron and tpu devices supported, got: {device}")
+                    if not skip_device_check and device not in KERNELS_SUPPORTED_DEVICE_TYPES:
+                        raise ValueError(
+                            f"Only devices in {KERNELS_SUPPORTED_DEVICE_TYPES} are supported, got: {device}"
+                        )
 
                     # Check case where metadata (revision/version/trust_remote_code) is explicitly passed
                     if isinstance(repo, tuple):

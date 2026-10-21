@@ -1003,7 +1003,10 @@ class ModelTesterMixin(ExportTesterMixin):
                     )
                     # When reloading in fp16, keep_in_fp32_modules AND keep_in_fp32_modules_strict should be upcasted
                     all_fp32_modules = model._keep_in_fp32_modules | model._keep_in_fp32_modules_strict
+                    # integer buffers (e.g. step counters) are never cast
                     for name, param in model.state_dict().items():
+                        if not param.is_floating_point():
+                            continue
                         if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in all_fp32_modules):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
@@ -1012,6 +1015,8 @@ class ModelTesterMixin(ExportTesterMixin):
                     # When reloading in bf16, only keep_in_fp32_modules_strict should be upcasted
                     model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                     for name, param in model.state_dict().items():
+                        if not param.is_floating_point():
+                            continue
                         if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules_strict):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
@@ -2807,6 +2812,33 @@ class ModelTesterMixin(ExportTesterMixin):
                     model.base_model.save_pretrained(temp_dir_name)
                     model, loading_info = model_class.from_pretrained(temp_dir_name, output_loading_info=True)
                     self.assertGreater(len(loading_info["missing_keys"]), 0, model.__class__.__name__)
+
+    def test_base_model_prefix_loads_base_weights(self):
+        """
+        `base_model_prefix` has to be the attribute a head stores the base model under: the loader strips or prepends
+        it to bridge base and head checkpoints, so any other value silently leaves every base weight random.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        base_model_names = MODEL_MAPPING_NAMES.get(config.model_type, ())
+        base_model_names = (base_model_names,) if isinstance(base_model_names, str) else base_model_names
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            for name, child in model.named_children():
+                if type(child).__name__ not in base_model_names:
+                    continue
+                self.assertEqual(model.base_model_prefix, name)
+                base_model, child_state_dict = type(child)(config), child.state_dict()
+                # Heads may build their base model differently (no pooler, a mask token...): check the shared weights
+                expected_keys = {
+                    f"{name}.{key}"
+                    for key, tensor in base_model.state_dict().items()
+                    if key in child_state_dict and child_state_dict[key].shape == tensor.shape
+                }
+                self.assertTrue(expected_keys)
+                with tempfile.TemporaryDirectory() as tmp:
+                    base_model.save_pretrained(tmp)
+                    _, info = model_class.from_pretrained(tmp, output_loading_info=True, ignore_mismatched_sizes=True)
+                self.assertTrue(info["missing_keys"].isdisjoint(expected_keys), info["missing_keys"] & expected_keys)
 
     def test_can_use_safetensors(self):
         for model_class in self.all_model_classes:
