@@ -222,7 +222,7 @@ class FineGrainedExpertsMarshallingTest(unittest.TestCase):
             m.post_expert_norm, m.has_post_expert_norm = torch.nn.RMSNorm(m.hidden_dim, eps=1e-4), True
             with (
                 patch_finegrained_kernel(kernel),
-                mock.patch.dict(fg.supported_fused_norms(), {torch.nn.RMSNorm: name}),
+                mock.patch.object(fg, "fused_norm_kind", return_value=name),
             ):
                 fg.finegrained_grouped_mm_experts_forward(m, *self._route())
             call = rec.calls["moe_fused_grouped"][-1]

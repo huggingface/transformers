@@ -299,6 +299,9 @@ class MuseSparkTextCenteredRMSNorm(MuseGlimmerTextCenteredRMSNorm):
 
 
 class MuseSparkTextInputScaledRMSNorm(MuseGlimmerTextCenteredRMSNorm):
+    # The fine-grained experts kernels fuse this norm under that name
+    fused_norm_kind = "input_scaled_rms_norm"
+
     def forward(self, x):
         # Different order from MuseSparkTextCenteredRMSNorm: first scale, then normalize.
         output = x.float() * (1.0 + self.weight).float()

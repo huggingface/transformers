@@ -244,20 +244,15 @@ def finegrained_linear(
     return output
 
 
-@functools.cache
-def supported_fused_norms() -> dict[type[nn.Module], str]:
-    """Map each post-expert norm class to the name of its fused kernel form.
+def fused_norm_kind(norm: nn.Module) -> str | None:
+    """Return the name of the fused kernel form of a post-expert norm, or `None` if it has none.
 
-    Match on the exact class, since a subclass may compute something else.
-    Build the map on first use, so importing this module does not import a model.
+    torch's `nn.RMSNorm` is `"rms_norm"`. A model's norm declares its form with a `fused_norm_kind` class attribute.
+    Only the norm's own class counts, since a subclass may compute something else.
     """
-    from ...models.muse_spark.modeling_muse_spark import MuseSparkTextInputScaledRMSNorm
-
-    return {
-        nn.RMSNorm: "rms_norm",
-        # Scales by `(1 + weight)` before the RMS norm and rounds to bf16 between the two steps
-        MuseSparkTextInputScaledRMSNorm: "input_scaled_rms_norm",
-    }
+    if type(norm) is nn.RMSNorm:
+        return "rms_norm"
+    return vars(type(norm)).get("fused_norm_kind")
 
 
 class _FineGrainedModule:
@@ -798,7 +793,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
 
         post_expert_norm, norm_eps = None, 1e-6
         if self.has_post_expert_norm:
-            norm_name = supported_fused_norms().get(type(self.post_expert_norm))
+            norm_name = fused_norm_kind(self.post_expert_norm)
             if norm_name in kernel.get_supported_norms():
                 post_expert_norm = norm_name
                 eps = getattr(self.post_expert_norm, "eps", getattr(self.post_expert_norm, "variance_epsilon", None))
