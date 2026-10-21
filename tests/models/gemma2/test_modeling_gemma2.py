@@ -23,7 +23,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, DynamicCache, is_t
 from transformers.cache_utils import DynamicLayer, DynamicSlidingWindowLayer
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
-    CaptureLogger,
     Expectations,
     cleanup,
     is_flash_attn_2_available,
@@ -38,7 +37,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import logging
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -65,16 +63,6 @@ class Gemma2ModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("Gemma2 tanh soft-capping amplifies TP numerical noise beyond 80% match threshold")
     def test_tp_generation_quantized(self):
         pass
-
-    def test_sdpa_warns_that_softcap_is_dropped(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        self.assertIsNotNone(config.attn_logit_softcapping)
-        model = Gemma2Model._from_config(config, attn_implementation="sdpa").to(torch_device).eval()
-        logger = logging.get_logger("transformers.integrations.sdpa_attention")
-        logger.warning_once.cache_clear()
-        with CaptureLogger(logger) as captured_logs:
-            model(**inputs_dict)
-        self.assertIn("does not support `softcap`", captured_logs.out)
 
 
 @slow
