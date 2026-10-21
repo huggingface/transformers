@@ -693,6 +693,46 @@ src/transformers/configuration_utils.py
         assert expected_tests_for_qwen2.issubset(set(reverse_map[f"{models_dir}/qwen2/modeling_qwen2.py"]))
         assert expected_tests_for_qwen2.isdisjoint(set(reverse_map[f"{models_dir}/qwen2/tokenization_qwen2.py"]))
 
+    def test_image_processor_files_trigger_test_image_processing_and_test_processing(self):
+        """
+        Since PR #43514, test_image_processing_*.py files no longer statically import their image
+        processor class (dynamic resolution via IMAGE_PROCESSOR_MAPPING_NAMES). Similarly,
+        test_processing_*.py files may not import it either when processing_<model>.py has no
+        static import of the image processor (e.g. CLIP's processing_clip.py imports only
+        ProcessorMixin). This test ensures create_reverse_dependency_map explicitly wires all
+        image_processing*.py source files to both test files by naming convention.
+        """
+        reverse_map = create_reverse_dependency_map()
+        models_dir = "src/transformers/models"
+
+        # CLIP: processing_clip.py has zero deps (only imports ProcessorMixin), so
+        # test_processing_clip.py has no static path to image_processing_clip.py — both
+        # test files must be wired explicitly.
+        for img_proc_file in [
+            f"{models_dir}/clip/image_processing_clip.py",
+            f"{models_dir}/clip/image_processing_pil_clip.py",
+        ]:
+            triggered = set(reverse_map[img_proc_file])
+            assert "tests/models/clip/test_image_processing_clip.py" in triggered, (
+                f"{img_proc_file} must trigger test_image_processing_clip.py"
+            )
+            assert "tests/models/clip/test_processing_clip.py" in triggered, (
+                f"{img_proc_file} must trigger test_processing_clip.py"
+            )
+
+        # Fuyu: same check for a second model to avoid false positives
+        for img_proc_file in [
+            f"{models_dir}/fuyu/image_processing_fuyu.py",
+            f"{models_dir}/fuyu/image_processing_pil_fuyu.py",
+        ]:
+            triggered = set(reverse_map[img_proc_file])
+            assert "tests/models/fuyu/test_image_processing_fuyu.py" in triggered, (
+                f"{img_proc_file} must trigger test_image_processing_fuyu.py"
+            )
+            assert "tests/models/fuyu/test_processing_fuyu.py" in triggered, (
+                f"{img_proc_file} must trigger test_processing_fuyu.py"
+            )
+
     @unittest.skip("Broken for now TODO @ArthurZucker")
     def test_infer_tests_to_run(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
