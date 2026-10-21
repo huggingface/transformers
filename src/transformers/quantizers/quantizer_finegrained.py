@@ -20,7 +20,7 @@ import copy
 import re
 from typing import TYPE_CHECKING
 
-from .base import HfQuantizer
+from .base import HfQuantizer, get_keys_to_not_convert
 from .quantizers_utils import checkpoint_module_namer, dedupe_conversions, plan_entry_for, skip_pattern
 
 
@@ -130,10 +130,14 @@ class FineGrainedHfQuantizer(HfQuantizer):
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         self._resolve_plan(model)
-        # The skip-list and the model's default skips are `None` entries, so the plan alone says who owns a module
-        skipped = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
-        )
+        # Skips become `None` entries, so the plan alone says who owns a module. The skip-list and the fp32 modules
+        # always win. A default skip, such as a tied `lm_head`, yields to an entry that names the module.
+        explicit = self.quantization_config.modules_to_not_convert
+        skipped = self.get_modules_to_not_convert(model, explicit or [], model._keep_in_fp32_modules)
+        if explicit is None:
+            targeted = [pattern for pattern, owner in self._plan.items() if pattern != ".*" and owner is not None]
+            defaults = get_keys_to_not_convert(model)
+            skipped += [name for name in defaults if not any(re.search(pattern, name) for pattern in targeted)]
         self._plan.update(dict.fromkeys(map(skip_pattern, skipped)))
         to_checkpoint = checkpoint_module_namer(model)
         owners = {name: self.member_for(name) for name, _ in model.named_modules()}

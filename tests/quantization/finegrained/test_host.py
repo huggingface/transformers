@@ -241,3 +241,13 @@ class FineGrainedHostTest(unittest.TestCase):
         self.assertEqual(tags["model.layers.1.mlp.gate_proj"], "mlp")
         self.assertEqual(tags["model.layers.0.self_attn.q_proj"], "attn")
         self.assertIsNone(tags["model.layers.0.mlp.gate_proj"])
+
+    def test_a_default_skip_yields_to_an_entry_that_names_the_module(self):
+        """Check that `lm_head`, skipped by default, quantizes when an entry names it, and that a skip-list wins."""
+        self._load({"lm_head": OtherTagTestConfig(tag="head"), ".*": TagTestConfig()})
+        self.assertEqual(self.model.lm_head.tag, "head")
+        del self.model.lm_head.tag
+        self._load(
+            {"lm_head": OtherTagTestConfig(tag="head"), ".*": TagTestConfig()}, modules_to_not_convert=["lm_head"]
+        )
+        self.assertIsNone(getattr(self.model.lm_head, "tag", None))
