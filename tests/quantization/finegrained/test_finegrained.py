@@ -145,6 +145,28 @@ class FineGrainedPlanTest(unittest.TestCase):
         ops = [type(op) for op in quantizer.get_param_ops(model, name)]
         self.assertEqual([type(op) for op in quantizer.get_param_ops(copied, name)], ops)
 
+    def test_an_embedding_table_loads_through_the_member_that_owns_it(self):
+        """Check that a passed table loads through the catch-all's member, and that a targeted entry opts one in."""
+        from transformers import LlamaConfig, LlamaForCausalLM
+        from transformers.integrations.finegrained import FineGrainedEmbedding
+        from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+
+        config = LlamaConfig(hidden_size=64, intermediate_size=64, num_hidden_layers=1, vocab_size=64)
+        per_tensor = Fp8Config(weight_block_size=None)
+        plans = {
+            "passed": FineGrainedConfig(dtype_plan={".*": Fp8Config()}, modules_to_convert=["embed_tokens"]),
+            "targeted": FineGrainedConfig(dtype_plan={"embed_tokens": per_tensor, ".*": Fp8Config()}),
+        }
+        for name, plan in plans.items():
+            with self.subTest(name), torch.device("meta"):
+                model = LlamaForCausalLM(config)
+                FineGrainedHfQuantizer(plan)._process_model_before_weight_loading(model)
+                self.assertIsInstance(model.model.embed_tokens, FineGrainedEmbedding)
+                self.assertNotIsInstance(model.lm_head, FineGrainedEmbedding)
+        with self.assertRaisesRegex(ValueError, "needs a `.\\*` entry"), torch.device("meta"):
+            plan = FineGrainedConfig(dtype_plan={"mlp": Fp8Config()}, modules_to_convert=["embed_tokens"])
+            FineGrainedHfQuantizer(plan)._process_model_before_weight_loading(LlamaForCausalLM(config))
+
 
 @require_torch
 class FineGrainedPlanConversionTest(unittest.TestCase):
