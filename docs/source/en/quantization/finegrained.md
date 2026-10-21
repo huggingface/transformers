@@ -60,6 +60,7 @@ quantized in the format of its entry. A typical plan puts the MoE experts in a 4
 - Two targeted entries that match the same module raise an error.
 - A module that no entry matches stays in full precision. So does a module listed in `modules_to_not_convert`.
 - `dequantize` and `modules_to_not_convert` belong to the plan, not to its entries.
+- An entry can be the config of any registered quantization method. Its modules load through that method's quantizer.
 
 ## Tensor and expert parallelism
 
