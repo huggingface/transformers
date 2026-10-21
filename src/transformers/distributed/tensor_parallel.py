@@ -204,8 +204,9 @@ class ColwiseParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
 
     def should_use_local_tensors(self, module):
+        use_local_quantized_path = getattr(module, "_hf_quantized_needs_local_tp", False)
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
-        return getattr(module, "tp_uses_local_tensors", False) or uses_local_inference_kernel
+        return use_local_quantized_path or uses_local_inference_kernel
 
     def install_forward(self, module, mesh):
         if not hasattr(module, "out_features"):
@@ -234,7 +235,7 @@ class ColwiseParallel(TensorParallelLayer):
         # Plain-local quantized fast path. The input is already replicated, so avoid
         # wrapping it as a DTensor. If its gradient is needed, synchronize the partial
         # input-gradient contributions explicitly.
-        if is_local_input and getattr(module, "tp_uses_local_tensors", False):
+        if is_local_input and getattr(module, "_hf_quantized_needs_local_tp", False):
             if torch.is_grad_enabled() and x.requires_grad:
                 process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
                 x = _AllReduceBackward.apply(x, process_group)
@@ -280,8 +281,9 @@ class RowwiseParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
 
     def should_use_local_tensors(self, module):
+        use_local_quantized_path = getattr(module, "_hf_quantized_needs_local_tp", False)
         uses_local_inference_kernel = isinstance(module, torch.nn.Linear) and not torch.is_grad_enabled()
-        return getattr(module, "tp_uses_local_tensors", False) or uses_local_inference_kernel
+        return use_local_quantized_path or uses_local_inference_kernel
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -373,7 +375,7 @@ class EmbeddingParallel(TensorParallelLayer):
         self.use_local_output = use_local_output
 
     def should_use_local_tensors(self, module):
-        return getattr(module, "tp_uses_local_tensors", False)
+        return getattr(module, "_hf_quantized_needs_local_tp", False)
 
     def shard_param(self, module, param, mesh):
         meta = module._parameters.get(param)
@@ -1044,21 +1046,6 @@ def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
         )
 
 
-def _replicate_scalar_parameters(model: PreTrainedModel, plan: dict[str, str]) -> None:
-    """Set every 0-dim parameter the plan covers to `replicate`, in place. A scalar has no axis to shard.
-
-    E.g. the per-tensor FP8 `activation_scale`.
-    """
-    if plan:
-        plan.update(
-            {
-                replace_layer_number_by_wildcard(name): "replicate"
-                for name, param in model.named_parameters()
-                if param.ndim == 0 and _get_parameter_plan(name, plan) is not None
-            }
-        )
-
-
 def resolve_parallel_plans(
     model: PreTrainedModel, distributed_config: DistributedConfig
 ) -> tuple[dict[str, str], dict[str, str]]:
@@ -1093,8 +1080,6 @@ def resolve_parallel_plans(
     # EP rules take precedence: drop TP rules on EP modules and their children.
     is_expert = re.compile(rf"(?:{'|'.join(map(re.escape, ep_plan))})(?:\..+)?").fullmatch
     tp_plan = {name: style for name, style in tp_plan.items() if not is_expert(name)}
-    _replicate_scalar_parameters(model, tp_plan)
-    _replicate_scalar_parameters(model, ep_plan)
 
     _validate_parallel_plan_styles(tp_plan)
     _validate_parallel_plan_styles(ep_plan)

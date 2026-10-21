@@ -126,7 +126,6 @@ class ParallelInterface(GeneralInterface):
         "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
         "mla_kv_a_proj": MlaKvAProjParallel(),
         "all_reduce": AllReduceParallel(),
-        "replicate": TensorParallelLayer(),
     }
 ```
 
@@ -151,7 +150,6 @@ The table below describes each strategy.
 | `MoeExpertsParallel` | Tensor parallel MoE experts. All-reduces the expert output forward and adds the backward all-reduces for hidden states and routing weights. |
 | `MoeTensorParalellMegaMoeExperts` | Inference-only experts layer for DeepGEMM Mega MoE. Skips the gradient syncs and passes the process group into the module so the kernel can set up its shared buffers on the first forward. |
 | `MoeIdentityParallel` | Pre-divides the input of a zero or identity expert by the mesh size, cancelling the all-reduce that `moe_tp_experts` applies downstream. |
-| `TensorParallelLayer` | The no-op base class behind the `replicate` name. Every rank keeps the full parameter. A plan replicates every 0-dim parameter it covers. |
 
 ### Packed strategies
 
@@ -187,7 +185,7 @@ Inherit from `TensorParallelLayer` in [distributed/tensor_parallel.py](https://g
 | `transform_inputs_pre_forward` | Redistribute the module's inputs to the layout its forward expects. |
 | `context_around_forward` | Wrap the forward in a context manager, for example to expose local tensors to a kernel. |
 | `transform_output_post_forward` | Redistribute or reduce the module's output. |
-| `should_use_local_tensors` | Report that this module's forward needs plain tensors rather than `DTensor`s. A module declares it with `tp_uses_local_tensors = True`. |
+| `should_use_local_tensors` | Report that this module's forward needs plain tensors rather than `DTensor`s. |
 | `install_forward` | Replace `module.forward` outright. Override this only when the hooks above aren't enough, as `ReplicatedWithGradAllReduce` does to register a backward hook. |
 
 The example below walks through a trimmed version of `ColwiseParallel`.

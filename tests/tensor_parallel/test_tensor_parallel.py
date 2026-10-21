@@ -29,7 +29,6 @@ from transformers.distributed.tensor_parallel import (
     PackedRowwiseParallel,
     RowwiseParallel,
     get_kv_heads_per_rank,
-    resolve_parallel_plans,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
@@ -388,23 +387,24 @@ class TestTensorParallelLayer(TestCasePlus):
         _init_distributed(tp=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
 
     def test_a_module_declares_its_forward_runs_on_local_tensors(self):
-        """Check that the linear and embedding styles read `tp_uses_local_tensors`, in grad mode too."""
+        """Check that the linear and embedding styles read `_hf_quantized_needs_local_tp`, in grad mode too."""
         styles = (ColwiseParallel(), RowwiseParallel(), ALL_PARALLEL_STYLES["embedding_rowwise"])
         for marked in (True, False):
             module = torch.nn.Embedding(4, 4)
-            module.tp_uses_local_tensors = marked
+            module._hf_quantized_needs_local_tp = marked
             for style in styles:
                 with self.subTest(marked=marked, style=type(style).__name__), torch.enable_grad():
                     self.assertIs(style.should_use_local_tensors(module), marked)
 
-    def test_resolving_the_plans_replicates_scalars(self):
+    def test_a_quantizer_replicates_the_scalars_its_plan_covers(self):
+        from transformers.quantizers.base import HfQuantizer
+
         model = torch.nn.Module()
         model.q_proj = torch.nn.Linear(4, 4)
         model.q_proj.scale = torch.nn.Parameter(torch.tensor(1.0))
-        model.tp_plan, model.ep_plan = {"q_proj": "colwise"}, {}
-        distributed_config = SimpleNamespace(tp_plan=None, ep_plan=None, tp_size=2, ep_size=1)
-        tp_plan, _ = resolve_parallel_plans(model, distributed_config)
-        self.assertEqual(tp_plan, {"q_proj": "colwise", "q_proj.scale": "replicate"})
+        plan = {"q_proj": "colwise"}
+        HfQuantizer.update_parallel_plan(SimpleNamespace(serialized_names={}), model, plan)
+        self.assertEqual(plan, {"q_proj": "colwise", "q_proj.scale": "replicate"})
 
 
 class _DummyExperts(torch.nn.Module):
