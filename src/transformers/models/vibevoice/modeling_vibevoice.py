@@ -322,7 +322,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         input_values: torch.FloatTensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> BaseModelOutputWithPast:
         r"""
         padding_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
             Padding mask to remove padded parts of audio.

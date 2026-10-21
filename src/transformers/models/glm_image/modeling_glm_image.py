@@ -1123,7 +1123,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             The number of image inputs per each sample in the batch.
@@ -1236,7 +1236,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
         images_per_sample: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GlmImageModelOutputWithPast:
+    ) -> GlmImageModelOutputWithPast:
         r"""
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Number of images (including target grids) for each sample in the batch.

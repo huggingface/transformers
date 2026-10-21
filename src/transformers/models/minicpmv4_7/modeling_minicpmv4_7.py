@@ -683,7 +683,7 @@ class MiniCPMV4_7Model(MiniCPMV4_7PreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> BaseModelOutputWithPast:
         r"""
         pixel_values (`torch.FloatTensor`, *optional*):
             Pixel value patches for images, NaViT-packed.
@@ -1241,7 +1241,7 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_7PreTrainedModel, Generation
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> CausalLMOutputWithPast:
         r"""
         pixel_values (`torch.FloatTensor`, *optional*):
             Pixel value patches for images, NaViT-packed.

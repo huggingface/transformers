@@ -616,7 +616,7 @@ class CLIPSegTextModel(CLIPSegPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -715,7 +715,7 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
         pixel_values: torch.FloatTensor | None,
         interpolate_pos_encoding: bool | None = True,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -843,7 +843,7 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = True,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 

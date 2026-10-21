@@ -851,7 +851,7 @@ class AriaModel(AriaPreTrainedModel):
         pixel_mask: torch.FloatTensor | None = None,
         vision_feature_layer: int | list[int] = -1,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
         kwargs["output_hidden_states"] = True
         image_outputs = self.vision_tower(
@@ -908,7 +908,7 @@ class AriaModel(AriaPreTrainedModel):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple | AriaModelOutputWithPast:
+    ) -> AriaModelOutputWithPast:
         if pixel_values is not None and mm_encoder_outputs is not None:
             raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
 

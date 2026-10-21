@@ -1472,7 +1472,7 @@ class PPDocLayoutV4Model(PPDocLayoutV4PreTrainedModel):
         encoder_outputs: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPDocLayoutV4ModelOutput:
+    ) -> PPDocLayoutV4ModelOutput:
         r"""
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Not supported: PP-DocLayoutV4 is inference only in Transformers.
@@ -1674,7 +1674,7 @@ class PPDocLayoutV4ForObjectDetection(PPDocLayoutV4PreTrainedModel):
         encoder_outputs: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPDocLayoutV4ForObjectDetectionOutput:
+    ) -> PPDocLayoutV4ForObjectDetectionOutput:
         r"""
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Not supported: PP-DocLayoutV4 is inference only in Transformers.
