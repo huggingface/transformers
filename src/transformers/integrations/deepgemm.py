@@ -608,6 +608,18 @@ def _assert_not_training(module: torch.nn.Module, hidden_states: torch.Tensor) -
         )
 
 
+def _assert_no_gradient(input: torch.Tensor) -> None:
+    """Raise when a linear call needs a gradient. DeepGEMM has no backward pass."""
+    if torch.is_grad_enabled() and input.requires_grad:
+        raise NotImplementedError("DeepGEMM linear has no backward pass.")
+
+
+def _assert_dynamic_activation_scale(activation_scale: torch.Tensor | None) -> None:
+    """Raise on a static activation scale. DeepGEMM quantizes the activations per token itself."""
+    if activation_scale is not None:
+        raise NotImplementedError("DeepGEMM linear does not support static activation quantization.")
+
+
 def _assert_half_precision_input(input: torch.Tensor) -> None:
     if input.dtype not in (torch.bfloat16, torch.float16):
         raise ValueError(f"DeepGEMM linear requires FP16 or BF16 activations, got {input.dtype}")
@@ -678,34 +690,70 @@ def _assert_stacked_gate_up(module: torch.nn.Module) -> None:
         )
 
 
-def _check_experts_call(self: torch.nn.Module, hidden_states: torch.Tensor) -> None:
-    """Run the checks every DeepGEMM experts forward needs before any kernel work. Each assert says when it applies."""
-    _assert_dynamic_activations(self)
-    _assert_not_training(self, hidden_states)
-    _assert_bf16_hidden_states(hidden_states)
-    _assert_block_scales_only(self)
-    _assert_affine_scales(self)
-    _assert_stacked_gate_up(self)
+def _assert_sm100_experts(module: torch.nn.Module) -> None:
+    """Raise on the arch constraints of quantized experts. The bf16 arm holds no scales."""
+    scale = getattr(module, "down_proj_scale_inv", None)
+    if scale is not None:
+        _assert_sm100_requirements(module.down_proj, scale)
 
 
+def _assert_single_device(module: torch.nn.Module) -> None:
+    """Raise on a model spanning several CUDA devices in one process, flagged by `disable_deepgemm_on_multi_device`.
+
+    DeepGEMM binds its kernels to one CUDA context, so they corrupt results on another device.
+    """
+    if getattr(module, "_deepgemm_disabled", False):
+        raise RuntimeError(
+            "DeepGEMM experts selected on a model spanning multiple CUDA devices in one process; "
+            "its kernels are bound to a single CUDA context and corrupt across devices. Use "
+            "`experts_implementation='grouped_mm'`, or run one device per process (TP/EP)."
+        )
+
+
+def deepgemm_experts_guards(forward):
+    """Run the checks a DeepGEMM experts forward needs before any kernel work. Each assert says when it applies."""
+
+    @functools.wraps(forward)
+    def guarded(self, hidden_states, *args, **kwargs):
+        _assert_dynamic_activations(self)
+        _assert_not_training(self, hidden_states)
+        _assert_bf16_hidden_states(hidden_states)
+        _assert_block_scales_only(self)
+        _assert_affine_scales(self)
+        _assert_stacked_gate_up(self)
+        _assert_sm100_experts(self)
+        _assert_single_device(self)
+        return forward(self, hidden_states, *args, **kwargs)
+
+    return guarded
+
+
+def deepgemm_linear_guards(forward):
+    """Run the checks a DeepGEMM linear needs before any kernel work. Each assert says when it applies."""
+
+    @functools.wraps(forward)
+    def guarded(input, weight, weight_scale_inv, *args, activation_scale=None, **kwargs):
+        _assert_dynamic_activation_scale(activation_scale)
+        _assert_no_gradient(input)
+        _assert_half_precision_input(input)
+        _assert_sm100_requirements(weight, weight_scale_inv)
+        return forward(input, weight, weight_scale_inv, *args, **kwargs)
+
+    return guarded
+
+
+@deepgemm_linear_guards
 def deepgemm_fp8_fp4_linear(
     input: torch.Tensor,
     weight: torch.Tensor,
     weight_scale_inv: torch.Tensor,
     bias: torch.Tensor | None = None,
     block_size: tuple[int, int] | None = None,
-    activation_scale: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """Run a DeepGEMM FP8/FP4 linear with per-token activation quantization.
 
-    Raise on the calls that `prefers_deepgemm_linear` routes to Triton.
+    `deepgemm_linear_guards` raises on the calls that `prefers_deepgemm_linear` routes to Triton.
     """
-    if activation_scale is not None:
-        raise NotImplementedError("DeepGEMM linear does not support static activation quantization.")
-    if torch.is_grad_enabled() and input.requires_grad:
-        raise NotImplementedError("DeepGEMM linear has no backward pass.")
-    _assert_half_precision_input(input)
-    _assert_sm100_requirements(weight, weight_scale_inv)
     deepgemm = load_deepgemm_kernel()
     cast_kwargs = _select_fp8_cast_kwargs(weight, weight_scale_inv, block_size, is_sm100())
 
@@ -728,13 +776,13 @@ def deepgemm_fp8_fp4_linear(
     return output
 
 
+@deepgemm_experts_guards
 def deepgemm_bf16_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    _check_experts_call(self, hidden_states)
     deepgemm = load_deepgemm_kernel()
     # Non-transposed weights (E, N, K) → NT kernel; transposed (E, K, N) → NN kernel.
     grouped_bf16_matmul = deepgemm.grouped_bf16_matmul_nn if self.is_transposed else deepgemm.grouped_bf16_matmul_nt
@@ -798,23 +846,13 @@ def deepgemm_bf16_experts_forward(
     )
 
 
+@deepgemm_experts_guards
 def deepgemm_fp8_fp4_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
     top_k_index: torch.Tensor,
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
-    _check_experts_call(self, hidden_states)
-    _assert_sm100_requirements(self.down_proj, self.down_proj_scale_inv)
-    if self._deepgemm_disabled:
-        # Set at load when the model spans >1 CUDA device in this process, where DeepGEMM's
-        # context-bound kernels corrupt across devices (see `disable_deepgemm_on_multi_device`).
-        raise RuntimeError(
-            "DeepGEMM experts selected on a model spanning multiple CUDA devices in one process; "
-            "its kernels are bound to a single CUDA context and corrupt across devices. Use "
-            "`experts_implementation='grouped_mm'`, or run one device per process (TP/EP)."
-        )
-
     deepgemm = load_deepgemm_kernel()
 
     grouped_fp8_fp4_matmul = (
@@ -950,6 +988,7 @@ def setup_megamoe_weights(module: torch.nn.Module) -> None:
     module.down_proj_scale_inv = torch.nn.Parameter(down_sf, requires_grad=False)
 
 
+@deepgemm_experts_guards
 def deepgemm_fp8_fp4_megamoe_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -975,9 +1014,8 @@ def deepgemm_fp8_fp4_megamoe_experts_forward(
       `transform_weights_for_mega_moe((gate_up, gate_up_sf), (down, down_sf))`.
       - `config.swiglu_limit` (optional): SwiGLU clamp; absent → unclamped.
     """
-    _check_experts_call(self, hidden_states)
+    # the one check that depends on the arm, not the module: Mega MoE fuses the reduce
     _assert_no_post_expert_norm(self)
-    _assert_sm100_requirements(self.down_proj, self.down_proj_scale_inv)
     if self.gate_up_proj.dtype != torch.int8:
         raise NotImplementedError(
             f"DeepGEMM Mega MoE requires FP4-packed expert weights (dtype=`int8`), got "

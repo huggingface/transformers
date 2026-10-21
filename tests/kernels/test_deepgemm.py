@@ -740,6 +740,18 @@ class DeepGemmForwardTest(unittest.TestCase):
                 with self.assertRaisesRegex(NotImplementedError, "grouped_mm"):
                     deepgemm_fp8_fp4_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
 
+    def test_linear_refuses_static_activations_and_gradients(self):
+        """DeepGEMM quantizes the activations per token itself and has no backward pass."""
+        weight = torch.randn(256, 128, device=torch_device).to(torch.float8_e4m3fn)
+        weight_scale = torch.ones(2, 1, dtype=torch.float32, device=torch_device)
+        for case, needs_grad, kwargs in (
+            ("static_activation_scale", False, {"activation_scale": torch.ones(1, device=torch_device)}),
+            ("gradient", True, {}),
+        ):
+            input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device, requires_grad=needs_grad)
+            with self.subTest(case), self._bundle(is_sm100=False), self.assertRaises(NotImplementedError):
+                deepgemm_fp8_fp4_linear(input, weight, weight_scale, block_size=(128, 128), **kwargs)
+
 
 @require_torch
 class DeepGemmFineGrainedDispatchTest(unittest.TestCase):

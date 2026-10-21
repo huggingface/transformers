@@ -297,9 +297,9 @@ class TestFormatModulesTest(_ChainAssertions, unittest.TestCase):
                         if isinstance(config, GroupFp4TestConfig):
                             self.assertEqual(experts.down_proj_scale_inv.ndim, 5 if triton else 3)
 
-    def test_use_deepgemm_linear_false_keeps_the_linears_on_triton(self):
-        config = BlockFp8TestConfig(use_deepgemm_linear=False)
-        self.assertEqual(config.get_loading_attributes()["use_deepgemm_linear"], False)
+    def test_prefer_deepgemm_linear_false_keeps_the_linears_on_triton(self):
+        config = BlockFp8TestConfig(prefer_deepgemm_linear=False)
+        self.assertEqual(config.get_loading_attributes()["prefer_deepgemm_linear"], False)
         linear = FineGrainedLinear(64, 32, quantization_config=config)
         with mock.patch.object(fg, "finegrained_linear") as finegrained_linear:
             linear(torch.randn(3, 64, dtype=torch.bfloat16))
