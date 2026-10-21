@@ -1003,7 +1003,10 @@ class ModelTesterMixin(ExportTesterMixin):
                     )
                     # When reloading in fp16, keep_in_fp32_modules AND keep_in_fp32_modules_strict should be upcasted
                     all_fp32_modules = model._keep_in_fp32_modules | model._keep_in_fp32_modules_strict
+                    # integer buffers (e.g. step counters) are never cast
                     for name, param in model.state_dict().items():
+                        if not param.is_floating_point():
+                            continue
                         if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in all_fp32_modules):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:
@@ -1012,6 +1015,8 @@ class ModelTesterMixin(ExportTesterMixin):
                     # When reloading in bf16, only keep_in_fp32_modules_strict should be upcasted
                     model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16)
                     for name, param in model.state_dict().items():
+                        if not param.is_floating_point():
+                            continue
                         if any(re.search(rf"(?:^|\.){k}(?:\.|$)", name) for k in model._keep_in_fp32_modules_strict):
                             self.assertTrue(param.dtype == torch.float32, f"{name} not upcasted to fp32")
                         else:

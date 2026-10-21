@@ -236,6 +236,9 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
                 ("cuda", (8, 6)): [
                     "In this image, we see two cats sleeping on a pink blanket. They are both very relaxed and comfortable. They are both grey"
                 ],
+                ("xpu", 5): [
+                    "In this image, we see two cats sleeping on a pink blanket. There are also two remote controls on the blanket.\n\n\n\n"
+                ],
             }
         )
         EXPECTED_TEXT_COMPLETION = EXPECTED_TEXT_COMPLETION.get_expectation()[0]
@@ -283,6 +286,10 @@ class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
                 (None, None): [
                     "In this image, we see a panoramic view of the New York City skyline. The iconic skyscrapers,",
                     "In this image, we see a cat that is lying on its side, and is resting on a pink blanket. The cat is lying on",
+                ],
+                ("xpu", 5): [
+                    "In this image, we see a panoramic view of the New York City skyline. The iconic skyscrapers,",
+                    "In this image, we see a cat that is lying on its side on a cat bed.",
                 ],
             }
         )
