@@ -97,6 +97,9 @@ class FineGrainedPlanTest(unittest.TestCase):
         # Without `expert_dtype`, block-FP8 stays block-FP8 in DeepSeek's layout
         plain = _read(DeepseekV4Config(quantization_config={"quant_method": "fp8"}))
         self.assertEqual((type(plain), plain.checkpoint_format), (Fp8Config, "deepseek"))
+        # A model quantized to FP8 and saved by transformers keeps its FP8 experts
+        saved = _read(DeepseekV4Config(expert_dtype="fp4", quantization_config=Fp8Config(scale_fmt="ue8m0").to_dict()))
+        self.assertEqual((type(saved), saved.checkpoint_format), (Fp8Config, None))
 
     def test_deepseek_block_scales_load_onto_their_slot(self):
         """Check that DeepSeek's block scale `scale` is renamed onto `weight_scale_inv`."""
