@@ -229,7 +229,7 @@ class Nvfp4ChainTest(_ChainAssertions, unittest.TestCase):
     def _modelopt_conversions(self, **cfg_kwargs):
         # A plain modelopt NVFP4 export reads as this config
         config = NVFP4Config(**{"activation_format": "nvfp4", **cfg_kwargs})
-        return _quantizer_for(config).format_conversions(dequantize=False)
+        return _quantizer_for(config).get_weight_conversions()
 
     def test_every_declared_target_is_a_slot_the_module_holds(self):
         """Check that every converter target is a slot the module holds.
