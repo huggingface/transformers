@@ -23,7 +23,7 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
-from typing import TYPE_CHECKING, Any, TypeVar, cast, overload
+from typing import TYPE_CHECKING, TypeVar, overload
 
 from typing_extensions import ParamSpec
 
@@ -36,6 +36,7 @@ if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 
+# Used to type hint decorators that modify the signature of the decorated function
 P = ParamSpec("P")
 T = TypeVar("T")
 
@@ -248,7 +249,8 @@ def capture_outputs(
 ) -> Callable[[Callable[P, T]], Callable[P, tuple | T]]: ...
 
 
-# https://docs.python.org/3/library/typing.html#typing.ParamSpec
+# We follow the example from https://docs.python.org/3/library/typing.html#typing.ParamSpec to type-hint
+# this decorator, allowing it to add 'tuple' to the signature of the decorated function.
 def capture_outputs(
     func: Callable[P, T] | None = None, *, tie_last_hidden_states: bool = True
 ) -> Callable[P, tuple | T] | Callable[[Callable[P, T]], Callable[P, tuple | T]]:
@@ -258,7 +260,8 @@ def capture_outputs(
     The implementation is fully context/thread safe, except when using `torch.compile`, as dynamo is unable to trace
     through `ContextVar` methods.
 
-    Annotate the wrapped function with its original return type. This decorator adds `tuple` to the return type.
+    The wrapped method or function should not be typed like `tuple | X`, but instead just `X`, where `X` is the
+    original return type. This decorator's typing ensures that the return type is correctly represented as `tuple | X`.
 
     Args:
         tie_last_hidden_states (`bool`, *optional*, defaults to `True`):
@@ -271,7 +274,7 @@ def capture_outputs(
     def wrapped_fn(func: Callable[P, T]) -> Callable[P, tuple | T]:
         @wraps(func)
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> tuple | T:
-            self = cast("PreTrainedModel", args[0])
+            self, *args = args
             # Pop it so that internal modules always return a dict even if False is requested
             return_dict = kwargs.pop("return_dict", getattr(self.config, "return_dict", True))
 
@@ -307,7 +310,7 @@ def capture_outputs(
 
             # Run the forward
             try:
-                outputs = cast(Any, func(*args, **kwargs))
+                outputs = func(self, *args, **kwargs)
             # Reset the states
             finally:
                 _active_collector.reset(output_token)

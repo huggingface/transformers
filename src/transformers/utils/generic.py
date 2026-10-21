@@ -927,13 +927,15 @@ def del_attribute_from_modules(module: nn.Module, key: str):
         del_attribute_from_modules(submodule, key)
 
 
-# https://docs.python.org/3/library/typing.html#typing.ParamSpec
+# We follow the example from https://docs.python.org/3/library/typing.html#typing.ParamSpec to type-hint
+# this decorator, allowing it to add 'tuple' to the signature of the decorated function.
 def can_return_tuple(func: Callable[P, T]) -> Callable[P, tuple | T]:
     """
     Decorator to wrap model method, to call output.to_tuple() if return_dict=False passed as a kwarg or
     return_dict=False is set in the config.
 
-    Annotate the wrapped function with its original return type. This decorator adds `tuple` to the return type.
+    The wrapped method or function should not be typed like `tuple | X`, but instead just `X`, where `X` is the
+    original return type. This decorator's typing ensures that the return type is correctly represented as `tuple | X`.
 
     Note:
         output.to_tuple() convert output to tuple skipping all `None` values.
@@ -941,14 +943,14 @@ def can_return_tuple(func: Callable[P, T]) -> Callable[P, tuple | T]:
 
     @wraps(func)
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> tuple | T:
-        self: Any = args[0]
-        return_dict = cast("PreTrainedConfig", self.config).return_dict if hasattr(self, "config") else True
+        self = args[0]
+        return_dict = self.config.return_dict if hasattr(self, "config") else True
         return_dict_passed = kwargs.pop("return_dict", return_dict)
         if return_dict_passed is not None:
             return_dict = return_dict_passed
-        output: tuple | T = func(*args, **kwargs)
+        output = func(*args, **kwargs)
         if not return_dict and not isinstance(output, tuple):
-            output = cast(ModelOutput, output).to_tuple()
+            output = output.to_tuple()
         return output
 
     return wrapper
