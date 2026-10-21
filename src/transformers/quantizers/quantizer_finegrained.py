@@ -43,7 +43,6 @@ class FineGrainedHfQuantizer(HfQuantizer):
     - in an op that several members share, find its tensor's member with `member_for`. The host is its quantizer.
     """
 
-    requires_calibration = False
     quantization_config: "FineGrainedConfig"
 
     def __init__(self, quantization_config: "FineGrainedConfig", **kwargs):
@@ -140,7 +139,10 @@ class FineGrainedHfQuantizer(HfQuantizer):
             member._process_model_before_weight_loading(model, **kwargs)
 
     def _resolve_plan(self, model: "PreTrainedModel"):
-        """Name each module that a plan pattern matches by its checkpoint name. The saved config keeps the patterns."""
+        """Add an entry by model name for each module a pattern matches by its checkpoint name.
+
+        The saved config keeps the patterns as passed.
+        """
         to_checkpoint = checkpoint_module_namer(model)
         plan = self._plan
         resolved = dict(plan)

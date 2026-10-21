@@ -24,7 +24,7 @@ def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
 
 
 def plan_entry_for(dtype_plan: dict, module_name: str, catch_all: bool = True):
-    """Return the format config `dtype_plan` gives `module_name`, or `None` if no entry covers it.
+    """Return the entry `dtype_plan` gives `module_name`, or `None` if no entry covers it.
 
     A targeted entry wins over the `".*"` catch-all in any order, since `config.json` does not keep the order. Two
     targeted entries on one module raise. Without `catch_all`, only a targeted entry counts.

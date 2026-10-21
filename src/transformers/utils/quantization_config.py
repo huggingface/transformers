@@ -1754,15 +1754,17 @@ class FineGrainedConfig(QuantizationConfigMixin):
         if isinstance(entry, dict):
             method = entry.get("quant_method")
             if method not in methods:
-                raise ValueError(f"dtype_plan entry {pattern!r} has quant_method {method!r}; it is one of {methods}")
+                raise ValueError(f"dtype_plan entry {pattern!r} has quant_method {method!r}. Use one of {methods}.")
             entry = AUTO_QUANTIZATION_CONFIG_MAPPING[method].from_dict(entry)
         if not isinstance(entry, QuantizationConfigMixin) or isinstance(entry, FineGrainedConfig):
-            raise TypeError(f"dtype_plan entry {pattern!r} is a {type(entry).__name__}, not a method's config")
+            raise TypeError(
+                f"dtype_plan entry {pattern!r} is a {type(entry).__name__}. An entry is a method's config."
+            )
         loading = [name for name in self._entry_loading_options if getattr(entry, name, None)]
         if loading:
             raise ValueError(
-                f"dtype_plan entry {pattern!r} sets {loading}, which hold for the whole model: set them on the "
-                "FineGrainedConfig"
+                f"dtype_plan entry {pattern!r} sets {loading}. They hold for the whole model, so set them on the "
+                "FineGrainedConfig."
             )
         return entry
 
