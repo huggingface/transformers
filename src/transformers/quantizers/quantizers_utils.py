@@ -23,6 +23,20 @@ def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
     return module, tensor_name
 
 
+def plan_entry_for(dtype_plan: dict, module_name: str, catch_all: bool = True):
+    """Return the format config `dtype_plan` gives `module_name`, or `None` if no entry covers it.
+
+    A targeted entry wins over the `".*"` catch-all in any order, since `config.json` does not keep the order. Two
+    targeted entries on one module raise. Without `catch_all`, only a targeted entry counts.
+    """
+    claimed = [pattern for pattern in dtype_plan if pattern != ".*" and re.search(pattern, module_name)]
+    if len(claimed) > 1:
+        raise ValueError(f"{module_name!r} is claimed by more than one dtype_plan entry: {claimed}")
+    if claimed:
+        return dtype_plan[claimed[0]]
+    return dtype_plan.get(".*") if catch_all else None
+
+
 def should_convert_module(full_name, patterns: list[str] | None = None):
     if patterns is None:
         return True
@@ -35,6 +49,36 @@ def should_convert_module(full_name, patterns: list[str] | None = None):
     boundary = r"(?:(?<=\.)|(?=\.|$))"
     # Group the key so the boundary applies to every alternative.
     return not any(re.match(rf"(?:{key}){boundary}", full_name) or full_name.endswith(key) for key in patterns)
+
+
+def dedupe_conversions(conversions, keep=()) -> tuple[list, list]:
+    """Return `conversions` with each one not in `keep` read once, in order, and the ones added more than once.
+
+    Two quantizers may add the same conversion. Two conversions that read one pattern differently raise.
+    """
+    kept = {id(conversion) for conversion in keep}
+    claimed, merged, shared = {}, [], {}
+    for conversion in conversions:
+        if id(conversion) in kept:
+            merged.append(conversion)
+            continue
+        owner = next((claimed[p] for p in conversion.source_patterns if p in claimed), None)
+        if owner is None:
+            merged.append(conversion)
+            claimed.update(dict.fromkeys(conversion.source_patterns, conversion))
+        elif _signature(owner) != _signature(conversion):
+            raise ValueError(
+                f"Two quantizers read {conversion.source_patterns} differently, so they cannot load together."
+            )
+        else:
+            shared[id(owner)] = owner
+    return merged, list(shared.values())
+
+
+def _signature(conversion) -> tuple:
+    """Return what a conversion does: the keys it reads, where they go and the ops they run through."""
+    operations = tuple(type(op).__name__ for op in getattr(conversion, "operations", ()))
+    return type(conversion), tuple(conversion.source_patterns), tuple(conversion.target_patterns), operations
 
 
 def checkpoint_module_namer(model):

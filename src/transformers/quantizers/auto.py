@@ -25,6 +25,7 @@ from ..utils.quantization_config import (
     CompressedTensorsConfig,
     EetqConfig,
     FbgemmFp8Config,
+    FineGrainedConfig,
     FineGrainedFP8Config,
     FourOverSixConfig,
     FPQuantConfig,
@@ -55,6 +56,7 @@ from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
 from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
+from .quantizer_finegrained import FineGrainedHfQuantizer
 from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from .quantizer_fouroversix import FourOverSixHfQuantizer
 from .quantizer_fp_quant import FPQuantHfQuantizer
@@ -103,6 +105,7 @@ AUTO_QUANTIZER_MAPPING = {
     "auto-round": AutoRoundQuantizer,
     "mxfp4": Mxfp4HfQuantizer,
     "metal": MetalHfQuantizer,
+    "finegrained": FineGrainedHfQuantizer,
     "sinq": SinqHfQuantizer,
     "gemma": GemmaQuantizer,
 }
@@ -133,6 +136,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "auto-round": AutoRoundConfig,
     "mxfp4": Mxfp4Config,
     "metal": MetalConfig,
+    "finegrained": FineGrainedConfig,
     "sinq": SinqConfig,
     "gemma": GemmaQuantizationConfig,
 }
@@ -145,6 +149,7 @@ LOADING_ATTRIBUTES_CONFIG_TYPES = (
     CompressedTensorsConfig,
     Mxfp4Config,
     MetalConfig,
+    FineGrainedConfig,
     FineGrainedFP8Config,
 )
 
@@ -256,14 +261,14 @@ class AutoHfQuantizer:
             else:
                 quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
-        if (
-            quantization_config_from_args is not None
-            and quantization_config.__class__.__name__ != quantization_config_from_args.__class__.__name__
-        ):
-            raise ValueError(
-                f"The model is quantized with {quantization_config.__class__.__name__} but you are passing a {quantization_config_from_args.__class__.__name__} config. "
-                "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
-            )
+        if quantization_config_from_args is not None:
+            lender = quantization_config.loading_attributes_lender(quantization_config_from_args)
+            if lender is None:
+                raise ValueError(
+                    f"The model is quantized with {quantization_config.__class__.__name__} but you are passing a {quantization_config_from_args.__class__.__name__} config. "
+                    "Please make sure to pass the same quantization config class to `from_pretrained` with different loading attributes."
+                )
+            quantization_config_from_args = lender
 
         if isinstance(quantization_config, LOADING_ATTRIBUTES_CONFIG_TYPES) and isinstance(
             quantization_config_from_args, LOADING_ATTRIBUTES_CONFIG_TYPES

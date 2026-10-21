@@ -62,6 +62,7 @@ class QuantizationMethod(str, Enum):
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
     NVFP4 = "nvfp4"
+    FINEGRAINED = "finegrained"
     MXFP8 = "mxfp8"
     METAL = "metal"
     FOUR_OVER_SIX = "fouroversix"
@@ -202,6 +203,16 @@ class QuantizationConfigMixin:
         # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
         return unused_kwargs
+
+    def loading_attributes_lender(self, config: "QuantizationConfigMixin") -> Optional["QuantizationConfigMixin"]:
+        """
+        Return the config whose loading attributes override this checkpoint config.
+
+        `config` is the config passed to `from_pretrained`. Return `None` if it cannot override this one.
+        By default only a config of the same class can. A method may accept others, e.g. a `FineGrainedConfig`
+        checkpoint takes the config of one of its plan entries.
+        """
+        return config if config.__class__.__name__ == self.__class__.__name__ else None
 
 
 @dataclass
@@ -1684,6 +1695,101 @@ class SpQRConfig(QuantizationConfigMixin):
             raise ValueError("SpQR currently only supports beta2 = 16")
         if not isinstance(self.shapes, dict):
             raise TypeError("shapes must be a dict")
+
+
+def _loading_attributes(config, **attributes) -> dict[str, Any]:
+    """Return the loading attributes a passed config lends to a pre-quantized checkpoint's config.
+
+    These are `dequantize`, `modules_to_not_convert` when it is set, and `attributes`.
+    An unset `modules_to_not_convert` keeps the checkpoint's.
+    """
+    loading = {"dequantize": config.dequantize}
+    if config.modules_to_not_convert is not None:
+        loading["modules_to_not_convert"] = config.modules_to_not_convert
+    return {**loading, **attributes}
+
+
+class FineGrainedConfig(QuantizationConfigMixin):
+    """
+    Configuration for a model whose modules use different quantization methods.
+
+    The `dtype_plan` maps modules to the config of their method. Each entry is the config of a registered quantization
+    method. The other options apply to the whole model. A model in one method takes that method's config alone.
+
+    Args:
+        dtype_plan (`dict[str, QuantizationConfigMixin]`, *optional*):
+            Maps a module regex to the config of the modules it matches. A targeted entry wins over the
+            `".*"` catch-all. Modules that no entry covers stay in full precision. Entries take no loading options.
+            Set `dequantize` and `modules_to_not_convert` on this config instead.
+        modules_to_not_convert (`list`, *optional*):
+            Modules to keep in full precision.
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to dequantize the model to full precision while loading.
+    """
+
+    # Loading options belong to the whole model, not to a plan entry
+    _entry_loading_options = ("dequantize", "modules_to_not_convert")
+
+    def __init__(
+        self,
+        *,
+        dtype_plan: dict[str, QuantizationConfigMixin] | None = None,
+        modules_to_not_convert: list | None = None,
+        dequantize: bool = False,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.FINEGRAINED
+        kwargs.pop("quant_method", None)
+        if kwargs:
+            logger.info(f"Unused kwargs: {list(kwargs)}. These kwargs are not used in {type(self).__name__}.")
+        self.dtype_plan = {pattern: self._plan_entry(pattern, entry) for pattern, entry in (dtype_plan or {}).items()}
+        self.modules_to_not_convert = modules_to_not_convert
+        self.dequantize = dequantize
+
+    def _plan_entry(self, pattern: str, entry) -> QuantizationConfigMixin:
+        """Return `entry` as a config. An entry read from `config.json` is a dict with its `quant_method`."""
+        from ..quantizers.auto import AUTO_QUANTIZATION_CONFIG_MAPPING
+
+        methods = sorted(set(AUTO_QUANTIZATION_CONFIG_MAPPING) - {QuantizationMethod.FINEGRAINED.value})
+        if isinstance(entry, dict):
+            method = entry.get("quant_method")
+            if method not in methods:
+                raise ValueError(f"dtype_plan entry {pattern!r} has quant_method {method!r}; it is one of {methods}")
+            entry = AUTO_QUANTIZATION_CONFIG_MAPPING[method].from_dict(entry)
+        if not isinstance(entry, QuantizationConfigMixin) or isinstance(entry, FineGrainedConfig):
+            raise TypeError(f"dtype_plan entry {pattern!r} is a {type(entry).__name__}, not a method's config")
+        loading = [name for name in self._entry_loading_options if getattr(entry, name, None)]
+        if loading:
+            raise ValueError(
+                f"dtype_plan entry {pattern!r} sets {loading}, which hold for the whole model: set them on the "
+                "FineGrainedConfig"
+            )
+        return entry
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "quant_method": self.quant_method,
+            "dtype_plan": {
+                pattern: {
+                    name: value for name, value in config.to_dict().items() if name not in self._entry_loading_options
+                }
+                for pattern, config in self.dtype_plan.items()
+            },
+            "modules_to_not_convert": self.modules_to_not_convert,
+            "dequantize": self.dequantize,
+        }
+
+    def get_loading_attributes(self):
+        return _loading_attributes(self)
+
+    def loading_attributes_lender(self, config):
+        # The config of a plan entry's method lends its loading options to the plan
+        if not any(type(entry) is type(config) for entry in self.dtype_plan.values()):
+            return super().loading_attributes_lender(config)
+        return FineGrainedConfig(
+            modules_to_not_convert=getattr(config, "modules_to_not_convert", None),
+            dequantize=getattr(config, "dequantize", False),
+        )
 
 
 @dataclass
