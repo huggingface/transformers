@@ -281,6 +281,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): torch.tensor([11.9922, 14.7188, 14.3125, 10.6719, 6.9297], dtype=torch.float16),
                 ("cuda", 8): torch.tensor([11.9609, 14.7188, 14.2734, 10.6484, 6.9141], dtype=torch.float16),
+                ("tpu", None): torch.tensor([11.9609, 14.7188, 14.2734, 10.6484, 6.9141], dtype=torch.float16),
             }
         )  # fmt: skip
         expected_logits = expected_logits_all.get_expectation()
@@ -310,6 +311,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.",
                 ("cuda", 8): 'Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.',
+                ("tpu", None): 'Whispers of dawn,\nSilent whispers of night,\nPeace in the stillness.',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -684,6 +686,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                 ("cuda", 8): [-9.8750,  -0.4900,   1.4629, -10.3281, -10.3359],
                 ("rocm", (9, 4)): [ -9.8672,  -0.4888,   1.4648, -10.3281, -10.3281],
                 ("rocm", (9, 5)): [ -9.8906,  -0.4976,   1.4502, -10.3359, -10.3438],
+                ("tpu", None): [-9.8984,  -0.5151,   1.4463, -10.3359, -10.3438],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(expected_logits_all.get_expectation(), dtype=torch.float16)
@@ -717,6 +720,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
                 ("xpu", 3): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
                 ("cuda", 8): "Autumn leaves fall,\nNature's breath, a season's sigh,\nSilent woods awake.",
                 ("rocm", (9, 4)): "Autumn leaves fall,\nNature's breath, a silent sigh,\nWinter's chill approaches.",
+                ("tpu", None): "Autumn leaves fall,\nNature's breath, a gentle sigh,\nSilent whispers.",
             }
         )
         expected_output = expected_outputs.get_expectation()
@@ -985,6 +989,7 @@ class InternVLLlamaIntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their",
                 ("cuda", 8): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their',
+                ("tpu", None): 'user\nFrame1: \nFrame2: \nFrame3: \nFrame4: \nFrame5: \nFrame6: \nFrame7: \nFrame8: \nWhat type of shot is the man performing?\nassistant\nThe man is performing a forehand shot. This is a common stroke in tennis where the player swings the racket across their',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()

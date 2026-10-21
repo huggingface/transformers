@@ -20,10 +20,9 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import logging, set_seed
+from transformers import set_seed
 from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATIONS
 from transformers.testing_utils import (
-    CaptureLogger,
     CaptureStderr,
     backend_device_count,
     backend_torch_accelerator_module,
@@ -55,6 +54,7 @@ if is_torch_available():
         Gemma4TextConfig,
         GenerationConfig,
         LlamaConfig,
+        LlamaForCausalLM,
         MixtralConfig,
         MixtralForCausalLM,
         PreTrainedConfig,
@@ -323,6 +323,31 @@ class CacheTest(unittest.TestCase):
             keys, _ = cache.update(*_kv(1), layer_idx)
             self.assertEqual(keys.device.type, torch.device(torch_device).type)
 
+    @require_torch_gpu
+    def test_offloaded_cache_prefetch_waits_for_offload(self):
+        """
+        Regression test for offloaded caches returning wrong values. The offloading copy to CPU is non-blocking on
+        the default stream, and the prefetch back to the GPU runs on another stream. When the GPU lags behind the
+        CPU, the prefetch must wait for the copy to CPU to be finished, otherwise it reads a CPU buffer that has not
+        been written yet.
+        """
+        # The first allocation of pinned memory synchronizes the device, which hides the issue, hence the repetitions
+        for _ in range(3):
+            cache = Cache(layers=[DynamicLayer(), DynamicLayer()], offloading=True, offload_only_non_sliding=False)
+            prefill = [torch.rand(1, 4, 5, 16, device=torch_device) for _ in range(2)]
+
+            # Make the GPU lag behind the CPU, so that the offloading copies are still pending when the last layer
+            # prefetches the first one back
+            torch.cuda._sleep(int(1e9))
+            for layer_idx, states in enumerate(prefill):
+                cache.update(states, states.clone(), layer_idx)
+
+            for layer_idx, states in enumerate(prefill):
+                new_states = torch.rand(1, 4, 1, 16, device=torch_device)
+                keys, values = cache.update(new_states, new_states.clone(), layer_idx)
+                torch.testing.assert_close(keys, torch.cat([states, new_states], dim=-2), rtol=0, atol=0)
+                torch.testing.assert_close(values, torch.cat([states, new_states], dim=-2), rtol=0, atol=0)
+
     def test_chunked_prefill_static_cache_per_layer_head_shapes(self):
         """
         Regression test for heterogeneous models with per-layer head shapes. The static cache is eagerly initialized
@@ -428,6 +453,71 @@ class CacheTest(unittest.TestCase):
         expected = model.generate(inputs, **generation_kwargs)
         out = model.generate(inputs, **generation_kwargs, prefill_chunk_size=2)
         self.assertTrue(torch.equal(out, expected))
+
+    @parameterized.expand([("dynamic",), ("static",)])
+    def test_chunked_prefill_cache_continuation(self, cache_implementation):
+        """
+        Test that we can reuse a non-empty Cache with prefill chunking, with only the new input_ids, or the full sequence
+        containing the ids of the previously filled Cache as well.
+        """
+        config = LlamaConfig(
+            hidden_size=32,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            num_hidden_layers=2,
+            intermediate_size=32,
+            vocab_size=50,
+        )
+        model = LlamaForCausalLM(config).to(torch_device).eval()
+        inputs = torch.randint(10, 40, (1, 10), device=torch_device)
+        # StaticCache may auto-compile otherwise, which we don't want to waste time on in this test
+        generation_kwargs = {"max_new_tokens": 5, "min_new_tokens": 5, "do_sample": False, "disable_compile": True}
+
+        # With StaticCache, we need the max_len to be greater than the first pass plus the second pass
+        cache = (
+            DynamicCache(config=config)
+            if cache_implementation == "dynamic"
+            else StaticCache(config=config, max_cache_len=50)
+        )
+
+        # First generation pass filling a Cache
+        first_gen_ids = model.generate(inputs, past_key_values=cache, **generation_kwargs)
+
+        # Now make sure we get the same results with and without prefill chunking
+        new_ids = torch.randint(10, 40, (1, 5), device=torch_device)
+        full_sequence = torch.cat([first_gen_ids, new_ids], dim=-1)
+        full_sequence_mask = torch.ones_like(full_sequence)
+        # Last generated token is not in the cache! So "new_ids" are last generated token + new ids
+        uncached_ids = full_sequence[:, cache.get_seq_length() :]
+
+        no_chunked_only_new_ids = model.generate(
+            uncached_ids, attention_mask=full_sequence_mask, past_key_values=copy.deepcopy(cache), **generation_kwargs
+        )
+        no_chunked_full_ids = model.generate(
+            full_sequence, attention_mask=full_sequence_mask, past_key_values=copy.deepcopy(cache), **generation_kwargs
+        )
+        # Not related to this test, but just to make sure
+        self.assertTrue(
+            torch.equal(no_chunked_only_new_ids, no_chunked_full_ids[:, -no_chunked_only_new_ids.shape[-1] :])
+        )
+
+        chunked_only_new_ids = model.generate(
+            uncached_ids,
+            attention_mask=full_sequence_mask,
+            past_key_values=copy.deepcopy(cache),
+            prefill_chunk_size=2,
+            **generation_kwargs,
+        )
+        chunked_full_ids = model.generate(
+            full_sequence,
+            attention_mask=full_sequence_mask,
+            past_key_values=copy.deepcopy(cache),
+            prefill_chunk_size=2,
+            **generation_kwargs,
+        )
+        # Should both be equal, and equal to the ones without chunking
+        self.assertTrue(torch.equal(no_chunked_only_new_ids, chunked_only_new_ids))
+        self.assertTrue(torch.equal(chunked_only_new_ids, chunked_full_ids[:, -chunked_only_new_ids.shape[-1] :]))
 
     def test_dynamic_layers_reset_drops_their_states(self):
         """
@@ -984,6 +1074,17 @@ class CacheHardIntegrationTest(unittest.TestCase):
             model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
         tp_init.assert_called_once()
         self.assertEqual(tp_init.call_args.kwargs["num_heads"], 1)
+
+        # A plan that leaves the key projection unsharded keeps every head on each rank.
+        tp_plan = model._tp_plan
+        for plan in ({}, {"model.layers.*.self_attn.k_proj": "colwise_gather_output"}):
+            model._cache = None
+            model._tp_plan = plan
+            with patch.object(Cache, "early_initialization", autospec=True) as tp_init:
+                model.generate(**inputs, **generation_kwargs, prefill_chunk_size=prefill_chunk_size)
+            tp_init.assert_called_once()
+            self.assertEqual(tp_init.call_args.kwargs["num_heads"], num_kv_heads)
+        model._tp_plan = tp_plan
         model._tp_size = None
 
         # A multi-device `device_map` (single `model.device` can't cover all layers) skips eager init -> lazy.
@@ -1307,9 +1408,6 @@ class CacheExportIntegrationTest(unittest.TestCase):
         """
         Tests that static cache works with `torch.export()`
         """
-        if not is_torch_greater_or_equal("2.6"):
-            self.skipTest(reason="This test requires torch >= 2.6 to run.")
-
         from transformers.integrations.executorch import TorchExportableModuleForDecoderOnlyLM
 
         set_seed(42)
@@ -1960,49 +2058,20 @@ class CacheCroppingTests(unittest.TestCase):
             if hasattr(layer, "indexer_keys"):
                 self.assertEqual(layer.indexer_keys.numel(), 0)
 
-    def test_bc_crop_with_positive_value(self):
-        """Test that `crop` is correct when used with positive value (BC behavior)"""
+    def test_crop_with_positive_value_raises(self):
+        """Test that `crop` raises when used with a positive value"""
         keys = torch.rand(*self.attention_shape)
         values = torch.rand(*self.attention_shape)
         indexer_states = torch.rand(*self.indexer_shape)
 
-        # All other classes will raise if we try to crop with positive value after reaching the max cache len (sliding window/conv kernel size)
         for layer_cls in (DynamicLayer, DynamicIndexedLayer):
             layer = layer_cls()
-
-            # Update the attention part if any
-            if hasattr(layer, "update"):
-                layer.update(keys, values)
+            layer.update(keys, values)
             if hasattr(layer, "update_indexer"):
                 layer.update_indexer(indexer_states)
 
-            # Make sure we recall all states correctly even for sliding/linear attention
-            if hasattr(layer, "keys"):
-                self.assertEqual(layer.keys.shape[-2], self.seq_len)
-                self.assertEqual(layer.values.shape[-2], self.seq_len)
-            if hasattr(layer, "indexer_keys"):
-                self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len)
-
-            # Crop the layer
-            # Note that we need to patch `warning_once` if we want to capture the warning for every layer as otherwise it's thrown
-            # only once
-            logger = logging.get_logger("transformers.cache_utils")
-            with patch.object(logger, "warning_once", new=logger.warning):
-                with CaptureLogger(logger) as cl:
-                    layer.crop(self.seq_len - 3)
-
-            # Make sure we trigger deprecation
-            self.assertTrue("Calling `crop` with a positive value is deprecated and will be removed" in cl.out)
-
-            # Make sure we cropped correctly, and restricted length correctly
-            if hasattr(layer, "keys"):
-                self.assertEqual(layer.keys.shape[-2], self.seq_len - 3)
-                self.assertEqual(layer.values.shape[-2], self.seq_len - 3)
-                self.assertTrue((layer.keys == keys[..., :-3, :]).all())
-                self.assertTrue((layer.values == values[..., :-3, :]).all())
-            if hasattr(layer, "indexer_keys"):
-                self.assertEqual(layer.indexer_keys.shape[-2], self.seq_len - 3)
-                self.assertTrue((layer.indexer_keys == indexer_states[..., :-3, :]).all())
+            with self.assertRaisesRegex(ValueError, "Calling `crop` with a positive value"):
+                layer.crop(self.seq_len - 3)
 
     def test_update_with_recording_returns_advertised_kv_width(self):
         """Test that with past recording activated, `update` returns exactly the states advertised by `get_mask_sizes`"""

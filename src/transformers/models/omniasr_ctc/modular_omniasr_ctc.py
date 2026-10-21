@@ -18,9 +18,9 @@ import torch
 from torch import nn
 
 from ...generation import CompileConfig
-from ...modeling_outputs import CausalLMOutput
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutput
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from ..omniasr.modeling_omniasr import OmniASRPreTrainedModel
 from ..parakeet.modeling_parakeet import ParakeetCTCGenerateOutput, ParakeetForCTC
@@ -31,6 +31,13 @@ from .configuration_omniasr_ctc import OmniASRCTCConfig
 class OmniASRCTCPreTrainedModel(OmniASRPreTrainedModel):
     config: OmniASRCTCConfig
 
+    def _get_subsampling_output_length(self, input_lengths: torch.LongTensor | int) -> torch.LongTensor | int:
+        lengths = input_lengths
+        for kernel_size, stride in zip(self.config.audio_config.conv_kernel, self.config.audio_config.conv_stride):
+            lengths = torch.div(lengths - kernel_size, stride, rounding_mode="floor") + 1
+
+        return lengths
+
 
 @auto_docstring(custom_intro="""Outputs of OmniASR CTC model generation.""")
 @dataclass
@@ -38,12 +45,39 @@ class OmniASRCTCGenerateOutput(ParakeetCTCGenerateOutput):
     pass
 
 
-class OmniASRCTCForCTC(ParakeetForCTC):
+@auto_docstring(
+    custom_intro="""
+    The OmniASR CTC model, i.e. the speech encoder without the CTC head.
+    """
+)
+class OmniASRCTCModel(OmniASRCTCPreTrainedModel):
+    def __init__(self, config: OmniASRCTCConfig):
+        super().__init__(config)
+        self.audio_tower = AutoModel.from_config(config.audio_config)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_values: torch.Tensor,
+        padding_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Padding mask used to pad `input_values`.
+        """
+        return self.audio_tower(input_values=input_values, padding_mask=padding_mask, **kwargs)
+
+
+class OmniASRForCTC(ParakeetForCTC):
     config: OmniASRCTCConfig
 
     def __init__(self, config: OmniASRCTCConfig):
         super().__init__(config)
-        self.encoder = AutoModel.from_config(config.audio_config)
+        del self.encoder
+        self.model = OmniASRCTCModel(config)
         self.ctc_head = nn.Linear(config.audio_config.hidden_size, config.vocab_size)
 
     # same as ParakeetForCTC but with `input_values` instead of `input_features` as we use audio values directly
@@ -61,12 +95,12 @@ class OmniASRCTCForCTC(ParakeetForCTC):
         Example:
 
         ```python
-        >>> from transformers import AutoProcessor, OmniASRCTCForCTC
+        >>> from transformers import AutoProcessor, OmniASRForCTC
         >>> from datasets import load_dataset, Audio
 
         >>> model_id = "bezzam/omniasr-ctc-300m-v2"
         >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = OmniASRCTCForCTC.from_pretrained(model_id)
+        >>> model = OmniASRForCTC.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -79,7 +113,7 @@ class OmniASRCTCForCTC(ParakeetForCTC):
 
         if labels is not None:
             kwargs.setdefault("output_attention_mask", True)
-        encoder_outputs = self.encoder(
+        encoder_outputs = self.model(
             input_values=input_values,
             padding_mask=padding_mask,
             **kwargs,
@@ -125,12 +159,12 @@ class OmniASRCTCForCTC(ParakeetForCTC):
         Example:
 
         ```python
-        >>> from transformers import AutoProcessor, OmniASRCTCForCTC
+        >>> from transformers import AutoProcessor, OmniASRForCTC
         >>> from datasets import load_dataset, Audio
 
         >>> model_id = "bezzam/omniasr-ctc-300m-v2"
         >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = OmniASRCTCForCTC.from_pretrained(model_id)
+        >>> model = OmniASRForCTC.from_pretrained(model_id)
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
@@ -170,4 +204,4 @@ class OmniASRCTCForCTC(ParakeetForCTC):
         return sequences
 
 
-__all__ = ["OmniASRCTCForCTC", "OmniASRCTCPreTrainedModel"]
+__all__ = ["OmniASRForCTC", "OmniASRCTCModel", "OmniASRCTCPreTrainedModel"]

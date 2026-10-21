@@ -60,12 +60,8 @@ ISO_639_1_TO_LANGUAGE = {
 # fmt: on
 
 
-class OmniASRProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
-    _defaults = {
-        "audio_kwargs": {"sampling_rate": 16000},
-        "text_kwargs": {"padding": True},
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+class OmniASRProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
 
 
 @auto_docstring

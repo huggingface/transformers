@@ -452,6 +452,9 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     tokenizer.add_special_tokens(
         {"extra_special_tokens": [f"<extra_id_{i}>" for i in range(NUM_RESERVED_TOKENS)] + language_tokens}
     )
+    # Saved with the tokenizer, so that `_merge_kwargs` uses them as processor defaults.
+    tokenizer.init_kwargs["padding"] = True
+    tokenizer.init_kwargs["return_tensors"] = "pt"
 
     # The chat template writes the decoder prompt, and the convolution geometry counts how many audio placeholders
     # it holds.

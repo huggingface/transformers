@@ -37,6 +37,7 @@ from ..cache_utils import (
 )
 from ..configuration_utils import get_head_shapes
 from ..distributed.fsdp import is_fsdp_managed_module
+from ..distributed.tensor_parallel import get_kv_heads_per_rank
 from ..distributed.utils import _get_torch_distributed_world_size
 from ..dynamic_module_utils import (
     check_python_requirements,
@@ -46,6 +47,7 @@ from ..dynamic_module_utils import (
 )
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled
 from ..masking_utils import create_masks_for_generate
+from ..pytorch_utils import move_to_device
 from ..tokenization_python import ExtensionsTrie
 from ..utils import (
     ModelOutput,
@@ -159,6 +161,7 @@ MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
     "input_features_mask",
     "input_values",
     "padding_mask",
+    "input_values_mask",
     "pixel_values_videos",
     "num_local_patches",
     "high_res_pixel_values",
@@ -168,7 +171,13 @@ MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL = (
     "image_sizes_videos",
     "pixel_attention_mask",
     "pixel_values_images",
-    "num_local_patches",
+    "pixel_values_local",
+    "patches_grid",
+    "image_token_pooling",
+    "image_grids",
+    "image_num_crops",
+    "video_token_pooling",
+    "video_grids",
 )
 
 
@@ -774,9 +783,7 @@ class GenerationMixin(ContinuousMixin):
         # the generation loop's growing-tensor bookkeeping stays off-device.
         input_tensor = model_inputs.get("inputs_embeds", model_inputs[input_ids_key])  # input_ids is None for embeds
         if self.device.type != "meta" and input_tensor is not None and input_tensor.device != self.device:
-            for key, value in model_inputs.items():
-                if isinstance(value, torch.Tensor):
-                    model_inputs[key] = value.to(self.device)
+            model_inputs = move_to_device(model_inputs, self.device)
 
         return model_inputs
 
@@ -2136,12 +2143,10 @@ class GenerationMixin(ContinuousMixin):
         num_heads, head_dim = get_head_shapes(text_config)
         tp_size = getattr(self, "_tp_size", None) or 1
         if tp_size > 1:
-            layer_heads = [num_heads] if isinstance(num_heads, int) else num_heads
-            if any(heads % tp_size for heads in layer_heads):
+            num_heads = get_kv_heads_per_rank(self.tp_plan, num_heads, tp_size)
+            if num_heads is None:
                 # The model cannot be evenly sharded by head
                 return None
-            # A scalar must stay scalar: `early_initialization` broadcasts it, but wants one entry per layer in a list
-            num_heads = num_heads // tp_size if isinstance(num_heads, int) else [h // tp_size for h in layer_heads]
         return num_heads, head_dim
 
     def _prepare_static_cache(
@@ -2948,7 +2953,8 @@ class GenerationMixin(ContinuousMixin):
             generation_config, model_kwargs, generation_mode, batch_size, max_cache_length
         )
 
-        if self.device.type != input_ids.device.type:
+        # Inputs on CPU are supported: `prepare_inputs_for_generation` moves them to the model device before each forward
+        if self.device.type != input_ids.device.type and input_ids.device.type != "cpu":
             warnings.warn(
                 "You are calling .generate() with the `input_ids` being on a device type different"
                 f" than your model's device. `input_ids` is on {input_ids.device.type}, whereas the model"
@@ -4263,10 +4269,11 @@ class GenerationMixin(ContinuousMixin):
         # When restarting from `inputs_embeds`, it's always the FULL sequence, and we always need to slice
         next_sequence_length = None
         inputs_embeds = model_kwargs.get("inputs_embeds")
+        cache = model_kwargs.get("past_key_values")
         use_inputs_embeds = False
         if not self.config.is_encoder_decoder and inputs_embeds is not None and is_first_iteration:
             use_inputs_embeds = True
-        if (cache := model_kwargs.get("past_key_values")) is not None:
+        if cache is not None:
             past_length = cache.get_seq_length()
             # It will be sliced as inputs_embeds = inputs_embeds[:, -next_sequence_length:, :] in `prepare_inputs_for_generation`
             if use_inputs_embeds:
@@ -4296,15 +4303,17 @@ class GenerationMixin(ContinuousMixin):
 
         # Chunked prefill (for very large contexts)
         else:
+            if cache is None:
+                raise ValueError("Cannot use prefill chunking without a cache")
+
             # Even if we are not compiling the forward, flex is always compiled when used. With chunked prefill, we may
             # end up needing just a bit more graphs than the default (which is 8). Doing this avoids very cryptic warnings
             getattr(torch, "_dynamo").config.cache_size_limit = 64
 
             chunk_size = generation_config.prefill_chunk_size
-            input_chunks = torch.split(input_ids, chunk_size, dim=-1)
-
-            if "past_key_values" not in model_kwargs:
-                raise ValueError("Cannot use prefill chunking without a cache")
+            # In case we are restarting from non-empty Cache and the input_ids also contain the old ones, we need to slice
+            next_sequence_length = 0 if next_sequence_length is None else next_sequence_length
+            input_chunks = torch.split(input_ids[:, -next_sequence_length:], chunk_size, dim=-1)
 
             model_forward = (
                 self.get_compiled_call(generation_config.compile_config)
@@ -4314,7 +4323,7 @@ class GenerationMixin(ContinuousMixin):
 
             attention_mask = model_kwargs.pop("attention_mask", None)
             position_ids = model_kwargs.pop("position_ids", None)
-            past_length = 0
+            past_length = cache.get_seq_length()
             for input_chunk in input_chunks:
                 current_length = past_length + input_chunk.shape[-1]
                 if attention_mask is not None:

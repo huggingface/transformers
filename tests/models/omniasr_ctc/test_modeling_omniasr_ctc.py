@@ -21,13 +21,15 @@ from transformers import (
     AutoProcessor,
     OmniASRAudioConfig,
     OmniASRCTCConfig,
-    OmniASRCTCForCTC,
+    OmniASRCTCModel,
+    OmniASRForCTC,
     is_datasets_available,
     is_torch_available,
 )
-from transformers.testing_utils import cleanup, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, random_attention_mask
 
 
@@ -38,7 +40,7 @@ if is_torch_available():
     import torch
 
 
-class OmniASRCTCForCTCModelTester:
+class OmniASRForCTCModelTester:
     def __init__(self, parent, batch_size=3, num_samples=80, vocab_size=32, pad_token_id=0, is_training=False):
         self.parent = parent
         self.batch_size = batch_size
@@ -84,7 +86,7 @@ class OmniASRCTCForCTCModelTester:
         return config, {"input_values": input_values, "padding_mask": padding_mask}
 
     def create_and_check_model(self, config, input_values, padding_mask):
-        model = OmniASRCTCForCTC(config=config)
+        model = OmniASRForCTC(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -93,14 +95,14 @@ class OmniASRCTCForCTCModelTester:
 
 
 @require_torch
-class OmniASRCTCForCTCModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (OmniASRCTCForCTC,) if is_torch_available() else ()
-    all_generative_model_classes = ()  # OmniASRCTCForCTC has a custom `generate`
+class OmniASRForCTCModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (OmniASRCTCModel, OmniASRForCTC) if is_torch_available() else ()
+    all_generative_model_classes = ()  # OmniASRForCTC has a custom `generate`
     _is_composite = True
     test_resize_embeddings = False
 
     def setUp(self):
-        self.model_tester = OmniASRCTCForCTCModelTester(self)
+        self.model_tester = OmniASRForCTCModelTester(self)
         self.config_tester = ConfigTester(self, config_class=OmniASRCTCConfig)
 
     def test_config(self):
@@ -109,7 +111,7 @@ class OmniASRCTCForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         self.model_tester.create_and_check_model(*self.model_tester.prepare_config_and_inputs())
 
-    @unittest.skip(reason="OmniASRCTCForCTC is an encoder with a CTC head: it takes the waveform, not inputs_embeds.")
+    @unittest.skip(reason="OmniASRForCTC is an encoder with a CTC head: it takes the waveform, not inputs_embeds.")
     def test_model_get_set_embeddings(self):
         pass
 
@@ -126,25 +128,21 @@ class OmniASRCTCForCTCModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class OmniASRCTCForCTCIntegrationTest(unittest.TestCase):
+class OmniASRForCTCIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     _dataset = None
 
-    @classmethod
-    def setUp(cls):
-        cls.checkpoint_name = "bezzam/omniasr-ctc-300m-v2"
-        cls.dtype = torch.float32
-        cls.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/omniasr_ctc"
-        cls.processor = AutoProcessor.from_pretrained("bezzam/omniasr-ctc-300m-v2")
+    def setUp(self):
+        super().setUp()
+        self.checkpoint_name = "bezzam/omniasr-ctc-300m-v2"
+        self.dtype = torch.float32
+        self.fixtures_path = Path(__file__).parent.parent.parent / "fixtures/omniasr_ctc"
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name)
 
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
-    @classmethod
-    def _load_dataset(cls):
-        if cls._dataset is None:
-            cls._dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-            cls._dataset = cls._dataset.cast_column(
-                "audio", Audio(sampling_rate=cls.processor.feature_extractor.sampling_rate)
+    def _load_dataset(self):
+        if type(self)._dataset is None:
+            dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+            type(self)._dataset = dataset.cast_column(
+                "audio", Audio(sampling_rate=self.processor.feature_extractor.sampling_rate)
             )
 
     def _load_datasamples(self, num_samples):
@@ -164,7 +162,7 @@ class OmniASRCTCForCTCIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(1)
-        model = OmniASRCTCForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map="auto")
+        model = OmniASRForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map="auto")
 
         inputs = self.processor(samples)
         inputs.to(model.device, dtype=self.dtype)
@@ -184,7 +182,7 @@ class OmniASRCTCForCTCIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
 
         samples = self._load_datasamples(3)
-        model = OmniASRCTCForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map="auto")
+        model = OmniASRForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map="auto")
 
         inputs = self.processor(samples)
         inputs.to(model.device, dtype=self.dtype)

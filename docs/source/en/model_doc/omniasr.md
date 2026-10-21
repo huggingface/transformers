@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was published in HF papers on 2025-11-12 and contributed to Hugging Face Transformers on 2026-10-20.*
+*This model was published in HF papers on 2025-11-12 and contributed to Hugging Face Transformers on 2026-10-21.*
 
 # OmniASR
 
@@ -30,8 +30,8 @@ OmniASR (Omnilingual ASR) is a suite of multilingual speech-recognition models f
 audio encoder (convolutional layers that downsample the 16 kHz waveform ~320× to a 50 Hz frame rate,
 followed by a pre-norm Transformer encoder) with one of two heads:
 
-- **CTC variant** ([`OmniASRCTCForCTC`], see [OmniASR CTC](omniasr_ctc)): a single linear projection to the vocabulary, decoded non-autoregressively with greedy CTC.
-- **ALM (audio language model) variant** ([`OmniASRForConditionalGeneration`], this page): the audio embeddings are linearly projected into a Llama decoder which autoregressively generates the transcription. This variant additionally supports optional **language conditioning**: passing a language code such as `"eng_Latn"` makes the processor write the matching language token into the decoder context, which generally improves transcription quality.
+- **CTC variant** (`OmniASRForCTC`, see [OmniASR CTC](./omniasr_ctc)): a single linear projection to the vocabulary, decoded non-autoregressively with greedy CTC.
+- **ALM (audio language model) variant** (`OmniASRForConditionalGeneration`, this page): the audio embeddings are linearly projected into a Llama decoder which autoregressively generates the transcription. This variant additionally supports optional **language conditioning**: passing a language code such as `"eng_Latn"` makes the processor write the matching language token into the decoder context, which generally improves transcription quality.
 
 Checkpoints can be found in [this collection](https://huggingface.co/collections/bezzam/omnilingual-asr-transformers-compatible): 4x ALM checkpoints of various sizes (300M, 1B, 3B, 7B). Original weights are released by Meta, and can be found on their [GitHub repo](https://github.com/facebookresearch/omnilingual-asr#model-architectures).
 
@@ -231,7 +231,7 @@ inputs = processor.apply_transcription_request(
 
 # Created once and reused across `generate` calls, to avoid recompiling at every call
 static_cache = StaticCache(
-    config=model.config.get_text_config(decoder=True),
+    config=model.config,
     max_cache_len=inputs["input_ids"].shape[1] + max_new_tokens,
 )
 compile_config = CompileConfig()

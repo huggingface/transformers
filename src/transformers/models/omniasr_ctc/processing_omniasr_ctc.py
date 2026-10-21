@@ -19,12 +19,8 @@ from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 
 
-class OmniASRCTCProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
-    _defaults = {
-        "audio_kwargs": {"sampling_rate": 16000},
-        "text_kwargs": {"padding": True},
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+class OmniASRCTCProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {}
 
 
 @auto_docstring

@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import unittest
 from typing import Literal
 
+from transformers.testing_utils import require_jinja
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
+from transformers.utils.chat_template_utils import render_jinja_template
 
 
 class JsonSchemaGeneratorTest(unittest.TestCase):
@@ -736,3 +739,49 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
         }
         self.assertEqual(schema["function"], expected_schema)
+
+
+# Renders reasoning from the message field named FIELD
+REASONING_TEMPLATE = """
+{%- for message in messages %}
+    {{- "<|" + message.role + "|>\n" }}
+    {%- if message.FIELD is defined %}
+        {{- "<think>" + message.FIELD + "</think>\n" }}
+    {%- endif %}
+    {{- message.content + "<|end|>\n" }}
+{%- endfor %}"""
+
+
+@require_jinja
+class ReasoningFieldAliasTest(unittest.TestCase):
+    def test_reasoning_renders_from_any_field_name(self):
+        expected = "<|user|>\nHi<|end|>\n<|assistant|>\n<think>Let me think</think>\nHello!<|end|>\n"
+        for template_field in ("reasoning_content", "thinking"):
+            for message_field in ("reasoning_content", "thinking", "reasoning"):
+                with self.subTest(template_field=template_field, message_field=message_field):
+                    chat = [
+                        {"role": "user", "content": "Hi"},
+                        {"role": "assistant", message_field: "Let me think", "content": "Hello!"},
+                    ]
+                    original_chat = copy.deepcopy(chat)
+                    rendered, _ = render_jinja_template(
+                        [chat], chat_template=REASONING_TEMPLATE.replace("FIELD", template_field)
+                    )
+                    self.assertEqual(rendered[0], expected)
+                    # The aliases are added to copies of the messages, not to the caller's chat
+                    self.assertEqual(chat, original_chat)
+
+    def test_continue_final_message_on_aliased_reasoning(self):
+        expected = "<|user|>\nHi<|end|>\n<|assistant|>\n<think>Let me think"
+        for template_field, message_field in (("thinking", "reasoning_content"), ("reasoning_content", "thinking")):
+            with self.subTest(template_field=template_field, message_field=message_field):
+                chat = [
+                    {"role": "user", "content": "Hi"},
+                    {"role": "assistant", message_field: "Let me think", "content": "Hello!"},
+                ]
+                rendered, _ = render_jinja_template(
+                    [chat],
+                    chat_template=REASONING_TEMPLATE.replace("FIELD", template_field),
+                    continue_final_message=message_field,
+                )
+                self.assertEqual(rendered[0], expected)

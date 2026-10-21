@@ -19,7 +19,7 @@ import os
 import torch
 from omnilingual_asr.models.inference.pipeline import ASRInferencePipeline
 
-from transformers import OmniASRCTCConfig, OmniASRCTCForCTC, OmniASRCTCProcessor, ParakeetTokenizer, logging
+from transformers import OmniASRCTCConfig, OmniASRCTCProcessor, OmniASRForCTC, ParakeetTokenizer, logging
 
 # The speech encoder, its weights and the tokenizer are converted as for the ALM variant, which defines the encoder.
 from transformers.models.omniasr.convert_omniasr_to_hf import (
@@ -67,7 +67,7 @@ def convert_omniasr_ctc_checkpoint(model_card, repo_id=None, bfloat16=False):
         bos_token_id=pipeline.tokenizer.vocab_info.bos_idx,
         eos_token_id=pipeline.tokenizer.vocab_info.eos_idx,
     )
-    hf_model = OmniASRCTCForCTC(config)
+    hf_model = OmniASRForCTC(config)
     hf_model.to(device).to(dtype)
 
     # 3) Convert weights
@@ -78,7 +78,7 @@ def convert_omniasr_ctc_checkpoint(model_card, repo_id=None, bfloat16=False):
     state_dict = original_model.state_dict()
     print("Number of keys in original model :", len(state_dict))
     print("Number of keys in HF model       : ", len(hf_model.state_dict()))
-    key_mapping = {**get_encoder_key_mapping("encoder."), **CTC_KEY_MAPPING}
+    key_mapping = {**get_encoder_key_mapping("model.audio_tower."), **CTC_KEY_MAPPING}
     hf_model = load_state_dict(hf_model, convert_state_dict(state_dict, key_mapping))
     remove_weight_norm(hf_model)
 
@@ -87,6 +87,9 @@ def convert_omniasr_ctc_checkpoint(model_card, repo_id=None, bfloat16=False):
     # The CTC loss does not depend on the padding side. `ParakeetTokenizer` decodes CTC outputs, collapsing repeats and
     # dropping the pad token, which is the CTC blank.
     tokenizer = convert_tokenizer(tokenizer_path, padding_side="right", tokenizer_class=ParakeetTokenizer)
+    # Saved with the tokenizer, so that `_merge_kwargs` uses them as processor defaults.
+    tokenizer.init_kwargs["padding"] = True
+    tokenizer.init_kwargs["return_tensors"] = "pt"
     processor = OmniASRCTCProcessor(feature_extractor=get_feature_extractor(), tokenizer=tokenizer)
 
     # 5) Upload to hub
