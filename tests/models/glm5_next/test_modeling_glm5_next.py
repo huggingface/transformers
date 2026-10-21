@@ -143,7 +143,7 @@ class Glm5NextModelTest(VLMModelTest, unittest.TestCase):
 
     def test_text_model_save_uses_original_weight_names(self):
         """Keep text-only saves in the released layout expected by SGLang (sgl-project/sglang#38618)."""
-        config = self.model_tester.get_text_config()
+        config = self.model_tester.get_config().get_text_config()
         model = Glm5NextTextModel(config)
 
         with tempfile.TemporaryDirectory() as tmpdirname:

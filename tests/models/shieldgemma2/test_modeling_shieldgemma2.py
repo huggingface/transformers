@@ -82,7 +82,7 @@ class ShieldGemma2ModelTester(VLMModelTester):
     @property
     def _special_token_ids(self):
         return super()._special_token_ids | {
-            self.image_token_index,
+            self.image_token_id,
             self.yes_token_index,
             self.no_token_index,
         }
