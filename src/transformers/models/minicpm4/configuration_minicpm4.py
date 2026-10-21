@@ -34,15 +34,11 @@ class MiniCPM4Config(PreTrainedConfig):
     scale_emb (`int` or `float`, *optional*, defaults to 12):
         Multiplier applied to input embeddings.
     scale_depth (`int` or `float`, *optional*, defaults to 1.4):
-        Multiplier for residual connections. The effective scale is
-        `scale_depth / sqrt(num_hidden_layers)`.
+        Multiplier for residual connections; the effective scaling is `scale_depth / sqrt(num_hidden_layers)`.
+        If `None`, defaults to `sqrt(num_hidden_layers)` (no-op scaling).
     dim_model_base (`int`, *optional*, defaults to 256):
-        Base model dimension used to scale hidden states before the language model head.
-    mup_denominator (`int`, *optional*):
-        Width denominator used by compatible speculative decoding heads.
-    sparse_config (`dict`, *optional*):
-        Configuration for OpenBMB's optional InfLLM-v2 sparse attention implementation. Native Transformers support
-        is currently limited to dense attention and raises an error if this is set.
+        Base model dimension used to scale logits before the language model head. If `None`,
+        defaults to `hidden_size` (no-op scaling).
 
     Example:
 
@@ -73,8 +69,6 @@ class MiniCPM4Config(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
 
-    # Architecture dimensions match MiniCPM4-8B. Compatibility fields omitted by MiniCPM4-0.5B keep their official
-    # constructor defaults.
     vocab_size: int = 73448
     hidden_size: int = 4096
     intermediate_size: int = 16384
@@ -99,8 +93,6 @@ class MiniCPM4Config(PreTrainedConfig):
     scale_emb: int | float = 12
     scale_depth: int | float | None = 1.4
     dim_model_base: int | None = 256
-    mup_denominator: int | None = None
-    sparse_config: dict | None = None
 
     def __post_init__(self, **kwargs):
         if self.scale_depth is None:
