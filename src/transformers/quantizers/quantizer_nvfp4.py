@@ -20,7 +20,7 @@ It also quantizes a full-precision checkpoint on the fly.
 from typing import TYPE_CHECKING
 
 from .block_scaled_utils import BlockScaledQuantizer, ProducerLayout
-from .quantizers_utils import FUSED_STACKS
+from .quantizers_utils import FUSED_STACKS, get_module_from_name
 
 
 if TYPE_CHECKING:
@@ -33,25 +33,25 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
     quantization_config: "NVFP4Config"
     # ModelOpt also calibrates an FP8 KV cache. Here the cache stays in the model dtype.
     unexpected_keys = (r"\.(k_proj\.k|v_proj\.v)_scale$",)
-    # NVFP4 checkpoints, transformers saves included, use the ModelOpt layout
-    producer_layouts = {None: ProducerLayout(block_scale_name="weight_scale", packed_as_uint8=True)}
+    # Every producer ships the ModelOpt layout, including checkpoints saved by transformers
+    producer_layouts = dict.fromkeys(
+        (None, "compressed-tensors", "modelopt"),
+        ProducerLayout(block_scale_name="weight_scale", packed_as_uint8=True),
+    )
 
     def get_weight_conversions(self, model=None):
-        from ..core_model_loading import WeightRenaming
-
         conversions = super().get_weight_conversions(model)
         if not self.pre_quantized:
             return conversions
         dequantize, up_projections = self.quantization_config.dequantize, self._up_projections(model)
         # Weight-only and dequantized models have no activation global to load `input_scale` into
         calibrated = not dequantize and self.quantization_config.activation_format != "bf16"
-        # rename the weight globals to the slot every module holds them in, experts included
-        conversions.append(
-            WeightRenaming(source_patterns=r"^(.+)\.weight_scale_2", target_patterns=r"\1.weight_global_scale")
-        )
+        conversions += self._global_scale_renames(calibrated)
         if calibrated:
             # The down projection's activation scale loads with its weight globals
-            conversions += self._activation_scale_conversions(up_projections, projections=up_projections)
+            conversions += self._activation_scale_conversions(
+                up_projections, projections=up_projections, ops=self._reciprocal_ops
+            )
         if dequantize:
             # Rename stacked scales to the slot names each stack's dequantize converter collects.
             # Cover every stack a model may hold, without looking at its experts.
@@ -62,6 +62,49 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
             conversions += self._per_expert_conversions(calibrated, up_projections)
             conversions += self._fused_conversions(calibrated, up_projections)
         return conversions
+
+    def get_param_ops(self, model, param_name):
+        from ..integrations.finegrained import FineGrainedLinear
+
+        ops = super().get_param_ops(model, param_name)
+        module, name = get_module_from_name(model, param_name)
+        # Experts invert their globals in their converters, before the per-expert reductions.
+        # The gate and up max is only right on the multiplier, not on its reciprocal.
+        if isinstance(module, FineGrainedLinear) and name in ("weight_global_scale", "activation_scale"):
+            ops = [*self._reciprocal_ops, *ops]
+        return ops
+
+    @property
+    def _reciprocal_ops(self) -> list:
+        """Return the ops that invert the globals of a compressed-tensors checkpoint.
+
+        compressed-tensors ships the reciprocal of each global. ModelOpt ships the multiplier the kernels take.
+        """
+        from ..integrations.finegrained.conversions import FineGrainedReciprocal
+
+        return (
+            [FineGrainedReciprocal(self)] if self.quantization_config.checkpoint_format == "compressed-tensors" else []
+        )
+
+    def _global_scale_renames(self, calibrated: bool):
+        """Rename the ModelOpt globals to the slots every module holds them in, experts included.
+
+        They are renamed before converter collection, like the block scale. The converters then find them by slot name.
+        """
+        from ..core_model_loading import WeightRenaming
+
+        renames = [WeightRenaming(source_patterns=r"^(.+)\.weight_scale_2", target_patterns=r"\1.weight_global_scale")]
+        if self.quantization_config.checkpoint_format == "compressed-tensors":
+            # compressed-tensors names the packed values `weight_packed`.
+            # It names the activation global `input_global_scale`. Its weight global already has the slot name.
+            renames.append(WeightRenaming(source_patterns=r"^(.+)\.weight_packed", target_patterns=r"\1.weight"))
+            if calibrated:
+                renames.append(
+                    WeightRenaming(
+                        source_patterns=r"^(.+)\.input_global_scale", target_patterns=r"\1.activation_scale"
+                    )
+                )
+        return renames
 
     def _per_expert_conversions(self, calibrated: bool, up_projections: tuple[str, ...]):
         """Return converters for one key per expert per projection, as GLM-5.2-NVFP4 ships them.
@@ -85,7 +128,7 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
                     "experts.down_proj_weight_global_scale",
                     *(["experts.down_proj_activation_scale"] if calibrated else []),
                 ],
-                operations=[MergeModulelist(dim=0), FineGrainedWeightGlobals(self)],
+                operations=[MergeModulelist(dim=0), *self._reciprocal_ops, FineGrainedWeightGlobals(self)],
             )
             for up in up_projections
         ]
@@ -122,7 +165,7 @@ class NVFP4HfQuantizer(BlockScaledQuantizer):
                     "experts.down_proj_weight_global_scale",
                     *(["experts.down_proj_activation_scale"] if calibrated else []),
                 ],
-                operations=[FineGrainedWeightGlobals(self)],
+                operations=[*self._reciprocal_ops, FineGrainedWeightGlobals(self)],
             )
             for up in up_projections
         ]

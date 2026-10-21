@@ -15,6 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import copy
+import fnmatch
 import importlib.metadata
 import json
 import os
@@ -1698,6 +1699,20 @@ class SpQRConfig(QuantizationConfigMixin):
             raise TypeError("shapes must be a dict")
 
 
+def _subtree_patterns(globs: list[str]) -> list[str]:
+    """Convert glob-style module names to regexes that match each module and its sub-tree.
+
+    Examples are `"model.layers.1.*"` or a bare `"self_attn"`.
+    Matches are anchored at dots, so `"model.layers.1.*"` does not match layers 10 to 19.
+    """
+    patterns = []
+    for glob in globs:
+        subtree = glob.removesuffix(".*").rstrip(".")
+        pattern = fnmatch.translate(subtree).removesuffix(r"\Z").removesuffix(r"\z")
+        patterns.append(r"(?:^|.*\.)" + pattern + r"(\..*)?$")
+    return patterns
+
+
 def _loading_attributes(config, **attributes) -> dict[str, Any]:
     """Return the loading attributes a passed config lends to a pre-quantized checkpoint's config.
 
@@ -1958,6 +1973,171 @@ class NVFP4Config(BlockScaledConfig):
 BLOCK_SCALED_CONFIGS = {config.method.value: config for config in (Fp8Config, Mxfp8Config, Mxfp4Config, NVFP4Config)}
 
 
+def _plan_from_config_groups(spec: dict) -> dict[str, BlockScaledConfig] | None:
+    """Return one `config_groups` entry as `dtype_plan` entries, one per target.
+
+    Return `None` if the entry uses a format these kernels do not support.
+    The format follows from the parameters. `group_size` tells NVFP4 from MXFP4.
+    A bare target is a class name, and `"Linear"` means every linear. A target starting with `re:` is a pattern.
+    """
+    try:
+        _check_block_scaled_features(spec)
+    except ValueError:
+        return None
+    formats = {
+        (4, "float", 16): "nvfp4",
+        (4, "float", 32): "mxfp4",
+        (8, "float", 32): "mxfp8",
+        (8, "float", None): "fp8",
+    }
+    weights = spec.get("weights") or {}
+    quant_method = formats.get((weights.get("num_bits"), weights.get("type"), weights.get("group_size")))
+    # Per-channel FP8 scales have no block for the kernels to tile
+    if quant_method is None or weights.get("strategy") == "channel":
+        return None
+    # MX block scales are E8M0. Some producers store the exponent bytes as uint8.
+    # Group-32 values with another scale dtype are not an MX format.
+    scale_dtype = str(weights.get("scale_dtype") or "e8m0")
+    if quant_method in ("mxfp8", "mxfp4") and not any(name in scale_dtype for name in ("e8m0", "uint8")):
+        return None
+    targets = []
+    for target in spec.get("targets") or []:
+        if target.startswith("re:"):
+            targets.append(target[3:])
+        elif target == "Linear":  # every linear, so the catch-all
+            targets.append(".*")
+        else:  # a class name that cannot be resolved to module paths here
+            return None
+    activations = spec.get("input_activations") or {}
+    act_key = (activations.get("num_bits"), activations.get("type"), activations.get("group_size"))
+    # FP8 activations are per token, or per 128-wide group as the FP8 kernels quantize them.
+    # No activation quantization means weight-only.
+    activation_format = {**formats, (8, "float", 128): "fp8"}.get(act_key) if activations else "bf16"
+    config_class = BLOCK_SCALED_CONFIGS[quant_method]
+    if activation_format is None or activation_format not in config_class.activation_formats:
+        return None
+    options = {"activation_format": activation_format}
+    if quant_method == "fp8":
+        # Only a per-tensor scale is calibrated. On group-scaled activations, `dynamic: false` marks NVFP4's
+        # global `input_scale`, which the loader handles separately.
+        static = not activations.get("dynamic", True) and act_key == (8, "float", None)
+        options.update(
+            activation_scheme="static" if static else "dynamic", weight_block_size=weights.get("block_structure")
+        )
+    config = config_class(**options)
+    return dict.fromkeys(targets or [".*"], config)
+
+
+def _check_block_scaled_features(spec: dict):
+    """Refuse runtime operations that a block-scaled GEMM alone cannot reproduce."""
+    for field in (
+        "pre_quant_scale",
+        "lora_rank",
+        "has_zero_point",
+        "transform_config",
+        "sparsity_config",
+        "weight_scale_encoding",
+    ):
+        if spec.get(field):
+            raise ValueError(f"Unsupported block-scaled quantization feature {field}: {spec[field]!r}")
+    for name in ("weights", "input_activations"):
+        if options := spec.get(name):
+            if options.get("symmetric") is False or options.get("zero_point") is not None:
+                raise ValueError(f"Unsupported asymmetric quantization of {name}")
+
+
+def _modelopt_format(spec: dict) -> BlockScaledConfig:
+    """Return the format config of one ModelOpt `quant_algo`. Raise on unsupported metadata rather than guess."""
+    if not isinstance(spec, dict):
+        raise ValueError(f"Expected a modelopt format object; got {spec!r}")
+    _check_block_scaled_features(spec)
+    algo = spec.get("quant_algo")
+    # quant_algo -> (config, group_size, activation_format); None is W4A4
+    formats = {
+        "NVFP4": (NVFP4Config, 16, None),
+        "W4A16_NVFP4": (NVFP4Config, 16, "bf16"),
+        "MXFP8": (Mxfp8Config, 32, None),
+        "MXFP4": (Mxfp4Config, 32, None),
+        "W4A16_MXFP4": (Mxfp4Config, 32, "bf16"),
+    }
+    if algo == "FP8":
+        return Fp8Config(weight_block_size=None, activation_scheme="static", checkpoint_format="modelopt")
+    if algo not in formats:
+        raise ValueError(f"Unsupported modelopt quant_algo: {algo!r}")
+    config_class, group_size, activation_format = formats[algo]
+    if spec.get("group_size", group_size) != group_size:
+        raise ValueError(f"modelopt {algo} requires group_size={group_size}; got {spec['group_size']!r}")
+    return config_class(activation_format=activation_format, checkpoint_format="modelopt")
+
+
+def _merge_config_group_plan(dtype_plan: dict, entries: dict):
+    """Merge `entries` into `dtype_plan`. Raise if two groups give one target different formats."""
+    for pattern, config in entries.items():
+        if pattern in dtype_plan and dtype_plan[pattern].to_dict() != config.to_dict():
+            raise ValueError(f"Conflicting quantization configs for target {pattern!r}")
+        dtype_plan[pattern] = config
+
+
+def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
+    """Return the config a ModelOpt export describes.
+
+    That is one format config, or a per-module `MIXED_PRECISION` plan. The fields may nest under `quantization`.
+    Unsupported groups and algorithms raise.
+    """
+    config_dict = {**config_dict, **config_dict.get("quantization", {})}
+    _check_block_scaled_features(config_dict)
+    quant_algo = config_dict.get("quant_algo")
+    if config_dict.get("kv_cache_scheme") or config_dict.get("kv_cache_quant_algo"):
+        # Only compressed-tensors has an in-tree KV-cache path
+        logger.warning_once(
+            "This modelopt checkpoint calibrates a quantized KV cache; the KV cache stays in the model's dtype, "
+            "so its scales are not loaded."
+        )
+    # The producer's exclusions are globs, while `modules_to_not_convert` already holds regexes
+    native_skip = config_dict.get("modules_to_not_convert") or []
+    producer_skip = [*(config_dict.get("ignore") or []), *(config_dict.get("exclude_modules") or [])]
+    modules_to_not_convert = [*native_skip, *_subtree_patterns(producer_skip)] or None
+    if quant_algo == "MIXED_PRECISION":
+        layers = config_dict.get("quantized_layers")
+        if not isinstance(layers, dict) or not layers:
+            raise ValueError("modelopt MIXED_PRECISION requires a non-empty quantized_layers mapping")
+        dtype_plan = {}
+        for name, spec in layers.items():
+            if not isinstance(name, str) or not name or "*" in name:
+                raise ValueError(f"modelopt quantized_layers requires concrete module names; got {name!r}")
+            try:
+                dtype_plan[_subtree_patterns([name])[0]] = _modelopt_format(spec)
+            except ValueError as error:
+                raise ValueError(f"modelopt module {name!r}: {error}") from error
+        return _config_for_plan(dtype_plan, modules_to_not_convert)
+    if groups := config_dict.get("config_groups"):
+        dtype_plan = {}
+        _modelopt_format(config_dict)  # check that the declared algorithm is supported too
+        for name, spec in groups.items():
+            _check_block_scaled_features(spec)
+            spec = dict(spec)
+            targets = []
+            for target in spec.get("targets") or ["Linear"]:
+                if target == "Linear" or target.startswith("re:"):
+                    targets.append(target)
+                # A module name, not a class name, e.g. `lm_head` and not `QuantLinear`
+                elif "." in target or target[:1].islower():
+                    targets.append("re:" + _subtree_patterns([target])[0])
+                else:
+                    raise ValueError(f"Unsupported modelopt target {target!r} in config group {name!r}")
+            spec["targets"] = targets
+            entries = _plan_from_config_groups(spec)
+            if entries is None:
+                raise ValueError(f"Unsupported modelopt config_groups entry {name!r}: {spec}")
+            for config in entries.values():
+                config.checkpoint_format = "modelopt"
+            _merge_config_group_plan(dtype_plan, entries)
+        return _config_for_plan(dtype_plan, modules_to_not_convert)
+    config = _modelopt_format(config_dict)
+    config.modules_to_not_convert = modules_to_not_convert
+    return config
+
+
 def read_mxfp8(config_dict: dict) -> QuantizationConfigMixin | None:
     """Return the config of an MXFP8 checkpoint, or `None` to read it as `Mxfp8Config`.
 
@@ -1994,6 +2174,45 @@ def read_fp8(config_dict: dict) -> QuantizationConfigMixin | None:
     if fp4_experts:
         dtype_plan[EXPERTS_PATTERN] = Mxfp4Config(activation_format="mxfp4", checkpoint_format=dense.checkpoint_format)
     return _config_for_plan({**dtype_plan, ".*": dense}, skip)
+
+
+def read_compressed_tensors(config_dict: dict) -> QuantizationConfigMixin | None:
+    """Return the block-scaled config a compressed-tensors checkpoint describes.
+
+    Per-tensor and block FP8 route here, e.g. `RedHatAI/Llama-3.2-1B-Instruct-FP8` and `RedHatAI/Qwen3-8B-FP8-block`.
+    Return `None` for integer, per-channel, sparse or transformed checkpoints. [`CompressedTensorsConfig`] loads them.
+    That includes the common per-channel FP8-dynamic ones, e.g. `RedHatAI/Qwen3-8B-FP8-dynamic`.
+    Each config's `checkpoint_format` names the layout of its tensors, which a save writes back.
+    """
+    # A quantized KV cache needs compressed-tensors' attention hooks, the only in-tree KV-cache path
+    if config_dict.get("kv_cache_scheme"):
+        return None
+    try:
+        _check_block_scaled_features(config_dict)
+    except ValueError:
+        return None
+    if config_dict.get("quantization_status", "compressed") != "compressed":
+        return None
+    groups = config_dict.get("config_groups") or {}
+    served = ("float-quantized", "nvfp4-pack-quantized")
+    if not groups or any(spec.get("format", config_dict.get("format")) not in served for spec in groups.values()):
+        return None
+    mapped = [_plan_from_config_groups(spec) for spec in groups.values()]
+    if any(entries is None for entries in mapped):
+        return None
+    dtype_plan = {}
+    try:
+        for entries in mapped:
+            _merge_config_group_plan(dtype_plan, entries)
+    except ValueError:
+        return None
+    for config in dtype_plan.values():
+        config.checkpoint_format = "compressed-tensors"
+    # Entries are module names or `re:` patterns. A bare name covers that module and its sub-tree, not a prefix.
+    ignore = config_dict.get("ignore") or []
+    skip = [entry[3:] for entry in ignore if entry.startswith("re:")]
+    skip += _subtree_patterns([entry for entry in ignore if not entry.startswith("re:")])
+    return _config_for_plan(dtype_plan, skip or None)
 
 
 def _config_for_plan(dtype_plan: dict, modules_to_not_convert: list | None) -> QuantizationConfigMixin:

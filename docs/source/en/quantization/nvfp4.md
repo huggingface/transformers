@@ -23,23 +23,32 @@ of scale. Each group of 16 values has an FP8 (E4M3) scale, and each tensor has o
 Checkpoints declare the format as `quant_method="nvfp4"`. See [Fine-grained](./finegrained) for the requirements,
 loading options and parallelism shared by every block-scaled format.
 
-Pass [`NVFP4Config`] to quantize a full-precision checkpoint as it loads. The saved model reloads as NVFP4 without a
-config.
+NVFP4 exports of [NVIDIA ModelOpt](https://github.com/NVIDIA/TensorRT-Model-Optimizer) also load as [`NVFP4Config`].
+They declare `quant_method="modelopt"` and `quant_algo="NVFP4"`. So do NVFP4 exports of
+[compressed-tensors](./compressed_tensors), which declare `format="nvfp4-pack-quantized"`. Both keep their calibrated
+activation scales and save back in the same tensor layout. A ModelOpt export that gives different modules different
+formats loads as a [`FineGrainedConfig`]. See [Fine-grained](./finegrained) for details.
 
 ```py
-from transformers import AutoModelForCausalLM, AutoTokenizer, NVFP4Config
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model_id = "Qwen/Qwen3-8B"
-model = AutoModelForCausalLM.from_pretrained(
-    model_id, dtype="auto", device_map="auto", quantization_config=NVFP4Config()
-)
-model.save_pretrained("qwen3-8b-nvfp4")
+model_id = "nvidia/Llama-3.1-8B-Instruct-NVFP4"
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", device_map="auto")
 
-model = AutoModelForCausalLM.from_pretrained("qwen3-8b-nvfp4", dtype="auto", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 inputs = tokenizer("NVFP4 is", return_tensors="pt").to(model.device)
 output = model.generate(**inputs, max_new_tokens=20)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
+```
+
+Pass [`NVFP4Config`] to quantize a full-precision checkpoint as it loads.
+
+```py
+from transformers import AutoModelForCausalLM, NVFP4Config
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-8B", dtype="auto", device_map="auto", quantization_config=NVFP4Config()
+)
 ```
 
 ## Activation formats

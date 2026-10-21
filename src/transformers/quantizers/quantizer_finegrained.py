@@ -180,15 +180,15 @@ class FineGrainedHfQuantizer(HfQuantizer):
         entry that matches no module raises. The saved config keeps the patterns as passed.
         """
         plan = self._plan
-        targeted = {pattern: re.compile(pattern) for pattern in plan if pattern != ".*"}
-        resolved, matched = dict(plan), set()
-        for name, checkpoint_names in checkpoint_module_names(model).items():
-            hits = {
-                candidate: [pattern for pattern, regex in targeted.items() if regex.search(candidate)]
-                for candidate in dict.fromkeys([name, *checkpoint_names])
-            }
-            selected = [candidate for candidate, patterns in hits.items() if patterns]
-            if not selected:
+        targeted = [pattern for pattern in plan if pattern != ".*"]
+        resolved = dict(plan)
+        matched = set()
+        for name, _ in model.named_modules():
+            checkpoint_name = to_checkpoint(name)
+            matched.update(
+                pattern for pattern in plan if re.search(pattern, name) or re.search(pattern, checkpoint_name)
+            )
+            if checkpoint_name == name or not any(re.search(pattern, checkpoint_name) for pattern in targeted):
                 continue
             matched.update(pattern for candidate in selected for pattern in hits[candidate])
             # only the patterns that hit a name can give its entry
@@ -203,11 +203,15 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 raise ValueError(f"{name!r} is one module, so its checkpoint names cannot load in different formats.")
             if selected[0] == name:
                 continue
-            if len(selected) < len(checkpoint_names):
-                raise ValueError(f"{name!r} is one fused module, so a dtype_plan entry must cover all of its pieces.")
-            resolved[rf"^{re.escape(name)}$"] = entries.popitem()[1]
-        if unmatched := [pattern for pattern in targeted if pattern not in matched and plan[pattern] is not None]:
-            raise ValueError(f"The dtype_plan entries {unmatched} match no module.")
+            resolved[rf"^{re.escape(name)}$"] = source
+        for pattern, member in plan.items():
+            if member is None or pattern in matched:
+                continue
+            if getattr(member.quantization_config, "checkpoint_format", None) == "modelopt":
+                raise ValueError(
+                    f"ModelOpt target {pattern!r} matches no module. "
+                    "Per-expert assignments cannot target an architecture that stores fused expert tensors."
+                )
         self._plan = resolved
 
     def update_parallel_plan(self, model, plan):

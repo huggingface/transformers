@@ -242,6 +242,21 @@ class FineGrainedPackedBlocks(_FineGrainedOp):
         return out
 
 
+class FineGrainedScalarScales(_FineGrainedOp):
+    """Give per-expert scalar scales a 1x1 grid before stacking and concatenating gate/up scales."""
+
+    def convert(self, input_dict, **kwargs):
+        def reshape(tensor):
+            if self.inverse:
+                return tensor.reshape(())
+            return tensor.reshape(1, 1)
+
+        return {
+            key: [reshape(tensor) for tensor in value] if isinstance(value, list) else reshape(value)
+            for key, value in input_dict.items()
+        }
+
+
 class FineGrainedViewPackedInt8(_FineGrainedOp):
     """View packed FP4 uint8 bytes as the int8 the modules hold. A copy would convert the values instead.
 
@@ -255,6 +270,20 @@ class FineGrainedViewPackedInt8(_FineGrainedOp):
             value = single_tensor(value)
             out[key] = value.view(want) if torch.is_tensor(value) and value.dtype == held else value
         return out
+
+
+class FineGrainedReciprocal(_FineGrainedOp):
+    """Invert the NVFP4 global scales of a compressed-tensors checkpoint.
+
+    compressed-tensors stores them as `448 * 6 / amax`. The kernels and modelopt take the reciprocal. The op is its
+    own inverse, so a save writes them back as shipped.
+    """
+
+    def convert(self, input_dict, target_patterns=None, **kwargs):
+        return {
+            key: [1 / tensor for tensor in value] if isinstance(value, list) else 1 / value
+            for key, value in keyed_by_target(input_dict, target_patterns).items()
+        }
 
 
 class FineGrainedWeightGlobals(_FineGrainedOp):
@@ -544,6 +573,7 @@ class FineGrainedDequantize(_FineGrainedOp):
         output_dtype: torch.dtype | None = None,
         global_scale: torch.Tensor | None = None,
         *,
+        reciprocal_globals: bool = False,
         weight_block_size: tuple[int, int] | None = None,
     ) -> torch.Tensor:
         fp4_dtype = getattr(torch, "float4_e2m1fn_x2", None)
@@ -592,7 +622,7 @@ class FineGrainedDequantize(_FineGrainedOp):
                 # stack globals are `(E,)` or `(E, 2)` for the gate and up halves, spread over the rows
                 global_scale = global_scale.reshape(global_scale.shape[0], -1)
                 global_scale = global_scale.repeat_interleave(rows // global_scale.shape[1], dim=1)[..., None]
-            out = out * global_scale
+            out = out / global_scale if reciprocal_globals else out * global_scale
         return out.to(output_dtype)
 
     def _get_target_dtype(self, model: torch.nn.Module | None, full_layer_name: str | None) -> torch.dtype | None:
@@ -611,6 +641,8 @@ class FineGrainedDequantize(_FineGrainedOp):
     ) -> dict[str, list[torch.Tensor] | torch.Tensor]:
         output_dtype = self._get_target_dtype(model, full_layer_name)
         config = self.config
+        # A dequantizing load adds no reciprocal ops, so the dequantize inverts compressed-tensors' globals itself
+        reciprocal_globals = getattr(config, "checkpoint_format", None) == "compressed-tensors"
         weight_block_size = getattr(config, "weight_block_size", None)
         # dense and fused stack converters pass one weight, with or without a scale. Norm weights match too.
         weight_pattern = next((p for p in input_dict if self._name(p) in self._SINGLE_WEIGHTS), None)
@@ -628,6 +660,7 @@ class FineGrainedDequantize(_FineGrainedOp):
                 scale,
                 output_dtype,
                 global_scale,
+                reciprocal_globals=reciprocal_globals,
                 weight_block_size=weight_block_size,
             )
             # a quantized stack ships as `(E, rows, K)`, so transpose it back for a module that holds it transposed
@@ -665,7 +698,9 @@ class FineGrainedDequantize(_FineGrainedOp):
             global_scales = input_dict.get(self._global_pattern_for(key), [None] * len(weights))
             global_scales = global_scales if isinstance(global_scales, list) else [global_scales]
             result[key] = [
-                self._dequantize_one(w, s, output_dtype, g, weight_block_size=weight_block_size)
+                self._dequantize_one(
+                    w, s, output_dtype, g, reciprocal_globals=reciprocal_globals, weight_block_size=weight_block_size
+                )
                 for w, s, g in zip(weights, scales, global_scales)
             ]
         return result

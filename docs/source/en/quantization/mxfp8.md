@@ -21,7 +21,8 @@ MXFP8 is the OCP microscaling FP8 format. It stores weights in 8-bit floating po
 directly in their block-scaled MMA.
 
 [`Mxfp8Config`] loads MXFP8 checkpoints as they ship, such as `MiniMaxAI/MiniMax-M3-MXFP8`. It also quantizes
-full-precision checkpoints on the fly. Checkpoints declare the format as `quant_method="mxfp8"`. See
+full-precision checkpoints on the fly. Checkpoints declare the format as `quant_method="mxfp8"`. Group-32 FP8 exports
+of [compressed-tensors](./compressed_tensors) with E8M0 scales also load as [`Mxfp8Config`]. See
 [Fine-grained](./finegrained) for the requirements, loading options and parallelism shared by every block-scaled
 format.
 

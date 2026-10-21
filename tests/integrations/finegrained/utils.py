@@ -32,6 +32,7 @@ from transformers.core_model_loading import (
 )
 from transformers.integrations.moe import use_experts_implementation
 from transformers.modeling_utils import LoadStateDictConfig
+from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.utils.quantization_config import BLOCK_SCALED_CONFIGS
 
 
@@ -90,6 +91,19 @@ def _replace(model, config, modules_to_not_convert=None):
 def _targets(conv):
     t = conv.target_patterns
     return t if isinstance(t, (list, tuple)) else [t]
+
+
+def _modelopt(**fields):
+    return AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4", **fields})
+
+
+def _compressed_tensors(weights, activations=None, fmt="nvfp4-pack-quantized", **fields):
+    group = {
+        "weights": weights,
+        "targets": ["Linear"],
+        **({"input_activations": activations} if activations else {}),
+    }
+    return {"quant_method": "compressed-tensors", "format": fmt, "config_groups": {"group_0": group}, **fields}
 
 
 @dataclass
