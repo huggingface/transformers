@@ -2341,6 +2341,8 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"\.w1\.", target_patterns=r"\.gate_proj\."),
         WeightRenaming(source_patterns=r"\.w2\.", target_patterns=r"\.down_proj\."),
         WeightRenaming(source_patterns=r"\.w3\.", target_patterns=r"\.up_proj\."),
+        # Rename quantization scales
+        WeightRenaming(r"\.qscale_weight$", ".weight_scale_inv"),
     ]
     mapping["mistral_large4_text"] = [
         # Rename attention modules
