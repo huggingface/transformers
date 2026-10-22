@@ -757,7 +757,7 @@ def pad(
 
 
 def convert_to_rgb(
-    image: PIL.Image.Image | np.ndarray,
+    image: Union["PIL.Image.Image", np.ndarray],
     return_numpy: bool = False,
     input_data_format: str | ChannelDimension | None = None,
 ) -> ImageInput:
