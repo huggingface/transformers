@@ -55,7 +55,7 @@ jobs:
         run: |
           echo "Setup status: $setup_status"
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 2
           # Security: checkout to the `main` branch for untrusted triggers (issue_comment, pull_request_target), otherwise use the specified ref
@@ -63,7 +63,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version-file: .python-version
 
@@ -128,7 +128,7 @@ jobs:
 
       # Upload the directory containing CI reports prepared in `notification_service.py`
       - name: Failure table artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ci_results_${{ inputs.job }}
           path: ci_results_${{ inputs.job }}
