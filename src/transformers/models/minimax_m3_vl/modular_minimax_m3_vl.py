@@ -30,6 +30,8 @@ from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPa
 from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, Unpack
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_attr, deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -1177,8 +1179,8 @@ class MiniMaxM3SparseForConditionalGeneration(LlavaForConditionalGeneration):
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
