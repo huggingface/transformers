@@ -71,10 +71,7 @@ class MiniCPM4Config(LlamaConfig):
         if self.dim_model_base is None:
             self.dim_model_base = self.hidden_size
         super().__post_init__(**kwargs)
-
-    @property
-    def logits_scaling(self) -> float:
-        return self.hidden_size / self.dim_model_base
+        self.logits_scaling = self.hidden_size / self.dim_model_base
 
 
 class MiniCPM4RotaryEmbedding(OlmoRotaryEmbedding):

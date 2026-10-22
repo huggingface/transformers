@@ -105,6 +105,7 @@ class MiniCPM4Config(PreTrainedConfig):
             self.num_key_value_heads = self.num_attention_heads
 
         super().__post_init__(**kwargs)
+        self.logits_scaling = self.hidden_size / self.dim_model_base
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
@@ -113,10 +114,6 @@ class MiniCPM4Config(PreTrainedConfig):
                 f"The hidden size ({self.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({self.num_attention_heads})."
             )
-
-    @property
-    def logits_scaling(self) -> float:
-        return self.hidden_size / self.dim_model_base
 
 
 __all__ = ["MiniCPM4Config"]
