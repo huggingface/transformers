@@ -165,9 +165,7 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
         config.backbone_config.embed_dim_per_stage = [
             dim * scale for dim in config.backbone_config.embed_dim_per_stage
         ]
-        config.backbone_channel_list = [
-            dim * scale for dim in config.backbone_channel_list
-        ]
+        config.backbone_channel_list = [dim * scale for dim in config.backbone_channel_list]
 
         return config
 
