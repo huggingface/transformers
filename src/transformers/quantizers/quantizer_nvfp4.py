@@ -135,10 +135,7 @@ class NVFP4HfQuantizer(HfQuantizer):
             return
         formats = self._formats = self._module_formats(model)
         weight_only = self.quantization_config.activation_format == "bf16"
-        tensor_parallel = getattr(model.config, "distributed_config", None) is not None
-        if not replace_with_nvfp4(
-            model, self.modules_to_not_convert, formats, self.pre_quantized, weight_only, tensor_parallel
-        ):
+        if not replace_with_nvfp4(model, self.modules_to_not_convert, formats, self.pre_quantized, weight_only):
             raise ValueError("NVFP4 found no linear or experts module to quantize in this model.")
 
     def _process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs):

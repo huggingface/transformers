@@ -74,8 +74,7 @@ model = AutoModelForCausalLM.from_pretrained(
 ## MoE experts
 
 Pick the experts' kernels with `experts_implementation`: `"grouped_mm"` or `"batched_mm"` run the fused MoE chain, and
-`"eager"` runs one call per expert. On Blackwell GPUs, scales load swizzled into the layout the scaled MMA reads, except
-for dense layers under tensor parallelism.
+`"eager"` runs one call per expert. On Blackwell GPUs, scales load swizzled into the layout the scaled MMA reads.
 
 [`DistributedConfig`] shards the experts by expert, with masked expert parallelism. Each rank runs its own experts on
 every token, so there is no all-to-all dispatch. Set `ep_size` equal to `tp_size`.

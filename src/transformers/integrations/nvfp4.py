@@ -61,10 +61,6 @@ def load_finegrained_kernels():
     return kernel
 
 
-def _is_sm100() -> bool:
-    return torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 10
-
-
 def _first_attr(config, *names):
     return next(getattr(config, name) for name in names if getattr(config, name, None) is not None)
 
@@ -75,12 +71,8 @@ def _parameter(tensor: torch.Tensor) -> nn.Parameter:
 
 def _tiles_swizzled(rows: int, scale_cols: int) -> bool:
     """Check whether the kernels read a `(rows, scale_cols)` scale grid swizzled: whole 128-row blocks, two bands."""
-    return _is_sm100() and rows % 128 == 0 and scale_cols % 4 == 0 and scale_cols >= 8
-
-
-def _swizzled_shape(matrices: int, rows: int, scale_cols: int) -> tuple:
-    """Return the 5-D `SWIZZLE_32_4_4` shape of `matrices` scale grids, the matrix axis first."""
-    return (matrices, rows // 128, scale_cols // 4, 2, 256)
+    sm100 = torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 10
+    return sm100 and rows % 128 == 0 and scale_cols % 4 == 0 and scale_cols >= 8
 
 
 @functools.cache
@@ -103,7 +95,7 @@ class NVFP4Linear(nn.Module):
 
     Activations quantize against the calibrated `input_global_scale`, or a global of 1 when quantized on the fly.
     `weight_only=True` keeps them in the model dtype. On the fly, the weight starts as a full-precision placeholder.
-    `swizzled_scales=True` holds the scales swizzled on SM100.
+    On SM100 the scales may load swizzled, as a 5-D grid, see `NVFP4SwizzleScales`.
     """
 
     def __init__(
@@ -113,7 +105,6 @@ class NVFP4Linear(nn.Module):
         bias: bool = False,
         pre_quantized: bool = False,
         weight_only: bool = False,
-        swizzled_scales: bool = True,
     ):
         super().__init__()
         self.in_features = in_features
@@ -122,10 +113,6 @@ class NVFP4Linear(nn.Module):
         weight = torch.empty(out_features, in_features // 2, dtype=torch.int8)
         self.weight = _parameter(weight if pre_quantized else torch.empty(out_features, in_features))
         scale_shape = (out_features, in_features // GROUP_SIZE)
-        # the weight-only arm reads row-major scales
-        self.swizzled_scales = swizzled_scales and not weight_only and _tiles_swizzled(*scale_shape)
-        if self.swizzled_scales:
-            scale_shape = _swizzled_shape(1, *scale_shape)
         self.weight_scale_inv = _parameter(torch.empty(scale_shape, dtype=torch.float8_e4m3fn))
         self.weight_global_scale = _parameter(torch.ones((), dtype=torch.float32))
         self.input_global_scale = None if weight_only else _parameter(torch.ones((), dtype=torch.float32))
@@ -181,15 +168,14 @@ class NVFP4Experts(nn.Module):
         self.gate_up_name = "gate_up_proj" if has_gate else "up_proj"
         up_rows = (2 if has_gate else 1) * self.intermediate_dim
         projections = ((up_rows, self.hidden_dim), (self.hidden_dim, self.intermediate_dim))
-        # The weight-only arm reads row-major scales. The fused kernels read both grids in one layout.
+        # Whether the scales load swizzled. The weight-only arm reads row-major scales, and the fused kernels read both
+        # grids in one layout. Expert parallelism only splits the expert axis, so it doesn't change this.
         self.swizzled_scales = not weight_only and all(_tiles_swizzled(r, c // GROUP_SIZE) for r, c in projections)
         self._register_projection(self.gate_up_name, up_rows, self.hidden_dim, pre_quantized, weight_only)
         self._register_projection("down_proj", self.hidden_dim, self.intermediate_dim, pre_quantized, weight_only)
 
     def _register_projection(self, proj: str, rows: int, cols: int, pre_quantized: bool, weight_only: bool):
         scale_shape = (self.num_experts, rows, cols // GROUP_SIZE)
-        if self.swizzled_scales:
-            scale_shape = _swizzled_shape(*scale_shape)
         packed = torch.empty(self.num_experts, rows, cols // 2, dtype=torch.int8)
         setattr(self, proj, _parameter(packed if pre_quantized else torch.empty(self.num_experts, rows, cols)))
         setattr(self, f"{proj}_scale_inv", _parameter(torch.empty(scale_shape, dtype=torch.float8_e4m3fn)))
@@ -240,7 +226,7 @@ class NVFP4Experts(nn.Module):
             A=input,
             B=getattr(self, proj)[expert_idx],
             # `matmul_2d` reads a swizzled expert slice with a leading dim of 1
-            Bs=scale[expert_idx : expert_idx + 1] if self.swizzled_scales else scale[expert_idx],
+            Bs=scale[expert_idx : expert_idx + 1] if scale.ndim == 5 else scale[expert_idx],
             activation_format=self.activation_format,
             output_dtype=input.dtype,
             a_global_scale=None if input_global is None else input_global[expert_idx],
@@ -296,13 +282,11 @@ def replace_with_nvfp4(
     formats: dict[str, str] | None = None,
     pre_quantized: bool = False,
     weight_only: bool = False,
-    tensor_parallel: bool = False,
 ) -> bool:
     """Replace the linears and fused experts in an NVFP4 format. Return whether any module was replaced.
 
     `formats` maps module names to ModelOpt formats. Without it, every eligible module is NVFP4. A pre-quantized FP8
-    linear gets a slot for its scale and dequantizes after loading. Under tensor parallelism, linears keep row-major
-    scales, as the split of a scale grid would cut its swizzled tiles.
+    linear gets a slot for its scale and dequantizes after loading.
     """
     # routers stay in full precision unless the checkpoint quantizes them
     parents = [name.removesuffix(".experts") for name, _ in model.named_modules() if name.endswith(".experts")]
@@ -340,13 +324,7 @@ def replace_with_nvfp4(
                 config = getattr(module, "config", model.config.get_text_config())
                 new_module = experts_class(config, has_gate, has_bias, post_expert_norm=norm, **options)
             else:
-                new_module = NVFP4Linear(
-                    module.in_features,
-                    module.out_features,
-                    module.bias is not None,
-                    swizzled_scales=not tensor_parallel,
-                    **options,
-                )
+                new_module = NVFP4Linear(module.in_features, module.out_features, module.bias is not None, **options)
         # the kernels take raw pointers, so tensor parallelism passes them local shards and not DTensors
         new_module._hf_quantized_needs_local_tp = True
         model.set_submodule(name, new_module)
@@ -464,23 +442,28 @@ class NVFP4InterleaveGateUp(_NVFP4Op):
 
 
 class NVFP4SwizzleScales(_NVFP4Op):
-    """Swizzle a row-major scale grid into the 5-D `SWIZZLE_32_4_4` layout its module holds. The reverse unswizzles."""
+    """Swizzle a scale grid into the 5-D `SWIZZLE_32_4_4` layout SM100's scaled MMA reads, when it tiles.
+
+    The kernels read the layout from the shape. Under tensor or expert parallelism the op swizzles the local shard. The
+    reverse unswizzles any 5-D grid back to row-major.
+    """
 
     def convert(self, input_dict, model=None, full_layer_name=None, **kwargs):
         module = model.get_submodule(full_layer_name.rpartition(".")[0])
-        if not module.swizzled_scales:
-            return input_dict
         dense = isinstance(module, NVFP4Linear)
         kernel = load_finegrained_kernels()
         out = {}
         for key, value in input_dict.items():
             value = _single(value).contiguous()
-            if self.inverse:
+            if self.inverse and value.ndim == 5:
                 matrices, row_blocks, column_groups = value.shape[:3]
                 plain = kernel.unswizzle_mx_scales(value, row_blocks * 128, column_groups * 4, num_experts=matrices)
-                out[key] = plain[0] if dense else plain
-            else:
-                out[key] = kernel.swizzle_mx_scales(value.unsqueeze(0) if dense else value)
+                value = plain[0] if dense else plain
+            elif not self.inverse and dense and module.activation_format != "bf16" and _tiles_swizzled(*value.shape):
+                value = kernel.swizzle_mx_scales(value.unsqueeze(0))
+            elif not self.inverse and not dense and module.swizzled_scales:
+                value = kernel.swizzle_mx_scales(value)
+            out[key] = value
         return out
 
 
