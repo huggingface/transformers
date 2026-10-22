@@ -1276,7 +1276,6 @@ UNDOCUMENTED_OBJECTS = [
     "Ernie4_5_VL_MoeVisionTransformerPretrainedModel",  # BC Alias
     # FIXME(SunMarc)
     "GemmaQuantizationConfig",  # No docs, going for release
-    "Qwen3TTSSpeakerEncoderConfig",  # Internal building block of Qwen3TTS, documented on the main model page.
     "Qwen3TTSTalkerCodePredictorModel",  # Internal building block of Qwen3TTS.
     "Qwen3TTSTalkerCodePredictorModelForConditionalGeneration",  # Internal building block of Qwen3TTS.
     "Qwen3TTSTalkerModel",  # Internal building block of Qwen3TTS.

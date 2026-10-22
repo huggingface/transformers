@@ -31,8 +31,7 @@ The model checkpoints can be found [here](https://huggingface.co/collections/Qwe
 
 Qwen3-TTS generates codes for a separate audio codec, which decodes them to a waveform. That codec is its own
 model, documented in [Qwen3-TTS Tokenizer](./qwen3_tts_tokenizer). Its configuration is stored in
-`model.config.audio_config`, defaulting to [`Qwen3TTSTokenizerConfig`]. The conversion script's
-`--audio_tokenizer_id` selects both this configuration and the codec checkpoint referenced by the processor.
+`model.config.audio_config`, defaulting to [`Qwen3TTSTokenizerConfig`].
 The processor loads the codec alongside the text tokenizer and the feature extractor, so
 [`~Qwen3TTSProcessor.decode`] works without setting it up yourself. Codec weights remain separate from the
 TTS model weights; loading the TTS model does not instantiate a second codec.
@@ -150,10 +149,12 @@ processor.save_audio(audio, "output_voice_design.wav")
 ### Voice Cloning
 
 Base checkpoints carry a speaker encoder, which turns a reference recording into speaker conditioning.
-Include the reference audio in the conversation: the processor loads it at 24 kHz and extracts mel features,
+Include mono reference audio at 24 kHz in the conversation. The processor extracts mel features,
 and the model computes the speaker embedding internally.
 
 ```python
+from datasets import Audio, load_dataset
+
 from transformers import AutoProcessor, AutoModelForTextToWaveform
 
 
@@ -162,15 +163,16 @@ model_id = "shahvandit/qwen3-tts-base-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+dataset = dataset.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+reference_audio = dataset[0]["audio"]["array"]
+
 conversation = [
     {
         "role": "user",
         "content": [
             {"type": "text", "text": "This sentence is spoken in the voice of the reference clip."},
-            {
-                "type": "audio",
-                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
-            },
+            {"type": "audio", "audio": reference_audio},
         ],
         "language": "English",
     },
@@ -191,8 +193,8 @@ subtalker_top_p=0.9)` samples both stages with nucleus sampling.
 
 Qwen3-TTS is also available through the `text-to-speech` pipeline, which builds the inputs, generates the codes,
 and decodes them to a waveform in a single call. Pass a conversation the same way as
-[`~Qwen3TTSProcessor.apply_chat_template`]; the per-message `language` and `speaker` keys are supported on
-CustomVoice checkpoints.
+[`~Qwen3TTSProcessor.apply_chat_template`]. The per-message `language` key selects the spoken language;
+CustomVoice checkpoints additionally support the `speaker` key for built-in voice presets.
 
 ```python
 import soundfile as sf
@@ -222,14 +224,14 @@ For larger datasets, cache the audio codes and speaker embeddings and pass them 
 `audio_codes` and `speaker_embeddings` arguments instead of re-encoding the audio at every step.
 
 ```python
-import torch
+from datasets import Audio, load_dataset
 
 from transformers import AutoModelForTextToWaveform, AutoProcessor
 
 
 model_id = "shahvandit/qwen3-tts-base-hf"
 processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForTextToWaveform.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 model.train()
 # Enable activation recomputation; the model's support flag does not enable it automatically.
 model.gradient_checkpointing_enable()
@@ -237,18 +239,16 @@ model.gradient_checkpointing_enable()
 model.speaker_encoder.requires_grad_(False)
 model.speaker_encoder.eval()
 
+dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+dataset = dataset.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+example = dataset[0]
+
 conversation = [
     {
         "role": "user",
         "content": [
-            {
-                "type": "text",
-                "text": "VibeVoice is this novel framework designed for generating expressive, long-form, multi-speaker conversational audio.",
-            },
-            {
-                "type": "audio",
-                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
-            },
+            {"type": "text", "text": example["text"]},
+            {"type": "audio", "audio": example["audio"]["array"]},
         ],
     },
 ]
@@ -299,6 +299,11 @@ processor.save_audio(audio, "output.wav")
 ## Qwen3TTSConfig
 
 [[autodoc]] Qwen3TTSConfig
+
+## Qwen3TTSSpeakerEncoderConfig
+
+[[autodoc]] Qwen3TTSSpeakerEncoderConfig
+
 
 ## Qwen3TTSTalkerConfig
 
