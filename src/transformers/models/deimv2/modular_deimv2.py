@@ -34,6 +34,7 @@ from ..d_fine.modeling_d_fine import (
     DFineDecoder,
     DFineDecoderLayer,
     DFineDecoderOutput,
+    DFineEncoderLayer,
     DFineForObjectDetection,
     DFineGate,
     DFineHybridEncoder,
@@ -42,6 +43,7 @@ from ..d_fine.modeling_d_fine import (
     DFineMLP,
     DFineModel,
     DFineModelOutput,
+    DFineMultiscaleDeformableAttention,
     DFinePreTrainedModel,
     DFineRepVggBlock,
     DFineSCDown,
@@ -237,6 +239,10 @@ class Deimv2MLP(DFineMLP):
     pass
 
 
+class Deimv2MultiscaleDeformableAttention(DFineMultiscaleDeformableAttention):
+    pass
+
+
 class Deimv2ConvNormLayer(DFineConvNormLayer):
     pass
 
@@ -306,6 +312,10 @@ class Deimv2RepNCSPELAN5(nn.Module):
 
 
 class Deimv2SCDown(DFineSCDown):
+    pass
+
+
+class Deimv2EncoderLayer(DFineEncoderLayer):
     pass
 
 

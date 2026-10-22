@@ -48,42 +48,6 @@ if is_accelerate_available():
     from accelerate.utils import reduce
 
 
-class EomtDinov3Embeddings(nn.Module):
-    """
-    Construct the CLS token, mask token, position and patch embeddings.
-    """
-
-    def __init__(self, config: EomtDinov3Config):
-        super().__init__()
-        self.config = config
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.register_tokens = nn.Parameter(torch.empty(1, config.num_register_tokens, config.hidden_size))
-        self.patch_embeddings = nn.Conv2d(
-            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
-        )
-        self.num_prefix_tokens = 1 + config.num_register_tokens
-
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
-        batch_size = pixel_values.shape[0]
-        target_dtype = self.patch_embeddings.weight.dtype
-
-        # (batch_size, num_channels, height, width) -> (batch_size, num_patches, hidden_size)
-        patch_embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
-        patch_embeddings = patch_embeddings.flatten(2).transpose(1, 2)
-
-        if bool_masked_pos is not None:
-            mask_token = self.mask_token.to(patch_embeddings.dtype)
-            patch_embeddings = torch.where(bool_masked_pos.unsqueeze(-1), mask_token, patch_embeddings)
-
-        # Add CLS and register tokens
-        cls_token = self.cls_token.expand(batch_size, -1, -1)
-        register_tokens = self.register_tokens.expand(batch_size, -1, -1)
-        embeddings = torch.cat([cls_token, register_tokens, patch_embeddings], dim=1)
-
-        return embeddings
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -201,6 +165,42 @@ class EomtDinov3Attention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
+
+class EomtDinov3Embeddings(nn.Module):
+    """
+    Construct the CLS token, mask token, position and patch embeddings.
+    """
+
+    def __init__(self, config: EomtDinov3Config):
+        super().__init__()
+        self.config = config
+        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
+        self.register_tokens = nn.Parameter(torch.empty(1, config.num_register_tokens, config.hidden_size))
+        self.patch_embeddings = nn.Conv2d(
+            config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
+        )
+        self.num_prefix_tokens = 1 + config.num_register_tokens
+
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
+        batch_size = pixel_values.shape[0]
+        target_dtype = self.patch_embeddings.weight.dtype
+
+        # (batch_size, num_channels, height, width) -> (batch_size, num_patches, hidden_size)
+        patch_embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+        patch_embeddings = patch_embeddings.flatten(2).transpose(1, 2)
+
+        if bool_masked_pos is not None:
+            mask_token = self.mask_token.to(patch_embeddings.dtype)
+            patch_embeddings = torch.where(bool_masked_pos.unsqueeze(-1), mask_token, patch_embeddings)
+
+        # Add CLS and register tokens
+        cls_token = self.cls_token.expand(batch_size, -1, -1)
+        register_tokens = self.register_tokens.expand(batch_size, -1, -1)
+        embeddings = torch.cat([cls_token, register_tokens, patch_embeddings], dim=1)
+
+        return embeddings
 
 
 class EomtDinov3MLP(nn.Module):

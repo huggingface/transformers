@@ -78,6 +78,7 @@ from ..sam.modeling_sam import (
     SamPatchEmbeddings,
     SamVisionAttention,
     SamVisionEncoder,
+    SamVisionLayer,
     SamVisionNeck,
 )
 
@@ -672,6 +673,10 @@ class DeepseekOcr2PreTrainedModel(LlavaNextPreTrainedModel):
 
 
 class DeepseekOcr2SamVisionAttention(SamVisionAttention):
+    pass
+
+
+class DeepseekOcr2SamVisionLayer(SamVisionLayer):
     pass
 
 

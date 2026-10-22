@@ -46,6 +46,7 @@ from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..phi3.configuration_phi3 import Phi3Config
 from ..phi3.modeling_phi3 import (
+    Phi3DecoderLayer,
     Phi3ForCausalLM,
     Phi3Model,
     Phi3PreTrainedModel,
@@ -1173,6 +1174,10 @@ class Phi4MultimodalAudioEmbedding(nn.Module):
 
 
 class Phi4MultimodalRMSNorm(LlamaRMSNorm):
+    pass
+
+
+class Phi4MultimodalDecoderLayer(Phi3DecoderLayer):
     pass
 
 

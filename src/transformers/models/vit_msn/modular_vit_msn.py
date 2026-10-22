@@ -26,7 +26,9 @@ from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
 from ..vit.modeling_vit import (
     PreTrainedModel,
+    ViTAttention,
     ViTEmbeddings,
+    ViTLayer,
     ViTModel,
     ViTPatchEmbeddings,
     ViTPreTrainedModel,
@@ -51,7 +53,15 @@ class ViTMSNEmbeddings(ViTEmbeddings):
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
 
 
+class ViTMSNAttention(ViTAttention):
+    pass
+
+
 class ViTMSNMLP(CLIPMLP):
+    pass
+
+
+class ViTMSNLayer(ViTLayer):
     pass
 
 

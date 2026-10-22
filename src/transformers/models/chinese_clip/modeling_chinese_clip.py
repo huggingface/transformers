@@ -303,6 +303,28 @@ class ChineseCLIPTextSelfOutput(nn.Module):
         return hidden_states
 
 
+class ChineseCLIPTextAttention(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.self = ChineseCLIPTextSelfAttention(config)
+        self.output = ChineseCLIPTextSelfOutput(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.FloatTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+        hidden_states, _ = self.self(
+            hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = self.output(hidden_states, residual)
+        return hidden_states
+
+
 class ChineseCLIPVisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -394,28 +416,6 @@ class ChineseCLIPVisionMLP(nn.Module):
         hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.down_proj(hidden_states)
-        return hidden_states
-
-
-class ChineseCLIPTextAttention(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.self = ChineseCLIPTextSelfAttention(config)
-        self.output = ChineseCLIPTextSelfOutput(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states, _ = self.self(
-            hidden_states,
-            attention_mask=attention_mask,
-            **kwargs,
-        )
-        hidden_states = self.output(hidden_states, residual)
         return hidden_states
 
 

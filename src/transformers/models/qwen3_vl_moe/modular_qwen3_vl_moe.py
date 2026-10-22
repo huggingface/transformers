@@ -32,6 +32,7 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionAttention
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
+    Qwen3MoeDecoderLayer,
     Qwen3MoeExperts,
     Qwen3MoePreTrainedModel,
     Qwen3MoeSparseMoeBlock,
@@ -193,6 +194,10 @@ class Qwen3VLMoeTextAttention(Qwen3Attention):
     def __init__(self, config: Qwen3VLMoeTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.sliding_window = None
+
+
+class Qwen3VLMoeTextDecoderLayer(Qwen3MoeDecoderLayer):
+    pass
 
 
 class Qwen3VLMoePreTrainedModel(Qwen3MoePreTrainedModel):

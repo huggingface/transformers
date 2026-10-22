@@ -541,6 +541,83 @@ class Sam3TrackerVideoAttention(nn.Module):
         return attn_output, attn_weights
 
 
+class Sam3TrackerVideoTwoWayAttentionBlock(GradientCheckpointingLayer):
+    def __init__(self, config: Sam3TrackerVideoMaskDecoderConfig, skip_first_layer_pe: bool = False):
+        """
+        A transformer block with four layers:
+            (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
+            sparse inputs (4) cross attention of dense inputs -> sparse inputs
+
+        Arguments:
+            config (`Sam3TrackerVideoMaskDecoderConfig`):
+                The configuration file used to instantiate the block
+            attention_downsample_rate (*optional*, int, defaults to 2):
+                The downsample ratio of the block used to reduce the inner dim of the attention.
+            skip_first_layer_pe (*optional*, bool, defaults to `False`):
+                Whether or not to skip the addition of the query_point_embedding on the first layer.
+        """
+        super().__init__()
+        self.self_attn = Sam3TrackerVideoAttention(config, downsample_rate=1)
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
+
+        self.cross_attn_token_to_image = Sam3TrackerVideoAttention(config)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
+
+        self.mlp = Sam3TrackerVideoFeedForward(
+            config.hidden_size, config.mlp_dim, config.hidden_size, num_layers=config.num_hidden_layers
+        )
+        self.layer_norm3 = nn.LayerNorm(config.hidden_size)
+
+        self.layer_norm4 = nn.LayerNorm(config.hidden_size)
+        self.cross_attn_image_to_token = Sam3TrackerVideoAttention(config)
+
+        self.skip_first_layer_pe = skip_first_layer_pe
+
+    def forward(
+        self,
+        queries: Tensor,
+        keys: Tensor,
+        query_point_embedding: Tensor,
+        key_point_embedding: Tensor,
+        attention_similarity: Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ):
+        # Self attention block
+        if self.skip_first_layer_pe:
+            queries, _ = self.self_attn(query=queries, key=queries, value=queries)
+        else:
+            query = queries + query_point_embedding
+            attn_out, _ = self.self_attn(query=query, key=query, value=queries)
+            queries = queries + attn_out
+        queries = self.layer_norm1(queries)
+
+        # Cross attention block, tokens attending to image embedding
+        query = queries + query_point_embedding
+        key = keys + key_point_embedding
+
+        attn_out, _ = self.cross_attn_token_to_image(
+            query=query, key=key, value=keys, attention_similarity=attention_similarity
+        )
+        queries = queries + attn_out
+
+        queries = self.layer_norm2(queries)
+
+        # MLP block
+        mlp_out = self.mlp(queries)
+        queries = queries + mlp_out
+        queries = self.layer_norm3(queries)
+
+        # Cross attention block, image embedding attending to tokens
+        query = queries + query_point_embedding
+        key = keys + key_point_embedding
+
+        attn_out, _ = self.cross_attn_image_to_token(query=key, key=query, value=queries)
+        keys = keys + attn_out
+
+        keys = self.layer_norm4(keys)
+        return queries, keys, attn_out
+
+
 class Sam3TrackerVideoFeedForward(nn.Module):
     def __init__(
         self,
@@ -1286,83 +1363,6 @@ class Sam3TrackerVideoPromptEncoder(nn.Module):
             )
 
         return sparse_embeddings, dense_embeddings
-
-
-class Sam3TrackerVideoTwoWayAttentionBlock(GradientCheckpointingLayer):
-    def __init__(self, config: Sam3TrackerVideoMaskDecoderConfig, skip_first_layer_pe: bool = False):
-        """
-        A transformer block with four layers:
-            (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
-            sparse inputs (4) cross attention of dense inputs -> sparse inputs
-
-        Arguments:
-            config (`Sam3TrackerVideoMaskDecoderConfig`):
-                The configuration file used to instantiate the block
-            attention_downsample_rate (*optional*, int, defaults to 2):
-                The downsample ratio of the block used to reduce the inner dim of the attention.
-            skip_first_layer_pe (*optional*, bool, defaults to `False`):
-                Whether or not to skip the addition of the query_point_embedding on the first layer.
-        """
-        super().__init__()
-        self.self_attn = Sam3TrackerVideoAttention(config, downsample_rate=1)
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
-
-        self.cross_attn_token_to_image = Sam3TrackerVideoAttention(config)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
-
-        self.mlp = Sam3TrackerVideoFeedForward(
-            config.hidden_size, config.mlp_dim, config.hidden_size, num_layers=config.num_hidden_layers
-        )
-        self.layer_norm3 = nn.LayerNorm(config.hidden_size)
-
-        self.layer_norm4 = nn.LayerNorm(config.hidden_size)
-        self.cross_attn_image_to_token = Sam3TrackerVideoAttention(config)
-
-        self.skip_first_layer_pe = skip_first_layer_pe
-
-    def forward(
-        self,
-        queries: Tensor,
-        keys: Tensor,
-        query_point_embedding: Tensor,
-        key_point_embedding: Tensor,
-        attention_similarity: Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        # Self attention block
-        if self.skip_first_layer_pe:
-            queries, _ = self.self_attn(query=queries, key=queries, value=queries)
-        else:
-            query = queries + query_point_embedding
-            attn_out, _ = self.self_attn(query=query, key=query, value=queries)
-            queries = queries + attn_out
-        queries = self.layer_norm1(queries)
-
-        # Cross attention block, tokens attending to image embedding
-        query = queries + query_point_embedding
-        key = keys + key_point_embedding
-
-        attn_out, _ = self.cross_attn_token_to_image(
-            query=query, key=key, value=keys, attention_similarity=attention_similarity
-        )
-        queries = queries + attn_out
-
-        queries = self.layer_norm2(queries)
-
-        # MLP block
-        mlp_out = self.mlp(queries)
-        queries = queries + mlp_out
-        queries = self.layer_norm3(queries)
-
-        # Cross attention block, image embedding attending to tokens
-        query = queries + query_point_embedding
-        key = keys + key_point_embedding
-
-        attn_out, _ = self.cross_attn_image_to_token(query=key, key=query, value=queries)
-        keys = keys + attn_out
-
-        keys = self.layer_norm4(keys)
-        return queries, keys, attn_out
 
 
 class Sam3TrackerVideoTwoWayTransformer(nn.Module):

@@ -14,6 +14,7 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ..mistral.modeling_mistral import (
     MistralAttention,
+    MistralDecoderLayer,
     MistralForCausalLM,
     MistralModel,
     MistralPreTrainedModel,
@@ -77,6 +78,10 @@ class Ministral3Attention(MistralAttention):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
+
+class Ministral3DecoderLayer(MistralDecoderLayer):
+    pass
 
 
 @auto_docstring

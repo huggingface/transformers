@@ -28,7 +28,9 @@ from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
 from ..vit.modeling_vit import (
     PreTrainedModel,
+    ViTAttention,
     ViTEmbeddings,
+    ViTLayer,
     ViTModel,
     ViTPooler,
     ViTPreTrainedModel,
@@ -115,7 +117,15 @@ class VivitEmbeddings(ViTEmbeddings):
         return embeddings
 
 
+class VivitAttention(ViTAttention):
+    pass
+
+
 class VivitMLP(CLIPMLP):
+    pass
+
+
+class VivitLayer(ViTLayer):
     pass
 
 

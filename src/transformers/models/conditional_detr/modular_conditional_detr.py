@@ -45,6 +45,7 @@ from ..detr.modeling_detr import (
     DetrDecoderLayer,
     DetrDecoderOutput,
     DetrEncoder,
+    DetrEncoderLayer,
     DetrForObjectDetection,
     DetrForSegmentation,
     DetrLearnedPositionEmbedding,
@@ -55,6 +56,7 @@ from ..detr.modeling_detr import (
     DetrObjectDetectionOutput,
     DetrPreTrainedModel,
     DetrSegmentationOutput,
+    DetrSelfAttention,
     DetrSinePositionEmbedding,
     eager_attention_forward,
 )
@@ -412,6 +414,10 @@ class ConditionalDetrLearnedPositionEmbedding(DetrLearnedPositionEmbedding):
     pass
 
 
+class ConditionalDetrSelfAttention(DetrSelfAttention):
+    pass
+
+
 class ConditionalDetrDecoderSelfAttention(nn.Module):
     """
     Multi-headed self-attention for Conditional DETR decoder layers.
@@ -619,6 +625,10 @@ class ConditionalDetrDecoderCrossAttention(nn.Module):
 
 
 class ConditionalDetrMLP(DetrMLP):
+    pass
+
+
+class ConditionalDetrEncoderLayer(DetrEncoderLayer):
     pass
 
 

@@ -37,11 +37,15 @@ from ..voxtral.modeling_voxtral import (
     VoxtralModelOutputWithPast,
     VoxtralMultiModalProjector,
 )
-from ..whisper.modeling_whisper import WhisperEncoderLayer
+from ..whisper.modeling_whisper import WhisperAttention, WhisperEncoderLayer
 from .configuration_audioflamingo3 import AudioFlamingo3Config
 
 
 logger = logging.get_logger(__name__)
+
+
+class AudioFlamingo3Attention(WhisperAttention):
+    pass
 
 
 class AudioFlamingo3EncoderLayer(WhisperEncoderLayer):

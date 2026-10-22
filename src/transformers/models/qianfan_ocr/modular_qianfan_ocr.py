@@ -38,6 +38,7 @@ from ..internvl.modeling_internvl import (
     InternVLModelOutputWithPast,
     InternVLMultiModalProjector,
     InternVLPreTrainedModel,
+    InternVLVisionAttention,
     InternVLVisionEmbeddings,
     InternVLVisionLayer,
     InternVLVisionModel,
@@ -112,6 +113,10 @@ class QianfanOCRConfig(InternVLConfig):
 
 
 class QianfanOCRDropPath(BeitDropPath):
+    pass
+
+
+class QianfanOCRVisionAttention(InternVLVisionAttention):
     pass
 
 

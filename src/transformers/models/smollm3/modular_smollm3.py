@@ -26,6 +26,7 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
+    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -186,6 +187,10 @@ class SmolLM3Attention(LlamaAttention):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
+
+class SmolLM3DecoderLayer(LlamaDecoderLayer):
+    pass
 
 
 class SmolLM3PreTrainedModel(LlamaPreTrainedModel):

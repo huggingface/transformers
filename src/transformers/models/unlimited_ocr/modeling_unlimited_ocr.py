@@ -321,106 +321,6 @@ class UnlimitedOcrPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
 
 
-class UnlimitedOcrSamLayerNorm(nn.LayerNorm):
-    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
-    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
-    """
-
-    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
-        super().__init__(normalized_shape, eps=eps, **kwargs)
-        if data_format not in ["channels_last", "channels_first"]:
-            raise NotImplementedError(f"Unsupported data format: {data_format}")
-        self.data_format = data_format
-
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
-        """
-        if self.data_format == "channels_first":
-            features = features.permute(0, 2, 3, 1)
-            features = super().forward(features)
-            features = features.permute(0, 3, 1, 2)
-        else:
-            features = super().forward(features)
-        return features
-
-
-class UnlimitedOcrSamVisionNeck(nn.Module):
-    def __init__(self, config: UnlimitedOcrSamVisionConfig):
-        super().__init__()
-        self.config = config
-
-        self.conv1 = nn.Conv2d(config.hidden_size, config.output_channels, kernel_size=1, bias=False)
-        self.layer_norm1 = UnlimitedOcrSamLayerNorm(config.output_channels, data_format="channels_first")
-        self.conv2 = nn.Conv2d(config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False)
-        self.layer_norm2 = UnlimitedOcrSamLayerNorm(config.output_channels, data_format="channels_first")
-
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.permute(0, 3, 1, 2)
-        hidden_states = self.conv1(hidden_states)
-        hidden_states = self.layer_norm1(hidden_states)
-
-        hidden_states = self.conv2(hidden_states)
-        hidden_states = self.layer_norm2(hidden_states)
-        return hidden_states
-
-
-class UnlimitedOcrSamPatchEmbeddings(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
-
-    def forward(self, pixel_values):
-        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
-        return embeddings
-
-
-class UnlimitedOcrSamVisionProj(nn.Module):
-    """Neck and multi-scale downsampling for SAM ViT-B output."""
-
-    def __init__(self, config: UnlimitedOcrSamVisionConfig):
-        super().__init__()
-        self.conv1 = nn.Conv2d(
-            config.output_channels,
-            config.downsample_channels[0],
-            kernel_size=3,
-            stride=2,
-            padding=1,
-            bias=False,
-        )
-        self.conv2 = nn.Conv2d(
-            config.downsample_channels[0],
-            config.downsample_channels[1],
-            kernel_size=3,
-            stride=2,
-            padding=1,
-            bias=False,
-        )
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.conv1(hidden_states)
-        hidden_states = self.conv2(hidden_states)
-        return hidden_states
-
-
 class UnlimitedOcrSamMLPBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -573,6 +473,106 @@ class UnlimitedOcrSamVisionLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
         layernorm_output = self.post_attention_layernorm(hidden_states)
         hidden_states = hidden_states + self.mlp(layernorm_output)
+        return hidden_states
+
+
+class UnlimitedOcrSamLayerNorm(nn.LayerNorm):
+    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
+    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
+    width, channels) while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
+    """
+
+    def __init__(self, normalized_shape, *, eps=1e-6, data_format="channels_last", **kwargs):
+        super().__init__(normalized_shape, eps=eps, **kwargs)
+        if data_format not in ["channels_last", "channels_first"]:
+            raise NotImplementedError(f"Unsupported data format: {data_format}")
+        self.data_format = data_format
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Tensor of shape (batch_size, channels, height, width) OR (batch_size, height, width, channels)
+        """
+        if self.data_format == "channels_first":
+            features = features.permute(0, 2, 3, 1)
+            features = super().forward(features)
+            features = features.permute(0, 3, 1, 2)
+        else:
+            features = super().forward(features)
+        return features
+
+
+class UnlimitedOcrSamVisionNeck(nn.Module):
+    def __init__(self, config: UnlimitedOcrSamVisionConfig):
+        super().__init__()
+        self.config = config
+
+        self.conv1 = nn.Conv2d(config.hidden_size, config.output_channels, kernel_size=1, bias=False)
+        self.layer_norm1 = UnlimitedOcrSamLayerNorm(config.output_channels, data_format="channels_first")
+        self.conv2 = nn.Conv2d(config.output_channels, config.output_channels, kernel_size=3, padding=1, bias=False)
+        self.layer_norm2 = UnlimitedOcrSamLayerNorm(config.output_channels, data_format="channels_first")
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.permute(0, 3, 1, 2)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.layer_norm1(hidden_states)
+
+        hidden_states = self.conv2(hidden_states)
+        hidden_states = self.layer_norm2(hidden_states)
+        return hidden_states
+
+
+class UnlimitedOcrSamPatchEmbeddings(nn.Module):
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+
+    def forward(self, pixel_values):
+        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
+        return embeddings
+
+
+class UnlimitedOcrSamVisionProj(nn.Module):
+    """Neck and multi-scale downsampling for SAM ViT-B output."""
+
+    def __init__(self, config: UnlimitedOcrSamVisionConfig):
+        super().__init__()
+        self.conv1 = nn.Conv2d(
+            config.output_channels,
+            config.downsample_channels[0],
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            bias=False,
+        )
+        self.conv2 = nn.Conv2d(
+            config.downsample_channels[0],
+            config.downsample_channels[1],
+            kernel_size=3,
+            stride=2,
+            padding=1,
+            bias=False,
+        )
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.conv2(hidden_states)
         return hidden_states
 
 

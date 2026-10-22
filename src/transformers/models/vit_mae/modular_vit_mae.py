@@ -28,7 +28,9 @@ from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
 from ..vit.modeling_vit import (
     PreTrainedModel,
+    ViTAttention,
     ViTEmbeddings,
+    ViTLayer,
     ViTModel,
     ViTPatchEmbeddings,
     ViTPreTrainedModel,
@@ -264,8 +266,16 @@ class ViTMAEEmbeddings(ViTEmbeddings):
         return embeddings, mask, ids_restore
 
 
+class ViTMAEAttention(ViTAttention):
+    pass
+
+
 # Pass-through: ViT MAE encoder uses same architecture as ViT
 class ViTMAEMLP(CLIPMLP):
+    pass
+
+
+class ViTMAELayer(ViTLayer):
     pass
 
 

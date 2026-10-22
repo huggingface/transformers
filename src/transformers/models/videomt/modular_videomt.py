@@ -27,6 +27,7 @@ from ..eomt.configuration_eomt import EomtConfig
 from ..eomt.modeling_eomt import (
     EomtEmbeddings,
     EomtForUniversalSegmentation,
+    EomtLayer,
     EomtLayerNorm2d,
     EomtLayerScale,
     EomtPatchEmbeddings,
@@ -93,6 +94,10 @@ class VideomtMLP(Dinov2MLP):
 
 
 class VideomtGatedMLP(Dinov2SwiGLUFFN):
+    pass
+
+
+class VideomtLayer(EomtLayer):
     pass
 
 

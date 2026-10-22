@@ -122,29 +122,6 @@ class SamHQImageSegmentationOutput(ModelOutput):
     mask_decoder_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-class SamHQPositionalEmbedding(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.scale = config.scale
-        self.positional_embedding = nn.Parameter(self.scale * torch.randn((2, config.num_pos_feats)))
-
-    def forward(self, input_coords, input_shape=None):
-        """Positionally encode points that are normalized to [0,1]."""
-        coordinates = input_coords.clone()
-
-        if input_shape is not None:
-            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
-            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
-
-        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
-        coordinates = 2 * coordinates - 1
-        coordinates = coordinates.to(self.positional_embedding.dtype)
-        coordinates = coordinates @ self.positional_embedding
-        coordinates = 2 * np.pi * coordinates
-        # outputs d_1 x ... x d_n x channel shape
-        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
-
-
 class SamHQVisionAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
@@ -276,65 +253,6 @@ class SamHQVisionAttention(nn.Module):
 
         attn_output = self.proj(attn_output)
         return attn_output, attn_weights
-
-
-@auto_docstring
-class SamHQPreTrainedModel(PreTrainedModel):
-    config: SamHQConfig
-    base_model_prefix = "sam_hq"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _no_split_modules = ["SamHQVisionLayer"]
-    supports_gradient_checkpointing = True
-    _supports_sdpa = True
-
-    @torch.no_grad()
-    def _init_weights(self, module: nn.Module):
-        super()._init_weights(module)
-        if isinstance(module, SamHQVisionAttention):
-            if module.use_rel_pos:
-                init.zeros_(module.rel_pos_h)
-                init.zeros_(module.rel_pos_w)
-        elif isinstance(module, SamHQVisionEncoder):
-            if self.config.use_abs_pos:
-                init.zeros_(module.pos_embed)
-        elif isinstance(module, SamHQPositionalEmbedding):
-            init.normal_(module.positional_embedding, std=module.scale)
-
-
-class SamHQPatchEmbeddings(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
-
-    def forward(self, pixel_values):
-        batch_size, num_channels, height, width = pixel_values.shape
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
-        if height != self.image_size[0] or width != self.image_size[1]:
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
-            )
-        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
-        return embeddings
 
 
 class SamHQMLPBlock(nn.Module):
@@ -490,6 +408,88 @@ class SamHQVisionLayer(GradientCheckpointingLayer):
         layernorm_output = self.post_attention_layernorm(hidden_states)
         hidden_states = hidden_states + self.mlp(layernorm_output)
         return hidden_states
+
+
+class SamHQPositionalEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.scale = config.scale
+        self.positional_embedding = nn.Parameter(self.scale * torch.randn((2, config.num_pos_feats)))
+
+    def forward(self, input_coords, input_shape=None):
+        """Positionally encode points that are normalized to [0,1]."""
+        coordinates = input_coords.clone()
+
+        if input_shape is not None:
+            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
+            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
+
+        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
+        coordinates = 2 * coordinates - 1
+        coordinates = coordinates.to(self.positional_embedding.dtype)
+        coordinates = coordinates @ self.positional_embedding
+        coordinates = 2 * np.pi * coordinates
+        # outputs d_1 x ... x d_n x channel shape
+        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
+
+
+@auto_docstring
+class SamHQPreTrainedModel(PreTrainedModel):
+    config: SamHQConfig
+    base_model_prefix = "sam_hq"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    _no_split_modules = ["SamHQVisionLayer"]
+    supports_gradient_checkpointing = True
+    _supports_sdpa = True
+
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
+        if isinstance(module, SamHQVisionAttention):
+            if module.use_rel_pos:
+                init.zeros_(module.rel_pos_h)
+                init.zeros_(module.rel_pos_w)
+        elif isinstance(module, SamHQVisionEncoder):
+            if self.config.use_abs_pos:
+                init.zeros_(module.pos_embed)
+        elif isinstance(module, SamHQPositionalEmbedding):
+            init.normal_(module.positional_embedding, std=module.scale)
+
+
+class SamHQPatchEmbeddings(nn.Module):
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+
+    def forward(self, pixel_values):
+        batch_size, num_channels, height, width = pixel_values.shape
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        if height != self.image_size[0] or width != self.image_size[1]:
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+            )
+        embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
+        return embeddings
 
 
 class SamHQVisionNeck(nn.Module):

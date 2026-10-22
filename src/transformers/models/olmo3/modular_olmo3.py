@@ -30,6 +30,7 @@ from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..olmo2.configuration_olmo2 import Olmo2Config
 from ..olmo2.modeling_olmo2 import (
     Olmo2Attention,
+    Olmo2DecoderLayer,
     Olmo2ForCausalLM,
     Olmo2ForSequenceClassification,
     Olmo2Model,
@@ -129,6 +130,10 @@ class Olmo3Attention(Olmo2Attention):
         self.attention_type = config.layer_types[layer_idx]
         super().__init__(config, layer_idx=layer_idx)
         self.sliding_window = config.sliding_window if self.attention_type == "sliding_attention" else None
+
+
+class Olmo3DecoderLayer(Olmo2DecoderLayer):
+    pass
 
 
 class Olmo3RotaryEmbedding(Gemma3RotaryEmbedding):

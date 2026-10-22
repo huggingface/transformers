@@ -28,6 +28,7 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..dinov3_vit.modeling_dinov3_vit import (
+    DINOv3ViTAttention,
     DINOv3ViTEmbeddings,
     DINOv3ViTLayer,
     DINOv3ViTLayerScale,
@@ -123,6 +124,10 @@ class EomtDinov3Config(EomtConfig):
 
     mlp_ratio = AttributeError()
     use_swiglu_ffn = AttributeError()
+
+
+class EomtDinov3Attention(DINOv3ViTAttention):
+    pass
 
 
 class EomtDinov3Embeddings(DINOv3ViTEmbeddings):

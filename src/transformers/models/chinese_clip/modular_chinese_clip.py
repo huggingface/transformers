@@ -28,6 +28,7 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..align.modeling_align import (
+    AlignTextAttention,
     AlignTextEmbeddings,
     AlignTextEncoder,
     AlignTextLayer,
@@ -157,6 +158,10 @@ class ChineseCLIPTextSelfAttention(AlignTextSelfAttention):
 
 
 class ChineseCLIPTextSelfOutput(BertSelfOutput):
+    pass
+
+
+class ChineseCLIPTextAttention(AlignTextAttention):
     pass
 
 

@@ -138,46 +138,6 @@ class PixioEmbeddings(nn.Module):
         return embeddings
 
 
-class PixioMLP(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
-        # the hidden size comes from mlp_ratio; the config has no intermediate_size
-        self.up_proj = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
-        self.down_proj = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
-
-
-class PixioDropPath(nn.Module):
-    """Stochastic depth (DropPath) per sample, for residual blocks.
-
-    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
-    <https://arxiv.org/abs/1603.09382>`_.
-    """
-
-    def __init__(self, drop_prob: float = 0.0) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        if self.drop_prob == 0.0 or not self.training:
-            return hidden_states
-        keep_prob = 1 - self.drop_prob
-        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
-        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
-        random_tensor = torch.floor(random_tensor + keep_prob)
-        return hidden_states.div(keep_prob) * random_tensor
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -254,6 +214,46 @@ class PixioAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
+
+
+class PixioMLP(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        # the hidden size comes from mlp_ratio; the config has no intermediate_size
+        self.up_proj = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
+        self.down_proj = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
+        return hidden_states
+
+
+class PixioDropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
 
 
 class PixioLayer(GradientCheckpointingLayer):
