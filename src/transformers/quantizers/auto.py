@@ -385,23 +385,6 @@ def _reads_checkpoint_config(passed: QuantizationConfigMixin | None, checkpoint:
     return isinstance(passed, CHECKPOINT_READING_CONFIG_TYPES)
 
 
-def _merged_plan(dtype_plan: dict, passed_plan: dict) -> dict:
-    """Return a checkpoint's `dtype_plan` with what a passed plan may change.
-
-    A passed `None` entry joins the plan. A passed entry with the same pattern and format lends its activation format.
-    The weights keep the checkpoint's formats. Only the kernels they run on change.
-    """
-    merged = dict(dtype_plan)
-    for pattern, entry in passed_plan.items():
-        if entry is None:
-            merged[pattern] = None
-        elif isinstance(entry, BlockScaledConfig) and type(merged.get(pattern)) is type(entry):
-            merged[pattern] = copy.copy(merged[pattern])
-            merged[pattern].activation_format = entry.activation_format
-            merged[pattern].post_init()
-    return merged
-
-
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent, gguf_file=None):
     if gguf_file is not None:
         if quantization_config is None:

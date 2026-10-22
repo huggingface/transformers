@@ -21,7 +21,7 @@ import re
 from typing import TYPE_CHECKING
 
 from .base import HfQuantizer, get_keys_to_not_convert
-from .quantizers_utils import checkpoint_module_namer, plan_entry_for, skip_pattern
+from .quantizers_utils import checkpoint_module_names, plan_entry_for, skip_pattern
 
 
 if TYPE_CHECKING:
@@ -158,8 +158,9 @@ class FineGrainedHfQuantizer(HfQuantizer):
             others = [pattern for pattern in self._plan if pattern not in own]
             # a skipped module takes its sub-tree with it, so a member never skips a parent of a module it owns
             parents = {parent for name, owner in owners.items() if owner is member for parent in _parents(name)}
-            parents |= {to_checkpoint(parent) for parent in parents}
-            member.dtype_plan_skip = _skip_unowned(own, others, parents)
+            parents |= {name for parent in parents for name in checkpoint_names[parent]}
+            # each member works on its own config copy, so the scope never reaches the saved config
+            setattr(member.quantization_config, member.skip_list_attribute, [_skip_unowned(own, others, parents)])
             member.dtype_plan_targets = [pattern for pattern in own if pattern != ".*"]
             before = {name: type(module) for name, module in model.named_modules()}
             member._process_model_before_weight_loading(model, **kwargs)
@@ -179,11 +180,15 @@ class FineGrainedHfQuantizer(HfQuantizer):
         entry that matches no module raises. The saved config keeps the patterns as passed.
         """
         plan = self._plan
-        targeted = [pattern for pattern in plan if pattern != ".*"]
-        resolved = dict(plan)
-        for name, _ in model.named_modules():
-            checkpoint_name = to_checkpoint(name)
-            if checkpoint_name == name or not any(re.search(pattern, checkpoint_name) for pattern in targeted):
+        targeted = {pattern: re.compile(pattern) for pattern in plan if pattern != ".*"}
+        resolved, matched = dict(plan), set()
+        for name, checkpoint_names in checkpoint_module_names(model).items():
+            hits = {
+                candidate: [pattern for pattern, regex in targeted.items() if regex.search(candidate)]
+                for candidate in dict.fromkeys([name, *checkpoint_names])
+            }
+            selected = [candidate for candidate, patterns in hits.items() if patterns]
+            if not selected:
                 continue
             matched.update(pattern for candidate in selected for pattern in hits[candidate])
             # only the patterns that hit a name can give its entry
@@ -198,7 +203,11 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 raise ValueError(f"{name!r} is one module, so its checkpoint names cannot load in different formats.")
             if selected[0] == name:
                 continue
-            resolved[rf"^{re.escape(name)}$"] = source
+            if len(selected) < len(checkpoint_names):
+                raise ValueError(f"{name!r} is one fused module, so a dtype_plan entry must cover all of its pieces.")
+            resolved[rf"^{re.escape(name)}$"] = entries.popitem()[1]
+        if unmatched := [pattern for pattern in targeted if pattern not in matched and plan[pattern] is not None]:
+            raise ValueError(f"The dtype_plan entries {unmatched} match no module.")
         self._plan = resolved
 
     def update_parallel_plan(self, model, plan):

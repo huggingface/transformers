@@ -1982,12 +1982,18 @@ class FineGrainedConfig(QuantizationConfigMixin):
         # formats.
         from ..quantizers.quantizers_utils import skip_pattern
 
-        if not any(type(entry) is type(config) for entry in self.dtype_plan.values() if entry is not None):
-            return super().loading_attributes_source(config)
-        entry = copy.copy(config)
-        entry.dequantize, entry.modules_to_not_convert = False, None
-        same_format = {pattern: entry for pattern, own in self.dtype_plan.items() if type(own) is type(config)}
-        skipped = dict.fromkeys(map(skip_pattern, getattr(config, "modules_to_not_convert", None) or []))
+        plan = dict(self.dtype_plan)
+        if isinstance(config, FineGrainedConfig):
+            skipped = [pattern for pattern, entry in config.dtype_plan.items() if entry is None]
+        elif any(type(entry) is type(config) for entry in plan.values() if entry is not None):
+            skipped = [skip_pattern(entry) for entry in getattr(config, "modules_to_not_convert", None) or []]
+            for pattern, entry in plan.items():
+                if isinstance(config, BlockScaledConfig) and type(entry) is type(config):
+                    plan[pattern] = copy.copy(entry)
+                    plan[pattern].activation_format = config.activation_format
+                    plan[pattern].post_init()
+        else:
+            return None
         return FineGrainedConfig(
             dtype_plan={**plan, **dict.fromkeys(skipped)}, dequantize=getattr(config, "dequantize", False)
         )
