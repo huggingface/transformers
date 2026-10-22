@@ -284,11 +284,6 @@ class Apertus1p5VisionTokenizerPreTrainedModel(PreTrainedModel):
     base_model_prefix = "vision_tokenizer"
     input_modalities = ("image",)
     _no_split_modules = ["Apertus1p5VisionTokenizerResnetBlock", "Apertus1p5VisionTokenizerAttnBlock"]
-    # code assignment is an argmax over codebook logits: half precision flips ~10% of codes (bf16, 131k codebook),
-    # so the tokenizer is kept in fp32 even when the model is loaded in fp16/bf16
-    _keep_in_fp32_modules_strict = ["encoder", "quant_conv", "quantize"]
-    # Quantizers use this separate list to exclude the codebook projection from weight quantization.
-    _keep_in_fp32_modules = ["quantize.embedding"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -304,8 +299,8 @@ class Apertus1p5VisionTokenizerPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Encode-only EMU3.5-derived vision tokenizer used by Apertus 1.5. It returns hard codebook indices and is kept
-    in `float32` for stable code assignment.
+    Encode-only EMU3.5-derived vision tokenizer used by Apertus 1.5. It returns hard codebook indices; run it in
+    `float32` for stable code assignment (Apertus 1.5 does this automatically).
     """
 )
 class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
@@ -327,8 +322,8 @@ class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
         Returns:
             `Apertus1p5VisionTokenizerEncoderOutput`: Discrete image-code grids in `image_tokens`.
         """
-        # the tokenizer runs in fp32 even inside a half-precision model (`_keep_in_fp32_modules_strict`):
-        # cast the input to the encoder's dtype so callers can pass fp16/bf16 pixel values
+        # Apertus keeps the tokenizer in fp32 (see Apertus1p5Model); cast the input to the encoder's dtype so
+        # callers can pass fp16/bf16 pixel values
         pixel_values = pixel_values.to(self.encoder.conv_in.weight.dtype)
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
@@ -794,7 +789,8 @@ class Apertus1p5TextForCausalLM(Apertus1p5TextPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class Apertus1p5Model(Apertus1p5PreTrainedModel):
-    # both tokenizers assign codes by argmax, which half precision perturbs (see Apertus1p5VisionTokenizerModel)
+    # code assignment is an argmax over codebook logits: half precision flips ~10% of image codes (bf16, 131k codebook),
+    # so both tokenizers are kept in fp32 even when the model is loaded in fp16/bf16
     _keep_in_fp32_modules_strict = ["vision_tokenizer", "audio_tokenizer"]
 
     def __init__(self, config: Apertus1p5Config):
@@ -1035,8 +1031,6 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
 class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMixin):
     output_modalities = ("text",)
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    # both tokenizers assign codes by argmax, which half precision perturbs (see Apertus1p5VisionTokenizerModel)
-    _keep_in_fp32_modules_strict = ["vision_tokenizer", "audio_tokenizer"]
 
     def __init__(self, config: Apertus1p5Config):
         super().__init__(config)
