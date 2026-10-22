@@ -169,14 +169,14 @@ processor = AutoProcessor.from_pretrained("openbmb/MiniCPM-OCR-1.0", downsample_
 
 <hfoption id="Small image resizing">
 
-Images too small to be sliced are upscaled to `scale_resolution` by default. Two options change
-that, which is useful for screenshots and crops where upscaling only blurs the glyphs:
+Images too small to be sliced are upscaled to `scale_resolution` by default, which is the setting
+the released checkpoint was trained with. Screenshots and crops are often better kept at their
+native resolution, where upscaling only blurs the glyphs, so `small_image_upsize` selects between
+the two:
 
-- `disable_small_image_upsize`: keep those images at their native resolution, aligned to the patch
-  grid only.
-- `adaptive_small_image_upsize`: decide per image instead. Small dense text is upscaled to
-  `scale_resolution`, images below `adaptive_upsize_tiny_pixels` are upscaled to
-  `adaptive_upsize_tiny_target_resolution`, and the rest follow `disable_small_image_upsize`.
+- `"always"` (default): upscale them to `scale_resolution`.
+- `"never"`: keep them at their native resolution, aligned to the patch grid only.
+- `"adaptive"`: decide per image, and per slice, from glyph size and density.
 
 ```python
 from transformers import AutoProcessor, load_image
@@ -191,32 +191,28 @@ text = processor.apply_chat_template(messages, add_generation_prompt=True, token
 print(processor(images=[image], text=[text], return_tensors="pt")["target_sizes"].tolist())
 # [[32, 32]] -- upscaled to `scale_resolution`
 
-processor = AutoProcessor.from_pretrained(
-    "openbmb/MiniCPM-OCR-1.0",
-    disable_small_image_upsize=True,
-    adaptive_small_image_upsize=True,
-)
+processor = AutoProcessor.from_pretrained("openbmb/MiniCPM-OCR-1.0", small_image_upsize="never")
+print(processor(images=[image], text=[text], return_tensors="pt")["target_sizes"].tolist())
+# [[16, 16]] -- 224 / 14 patches per side, no upscaling
+```
+
+`"adaptive"` upscales small dense text to `scale_resolution`, images below 6272 pixels to 84, and
+keeps the rest native; on a slice it never spends more tokens than the baseline tile would. Glyph
+height and density are measured with an Otsu threshold followed by connected component analysis, so
+it requires [OpenCV](https://pypi.org/project/opencv-python/) and raises without it, rather than
+silently falling back to a different rule.
+
+```python
+processor = AutoProcessor.from_pretrained("openbmb/MiniCPM-OCR-1.0", small_image_upsize="adaptive")
 print(processor(images=[image], text=[text], return_tensors="pt")["target_sizes"].tolist())
 # [[32, 32]] -- dense text detected, so this one is upscaled anyway
 ```
 
-Glyph height and density are measured with an Otsu threshold followed by connected component
-analysis, so `adaptive_small_image_upsize` requires
-[OpenCV](https://pypi.org/project/opencv-python/) and raises without it, rather than silently
-falling back to a different rule; `adaptive_upsize_font_px` and `adaptive_upsize_dense_per_kpx`
-set the thresholds.
-
-Like `downsample_mode`, all of these can be overridden per call as well. Turning the adaptive rule
-off per call makes `disable_small_image_upsize` apply unconditionally, which keeps the 224x224
-receipt at its native resolution:
+Like `downsample_mode`, it can be overridden per call as well, which keeps the 224x224 receipt at
+its native resolution without reloading the processor:
 
 ```python
-inputs = processor(
-    images=[image],
-    text=[text],
-    return_tensors="pt",
-    adaptive_small_image_upsize=False,
-)
+inputs = processor(images=[image], text=[text], return_tensors="pt", small_image_upsize="never")
 print(inputs["target_sizes"].tolist())
 # [[16, 16]] -- 224 / 14 patches per side, no upscaling
 ```
