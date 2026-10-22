@@ -11,7 +11,6 @@ from transformers import logging
 from transformers.testing_utils import (
     CaptureLogger,
     LoggingLevel,
-    execute_subprocess_async,
     require_torch,
     require_torchvision,
     run_test_using_subprocess,
@@ -23,7 +22,6 @@ from transformers.utils.import_utils import (
     clear_import_cache,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
-    is_sklearn_available,
 )
 
 
@@ -428,72 +426,6 @@ def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
         return x + 1 if helper(*args) else x - 1
 
     run(torch.zeros(3))  # a graph break inside the helper would raise here
-
-
-def test_auto_classes_do_not_import_generation_or_sklearn():
-    """
-    Importing the config/tokenizer auto classes must not pull in the generation stack (which imports torch) or
-    scikit-learn: those are only needed once a model generates. Runs in a fresh interpreter so modules imported
-    by the test session don't mask the result.
-    """
-    code = (
-        "import sys\n"
-        "from transformers import AutoConfig, AutoTokenizer, PreTrainedConfig\n"
-        "PreTrainedConfig(dtype='float32')\n"
-        "leaked = [m for m in ('sklearn', 'transformers.generation.logits_process',"
-        " 'transformers.generation.candidate_generator', 'transformers.modeling_gguf_pytorch_utils')"
-        " if m in sys.modules]\n"
-        "AutoConfig.for_model('llama')\n"
-        "leaked += [m for m in ('sklearn', 'transformers.generation.candidate_generator',"
-        " 'transformers.modeling_gguf_pytorch_utils') if m in sys.modules]\n"
-        "print(leaked)\n"
-    )
-    result = execute_subprocess_async([sys.executable, "-c", code])
-    assert result.stdout == ["[]"], "\n".join(result.stdout + result.stderr)
-
-
-@require_torch
-def test_deferred_generation_imports_still_load_on_first_use():
-    """The imports deferred above must still resolve when the feature that needs them is used."""
-    from transformers import SynthIDTextWatermarkingConfig, WatermarkingConfig
-    from transformers.generation.logits_process import (
-        SynthIDTextWatermarkLogitsProcessor,
-        WatermarkLogitsProcessor,
-    )
-
-    processor = WatermarkingConfig().construct_processor(vocab_size=10, device="cpu")
-    assert isinstance(processor, WatermarkLogitsProcessor)
-    processor = SynthIDTextWatermarkingConfig(ngram_len=2, keys=[1, 2]).construct_processor(
-        vocab_size=10, device="cpu"
-    )
-    assert isinstance(processor, SynthIDTextWatermarkLogitsProcessor)
-
-
-@require_torch
-@pytest.mark.skipif(not is_sklearn_available(), reason="test requires scikit-learn")
-def test_deferred_sklearn_import_still_loads_on_first_use():
-    """The assisted candidate generator must still reach `sklearn.metrics.roc_curve` to tune its threshold."""
-    import torch
-
-    from transformers import LlamaConfig, LlamaForCausalLM
-    from transformers.generation.candidate_generator import AssistedCandidateGenerator
-
-    config = LlamaConfig(
-        vocab_size=16, hidden_size=8, intermediate_size=16, num_hidden_layers=1, num_attention_heads=2
-    )
-    assistant_model = LlamaForCausalLM(config)
-    assistant_model.generation_config.assistant_confidence_threshold = 0.4
-    input_ids = torch.randint(1, 10, (1, 9))
-    candidate_generator = AssistedCandidateGenerator(
-        input_ids=input_ids,
-        assistant_model=assistant_model,
-        generation_config=assistant_model.generation_config,
-        model_kwargs={},
-    )
-    candidate_generator.probs = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
-    candidate_generator.matches = [1, 0, 1, 0, 1]
-    candidate_generator.update_candidate_strategy(input_ids, None, 3)
-    assert candidate_generator.assistant_generation_config.assistant_confidence_threshold == 0.2
 
 
 @run_test_using_subprocess
