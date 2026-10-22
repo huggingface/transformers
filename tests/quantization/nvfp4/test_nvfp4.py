@@ -262,7 +262,7 @@ class NVFP4LoadingOpsTest(unittest.TestCase):
         quantized, scales, dequantized = _fp8_block(weight)
         model = torch.nn.Module()
         model.proj = torch.nn.Linear(256, 256, bias=False, dtype=torch.bfloat16)
-        out = NVFP4Dequantize(SimpleNamespace(quantization_config=NVFP4Config())).convert(
+        out = NVFP4Dequantize(None).convert(
             {"weight": quantized, "weight_scale_inv": scales}, full_layer_name="proj.weight", model=model
         )
         torch.testing.assert_close(out["proj.weight"].float(), dequantized, rtol=1e-2, atol=1e-2)
@@ -275,9 +275,6 @@ class NVFP4LoadingOpsTest(unittest.TestCase):
             out = NVFP4ExpertGlobals(None, "first").convert({"w1": gate, "w3": up}, full_layer_name="y")
         self.assertEqual(out["y"].tolist(), [1.0, 2.0])
 
-
-@require_torch
-class NVFP4DequantizeTest(unittest.TestCase):
     def test_without_a_gpu_a_checkpoint_loads_dequantized(self):
         """Check that a ModelOpt checkpoint loads dequantized without a GPU, its NVFP4 globals included."""
         with tempfile.TemporaryDirectory() as path:

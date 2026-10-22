@@ -94,7 +94,7 @@ class NVFP4Linear(nn.Module):
 
     Activations quantize against the calibrated `input_global_scale`, or a global of 1 when quantized on the fly.
     `weight_only=True` keeps them in the model dtype. On the fly, the weight starts as a full-precision placeholder.
-    `swizzled=True` holds the scales swizzled on SM100.
+    `swizzled_scales=True` holds the scales swizzled on SM100.
     """
 
     def __init__(
@@ -104,7 +104,7 @@ class NVFP4Linear(nn.Module):
         bias: bool = False,
         pre_quantized: bool = False,
         weight_only: bool = False,
-        swizzled: bool = False,
+        swizzled_scales: bool = True,
     ):
         super().__init__()
         self.in_features = in_features
@@ -114,7 +114,7 @@ class NVFP4Linear(nn.Module):
         self.weight = _parameter(weight if pre_quantized else torch.empty(out_features, in_features))
         scale_shape = (out_features, in_features // GROUP_SIZE)
         # the weight-only arm reads row-major scales
-        if swizzled and not weight_only and _tiles_swizzled(*scale_shape):
+        if swizzled_scales and not weight_only and _tiles_swizzled(*scale_shape):
             scale_shape = (1, out_features // 128, scale_shape[1] // 4, 2, 256)
         self.weight_scale_inv = _parameter(torch.empty(scale_shape, dtype=torch.float8_e4m3fn))
         self.weight_global_scale = _parameter(torch.ones((), dtype=torch.float32))
@@ -287,11 +287,12 @@ def replace_with_nvfp4(
     formats: dict[str, str] | None = None,
     pre_quantized: bool = False,
     weight_only: bool = False,
-    swizzle_linears: bool = True,
+    tensor_parallel: bool = False,
 ) -> bool:
     """Replace the linears and fused experts in an NVFP4 format. Return whether any module was replaced.
 
-    `formats` maps module names to ModelOpt formats. Without it, every eligible module is NVFP4.
+    `formats` maps module names to ModelOpt formats. Without it, every eligible module is NVFP4. Under tensor
+    parallelism, linears keep row-major scales, as the split of a scale grid would cut its swizzled tiles.
     """
     # routers stay in full precision unless the checkpoint quantizes them
     parents = [name.removesuffix(".experts") for name, _ in model.named_modules() if name.endswith(".experts")]
@@ -329,7 +330,7 @@ def replace_with_nvfp4(
                     module.in_features,
                     module.out_features,
                     module.bias is not None,
-                    swizzled=swizzle_linears,
+                    swizzled_scales=not tensor_parallel,
                     **options,
                 )
         # the kernels take raw pointers, so tensor parallelism passes them local shards and not DTensors
@@ -471,8 +472,9 @@ class NVFP4Quantize(_NVFP4Op):
         value = _single(next(iter(input_dict.values())))
         module_name, _, slot = full_layer_name.rpartition(".")
         module = model.get_submodule(module_name)
-        if not value.is_cuda:
-            value = value.to(torch.device("cuda", torch.cuda.current_device()))
+        # the NVFP4 quantize kernel runs on the accelerator
+        if value.device.type == "cpu":
+            value = value.to(torch.accelerator.current_accelerator())
         if isinstance(module, NVFP4Linear):
             packed, scales, global_scale = quantize_nvfp4(value)
             names = ("weight", "weight_scale_inv", "weight_global_scale", "input_global_scale")
@@ -591,13 +593,9 @@ class NVFP4Deserialize(_NVFP4Op):
         return out
 
 
-def nvfp4_checkpoint_conversions(hf_quantizer, weight_conversions: list, dequantize: bool = False) -> list:
-    """Return the conversions that load a ModelOpt NVFP4 checkpoint.
-
-    ModelOpt's `weight_scale`, `weight_scale_2` and `input_scale` take the module slots' names. Per-expert globals
-    merge through copies of the model's own expert converters.
-    """
-    from ..core_model_loading import MergeModulelist, WeightConverter, WeightRenaming
+def modelopt_renames() -> list:
+    """Return the renames that give ModelOpt's `weight_scale`, `weight_scale_2` and `input_scale` the slots' names."""
+    from ..core_model_loading import WeightRenaming
 
     projections = "|".join(EXPERT_PROJECTIONS)
     renames = []
@@ -613,6 +611,16 @@ def nvfp4_checkpoint_conversions(hf_quantizer, weight_conversions: list, dequant
                 source_patterns=rf"^(.+experts\.(?:{projections}))_{shipped}$", target_patterns=rf"\1_{slot}"
             )
         )
+    return renames
+
+
+def nvfp4_checkpoint_conversions(hf_quantizer, weight_conversions: list, dequantize: bool = False) -> list:
+    """Return the conversions that load an NVFP4 checkpoint. Per-expert globals merge through copies of the model's
+    own expert converters.
+    """
+    from ..core_model_loading import MergeModulelist, WeightConverter
+
+    projections = "|".join(EXPERT_PROJECTIONS)
     if dequantize:
         # fused stacks first, as the first matching converter wins
         conversions = [
@@ -633,7 +641,7 @@ def nvfp4_checkpoint_conversions(hf_quantizer, weight_conversions: list, dequant
                     [*sources, *globals_], converter._original_target_patterns, operations=converter.operations
                 )
             conversions.append(converter)
-        return renames + conversions
+        return conversions
     conversions = []
     for converter in weight_conversions:
         conversions.append(converter)
@@ -653,4 +661,4 @@ def nvfp4_checkpoint_conversions(hf_quantizer, weight_conversions: list, dequant
                     operations=[MergeModulelist(dim=0), NVFP4ExpertGlobals(hf_quantizer, reduce)],
                 )
             )
-    return renames + conversions
+    return conversions

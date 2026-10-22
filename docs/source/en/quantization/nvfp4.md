@@ -75,7 +75,8 @@ model = AutoModelForCausalLM.from_pretrained(
 
 The experts run on the kernels' fused MoE chain. Pick the chain with `experts_implementation`: `"grouped_mm"` or
 `"batched_mm"`. `"eager"` runs one kernel call per expert. At load, the gate and up rows are interleaved, so the kernels
-fuse the gated activation. On Blackwell GPUs, the scales are swizzled into the layout the scaled MMA reads.
+fuse the gated activation. On Blackwell GPUs, the scales are swizzled into the layout the scaled MMA reads. Dense
+layers swizzle theirs too, except under tensor parallelism, which splits their scale grids.
 
 [`DistributedConfig`] shards the experts by expert, with masked expert parallelism. Each rank runs its own experts on
 every token, so there is no all-to-all dispatch. Set `ep_size` equal to `tp_size`.
@@ -86,7 +87,16 @@ from transformers.distributed import DistributedConfig
 distributed_config = DistributedConfig(tp_size=8, ep_size=8)
 ```
 
+## Saving
+
+[`~PreTrainedModel.save_pretrained`] writes the NVFP4 tensors in the checkpoint layout, under the modules' own names.
+A model quantized on the fly saves quantized, so it reloads without quantizing again.
+
+```py
+model.save_pretrained("Qwen3-30B-A3B-NVFP4-local")
+```
+
 ## Current limitations
 
 - CPU and disk offload are not supported.
-- NVFP4 models cannot be serialized with [`~PreTrainedModel.save_pretrained`] or trained.
+- NVFP4 models cannot be trained.

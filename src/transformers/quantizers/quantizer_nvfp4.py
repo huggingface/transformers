@@ -135,10 +135,9 @@ class NVFP4HfQuantizer(HfQuantizer):
             return
         formats = self._module_formats(model)
         weight_only = self.quantization_config.activation_format == "bf16"
-        # tensor parallelism splits a dense scale grid across its swizzled tiles, so it stays row-major
-        swizzle_linears = getattr(model.config, "distributed_config", None) is None
+        tensor_parallel = getattr(model.config, "distributed_config", None) is not None
         if not replace_with_nvfp4(
-            model, self.modules_to_not_convert, formats, self.pre_quantized, weight_only, swizzle_linears
+            model, self.modules_to_not_convert, formats, self.pre_quantized, weight_only, tensor_parallel
         ):
             raise ValueError("NVFP4 found no linear or experts module to quantize in this model.")
         # the loader accepts any shape for a quantized tensor
@@ -150,21 +149,16 @@ class NVFP4HfQuantizer(HfQuantizer):
         }
 
     def _process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs):
-        from ..core_model_loading import WeightRenaming
+        from ..integrations.nvfp4 import modelopt_renames
 
         conversions = getattr(model, "_weight_conversions", None) or []
         if not self.pre_quantized:
             # scales from on-the-fly quantization save through the conversions of their weights
             conversions = self.update_weight_conversions(conversions, model, for_save=True)
-        # save the modules' own names, not ModelOpt's
-        model._weight_conversions = [
-            conversion
-            for conversion in conversions
-            if not (
-                isinstance(conversion, WeightRenaming)
-                and conversion._original_source_patterns[0].endswith(("_scale$", "_scale_2$"))
-            )
-        ]
+        # Save the modules' own names, which load as they are. A save cannot reverse the ModelOpt renames, as on save
+        # the renames run before the converters.
+        shipped = {tuple(rename._original_source_patterns) for rename in modelopt_renames()}
+        model._weight_conversions = [c for c in conversions if tuple(c._original_source_patterns) not in shipped]
         # a distributed load holds shards, so only a full load checks the shapes
         if getattr(model.config, "distributed_config", None) is None:
             for name, param in model.named_parameters():
@@ -174,12 +168,6 @@ class NVFP4HfQuantizer(HfQuantizer):
                         f"{name} loaded with shape {tuple(param.shape)}, but its module holds {tuple(expected)}."
                     )
         return model
-
-    def postprocess_model(self, model: PreTrainedModel, **kwargs):
-        if self.quantization_config.dequantize:
-            self.remove_quantization_config(model)
-            return model
-        return super().postprocess_model(model, **kwargs)
 
     def get_quantize_ops(self):
         from ..integrations.nvfp4 import NVFP4Quantize
@@ -219,12 +207,15 @@ class NVFP4HfQuantizer(HfQuantizer):
 
     def update_weight_conversions(self, weight_conversions, model, for_save: bool = False):
         from ..core_model_loading import WeightConverter
-        from ..integrations.nvfp4 import NVFP4Deserialize, nvfp4_checkpoint_conversions
+        from ..integrations.nvfp4 import NVFP4Deserialize, modelopt_renames, nvfp4_checkpoint_conversions
 
         conversions = super().update_weight_conversions(weight_conversions, model)
         if not self.pre_quantized and not for_save:
             return conversions
-        conversions = nvfp4_checkpoint_conversions(self, conversions, dequantize=self.quantization_config.dequantize)
+        conversions = [
+            *modelopt_renames(),
+            *nvfp4_checkpoint_conversions(self, conversions, dequantize=self.quantization_config.dequantize),
+        ]
         if self.quantization_config.dequantize:
             return conversions
         # A fused stack in the checkpoint, or a dense scale, loads through its own converter. It comes first, as the
