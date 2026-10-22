@@ -35,35 +35,27 @@ if is_cv2_available():
 
 logger = logging.get_logger(__name__)
 
+# Calibration of the glyph classifier the checkpoint was trained with
+SMALL_FONT_PX = 12.0
+DENSE_GLYPHS_PER_KPX = 2.0
+TINY_PIXELS = 6272
+TINY_RESOLUTION = 84
 
-def adaptive_upsize_tier(
-    image: "np.ndarray",
-    font_px_threshold: float,
-    dense_per_kpx_threshold: float,
-    tiny_pixels: int,
-) -> str:
+
+def adaptive_upsize_resolution(image: "np.ndarray", scale_resolution: int) -> int | None:
     r"""
-    Pick the resize target for an image small enough that it is not sliced.
-
-    Text that is both small and dense is worth upscaling to the full `scale_resolution`
-    (`"448"`), images that are merely tiny are upscaled to a lower target (`"84"`), and
-    everything else keeps its native resolution (`"native"`). Glyph height and density are
-    measured with an Otsu threshold followed by 8-connected component analysis, matching the
-    classifier the checkpoint was trained with, so OpenCV is required.
+    Resolution to upscale an image (or slice) no larger than `scale_resolution` squared towards, or `None` to keep
+    it native. Small dense text gets `scale_resolution`, tiny images get `TINY_RESOLUTION`. Glyph height and density
+    come from an Otsu threshold and 8-connected components, matching the classifier the checkpoint was trained with,
+    so OpenCV is required.
 
     Args:
         image (`np.ndarray`):
-            Image to classify, shaped `(num_channels, height, width)` or `(height, width)`,
-            with dtype ``uint8``.
-        font_px_threshold (`float`):
-            Largest median glyph height, in pixels, still considered small text.
-        dense_per_kpx_threshold (`float`):
-            Smallest number of glyphs per 1000 pixels still considered dense text.
-        tiny_pixels (`int`):
-            Images with fewer pixels than this are treated as tiny, unless small dense text was
-            detected first.
+            `uint8` image shaped `(num_channels, height, width)` or `(height, width)`.
+        scale_resolution (`int`):
+            Resolution small dense text is upscaled to.
     """
-    requires_backends(adaptive_upsize_tier, ["cv2"])
+    requires_backends(adaptive_upsize_resolution, ["cv2"])
 
     height, width = image.shape[-2:]
     if height <= 0 or width <= 0:
