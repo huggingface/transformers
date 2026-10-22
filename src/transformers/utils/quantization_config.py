@@ -2071,21 +2071,19 @@ class GemmaQuantizationConfig(QuantizationConfigMixin):
 class NVFP4Config(QuantizationConfigMixin):
     """Configuration for NVFP4 weights, quantized on the fly or loaded from a ModelOpt export.
 
-    NVFP4 weights are E2M1 values with an E4M3 scale per 16 values and an fp32 global per tensor. They run on the
-    `kernels-community/finegrained-kernels` Hub kernel. A ModelOpt export reads as this config through
-    `read_modelopt`. Its FP8 layers, such as FP8 attention, load dequantized to the model dtype.
+    NVFP4 stores E2M1 values with an E4M3 scale per 16 values and an fp32 global per tensor. It runs on the
+    `kernels-community/finegrained-kernels` Hub kernel.
 
     Args:
         modules_to_not_convert (`list[str]`, *optional*):
             Module-name patterns that should remain in their original precision.
         quantized_layers (`dict[str, str]`, *optional*):
-            Maps checkpoint module names to their ModelOpt format, as a `MIXED_PRECISION` export lists them. `None`
-            makes every eligible module NVFP4.
+            Checkpoint module names to their ModelOpt format. `None` makes every eligible module NVFP4.
         activation_format (`str`, *optional*):
             `None` quantizes the activations to NVFP4 too. `"bf16"` keeps them in the model dtype (weight-only).
         dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to load a pre-quantized checkpoint dequantized to the model dtype. It is also the fallback without
-            a GPU of compute capability 8.9 or the `kernels` package.
+            Whether to load a pre-quantized checkpoint dequantized. It is also the fallback without a supported GPU or
+            the `kernels` package.
         kwargs (`dict[str, Any]`, *optional*):
             Additional values are ignored and reported through the Transformers logger.
     """
@@ -2116,11 +2114,7 @@ class NVFP4Config(QuantizationConfigMixin):
 
 
 def read_modelopt(config_dict: dict) -> NVFP4Config:
-    """Return the config of a ModelOpt export with NVFP4 layers.
-
-    A `MIXED_PRECISION` export names each module's format. Its layers in another format must be FP8, block FP8 or
-    MXFP8, which load dequantized. Any other layout raises.
-    """
+    """Read a ModelOpt export with NVFP4 layers. Its FP8, block FP8 or MXFP8 layers load dequantized."""
     config_dict = {**config_dict, **config_dict.get("quantization", {})}
     if config_dict.get("group_size", 16) != 16:
         raise ValueError(f"NVFP4 uses a group size of 16; got {config_dict['group_size']}.")
@@ -2148,7 +2142,10 @@ def read_modelopt(config_dict: dict) -> NVFP4Config:
     # ModelOpt matches its exclusions anywhere in a name, with `*` as a wildcard
     globs = [*(config_dict.get("ignore") or []), *(config_dict.get("exclude_modules") or [])]
     skip = [*skip, *(".*" + re.escape(glob).replace(r"\*", ".*") for glob in globs)]
-    return NVFP4Config(modules_to_not_convert=skip or None, quantized_layers=quantized_layers)
+    # a `MIXED_PRECISION` export lists every quantized module, so the default skips (e.g. `lm_head`) do not apply
+    if not skip and quantized_layers is None:
+        skip = None
+    return NVFP4Config(modules_to_not_convert=skip, quantized_layers=quantized_layers)
 
 
 @dataclass

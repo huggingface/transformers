@@ -13,6 +13,7 @@
 # limitations under the License.
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from ..utils import is_kernels_available, is_torch_available, is_torch_xpu_available, logging
@@ -32,37 +33,11 @@ if TYPE_CHECKING:
     from ..utils.quantization_config import NVFP4Config
 
 
-def _checkpoint_module_namer(model):
-    """Return a function mapping a module name of `model` to its name in the checkpoint, through the model's renames."""
-    from ..conversion_mapping import get_model_conversion_mapping
-    from ..core_model_loading import WeightRenaming
-
-    reverse = [
-        rule.reverse_transform()
-        for rule in get_model_conversion_mapping(model, add_legacy=False)[::-1]
-        if isinstance(rule, WeightRenaming)
-    ]
-
-    def checkpoint_name(module_name: str) -> str:
-        # renames match keys, so rename the module's `weight` key
-        key = f"{module_name}.weight"
-        for rule in reverse:
-            key, _ = rule.rename_source_key(key)
-        return key.removesuffix(".weight")
-
-    return checkpoint_name
-
-
 class NVFP4HfQuantizer(HfQuantizer):
-    """Load NVFP4 linears and MoE experts, pre-quantized or quantized from a full-precision checkpoint.
-
-    A pre-quantized checkpoint is a ModelOpt export. Its NVFP4 layers load into the NVFP4 modules, and its layers in
-    another format, such as FP8 attention, load dequantized to the model dtype.
-    """
+    """NVFP4 linears and MoE experts, from a ModelOpt export or quantized on the fly. FP8 layers load dequantized."""
 
     requires_calibration = False
     quantization_config: NVFP4Config
-    # A module's weight loads with its scale, which also dequantizes the layers in another format
     serialized_names = {"weight": ["weight", "weight_scale_inv"]}
 
     @property
@@ -77,7 +52,7 @@ class NVFP4HfQuantizer(HfQuantizer):
             missing = f"the `kernels` package ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION})"
         elif not torch.cuda.is_available() and not is_torch_xpu_available():
             missing = "a GPU or XPU"
-        # the NVFP4 kernels use Triton's FP8 type, which NVIDIA GPUs only have from compute capability 8.9
+        # Triton's FP8 type needs compute capability 8.9 on NVIDIA
         elif torch.cuda.is_available() and torch.version.hip is None and torch.cuda.get_device_capability() < (8, 9):
             missing = "a GPU with compute capability 8.9 or newer"
         if missing is not None:
@@ -112,13 +87,24 @@ class NVFP4HfQuantizer(HfQuantizer):
         `quantized_layers` names checkpoint modules. A module matches by its model or checkpoint name. Fused experts
         also match their per-expert entries, such as `experts.3.w1`.
         """
+        from ..conversion_mapping import get_model_conversion_mapping
+        from ..core_model_loading import WeightRenaming
+
         layers = self.quantization_config.quantized_layers
         if layers is None:
             return None
-        checkpoint_name = _checkpoint_module_namer(model)
+        # the model's renames, reversed, give a module's checkpoint name
+        reverse = [
+            rule.reverse_transform()
+            for rule in get_model_conversion_mapping(model, add_legacy=False)[::-1]
+            if isinstance(rule, WeightRenaming)
+        ]
         formats = {}
         for name, _ in model.named_modules():
-            names = {name, checkpoint_name(name)}
+            key = f"{name}.weight"
+            for rule in reverse:
+                key, _ = rule.rename_source_key(key)
+            names = {name, key.removesuffix(".weight")}
             entries = [algo for layer, algo in layers.items() for prefix in names if layer == prefix]
             if name.endswith(".experts"):
                 entries += [
@@ -139,8 +125,7 @@ class NVFP4HfQuantizer(HfQuantizer):
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
         self._nvfp4_shapes = {}
-        # a dequantized or weight-only layer has no slot for its calibrated `input_scale`, and the KV cache stays in
-        # the model dtype
+        # no slot for calibrated `input_scale`s or FP8 KV-cache scales
         model._keys_to_ignore_on_load_unexpected = {
             *(model._keys_to_ignore_on_load_unexpected or ()),
             r"[._]input(_global)?_scale$",
@@ -150,9 +135,13 @@ class NVFP4HfQuantizer(HfQuantizer):
             return
         formats = self._module_formats(model)
         weight_only = self.quantization_config.activation_format == "bf16"
-        if not replace_with_nvfp4(model, self.modules_to_not_convert, formats, self.pre_quantized, weight_only):
+        # tensor parallelism splits a dense scale grid across its swizzled tiles, so it stays row-major
+        swizzle_linears = getattr(model.config, "distributed_config", None) is None
+        if not replace_with_nvfp4(
+            model, self.modules_to_not_convert, formats, self.pre_quantized, weight_only, swizzle_linears
+        ):
             raise ValueError("NVFP4 found no linear or experts module to quantize in this model.")
-        # the loader takes a quantized tensor in any shape, so a wrong layout would only show in the outputs
+        # the loader accepts any shape for a quantized tensor
         self._nvfp4_shapes = {
             name: param.shape
             for name, param in model.named_parameters()
@@ -162,16 +151,12 @@ class NVFP4HfQuantizer(HfQuantizer):
 
     def _process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs):
         from ..core_model_loading import WeightRenaming
-        from ..integrations.nvfp4 import NVFP4Linear, nvfp4_checkpoint_conversions
 
         conversions = getattr(model, "_weight_conversions", None) or []
         if not self.pre_quantized:
-            # an on-the-fly load matched no scale or global, so the loader dropped their converters. A save needs them
-            # to split the scales and globals per expert, like their weights.
-            conversions = nvfp4_checkpoint_conversions(
-                self, super().update_weight_conversions(conversions, model), for_save=True
-            )
-        # a save writes the modules' own names, which load as they are, so it does not reverse the ModelOpt renames
+            # scales from on-the-fly quantization save through the conversions of their weights
+            conversions = self.update_weight_conversions(conversions, model, for_save=True)
+        # save the modules' own names, not ModelOpt's
         model._weight_conversions = [
             conversion
             for conversion in conversions
@@ -180,7 +165,6 @@ class NVFP4HfQuantizer(HfQuantizer):
                 and conversion._original_source_patterns[0].endswith(("_scale$", "_scale_2$"))
             )
         ]
-
         # a distributed load holds shards, so only a full load checks the shapes
         if getattr(model.config, "distributed_config", None) is None:
             for name, param in model.named_parameters():
@@ -189,14 +173,10 @@ class NVFP4HfQuantizer(HfQuantizer):
                     raise ValueError(
                         f"{name} loaded with shape {tuple(param.shape)}, but its module holds {tuple(expected)}."
                     )
-        for module in model.modules():
-            if isinstance(module, NVFP4Linear):
-                module.swizzle_scales()
         return model
 
     def postprocess_model(self, model: PreTrainedModel, **kwargs):
         if self.quantization_config.dequantize:
-            # the model holds no NVFP4 module, so it loads and saves as an unquantized one
             self.remove_quantization_config(model)
             return model
         return super().postprocess_model(model, **kwargs)
@@ -207,37 +187,57 @@ class NVFP4HfQuantizer(HfQuantizer):
         return NVFP4Quantize(self)
 
     def get_load_operations(self):
-        from ..integrations.nvfp4 import NVFP4Deserialize
+        from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize
 
-        return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Deserialize}
+        return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
 
-    def get_weight_conversions(self):
-        from ..core_model_loading import WeightConverter
-        from ..integrations.nvfp4 import NVFP4Deserialize
+    def get_param_ops(self, model: PreTrainedModel, param_name: str) -> list:
+        """Return the layout ops a tensor runs when it loads into `param_name`. Each op is reversed on save.
 
-        if not self.pre_quantized:
+        The ops are the packed FP4 view, the gate|up interleave and the scale swizzle.
+        """
+        from ..integrations.nvfp4 import (
+            EXPERT_PROJECTIONS,
+            NVFP4Experts,
+            NVFP4InterleaveGateUp,
+            NVFP4Linear,
+            NVFP4SwizzleScales,
+            NVFP4ViewPackedInt8,
+        )
+
+        module, name = get_module_from_name(model, param_name)
+        if not isinstance(module, (NVFP4Linear, NVFP4Experts)):
             return []
-        # a module's weight loads with its scale, which also dequantizes it
-        return [WeightConverter(["weight", "weight_scale_inv"], "weight", [NVFP4Deserialize(self)])]
+        ops = []
+        if name in ("weight", *EXPERT_PROJECTIONS):
+            ops.append(NVFP4ViewPackedInt8(self))
+        if isinstance(module, NVFP4Experts) and module.has_gate and name in ("gate_up_proj", "gate_up_proj_scale_inv"):
+            ops.append(NVFP4InterleaveGateUp(self))
+        if name.endswith("scale_inv"):
+            ops.append(NVFP4SwizzleScales(self))
+        return ops
 
-    def get_new_dtype(self, converter, param, dtype):
-        # scales and globals keep their checkpoint dtype, never the model's
-        if any(target.endswith(("scale_inv", "global_scale")) for target in converter.target_patterns):
-            return None
-        return super().get_new_dtype(converter, param, dtype)
-
-    def update_weight_conversions(self, weight_conversions, model):
-        from ..integrations.nvfp4 import nvfp4_checkpoint_conversions
+    def update_weight_conversions(self, weight_conversions, model, for_save: bool = False):
+        from ..core_model_loading import WeightConverter
+        from ..integrations.nvfp4 import NVFP4Deserialize, nvfp4_checkpoint_conversions
 
         conversions = super().update_weight_conversions(weight_conversions, model)
-        if not self.pre_quantized:
+        if not self.pre_quantized and not for_save:
             return conversions
-        return nvfp4_checkpoint_conversions(self, conversions, dequantize=self.quantization_config.dequantize)
-
-    def get_state_dict_and_metadata(self, model):
-        from ..integrations.nvfp4 import nvfp4_checkpoint_state_dict
-
-        return nvfp4_checkpoint_state_dict(model), {}
+        conversions = nvfp4_checkpoint_conversions(self, conversions, dequantize=self.quantization_config.dequantize)
+        if self.quantization_config.dequantize:
+            return conversions
+        # A fused stack in the checkpoint, or a dense scale, loads through its own converter. It comes first, as the
+        # first matching converter wins. On save, skip the params a model converter writes back, as they would match
+        # first there.
+        reverse = [c.reverse_transform() for c in conversions if isinstance(c, WeightConverter)] if for_save else []
+        per_param = [
+            WeightConverter(re.escape(name), name, [NVFP4Deserialize(self)])
+            for name, _ in model.named_parameters()
+            if self.get_param_ops(model, name) and not any(c.rename_source_key(name)[1] for c in reverse)
+        ]
+        renames = [c for c in conversions if not isinstance(c, WeightConverter)]
+        return renames + per_param + [c for c in conversions if isinstance(c, WeightConverter)]
 
     def is_serializable(self) -> bool:
         return True

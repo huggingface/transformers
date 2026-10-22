@@ -32,7 +32,7 @@ if is_torch_available():
 
     from transformers import AutoModelForCausalLM, MixtralForCausalLM
     from transformers.integrations.nvfp4 import (
-        NVFP4Deserialize,
+        NVFP4Dequantize,
         NVFP4ExpertGlobals,
         NVFP4Experts,
         NVFP4Linear,
@@ -90,7 +90,8 @@ def _cosine(got, expected):
 def _modelopt_checkpoint(path):
     """Save a tiny Mixtral as a ModelOpt export and return its dequantized reference model.
 
-    The experts are NVFP4 per expert. The attention mixes NVFP4, weight-only NVFP4 and block FP8.
+    The experts are NVFP4 per expert. The attention mixes NVFP4, weight-only NVFP4, block and per-tensor FP8. The
+    `lm_head` is weight-only NVFP4.
     """
     torch.manual_seed(0)
     config = _mixtral_config()
@@ -114,10 +115,15 @@ def _modelopt_checkpoint(path):
                 state[f"{key}.weight_scale_2"], state[f"{key}.input_scale"] = global_scale, torch.tensor(4 / (6 * 448))
                 weight.copy_(dequantized.to(weight.dtype))
         layers[f"model.layers.{i}.block_sparse_moe.experts"] = {"quant_algo": "NVFP4"}
-        for proj, algo in (("q_proj", "NVFP4"), ("k_proj", "W4A16_NVFP4"), ("o_proj", "FP8_PB_WO")):
+        for proj, algo in (("q_proj", "NVFP4"), ("k_proj", "W4A16_NVFP4"), ("o_proj", "FP8_PB_WO"), ("v_proj", "FP8")):
             linear = getattr(layer.self_attn, proj)
             key = f"model.layers.{i}.self_attn.{proj}"
-            if algo == "FP8_PB_WO":
+            if algo == "FP8":
+                scale = linear.weight.data.float().abs().amax() / 448
+                quantized = (linear.weight.data.float() / scale).to(torch.float8_e4m3fn)
+                dequantized = quantized.float() * scale
+                state[f"{key}.weight"], state[f"{key}.weight_scale"] = quantized, scale.reshape(())
+            elif algo == "FP8_PB_WO":
                 quantized, scales, dequantized = _fp8_block(linear.weight.data)
                 state[f"{key}.weight"], state[f"{key}.weight_scale"] = quantized, scales
             else:
@@ -131,6 +137,14 @@ def _modelopt_checkpoint(path):
                     state[f"{key}.input_scale"] = torch.tensor(8 / (6 * 448))
             linear.weight.data.copy_(dequantized.to(linear.weight.dtype))
             layers[key] = {"quant_algo": algo}
+    packed, scales, global_scale, dequantized = _nvfp4(reference.lm_head.weight.data)
+    state["lm_head.weight"], state["lm_head.weight_scale"], state["lm_head.weight_scale_2"] = (
+        packed,
+        scales,
+        global_scale,
+    )
+    reference.lm_head.weight.data.copy_(dequantized.to(reference.lm_head.weight.dtype))
+    layers["lm_head"] = {"quant_algo": "W4A16_NVFP4"}
 
     from safetensors.torch import save_file
 
@@ -173,6 +187,12 @@ class NVFP4ConfigTest(unittest.TestCase):
         self.assertIsNone(
             AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4"}).quantized_layers
         )
+        # a mixed export lists every quantized module, so the default skips (e.g. `lm_head`) do not apply
+        layers = {"lm_head": {"quant_algo": "W4A16_NVFP4"}}
+        config = read_modelopt(
+            {"quant_method": "modelopt", "quant_algo": "MIXED_PRECISION", "quantized_layers": layers}
+        )
+        self.assertEqual(config.modules_to_not_convert, [])
 
     @parameterized.expand([("without_nvfp4", ["FP8"]), ("with_another_format", ["NVFP4", "W4A8_AWQ"])])
     def test_a_modelopt_export_raises(self, _, algos):
@@ -196,7 +216,8 @@ class NVFP4ModulesTest(unittest.TestCase):
         self.assertNotIsInstance(layer.mlp.gate, NVFP4Linear)
         # the weights start as full-precision placeholders, which the loader quantizes
         self.assertEqual(layer.self_attn.q_proj.weight.dtype, torch.float32)
-        self.assertIsNone(layer.self_attn.q_proj.input_global_scale)
+        # without calibration, the activations quantize with a global of 1
+        self.assertIsNotNone(layer.self_attn.q_proj.input_global_scale)
 
     def test_pre_quantized_modules_follow_the_formats(self):
         model = self._model()
@@ -241,7 +262,7 @@ class NVFP4LoadingOpsTest(unittest.TestCase):
         quantized, scales, dequantized = _fp8_block(weight)
         model = torch.nn.Module()
         model.proj = torch.nn.Linear(256, 256, bias=False, dtype=torch.bfloat16)
-        out = NVFP4Deserialize(SimpleNamespace(quantization_config=NVFP4Config())).convert(
+        out = NVFP4Dequantize(SimpleNamespace(quantization_config=NVFP4Config())).convert(
             {"weight": quantized, "weight_scale_inv": scales}, full_layer_name="proj.weight", model=model
         )
         torch.testing.assert_close(out["proj.weight"].float(), dequantized, rtol=1e-2, atol=1e-2)
@@ -312,6 +333,7 @@ class NVFP4LoadTest(unittest.TestCase):
         self.assertFalse(any(info.values()), info)
         self.assertIsInstance(model.model.layers[0].mlp.experts, NVFP4Experts)
         self.assertIs(type(model.model.layers[0].self_attn.o_proj), torch.nn.Linear)
+        self.assertIsInstance(model.lm_head, NVFP4Linear)
         self.assertGreater(_cosine(self._logits(model), self.expected), 0.995)
 
     @parameterized.expand(

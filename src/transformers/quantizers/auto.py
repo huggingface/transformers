@@ -139,8 +139,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "gemma": GemmaQuantizationConfig,
 }
 
-# Readers for checkpoints written by other tools, keyed by `quant_method`.
-# A reader returns the config the checkpoint describes, or `None` to fall back to the method's config class.
+# Readers for other tools' checkpoint configs, keyed by `quant_method`. `None` falls back to the config class.
 AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
     "modelopt": read_modelopt,
 }
