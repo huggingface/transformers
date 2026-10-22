@@ -215,7 +215,6 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
                 "do_resize=False is not supported. MiniCPM-OCR always resizes images "
                 "to align them to the patch grid; set do_resize=True."
             )
-        use_adaptive_tile = self.adaptive_tile_upsize and self.adaptive_small_image_upsize
         all_pixel_values: list[torch.Tensor] = []
         all_target_sizes: list[list[int]] = []
         all_grids: list[list[int]] = []
