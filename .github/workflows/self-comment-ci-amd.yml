@@ -69,7 +69,7 @@ jobs:
     outputs:
       models: ${{ steps.models_to_run.outputs.models }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: "0"
           ref: "refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge"
@@ -249,7 +249,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - run: mkdir dummy_artifact && echo "placeholder" > dummy_artifact/placeholder.txt
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: dummy_artifact
           path: dummy_artifact
@@ -283,7 +283,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Download model CI new failures artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: new_failures_with_bad_commit_run_models_gpu
           path: ./new_failures/new_failures_with_bad_commit_run_models_gpu
