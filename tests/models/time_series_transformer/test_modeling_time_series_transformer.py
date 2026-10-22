@@ -370,6 +370,39 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
+    @parameterized.expand([1, 2])
+    def test_no_lags(self, input_size):
+        config = TimeSeriesTransformerConfig(
+            prediction_length=2,
+            context_length=4,
+            input_size=input_size,
+            lags_sequence=[],
+            num_time_features=1,
+            num_parallel_samples=2,
+        )
+        model = TimeSeriesTransformerForPrediction(config).to(torch_device).eval()
+        target_shape = [] if input_size == 1 else [input_size]
+        inputs = {
+            "past_values": floats_tensor([2, config.context_length] + target_shape),
+            "past_time_features": floats_tensor([2, config.context_length, config.num_time_features]),
+            "future_values": floats_tensor([2, config.prediction_length] + target_shape),
+            "future_time_features": floats_tensor([2, config.prediction_length, config.num_time_features]),
+        }
+        inputs["past_observed_mask"] = torch.ones_like(inputs["past_values"])
+
+        self.assertEqual(model.model._past_length, config.context_length)
+        transformer_inputs, _, _, _ = model.model.create_network_inputs(**inputs)
+        self.assertEqual(
+            transformer_inputs.shape,
+            (2, config.context_length + config.prediction_length, config.feature_size),
+        )
+        with torch.no_grad():
+            self.assertTrue(torch.isfinite(model(**inputs).loss))
+            inputs.pop("future_values")
+            samples = model.generate(**inputs).sequences
+        self.assertEqual(samples.shape, (2, config.num_parallel_samples, config.prediction_length, *target_shape))
+        self.assertTrue(torch.isfinite(samples).all())
+
     @parameterized.expand(
         [
             (1, 5, [1]),
