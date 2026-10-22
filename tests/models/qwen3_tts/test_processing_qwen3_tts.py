@@ -23,8 +23,11 @@ import numpy as np
 from parameterized import parameterized
 
 from transformers import (
+    AutoConfig,
+    AutoModel,
     AutoProcessor,
     Qwen2TokenizerFast,
+    Qwen3TTSConfig,
     Qwen3TTSFeatureExtractor,
     Qwen3TTSProcessor,
     is_torch_available,
@@ -543,6 +546,25 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         audio = processor.decode(codes)
 
         self.assertIsInstance(audio, torch.Tensor)
+
+    def test_audio_config_roundtrip_preserves_codec_decode(self):
+        codec = _build_tiny_audio_tokenizer()
+        codes = torch.arange(24).reshape(1, 6, 4) % 8
+        with torch.no_grad():
+            for module in codec.quantizer.modules():
+                if hasattr(module, "embed_sum"):
+                    module.embed_sum.normal_()
+            expected = codec.decode(codes).audio_values
+
+        config = Qwen3TTSConfig(audio_config=codec.config.to_dict())
+        with tempfile.TemporaryDirectory() as directory:
+            config.save_pretrained(directory)
+            restored_config = AutoConfig.from_pretrained(directory)
+            restored_codec = AutoModel.from_config(restored_config.audio_config).eval()
+            restored_codec.load_state_dict(codec.state_dict(), strict=True)
+            with torch.no_grad():
+                actual = restored_codec.decode(codes).audio_values
+            torch.testing.assert_close(actual, expected)
 
     def test_save_load_audio_tokenizer_reference(self):
         processor = self.get_processor()

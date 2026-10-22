@@ -1316,8 +1316,6 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         else:
             self.speaker_encoder = None
 
-        # Optional: speech_tokenizer and generate_config loaded separately
-        self.speech_tokenizer = None
         self.generate_config = None
 
         # Model metadata
@@ -1336,15 +1334,10 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             # CODEPATH: base checkpoints only; the others never resample a reference clip
             config.speaker_encoder_config.sample_rate if config.speaker_encoder_config is not None else 24000
         )
-        self.tokenizer_type = getattr(config, "tokenizer_type", "qwen2")
         self.tts_model_size = getattr(config, "tts_model_size", "base")
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def load_speech_tokenizer(self, speech_tokenizer):
-        """Load the speech tokenizer for audio encoding/decoding."""
-        self.speech_tokenizer = speech_tokenizer
 
     def load_generate_config(self, generate_config):
         """Load the generation configuration."""
