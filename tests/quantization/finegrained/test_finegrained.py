@@ -235,18 +235,13 @@ class FineGrainedPlanTest(unittest.TestCase):
         )
         self.assertEqual((type(merged), merged.activation_format), (Mxfp4Config, "mxfp8"))
 
-        # A plan's entries lend their activation formats to the checkpoint's entries
+        # A format config lends its activation format to the plan entries of its format
         hub = {"quant_method": "fp8", "scale_fmt": "ue8m0", "weight_block_size": [128, 128]}
-        passed = FineGrainedConfig(
-            dtype_plan={
-                EXPERTS_PATTERN: Mxfp4Config(activation_format="bf16"),
-                ".*": Fp8Config(weight_block_size=(64, 64)),
-            }
-        )
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             merged = AutoHfQuantizer.merge_quantization_configs(
-                DeepseekV4Config(expert_dtype="fp4", quantization_config=hub).quantization_config, passed
+                DeepseekV4Config(expert_dtype="fp4", quantization_config=hub).quantization_config,
+                Mxfp4Config(activation_format="bf16"),
             )
         self.assertTrue(any(issubclass(w.category, UserWarning) for w in caught))
         experts, rest = merged.dtype_plan[EXPERTS_PATTERN], merged.dtype_plan[".*"]
