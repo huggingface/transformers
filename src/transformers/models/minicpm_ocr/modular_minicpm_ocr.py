@@ -59,7 +59,7 @@ def adaptive_upsize_resolution(image: "np.ndarray", scale_resolution: int) -> in
 
     height, width = image.shape[-2:]
     if height <= 0 or width <= 0:
-        return "native"
+        return None
 
     if image.ndim == 3 and image.shape[0] >= 3:
         # ITU-R 601-2 luma, matching the integer arithmetic of `PIL.Image.convert("L")`
