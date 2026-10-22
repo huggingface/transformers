@@ -25,10 +25,11 @@ codec's space, and this model turns them back into a waveform. It can also be us
 - **Low frame rate**: audio is encoded at 12.5 frames per second (24 kHz input, a downsampling rate of 1920 samples per
   frame), so one second of speech becomes 12.5 frames.
 - **Multi-codebook residual quantization**: each frame is represented by 16 codes rather than one, with a codebook size
-  of 2048. Encoding therefore returns a `(time, 16)` tensor per utterance.
+  of 2048. Encoding returns a padded `(batch_size, num_frames, 16)` tensor and an `audio_codes_mask` for valid frames.
 - **24 kHz in, 24 kHz out**: the decoder reconstructs at the input sample rate.
 
-The encoder is a [Mimi](./mimi)-based residual vector quantizer, of whose 32 quantizer layers the first 16 are used.
+The encoder uses [Mimi](./mimi)'s convolutional encoder and transformer. A separate split residual vector quantizer
+turns its continuous output into 16 codes per frame: one semantic codebook and 15 acoustic codebooks.
 The decoder is the Code2Wav vocoder shared with [Qwen3-Omni-MoE](./qwen3_omni_moe): a sliding-window transformer
 followed by a causal-convolution upsampling stack.
 
@@ -54,7 +55,7 @@ from transformers import AutoFeatureExtractor, AutoModel
 model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
 
 # load model and feature extractor
-model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
+model = AutoModel.from_pretrained(model_id, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 # load audio at the sample rate the tokenizer expects
@@ -110,7 +111,7 @@ from transformers import AutoFeatureExtractor, AutoModel
 
 batch_size = 2
 model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
-model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
+model = AutoModel.from_pretrained(model_id, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -147,7 +148,7 @@ from datasets import Audio, load_dataset
 from transformers import AutoFeatureExtractor, AutoModel
 
 model_id = "Qwen/Qwen3-TTS-Tokenizer-12Hz"
-model = AutoModel.from_pretrained(model_id, device_map="auto").eval()
+model = AutoModel.from_pretrained(model_id, device_map="auto")
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
 
 dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -207,7 +208,8 @@ config = Qwen3TTSTokenizerConfig(
 ```
 
 The semantic config also exposes `codebook_dim`, `hidden_size`, and `vector_quantization_hidden_dimension`.
-Unspecified semantic dictionary fields inherit the outer quantizer settings. You can also pass a
+Unspecified semantic dictionary fields inherit the outer quantizer settings, except `n_codebooks`, which defaults to
+`1`. You can also pass a
 [`Qwen3TTSTokenizerSemanticQuantizerConfig`] instance with its own settings. Keep dimensions and codebook sizes
 consistent with the weights when loading a pretrained checkpoint.
 
@@ -239,6 +241,7 @@ only as `semantic_quantizer_config.n_codebooks`.
 [[autodoc]] Qwen3TTSTokenizerModel
     - encode
     - decode
+    - forward
 
 ## Qwen3TTSTokenizerEncoderModel
 
