@@ -114,6 +114,8 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
             transcription (`str` or `list[str]`, *optional*):
                 Target transcript(s) for training, one per audio. When given, each transcript is written as the
                 assistant turn and `labels` are returned (see `output_labels` in [`~GlmAsrProcessor.__call__`]).
+                The chat template does not close the last assistant turn, so `<|user|>` (one of the model's EOS
+                tokens) is appended to each transcript for the model to learn when to stop.
             **kwargs:
                 Additional keyword arguments forwarded to [`~GlmAsrProcessor.apply_chat_template`].
                 Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
@@ -171,7 +173,10 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
                 }
             ]
             if transcript is not None:
-                conversation.append({"role": "assistant", "content": [{"type": "text", "text": transcript}]})
+                # The chat template doesn't close the last assistant turn, so the EOS is appended for it to be learned
+                conversation.append(
+                    {"role": "assistant", "content": [{"type": "text", "text": transcript + self.assistant_end}]}
+                )
             conversations.append(conversation)
 
         return self.apply_chat_template(
