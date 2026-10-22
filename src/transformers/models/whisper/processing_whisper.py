@@ -30,28 +30,17 @@ class WhisperProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(self, *args, **kwargs):
         audio = kwargs.pop("audio", None)
-        sampling_rate = kwargs.pop("sampling_rate", None)
         text = kwargs.pop("text", None)
+
+        # for BC
         if len(args) > 0:
             audio = args[0]
             args = args[1:]
 
-        if audio is None and text is None:
-            raise ValueError("You need to specify either an `audio` or `text` input to process.")
-
-        if audio is not None:
-            inputs = self.feature_extractor(audio, *args, sampling_rate=sampling_rate, **kwargs)
+        outputs = super().__call__(audio=audio, text=text, **kwargs)
         if text is not None:
-            encodings = self.tokenizer(text, **kwargs)
-
-        if text is None:
-            return inputs
-
-        elif audio is None:
-            return encodings
-        else:
-            inputs["labels"] = encodings["input_ids"]
-            return inputs
+            outputs["labels"] = outputs["input_ids"]
+        return outputs
 
     def get_prompt_ids(self, text: str, return_tensors="np"):
         return self.tokenizer.get_prompt_ids(text, return_tensors=return_tensors)
