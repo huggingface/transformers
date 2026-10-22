@@ -13,11 +13,12 @@
 # limitations under the License.
 """Generation mixin for Qwen3-TTS."""
 
+import copy
 from dataclasses import dataclass
 
 import torch
 
-from ...generation import GenerateDecoderOnlyOutput, GenerationMixin
+from ...generation import GenerateDecoderOnlyOutput, GenerationConfig, GenerationMixin
 from ...utils import logging
 
 
@@ -43,6 +44,82 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
     Contains the TTS-specific generation logic including speaker prompt generation,
     in-context learning prompt generation, and the main generate method.
     """
+
+    def _prepare_generation_config(self, generation_config: GenerationConfig | None, **kwargs):
+        """Resolve Qwen sampling defaults without overriding saved or caller-supplied settings."""
+        subtalker_names = ("subtalker_dosample", "subtalker_top_k", "subtalker_top_p", "subtalker_temperature")
+        subtalker_kwargs = {name: kwargs.pop(name) for name in subtalker_names if name in kwargs}
+        generation_config = copy.deepcopy(generation_config) if generation_config is not None else GenerationConfig()
+        generation_config.update(**self.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True)
+        generation_config.update(
+            defaults_only=True,
+            max_new_tokens=4096 if generation_config.max_length is None and kwargs.get("max_length") is None else None,
+            min_new_tokens=2 if not generation_config.min_length and kwargs.get("min_length") is None else None,
+            do_sample=True,
+            top_k=50,
+            top_p=1.0,
+            temperature=0.9,
+            repetition_penalty=1.05,
+            eos_token_id=self.config.talker_config.codec_eos_token_id,
+            suppress_tokens=[
+                token_id
+                for token_id in range(
+                    self.config.talker_config.vocab_size - 1024, self.config.talker_config.vocab_size
+                )
+                if token_id != self.config.talker_config.codec_eos_token_id
+            ],
+            return_dict_in_generate=True,
+        )
+        generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
+        for name, default in zip(subtalker_names, (generation_config.do_sample, 50, 1.0, 0.9)):
+            value = subtalker_kwargs.get(name, getattr(generation_config, name, None))
+            value = default if value is None else value
+            setattr(generation_config, name, value)
+        if generation_config.use_cache is False:
+            raise ValueError(
+                "Qwen3-TTS generation requires `use_cache=True` to retain previous audio frame embeddings."
+            )
+        if generation_config.num_beams != 1 or generation_config.num_return_sequences != 1:
+            raise ValueError("Qwen3-TTS supports only one generated sequence per input and `num_beams=1`.")
+        return generation_config, model_kwargs
+
+    def _sample(self, input_ids, logits_processor, stopping_criteria, generation_config, **model_kwargs):
+        # Pipeline initialization also prepares generation configs; only sampling needs these step-level kwargs.
+        for name in ("subtalker_dosample", "subtalker_top_k", "subtalker_top_p", "subtalker_temperature"):
+            model_kwargs[name] = getattr(generation_config, name)
+        return super()._sample(
+            input_ids,
+            logits_processor,
+            stopping_criteria,
+            generation_config,
+            **model_kwargs,
+        )
+
+    @torch.no_grad()
+    def _extract_speaker_embeddings(self, input_features, feature_attention_mask=None):
+        """Encode each unpadded reference independently: pooling must never see padded mel frames."""
+        if self.speaker_encoder is None:
+            raise ValueError("`input_features` requires a checkpoint with a speaker encoder.")
+        if input_features.ndim != 3 or input_features.shape[-1] != self.config.speaker_encoder_config.mel_dim:
+            raise ValueError("`input_features` must have shape (batch_size, feature_length, mel_dim).")
+        if feature_attention_mask is None:
+            feature_attention_mask = torch.ones(
+                input_features.shape[:2], dtype=torch.bool, device=input_features.device
+            )
+        elif feature_attention_mask.shape != input_features.shape[:2]:
+            raise ValueError("`feature_attention_mask` must match the first two dimensions of `input_features`.")
+        if not feature_attention_mask.bool().any(dim=-1).all():
+            raise ValueError("Each reference must contain at least one valid mel frame.")
+        encoder_weight = next(self.speaker_encoder.parameters())
+        input_features = input_features.to(device=encoder_weight.device, dtype=encoder_weight.dtype)
+        feature_attention_mask = feature_attention_mask.to(device=encoder_weight.device, dtype=torch.bool)
+        return torch.cat(
+            [
+                self.speaker_encoder(features[mask].unsqueeze(0))
+                for features, mask in zip(input_features, feature_attention_mask)
+            ],
+            dim=0,
+        )
 
     def prepare_inputs_for_generation(
         self,
@@ -126,9 +203,7 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
 
             feature_extractor = Qwen3TTSFeatureExtractor()
         features = feature_extractor(audio, return_tensors="pt", sampling_rate=sr)
-        mels = features["input_features"].to(self.device).to(self.dtype)
-        speaker_embedding = self.speaker_encoder(mels)[0]
-        return speaker_embedding
+        return self._extract_speaker_embeddings(features["input_features"])[0]
 
     @torch.inference_mode()
     def generate_speaker_prompt(self, voice_clone_prompt: list[dict]):
@@ -201,46 +276,58 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
         languages: list[str] | None = None,
         speakers: list[str] | None = None,
         non_streaming_mode: bool = False,
-        max_new_tokens: int = 4096,
-        do_sample: bool = True,
-        top_k: int = 50,
-        top_p: float = 1.0,
-        temperature: float = 0.9,
-        subtalker_dosample: bool = True,
-        subtalker_top_k: int = 50,
-        subtalker_top_p: float = 1.0,
-        subtalker_temperature: float = 0.9,
+        max_new_tokens: int | None = None,
+        do_sample: bool | None = None,
+        top_k: int | None = None,
+        top_p: float | None = None,
+        temperature: float | None = None,
+        subtalker_dosample: bool | None = None,
+        subtalker_top_k: int | None = None,
+        subtalker_top_p: float | None = None,
+        subtalker_temperature: float | None = None,
         eos_token_id: int | None = None,
-        repetition_penalty: float = 1.05,
+        repetition_penalty: float | None = None,
+        input_features: torch.FloatTensor | None = None,
+        feature_attention_mask: torch.Tensor | None = None,
+        generation_config: GenerationConfig | None = None,
         **kwargs,
     ):
-        use_cache = kwargs.get("use_cache", self.generation_config.use_cache)
-        if use_cache is False:
-            raise ValueError(
-                "Qwen3-TTS generation requires `use_cache=True` to retain previous audio frame embeddings."
-            )
-        talker_kwargs = {
-            "use_cache": use_cache,
-            "max_new_tokens": max_new_tokens,
-            "min_new_tokens": 2,
-            "do_sample": do_sample,
-            "top_k": top_k,
-            "top_p": top_p,
-            "temperature": temperature,
-            "subtalker_dosample": subtalker_dosample,
-            "subtalker_top_k": subtalker_top_k,
-            "subtalker_top_p": subtalker_top_p,
-            "subtalker_temperature": subtalker_temperature,
-            "eos_token_id": eos_token_id if eos_token_id is not None else self.config.talker_config.codec_eos_token_id,
-            "repetition_penalty": repetition_penalty,
-            "suppress_tokens": [
-                i
-                for i in range(self.config.talker_config.vocab_size - 1024, self.config.talker_config.vocab_size)
-                if i != self.config.talker_config.codec_eos_token_id
-            ],
-            "output_hidden_states": kwargs.get("output_hidden_states", False),
-            "return_dict_in_generate": True,
-        }
+        """Generate codec frames from formatted text, optionally conditioned on unpadded reference mel features."""
+        if kwargs.get("speaker_embeddings") is not None:
+            raise ValueError("For generation, pass cached speaker embeddings through `voice_clone_prompt`.")
+        kwargs.update(
+            {
+                name: value
+                for name, value in {
+                    "max_new_tokens": max_new_tokens,
+                    "do_sample": do_sample,
+                    "top_k": top_k,
+                    "top_p": top_p,
+                    "temperature": temperature,
+                    "subtalker_dosample": subtalker_dosample,
+                    "subtalker_top_k": subtalker_top_k,
+                    "subtalker_top_p": subtalker_top_p,
+                    "subtalker_temperature": subtalker_temperature,
+                    "eos_token_id": eos_token_id,
+                    "repetition_penalty": repetition_penalty,
+                }.items()
+                if value is not None
+            }
+        )
+        if input_features is not None:
+            if voice_clone_prompt is not None or any(speakers or []):
+                raise ValueError("`input_features` cannot be combined with `voice_clone_prompt` or named `speakers`.")
+            if input_features.shape[0] != len(input_ids):
+                raise ValueError("`input_features` and `input_ids` must have the same batch size.")
+            speaker_embeddings = self._extract_speaker_embeddings(input_features, feature_attention_mask)
+            voice_clone_prompt = {
+                "ref_spk_embedding": list(speaker_embeddings),
+                "x_vector_only_mode": [True] * len(input_ids),
+                "icl_mode": [False] * len(input_ids),
+                "ref_code": None,
+            }
+        elif feature_attention_mask is not None:
+            raise ValueError("`feature_attention_mask` requires `input_features`.")
 
         input_ids = [ids.to(self.device) for ids in input_ids]
         if instruct_ids is not None:
@@ -457,12 +544,18 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
 
         codec_frames = []
         talker_result = super().generate(
+            generation_config=generation_config,
             inputs_embeds=talker_input_embeds,
             attention_mask=talker_attention_mask,
             trailing_text_hidden=trailing_text_hiddens,
             tts_pad_embed=tts_pad_embed,
             codec_frames=codec_frames,
-            **talker_kwargs,
+            **kwargs,
+        )
+        output_kwargs = (
+            {name: value for name, value in talker_result.items() if name != "sequences"}
+            if not isinstance(talker_result, torch.Tensor)
+            else {}
         )
 
         if not codec_frames:
@@ -471,7 +564,7 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
                     torch.empty((0, self.config.talker_config.num_code_groups), dtype=torch.long, device=self.device)
                     for _ in range(batch_size)
                 ],
-                hidden_states=talker_result.hidden_states,
+                **output_kwargs,
             )
         talker_codes = torch.stack(codec_frames, dim=1)
 
@@ -483,4 +576,4 @@ class Qwen3TTSGenerationMixin(GenerationMixin):
 
         talker_codes_list = [talker_codes[i, :length] for i, length in enumerate(effective_lengths)]
 
-        return Qwen3TTSGenerateOutput(sequences=talker_codes_list, hidden_states=talker_result.hidden_states)
+        return Qwen3TTSGenerateOutput(sequences=talker_codes_list, **output_kwargs)

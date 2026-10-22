@@ -31,8 +31,10 @@ from transformers import (
     Qwen3TTSFeatureExtractor,
     Qwen3TTSProcessor,
     is_torch_available,
+    pipeline,
 )
-from transformers.testing_utils import require_accelerate, require_torch, slow
+from transformers.audio_utils import load_audio
+from transformers.testing_utils import require_accelerate, require_librosa, require_soundfile, require_torch, slow
 from transformers.trainer_utils import set_seed
 from transformers.utils import is_soundfile_available
 
@@ -54,7 +56,7 @@ if is_torch_available():
 
 
 def _build_tiny_audio_tokenizer(num_quantizers=4):
-    """Build a tiny Qwen3TTSTokenizerModel for decode/save_audio tests."""
+    """Build a tiny real codec for waveform encoding, decoding, and serialization tests."""
     encoder_config = {
         "hidden_size": 16,
         "num_hidden_layers": 1,
@@ -106,40 +108,102 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_feature_extractor(cls):
         return Qwen3TTSFeatureExtractor()
 
-    @unittest.skip(reason="Qwen3TTS is a TTS processor; audio chat template tests are not applicable")
-    def test_apply_chat_template_audio_0(self):
-        pass
+    @parameterized.expand([(1, "url"), (1, "path"), (2, "audio"), (2, "url")])
+    @require_librosa
+    @require_soundfile
+    def test_apply_chat_template_audio(self, batch_size, audio_key):
+        import soundfile as sf
 
-    @unittest.skip(reason="Qwen3TTS is a TTS processor; audio chat template tests are not applicable")
-    def test_apply_chat_template_audio_1(self):
-        pass
+        processor = self.get_processor()
+        sampling_rate = processor.feature_extractor.sampling_rate
+        waveforms = [
+            np.sin(np.arange(length, dtype=np.float32) * (2 * np.pi * 220 / sampling_rate)) * 0.1
+            for length in (2048, 3073)[:batch_size]
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            conversations = []
+            for index, waveform in enumerate(waveforms):
+                path = os.path.join(directory, f"reference_{index}.wav")
+                sf.write(path, waveform, sampling_rate, subtype="FLOAT")
+                conversations.append(
+                    [
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": "Hello there."},
+                                {"type": "audio", audio_key: waveform if audio_key == "audio" else path},
+                            ],
+                        }
+                    ]
+                )
+            rendered = processor.apply_chat_template(conversations, tokenize=False)
+            self.assertTrue(all("<|audio|>" in prompt for prompt in rendered))
+            inputs = processor.apply_chat_template(
+                conversations,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+                processor_kwargs={"audio_kwargs": {"load_audio_backend": "librosa"}},
+            )
 
-    @unittest.skip(reason="Qwen3TTS is a TTS processor; audio chat template tests are not applicable")
-    def test_apply_chat_template_audio_2(self):
-        pass
+        self.assertEqual(inputs.input_features.dtype, torch.float32)
+        self.assertEqual(inputs.feature_attention_mask.dtype, torch.long)
+        self.assertEqual(inputs.languages, ["auto"] * batch_size)
+        self.assertNotIn("audio_codes", inputs)
+        self.assertNotIn("speaker_embeddings", inputs)
+        expected_ids = processor.tokenizer(processor._build_synthesis_text("Hello there."), return_tensors="pt")
+        for index, waveform in enumerate(waveforms):
+            expected = processor.feature_extractor(waveform, sampling_rate=sampling_rate, return_tensors="pt")
+            length = expected.input_features.shape[1]
+            torch.testing.assert_close(inputs.input_ids[index], expected_ids.input_ids)
+            torch.testing.assert_close(inputs.input_features[index, :length], expected.input_features[0])
+            self.assertEqual(inputs.feature_attention_mask[index].sum().item(), length)
+            self.assertTrue((inputs.input_features[index, length:] == 0).all())
+            self.assertTrue((inputs.feature_attention_mask[index, length:] == 0).all())
+        inputs.to(dtype=torch.bfloat16)
+        self.assertEqual(inputs.input_features.dtype, torch.bfloat16)
+        self.assertEqual(inputs.input_ids[0].dtype, torch.long)
+        self.assertEqual(inputs.feature_attention_mask.dtype, torch.long)
 
-    @unittest.skip(reason="Qwen3TTS is a TTS processor; audio chat template tests are not applicable")
-    def test_apply_chat_template_audio_3(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS chat templates format synthesis text and do not process audio inputs")
+    @require_librosa
+    @require_soundfile
     def test_chat_template_audio_sampling_rate(self):
-        pass
+        import soundfile as sf
 
-    @unittest.skip(reason="Qwen3TTS chat template returns a list, not a plain string")
-    def test_chat_template_jinja_kwargs(self):
-        pass
+        processor = self.get_processor()
+        sampling_rate = processor.feature_extractor.sampling_rate
+        waveform = np.sin(np.arange(2048, dtype=np.float32) * 0.05) * 0.1
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "reference.wav")
+            sf.write(path, waveform, sampling_rate // 2, subtype="FLOAT")
+            loaded = load_audio(path, sampling_rate=sampling_rate, backend="librosa")
+            expected = processor.feature_extractor(loaded, sampling_rate=sampling_rate, return_tensors="pt")
+            conversation = [
+                {"role": "user", "content": [{"type": "audio", "path": path}, {"type": "text", "text": "Hello."}]}
+            ]
+            for kwargs in (
+                {},
+                {"sampling_rate": sampling_rate},
+                {"audio_kwargs": {"sampling_rate": sampling_rate}},
+                {"sampling_rate": None},
+                {"audio_kwargs": {"sampling_rate": None}},
+            ):
+                with self.subTest(kwargs=kwargs):
+                    inputs = processor.apply_chat_template(
+                        conversation,
+                        tokenize=True,
+                        return_dict=True,
+                        processor_kwargs={**kwargs, "load_audio_backend": "librosa"},
+                    )
+                    torch.testing.assert_close(inputs.input_features, expected.input_features)
+                    self.assertTrue(inputs.feature_attention_mask.all())
 
     @unittest.skip(reason="decode/batch_decode are overridden to decode audio codes, not text tokens")
     def test_tokenizer_decode_defaults(self):
         pass
 
-    @unittest.skip(reason="decode/batch_decode are overridden to decode audio codes, not text tokens")
+    @unittest.skip(reason="Synthesis conversations do not support assistant replies or assistant token masks")
     def test_apply_chat_template_assistant_mask(self):
-        pass
-
-    @unittest.skip(reason="Qwen3TTS apply_chat_template is custom and does not use chat_template serialization")
-    def test_chat_template_save_loading(self):
         pass
 
     @unittest.skip(reason="Qwen3TTS __call__ accepts text/audio, not the generic multimodal argument set")
@@ -520,6 +584,238 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         conversation = [{"role": "system", "content": [{"type": "text", "text": "Only an instruction."}]}]
         with self.assertRaises(ValueError):
             processor.apply_chat_template(conversation)
+
+    def test_chat_template_rendering_and_processor_kwargs(self):
+        processor = self.get_processor()
+        conversation = [
+            {"role": "system", "content": "A calm voice."},
+            {"role": "scene", "content": [{"type": "text", "text": "Speak slowly."}]},
+            {"role": "user", "content": [{"type": "text", "text": "Hello."}, {"type": "text", "text": "Goodbye."}]},
+        ]
+        expected_instruction = "<|im_start|>user\nA calm voice. Speak slowly.<|im_end|>\n"
+        expected_synthesis = processor._build_synthesis_text("Hello. Goodbye.")
+        self.assertEqual(
+            processor.apply_chat_template(conversation, tokenize=False), expected_instruction + expected_synthesis
+        )
+        inputs = processor.apply_chat_template(
+            conversation,
+            tokenize=True,
+            return_dict=True,
+            processor_kwargs={"text_kwargs": {"padding": "max_length", "max_length": 32}},
+        )
+        self.assertEqual(inputs.input_ids[0].shape, (1, 32))
+        self.assertEqual(inputs.instruct_ids[0].shape, (1, 32))
+        expected = processor.tokenizer(expected_synthesis, padding="max_length", max_length=32, return_tensors="pt")
+        torch.testing.assert_close(inputs.input_ids[0], expected.input_ids)
+        flat_inputs = processor.apply_chat_template(
+            conversation, tokenize=True, return_dict=True, padding="max_length", max_length=32
+        )
+        torch.testing.assert_close(flat_inputs.input_ids[0], inputs.input_ids[0])
+        torch.testing.assert_close(flat_inputs.instruct_ids[0], inputs.instruct_ids[0])
+
+    def test_chat_template_rendering_roundtrip(self):
+        processor = self.get_processor()
+        processor.chat_template = processor.chat_template.replace("ns.text +", "'Custom: ' + ns.text +")
+        conversation = [{"role": "user", "content": "Hello."}]
+        expected = processor._build_synthesis_text("Custom: Hello.")
+        self.assertEqual(processor.apply_chat_template(conversation, tokenize=False), expected)
+        with tempfile.TemporaryDirectory() as directory:
+            processor.save_pretrained(directory)
+            restored = Qwen3TTSProcessor.from_pretrained(directory)
+        self.assertEqual(restored.apply_chat_template(conversation, tokenize=False), expected)
+        torch.testing.assert_close(
+            restored.apply_chat_template(conversation).input_ids[0],
+            restored.tokenizer(expected, return_tensors="pt").input_ids,
+        )
+
+    @require_librosa
+    @require_soundfile
+    def test_chat_template_training_audio_padding_and_labels(self):
+        import soundfile as sf
+
+        set_seed(42)
+        processor = self.get_processor()
+        processor.audio_tokenizer = _build_tiny_audio_tokenizer(num_quantizers=2)
+        sampling_rate = processor.feature_extractor.sampling_rate
+        waveforms = [np.sin(np.arange(length, dtype=np.float32) * 0.03) * 0.1 for length in (2048, 3073)]
+        texts = ["Hi.", "This is a longer training example."]
+        with tempfile.TemporaryDirectory() as directory:
+            conversations = []
+            expected_codes = []
+            for index, (text, waveform) in enumerate(zip(texts, waveforms)):
+                path = os.path.join(directory, f"target_{index}.wav")
+                sf.write(path, waveform, sampling_rate, subtype="FLOAT")
+                conversations.append(
+                    [
+                        {
+                            "role": "user",
+                            "content": [{"type": "text", "text": text}, {"type": "audio", "path": path}],
+                        }
+                    ]
+                )
+                with torch.no_grad():
+                    expected_codes.append(
+                        processor.audio_tokenizer.encode(torch.from_numpy(waveform)[None, None]).audio_codes[0]
+                    )
+            inputs = processor.apply_chat_template(
+                conversations,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+                processor_kwargs={"output_labels": True, "load_audio_backend": "librosa"},
+            )
+
+        self.assertNotIn("speaker_embeddings", inputs)
+        self.assertNotIn("languages", inputs)
+        self.assertNotIn("speakers", inputs)
+        self.assertNotEqual(expected_codes[0].shape[0], expected_codes[1].shape[0])
+        expected_text = processor.tokenizer(
+            [processor._build_synthesis_text(text) for text in texts], padding=True, return_tensors="pt"
+        )
+        torch.testing.assert_close(inputs.input_ids, expected_text.input_ids)
+        torch.testing.assert_close(inputs.attention_mask, expected_text.attention_mask)
+        for index, (waveform, codes) in enumerate(zip(waveforms, expected_codes)):
+            length = codes.shape[0]
+            self.assertEqual(inputs.audio_attention_mask[index].sum().item(), length)
+            torch.testing.assert_close(inputs.audio_codes[index, :length], codes)
+            torch.testing.assert_close(inputs.labels[index, :length], codes)
+            self.assertTrue((inputs.labels[index, length:] == -100).all())
+            self.assertTrue((inputs.audio_codes[index, length:] == 0).all())
+            features = processor.feature_extractor(waveform, sampling_rate=sampling_rate, return_tensors="pt")
+            feature_length = features.input_features.shape[1]
+            self.assertEqual(inputs.feature_attention_mask[index].sum().item(), feature_length)
+            torch.testing.assert_close(inputs.input_features[index, :feature_length], features.input_features[0])
+        inputs.to(dtype=torch.bfloat16)
+        for name in (
+            "input_ids",
+            "attention_mask",
+            "audio_codes",
+            "audio_attention_mask",
+            "labels",
+            "feature_attention_mask",
+        ):
+            self.assertEqual(inputs[name].dtype, torch.long)
+        self.assertEqual(inputs.input_features.dtype, torch.bfloat16)
+
+    @parameterized.expand([(2, 0), (0, 2), (1, 0)])
+    def test_chat_template_rejects_ambiguous_audio_batches(self, first_count, second_count):
+        processor = self.get_processor()
+        waveform = np.zeros(2048, dtype=np.float32)
+        conversations = [
+            [
+                {
+                    "role": "user",
+                    "content": [{"type": "text", "text": "Hello."}]
+                    + [{"type": "audio", "audio": waveform} for _ in range(count)],
+                }
+            ]
+            for count in (first_count, second_count)
+        ]
+        with self.assertRaises(ValueError):
+            processor.apply_chat_template(conversations, tokenize=True, return_dict=True)
+
+    def test_chat_template_training_requires_target_audio(self):
+        processor = self.get_processor()
+        with self.assertRaisesRegex(ValueError, "requires target audio"):
+            processor.apply_chat_template(
+                [{"role": "user", "content": "Hello."}],
+                tokenize=True,
+                return_dict=True,
+                processor_kwargs={"output_labels": True},
+            )
+
+    def test_chat_template_training_forward_backward(self):
+        set_seed(42)
+        processor = self.get_processor()
+        config = Qwen3TTSModelTester(self).get_config(with_speaker_encoder=True)
+        config.talker_config.text_vocab_size = len(processor.tokenizer)
+        processor.feature_extractor = Qwen3TTSFeatureExtractor(
+            feature_size=config.speaker_encoder_config.mel_dim, n_fft=64, hop_length=16, win_length=64
+        )
+        processor.audio_tokenizer = _build_tiny_audio_tokenizer(num_quantizers=2)
+        model = Qwen3TTSForConditionalGeneration(config).train()
+        conversations = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": text},
+                        {"type": "audio", "audio": np.sin(np.arange(length, dtype=np.float32) * 0.1) * 0.1},
+                    ],
+                }
+            ]
+            for text, length in (("Hi.", 256), ("A longer training sentence.", 385))
+        ]
+        inputs = processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={"output_labels": True},
+            padding=True,
+        )
+        self.assertTrue(all(isinstance(value, torch.Tensor) for value in inputs.values()))
+        self.assertNotEqual(inputs.audio_attention_mask[0].sum(), inputs.audio_attention_mask[1].sum())
+        self.assertNotEqual(inputs.feature_attention_mask[0].sum(), inputs.feature_attention_mask[1].sum())
+        output = model(**inputs)
+        self.assertTrue(torch.isfinite(output.loss))
+        output.loss.backward()
+        for parameter in (
+            model.text_projection.linear_1.weight,
+            model.codec_head.weight,
+            model.code_predictor.lm_head.weight,
+        ):
+            self.assertTrue(torch.isfinite(parameter.grad).all())
+            self.assertGreater(parameter.grad.abs().sum().item(), 0)
+
+    def test_audio_conversation_pipeline_honors_subtalker_generation_config(self):
+        set_seed(42)
+        processor = self.get_processor()
+        config = Qwen3TTSModelTester(self).get_config(with_speaker_encoder=True)
+        config.talker_config.text_vocab_size = len(processor.tokenizer)
+        config.talker_config.vocab_size = 2048
+        config.talker_config.code_predictor_config.vocab_size = 2048
+        config.talker_config.codec_eos_token_id = 2047
+        processor.feature_extractor = Qwen3TTSFeatureExtractor(
+            feature_size=config.speaker_encoder_config.mel_dim, n_fft=64, hop_length=16, win_length=64
+        )
+        codec_config = _build_tiny_audio_tokenizer(num_quantizers=2).config
+        codec_config.codebook_size = 2048
+        codec_config.quantizer_config.codebook_size = 2048
+        codec_config.quantizer_config.semantic_quantizer_config.codebook_size = 2048
+        processor.audio_tokenizer = Qwen3TTSTokenizerModel(codec_config).eval()
+        with torch.no_grad():
+            for module in processor.audio_tokenizer.quantizer.modules():
+                if hasattr(module, "embed_sum"):
+                    module.embed_sum.normal_()
+        model = Qwen3TTSForConditionalGeneration(config).eval()
+        model.generation_config.max_new_tokens = 4
+        model.generation_config.do_sample = False
+        model.generation_config.subtalker_dosample = True
+        model.generation_config.subtalker_top_k = 2
+        conversation = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Hello."},
+                    {"type": "audio", "audio": np.sin(np.arange(256, dtype=np.float32) * 0.1) * 0.1},
+                ],
+            }
+        ]
+        inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True)
+        expected_codes = model.generate(**inputs, subtalker_top_k=1).sequences
+        expected_audio = processor.decode(expected_codes)[0].float().cpu().numpy().squeeze()
+        speech_pipeline = pipeline(
+            "text-to-speech",
+            model=model,
+            processor=processor,
+            tokenizer=processor.tokenizer,
+            feature_extractor=processor.feature_extractor,
+            device="cpu",
+        )
+        actual = speech_pipeline(conversation, generate_kwargs={"subtalker_top_k": 1})
+        np.testing.assert_array_equal(np.asarray(actual["audio"]).squeeze(), expected_audio)
+        self.assertEqual(actual["sampling_rate"], processor.audio_tokenizer.config.output_sampling_rate)
 
     def test_decode_batch_and_save_audio(self):
         if not is_soundfile_available():

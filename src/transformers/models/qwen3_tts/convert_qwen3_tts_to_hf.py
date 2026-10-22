@@ -53,6 +53,7 @@ from transformers import (
     Qwen3TTSForConditionalGeneration,
     Qwen3TTSProcessor,
 )
+from transformers.models.qwen3_tts.processing_qwen3_tts import QWEN3_TTS_CHAT_TEMPLATE
 
 
 logger = logging.getLogger(__name__)
@@ -227,6 +228,7 @@ def convert_processor(
         feature_extractor=Qwen3TTSFeatureExtractor.from_pretrained(str(checkpoint_path)),
         tokenizer=AutoTokenizer.from_pretrained(str(checkpoint_path)),
         audio_tokenizer=audio_tokenizer,
+        chat_template=QWEN3_TTS_CHAT_TEMPLATE,
     )
 
     logger.info(f"Saving processor to {output_path}")

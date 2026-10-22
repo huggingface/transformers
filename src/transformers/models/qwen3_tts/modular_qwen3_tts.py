@@ -922,6 +922,8 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         audio_codes: torch.LongTensor | None = None,
         audio_attention_mask: torch.Tensor | None = None,
         speaker_embeddings: torch.FloatTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        feature_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
@@ -933,7 +935,11 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         audio_attention_mask (`torch.Tensor` of shape `(batch_size, audio_length)`, *optional*):
             Mask with 1 for valid audio frames and 0 for padding.
         speaker_embeddings (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*):
-            Precomputed speaker conditioning required for teacher forcing.
+            Precomputed speaker conditioning for teacher forcing. Mutually exclusive with `input_features`.
+        input_features (`torch.FloatTensor` of shape `(batch_size, feature_length, mel_dim)`, *optional*):
+            Reference mel features used to extract frozen speaker conditioning for teacher forcing.
+        feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_length)`, *optional*):
+            Mask with 1 for valid reference mel frames and 0 for padding.
         labels (`torch.LongTensor`, *optional*):
             Unshifted targets with `-100` for ignored values. With `audio_codes`, has shape
             `(batch_size, audio_length, num_code_groups)`; codec EOS is supervised only for examples with at least
@@ -941,9 +947,19 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             has shape `(batch_size, sequence_length)` for causal primary-code prediction.
         """
         teacher_forcing = audio_codes is not None
+        if input_features is not None:
+            if speaker_embeddings is not None:
+                raise ValueError("Pass either `input_features` or `speaker_embeddings`, not both.")
+            if not teacher_forcing:
+                raise ValueError("`input_features` in forward requires `audio_codes` for teacher forcing.")
+            speaker_embeddings = self._extract_speaker_embeddings(input_features, feature_attention_mask)
+        elif feature_attention_mask is not None:
+            raise ValueError("`feature_attention_mask` requires `input_features`.")
         if teacher_forcing:
             if input_ids is None or speaker_embeddings is None:
-                raise ValueError("Teacher forcing requires `input_ids` and `speaker_embeddings`.")
+                raise ValueError(
+                    "Teacher forcing requires `input_ids` and either `speaker_embeddings` or `input_features`."
+                )
             if inputs_embeds is not None or past_key_values is not None:
                 raise ValueError("Teacher forcing cannot be combined with `inputs_embeds` or a generation cache.")
             inputs_embeds, attention_mask, audio_positions, eos_positions = self._prepare_teacher_forcing_inputs(

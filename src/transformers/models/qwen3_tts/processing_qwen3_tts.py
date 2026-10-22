@@ -19,6 +19,7 @@ from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import auto_docstring, is_soundfile_available, is_torch_available, logging, requires_backends
+from ...utils.chat_template_utils import _get_template_variables
 
 
 if is_torch_available():
@@ -28,6 +29,35 @@ if is_soundfile_available():
     import soundfile as sf
 
 
+# The audio marker is consumed by the processor, not by the text tokenizer.
+QWEN3_TTS_CHAT_TEMPLATE = (
+    "{%- set ns = namespace(text=none, instructions=[], audio=false) -%}"
+    "{%- for message in messages -%}"
+    "{%- set content = message['content'] -%}"
+    "{%- if content is string -%}"
+    "{%- set text = content -%}"
+    "{%- else -%}"
+    "{%- set text = content | selectattr('type', 'equalto', 'text') | map(attribute='text') | join(' ') -%}"
+    "{%- endif -%}"
+    "{%- if message['role'] in ['system', 'scene'] -%}"
+    "{%- set ns.instructions = ns.instructions + [text] -%}"
+    "{%- elif message['role'] == 'user' -%}"
+    "{%- set ns.text = text -%}"
+    "{%- set ns.audio = content is not string and "
+    "content | selectattr('type', 'equalto', 'audio') | list | length > 0 -%}"
+    "{%- else -%}"
+    "{{- raise_exception('Unsupported message role for Qwen3TTS: ' + message['role']) -}}"
+    "{%- endif -%}"
+    "{%- endfor -%}"
+    "{%- if ns.text is none -%}"
+    "{{- raise_exception('Each conversation must contain a user message with the text to synthesize.') -}}"
+    "{%- endif -%}"
+    "{%- if ns.instructions -%}"
+    "{{- '<|im_start|>user\\n' + ns.instructions | join(' ') + '<|im_end|>\\n' -}}"
+    "{%- endif -%}"
+    "{%- if ns.audio -%}{{- '<|audio|>' -}}{%- endif -%}"
+    "{{- '<|im_start|>assistant\\n' + ns.text + '<|im_end|>\\n<|im_start|>assistant\\n' -}}"
+)
 logger = logging.get_logger(__name__)
 
 
@@ -57,6 +87,7 @@ class Qwen3TTSProcessor(ProcessorMixin):
     """
 
     attributes = ["feature_extractor", "tokenizer"]
+    valid_processor_kwargs = Qwen3TTSProcessorKwargs
     tokenizer_class = ("Qwen2Tokenizer", "Qwen2TokenizerFast")
     audio_tokenizer_class = "Qwen3TTSTokenizerModel"
 
@@ -66,7 +97,12 @@ class Qwen3TTSProcessor(ProcessorMixin):
             The audio tokenizer that decodes the codes the model generates back into waveforms. A checkpoint
             records which one to use, so `from_pretrained` supplies it.
         """
-        super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer, chat_template=chat_template)
+        super().__init__(
+            feature_extractor,
+            tokenizer,
+            audio_tokenizer=audio_tokenizer,
+            chat_template=QWEN3_TTS_CHAT_TEMPLATE if chat_template is None else chat_template,
+        )
 
     @auto_docstring
     def __call__(
@@ -76,6 +112,7 @@ class Qwen3TTSProcessor(ProcessorMixin):
         audio_codes: "torch.Tensor | list[torch.Tensor] | None" = None,
         speaker_embeddings: "torch.Tensor | list[torch.Tensor] | None" = None,
         output_labels: bool = False,
+        _chat_template: bool = False,
         **kwargs: Unpack[Qwen3TTSProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -102,6 +139,11 @@ class Qwen3TTSProcessor(ProcessorMixin):
         Returns:
             BatchFeature: Dictionary containing tokenized text and/or audio features.
         """
+        if _chat_template:
+            # ProcessorMixin has already rendered the template and loaded/resampled the audio.
+            kwargs.pop("images", None)
+            kwargs.pop("videos", None)
+            return self._process_chat_inputs(text, audio, output_labels=output_labels, **kwargs)
         cached_inputs = audio_codes is not None or speaker_embeddings is not None
         if output_labels and not cached_inputs:
             raise ValueError("`output_labels=True` requires cached training inputs.")
@@ -184,77 +226,176 @@ class Qwen3TTSProcessor(ProcessorMixin):
             tensor_type="pt" if cached_inputs else kwargs.get("return_tensors"),
         )
 
-    @staticmethod
-    def _extract_text(content):
-        """Extract the text from a message `content`, which may be a string or a list of content parts."""
-        if isinstance(content, str):
-            return content
-        if isinstance(content, (list, tuple)):
-            texts = [part["text"] for part in content if isinstance(part, dict) and part.get("type") == "text"]
-            return " ".join(texts)
-        raise ValueError(f"Unsupported message content type: {type(content)}")
-
     def _build_synthesis_text(self, text):
         return f"<|im_start|>assistant\n{text}<|im_end|>\n<|im_start|>assistant\n"
 
-    def _build_instruct_text(self, instruct):
-        return f"<|im_start|>user\n{instruct}<|im_end|>\n"
+    def _process_chat_inputs(self, text, audio=None, output_labels=False, **kwargs):
+        requires_backends(self, ["torch"])
+        output_kwargs = self._merge_kwargs(
+            Qwen3TTSProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
+        )
+        text_kwargs = output_kwargs["text_kwargs"]
+        if text_kwargs.get("return_tensors") not in (None, "pt"):
+            raise ValueError("Qwen3TTS conversation inputs require `return_tensors='pt'`.")
+        text_kwargs["return_tensors"] = "pt"
+        prompts = [text] if isinstance(text, str) else text
+        synthesis, instructions = [], []
+        for prompt in prompts:
+            instruction = None
+            if prompt.startswith("<|im_start|>user\n"):
+                instruction, separator, prompt = prompt.partition("<|im_end|>\n")
+                if not separator:
+                    raise ValueError("The instruction prompt must end with `<|im_end|>\\n`.")
+                instruction += separator
+            synthesis.append(prompt.replace("<|audio|>", ""))
+            instructions.append(instruction)
 
-    def apply_chat_template(self, conversation, chat_template=None, **kwargs):
-        """
-        Convert one or more conversations into the inputs expected by
-        [`Qwen3TTSForConditionalGeneration.generate`].
-
-        Each conversation is a list of messages with a `role` and `content`. Following the standard chat format,
-        `content` may be a string or a list of parts such as `{"type": "text", "text": ...}`. Roles are mapped as
-        follows:
-
-        - `system` (and `scene`): natural-language voice/style instruction, becomes `instruct_ids` (VoiceDesign).
-        - `user`: the text to synthesize, becomes `input_ids`. The optional `language` and `speaker` keys on the
-          message control the spoken language and the speaker preset.
-
-        Returns a [`BatchFeature`] with `input_ids`, `instruct_ids`, `languages`, and `speakers` ready to be passed
-        to `generate`.
-        """
-        if isinstance(conversation[0], dict):
-            conversations = [conversation]
+        if output_labels:
+            if audio is None or getattr(self, "audio_tokenizer", None) is None:
+                raise ValueError("Conversation training requires target audio and an audio tokenizer.")
+            if text_kwargs.get("truncation") not in (None, False, "do_not_truncate"):
+                raise ValueError("Training text cannot be truncated because its prompt suffix is required.")
+            text_kwargs.setdefault("padding", True)
+            text_kwargs["return_attention_mask"] = True
+            data = dict(self.tokenizer(synthesis, **text_kwargs))
         else:
-            conversations = conversation
+            data = {
+                "input_ids": [self.tokenizer(prompt, **text_kwargs)["input_ids"] for prompt in synthesis],
+            }
+            if any(instruction is not None for instruction in instructions):
+                data["instruct_ids"] = [
+                    self.tokenizer(instruction, **text_kwargs)["input_ids"] if instruction is not None else None
+                    for instruction in instructions
+                ]
 
-        input_ids, instruct_ids, languages, speakers = [], [], [], []
-        for messages in conversations:
-            instruct_parts, synthesis_text = [], None
-            language, speaker = "auto", None
-            for message in messages:
-                role = message["role"]
-                text = self._extract_text(message["content"])
-                if role in ("system", "scene"):
-                    instruct_parts.append(text)
-                elif role == "user":
-                    synthesis_text = text
+        if audio is not None:
+            if len(audio) != len(prompts):
+                raise ValueError("Provide exactly one audio clip per conversation in an audio batch.")
+            # Extract each unpadded clip independently: padding the waveform would change its mel features.
+            audio_kwargs = output_kwargs["audio_kwargs"]
+            audio_kwargs["return_tensors"] = None
+            features = self.feature_extractor(audio, **audio_kwargs)["input_features"]
+            features = [torch.as_tensor(feature, dtype=torch.float32) for feature in features]
+            data["input_features"] = torch.nn.utils.rnn.pad_sequence(features, batch_first=True)
+            lengths = torch.tensor([feature.shape[0] for feature in features])
+            data["feature_attention_mask"] = (
+                torch.arange(data["input_features"].shape[1])[None, :] < lengths[:, None]
+            ).long()
+
+            if output_labels:
+                sampling_rate = audio_kwargs.get("sampling_rate", self.feature_extractor.sampling_rate)
+                if sampling_rate != self.audio_tokenizer.config.input_sampling_rate:
+                    raise ValueError(
+                        "The audio tokenizer and speaker feature extractor must use the same sampling rate."
+                    )
+                codes = []
+                with torch.no_grad():
+                    for waveform in audio:
+                        waveform = torch.as_tensor(
+                            waveform, device=self.audio_tokenizer.device, dtype=self.audio_tokenizer.dtype
+                        )[None, None]
+                        # Encode without batch padding to preserve the codec's exact frame-length semantics.
+                        encoded = self.audio_tokenizer.encode(waveform, return_dict=True).audio_codes[0]
+                        codes.append(encoded.cpu().long())
+                data["audio_codes"] = torch.nn.utils.rnn.pad_sequence(codes, batch_first=True)
+                lengths = torch.tensor([code.shape[0] for code in codes])
+                data["audio_attention_mask"] = (
+                    torch.arange(data["audio_codes"].shape[1])[None, :] < lengths[:, None]
+                ).long()
+                data["labels"] = data["audio_codes"].clone()
+                data["labels"].masked_fill_(~data["audio_attention_mask"].bool()[..., None], -100)
+        return BatchFeature(data=data)
+
+    def apply_chat_template(
+        self,
+        conversation,
+        chat_template=None,
+        tools=None,
+        documents=None,
+        add_generation_prompt=False,
+        continue_final_message=False,
+        return_assistant_tokens_mask=False,
+        tokenize=None,
+        return_tensors=None,
+        return_dict=None,
+        load_audio_from_video=False,
+        processor_kwargs=None,
+        **kwargs,
+    ):
+        """
+        Format synthesis conversations, optionally loading a reference (or training target) audio clip.
+
+        A `user` message supplies synthesis text and optionally one standard audio content block. `system` and
+        `scene` messages supply voice instructions. User-message `language` and `speaker` select the language and
+        preset speaker. With `processor_kwargs={"output_labels": True}`, the audio is both the training target and
+        speaker reference; returned text, features, codes, masks, and labels are padded PyTorch tensors.
+
+        Explicit `tokenize=False` returns the rendered Jinja prompt. Calls without `tokenize` preserve the
+        generation-ready [`BatchFeature`] interface. Use `tokenize=True, return_dict=True` for model inputs.
+        """
+        legacy = tokenize is None
+        tokenize = True if legacy else tokenize
+        processor_kwargs = dict(processor_kwargs or {})
+        if tokenize:
+            conversations = [conversation] if isinstance(conversation[0], dict) else conversation
+            audio_counts = [
+                sum(
+                    part.get("type") == "audio"
+                    for message in messages
+                    if not isinstance(message["content"], str)
+                    for part in message["content"]
+                )
+                for messages in conversations
+            ]
+            if any(audio_counts) and any(count != 1 for count in audio_counts):
+                raise ValueError("Provide exactly one audio clip per conversation in an audio batch.")
+            for messages in conversations:
+                if not any(message["role"] == "user" for message in messages):
+                    raise ValueError("Each conversation must contain a `user` message with the text to synthesize.")
+                for message in messages:
+                    if message["role"] not in ("system", "scene", "user"):
+                        raise ValueError(f"Unsupported message role for Qwen3TTS: {message['role']!r}")
+            # Keep flat processing kwargs from replacing the nested kwargs (and the internal dispatch flag)
+            # in ProcessorMixin. Variables declared by the Jinja template still belong to the renderer.
+            template = chat_template if chat_template is not None else self.chat_template
+            if isinstance(self.chat_template, dict):
+                template = self.chat_template.get(chat_template or "default", chat_template)
+            if template is not None:
+                template_variables = _get_template_variables(template)
+                for key in tuple(kwargs):
+                    if key not in template_variables:
+                        processor_kwargs[key] = kwargs.pop(key)
+            processor_kwargs["_chat_template"] = True
+        data = super().apply_chat_template(
+            conversation,
+            chat_template=chat_template,
+            tools=tools,
+            documents=documents,
+            add_generation_prompt=add_generation_prompt,
+            continue_final_message=continue_final_message,
+            return_assistant_tokens_mask=return_assistant_tokens_mask,
+            return_tensors=return_tensors,
+            load_audio_from_video=load_audio_from_video,
+            tokenize=tokenize,
+            return_dict=True,
+            processor_kwargs=processor_kwargs,
+            **kwargs,
+        )
+        if not tokenize:
+            return data
+        if not processor_kwargs.get("output_labels"):
+            languages, speakers = [], []
+            for messages in conversations:
+                users = [message for message in messages if message["role"] == "user"]
+                language, speaker = "auto", None
+                for message in users:
                     language = message.get("language", language)
                     speaker = message.get("speaker", speaker)
-                else:
-                    raise ValueError(f"Unsupported message role for Qwen3TTS: {role!r}")
-
-            if synthesis_text is None:
-                raise ValueError("Each conversation must contain a `user` message with the text to synthesize.")
-
-            input_ids.append(
-                self.tokenizer(self._build_synthesis_text(synthesis_text), return_tensors="pt")["input_ids"]
-            )
-            if instruct_parts:
-                instruct = self._build_instruct_text(" ".join(instruct_parts))
-                instruct_ids.append(self.tokenizer(instruct, return_tensors="pt")["input_ids"])
-            else:
-                instruct_ids.append(None)
-            languages.append(language)
-            speakers.append(speaker)
-
-        data = {"input_ids": input_ids, "languages": languages, "speakers": speakers}
-        if any(ids is not None for ids in instruct_ids):
-            data["instruct_ids"] = instruct_ids
-        return BatchFeature(data=data)
+                languages.append(language)
+                speakers.append(speaker)
+            data["languages"] = languages
+            data["speakers"] = speakers
+        return data if legacy or return_dict else data["input_ids"]
 
     def decode(self, audio_codes):
         """
@@ -318,7 +459,7 @@ class Qwen3TTSProcessor(ProcessorMixin):
             dict.fromkeys(
                 tokenizer_input_names
                 + feature_extractor_input_names
-                + ["audio_codes", "audio_attention_mask", "speaker_embeddings"]
+                + ["feature_attention_mask", "audio_codes", "audio_attention_mask", "speaker_embeddings"]
             )
         )
 
