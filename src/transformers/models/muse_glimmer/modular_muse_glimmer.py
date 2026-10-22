@@ -771,6 +771,7 @@ class MuseGlimmerTextDecoderLayer(Gemma2DecoderLayer):
 
 class MuseGlimmerPreTrainedModel(Gemma2PreTrainedModel):
     _no_split_modules = ["MuseGlimmerTextDecoderLayer", "MuseGlimmerVisionEncoderLayer"]
+    _supports_sdpa = True
     _can_record_outputs = None  # set on children directly as they are different for text and vision
 
     def _init_weights(self, module):  # trf-ignore: TRF018  @Tarek this ignore of the rule should not be needed!!

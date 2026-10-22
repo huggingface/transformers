@@ -1342,7 +1342,7 @@ class Molmo2VisionModel(Molmo2PreTrainedModel):
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         hidden_states = self.patch_embedding(pixel_values.to(dtype=self.dtype))
         # patch count == num_position_embeddings, locked by config; only retraining with a different grid breaks this.
-        hidden_states = hidden_states + self.positional_embedding[None, :, :].to(hidden_states.dtype)
+        hidden_states = hidden_states + self.positional_embedding[None, :, :].to(hidden_states)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(hidden_states, None, **kwargs)
