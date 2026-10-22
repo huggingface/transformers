@@ -140,8 +140,7 @@ def convert_deformable_detr_checkpoint(
             val = state_dict.pop(key)
             state_dict[prefix + key] = val
     # finally, create HuggingFace model and load state dict
-    model = DeformableDetrForObjectDetection(config)
-    model.load_state_dict(state_dict)
+    model = DeformableDetrForObjectDetection.from_pretrained(None, config=config, state_dict=state_dict)
     model.eval()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
