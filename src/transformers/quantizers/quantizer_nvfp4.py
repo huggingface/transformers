@@ -82,10 +82,10 @@ class NVFP4HfQuantizer(HfQuantizer):
         return isinstance(module, NVFP4Linear) and tensor_name == "weight"
 
     def _module_formats(self, model: PreTrainedModel) -> dict[str, str] | None:
-        """Return the ModelOpt format of each module of `model`, or `None` when every eligible module is NVFP4.
+        """Return how each module of `model` loads, from `quantized_layers`, or `None` when every eligible module is NVFP4.
 
-        `quantized_layers` names checkpoint modules. A module matches by its model or checkpoint name. Fused experts
-        also match their per-expert entries, such as `experts.3.w1`.
+        A module matches by its model or checkpoint name. Exact names win, and fused experts also match their per-expert
+        entries, such as `experts.3.w1`. Otherwise the first pattern that matches applies.
         """
         from ..conversion_mapping import get_model_conversion_mapping
         from ..core_model_loading import WeightRenaming
@@ -99,17 +99,20 @@ class NVFP4HfQuantizer(HfQuantizer):
             for rule in get_model_conversion_mapping(model, add_legacy=False)[::-1]
             if isinstance(rule, WeightRenaming)
         ]
+        patterns = [(re.compile(layer), loads) for layer, loads in layers.items()]
         formats = {}
         for name, _ in model.named_modules():
             key = f"{name}.weight"
             for rule in reverse:
                 key, _ = rule.rename_source_key(key)
             names = {name, key.removesuffix(".weight")}
-            entries = [algo for layer, algo in layers.items() for prefix in names if layer == prefix]
-            if name.endswith(".experts"):
-                entries += [
-                    algo for layer, algo in layers.items() for prefix in names if layer.startswith(f"{prefix}.")
+            entries = [loads for layer, loads in layers.items() if layer in names]
+            if not entries and name.endswith(".experts"):
+                entries = [
+                    loads for layer, loads in layers.items() for prefix in names if layer.startswith(f"{prefix}.")
                 ]
+            if not entries:
+                entries = [loads for pattern, loads in patterns if any(pattern.fullmatch(n) for n in names)][:1]
             if len(set(entries)) > 1:
                 raise ValueError(
                     f"{name!r} is one module, but the checkpoint gives it formats {sorted(set(entries))}."
@@ -124,7 +127,6 @@ class NVFP4HfQuantizer(HfQuantizer):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
-        self._formats = None
         # no slot for calibrated `input_scale`s or FP8 KV-cache scales
         model._keys_to_ignore_on_load_unexpected = {
             *(model._keys_to_ignore_on_load_unexpected or ()),
@@ -133,21 +135,21 @@ class NVFP4HfQuantizer(HfQuantizer):
         }
         if self.quantization_config.dequantize:
             return
-        formats = self._formats = self._module_formats(model)
+        formats = self._module_formats(model)
         weight_only = self.quantization_config.activation_format == "bf16"
         if not replace_with_nvfp4(model, self.modules_to_not_convert, formats, self.pre_quantized, weight_only):
             raise ValueError("NVFP4 found no linear or experts module to quantize in this model.")
 
     def _process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs):
-        from ..integrations.nvfp4 import FP8_BLOCKS, dequantize_fp8_linears, modelopt_renames
+        from ..integrations.nvfp4 import checkpoint_renames, dequantize_fp8_linears
 
-        dequantize_fp8_linears(model, self._formats or {})
-        # the FP8 layers are now in the model dtype, so a save lists them no more
+        dequantize_fp8_linears(model)
+        # the dequantized layers are now in the model dtype, so a save lists them no more
         if self.quantization_config.quantized_layers is not None:
             self.quantization_config.quantized_layers = {
-                layer: algo
-                for layer, algo in self.quantization_config.quantized_layers.items()
-                if algo not in FP8_BLOCKS
+                layer: loads
+                for layer, loads in self.quantization_config.quantized_layers.items()
+                if loads != "dequantize"
             }
 
         conversions = getattr(model, "_weight_conversions", None) or []
@@ -156,7 +158,7 @@ class NVFP4HfQuantizer(HfQuantizer):
             conversions = self.update_weight_conversions(conversions, model, for_save=True)
         # Save the modules' own names, which load as they are. A save cannot reverse the ModelOpt renames, as on save
         # the renames run before the converters.
-        shipped = {tuple(rename._original_source_patterns) for rename in modelopt_renames()}
+        shipped = {tuple(rename._original_source_patterns) for rename in checkpoint_renames()}
         model._weight_conversions = [c for c in conversions if tuple(c._original_source_patterns) not in shipped]
         return model
 
@@ -180,13 +182,17 @@ class NVFP4HfQuantizer(HfQuantizer):
             NVFP4Experts,
             NVFP4InterleaveGateUp,
             NVFP4Linear,
+            NVFP4Reciprocal,
             NVFP4SwizzleScales,
             NVFP4ViewPackedInt8,
+            _reciprocal_globals,
         )
 
         module, name = get_module_from_name(model, param_name)
         if not isinstance(module, (NVFP4Linear, NVFP4Experts)):
             return []
+        if name.endswith("global_scale"):
+            return [NVFP4Reciprocal(self)] if _reciprocal_globals(self) else []
         ops = []
         if name in ("weight", *EXPERT_PROJECTIONS):
             ops.append(NVFP4ViewPackedInt8(self))
@@ -198,13 +204,13 @@ class NVFP4HfQuantizer(HfQuantizer):
 
     def update_weight_conversions(self, weight_conversions, model, for_save: bool = False):
         from ..core_model_loading import WeightConverter
-        from ..integrations.nvfp4 import NVFP4Deserialize, modelopt_renames, nvfp4_checkpoint_conversions
+        from ..integrations.nvfp4 import NVFP4Deserialize, checkpoint_renames, nvfp4_checkpoint_conversions
 
         conversions = super().update_weight_conversions(weight_conversions, model)
         if not self.pre_quantized and not for_save:
             return conversions
         conversions = [
-            *modelopt_renames(),
+            *checkpoint_renames(),
             *nvfp4_checkpoint_conversions(self, conversions, dequantize=self.quantization_config.dequantize),
         ]
         if self.quantization_config.dequantize:

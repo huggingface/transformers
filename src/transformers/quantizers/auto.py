@@ -46,6 +46,7 @@ from ..utils.quantization_config import (
     TorchAoConfig,
     VptqConfig,
     read_modelopt,
+    read_mxfp8,
 )
 from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
@@ -139,9 +140,11 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "gemma": GemmaQuantizationConfig,
 }
 
-# Readers that turn another tool's checkpoint config into a Transformers config, keyed by `quant_method`
-AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin]] = {
+# Readers that turn another tool's checkpoint config into a Transformers config, keyed by `quant_method`. A reader
+# returns `None` to leave the checkpoint to the method's own config class.
+AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
     "modelopt": read_modelopt,
+    "mxfp8": read_mxfp8,
 }
 
 LOADING_ATTRIBUTES_CONFIG_TYPES = (
@@ -177,8 +180,9 @@ class AutoQuantizationConfig:
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
 
-        if (reader := AUTO_QUANTIZATION_CONFIG_READERS.get(quant_method)) is not None:
-            return reader(quantization_config_dict)
+        reader = AUTO_QUANTIZATION_CONFIG_READERS.get(quant_method)
+        if reader is not None and (config := reader(quantization_config_dict)) is not None:
+            return config
 
         if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
             raise ValueError(

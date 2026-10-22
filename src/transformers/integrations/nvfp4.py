@@ -44,10 +44,6 @@ logger = logging.get_logger(__name__)
 GROUP_SIZE = 16
 # the projections of a fused experts module
 EXPERT_PROJECTIONS = ("gate_up_proj", "up_proj", "down_proj")
-# `W4A16_NVFP4` is weight-only
-NVFP4_FORMATS = ("NVFP4", "W4A16_NVFP4")
-# the ModelOpt formats that load dequantized, with their scale block: per tensor, 128x128 or 1x32
-FP8_BLOCKS = {"FP8": None, "FP8_PB_WO": (128, 128), "MXFP8": (1, 32)}
 
 
 @functools.cache
@@ -162,6 +158,9 @@ class NVFP4Experts(nn.Module):
         self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
         self.act_fn_name = _first_attr(config, "hidden_activation", "hidden_act")
         self.act_fn = ACT2FN[self.act_fn_name]
+        # an optional clamped SwiGLU, see `_apply_gate`
+        self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
+        self.swiglu_limit = getattr(config, "swiglu_limit", None)
         self.activation_format = "bf16" if weight_only else None
         # normalizes each expert's output before the weighted sum
         self.post_expert_norm = post_expert_norm
@@ -184,7 +183,13 @@ class NVFP4Experts(nn.Module):
         setattr(self, f"{proj}_input_global_scale", input_global)
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
-        return self.act_fn(gate_up[..., 0::2]) * gate_up[..., 1::2]
+        gate, up = gate_up[..., 0::2], gate_up[..., 1::2]
+        if self.swiglu_limit is not None:
+            gate = gate.clamp(max=self.swiglu_limit)
+            up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        if self.swiglu_alpha is not None:
+            return (up + 1.0) * gate * torch.sigmoid(gate * self.swiglu_alpha)
+        return self.act_fn(gate) * up
 
     def _moe_operands(self, kernel) -> dict:
         """Return the arguments of the kernels' fused MoE forwards."""
@@ -195,8 +200,8 @@ class NVFP4Experts(nn.Module):
         operands = {
             "act_fn": act_fn,
             "gate": self.has_gate,
-            "swiglu_alpha": None,
-            "swiglu_limit": None,
+            "swiglu_alpha": self.swiglu_alpha,
+            "swiglu_limit": self.swiglu_limit,
             "activation_format": self.activation_format,
             "post_expert_norm": self.post_expert_norm,
             "post_expert_norm_weight": None,
@@ -285,8 +290,9 @@ def replace_with_nvfp4(
 ) -> bool:
     """Replace the linears and fused experts in an NVFP4 format. Return whether any module was replaced.
 
-    `formats` maps module names to ModelOpt formats. Without it, every eligible module is NVFP4. A pre-quantized FP8
-    linear gets a slot for its scale and dequantizes after loading.
+    `formats` maps module names to how they load: `"nvfp4"`, `"nvfp4_weight_only"` or `"dequantize"`. Without it, every
+    eligible module is NVFP4. A pre-quantized linear that dequantizes gets a slot for its scale, see
+    `dequantize_fp8_linears`.
     """
     # routers stay in full precision unless the checkpoint quantizes them
     parents = [name.removesuffix(".experts") for name, _ in model.named_modules() if name.endswith(".experts")]
@@ -302,14 +308,14 @@ def replace_with_nvfp4(
             continue
         if formats is None and name in routers:
             continue
-        quant_format = "NVFP4" if formats is None else formats.get(name)
-        if quant_format in FP8_BLOCKS and pre_quantized:
+        loads = "nvfp4" if formats is None else formats.get(name)
+        if loads == "dequantize" and pre_quantized:
             # an FP8 layer loads its scale into a slot of its own, see `dequantize_fp8_linears`
             module.register_parameter("weight_scale_inv", _parameter(torch.empty((), device="meta")))
             continue
-        if quant_format not in NVFP4_FORMATS:
+        if loads not in ("nvfp4", "nvfp4_weight_only"):
             continue
-        options = {"pre_quantized": pre_quantized, "weight_only": weight_only or quant_format == "W4A16_NVFP4"}
+        options = {"pre_quantized": pre_quantized, "weight_only": weight_only or loads == "nvfp4_weight_only"}
         with torch.device("meta"):
             if is_experts:
                 has_gate = getattr(module, "has_gate", True)
@@ -418,6 +424,19 @@ def _apply_param_ops(op, model, full_name: str, value):
     for param_op in ops:
         tensors = param_op.convert(tensors, model=model, full_layer_name=full_name)
     return tensors[full_name]
+
+
+def _reciprocal_globals(hf_quantizer) -> bool:
+    return hf_quantizer is not None and hf_quantizer.quantization_config.checkpoint_format == "nvfp4-pack-quantized"
+
+
+class NVFP4Reciprocal(_NVFP4Op):
+    """Invert the globals of an `nvfp4-pack-quantized` checkpoint. It ships `448 * 6 / amax`, and the kernels take the
+    reciprocal. The op is its own inverse, so a save writes them back as they ship.
+    """
+
+    def convert(self, input_dict, **kwargs):
+        return {key: 1 / _single(value) for key, value in input_dict.items()}
 
 
 class NVFP4ViewPackedInt8(_NVFP4Op):
@@ -564,7 +583,10 @@ class NVFP4Dequantize(Fp8Dequantize):
             scales = scales.reshape(scales.shape[0], scales.shape[2])
         dequantized = self._dequantize_one(weight, scales, output_dtype=torch.float32)
         if global_scale is not None:
-            dequantized = dequantized * global_scale.float().reshape(-1, *([1] * (dequantized.ndim - 1)))
+            global_scale = global_scale.float()
+            if _reciprocal_globals(self.hf_quantizer):
+                global_scale = 1 / global_scale
+            dequantized = dequantized * global_scale.reshape(-1, *([1] * (dequantized.ndim - 1)))
         return dequantized.to(output_dtype or torch.bfloat16)
 
     @property
@@ -572,14 +594,19 @@ class NVFP4Dequantize(Fp8Dequantize):
         return _IdentityOp()
 
 
-def dequantize_fp8_linears(model: nn.Module, formats: dict[str, str]):
+def dequantize_fp8_linears(model: nn.Module):
     """Dequantize the FP8 layers that loaded with their scale, and drop the scale.
 
-    Under tensor parallelism each rank holds the whole scale grid and dequantizes its shard of the weight.
+    The scale is per tensor or a block grid, whose block size follows from its shape. Under tensor parallelism each rank
+    holds the whole grid and dequantizes its shard of the weight.
     """
-    for name, module in model.named_modules():
+    for module in model.modules():
         scale = module._parameters.get("weight_scale_inv") if type(module) is nn.Linear else None
         if scale is None:
+            continue
+        # an unquantized layer that matched a catch-all pattern loads no scale
+        if scale.is_meta:
+            del module.weight_scale_inv
             continue
         weight, grid = module.weight.data, scale.data
         offsets = [0, 0]
@@ -587,10 +614,14 @@ def dequantize_fp8_linears(model: nn.Module, formats: dict[str, str]):
             _, offsets = compute_local_shape_and_global_offset(weight.shape, weight.device_mesh, weight.placements)
             grid = grid.to_local() if isinstance(grid, DTensor) else grid
         local = weight.to_local() if isinstance(weight, DTensor) else weight
-        block = FP8_BLOCKS[formats[name]]
-        if block is not None:
+        if grid.numel() > 1:
             # ModelOpt ships a block grid as `[N / 128, 1, K / 128, 1]`
             grid = grid.reshape(grid.shape[0], grid.shape[2]) if grid.ndim == 4 else grid
+            if weight.shape[0] % grid.shape[0] or weight.shape[1] % grid.shape[1]:
+                raise ValueError(
+                    f"A {tuple(weight.shape)} weight does not split into a {tuple(grid.shape)} scale grid."
+                )
+            block = (weight.shape[0] // grid.shape[0], weight.shape[1] // grid.shape[1])
             rows, cols = (
                 slice(start // size, -(-(start + length) // size))
                 for start, length, size in zip(offsets, local.shape, block)
@@ -629,12 +660,16 @@ class NVFP4Deserialize(_NVFP4Op):
         return out
 
 
-def modelopt_renames() -> list:
-    """Return the renames that give ModelOpt's `weight_scale`, `weight_scale_2` and `input_scale` the slots' names."""
+def checkpoint_renames() -> list:
+    """Return the renames that give a checkpoint's NVFP4 tensors the slots' names.
+
+    ModelOpt names them `weight_scale`, `weight_scale_2` and `input_scale`. `nvfp4-pack-quantized` names the packed
+    weight `weight_packed`.
+    """
     from ..core_model_loading import WeightRenaming
 
     projections = "|".join(EXPERT_PROJECTIONS)
-    renames = []
+    renames = [WeightRenaming(source_patterns=r"^(.+)\.weight_packed$", target_patterns=r"\1.weight")]
     for shipped, slot in (
         ("weight_scale", "scale_inv"),
         ("weight_scale_2", "weight_global_scale"),
@@ -694,7 +729,12 @@ def nvfp4_checkpoint_conversions(hf_quantizer, weight_conversions: list, dequant
                 converter.copy(
                     [re.sub(r"weight$", slot, source) for source in converter._original_source_patterns],
                     [f"{target}_{slot}"],
-                    operations=[MergeModulelist(dim=0), NVFP4ExpertGlobals(hf_quantizer, reduce)],
+                    # the reduce takes the multipliers, so a reciprocal global inverts before it
+                    operations=[
+                        MergeModulelist(dim=0),
+                        *([NVFP4Reciprocal(hf_quantizer)] if _reciprocal_globals(hf_quantizer) else []),
+                        NVFP4ExpertGlobals(hf_quantizer, reduce),
+                    ],
                 )
             )
     return conversions

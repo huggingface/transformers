@@ -20,7 +20,7 @@ from types import SimpleNamespace
 from parameterized import parameterized
 from safetensors import safe_open
 
-from transformers import MixtralConfig, NVFP4Config
+from transformers import FineGrainedFP8Config, MixtralConfig, NVFP4Config
 from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.testing_utils import require_kernels, require_torch, require_torch_accelerator, slow, torch_device
 from transformers.utils import is_torch_available, logging
@@ -66,6 +66,15 @@ def _fp8_block(weight):
     quantized = (blocks / scales).to(torch.float8_e4m3fn)
     dequantized = (quantized.float() * scales).reshape(rows, cols)
     return quantized.reshape(rows, cols), scales.reshape(rows // 128, 1, cols // 128, 1), dequantized
+
+
+def _mxfp8(weight):
+    """Quantize a `(N, K)` weight to MXFP8 with UE8M0 scales per 32. Return `(values, uint8 scales, dequantized)`."""
+    blocks = weight.float().reshape(weight.shape[0], -1, 32)
+    exponent = torch.ceil(torch.log2(blocks.abs().amax(-1).clamp(min=2**-100) / 448))
+    values = (blocks / torch.exp2(exponent).unsqueeze(-1)).to(torch.float8_e4m3fn)
+    dequantized = values.float() * torch.exp2(exponent).unsqueeze(-1)
+    return values.reshape(weight.shape), (exponent + 127).to(torch.uint8), dequantized.reshape(weight.shape)
 
 
 def _mixtral_config(**kwargs):
@@ -162,6 +171,51 @@ def _modelopt_checkpoint(path):
     return reference
 
 
+def _mxfp8_checkpoint(path):
+    """Save a tiny Mixtral as an MXFP8 checkpoint with NVFP4 experts and return its dequantized reference model.
+
+    The experts are `nvfp4-pack-quantized`, with reciprocal globals. The attention is MXFP8. The routers and `lm_head`
+    stay in full precision.
+    """
+    torch.manual_seed(0)
+    config = _mixtral_config()
+    reference = MixtralForCausalLM(config).to(torch.bfloat16).eval()
+    state = {name: param.clone() for name, param in reference.state_dict().items() if ".mlp.experts." not in name}
+    for i, layer in enumerate(reference.model.layers):
+        experts = layer.mlp.experts
+        for expert in range(config.num_local_experts):
+            gate, up = experts.gate_up_proj.data[expert].chunk(2, dim=0)
+            for proj, weight in (("w1", gate), ("w3", up), ("w2", experts.down_proj.data[expert])):
+                packed, scales, global_scale, dequantized = _nvfp4(weight)
+                key = f"model.layers.{i}.block_sparse_moe.experts.{expert}.{proj}"
+                state[f"{key}.weight_packed"], state[f"{key}.weight_scale"] = packed, scales
+                state[f"{key}.weight_global_scale"] = 1 / global_scale
+                state[f"{key}.input_global_scale"] = torch.tensor(1.0)
+                weight.copy_(dequantized.to(weight.dtype))
+        for proj in ("q_proj", "k_proj", "v_proj", "o_proj"):
+            linear = getattr(layer.self_attn, proj)
+            key = f"model.layers.{i}.self_attn.{proj}"
+            state[f"{key}.weight"], state[f"{key}.weight_scale_inv"], dequantized = _mxfp8(linear.weight.data)
+            linear.weight.data.copy_(dequantized.to(linear.weight.dtype))
+
+    from safetensors.torch import save_file
+
+    config.save_pretrained(path)
+    with open(f"{path}/config.json", encoding="utf-8") as file:
+        saved = json.load(file)
+    saved["quantization_config"] = {
+        "quant_method": "mxfp8",
+        "weight_block_size": [1, 32],
+        "ignored_layers": ["lm_head", *(f"model.layers.{i}.block_sparse_moe.gate" for i in range(2))],
+        "moe_quant_algo": "NVFP4",
+        "moe_quant_format": "nvfp4-pack-quantized",
+    }
+    with open(f"{path}/config.json", "w", encoding="utf-8") as file:
+        json.dump(saved, file)
+    save_file({key: value.contiguous() for key, value in state.items()}, f"{path}/model.safetensors")
+    return reference
+
+
 @require_torch
 class NVFP4ConfigTest(unittest.TestCase):
     def test_a_modelopt_export_reads_its_formats_and_skip_list(self):
@@ -182,17 +236,33 @@ class NVFP4ConfigTest(unittest.TestCase):
         self.assertIn("FP8_PB_WO", logs.output[0])
         self.assertIsInstance(config, NVFP4Config)
         self.assertEqual(config.quant_method, QuantizationMethod.NVFP4)
-        self.assertEqual(config.quantized_layers, {"layers.0.experts": "NVFP4", "layers.0.attention.wq": "FP8_PB_WO"})
+        self.assertEqual(config.quantized_layers, {"layers.0.experts": "nvfp4", "layers.0.attention.wq": "dequantize"})
         self.assertEqual(config.modules_to_not_convert, ["model.layers.0.mlp.gate", r".*lm_head"])
         self.assertIsNone(
             AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4"}).quantized_layers
         )
+        # a single weight-only algorithm makes the whole model weight-only
+        config = read_modelopt({"quant_method": "modelopt", "quant_algo": "W4A16_NVFP4"})
+        self.assertEqual(config.activation_format, "bf16")
         # a mixed export lists every quantized module, so the default skips (e.g. `lm_head`) do not apply
         layers = {"lm_head": {"quant_algo": "W4A16_NVFP4"}}
         config = read_modelopt(
             {"quant_method": "modelopt", "quant_algo": "MIXED_PRECISION", "quantized_layers": layers}
         )
         self.assertEqual(config.modules_to_not_convert, [])
+
+    def test_an_mxfp8_checkpoint_with_nvfp4_experts_reads_as_nvfp4(self):
+        shipped = {"quant_method": "mxfp8", "weight_block_size": [1, 32], "ignored_layers": ["lm_head"]}
+        self.assertIsInstance(AutoQuantizationConfig.from_dict(shipped), FineGrainedFP8Config)
+        shipped.update({"moe_quant_algo": "NVFP4", "moe_quant_format": "nvfp4-pack-quantized"})
+        config = AutoQuantizationConfig.from_dict(shipped)
+        self.assertIsInstance(config, NVFP4Config)
+        self.assertEqual(config.checkpoint_format, "nvfp4-pack-quantized")
+        self.assertEqual(
+            config.quantized_layers, {r"lm_head(\..*)?": None, r".*\.experts": "nvfp4", r".*": "dequantize"}
+        )
+        with self.assertRaises(ValueError):
+            AutoQuantizationConfig.from_dict({**shipped, "moe_quant_format": "unknown"})
 
     @parameterized.expand([("without_nvfp4", ["FP8"]), ("with_another_format", ["NVFP4", "W4A8_AWQ"])])
     def test_a_modelopt_export_raises(self, _, algos):
@@ -222,10 +292,10 @@ class NVFP4ModulesTest(unittest.TestCase):
     def test_pre_quantized_modules_follow_the_formats(self):
         model = self._model()
         formats = {
-            "model.layers.0.mlp.experts": "NVFP4",
-            "model.layers.0.self_attn.q_proj": "NVFP4",
-            "model.layers.0.self_attn.k_proj": "W4A16_NVFP4",
-            "model.layers.0.self_attn.o_proj": "FP8_PB_WO",
+            "model.layers.0.mlp.experts": "nvfp4",
+            "model.layers.0.self_attn.q_proj": "nvfp4",
+            "model.layers.0.self_attn.k_proj": "nvfp4_weight_only",
+            "model.layers.0.self_attn.o_proj": "dequantize",
         }
         replace_with_nvfp4(model, formats=formats, pre_quantized=True)
         attention = model.model.layers[0].self_attn
@@ -354,6 +424,18 @@ class NVFP4LoadTest(unittest.TestCase):
         self.assertIsInstance(model.model.layers[0].mlp.experts, NVFP4Experts)
         self.assertEqual(model.model.layers[0].self_attn.q_proj.weight.dtype, torch.int8)
         self.assertGreater(_cosine(self._logits(model), self._logits(reference.to(torch_device))), 0.95)
+
+    def test_an_mxfp8_checkpoint_with_nvfp4_experts_matches_its_dequantized_model(self):
+        with tempfile.TemporaryDirectory() as path, tempfile.TemporaryDirectory() as saved:
+            expected = self._logits(_mxfp8_checkpoint(path).to(torch_device))
+            model, info = self._load(path, output_loading_info=True)
+            model.save_pretrained(saved)
+            reloaded = self._load(saved)
+        self.assertFalse(any(info.values()), info)
+        self.assertIsInstance(model.model.layers[0].mlp.experts, NVFP4Experts)
+        self.assertIs(type(model.model.layers[0].self_attn.q_proj), torch.nn.Linear)
+        self.assertGreater(_cosine(self._logits(model), expected), 0.995)
+        torch.testing.assert_close(self._logits(reloaded), self._logits(model))
 
     @parameterized.expand(["modelopt", "on_the_fly"])
     def test_a_saved_model_reloads_with_the_same_outputs(self, source):
