@@ -39,6 +39,12 @@ If an issue already exists for the problem, your PR goes through that issue whet
 
 **Changes that need an issue first.** Mechanical cleanups that don't affect correctness or performance, and bulk fixes to typos or wording in the docs, need an issue before a PR. Propose the change, how you'd make it, and how many files it touches. A single typo fix is too small for a PR on either path.
 
+**Reviewing other people's PRs.** Reviews from the community are welcome when they tell us something new, but maintainers read every comment on a PR, and we already run our own review tools. Before you comment on a PR you didn't open, make sure you have something specific to say:
+
+- If you found a problem or have a concrete change to propose, leave an inline comment on the relevant lines, ideally as a GitHub suggestion the author can apply directly. A reproducer helps if you're reporting a bug.
+- If you reported the issue the PR fixes, a quick note saying whether it fixes your case is really useful.
+- Please don't post general summaries or "I tested this and it works" reports. Approvals from non-maintainers don't affect whether a PR gets merged, and a long comment that restates the PR costs us time without changing the outcome.
+
 How you write your code is up to you, but you're responsible for everything you submit, and we may block accounts that repeatedly open low-quality issues or PRs. Please also respect our [code of conduct](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md).
 
 <details>
