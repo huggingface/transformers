@@ -753,7 +753,6 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
         )
         hidden_states = model_output.last_hidden_state if return_dict else model_output[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.lm_head(hidden_states)
 
         loss = None

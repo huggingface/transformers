@@ -1379,7 +1379,6 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
         hidden_states = outputs[0]
 
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.lm_head(hidden_states)
 
         loss = None

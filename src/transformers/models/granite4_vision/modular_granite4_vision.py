@@ -732,7 +732,6 @@ class Granite4VisionForConditionalGeneration(LlavaNextForConditionalGeneration):
         hidden_states = outputs.last_hidden_state
 
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.lm_head(hidden_states)
         logits = logits / self.config.text_config.logits_scaling
 

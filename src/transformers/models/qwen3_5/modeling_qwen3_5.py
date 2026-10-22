@@ -1719,7 +1719,6 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.lm_head(hidden_states)
 
         loss = None
@@ -1866,7 +1865,6 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
         hidden_states = outputs[0]
 
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.lm_head(hidden_states)
 
         loss = None

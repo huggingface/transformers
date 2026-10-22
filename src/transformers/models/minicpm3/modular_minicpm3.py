@@ -318,7 +318,6 @@ class MiniCPM3ForCausalLM(LlamaForCausalLM):
         # MiniCPM3 scales hidden states down before the LM head (not present in Llama).
         hidden_states = hidden_states / self.config.logits_scaling
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.lm_head(hidden_states)
 
         loss = None

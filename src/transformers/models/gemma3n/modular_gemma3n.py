@@ -2411,7 +2411,6 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         hidden_states = outputs.last_hidden_state
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.lm_head(hidden_states)
         if (final_logit_softcapping := self.config.get_text_config().final_logit_softcapping) is not None:
             logits = logits / final_logit_softcapping

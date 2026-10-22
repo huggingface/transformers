@@ -893,7 +893,6 @@ class InklingForCausalLM(Gemma3ForCausalLM):
 
         hidden_states = outputs.last_hidden_state / self.config.logits_mup_width_multiplier
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.lm_head(hidden_states)
         unpadded_vocab_size = self.config.unpadded_vocab_size
         if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:
@@ -1393,7 +1392,6 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0] / self.config.text_config.logits_mup_width_multiplier
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.lm_head(hidden_states)
         unpadded_vocab_size = self.config.text_config.unpadded_vocab_size
         if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:

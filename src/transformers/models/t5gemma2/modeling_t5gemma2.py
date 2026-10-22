@@ -1247,7 +1247,6 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
 
         hidden_states = decoder_outputs.last_hidden_state
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.lm_head(hidden_states)
 
         decoder_config = self.config.decoder

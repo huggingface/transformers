@@ -1654,7 +1654,6 @@ class Qwen4ExpForCausalLM(Qwen4ExpPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.lm_head(hidden_states)
 
         loss = None
@@ -2519,7 +2518,6 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
         hidden_states = outputs[0]
 
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.lm_head(hidden_states)
 
         loss = None
