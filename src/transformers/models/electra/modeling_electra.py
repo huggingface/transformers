@@ -1323,7 +1323,6 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.generator_lm_head(self.generator_predictions(hidden_states))
 
         loss = None

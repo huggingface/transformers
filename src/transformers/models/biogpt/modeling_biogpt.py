@@ -467,7 +467,6 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.output_projection(hidden_states)
 
         loss = None

@@ -1426,7 +1426,6 @@ class XLNetLMHeadModel(XLNetPreTrainedModel, GenerationMixin):
 
         hidden_states = transformer_outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.lm_loss(hidden_states)
 
         loss = None

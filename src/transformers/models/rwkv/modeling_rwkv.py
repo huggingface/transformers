@@ -733,7 +733,6 @@ class RwkvForCausalLM(RwkvPreTrainedModel, GenerationMixin):
 
         hidden_states = rwkv_outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.head(hidden_states)
 
         loss = None
