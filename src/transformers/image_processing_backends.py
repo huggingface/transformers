@@ -469,7 +469,7 @@ class PilBackend(BaseImageProcessor):
 
         # Apply conversion first to not lose PIL mode for PIL.Image.Image
         if do_convert_rgb:
-            image = self.convert_to_rgb(image)
+            image = self.convert_to_rgb(image, input_data_format=input_data_format)
         elif image_type == ImageType.PIL:
             image = np.array(image)
 

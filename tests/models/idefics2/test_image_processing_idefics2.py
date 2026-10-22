@@ -161,13 +161,13 @@ class Idefics2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     self.assertIsInstance(image, np.ndarray)
 
             encoded_images = image_processing(
-                image_inputs[0], input_data_format="channels_last", return_tensors="pt"
+                image_inputs[0], do_convert_rgb=False, input_data_format="channels_last", return_tensors="pt"
             ).pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape([image_inputs[0]])
             self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
 
             encoded_images = image_processing(
-                image_inputs, input_data_format="channels_last", return_tensors="pt"
+                image_inputs, do_convert_rgb=False, input_data_format="channels_last", return_tensors="pt"
             ).pixel_values
             expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
             self.assertEqual(
