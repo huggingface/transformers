@@ -308,13 +308,11 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
             image_size = image.shape[-2:]
             best_grid = self.get_sliced_grid(image_size, max_slice_nums, scale_resolution) if slice_mode else None
 
-            # Resize the overview (source) image.  For unsliced images the resolution
-            # may be reduced to preserve small glyphs; sliced images always use
-            # scale_resolution for the overview.
-            if best_grid is None:
-                source_resolution, allow_upscale = _source_resolutions[len(num_patches_per_image)]
-            else:
-                source_resolution, allow_upscale = scale_resolution, False
+            # Unsliced images may keep, or reduce, their native resolution; sliced overviews always use scale_resolution
+            source_resolution, allow_upscale = scale_resolution, best_grid is None and small_image_upsize == "always"
+            if best_grid is None and small_image_upsize == "adaptive":
+                resolution = adaptive_upsize_resolution(image.to("cpu", torch.uint8).numpy(), scale_resolution)
+                source_resolution, allow_upscale = resolution or scale_resolution, resolution is not None
             source_h, source_w = self.find_best_resize(
                 image_size, source_resolution, patch_size, allow_upscale=allow_upscale, downsample_mode=downsample_mode
             )
