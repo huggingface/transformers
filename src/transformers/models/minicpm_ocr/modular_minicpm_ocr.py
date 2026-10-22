@@ -150,8 +150,7 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
 
     def _resolve_tile_size(
         self,
-        original_image: "torch.Tensor",
-        original_image_size: tuple[int, int],
+        image: "torch.Tensor",
         grid: tuple[int, int],
         row: int,
         column: int,
@@ -160,57 +159,35 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
         patch_size: int,
         downsample_mode: str,
     ) -> "torch.Tensor":
-        """Return the tile to use for (row, column) when adaptive_tile_upsize is enabled.
-
-        Crops the cell from the original image, classifies it with the same CV heuristic
-        used for small whole-image upsize, then picks the lowest-cost resolution that is
-        still no larger than the baseline tile. The baseline tile is always returned when
-        the original crop already exceeds scale_resolution², so this can only reduce tokens.
-        """
-        original_height, original_width = original_image_size
+        """Crop cell (row, column) of the original image and return it at its adaptive resolution when that costs
+        fewer tokens than `base_tile`, otherwise return `base_tile`."""
+        height, width = image.shape[-2:]
         grid_rows, grid_columns = grid
-        top = round(original_height * row / grid_rows)
-        bottom = round(original_height * (row + 1) / grid_rows)
-        left = round(original_width * column / grid_columns)
-        right = round(original_width * (column + 1) / grid_columns)
-        cell = original_image[..., top:bottom, left:right]
+        cell = image[
+            ...,
+            round(height * row / grid_rows) : round(height * (row + 1) / grid_rows),
+            round(width * column / grid_columns) : round(width * (column + 1) / grid_columns),
+        ]
         cell_height, cell_width = cell.shape[-2:]
-
-        if cell_height < 1 or cell_width < 1 or cell_height * cell_width > scale_resolution * scale_resolution:
+        if cell_height < 1 or cell_width < 1 or cell_height * cell_width > scale_resolution**2:
             return base_tile
 
-        tier = adaptive_upsize_tier(
-            cell.detach().to("cpu", torch.uint8).numpy(),
-            font_px_threshold=self.adaptive_upsize_font_px,
-            dense_per_kpx_threshold=self.adaptive_upsize_dense_per_kpx,
-            tiny_pixels=self.adaptive_upsize_tiny_pixels,
+        resolution = adaptive_upsize_resolution(cell.to("cpu", torch.uint8).numpy(), scale_resolution)
+        if resolution == scale_resolution:
+            return base_tile
+        target_height, target_width = self.find_best_resize(
+            (cell_height, cell_width),
+            resolution or scale_resolution,
+            patch_size,
+            allow_upscale=resolution is not None,
+            downsample_mode=downsample_mode,
         )
-        if tier == "448":
-            return base_tile
-
-        merge_factor = 2 if downsample_mode == "4x" else 4
-        divisor = patch_size * merge_factor
-        if tier == "84":
-            target_height, target_width = self.find_best_resize(
-                (cell_height, cell_width),
-                self.adaptive_upsize_tiny_target_resolution,
-                patch_size,
-                allow_upscale=True,
-                downsample_mode=downsample_mode,
-            )
-        else:
-            target_height = ensure_divide(cell_height, divisor)
-            target_width = ensure_divide(cell_width, divisor)
-
         if target_height * target_width >= base_tile.shape[-2] * base_tile.shape[-1]:
             return base_tile
-
         if (target_height, target_width) == (cell_height, cell_width):
             return cell
         return self.resize(
-            cell,
-            size=SizeDict(height=target_height, width=target_width),
-            resample=PILImageResampling.BICUBIC,
+            cell, size=SizeDict(height=target_height, width=target_width), resample=PILImageResampling.BICUBIC
         )
 
     def _preprocess_image_like_inputs(
