@@ -915,33 +915,43 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
                         parent_file_posix = Path(parent_file).relative_to(PATH_TO_REPO).as_posix()
                         reverse_map.setdefault(child_file_posix, []).extend(reverse_map.get(parent_file_posix, []))
 
-    # Image processor source files are not statically imported by their test files because
-    # class resolution happens dynamically via IMAGE_PROCESSOR_MAPPING_NAMES (in
-    # test_image_processing_common.py) or IMAGE_PROCESSOR_MAPPING (in test_processing_common.py).
-    # Wire them explicitly by naming convention to cover two cases:
-    #   1. test_image_processing_<model>.py — uses _get_image_processing_classes() dynamically
-    #   2. test_processing_<model>.py — uses _get_component_class_from_processor() dynamically,
-    #      when processing_<model>.py itself doesn't statically import the image processor class
+    # Preprocessor source files (image/video processors, feature extractors, tokenizers) are not
+    # statically imported by their test files because class resolution happens dynamically (e.g.
+    # via IMAGE_PROCESSOR_MAPPING_NAMES, TOKENIZER_MAPPING) or because processing_<model>.py
+    # itself has no static import of those classes (e.g. CLIP's processing_clip.py only imports
+    # ProcessorMixin). Wire them explicitly by naming convention: for each glob pattern we wire
+    # matching source files to the pattern-specific test file (e.g. test_image_processing_<model>.py)
+    # and to test_processing_<model>.py (the processor integration test).
+    preprocessor_patterns = [
+        ("image_processing*.py", "test_image_processing"),
+        ("video_processing*.py", "test_video_processing"),
+        ("feature_extraction*.py", "test_feature_extraction"),
+        ("audio_processing*.py", "test_audio_processing"),
+        ("tokenization*.py", "test_tokenization"),
+    ]
     for model_dir in (PATH_TO_TRANSFORMERS / "models").iterdir():
         if not model_dir.is_dir():
             continue
         model_name = model_dir.name
-        img_proc_files = list(model_dir.glob("image_processing*.py"))
-        if not img_proc_files:
-            continue
-        candidate_tests = [
-            PATH_TO_TESTS / "models" / model_name / f"test_image_processing_{model_name}.py",
-            PATH_TO_TESTS / "models" / model_name / f"test_processing_{model_name}.py",
-        ]
-        test_files = [str(t.relative_to(PATH_TO_REPO)) for t in candidate_tests if t.is_file()]
-        if not test_files:
-            continue
-        for img_proc_file in img_proc_files:
-            img_proc_key = str(img_proc_file.relative_to(PATH_TO_REPO))
-            existing = set(reverse_map.get(img_proc_key, []))
-            for test_file in test_files:
-                if test_file not in existing:
-                    reverse_map.setdefault(img_proc_key, []).append(test_file)
+        test_model_dir = PATH_TO_TESTS / "models" / model_name
+        processing_test = test_model_dir / f"test_processing_{model_name}.py"
+        for glob_pattern, test_prefix in preprocessor_patterns:
+            src_files = list(model_dir.glob(glob_pattern))
+            if not src_files:
+                continue
+            candidate_tests = [
+                test_model_dir / f"{test_prefix}_{model_name}.py",
+                processing_test,
+            ]
+            test_files = [str(t.relative_to(PATH_TO_REPO)) for t in candidate_tests if t.is_file()]
+            if not test_files:
+                continue
+            for src_file in src_files:
+                src_key = str(src_file.relative_to(PATH_TO_REPO))
+                existing = set(reverse_map.get(src_key, []))
+                for test_file in test_files:
+                    if test_file not in existing:
+                        reverse_map.setdefault(src_key, []).append(test_file)
 
     return reverse_map
 
