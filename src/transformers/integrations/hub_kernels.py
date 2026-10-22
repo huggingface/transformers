@@ -178,24 +178,24 @@ if is_kernels_available():
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="chunk_gated_delta_rule",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="chunk_gated_delta_rule",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="chunk_gated_delta_rule",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="chunk_gated_delta_rule",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                 },
             },
@@ -206,14 +206,14 @@ if is_kernels_available():
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="recurrent_gated_delta_rule",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                 },
                 "xpu": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="recurrent_gated_delta_rule",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                 },
             },
@@ -222,12 +222,12 @@ if is_kernels_available():
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="chunk_kimi_delta_attention",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="chunk_kimi_delta_attention",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                 },
                 "xpu": {
@@ -236,7 +236,7 @@ if is_kernels_available():
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="chunk_kimi_delta_attention",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                 },
             },
@@ -247,14 +247,14 @@ if is_kernels_available():
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="recurrent_kimi_delta_attention",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                 },
                 "xpu": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="recurrent_kimi_delta_attention",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                 },
             },
@@ -263,24 +263,24 @@ if is_kernels_available():
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="FusedRMSNormGated",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="FusedRMSNormGated",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                 },
                 "xpu": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="FusedRMSNormGated",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="FusedRMSNormGated",
-                        revision="pr-1223",
+                        revision="pr-1141",
                     ),
                 },
             },
