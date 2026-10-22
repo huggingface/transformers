@@ -1,6 +1,8 @@
 name: Triage PRs
 
-# Closes PRs that don't link an issue their author may work on; see scripts/triage_prs.py.
+# Closes PRs that link an issue their author may not work on, and labels PRs that link none as standalone; see
+# scripts/triage_prs.py. `edited` re-checks a PR when its description changes, which also reopens a PR this closed
+# once it links a qualifying issue.
 # PR events only log what they would do until the rules are enforced. A manual run checks every
 # open PR, and applies the decisions if `dry_run` is unchecked.
 #

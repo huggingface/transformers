@@ -12,11 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Close PRs that don't link an issue their author may work on. See "Contribution rules" in CONTRIBUTING.md.
+Close PRs that link an issue their author may not work on. See "Contribution rules" in CONTRIBUTING.md.
 
-A PR passes if its author is exempt, or if its description links an open issue that is labeled `contributions-welcome`,
-or labeled `triaged` and opened by the PR author. Passing PRs from non-exempt authors get the `triaged` label and are
-skipped on later runs, so maintainers can also add that label to override a closure.
+A PR links an issue with a closing keyword (`Fixes #123`); other mentions of issues are just context. A PR that links
+no issue is standalone, and gets the `standalone` label so maintainers can check its evidence. A PR that links issues
+passes if one of them is open and is labeled `contributions-welcome` or `New model`, or is labeled `triaged` and was
+opened by the PR author. Otherwise the PR is closed.
+
+PRs are re-checked whenever their description is edited, so links can be added or removed at any time: the
+`standalone` label follows the description, and a PR this script closed is reopened once it links a qualifying issue.
+Exempt authors are skipped, and so are PRs with the `triaged` label, which maintainers can add to override a closure.
 
 Checks the PR in `PR_NUMBER`, or every open PR if it is unset. Nothing is changed unless `DRY_RUN=false`.
 """
@@ -31,7 +36,9 @@ from github.GithubException import UnknownObjectException
 
 START_DATE = datetime(2026, 10, 20, tzinfo=timezone.utc)  # Set to the day enforcement starts; earlier PRs are skipped
 TRIAGED_LABEL = "triaged"
-OPEN_LABEL = "contributions-welcome"
+STANDALONE_LABEL = "standalone"
+OPEN_LABELS = {"contributions-welcome", "New model"}
+BOT_LOGIN = "github-actions[bot]"
 # Hugging Face members whose membership is private and who have no access to this repo show up as CONTRIBUTOR or NONE,
 # so they need an allowlist entry or public membership.
 EXEMPT_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
@@ -43,27 +50,29 @@ ALLOWLIST = {
     265538906,  # hf-security-analysis[bot]
 }
 MAX_ISSUE_REFERENCES = 10
-ISSUE_REFERENCE = re.compile(
-    r"(?<![\w/])#(\d+)|huggingface/transformers#(\d+)|github\.com/huggingface/transformers/issues/(\d+)"
+# GitHub's closing keywords: https://docs.github.com/en/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue
+ISSUE_LINK = re.compile(
+    r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+"
+    r"(?:#|huggingface/transformers#|https://github\.com/huggingface/transformers/issues/)(\d+)\b",
+    re.IGNORECASE,
 )
 CLOSURE_MARKER = "<!-- triage-prs: closed -->"
 CLOSURE_MESSAGE = (
     f"{CLOSURE_MARKER}\n\n"
-    "Thanks for your PR! We're closing it because its description doesn't link an open issue that you can work on. "
+    "Thanks for your PR! We're closing it because the issue it links isn't one you can work on. "
     "You can open a PR for an issue you opened once a maintainer has labeled it `triaged`, or for any issue labeled "
-    f"`{OPEN_LABEL}`.\n\n"
-    "Once that's the case, link the issue in the description (for example `Fixes #123`) and reopen this PR; "
-    "there's no need to open a new one. If you think this was a mistake, ping a maintainer here.\n\n"
+    f"{' or '.join(f'`{label}`' for label in sorted(OPEN_LABELS))}.\n\n"
+    "Once the PR links an issue that qualifies, edit the description (for example `Fixes #123`) and we'll reopen it "
+    "automatically; there's no need to open a new one. If you think this was a mistake, ping a maintainer here.\n\n"
     "See the [contribution rules](https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#contribution-rules)."
 )
 
 
 def linked_issues(body):
     numbers = []
-    for groups in ISSUE_REFERENCE.findall(body or ""):
-        number = int(next(group for group in groups if group))
-        if number not in numbers:
-            numbers.append(number)
+    for number in ISSUE_LINK.findall(body or ""):
+        if int(number) not in numbers:
+            numbers.append(int(number))
     return numbers[:MAX_ISSUE_REFERENCES]
 
 
@@ -75,23 +84,48 @@ def may_work_on(repo, number, user_id):
     if issue.pull_request is not None or issue.state != "open":
         return False
     labels = {label.name for label in issue.labels}
-    return OPEN_LABEL in labels or (TRIAGED_LABEL in labels and issue.user.id == user_id)
+    return bool(OPEN_LABELS & labels) or (TRIAGED_LABEL in labels and issue.user.id == user_id)
+
+
+def closed_by_us(pr):
+    closer = pr.as_issue().closed_by
+    if closer is None or closer.login != BOT_LOGIN:
+        return False
+    return any(CLOSURE_MARKER in (comment.body or "") for comment in pr.get_issue_comments())
 
 
 def triage(repo, pr, dry_run):
-    if pr.state != "open" or pr.created_at < START_DATE:
+    if pr.created_at < START_DATE or pr.merged:
         return
     if pr.author_association in EXEMPT_ASSOCIATIONS or pr.user.id in ALLOWLIST:
         return
-    if any(label.name == TRIAGED_LABEL for label in pr.labels):
+    labels = {label.name for label in pr.labels}
+    if TRIAGED_LABEL in labels:
         return
 
-    passes = any(may_work_on(repo, number, pr.user.id) for number in linked_issues(pr.body))
-    print(f"{'Would' if dry_run else 'Will'} {'label' if passes else 'close'} PR #{pr.number}")
+    issues = linked_issues(pr.body)
+    standalone = not issues
+    passes = standalone or any(may_work_on(repo, number, pr.user.id) for number in issues)
+
+    if pr.state != "open":
+        # Only undo our own closures, and only once the PR links a qualifying issue. Dropping the link from a closed PR
+        # doesn't reopen it: a PR that fixes an existing issue has to go through that issue.
+        if standalone or not passes or not closed_by_us(pr):
+            return
+        print(f"{'Would' if dry_run else 'Will'} reopen PR #{pr.number}")
+        if not dry_run:
+            pr.edit(state="open")
+    else:
+        action = "label as standalone" if standalone else "pass" if passes else "close"
+        print(f"{'Would' if dry_run else 'Will'} {action} PR #{pr.number}")
     if dry_run:
         return
+
+    if standalone and STANDALONE_LABEL not in labels:
+        pr.add_to_labels(STANDALONE_LABEL)
+    elif not standalone and STANDALONE_LABEL in labels:
+        pr.remove_from_labels(STANDALONE_LABEL)
     if passes:
-        pr.add_to_labels(TRIAGED_LABEL)
         return
     # A PR reopened without a valid link is closed again, but only commented on once
     if not any(CLOSURE_MARKER in (comment.body or "") for comment in pr.get_issue_comments()):
