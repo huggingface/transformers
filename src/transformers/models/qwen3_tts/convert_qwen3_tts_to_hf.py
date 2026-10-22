@@ -44,12 +44,14 @@ import torch
 from safetensors.torch import load_file
 
 from transformers import (
+    AutoConfig,
+    AutoModel,
     AutoTokenizer,
+    PreTrainedConfig,
     Qwen3TTSConfig,
     Qwen3TTSFeatureExtractor,
     Qwen3TTSForConditionalGeneration,
     Qwen3TTSProcessor,
-    Qwen3TTSTokenizerModel,
 )
 
 
@@ -69,7 +71,7 @@ def load_original_checkpoint(checkpoint_path: Path) -> dict[str, torch.Tensor]:
     index_path = checkpoint_path / "model.safetensors.index.json"
     if index_path.exists():
         logger.info(f"Loading sharded checkpoint from {checkpoint_path}")
-        with open(index_path, "r") as f:
+        with open(index_path, "r", encoding="utf-8") as f:
             index = json.load(f)
 
         state_dict = {}
@@ -86,15 +88,15 @@ def load_original_checkpoint(checkpoint_path: Path) -> dict[str, torch.Tensor]:
     )
 
 
-def create_config_from_checkpoint(checkpoint_path: Path) -> Qwen3TTSConfig:
+def create_config_from_checkpoint(checkpoint_path: Path, audio_config: PreTrainedConfig) -> Qwen3TTSConfig:
     """Create HF config from the original checkpoint's config.json."""
     config_path = checkpoint_path / "config.json"
 
     if not config_path.exists():
         logger.warning("No config.json found, using default configuration")
-        return Qwen3TTSConfig()
+        return Qwen3TTSConfig(audio_config=audio_config)
 
-    with open(config_path, "r") as f:
+    with open(config_path, "r", encoding="utf-8") as f:
         original_config = json.load(f)
 
     talker_dict = original_config.get("talker_config", {})
@@ -189,9 +191,9 @@ def create_config_from_checkpoint(checkpoint_path: Path) -> Qwen3TTSConfig:
     speaker_encoder_dict = original_config.get("speaker_encoder_config")
 
     config = Qwen3TTSConfig(
+        audio_config=audio_config,
         talker_config=talker_filtered,
         speaker_encoder_config=speaker_encoder_dict,
-        tokenizer_type=original_config.get("tokenizer_type"),
         tts_model_size=original_config.get("tts_model_size"),
         im_start_token_id=original_config.get("im_start_token_id", 151644),
         im_end_token_id=original_config.get("im_end_token_id", 151645),
@@ -203,7 +205,13 @@ def create_config_from_checkpoint(checkpoint_path: Path) -> Qwen3TTSConfig:
     return config
 
 
-def convert_processor(checkpoint_path: Path, output_path: Path, audio_tokenizer_id: str, push_to_hub: str | None):
+def convert_processor(
+    checkpoint_path: Path,
+    output_path: Path,
+    audio_tokenizer_id: str,
+    audio_config: PreTrainedConfig,
+    push_to_hub: str | None,
+):
     """Build the processor and record which audio tokenizer decodes the codes this model generates.
 
     The tokenizer's weights are not copied into the checkpoint: saving the processor stores only its class
@@ -211,7 +219,7 @@ def convert_processor(checkpoint_path: Path, output_path: Path, audio_tokenizer_
     and `save_audio` have no tokenizer to call.
     """
     logger.info(f"Loading audio tokenizer from {audio_tokenizer_id}")
-    audio_tokenizer = Qwen3TTSTokenizerModel.from_pretrained(audio_tokenizer_id)
+    audio_tokenizer = AutoModel.from_pretrained(audio_tokenizer_id, config=audio_config)
 
     # The original checkpoint carries the padding settings the feature extractor should keep; the rest of its
     # fields fall back to the class defaults.
@@ -232,8 +240,11 @@ def convert_checkpoint(checkpoint_path, output_dir, push_to_hub, bfloat16, max_s
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
+    logger.info(f"Loading audio tokenizer config from {audio_tokenizer_id}")
+    audio_config = AutoConfig.from_pretrained(audio_tokenizer_id)
+
     logger.info("Creating config from checkpoint")
-    config = create_config_from_checkpoint(Path(checkpoint_path))
+    config = create_config_from_checkpoint(Path(checkpoint_path), audio_config=audio_config)
     config.save_pretrained(str(output_path))
 
     logger.info(f"Loading checkpoint from {checkpoint_path}")
@@ -288,7 +299,7 @@ def convert_checkpoint(checkpoint_path, output_dir, push_to_hub, bfloat16, max_s
         logger.info(f"Pushing to Hub: {push_to_hub}")
         model.push_to_hub(push_to_hub, max_shard_size=max_shard_size)
 
-    convert_processor(Path(checkpoint_path), output_path, audio_tokenizer_id, push_to_hub)
+    convert_processor(Path(checkpoint_path), output_path, audio_tokenizer_id, config.audio_config, push_to_hub)
 
     logger.info("Verifying conversion by reloading model")
     del model, converted_state_dict, original_state_dict
