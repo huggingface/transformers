@@ -593,10 +593,10 @@ class PackedRowwiseParallel(TensorParallelLayer):
 
 
 class MoEParamShard(TensorParallelLayer):
-    """Param-only EP style for MoE expert weights (``grouped_gemm``).
+    """Param-only style for stacked MoE expert weights of shape `(num_experts, out_features, in_features)`.
 
-    Shards dim 0 and updates module.num_experts to the per-rank local count so the
-    experts forward and ep_router sentinel agree.
+    `grouped_gemm` gives each rank whole experts and updates `module.num_experts` to the local count.
+    The `moe_experts_*` styles split every expert across the ranks instead.
     """
 
     def __init__(self, placement, *, shards_expert_dim: bool = False):
@@ -607,6 +607,11 @@ class MoEParamShard(TensorParallelLayer):
         meta = module._parameters.get(param)
         if meta is None:
             return
+        if not self.shards_expert_dim and getattr(module, "has_post_expert_norm", False):
+            raise ValueError(
+                f"{type(module).__name__} normalizes each expert's whole output rows, so its experts can only be "
+                "sharded whole (`grouped_gemm`), not within an expert."
+            )
         if self.shards_expert_dim and hasattr(module, "num_experts"):
             global_num_experts = meta.shape[0]
             expert_parallel_size = mesh.size()
@@ -1018,6 +1023,10 @@ class ParallelInterface(GeneralInterface):
             "packed_rowwise": PackedRowwiseParallel(),
             "sequence_parallel": SequenceParallel(use_local_output=True),
             "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
+            # Split within each expert
+            "moe_experts_colwise": MoEParamShard(Shard(1)),
+            "moe_experts_packed_colwise": MoEParamShard(_StridedShard(dim=1, split_factor=2)),
+            "moe_experts_rowwise": MoEParamShard(Shard(2)),
             "ep_router": EpRouterParallel(),
             "ep_dispatch_experts": EpDispatchExpertsParallel(),
             "megamoe_router": RouterParallelMegaMoe(),

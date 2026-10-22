@@ -22,6 +22,7 @@ from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, torch_device
+from transformers.utils.quantization_config import NVFP4Config
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import floats_tensor
@@ -35,7 +36,6 @@ if is_torch_available():
     from transformers import (
         AutoModelForCausalLM,
         DynamicCache,
-        FineGrainedFP8Config,
         Qwen4ExpConfig,
         Qwen4ExpForCausalLM,
         Qwen4ExpForConditionalGeneration,
@@ -46,8 +46,10 @@ if is_torch_available():
         StaticCache,
     )
     from transformers.distributed.fsdp import verify_fsdp_plan
-    from transformers.integrations import FP8Embedding
-    from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
+    from transformers.integrations.finegrained import FineGrainedEmbedding
+    from transformers.quantizers.auto import AutoHfQuantizer, AutoQuantizationConfig
+    from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+    from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config
 
 
 class Qwen4ExpTextModelTester(CausalLMModelTester):
@@ -192,18 +194,6 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
                 layer_types=["linear_attention", "indexed_attention"],
             )
 
-    def test_finegrained_fp8_embedding_conversion(self):
-        config = self.model_tester.get_config()
-        with torch.device("meta"):
-            model = Qwen4ExpForCausalLM(config)
-
-        quantization_config = FineGrainedFP8Config(
-            modules_to_convert=["ple.ple_embedding.ngram_embedding"], modules_to_not_convert=[]
-        )
-        FineGrainedFP8HfQuantizer(quantization_config).preprocess_model(model)
-
-        self.assertIsInstance(model.model.layers[0].ple.ple_embedding.ngram_embedding, FP8Embedding)
-
     def test_ple_padding_and_static_cache_match_unpadded_sequence(self):
         torch.manual_seed(0)
         config = self.model_tester.get_config()
@@ -329,6 +319,46 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
                 do_sample=False,
             )
         torch.testing.assert_close(actual, expected[:, input_ids.shape[1] :])
+
+    def test_finegrained_embedding_conversion(self):
+        """Check that the n-gram table is held as FP8 rows with one per-tensor scale."""
+        config = self.model_tester.get_config()
+        with torch.device("meta"):
+            model = Qwen4ExpForCausalLM(config)
+
+        # an FP8 checkpoint names the table with `modules_to_convert`, which the reader turns into a plan entry
+        quantization_config = AutoQuantizationConfig.from_dict(
+            {"quant_method": "fp8", "modules_to_convert": ["ple.ple_embedding.ngram_embedding"]}
+        )
+        quantizer = AutoHfQuantizer.from_config(quantization_config)
+        quantizer.pre_quantized = True
+        quantizer.preprocess_model(model)
+
+        table = model.model.layers[0].ple.ple_embedding.ngram_embedding
+        self.assertIsInstance(table, FineGrainedEmbedding)
+        self.assertEqual(table.weight.dtype, torch.float8_e4m3fn)
+        self.assertEqual(table.weight_scale.shape, torch.Size([1]))
+
+    def test_a_table_beside_another_format_is_held_in_fp8(self):
+        """Check that a plan entry keeps an embedding table in FP8 next to NVFP4 linears.
+
+        Embedding tables only exist in per-tensor FP8, so the table stays FP8 under an NVFP4 plan.
+        """
+        config = self.model_tester.get_config()
+        with torch.device("meta"):
+            model = Qwen4ExpForCausalLM(config)
+
+        quantizer = FineGrainedHfQuantizer(
+            FineGrainedConfig(
+                dtype_plan={
+                    "ple.ple_embedding.ngram_embedding$": Fp8Config(weight_block_size=None),
+                    ".*": NVFP4Config(),
+                },
+            )
+        )
+        quantizer.pre_quantized = True
+        quantizer.preprocess_model(model)
+        self.assertEqual(model.model.layers[0].ple.ple_embedding.ngram_embedding.weight.dtype, torch.float8_e4m3fn)
 
 
 class Qwen4ExpVisionText2TextModelTester(VLMModelTester):

@@ -11,13 +11,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import re
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin, QuantizationMethod
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import checkpoint_module_namer, get_module_from_name, should_convert_module
 
 
 if TYPE_CHECKING:
@@ -82,9 +83,23 @@ class HfQuantizer(ABC):
             The quantization config that defines the quantization parameters of your model that you want to quantize.
         requires_calibration (`bool`):
             Whether the quantization method requires to calibrate the model before using it.
+        dequantized_saves_unquantized (`bool`):
+            Whether a model loaded with `dequantize=True` saves like an unquantized model. The save then uses only
+            the model's own conversions, not the quantizer's. It is off by default, so the other quantizers keep
+            their current save.
+        skip_list_attribute (`str`):
+            The config field that holds this method's skip-list. [`FineGrainedHfQuantizer`] writes the modules a
+            member must leave there, on the member's own copy of its config.
+        dtype_plan_targets (`list[str]`):
+            Set by [`FineGrainedHfQuantizer`] on its members. They are the patterns of this quantizer's entries that
+            name modules, so not the `".*"` catch-all. A quantizer that skips some modules by default, such as
+            embeddings, converts the ones they name.
     """
 
     requires_calibration = False
+    dequantized_saves_unquantized = False
+    skip_list_attribute = "modules_to_not_convert"
+    dtype_plan_targets: tuple[str, ...] = ()
 
     def __init__(self, quantization_config: QuantizationConfigMixin, **kwargs):
         self.quantization_config = quantization_config
@@ -167,12 +182,15 @@ class HfQuantizer(ABC):
         """
         Updates in place `model.tp_plan` or `model.ep_plan` (the full plans, merged from the config and all
         sub-configs) to take into account the quantizer's custom keys like 'inv_scale'"""
-        from ..distributed.tensor_parallel import replace_layer_number_by_wildcard
+        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
 
         params = {replace_layer_number_by_wildcard(name) for name, _ in model.named_parameters()}
         suffixes = {n.removeprefix(p) for p, names in self.serialized_names.items() for n in names}
         extra = {key + suffix: style for key, style in plan.items() for suffix in suffixes}
         plan.update({key: style for key, style in extra.items() if key in params and key not in plan})
+        # A scalar has no axis to shard, e.g. a per-tensor FP8 `activation_scale`
+        scalars = {replace_layer_number_by_wildcard(n) for n, p in model.named_parameters() if p.ndim == 0}
+        plan.update({name: "replicate" for name in scalars if _get_parameter_plan(name, plan) is not None})
 
     def update_attn_implementation(self, config):
         """Sees the requested `attn_implementation` before the model is built, so a quantizer can default it."""
@@ -219,6 +237,13 @@ class HfQuantizer(ABC):
 
         if self.pre_quantized and getattr(self.quantization_config, "dequantize", False):
             self.remove_quantization_config(model)
+            conversions = getattr(model, "_weight_conversions", None)
+            if self.dequantized_saves_unquantized and conversions is not None:
+                # The loader kept the transforms that fired. Swap each for the model transform it derives from.
+                fired = (conversion._unquantized_transform for conversion in conversions)
+                unquantized = list({id(transform): transform for transform in fired if transform is not None}.values())
+                # a plain attribute, not the tensor or module `nn.Module.__setattr__` is typed for
+                setattr(model, "_weight_conversions", unquantized)
         else:
             _assign_is_quantized(model)
 
@@ -267,8 +292,19 @@ class HfQuantizer(ABC):
         else:
             modules_to_not_convert = []
 
-        if skip_modules is not None:
+        if skip_modules:
             modules_to_not_convert.extend(skip_modules)
+            # The skip-list uses checkpoint names, e.g. a VLM's `language_model.model.*` that loads as
+            # `model.language_model.*`. So also add the modules it covers under their model names.
+            to_checkpoint = checkpoint_module_namer(model)
+            renamed = []
+            for module_name, _ in model.named_modules():
+                if any(module_name.startswith(f"{parent}.") for parent in renamed):
+                    continue
+                checkpoint_name = to_checkpoint(module_name)
+                if checkpoint_name != module_name and not should_convert_module(checkpoint_name, skip_modules):
+                    renamed.append(module_name)
+            modules_to_not_convert.extend(renamed)
 
         if keep_in_fp32_modules is not None:
             modules_to_not_convert.extend(keep_in_fp32_modules)
@@ -328,8 +364,11 @@ class HfQuantizer(ABC):
         """
         return {}
 
-    def get_weight_conversions(self):
-        "Return the loading to perform on any parameter that is not matched by the model's converters"
+    def get_weight_conversions(self, model=None):
+        """Return the loading to perform on any parameter that is not matched by the model's converters.
+
+        `model` is the model being loaded, with its modules already replaced.
+        """
         from ..core_model_loading import WeightConverter
 
         mode = "dequantize" if getattr(self.quantization_config, "dequantize", False) else "deserialize"
@@ -337,6 +376,13 @@ class HfQuantizer(ABC):
         if operation is None:
             return []
         return [WeightConverter(names, param, [operation(self)]) for param, names in self.serialized_names.items()]
+
+    def get_checkpoint_renamings(self):
+        """Return renamings of the checkpoint keys, applied before the model's conversion mapping.
+
+        Use it when a producer names a tensor its own way, e.g. a block scale saved as `scale`.
+        """
+        return []
 
     def update_weight_conversions(self, weight_conversions, model):
         """
@@ -346,6 +392,13 @@ class HfQuantizer(ABC):
         - otherwise the converter also collects `experts.*.gate_proj.weight_scale_inv`, the dequantize op runs first
         """
         from ..core_model_loading import WeightConverter
+
+        dequantized = self.pre_quantized and getattr(self.quantization_config, "dequantize", False)
+        if dequantized and self.dequantized_saves_unquantized:
+            # Keep the model's own transforms, so a dequantized model saves like an unquantized one.
+            # Copy them, as the quantizer and the loader mutate the live transforms.
+            for conversion in weight_conversions:
+                conversion._unquantized_transform = copy.deepcopy(conversion)
 
         param_names = "\n".join(name for name, _ in model.named_parameters())
         dequantize = self.get_load_operations().get("dequantize") if self.pre_quantized else None
@@ -375,7 +428,7 @@ class HfQuantizer(ABC):
                 updated[-1] = converter.copy(
                     all_sources, targets, operations=[dequantize(self)] + converter.operations
                 )
-        return updated + self.get_weight_conversions()
+        return self.get_checkpoint_renamings() + updated + self.get_weight_conversions(model)
 
 
 class SequentialLlama4TextExperts(ModuleList):

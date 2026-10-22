@@ -70,14 +70,6 @@ Learn how to quantize models in the [Quantization](../quantization/overview) gui
 
 [[autodoc]] MetalConfig
 
-## Mxfp4Config
-
-[[autodoc]] Mxfp4Config
-
-## NVFP4Config
-
-[[autodoc]] NVFP4Config
-
 ## FbgemmFp8Config
 
 [[autodoc]] FbgemmFp8Config
@@ -98,7 +90,38 @@ Learn how to quantize models in the [Quantization](../quantization/overview) gui
 
 [[autodoc]] SpQRConfig
 
+## BlockScaledConfig
+
+The base class of the block-scaled format configs below. Build one of those configs instead.
+
+[[autodoc]] BlockScaledConfig
+
+## Fp8Config
+
+[[autodoc]] Fp8Config
+
+## Mxfp8Config
+
+[[autodoc]] Mxfp8Config
+
+## Mxfp4Config
+
+[[autodoc]] Mxfp4Config
+
+## NVFP4Config
+
+[[autodoc]] NVFP4Config
+
+## FineGrainedConfig
+
+[[autodoc]] FineGrainedConfig
+
 ## FineGrainedFP8Config
+
+> [!WARNING]
+> `FineGrainedFP8Config` is deprecated and will be removed in a future release. Use [`Fp8Config`] instead. Use
+> [`Mxfp8Config`] for a `[1, 32]` block with UE8M0 scales. See
+> [Migrating from FineGrainedFP8Config](../quantization/fp8#migrating-from-finegrainedfp8config).
 
 [[autodoc]] FineGrainedFP8Config
 

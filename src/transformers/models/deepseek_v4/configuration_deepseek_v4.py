@@ -309,5 +309,19 @@ class DeepseekV4Config(PreTrainedConfig):
                 compress.setdefault("attention_factor", 1.0)
             self.rope_parameters = {"main": main, "compress": compress}
 
+        # DeepSeek's checkpoints name their block scales `scale`, and V4 marks its FP4 experts on the model config.
+        # Both describe the quantization, so they move into its config, where the `fp8` reader sees them.
+        # A config transformers saved names its own layout, so it is left as saved.
+        quantization_config = getattr(self, "quantization_config", None)
+        if (
+            isinstance(quantization_config, dict)
+            and quantization_config.get("quant_method") == "fp8"
+            and "checkpoint_format" not in quantization_config
+        ):
+            moved = {"checkpoint_format": "deepseek"}
+            if getattr(self, "expert_dtype", None) is not None:
+                moved["expert_dtype"] = self.expert_dtype
+            self.quantization_config = {**moved, **quantization_config}
+
 
 __all__ = ["DeepseekV4Config"]

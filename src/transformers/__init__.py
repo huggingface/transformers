@@ -232,11 +232,14 @@ _import_structure = {
         "AwqConfig",
         "BitNetQuantConfig",
         "BitsAndBytesConfig",
+        "BlockScaledConfig",
         "CompressedTensorsConfig",
         "EetqConfig",
         "FbgemmFp8Config",
+        "FineGrainedConfig",
         "FineGrainedFP8Config",
         "FourOverSixConfig",
+        "Fp8Config",
         "FPQuantConfig",
         "GemmaQuantizationConfig",
         "GgufConfig",
@@ -245,6 +248,7 @@ _import_structure = {
         "HqqConfig",
         "MetalConfig",
         "Mxfp4Config",
+        "Mxfp8Config",
         "NVFP4Config",
         "QuantoConfig",
         "QuarkConfig",
@@ -733,11 +737,14 @@ if TYPE_CHECKING:
     from .utils.quantization_config import AwqConfig as AwqConfig
     from .utils.quantization_config import BitNetQuantConfig as BitNetQuantConfig
     from .utils.quantization_config import BitsAndBytesConfig as BitsAndBytesConfig
+    from .utils.quantization_config import BlockScaledConfig as BlockScaledConfig
     from .utils.quantization_config import CompressedTensorsConfig as CompressedTensorsConfig
     from .utils.quantization_config import EetqConfig as EetqConfig
     from .utils.quantization_config import FbgemmFp8Config as FbgemmFp8Config
+    from .utils.quantization_config import FineGrainedConfig as FineGrainedConfig
     from .utils.quantization_config import FineGrainedFP8Config as FineGrainedFP8Config
     from .utils.quantization_config import FourOverSixConfig as FourOverSixConfig
+    from .utils.quantization_config import Fp8Config as Fp8Config
     from .utils.quantization_config import FPQuantConfig as FPQuantConfig
     from .utils.quantization_config import GemmaQuantizationConfig as GemmaQuantizationConfig
     from .utils.quantization_config import GgufConfig as GgufConfig
@@ -745,6 +752,8 @@ if TYPE_CHECKING:
     from .utils.quantization_config import HiggsConfig as HiggsConfig
     from .utils.quantization_config import HqqConfig as HqqConfig
     from .utils.quantization_config import MetalConfig as MetalConfig
+    from .utils.quantization_config import Mxfp4Config as Mxfp4Config
+    from .utils.quantization_config import Mxfp8Config as Mxfp8Config
     from .utils.quantization_config import NVFP4Config as NVFP4Config
     from .utils.quantization_config import QuantoConfig as QuantoConfig
     from .utils.quantization_config import QuarkConfig as QuarkConfig

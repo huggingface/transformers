@@ -25,7 +25,7 @@ import unittest
 import torch
 
 from transformers.activations import ACT2FN
-from transformers.integrations.moe import batched_mm_experts_forward
+from transformers.integrations.moe import batched_mm_experts_forward, use_experts_implementation
 from transformers.testing_utils import require_torch, torch_device
 
 
@@ -90,3 +90,48 @@ class BatchedMmExpertsForwardTest(unittest.TestCase):
         moved = self.top_k_index.masked_fill(self.top_k_index >= NUM_EXPERTS, NUM_EXPERTS + 1)
         out_moved = batched_mm_experts_forward(self.experts, self.hidden_states, moved, self._weights())
         torch.testing.assert_close(out, out_moved)
+
+
+@require_torch
+class UseExpertsImplementationTest(unittest.TestCase):
+    """Check that the class body and the instance can override the layout flags of the decorator."""
+
+    def test_flags_set_by_the_class_or_the_instance_are_kept(self):
+        @use_experts_implementation(has_bias=True, is_transposed=True)
+        class Experts(torch.nn.Module):
+            is_transposed = False  # the class body wins over the decorator
+
+            def __init__(self, config, has_gate=True):
+                super().__init__()
+                self.has_gate = has_gate  # the instance wins over the class default
+
+            def forward(self, hidden_states, top_k_index, top_k_weights):
+                return hidden_states
+
+        config = types.SimpleNamespace(_experts_implementation="eager")
+        experts = Experts(config, has_gate=False)
+        self.assertEqual((experts.has_gate, experts.has_bias, experts.is_transposed), (False, True, False))
+        self.assertEqual((experts.is_concatenated, experts.has_post_expert_norm), (True, False))
+        self.assertIs(experts.config, config)
+        self.assertTrue(Experts(config).has_gate)
+
+
+@require_torch
+class LoadTimeOnlyExpertsTest(unittest.TestCase):
+    """Check the experts implementations that `ExpertsInterface._load_time_only` names."""
+
+    def test_a_load_time_implementation_cannot_be_switched_to(self):
+        from transformers import MixtralConfig, MixtralForCausalLM
+
+        config = MixtralConfig(
+            vocab_size=32,
+            hidden_size=16,
+            intermediate_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            num_local_experts=2,
+        )
+        model = MixtralForCausalLM(config)
+        with self.assertRaisesRegex(RuntimeError, "load-time choice"):
+            model.set_experts_implementation("deepgemm_megamoe")

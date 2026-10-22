@@ -28,9 +28,8 @@ Two layers, both mocking only what needs a Hopper/Blackwell GPU + a JIT CUDA too
   (packed int32 UE8M0 SFs, int32 grouped layout, `(qtensor, sf)` operand tuples, recipes, transformed
   Mega MoE weights, ...).
 
-Arch-gated paths are exercised by faking the device capability (`is_sm100()` reads it): the
-SF-packing / TMA-alignment / psum-layout code it selects is pure tensor arithmetic, so mocking the
-capability to SM100 drives the Blackwell paths on any device.
+Arch-gated paths run by faking the device. `is_sm100()` reads CUDA availability, then the capability.
+The code it selects is pure tensor arithmetic. So faking a Blackwell device drives those paths on any runner.
 """
 
 import contextlib
@@ -43,21 +42,27 @@ from unittest import mock
 
 import torch
 from parameterized import parameterized
-from test_utils import make_experts, make_fp8_experts
 
 import transformers.integrations.deepgemm as dg
-from transformers.distributed.utils import is_dtensor
+import transformers.integrations.finegrained.layers as fg
 from transformers.integrations.deepgemm import (
     deepgemm_bf16_experts_forward,
     deepgemm_fp8_fp4_experts_forward,
     deepgemm_fp8_fp4_linear,
     deepgemm_fp8_fp4_megamoe_experts_forward,
 )
+from transformers.integrations.finegrained import FineGrainedLinear
 from transformers.testing_utils import (
     require_torch,
+    require_torch_gpu,
     require_torch_greater_or_equal,
+    require_torch_multi_gpu,
     torch_device,
 )
+from transformers.utils.quantization_config import Fp8Config, Mxfp4Config
+
+from ..integrations.finegrained.utils import _Cfg, fake_finegrained_kernel, patch_finegrained_kernel
+from .test_utils import make_experts, make_fp8_experts
 
 
 def _add_one(x, *args, **kwargs):
@@ -231,11 +236,10 @@ class DeepGemmLoaderTest(unittest.TestCase):
         run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
 
     def test_to_local_is_compile_safe(self):
-        # Regression guard: every experts forward here unwraps its weights through `to_local`, so it runs
-        # inside the traced region. It calls `is_dtensor`, whose torch-distributed availability check must
-        # therefore fold to a constant instead of being traced — its body reaches `importlib.metadata`,
-        # which dynamo cannot follow (and follows differently across Python versions). `@lru_cache` is no
-        # protection: dynamo steps past cache wrappers, so the marker has to sit on the wrapped function.
+        # Every experts forward unwraps its weights through `to_local`, inside the traced region.
+        # So the distributed availability check in `is_dtensor` must fold to a constant.
+        from transformers.distributed.utils import is_dtensor
+
         torch.compiler.reset()
 
         @torch.compile(fullgraph=True)
@@ -244,6 +248,13 @@ class DeepGemmLoaderTest(unittest.TestCase):
 
         out = run(torch.zeros(3, device=torch_device))  # a graph break / traced probe would raise here
         self.assertTrue(torch.equal(out, torch.ones(3, device=torch_device)))
+
+    def test_uint8_scale_containers_use_exponents_on_both_architectures(self):
+        scales = torch.tensor([[126, 127, 128, 129]], dtype=torch.uint8).repeat(2, 1)
+        hopper = dg._coerce_sf_for_kernel(scales, is_sm100=False)
+        torch.testing.assert_close(hopper, torch.tensor([[0.5, 1.0, 2.0, 4.0]]).repeat(2, 1))
+        blackwell = dg._coerce_sf_for_kernel(scales, is_sm100=True)
+        torch.testing.assert_close(blackwell, scales.view(torch.int32))
 
 
 # ── Capturing fake DeepGEMM bundle ─────────────────────────────────────────────
@@ -361,12 +372,12 @@ class DeepGemmForwardTest(unittest.TestCase):
     def _bundle(self, *, is_sm100):
         captured = {}
         bundle = _make_bundle(captured)
-        # The forwards read the arch via `is_sm100()` (which queries `get_device_capability`), so fake the
-        # device to the requested arch: lets SM100 dispatch/packing run on this SM80 box and drives the
-        # Hopper-rejection guards. `[0]` is all `is_sm100()` reads.
+        # The forwards read the arch through `is_sm100()`, which checks CUDA availability first.
+        # Fake both so the arch-gated branches also run on a CPU-only runner.
         capability = (10, 0) if is_sm100 else (9, 0)
         with (
             mock.patch.object(dg, "load_deepgemm_kernel", return_value=bundle),
+            mock.patch.object(torch.cuda, "is_available", return_value=True),
             mock.patch.object(torch.cuda, "get_device_capability", return_value=capability),
         ):
             yield captured
@@ -431,11 +442,12 @@ class DeepGemmForwardTest(unittest.TestCase):
         int8_w = torch.zeros(1, 1, dtype=torch.int8, device=torch_device)
         f32_sf = torch.ones(1, 1, dtype=torch.float32, device=torch_device)
         ue8m0_sf = f32_sf.to(torch.float8_e8m0fnu)
-        with mock.patch.object(torch.cuda, "get_device_capability", return_value=(9, 0)):  # SM90
+        available = mock.patch.object(torch.cuda, "is_available", return_value=True)
+        with available, mock.patch.object(torch.cuda, "get_device_capability", return_value=(9, 0)):  # SM90
             with self.assertRaisesRegex(NotImplementedError, "Blackwell"):
                 dg._assert_sm100_requirements(int8_w, ue8m0_sf)  # FP4 has no Hopper kernel
             dg._assert_sm100_requirements(fp8_w, f32_sf)  # float32 SF is fine on SM90 -> no raise
-        with mock.patch.object(torch.cuda, "get_device_capability", return_value=(10, 0)):  # SM100
+        with available, mock.patch.object(torch.cuda, "get_device_capability", return_value=(10, 0)):  # SM100
             with self.assertRaisesRegex(NotImplementedError, "float32 scale-factor path"):
                 dg._assert_sm100_requirements(fp8_w, f32_sf)  # no float32 SF path on Blackwell
             dg._assert_sm100_requirements(int8_w, ue8m0_sf)  # UE8M0 on SM100 -> no raise
@@ -580,6 +592,7 @@ class DeepGemmForwardTest(unittest.TestCase):
                 requires_grad=False,
             ),
             config=types.SimpleNamespace(swiglu_limit=swiglu_limit),
+            has_post_expert_norm=False,
         )
 
     @require_torch_greater_or_equal("2.7")  # torch.float8_e8m0fnu (UE8M0) landed in 2.7
@@ -658,3 +671,224 @@ class DeepGemmForwardTest(unittest.TestCase):
     @staticmethod
     def _megamoe_flag_set(module):
         return getattr(module, "_megamoe_transformed", False)
+
+    def test_every_arm_refuses_hidden_states_that_are_not_bfloat16(self):
+        """Each arm builds its output in bfloat16. Other hidden states would change the returned dtype."""
+
+        class _Experts(torch.nn.Module):
+            activation_scheme = "dynamic"
+
+        arms = (
+            dg.deepgemm_bf16_experts_forward,
+            dg.deepgemm_fp8_fp4_experts_forward,
+            dg.deepgemm_fp8_fp4_megamoe_experts_forward,
+        )
+        for forward in arms:
+            with self.subTest(forward=forward.__name__), self.assertRaises(ValueError) as caught:
+                forward(_Experts(), torch.zeros(2, 4, dtype=torch.float16), None, None)
+            self.assertIn("bfloat16", str(caught.exception))
+
+    def test_megamoe_refuses_a_post_expert_norm(self):
+        """Mega MoE fuses the weighted reduce, so it cannot apply a per-expert output norm."""
+        module = torch.nn.Module()
+        module.has_post_expert_norm = True
+        with self.assertRaises(NotImplementedError):
+            dg._assert_no_post_expert_norm(module)
+
+    def test_bf16_experts_apply_the_post_expert_norm(self):
+        experts = make_experts(num_experts=4, hidden=8, inter=16)
+        normalized = []
+        experts.has_post_expert_norm = True
+        experts.post_expert_norm = lambda out: normalized.append(out.shape) or out + 1
+        hidden_states, top_k_index, top_k_weights = self._bf16_hidden(experts)
+        with self._bundle(is_sm100=False):
+            output = deepgemm_bf16_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
+        self.assertEqual(len(normalized), 1)
+        # The fake matmuls write zeros, so each token sums its routing weights
+        expected = top_k_weights.float().sum(dim=-1, keepdim=True).expand_as(output)
+        torch.testing.assert_close(output.float(), expected, rtol=1e-2, atol=1e-2)
+
+    def test_experts_run_in_eval_mode_and_refuse_training(self):
+        """Inputs require grad after `from_pretrained`, so only training mode may refuse them."""
+        arms = (
+            (deepgemm_bf16_experts_forward, make_experts),
+            (deepgemm_fp8_fp4_experts_forward, make_fp8_experts),
+        )
+        for forward, make in arms:
+            experts = make(num_experts=4, hidden=8, inter=16)
+            hidden_states, top_k_index, top_k_weights = self._bf16_hidden(experts)
+            hidden_states.requires_grad_()
+            with self.subTest(forward=forward.__name__), self._bundle(is_sm100=False) as captured:
+                experts.training = False
+                forward(experts, hidden_states, top_k_index, top_k_weights)
+                self.assertEqual(len(captured["grouped"]), 2)
+
+                experts.training = True
+                with self.assertRaises(NotImplementedError):
+                    forward(experts, hidden_states, top_k_index, top_k_weights)
+
+    def test_fp8_experts_refuse_the_triton_layout(self):
+        """Experts holding gate|up interleaved or swizzled scales for the Triton kernels point to them."""
+        hidden_states, top_k_index, top_k_weights = self._fp8_hidden()
+        for layout in ("interleaved", "swizzled"):
+            experts = make_fp8_experts(num_experts=4, hidden=8, inter=16)
+            if layout == "interleaved":
+                experts.holds_interleaved_gate_up = True
+            else:
+                experts.down_proj_scale_inv = torch.nn.Parameter(torch.ones(4, 1, 1, 2, 256), requires_grad=False)
+            with self.subTest(layout=layout), self._bundle(is_sm100=True):
+                with self.assertRaisesRegex(NotImplementedError, "grouped_mm"):
+                    deepgemm_fp8_fp4_experts_forward(experts, hidden_states, top_k_index, top_k_weights)
+
+    def test_linear_refuses_static_activations_and_gradients(self):
+        """DeepGEMM quantizes the activations per token itself and has no backward pass."""
+        weight = torch.randn(256, 128, device=torch_device).to(torch.float8_e4m3fn)
+        weight_scale = torch.ones(2, 1, dtype=torch.float32, device=torch_device)
+        for case, needs_grad, kwargs in (
+            ("static_activation_scale", False, {"activation_scale": torch.ones(1, device=torch_device)}),
+            ("gradient", True, {}),
+        ):
+            input = torch.randn(4, 128, dtype=torch.bfloat16, device=torch_device, requires_grad=needs_grad)
+            with self.subTest(case), self._bundle(is_sm100=False), self.assertRaises(NotImplementedError):
+                deepgemm_fp8_fp4_linear(input, weight, weight_scale, block_size=(128, 128), **kwargs)
+
+
+@require_torch
+class DeepGemmFineGrainedDispatchTest(unittest.TestCase):
+    """Check the two gates of `prefers_deepgemm_linear`.
+
+    The correctness gate refuses swizzled scales. The perf gate refuses SM100.
+    """
+
+    def _routed_to(self, *, sm100, scale_ndim, trains=False, fp4=False, input_dtype=torch.bfloat16):
+        """Return the backend a block-FP8 or FP4 linear reaches."""
+        kernel, _ = fake_finegrained_kernel()
+        w = torch.randint(-8, 8, (32, 32), dtype=torch.int8) if fp4 else torch.randn(32, 64).to(torch.float8_e4m3fn)
+        s = torch.randn(*([1, 1, 1, 1, 1][:scale_ndim] if scale_ndim > 2 else [1, 1]))
+        with (
+            patch_finegrained_kernel(kernel),
+            mock.patch.object(dg, "is_deepgemm_loadable", return_value=True),
+            mock.patch.object(dg, "is_sm100", return_value=sm100),
+            mock.patch.object(fg, "deepgemm_fp8_fp4_linear") as deepgemm_linear,
+        ):
+            x = torch.randn(4, 64, dtype=input_dtype, requires_grad=trains)
+            fg.finegrained_linear(x, w, s, block_size=[128, 128])
+        return "deepgemm" if deepgemm_linear.called else "triton"
+
+    @parameterized.expand(
+        [
+            ("sm100_never_prefers_deepgemm", {"sm100": True}, "triton"),
+            ("pre_sm100_uses_deepgemm", {}, "deepgemm"),
+            # DeepGEMM has no backward pass
+            ("a_call_needing_a_gradient", {"trains": True}, "triton"),
+            # DeepGEMM FP4 needs SM100 and its linear takes half-precision inputs only
+            ("fp4_before_sm100", {"fp4": True}, "triton"),
+            ("full_precision_input", {"input_dtype": torch.float32}, "triton"),
+            # The correctness gate holds on any arch
+            ("swizzled_scales", {"scale_ndim": 5}, "triton"),
+        ]
+    )
+    def test_routing(self, _, kwargs, backend):
+        self.assertEqual(self._routed_to(**{"sm100": False, "scale_ndim": 2, **kwargs}), backend)
+
+    def test_deepgemm_refuses_a_call_that_needs_a_gradient(self):
+        """DeepGEMM has no backward pass. Every entry point refuses such a call before loading the kernel."""
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size = 256, 128
+        experts = fg.FineGrainedExperts(cfg, quantization_config=Fp8Config(weight_block_size=(128, 128)))
+        experts._deepgemm_disabled = False
+        hs = torch.randn(2, 256, dtype=torch.bfloat16, requires_grad=True)
+        routing = torch.zeros(2, 2, dtype=torch.long), torch.ones(2, 2)
+        w, s = torch.randn(32, 256).to(torch.float8_e4m3fn), torch.ones(1, 2)
+        calls = [
+            lambda: deepgemm_fp8_fp4_linear(hs, w, s, block_size=(128, 128)),
+            lambda: deepgemm_fp8_fp4_experts_forward(experts, hs, *routing),
+            lambda: deepgemm_fp8_fp4_megamoe_experts_forward(experts, hs, *routing),
+        ]
+        with mock.patch.object(dg, "load_deepgemm_kernel") as load:
+            for call in calls:
+                with self.assertRaises(NotImplementedError):
+                    call()
+        load.assert_not_called()
+
+
+class DeepGemmMultiDeviceTest(unittest.TestCase):
+    """Check that DeepGEMM is disabled only when the model spans several devices.
+
+    DeepGEMM kernels are bound to one CUDA context.
+    """
+
+    @staticmethod
+    def _linear(device):
+        return FineGrainedLinear(256, 256, quantization_config=Fp8Config()).to(device)
+
+    @require_torch_multi_gpu
+    def test_multi_device_disables_deepgemm(self):
+        model = torch.nn.Module()
+        model.a = self._linear("cuda:0")
+        model.b = self._linear("cuda:1")
+        fg.disable_deepgemm_on_multi_device(model)
+        self.assertTrue(model.a._deepgemm_disabled)
+        self.assertTrue(model.b._deepgemm_disabled)
+
+    @require_torch_gpu
+    def test_single_device_keeps_deepgemm(self):
+        model = torch.nn.Module()
+        model.a = self._linear("cuda:0")
+        model.b = self._linear("cuda:0")
+        fg.disable_deepgemm_on_multi_device(model)
+        self.assertFalse(model.a._deepgemm_disabled)
+        self.assertFalse(model.b._deepgemm_disabled)
+
+
+@require_torch
+class DeepGemmQuantizedExpertsOperandsTest(unittest.TestCase):
+    """Check that the quantized DeepGEMM arms refuse operands they would silently drop."""
+
+    def _experts(self, quantization_config, impl="deepgemm", **kwargs):
+        cfg = _Cfg()
+        cfg.hidden_size, cfg.intermediate_size, cfg._experts_implementation = 256, 256, impl
+        return fg.FineGrainedExperts(cfg, quantization_config=quantization_config, **kwargs)
+
+    def _assert_refused(self, experts, message):
+        hidden = torch.randn(2, 256, dtype=torch.bfloat16)
+        routing = torch.zeros(2, 2, dtype=torch.long), torch.ones(2, 2)
+        with mock.patch.object(dg, "load_deepgemm_kernel") as load:
+            for forward in (deepgemm_fp8_fp4_experts_forward, deepgemm_fp8_fp4_megamoe_experts_forward):
+                with self.subTest(forward=forward.__name__), self.assertRaisesRegex(NotImplementedError, message):
+                    forward(experts, hidden, *routing)
+        load.assert_not_called()
+
+    def test_operands_the_kernels_would_drop_are_refused(self):
+        from transformers.utils.quantization_config import Mxfp4Config, NVFP4Config
+
+        for experts, message in (
+            (self._experts(Fp8Config(weight_block_size=(128, 128)), has_bias=True), "bias"),
+            (self._experts(NVFP4Config()), "NVFP4"),
+            (self._experts(Mxfp4Config(activation_format="bf16")), "weight-only"),
+        ):
+            with self.subTest(message=message):
+                self._assert_refused(experts, message)
+
+    def test_a_layout_loaded_for_triton_is_refused(self):
+        """Check that DeepGEMM's grouped experts refuse weights held for the Triton kernels.
+
+        On SM100 gate and up are interleaved. For MX with quantized activations the scales are also swizzled.
+        """
+        with (
+            mock.patch.object(fg, "is_sm100", return_value=True),
+            mock.patch("torch.cuda.is_available", return_value=True),
+        ):
+            modules = [self._experts(Fp8Config(weight_block_size=(128, 128)), impl="grouped_mm")]
+            modules += [
+                self._experts(Mxfp4Config(activation_format=None), impl="grouped_mm", has_gate=has_gate)
+                for has_gate in (True, False)
+            ]
+        self.assertTrue(modules[0].holds_interleaved_gate_up)
+        self.assertEqual([m.down_proj_scale_inv.ndim for m in modules[1:]], [5, 5])
+        hidden = torch.randn(2, 256, dtype=torch.bfloat16)
+        routing = torch.zeros(2, 2, dtype=torch.long), torch.ones(2, 2)
+        for index, experts in enumerate(modules):
+            with self.subTest(module=index), mock.patch.object(dg, "load_deepgemm_kernel"):
+                with self.assertRaisesRegex(NotImplementedError, "Triton kernels"):
+                    deepgemm_fp8_fp4_experts_forward(experts, hidden, *routing)

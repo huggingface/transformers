@@ -51,7 +51,7 @@ Optimized kernels are downloaded from the Hub when [kernels](https://github.com/
 | Variable | Values | Description |
 |---|---|---|
 | `USE_HUB_KERNELS` | boolean, enabled by default | Set to a false value to fall back to the reference implementations. |
-| `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR` | `1` | Forces the Triton fallback instead of DeepGEMM for FP8 linear layers in finegrained FP8 quantization. |
+| `TRANSFORMERS_DISABLE_DEEPGEMM_LINEAR` | `1` | Forces the Triton fallback instead of DeepGEMM for FP8 linear layers loaded with the deprecated `FineGrainedFP8Config`. Other configs take `prefer_deepgemm_linear=False`. |
 | `TRANSFORMERS_DISABLE_TORCH_CHECK` | `1` | Skips the minimum PyTorch version check at import. |
 
 > [!WARNING]

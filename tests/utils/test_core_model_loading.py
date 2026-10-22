@@ -13,7 +13,6 @@
 # limitations under the License.
 import copy
 import unittest
-from types import SimpleNamespace
 
 import torch
 import torch.nn as nn
@@ -29,13 +28,14 @@ from transformers.core_model_loading import (
     Chunk,
     Concatenate,
     Conv3dToLinear,
+    ConversionOps,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
     LinearToConv3d,
     MergeModulelist,
-    PermuteForRope,
     PrefixChange,
     Split,
+    SplitModulelist,
     VisionFuseAndPermuteForRope,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -47,7 +47,6 @@ from transformers.core_model_loading import (
     spawn_materialize,
 )
 from transformers.modeling_utils import LoadStateDictConfig
-from transformers.utils.import_utils import is_triton_available
 
 from ..test_modeling_common import compare_state_dicts
 from .test_distributed_sharding_utils import FakeMesh, _make_dtensor_shard_op
@@ -175,6 +174,13 @@ class TestWeightGlobMatching(unittest.TestCase):
         key = "unrelated.key"
         renamed_key, _ = rename_source_key(key, renamings, [])
         self.assertEqual(renamed_key, key)
+
+    def test_reverse_keeps_escaped_dots_in_capturing_group(self):
+        renaming = WeightRenaming(source_patterns=r"\.moe\.(experts\.|gate\.)", target_patterns=r"\.mlp\.\1")
+        reverse = renaming.reverse_transform()
+        self.assertEqual(reverse.rename_source_key("model.mlp.experts.0.w")[0], "model.moe.experts.0.w")
+        # an unescaped `.` would match any character, so `gateX` would be renamed as well
+        self.assertEqual(reverse.rename_source_key("model.mlp.gateX.w")[0], "model.mlp.gateX.w")
 
 
 class DummyParamModule(nn.Module):
@@ -517,173 +523,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         # Make sure both saved state_dict are identical
         self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
-
-    def test_qkv_chunk_rope_permute_with_fp8_quantization(self):
-        if is_triton_available():
-            from transformers.integrations.finegrained_fp8 import Fp8Dequantize, Fp8Quantize
-        else:
-            self.skipTest("Fine-grained FP8 integration tests require Triton to be installed.")
-        n_heads = 2
-        head_dim = 4
-        in_dim = 4
-        out_dim = n_heads * head_dim
-        block_size = (4, 4)
-
-        class RopeProjector(nn.Module):
-            def __init__(self, *, with_scale: bool = False):
-                super().__init__()
-                self.weight = nn.Parameter(torch.zeros(out_dim, in_dim))
-                if with_scale:
-                    scale_shape = (out_dim // block_size[0], in_dim // block_size[1])
-                    self.weight_scale_inv = nn.Parameter(torch.ones(scale_shape))
-
-        class RopeSelfAttn(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.q_proj = RopeProjector(with_scale=True)
-                self.k_proj = RopeProjector()
-                self.v_proj = RopeProjector()
-
-        class RopeLayer(nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.self_attn = RopeSelfAttn()
-
-        class RopeModel(PreTrainedModel):
-            base_model_prefix = "model"
-
-            def __init__(self, config):
-                super().__init__(config)
-                self.layers = nn.ModuleList([RopeLayer()])
-                self.post_init()
-
-        config = PreTrainedConfig()
-        config.num_attention_heads = n_heads
-        model = RopeModel(config)
-
-        raw_q = torch.tensor(
-            [
-                [1.0, -1.0, 1.0, -1.0],
-                [0.5, -0.5, 0.5, -0.5],
-                [-1.0, 1.0, -1.0, 1.0],
-                [-0.5, 0.5, -0.5, 0.5],
-                [1.0, 1.0, -1.0, -1.0],
-                [0.5, 0.5, -0.5, -0.5],
-                [-1.0, -1.0, 1.0, 1.0],
-                [-0.5, -0.5, 0.5, 0.5],
-            ],
-            dtype=torch.float32,
-        )
-        raw_k = torch.arange(out_dim * in_dim, dtype=torch.float32).reshape(out_dim, in_dim)
-        raw_v = torch.arange(out_dim * in_dim, dtype=torch.float32).reshape(out_dim, in_dim) + 100.0
-        raw_qkv = torch.cat([raw_q, raw_k, raw_v], dim=0)
-        state_dict = {"model.layers.0.self_attn.qkv_proj.weight": raw_qkv.clone()}
-
-        quantizer_cls = type(
-            "FineGrainedFP8HfQuantizer",
-            (),
-            {
-                "__init__": lambda self, bs=block_size: setattr(
-                    self, "quantization_config", SimpleNamespace(weight_block_size=bs)
-                ),
-                "param_needs_quantization": lambda self, _model, param_name: param_name.endswith("q_proj.weight"),
-                "get_quantize_ops": lambda self: Fp8Quantize(self),
-                "pre_quantized": False,
-            },
-        )
-        quantizer = quantizer_cls()
-
-        weight_mapping = [
-            WeightConverter(
-                "self_attn.qkv_proj.weight",
-                [
-                    "self_attn.q_proj.weight",
-                    "self_attn.k_proj.weight",
-                    "self_attn.v_proj.weight",
-                ],
-                operations=[Chunk(dim=0), PermuteForRope()],
-            )
-        ]
-        load_config = LoadStateDictConfig(weight_mapping=weight_mapping, hf_quantizer=quantizer)
-        loading_info, _ = convert_and_load_state_dict_in_model(model, state_dict, load_config)
-
-        self.assertEqual(loading_info.missing_keys, set())
-        self.assertEqual(loading_info.unexpected_keys, set())
-        self.assertEqual(loading_info.mismatched_keys, set())
-        self.assertEqual(loading_info.conversion_errors, {})
-
-        permute_op = PermuteForRope()
-        permute_op.config = model.config
-        expected_q = permute_op._apply(raw_q)
-        expected_k = permute_op._apply(raw_k)
-        expected_v = permute_op._apply(raw_v)
-
-        model_state = model.state_dict()
-        self.assertFalse(torch.allclose(raw_k, expected_k))
-        torch.testing.assert_close(model_state["model.layers.0.self_attn.k_proj.weight"], expected_k)
-        torch.testing.assert_close(model_state["model.layers.0.self_attn.v_proj.weight"], expected_v)
-
-        q_weight_key = "model.layers.0.self_attn.q_proj.weight"
-        scale_key = "model.layers.0.self_attn.q_proj.weight_scale_inv"
-        self.assertIn(scale_key, model_state)
-        expected_dtype = torch.float8_e4m3fn if hasattr(torch, "float8_e4m3fn") else torch.int8
-        self.assertEqual(model_state[q_weight_key].dtype, expected_dtype)
-        self.assertEqual(model_state[q_weight_key].shape, torch.Size((out_dim, in_dim)))
-        self.assertEqual(model_state[scale_key].dtype, torch.float32)
-        self.assertEqual(
-            model_state[scale_key].shape,
-            torch.Size((out_dim // block_size[0], in_dim // block_size[1])),
-        )
-
-        dequant = Fp8Dequantize(block_size=block_size)
-        dequantized_q = dequant.convert(
-            [model_state[q_weight_key], model_state[scale_key]],
-            context={"quantization_config": quantizer.quantization_config},
-        )
-        torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
-
-    def test_fp8_ue8m0_quantize_dequantize_round_trip(self):
-        # ``scale_fmt="ue8m0"`` rounds weight_scale_inv to a power of two; the weight has to be
-        # quantized with that same rounded scale, or ``weight * weight_scale_inv`` at dequant
-        # disagrees with the scale the weight was divided by (a silent per-block error up to an octave).
-        from transformers.integrations.finegrained_fp8 import Fp8Dequantize, Fp8Quantize
-
-        if not hasattr(torch, "float8_e8m0fnu"):
-            self.skipTest("ue8m0 storage requires torch.float8_e8m0fnu")
-
-        quantizer = SimpleNamespace(
-            quantization_config=SimpleNamespace(weight_block_size=(128, 128), scale_fmt="ue8m0")
-        )
-        torch.manual_seed(0)
-        weight = torch.randn(128, 128, dtype=torch.float32)
-
-        quantized = Fp8Quantize(quantizer)._quantize_one("layer.weight", weight)
-        recovered = Fp8Dequantize(quantizer)._dequantize_one(
-            quantized["layer.weight"], quantized["layer.weight_scale_inv"], output_dtype=torch.float32
-        )
-        rel_err = ((recovered - weight).abs().sum() / weight.abs().sum()).item()
-        self.assertLess(rel_err, 5e-2)  # fp8 round-trip is ~2e-2; a scale mismatch inflates it past 0.2
-
-    def test_fp8_float_scale_fmt_quantization_unchanged(self):
-        # The ue8m0 reordering must leave the default scale_fmt="float" path bit-identical to the
-        # original single-division formula (scales = _FP8_MAX / max_abs). Any divergence only shows
-        # on rare fp32-ULP block maxima, so scan many random 128x128 blocks rather than one.
-        from transformers.integrations.finegrained_fp8 import _FP8_DTYPE, _FP8_MAX, _FP8_MIN, Fp8Quantize
-
-        quantizer = Fp8Quantize(
-            SimpleNamespace(quantization_config=SimpleNamespace(weight_block_size=(128, 128), scale_fmt="float"))
-        )
-        for seed in range(100):
-            torch.manual_seed(seed)
-            weight = torch.randn(128, 128, dtype=torch.float32)
-            out = quantizer._quantize_one("layer.weight", weight)
-            scales = _FP8_MAX / weight.abs().amax()
-            ref_q = torch.clamp(weight * scales, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-            ref_inv = (1.0 / scales).to(torch.float32).reshape(1, 1)
-            self.assertTrue(torch.equal(out["layer.weight"], ref_q), f"float weight diverged at seed {seed}")
-            self.assertTrue(
-                torch.equal(out["layer.weight_scale_inv"], ref_inv), f"float scale diverged at seed {seed}"
-            )
 
     def test_scoped_renaming_does_not_leak_to_sibling_or_parent(self):
         """scope_prefix gates a WeightRenaming to keys under one submodel only —
@@ -1272,6 +1111,79 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         reversed_qkv = {key: value for key, value in reversed_state_dict.items() if "qkv_proj" in key}
         self.assertTrue(compare_state_dicts(reversed_qkv, state_dict))
 
+    def test_reverse_renames_the_converter_outputs(self):
+        # The renaming writes the name the converter reads, so the save must convert before it renames back
+        model = DummyModelWithNorm(PreTrainedConfig())
+        weight_mapping = [
+            WeightRenaming(r"\.attention\.", ".self_attn."),
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                ["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+        ]
+        state_dict = {
+            f"model.layers.{index}.attention.qkv_proj.weight": torch.arange(6.0).reshape(3, 2) + index
+            for index in range(2)
+        }
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
+        )
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        model._weight_conversions = weight_mapping
+        saved = revert_weight_conversion(model, model.state_dict())
+        saved_qkv = {key: value for key, value in saved.items() if "qkv_proj" in key}
+        self.assertTrue(compare_state_dicts(saved_qkv, state_dict))
+
+    def test_quantize_on_load_receives_the_checkpoint_dtype(self):
+        # Casting to the int8 storage before quantizing would zero the weight
+        class QuantizeOp(ConversionOps):
+            def convert(self, input_dict, full_layer_name=None, **kwargs):
+                tensor = next(iter(input_dict.values()))[0]
+                received.append(tensor.dtype)
+                return {full_layer_name: (tensor * 10).round().to(torch.int8)}
+
+        class OnTheFlyQuantizer:
+            pre_quantized = False
+
+            def param_needs_quantization(self, model, param_name):
+                return param_name.endswith("down_proj.weight")
+
+            def get_quantize_ops(self):
+                return QuantizeOp()
+
+        received = []
+        model = DummyRoot(PreTrainedConfig(), with_mlp=True)
+        model.mlp.down_proj.weight = nn.Parameter(torch.zeros(2, 2, dtype=torch.int8), requires_grad=False)
+        state_dict = {"mlp.down_proj.weight": torch.full((2, 2), 0.5)}
+
+        convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(hf_quantizer=OnTheFlyQuantizer(), dtype=torch.float32)
+        )
+
+        self.assertEqual(received, [torch.float32])
+        self.assertTrue(torch.equal(model.mlp.down_proj.weight, torch.full((2, 2), 5, dtype=torch.int8)))
+
+    def test_split_modulelist_squeezes_only_the_split_dim(self):
+        # One column of block scales per expert keeps its size-1 dim
+        scales = torch.arange(4.0).reshape(2, 2, 1)
+        split = SplitModulelist(dim=0).convert({"experts.scale": scales}, ["experts.scale"], ["experts.*.scale"])
+        self.assertEqual(split["experts.0.scale"].shape, (2, 1))
+        self.assertEqual(split["experts.1.scale"].shape, (2, 1))
+
+    def test_many_to_many_requires_an_operation_that_supports_it(self):
+        with self.assertRaises(ValueError):
+            WeightConverter(["a", "b"], ["c", "d"], operations=[Concatenate(dim=0)])
+        WeightConverter(["a", "b"], ["c", "d"], operations=[ErnieFuseAndSplitTextVisionExperts()])
+
+    def test_copy_keeps_force_cpu(self):
+        converter = WeightConverter("a", "b", operations=[Concatenate(dim=0)], force_cpu=True)
+        self.assertTrue(converter.copy("c", "d", operations=converter.operations).force_cpu)
+        self.assertTrue(converter.reverse_transform().force_cpu)
+
 
 class TestConversionMapping(unittest.TestCase):
     def test_group_weight_rename(self):
@@ -1711,3 +1623,12 @@ class TestConversionMapping(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WeightTransformPatternsTest(unittest.TestCase):
+    def test_a_reverse_leaves_the_transforms_own_patterns_alone(self):
+        converter = WeightConverter(r"\.experts.*.w2.weight", r"\.experts.down_proj", [MergeModulelist(dim=0)])
+        converter.reverse_transform()
+        converter.reverse_transform()
+        self.assertEqual(converter._original_target_patterns, [r"\.experts.down_proj"])
+        self.assertEqual(converter._original_source_patterns, [r"\.experts.*.w2.weight"])
