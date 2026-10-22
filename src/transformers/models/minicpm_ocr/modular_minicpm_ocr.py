@@ -252,29 +252,23 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
                 patch_height = refine_height // grid_y
                 patch_width = refine_width // grid_x
 
-                if use_adaptive_tile:
-                    # Per-tile adaptive resolution: classify each cell on the original
-                    # image crop and use the cheapest resolution that does not exceed
-                    # the baseline tile budget.
-                    base_patches = divide_to_patches(refine_img, (patch_height, patch_width))
-                    for row in range(grid_y):
-                        for col in range(grid_x):
-                            base_tile = base_patches[row * grid_x + col]
-                            image_patches.append(
-                                self._resolve_tile_size(
-                                    image,
-                                    image_size,
-                                    (grid_y, grid_x),
-                                    row,
-                                    col,
-                                    base_tile,
-                                    scale_resolution,
-                                    patch_size,
-                                    downsample_mode,
-                                )
-                            )
-                else:
-                    image_patches.extend(divide_to_patches(refine_img, (patch_height, patch_width)))
+                slices = divide_to_patches(refine_img, (patch_height, patch_width))
+                if small_image_upsize == "adaptive":
+                    # Per-slice adaptive resolution, never above the baseline slice budget
+                    slices = [
+                        self._resolve_tile_size(
+                            image,
+                            best_grid,
+                            i // grid_x,
+                            i % grid_x,
+                            tile,
+                            scale_resolution,
+                            patch_size,
+                            downsample_mode,
+                        )
+                        for i, tile in enumerate(slices)
+                    ]
+                image_patches.extend(slices)
 
             # Group patches by shape and batch rescale + normalize
             grouped_patches, grouped_index = group_images_by_shape(image_patches, disable_grouping=disable_grouping)
