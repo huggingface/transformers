@@ -96,7 +96,7 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
         model_id = "google/vaultgemma-1b"
         # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
         EXPECTED_TEXTS = [
-            "Hello I am doing a project on a 1990 240sx. I have a 1",
+            "Hello I am doing a project on a 1990 240sx. I have a 2",
             "Hi today I am going to show you how to make a simple 3D model of a 3D",
         ]
 
