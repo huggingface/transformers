@@ -1033,7 +1033,9 @@ class Gemma4IntegrationTest(unittest.TestCase):
         model = Gemma4ForConditionalGeneration.from_pretrained(
             self.model_name,
             device_map=torch_device,
-            attn_implementation=attn_implementation,
+            # Audio tower chunked local attention is eager-only (#49404); vary only text
+            # attention.
+            attn_implementation={"text_config": attn_implementation, "audio_config": "eager"},
         )
 
         # Make sure prefill is larger than sliding window
