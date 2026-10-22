@@ -190,9 +190,13 @@ class FineGrainedHfQuantizer(HfQuantizer):
             if not selected:
                 continue
             matched.update(pattern for candidate in selected for pattern in hits[candidate])
+            # only the patterns that hit a name can give its entry
             entries = {
                 id(entry): entry
-                for entry in (plan_entry_for(plan, candidate, catch_all=False) for candidate in selected)
+                for entry in (
+                    plan_entry_for({pattern: plan[pattern] for pattern in hits[candidate]}, candidate)
+                    for candidate in selected
+                )
             }
             if len(entries) > 1:
                 raise ValueError(f"{name!r} is one module, so its checkpoint names cannot load in different formats.")
