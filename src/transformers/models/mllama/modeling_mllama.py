@@ -770,7 +770,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
         "MllamaSelfAttentionDecoderLayer",
     ]
     _supports_sdpa = True
-    _supports_flash_attn = True
+    _supports_flash_attn = False  # Constructs 4D masks
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
