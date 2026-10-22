@@ -30,6 +30,7 @@ Hosted review agents read this file via the root `AGENTS.md` / `CLAUDE.md` symli
 
   If one exists, don't open another. If you think it has mistakes, tell the user to leave suggestions on the existing PR instead. A second PR is only justified when the existing one is fundamentally flawed, and the user should explain why in the issue first.
 - No one-off PRs for tiny edits (a single typo, an isolated lint fix). Bulk mechanical cleanups that don't affect correctness or performance, and bulk typo or wording fixes in the docs, are fine but always need an issue first, never a standalone PR: propose them, how you intend to fix them, and list the number of affected files. Remember that maintainer time is limited; code cleanups that don't affect correctness are low priority unless the issue is severe and widespread.
+- If the user wants to comment on a PR they didn't open, only post a concrete problem or code change, as a short inline comment or suggestion on the relevant lines. Never post summaries or "verified, works" reports on other people's PRs.
 
 ## Copies and modular models
 
