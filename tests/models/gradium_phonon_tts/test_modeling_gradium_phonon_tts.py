@@ -145,15 +145,11 @@ class GradiumPhononTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     VOICES_REVISION = "da6c9ec0d47be8df5c87c730a3aa97187f3229c3"
 
     checkpoint_name = "gradium/phonon-31m-en"
-    # the merge of https://huggingface.co/gradium/phonon-31m-en/discussions/1, which adds the transformers files
-    revision = "5c8a65f0bcefe4f34f04c5f3614d690b84723b36"
     bucket = "hf-internal-testing/phonon-integration-tests"
 
     def setUp(self):
         super().setUp()
-        self.processor = AutoProcessor.from_pretrained(
-            self.checkpoint_name, revision=self.revision, device_map=torch_device
-        )
+        self.processor = AutoProcessor.from_pretrained(self.checkpoint_name, device_map=torch_device)
 
     def _load_voice(self, voice):
         from huggingface_hub import hf_hub_download
@@ -177,7 +173,7 @@ class GradiumPhononTTSIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def _generate(self, cases):
         # the runtime computes in float32 and its reference is greedy (temperature 0)
         model = AutoModelForTextToWaveform.from_pretrained(
-            self.checkpoint_name, revision=self.revision, device_map=torch_device, dtype=torch.float32
+            self.checkpoint_name, device_map=torch_device, dtype=torch.float32
         )
         # an empty `audio` item marks the voice, given as precomputed latents
         conversations = [
