@@ -188,6 +188,31 @@ encoder = AutoModel.from_pretrained("qwen3_tts_encoder")
 decoder = AutoModel.from_pretrained("qwen3_tts_decoder")
 ```
 
+## Quantizer configuration
+
+`quantizer_config.semantic_quantizer_config` configures the semantic residual vector quantizer independently.
+The outer `quantizer_config.n_codebooks` counts all codebooks; `semantic_quantizer_config.n_codebooks` assigns
+the first codebooks to semantic codes, and the remaining codebooks are acoustic.
+
+```python
+from transformers import Qwen3TTSTokenizerConfig
+
+config = Qwen3TTSTokenizerConfig(
+    quantizer_config={
+        "n_codebooks": 16,
+        "semantic_quantizer_config": {"n_codebooks": 1, "codebook_size": 2048},
+    }
+)
+```
+
+The semantic config also exposes `codebook_dim`, `hidden_size`, and `vector_quantization_hidden_dimension`.
+Unspecified semantic dictionary fields inherit the outer quantizer settings. You can also pass a
+[`Qwen3TTSTokenizerSemanticQuantizerConfig`] instance with its own settings. Keep dimensions and codebook sizes
+consistent with the weights when loading a pretrained checkpoint.
+
+Older configs with `num_semantic_quantizers` are migrated on loading. Saved configs store the semantic count
+only as `semantic_quantizer_config.n_codebooks`.
+
 ## Qwen3TTSTokenizerConfig
 
 [[autodoc]] Qwen3TTSTokenizerConfig
@@ -203,6 +228,10 @@ decoder = AutoModel.from_pretrained("qwen3_tts_decoder")
 ## Qwen3TTSTokenizerQuantizerConfig
 
 [[autodoc]] Qwen3TTSTokenizerQuantizerConfig
+
+## Qwen3TTSTokenizerSemanticQuantizerConfig
+
+[[autodoc]] Qwen3TTSTokenizerSemanticQuantizerConfig
 
 ## Qwen3TTSTokenizerModel
 
