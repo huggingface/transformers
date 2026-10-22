@@ -109,11 +109,19 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
     def is_pipeline_test_to_skip(self, *args, **kwargs):
         return True
 
-    def test_expert_dtype_of_the_quantization_config_reaches_the_model_config(self):
-        """Check that V4.1's `expert_dtype`, shipped in its quantization config, reaches the model config like V4's."""
+    def test_expert_dtype_reaches_the_quantization_config(self):
+        """Check that V4's model-config `expert_dtype` moves into its quantization config, where V4.1 ships it."""
+        shipped = {"quant_method": "fp8"}
+        self.assertEqual(
+            DeepseekV4Config(expert_dtype="fp4", quantization_config=shipped).quantization_config["expert_dtype"],
+            "fp4",
+        )
+        # V4.1's own value stays
         shipped = {"quant_method": "fp8", "expert_dtype": "fp4"}
-        self.assertEqual(DeepseekV4Config(quantization_config=shipped).expert_dtype, "fp4")
-        self.assertEqual(DeepseekV4Config(expert_dtype="fp8", quantization_config=shipped).expert_dtype, "fp8")
+        self.assertEqual(
+            DeepseekV4Config(expert_dtype="fp8", quantization_config=shipped).quantization_config["expert_dtype"],
+            "fp4",
+        )
 
     @unittest.skip(
         "V4's `DeepseekV4GroupedLinear` uses `torch.bmm` for the per-group matmul; "
