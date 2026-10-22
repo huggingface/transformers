@@ -127,6 +127,7 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
     "audio_tokenizer": (
         "HiggsAudioV2TokenizerModel",
         "DacModel",
+        "PocketTTSAudioTokenizerModel",
     ),  # TODO: @eustlb, to be replaced with PreTrainedAudioTokenizerBase
     "audio_processor": "FeatureExtractionMixin",
     "tokenizer": ("PreTrainedTokenizerBase", "MistralCommonBackend"),
@@ -134,6 +135,9 @@ MODALITY_TO_BASE_CLASS_MAPPING = {
     "image_processor": "ImageProcessingMixin",
     "video_processor": "VideoProcessorMixin",
 }
+
+# The kwargs of a processor's `from_pretrained` that also apply to its audio tokenizer's `from_pretrained`
+AUDIO_TOKENIZER_KWARGS = ("cache_dir", "force_download", "proxies", "token", "local_files_only", "device_map", "dtype")
 
 
 def _get_modality_for_attribute(attribute_name: str) -> str:
@@ -1228,9 +1232,9 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `tuple[Dict, Dict]`: The dictionary(ies) that will be used to instantiate the processor object.
         """
-        # holding a copy for optionally loading the audio tokenizer (if available). It keeps the revision requested by
-        # the user, as the audio tokenizer usually lives in another repository.
-        audio_tokenizer_kwargs = copy.deepcopy(kwargs)
+        # The audio tokenizer (if any) lives in another repository: it gets the Hub access and placement kwargs only, not
+        # the ones that locate files in this repository (`revision`, `subfolder`) or override sub-processors.
+        audio_tokenizer_kwargs = {key: kwargs[key] for key in AUDIO_TOKENIZER_KWARGS if key in kwargs}
 
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)
