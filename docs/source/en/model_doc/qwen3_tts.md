@@ -268,9 +268,10 @@ Use FP32 or BF16 for training because the released checkpoint's residual predict
 ### Torch compile
 
 Generation is driven by two autoregressive transformers — the talker (`model.model`) and the code
-predictor (`model.code_predictor.model`). Both can be compiled with `torch.compile` for faster inference;
-`generate` is then called as usual and transparently uses the compiled graphs. The first call pays a
-one-time compilation cost, so run a short warmup before timing (speed-ups are seen on GPU).
+predictor (`model.code_predictor.model`). Both can be compiled with `torch.compile`;
+`generate` is then called as usual and uses the compiled graphs. Initial calls include compilation
+overhead, and later calls may trigger recompilation. Benchmark after warmup on your target hardware;
+compilation does not guarantee lower latency.
 
 ```python
 import torch
