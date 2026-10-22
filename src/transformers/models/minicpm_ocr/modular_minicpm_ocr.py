@@ -148,57 +148,6 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
     small_image_upsize = "always"
     valid_kwargs = MiniCPMOcrImageProcessorKwargs
 
-    def resolve_source_resolution(
-        self,
-        image: "np.ndarray",
-        scale_resolution: int,
-        disable_small_image_upsize: bool,
-        adaptive_small_image_upsize: bool,
-        adaptive_upsize_font_px: float,
-        adaptive_upsize_dense_per_kpx: float,
-        adaptive_upsize_tiny_pixels: int,
-        adaptive_upsize_tiny_target_resolution: int,
-    ) -> tuple[int, bool]:
-        r"""
-        Resolve the resize target of an image that is small enough not to be sliced.
-
-        Returns the resolution to resize towards and whether upscaling is allowed. Text that is
-        small and dense is upscaled to `scale_resolution`, tiny images are upscaled to
-        `adaptive_upsize_tiny_target_resolution`, and the remaining ones keep their native resolution.
-
-        Args:
-            image (`torch.Tensor`):
-                Image to classify, shaped `(num_channels, height, width)`.
-            scale_resolution (`int`):
-                Target resolution requested for this call.
-            disable_small_image_upsize (`bool`):
-                Whether small images keep their native resolution when no tier matches.
-            adaptive_small_image_upsize (`bool`):
-                Whether to classify the image instead of applying `disable_small_image_upsize`.
-            adaptive_upsize_font_px (`float`):
-                Largest median glyph height, in pixels, still treated as small text.
-            adaptive_upsize_dense_per_kpx (`float`):
-                Smallest number of glyphs per 1000 pixels still treated as dense text.
-            adaptive_upsize_tiny_pixels (`int`):
-                Images with fewer pixels than this are treated as tiny.
-            adaptive_upsize_tiny_target_resolution (`int`):
-                Resolution tiny images are upscaled to.
-        """
-        if not adaptive_small_image_upsize:
-            return scale_resolution, not disable_small_image_upsize
-
-        tier = adaptive_upsize_tier(
-            image,
-            font_px_threshold=adaptive_upsize_font_px,
-            dense_per_kpx_threshold=adaptive_upsize_dense_per_kpx,
-            tiny_pixels=adaptive_upsize_tiny_pixels,
-        )
-        if tier == "448":
-            return scale_resolution, True
-        if tier == "84":
-            return adaptive_upsize_tiny_target_resolution, True
-        return scale_resolution, not disable_small_image_upsize
-
     def _resolve_tile_size(
         self,
         original_image: "torch.Tensor",
