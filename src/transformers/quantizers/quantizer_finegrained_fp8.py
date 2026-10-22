@@ -15,29 +15,6 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def _mask_expert_parallelism(model, plan):
-    """Run `ep_dispatch_experts` as masked expert parallelism.
-
-    Each rank runs its own experts on every token. The router masks the other ranks' experts, and an all-reduce sums
-    the outputs. So the quantized experts need no all-to-all dispatch. An implementation with its own styles, such as
-    Mega MoE, has already replaced them.
-    """
-    from ..distributed.tensor_parallel import replace_layer_number_by_wildcard
-
-    if "ep_dispatch_experts" not in plan.values():
-        return
-    modules = {replace_layer_number_by_wildcard(name) for name, _ in model.named_modules()}
-    for name, style in list(plan.items()):
-        if style != "ep_dispatch_experts":
-            continue
-        parent = name.rpartition(".")[0]
-        router = next((f"{parent}.{key}" for key in ("gate", "router") if f"{parent}.{key}" in modules), None)
-        if router is None:
-            raise ValueError(f"Cannot find a gate or router for masked expert parallelism at `{name}`.")
-        plan[name] = "moe_tp_experts"
-        plan[router] = "ep_router"
-
-
 class FineGrainedFP8HfQuantizer(HfQuantizer):
     """
     FP8 quantization implementation supporting both standard and MoE models.
@@ -173,7 +150,19 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         plan.update({name: "replicate" for name in scalars if _get_parameter_plan(name, plan) is not None})
         overwrite = FP8Experts._impl_tp_layer_overrides.get(getattr(model.config, "_experts_implementation", None), {})
         plan.update({key: overwrite.get(style, style) for key, style in plan.items()})
-        _mask_expert_parallelism(model, plan)
+        # Run `ep_dispatch_experts` as masked expert parallelism, so the quantized experts need no all-to-all.
+        # Each rank runs its own experts on every token, the router masks the other ranks' experts and an all-reduce
+        # sums the outputs. An implementation with its own styles, such as Mega MoE, has already replaced them.
+        modules = {replace_layer_number_by_wildcard(name) for name, _ in model.named_modules()}
+        for name, style in list(plan.items()):
+            if style != "ep_dispatch_experts":
+                continue
+            parent = name.rpartition(".")[0]
+            router = next((f"{parent}.{key}" for key in ("gate", "router") if f"{parent}.{key}" in modules), None)
+            if router is None:
+                raise ValueError(f"Cannot find a gate or router for masked expert parallelism at `{name}`.")
+            plan[name] = "moe_tp_experts"
+            plan[router] = "ep_router"
 
     def is_serializable(self):
         return True
