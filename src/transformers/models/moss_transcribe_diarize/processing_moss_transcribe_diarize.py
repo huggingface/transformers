@@ -61,6 +61,9 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
     # Chat template markers delimiting the assistant turns, which are the only positions kept in the labels
     assistant_header = "<|im_start|>assistant\n"
     assistant_end = "<|im_end|>"
+    # The chat template opens the final assistant turn with an empty think block, which the model doesn't generate at
+    # inference, so it is kept out of the labels
+    empty_think_block = "<think>\n\n</think>\n\n"
 
     def __init__(
         self,
@@ -393,10 +396,11 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
     def _mask_non_assistant_tokens(self, input_ids: "torch.Tensor", labels: "torch.Tensor") -> "torch.Tensor":
         """
         Mask everything outside the assistant turns, e.g. the system and user prompts, out of the loss. Each assistant
-        turn is kept from the token after `assistant_header` up to and including `assistant_end` (or the end of the
-        sequence). Sequences without an assistant turn are left unchanged.
+        turn is kept from the token after `assistant_header` (and after the `empty_think_block` if any) up to and
+        including `assistant_end` (or the end of the sequence). Sequences without an assistant turn are left unchanged.
         """
         header_ids = self.tokenizer.encode(self.assistant_header, add_special_tokens=False)
+        think_ids = self.tokenizer.encode(self.empty_think_block, add_special_tokens=False)
         end_id = self.tokenizer.convert_tokens_to_ids(self.assistant_end)
         header_len = len(header_ids)
         for row, ids in enumerate(input_ids.tolist()):
@@ -405,6 +409,8 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                 continue
             keep = torch.zeros(len(ids), dtype=torch.bool)
             for start in starts:
+                if ids[start : start + len(think_ids)] == think_ids:
+                    start += len(think_ids)
                 end = ids.index(end_id, start) + 1 if end_id in ids[start:] else len(ids)
                 keep[start:end] = True
             labels[row, ~keep] = -100

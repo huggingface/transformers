@@ -208,6 +208,40 @@ EXPECTED_OUTPUT = [
 assert decoded_outputs == EXPECTED_OUTPUT
 ```
 
+### Training
+
+The model can be trained with the loss it outputs. Pass the target transcripts to `apply_transcription_request` with
+`transcription`, which writes them as the assistant turn and returns `labels`. Only the assistant turn contributes to
+the loss: the prompt, the audio placeholders and the padding are masked automatically.
+
+The chat template doesn't close the last assistant turn, so `apply_transcription_request` appends `<|user|>` (one of
+the model's EOS tokens) to each transcript for the model to learn when to stop. When training with
+`apply_chat_template` and `processor_kwargs={"output_labels": True}` instead, append `<|user|>` to the assistant turn yourself.
+
+```python
+from datasets import Audio, load_dataset
+from transformers import AutoProcessor, GlmAsrForConditionalGeneration
+
+model_id = "zai-org/GLM-ASR-Nano-2512"
+NUM_SAMPLES = 2
+
+processor = AutoProcessor.from_pretrained(model_id)
+model = GlmAsrForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+model.train()
+
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+speech_samples = [el["array"] for el in ds["audio"][:NUM_SAMPLES]]
+text_samples = ds["text"][:NUM_SAMPLES]
+
+inputs = processor.apply_transcription_request(speech_samples, transcription=text_samples)
+inputs.to(model.device, dtype=model.dtype)
+
+loss = model(**inputs).loss
+print("Loss:", loss.item())
+loss.backward()
+```
+
 ## GlmAsrEncoderConfig
 
 [[autodoc]] GlmAsrEncoderConfig
