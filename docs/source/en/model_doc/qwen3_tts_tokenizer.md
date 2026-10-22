@@ -193,6 +193,7 @@ decoder = AutoModel.from_pretrained("qwen3_tts_decoder")
 `quantizer_config.semantic_quantizer_config` configures the semantic residual vector quantizer independently.
 The outer `quantizer_config.n_codebooks` counts all codebooks; `semantic_quantizer_config.n_codebooks` assigns
 the first codebooks to semantic codes, and the remaining codebooks are acoustic.
+The semantic codebook count must be between `1` and `quantizer_config.n_codebooks`, inclusive.
 
 ```python
 from transformers import Qwen3TTSTokenizerConfig
