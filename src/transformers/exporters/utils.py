@@ -728,7 +728,7 @@ def _capture_forward(module: torch.nn.Module):
         module.forward = original
 
 
-def _merge_decode_calls(decode_calls: list[dict]) -> dict:
+def _merge_decode_calls(decode_calls: list[dict], prefill_call: dict) -> dict:
     """Merge consecutive single-token decode captures into one multi-token decode input.
 
     Each `model.generate` decode step feeds a single new token, so `torch.export` (with `Dim.AUTO`)
@@ -740,7 +740,8 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
 
     The cache (`past_key_values`) is taken from the FIRST step (the state right after prefill, before
     the chunk). The per-token tensors are concatenated along their sequence axis; `attention_mask` is
-    handled below (its layout depends on the cache).
+    handled below (its layout depends on the cache). `prefill_call` tells model-specific per-token inputs
+    from per-sequence ones (see below).
     """
     first = decode_calls[0]
     merged = copy.copy(first)
@@ -765,6 +766,24 @@ def _merge_decode_calls(decode_calls: list[dict]) -> dict:
     concat_along("input_ids", 1)
     concat_along("inputs_embeds", 1)
     concat_along("cache_position", 0)
+    # Model-specific per-token inputs, fed with each token as `[batch, 1, ...]` (e.g. `token_type_ids`, Mllama's
+    # `cross_attention_mask`, Pocket TTS's `audio_latents`), are concatenated too. Per-sequence inputs can have the
+    # same shape (Idefics's `image_encoder_embeddings` is `[batch, num_images, ...]`), so an input counts as per-token
+    # only if the prefill gives it a sequence axis or, absent from the prefill, it changes from step to step.
+    batch_size = next(first[key] for key in ("input_ids", "inputs_embeds") if first.get(key) is not None).shape[0]
+    prefill_length = query_length(prefill_call)
+    for key, value in first.items():
+        if key in ("input_ids", "inputs_embeds", "cache_position", "position_ids", "attention_mask") or not all(
+            isinstance(call.get(key), torch.Tensor) and call[key].shape[:2] == (batch_size, 1) for call in decode_calls
+        ):
+            continue
+        prefill_value = prefill_call.get(key)
+        if isinstance(prefill_value, torch.Tensor):
+            is_per_token = prefill_value.dim() > 1 and prefill_value.shape[1] == prefill_length
+        else:
+            is_per_token = any(not torch.equal(call[key], value) for call in decode_calls[1:])
+        if is_per_token:
+            concat_along(key, 1)
     # `position_ids` is `[batch, seq]` or `[n_axes, batch, seq]` (m-rope) — the sequence axis is
     # last in both, so a negative dim concatenates it correctly either way.
     concat_along("position_ids", -1)
@@ -866,7 +885,7 @@ def decompose_prefill_decode(
     # `multi_token_decode`, merge the two decode steps into one multi-token decode so that axis stays
     # symbolic (continuation-from-past, or a plain prefill when the cache is empty, and it still covers seq == 1).
     prefill_inputs = calls[0]
-    decode_inputs = _merge_decode_calls(calls[1:num_new_tokens]) if multi_token_decode else calls[1]
+    decode_inputs = _merge_decode_calls(calls[1:num_new_tokens], calls[0]) if multi_token_decode else calls[1]
     return {
         "prefill": (copy.copy(model), prefill_inputs),
         "decode": (copy.copy(model), decode_inputs),
