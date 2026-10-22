@@ -520,6 +520,8 @@ class MistralLarge4TextMLP(nn.Module):
 
 
 class MistralLarge4TextTopkRouter(nn.Module):
+    """Same as Mistral4TopkRouter, but with fp32 precision for routing logits."""
+
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -533,7 +535,7 @@ class MistralLarge4TextTopkRouter(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states, self.weight)
+        router_logits = F.linear(hidden_states.float(), self.weight.float())
         scores = router_logits.softmax(-1)
         group_scores = (
             scores.view(-1, self.num_group, self.num_experts // self.num_group).topk(2, dim=-1)[0].sum(dim=-1)
