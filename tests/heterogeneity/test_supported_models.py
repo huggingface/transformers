@@ -15,8 +15,7 @@
 
 import unittest
 from collections.abc import Callable
-from dataclasses import dataclass, field
-from typing import NamedTuple
+from dataclasses import dataclass
 
 from parameterized import parameterized
 
@@ -44,25 +43,15 @@ if is_torch_available():
     from transformers.models.llama4.modeling_llama4 import Llama4ForCausalLM
     from transformers.models.nemotron_h.modeling_nemotron_h import NemotronHForCausalLM
 
-    class WeightCheck(NamedTuple):
-        """An expected weight shape in the built model."""
-
-        layer_idx: int
-        attr_path: str  # dot-separated path to the weight tensor
-        shape_dim: int
-        expected: int
-
     @dataclass(frozen=True)
     class HeteroCase:
-        """Per-layer overrides and expected structure for a supported model."""
+        """Per-layer overrides for a supported model."""
 
         name: str
         model_key: str  # key into MODEL_FIXTURES
         config_factory: Callable
         model_cls: type
         per_layer_config: dict
-        # --- Structure verification fields ---
-        structure_weight_checks: list[WeightCheck] = field(default_factory=list)
 
     HETERO_CASES = [
         # ── Llama ──
@@ -75,16 +64,6 @@ if is_torch_available():
                 0: {"intermediate_size": 64, "num_key_value_heads": 2},
                 2: {"intermediate_size": 96, "num_key_value_heads": 1},
             },
-            structure_weight_checks=[
-                WeightCheck(0, "mlp.gate_proj.weight", 0, 64),
-                WeightCheck(0, "self_attn.k_proj.weight", 0, 32),  # 2 kv_heads × 16
-                WeightCheck(1, "mlp.gate_proj.weight", 0, 128),
-                WeightCheck(1, "self_attn.k_proj.weight", 0, 64),  # 4 kv_heads × 16 (default)
-                WeightCheck(2, "mlp.gate_proj.weight", 0, 96),
-                WeightCheck(2, "self_attn.k_proj.weight", 0, 16),  # 1 kv_head × 16
-                WeightCheck(3, "mlp.gate_proj.weight", 0, 128),
-                WeightCheck(3, "self_attn.k_proj.weight", 0, 64),  # 4 kv_heads × 16 (default)
-            ],
         ),
         HeteroCase(
             name="llama_skip_attn",
@@ -114,12 +93,6 @@ if is_torch_available():
             config_factory=tiny_gpt_oss_config,
             model_cls=GptOssForCausalLM,
             per_layer_config={0: {"intermediate_size": 16}, 2: {"intermediate_size": 48}},
-            structure_weight_checks=[
-                WeightCheck(0, "mlp.experts.down_proj", 1, 16),
-                WeightCheck(1, "mlp.experts.down_proj", 1, 32),
-                WeightCheck(2, "mlp.experts.down_proj", 1, 48),
-                WeightCheck(3, "mlp.experts.down_proj", 1, 32),
-            ],
         ),
         HeteroCase(
             name="gpt_oss_skip_attn",
@@ -142,10 +115,6 @@ if is_torch_available():
             config_factory=tiny_llama4_config,
             model_cls=Llama4ForCausalLM,
             per_layer_config={0: {"intermediate_size_mlp": 64}},
-            structure_weight_checks=[
-                WeightCheck(0, "feed_forward.up_proj.weight", 0, 64),
-                WeightCheck(2, "feed_forward.up_proj.weight", 0, 128),  # default
-            ],
         ),
         HeteroCase(
             name="llama4_skip_attn",
@@ -175,10 +144,6 @@ if is_torch_available():
             config_factory=tiny_nemotron_h_config,
             model_cls=NemotronHForCausalLM,
             per_layer_config={0: {"num_key_value_heads": 2}},
-            structure_weight_checks=[
-                WeightCheck(0, "mixer.k_proj.weight", 0, 32),  # 2 kv_heads × head_dim 16
-                WeightCheck(3, "mixer.k_proj.weight", 0, 64),  # 4 kv_heads × 16 (default)
-            ],
         ),
         HeteroCase(
             name="nemotron_h_skip_attn",
@@ -220,6 +185,7 @@ def _build_reference(hetero_model, base_config, model_cls, model_key):
     ref_layer_cls = MODEL_FIXTURES[model_key].ref_layer_cls
     for i in range(len(ref.model.layers)):
         ref.model.layers[i] = ref_layer_cls(hetero_config, layer_idx=i)
+    # Raises on a missing, unexpected, or differently shaped weight, so this also checks every layer's weight shapes
     ref.load_state_dict(hetero_model.state_dict())
     return ref.eval()
 
@@ -246,7 +212,7 @@ class TestSupportedHeterogeneousModels(unittest.TestCase):
 
     @parameterized.expand(HETERO_CASES, name_func=_case_name)
     def test_structure(self, case):
-        """Verify the entire model structure: skip replacements and weight shapes."""
+        """The skip replacements match the reference layers."""
         config = case.config_factory(per_layer_config=case.per_layer_config)
         model = build_model(config, case.model_cls)
         modeling_specs = get_heterogeneous_modeling_specs(model)
@@ -269,11 +235,6 @@ class TestSupportedHeterogeneousModels(unittest.TestCase):
                     self.assertTrue(is_replacement, f"Layer {i}.{name} should be a skip replacement")
                 else:
                     self.assertFalse(is_replacement, f"Layer {i}.{name} should not be a skip replacement")
-
-        # Check weight shapes on all specified layers
-        for layer_idx, attr_path, shape_dim, expected in case.structure_weight_checks:
-            weight = model.model.layers[layer_idx].get_parameter(attr_path)
-            self.assertEqual(weight.shape[shape_dim], expected, f"Layer {layer_idx} {attr_path} shape mismatch")
 
     @parameterized.expand(HETERO_CASES, name_func=_case_name)
     def test_forward(self, case):

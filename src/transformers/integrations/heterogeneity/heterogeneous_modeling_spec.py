@@ -29,8 +29,9 @@ if TYPE_CHECKING:
 
 
 # A layer member, which is a submodule of the layer, as a path like "self_attn" or "block.attn", or as a (path, class)
-# pair that only matches members of that class. A (path, class) pair takes precedence over the plain path. When several
-# classes match, the most specific one takes precedence.
+# pair that matches the member at the path only when the layer has one and it's an instance of that class. A plain path
+# must exist in the layer. A (path, class) pair takes precedence over the plain path. When several classes match, the
+# most specific one takes precedence.
 MemberKey: TypeAlias = str | tuple[str, type]
 SkipDescriptor: TypeAlias = dict[MemberKey, Callable[[], "nn.Module"]]
 

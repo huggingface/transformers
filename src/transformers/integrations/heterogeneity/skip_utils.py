@@ -194,19 +194,22 @@ def _get_key_rank(member_key: MemberKey, member_mro: tuple[type, ...]) -> int:
 
 
 def _get_matching_member_keys(
-    layer: nn.Module, member_keys: Iterable[MemberKey], *, error_prefix: str
+    layer: nn.Module, member_keys: Iterable[MemberKey], *, error_prefix: str, missing_member_hint: str = ""
 ) -> list[MemberKey]:
-    """Return the keys in `member_keys` that match members of `layer`, at most one per member path. A (path, class)
-    key matches only when the member is an instance of that class, and takes precedence over the plain path. Among
-    matching (path, class) keys, the one with the most specific class takes precedence."""
+    """Return the keys in `member_keys` that match members of `layer`, at most one per member path. A plain path must
+    exist in the layer. A (path, class) key matches only when the layer has a member at the path and it's an
+    instance of that class, and takes precedence over the plain path. Among matching (path, class) keys, the one with
+    the most specific class takes precedence."""
     member_path_to_key = {}
     for member_key in member_keys:
         member_path = _get_member_path(member_key)
         try:
             member = layer.get_submodule(member_path)
         except AttributeError:
+            if isinstance(member_key, tuple):
+                continue
             raise AttributeError(
-                f"{error_prefix}, but {layer.__class__.__name__} has no submodule '{member_path}'."
+                f"{error_prefix}, but {layer.__class__.__name__} has no submodule '{member_path}'.{missing_member_hint}"
             ) from None
 
         member_mro = type(member).__mro__
@@ -250,12 +253,18 @@ def _apply_skip_descriptor(
     # would only partly apply, and the layer would silently compute an unintended output.
     for member_key in skip_descriptor:
         member_path = _get_member_path(member_key)
-        if member_path not in matched_member_paths:
-            member_cls = type(layer.get_submodule(member_path))
-            raise ValueError(
-                f"{error_prefix}, but that descriptor has no replacement for member '{member_path}' with class "
-                f"{member_cls.__name__}. Add a class-specific or generic replacement."
-            )
+        if member_path in matched_member_paths:
+            continue
+        try:
+            member = layer.get_submodule(member_path)
+        except AttributeError:
+            raise AttributeError(
+                f"{error_prefix}, but {layer.__class__.__name__} has no submodule '{member_path}'."
+            ) from None
+        raise ValueError(
+            f"{error_prefix}, but that descriptor has no replacement for member '{member_path}' with class "
+            f"{type(member).__name__}. Add a class-specific or generic replacement."
+        )
 
     for member_key in matching_member_keys:
         member_path = _get_member_path(member_key)
@@ -283,6 +292,11 @@ def apply_skips(
             f"class, `{heterogeneous_modeling_spec.layer_cls.__name__}`, has no skip descriptors for them."
         )
 
+    # Unlike skip descriptors, `attention_mask_consumers` and `cache_writers` can use a (path, class) key for a member
+    # that only some layers build
+    missing_member_hint = (
+        " If the path is right and only some layers build this member, use a `(path, class)` key for it."
+    )
     # Find the declared members before the skips replace them
     attention_mask_consumers = [
         layer.get_submodule(_get_member_path(member_key))
@@ -290,6 +304,7 @@ def apply_skips(
             layer,
             heterogeneous_modeling_spec.attention_mask_consumers,
             error_prefix=f"The spec's `attention_mask_consumers` lists a member of layer {layer_idx}",
+            missing_member_hint=missing_member_hint,
         )
     ]
     cache_writers = {
@@ -298,6 +313,7 @@ def apply_skips(
             layer,
             heterogeneous_modeling_spec.cache_writers,
             error_prefix=f"The spec's `cache_writers` lists a member of layer {layer_idx}",
+            missing_member_hint=missing_member_hint,
         )
     }
 

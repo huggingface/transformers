@@ -39,6 +39,8 @@ if is_torch_available():
         tiny_nemotron_h_config,
     )
     from transformers import (
+        BambaConfig,
+        BambaForCausalLM,
         DynamicCache,
         FalconH1Config,
         FalconH1ForCausalLM,
@@ -63,6 +65,13 @@ if is_torch_available():
     )
     from transformers.integrations.heterogeneity.masking_utils import AttentionMasksByLayerIdx
     from transformers.modeling_layers import MtpModel
+    from transformers.models.bamba.modeling_bamba import (
+        BambaAttention,
+        BambaDecoderLayer,
+        BambaMixer,
+        BambaPreTrainedModel,
+        BambaRMSNorm,
+    )
     from transformers.models.falcon_h1.modeling_falcon_h1 import (
         FalconH1Attention,
         FalconH1DecoderLayer,
@@ -229,6 +238,49 @@ if is_torch_available():
             expert_layer_period=2,
             expert_layer_offset=1,
             num_experts=2,
+            per_layer_config=per_layer_config,
+        )
+
+    def _bamba_modeling_spec():
+        """Bamba builds `self_attn` in attention layers and `mamba` in Mamba layers, from one layer class, so its spec
+        has a skip type for each, and its declarations list both with their classes."""
+        passthrough_norm = get_skip_replacement_factory(
+            BambaRMSNorm, ReturnEntry(arg_name="hidden_states", transform=lambda hidden_states: hidden_states)
+        )
+        return HeterogeneousModelingSpec(
+            layer_cls=BambaDecoderLayer,
+            layer_idx_resolver=LayerIdxFromArgument("layer_idx"),
+            skip_descriptors={
+                "attention": {
+                    "input_layernorm": passthrough_norm,
+                    "self_attn": get_skip_replacement_factory(
+                        BambaAttention, [ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]
+                    ),
+                },
+                "mamba": {
+                    "input_layernorm": passthrough_norm,
+                    "mamba": get_skip_replacement_factory(
+                        BambaMixer, ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like)
+                    ),
+                },
+            },
+            attention_mask_consumers=[("self_attn", BambaAttention), ("mamba", BambaMixer)],
+            cache_writers={("self_attn", BambaAttention): ["key_value"], ("mamba", BambaMixer): ["linear_attention"]},
+        )
+
+    def _tiny_bamba_config(per_layer_config):
+        # Layers 1 and 3 are attention layers, and layers 0 and 2 are Mamba layers
+        return BambaConfig(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=64,
+            num_hidden_layers=4,
+            num_attention_heads=4,
+            num_key_value_heads=2,
+            attn_layer_indices=[1, 3],
+            mamba_n_heads=8,
+            mamba_d_state=16,
+            mamba_chunk_size=16,
             per_layer_config=per_layer_config,
         )
 
@@ -566,6 +618,38 @@ class TestHeterogeneousCache(unittest.TestCase):
         with patch.object(JambaPreTrainedModel, "_heterogeneous_modeling_spec", _jamba_modeling_specs(), create=True):
             with self.assertRaisesRegex(ValueError, r"Layer 0 skips \['mlp'\].*`JambaMambaDecoderLayer`"):
                 build_model(config, JambaForCausalLM)
+
+    def test_declarations_can_list_members_that_only_some_layers_build(self):
+        config = _tiny_bamba_config({0: {"skip": ["mamba"]}, 1: {"skip": ["attention"]}})
+        with patch.object(BambaPreTrainedModel, "_heterogeneous_modeling_spec", _bamba_modeling_spec(), create=True):
+            build_model(config, BambaForCausalLM)
+
+        # Each skipped mixer was its layer's only cache writer
+        self.assertEqual(
+            [type(layer).__name__ for layer in DynamicCache(config=config).layers],
+            ["NoCacheLayer", "NoCacheLayer", "LinearAttentionLayer", "DynamicLayer"],
+        )
+
+    def test_skip_type_with_a_member_the_layer_doesnt_build_raises(self):
+        spec = _bamba_modeling_spec()
+        attention_descriptor = spec.skip_descriptors["attention"]
+        attention_descriptor[("self_attn", BambaAttention)] = attention_descriptor.pop("self_attn")
+        # Unlike the declarations, a skip descriptor needs its members even with a class key. Layer 0 is a Mamba
+        # layer, so it has no `self_attn`, and the skip would replace only its norm.
+        config = _tiny_bamba_config({0: {"skip": ["attention"]}})
+
+        with patch.object(BambaPreTrainedModel, "_heterogeneous_modeling_spec", spec, create=True):
+            with self.assertRaisesRegex(AttributeError, "Layer 0 skips 'attention'.*has no submodule 'self_attn'"):
+                build_model(config, BambaForCausalLM)
+
+    def test_declaration_key_without_a_class_must_exist_in_the_layer(self):
+        spec = dataclasses.replace(_bamba_modeling_spec(), attention_mask_consumers=["self_attn"])
+        # Layer 0 is a Mamba layer, so it has no `self_attn`
+        config = _tiny_bamba_config({0: {"skip": ["mamba"]}})
+
+        with patch.object(BambaPreTrainedModel, "_heterogeneous_modeling_spec", spec, create=True):
+            with self.assertRaisesRegex(AttributeError, "`attention_mask_consumers`.*has no submodule 'self_attn'"):
+                build_model(config, BambaForCausalLM)
 
     def test_cached_decoding_with_attention_skipped_in_a_hybrid_layer(self):
         # Falcon-H1 runs attention and Mamba in parallel in every layer, and each layer's cache entry holds the
