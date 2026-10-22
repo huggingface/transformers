@@ -3,7 +3,10 @@ import os
 import tempfile
 import unittest
 
+from tokenizers import pre_tokenizers
+
 from transformers import AutoTokenizer
+from transformers.tokenization_utils_tokenizers import _pretokenizer_mismatch
 
 
 class TokenizerPreTokenizerMismatchWarningTest(unittest.TestCase):
@@ -46,6 +49,33 @@ class TokenizerPreTokenizerMismatchWarningTest(unittest.TestCase):
                 AutoTokenizer.from_pretrained(tmpdirname)
 
             self.assertTrue(
-                any("pre-tokenizer" in log and "ByteLevel" in log for log in cm.output),
+                any("pre-tokenizer" in log and "behaves differently" in log for log in cm.output),
                 f"Expected pre-tokenizer mismatch warning, got: {cm.output}",
             )
+
+
+class TokenizerPreTokenizerBehavioralMismatchTest(unittest.TestCase):
+    def test_equivalent_pipelines_do_not_warn(self):
+        # JSON declares bare Metaspace; a class building Sequence([Metaspace])
+        # is behaviorally identical: no warning (no false positive).
+        json_pt = {"type": "Metaspace", "replacement": "▁", "prepend_scheme": "always", "split": True}
+        built = pre_tokenizers.Sequence([pre_tokenizers.Metaspace()])
+        self.assertFalse(_pretokenizer_mismatch(json_pt, built))
+
+    def test_same_type_different_params_warn(self):
+        # Both are Sequence, but Digits individual_digits differs (the
+        # Cohere/tiny-aya case from #49176): must warn (no false negative).
+        json_pt = {
+            "type": "Sequence",
+            "pretokenizers": [
+                {"type": "Digits", "individual_digits": False},
+                {"type": "ByteLevel", "add_prefix_space": True, "trim_offsets": True, "use_regex": True},
+            ],
+        }
+        built = pre_tokenizers.Sequence([pre_tokenizers.Digits(individual_digits=True), pre_tokenizers.ByteLevel()])
+        self.assertTrue(_pretokenizer_mismatch(json_pt, built))
+
+    def test_unbuildable_pretokenizer_never_warns(self):
+        # Unknown types must skip the check, never crash loading.
+        self.assertFalse(_pretokenizer_mismatch({"type": "Nope"}, pre_tokenizers.Metaspace()))
+        self.assertFalse(_pretokenizer_mismatch(None, pre_tokenizers.Metaspace()))
