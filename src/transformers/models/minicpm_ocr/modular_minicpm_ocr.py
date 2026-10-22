@@ -88,12 +88,11 @@ def adaptive_upsize_resolution(image: "np.ndarray", scale_resolution: int) -> in
 
     font_px = float(np.median(glyph_heights)) if glyph_heights else 0.0
     density = len(glyph_heights) * 1000.0 / (width * height)
-    if 0 < font_px <= font_px_threshold and density >= dense_per_kpx_threshold:
-        return "448"
-
-    if height * width < tiny_pixels:
-        return "84"
-    return "native"
+    if 0 < font_px <= SMALL_FONT_PX and density >= DENSE_GLYPHS_PER_KPX:
+        return scale_resolution
+    if height * width < TINY_PIXELS:
+        return TINY_RESOLUTION
+    return None
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-OCR-1.0")
