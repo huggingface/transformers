@@ -2070,6 +2070,8 @@ class FineGrainedConfig(QuantizationConfigMixin):
             skipped = [skip_pattern(entry) for entry in getattr(config, "modules_to_not_convert", None) or []]
             for pattern, entry in plan.items():
                 if isinstance(config, BlockScaledConfig) and type(entry) is type(config):
+                    if not config.dequantize:
+                        entry._check_activation_format(config.activation_format)
                     plan[pattern] = copy.copy(entry)
                     plan[pattern].activation_format = config.activation_format
                     plan[pattern].post_init()

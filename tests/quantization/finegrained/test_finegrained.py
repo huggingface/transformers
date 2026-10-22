@@ -308,18 +308,13 @@ class FineGrainedPlanTest(unittest.TestCase):
         )
         self.assertEqual((type(merged), merged.activation_format), (Mxfp4Config, "mxfp8"))
 
-        # A plan's entries lend their activation formats to the checkpoint's entries
+        # A format config lends its activation format to the plan entries of its format
         hub = {"quant_method": "fp8", "scale_fmt": "ue8m0", "weight_block_size": [128, 128]}
-        passed = FineGrainedConfig(
-            dtype_plan={
-                EXPERTS_PATTERN: Mxfp4Config(activation_format="bf16"),
-                ".*": Fp8Config(weight_block_size=(64, 64)),
-            }
-        )
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             merged = AutoHfQuantizer.merge_quantization_configs(
-                DeepseekV4Config(expert_dtype="fp4", quantization_config=hub).quantization_config, passed
+                DeepseekV4Config(expert_dtype="fp4", quantization_config=hub).quantization_config,
+                Mxfp4Config(activation_format="bf16"),
             )
         self.assertTrue(any(issubclass(w.category, UserWarning) for w in caught))
         experts, rest = merged.dtype_plan[EXPERTS_PATTERN], merged.dtype_plan[".*"]
@@ -327,10 +322,10 @@ class FineGrainedPlanTest(unittest.TestCase):
         self.assertEqual((rest.weight_block_size, rest.scale_fmt), ((128, 128), "ue8m0"))
 
     def test_related_config_classes_lend_their_loading_attributes(self):
-        """Check that format configs and plans lend each other their loading attributes.
+        """Check that a format config lends its loading attributes to a plan.
 
-        A format config lends its loading options to a plan, and its activation format to the entries in its format.
-        A single-format plan lends them back to a checkpoint in that format. Unrelated classes are refused.
+        It lends its loading options to the plan, and its activation format to the entries in its format. A plan does
+        not lend to a format checkpoint. Unrelated classes are refused.
         """
         from transformers.quantizers.auto import AutoHfQuantizer
         from transformers.quantizers.quantizers_utils import EXPERTS_PATTERN, plan_entry_for
@@ -348,14 +343,9 @@ class FineGrainedPlanTest(unittest.TestCase):
         self.assertIsNone(plan_entry_for(merged.dtype_plan, "lm_head"))
         self.assertIs(plan_entry_for(merged.dtype_plan, "model.layers.0.mlp.experts"), experts)
 
-        merged = AutoHfQuantizer.merge_quantization_configs(
-            {"quant_method": "fp8"},
-            FineGrainedConfig(dtype_plan={".*": Fp8Config()}, dequantize=True),
-        )
-        self.assertEqual((type(merged), merged.activation_format, merged.dequantize), (Fp8Config, None, True))
         for checkpoint, passed in (
             ({"quant_method": "fp8"}, Mxfp4Config(dequantize=True)),
-            ({"quant_method": "fp8"}, FineGrainedConfig(dtype_plan={".*": Mxfp4Config()})),
+            ({"quant_method": "fp8"}, FineGrainedConfig(dtype_plan={".*": Fp8Config()}, dequantize=True)),
             (checkpoint.to_dict(), BitsAndBytesConfig(load_in_8bit=True)),
         ):
             with self.subTest(passed=type(passed).__name__), self.assertRaises(ValueError):
