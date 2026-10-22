@@ -205,15 +205,9 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
         patch_size: int,
         slice_mode: bool,
         downsample_mode: str,
-        disable_small_image_upsize: bool,
-        adaptive_small_image_upsize: bool,
-        adaptive_upsize_font_px: float,
-        adaptive_upsize_dense_per_kpx: float,
-        adaptive_upsize_tiny_pixels: int,
-        adaptive_upsize_tiny_target_resolution: int,
+        small_image_upsize: str,
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None,
-        _source_resolutions: "list[tuple[int, bool]]",
         **kwargs,
     ) -> BatchFeature:
         if not do_resize:
