@@ -2335,15 +2335,19 @@ def _build_checkpoint_conversion_mapping():
         # Rename the attention projections shared by both towers: value and output
         WeightRenaming(source_patterns=r"\.wv\.", target_patterns=".v_proj."),
         WeightRenaming(source_patterns=r"\.wo\.", target_patterns=".o_proj."),
-        # For the vision tower Q and K projectors, rename the weights and apply the RoPE permutation.
+        # Vision model Q and K projectors: saved for interleaved RoPE, Pixtral expects rotate-half. So we rename the
+        # projection (only inside the vision tower) and permute the rows in place (thanks to the rename, only the
+        # vision tower is affected).
+        WeightRenaming(source_patterns=r"(vision_tower\..*\.attention)\.wq\.", target_patterns=r"\1.q_proj."),
+        WeightRenaming(source_patterns=r"(vision_tower\..*\.attention)\.wk\.", target_patterns=r"\1.k_proj."),
         WeightConverter(
-            source_patterns=r"attention\.wq\.weight",
-            target_patterns="attention.q_proj.weight",
+            source_patterns="attention.q_proj",
+            target_patterns="attention.q_proj",
             operations=[PermuteForRope(subconfig_key="vision_config", permute_layer_names=["q_proj"])],
         ),
         WeightConverter(
-            source_patterns=r"attention\.wk\.weight",
-            target_patterns="attention.k_proj.weight",
+            source_patterns="attention.k_proj",
+            target_patterns="attention.k_proj",
             operations=[PermuteForRope(subconfig_key="vision_config", permute_layer_names=["k_proj"])],
         ),
         # Rename up, down and gate projection weights
