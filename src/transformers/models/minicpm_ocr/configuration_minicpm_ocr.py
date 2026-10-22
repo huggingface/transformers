@@ -93,12 +93,10 @@ class MiniCPMOcrConfig(PreTrainedConfig):
     merge_kernel_size: tuple[int, int] | list[int] = (2, 2)
     merger_times: int = 1
 
-    def validate_architecture(self):
-        if self.insert_layer_id != self.vision_config.insert_layer_id:
-            raise ValueError(
-                f"`insert_layer_id` ({self.insert_layer_id}) must match "
-                f"`vision_config.insert_layer_id` ({self.vision_config.insert_layer_id})."
-            )
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        self.vision_config.insert_layer_id = self.insert_layer_id
+        self.patch_size = self.vision_config.patch_size
 
 
 __all__ = ["MiniCPMOcrConfig", "MiniCPMOcrVisionConfig"]

@@ -198,7 +198,7 @@ class MiniCPMOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
     @staticmethod
     def _tiny_image(width=80, height=60):
-        """Few large blobs below `adaptive_upsize_tiny_pixels`: the `"84"` tier.
+        """Few large blobs below `TINY_PIXELS`: the `"84"` tier.
 
         Noise would not do: hundreds of 1-2px components read as small dense text.
         """
@@ -208,65 +208,47 @@ class MiniCPMOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
         draw.rectangle([44, 9, 73, 48], fill=(0, 0, 0))
         return image
 
-    def test_disable_small_image_upsize_keeps_native_resolution(self):
+    def test_small_image_upsize_never_keeps_native_resolution(self):
         """Small images stay at their native size, aligned to the patch grid only."""
         for image_processing_class in self.image_processing_classes.values():
             image = self._tiny_image()
             upsizing = image_processing_class(slice_mode=False, downsample_mode="4x")
-            native = image_processing_class(slice_mode=False, downsample_mode="4x", disable_small_image_upsize=True)
+            native = image_processing_class(slice_mode=False, downsample_mode="4x", small_image_upsize="never")
             upsized_area = np.prod(upsizing(image, return_tensors="pt")["target_sizes"].numpy(), axis=1).sum()
             native_area = np.prod(native(image, return_tensors="pt")["target_sizes"].numpy(), axis=1).sum()
             self.assertGreater(upsized_area, native_area)
 
     @require_cv2
     def test_adaptive_upsize_upscales_small_dense_text(self):
-        """Small dense text is upscaled even though `disable_small_image_upsize` is set."""
+        """Small dense text is upscaled even though `"never"` keeps small images native."""
         for image_processing_class in self.image_processing_classes.values():
             image = self._dense_text_image()
-            native = image_processing_class(slice_mode=False, downsample_mode="4x", disable_small_image_upsize=True)
-            adaptive = image_processing_class(
-                slice_mode=False,
-                downsample_mode="4x",
-                disable_small_image_upsize=True,
-                adaptive_small_image_upsize=True,
-            )
+            native = image_processing_class(slice_mode=False, downsample_mode="4x", small_image_upsize="never")
+            adaptive = image_processing_class(slice_mode=False, downsample_mode="4x", small_image_upsize="adaptive")
             native_area = np.prod(native(image, return_tensors="pt")["target_sizes"].numpy(), axis=1).sum()
             adaptive_area = np.prod(adaptive(image, return_tensors="pt")["target_sizes"].numpy(), axis=1).sum()
             self.assertGreater(adaptive_area, native_area)
 
     @require_cv2
-    def test_adaptive_upsize_thresholds_are_configurable(self):
-        """A font threshold no glyph can satisfy drops the image out of the `"448"` tier."""
-        for image_processing_class in self.image_processing_classes.values():
-            image = self._dense_text_image()
-            shared = {
-                "slice_mode": False,
-                "downsample_mode": "4x",
-                "disable_small_image_upsize": True,
-                "adaptive_small_image_upsize": True,
-            }
-            default = image_processing_class(**shared)
-            strict = image_processing_class(**shared, adaptive_upsize_font_px=0.5)
-            default_sizes = default(image, return_tensors="pt")["target_sizes"].tolist()
-            strict_sizes = strict(image, return_tensors="pt")["target_sizes"].tolist()
-            self.assertNotEqual(default_sizes, strict_sizes)
+    def test_adaptive_upsize_resolution_tiers(self):
+        """The classifier maps dense text to `scale_resolution`, tiny images to `TINY_RESOLUTION`, the rest to
+        native resolution."""
+        from transformers.models.minicpm_ocr.image_processing_minicpm_ocr import (
+            TINY_RESOLUTION,
+            adaptive_upsize_resolution,
+        )
 
-    @require_cv2
-    def test_adaptive_upsize_tiny_target_resolution_is_configurable(self):
-        """Tiny images are upscaled to `adaptive_upsize_tiny_target_resolution`."""
-        for image_processing_class in self.image_processing_classes.values():
-            image = self._tiny_image()
-            shared = {
-                "slice_mode": False,
-                "downsample_mode": "4x",
-                "disable_small_image_upsize": True,
-                "adaptive_small_image_upsize": True,
-            }
-            small_target = image_processing_class(**shared, adaptive_upsize_tiny_target_resolution=84)
-            large_target = image_processing_class(**shared, adaptive_upsize_tiny_target_resolution=168)
-            small_area = np.prod(small_target(image, return_tensors="pt")["target_sizes"].numpy(), axis=1).sum()
-            large_area = np.prod(large_target(image, return_tensors="pt")["target_sizes"].numpy(), axis=1).sum()
-            self.assertGreater(large_area, small_area)
+        scale_resolution = self.image_processor_tester.scale_resolution
+        blank = Image.new("RGB", (200, 120), (255, 255, 255))
+        for image, expected in [
+            (self._dense_text_image(), scale_resolution),
+            (self._tiny_image(), TINY_RESOLUTION),
+            (blank, None),
+        ]:
+            resolution = adaptive_upsize_resolution(
+                np.array(image).transpose(2, 0, 1).astype(np.uint8), scale_resolution
+            )
+            self.assertEqual(resolution, expected)
 
     @require_cv2
     def test_adaptive_tile_target_sizes_match_pixel_values(self):
@@ -283,8 +265,7 @@ class MiniCPMOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                 **{
                     **self.image_processor_dict,
                     "slice_mode": True,
-                    "adaptive_tile_upsize": True,
-                    "adaptive_small_image_upsize": True,
+                    "small_image_upsize": "adaptive",
                 }
             )
             result = adaptive(image, return_tensors="pt")
@@ -320,8 +301,7 @@ class MiniCPMOcrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             image_processor = image_processing_class(
                 slice_mode=False,
                 downsample_mode="4x",
-                disable_small_image_upsize=True,
-                adaptive_small_image_upsize=True,
+                small_image_upsize="adaptive",
             )
 
             missing_cv2 = {"cv2": (lambda: False, import_utils.BACKENDS_MAPPING["cv2"][1])}

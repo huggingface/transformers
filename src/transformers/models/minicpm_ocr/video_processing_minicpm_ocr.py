@@ -209,15 +209,15 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         video_size: tuple[int, int],
         scale_resolution: int,
         patch_size: int,
+        downsample_mode: str,
         allow_upscale: bool = False,
-        downsample_mode: str = "4x",
     ) -> tuple[int, int]:
         height, width = video_size
         if (height * width > scale_resolution * scale_resolution) or allow_upscale:
             aspect_ratio = width / height
             height = int(scale_resolution / math.sqrt(aspect_ratio))
             width = int(height * aspect_ratio)
-
+        # "4x" merges one 2×2 block, "16x" merges twice (ViT insert merger + downsample MLP)
         merge_factor = 2 if downsample_mode == "4x" else 4
         best_height = ensure_divide(height, patch_size * merge_factor)
         best_width = ensure_divide(width, patch_size * merge_factor)
@@ -229,8 +229,8 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         grid: list[int],
         scale_resolution: int,
         patch_size: int,
+        downsample_mode: str,
         allow_upscale: bool = False,
-        downsample_mode: str = "4x",
     ) -> tuple[int, int]:
         height, width = video_size
         grid_y, grid_x = grid
@@ -241,8 +241,8 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
             video_size=(refine_height / grid_y, refine_width / grid_x),
             scale_resolution=scale_resolution,
             patch_size=patch_size,
-            allow_upscale=allow_upscale,
             downsample_mode=downsample_mode,
+            allow_upscale=allow_upscale,
         )
         return best_height * grid_y, best_width * grid_x
 
@@ -347,7 +347,7 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         max_slice_nums: int,
         scale_resolution: int,
         patch_size: int,
-        downsample_mode: str = "4x",
+        downsample_mode: str,
     ):
         num_frames = video.shape[1]
         video_size = video.shape[-2:]
@@ -361,8 +361,8 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
             video_size,
             scale_resolution,
             patch_size,
-            allow_upscale=(best_grid is None),
             downsample_mode=downsample_mode,
+            allow_upscale=(best_grid is None),
         )
         source_videos = self.resize(video, size=SizeDict(height=new_height, width=new_width), resample=resample)
 
@@ -374,8 +374,8 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
                 best_grid,
                 scale_resolution,
                 patch_size,
-                allow_upscale=True,
                 downsample_mode=downsample_mode,
+                allow_upscale=True,
             )
             grid_y, grid_x = best_grid
             patch_height, patch_width = refine_height // grid_y, refine_width // grid_x
@@ -428,7 +428,6 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
-        # Different from MiniCPM-V 4.6 as we also pass `downsample_mode`.
         # Stage 1 — Build an ordered list of visual units.
         # Each unit is a [1, C, H, W] tensor representing either a single main
         # frame or a per-second composite of sub-frames.  When stack_frames > 1

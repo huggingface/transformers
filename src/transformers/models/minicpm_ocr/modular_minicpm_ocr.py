@@ -26,7 +26,7 @@ from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4
 from ..minicpmv4_6.image_processing_minicpmv4_6 import MiniCPMV4_6ImageProcessor, MiniCPMV4_6ImageProcessorKwargs
 from ..minicpmv4_6.modeling_minicpmv4_6 import MiniCPMV4_6ForConditionalGeneration, MiniCPMV4_6Model
 from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor
-from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor
+from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor, MiniCPMV4_6VideoProcessorKwargs
 
 
 if is_cv2_available():
@@ -105,9 +105,15 @@ class MiniCPMOcrVisionConfig(MiniCPMV4_6VisionConfig):
 @strict
 class MiniCPMOcrConfig(MiniCPMV4_6Config):
     r"""
+    insert_layer_id (`int`, *optional*, defaults to 6):
+        Vision encoder layer index after which the window-attention merger is applied.
     downsample_mode (`str`, *optional*, defaults to `"4x"`):
         Visual token downsampling ratio. `"4x"` keeps 4× more tokens than `"16x"`, which is what
         text-dense document images are read with.
+    merge_kernel_size (`tuple[int, int]`, *optional*, defaults to `(2, 2)`):
+        Kernel size `(h, w)` for merging adjacent visual patches in the Merger.
+    merger_times (`int`, *optional*, defaults to 1):
+        Number of iterative merge rounds in the Merger.
     """
 
     tie_word_embeddings: bool = True
@@ -304,42 +310,36 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
         )
 
 
+class MiniCPMOcrVideoProcessorKwargs(MiniCPMV4_6VideoProcessorKwargs, total=False):
+    r"""
+    max_num_frames (`int`, *optional*, defaults to 128):
+        Maximum number of main frames to sample per video.
+    stack_frames (`int`, *optional*, defaults to 1):
+        Sub-frames per second to stack.  ``1`` disables stacking.
+    max_slice_nums (`int`, *optional*, defaults to 9):
+        Maximum number of slices when splitting a high-resolution image.
+    scale_resolution (`int`, *optional*, defaults to 448):
+        Target resolution for individual slices.
+    patch_size (`int`, *optional*, defaults to 14):
+        Spatial patch size of the vision encoder.
+    slice_mode (`bool`, *optional*, defaults to `True`):
+        Whether to split images into multiple slices for higher resolution.
+    downsample_mode (`str`, *optional*, defaults to `"4x"`):
+        Visual token downsampling mode. `"4x"` keeps 4x more tokens than `"16x"`,
+        which applies the full merge.
+    use_image_id (`bool`, *optional*, defaults to `True`):
+        Whether to prepend an image-id tag (``<image_id>N</image_id>``) before
+        each image placeholder. Consumed by the Processor for placeholder
+        generation, not by the image processing pipeline itself.
+    """
+
+
 class MiniCPMOcrVideoProcessor(MiniCPMV4_6VideoProcessor):
     downsample_mode = "4x"
 
 
 class MiniCPMOcrProcessor(MiniCPMV4_6Processor):
-    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
-        # Unlike the parent, slices carry individual token counts: `adaptive_tile_upsize` resizes
-        # each tile independently, so a uniform count would desync text tokens from `pixel_values`.
-        image_grids = image_inputs["grids"]
-        num_patches_per_image = image_inputs["num_patches_per_image"]
-        target_sizes = image_inputs["target_sizes"]
-
-        cum_patches = np.cumsum(num_patches_per_image)
-        start_idx = cum_patches[image_idx - 1] if image_idx > 0 else 0
-        end_idx = cum_patches[image_idx]
-        img_target_sizes = target_sizes[start_idx:end_idx]
-        num_tokens_per_patch = img_target_sizes.prod(-1) // kwargs["image_token_divisor"]
-        num_rows, num_cols = image_grids[image_idx]
-
-        image_placeholder = (
-            self.image_start_token + self.image_token * int(num_tokens_per_patch[0]) + self.image_end_token
-        )
-
-        if self.slice_mode and num_rows > 0 and num_cols > 0:
-            slice_tokens = [int(n) for n in num_tokens_per_patch[1:]]
-            if len(slice_tokens) != num_rows * num_cols:
-                raise ValueError(f"Image {image_idx}: got {len(slice_tokens)} slices for a {num_rows}x{num_cols} grid")
-            slices = []
-            for row in range(num_rows):
-                row_tokens = slice_tokens[row * num_cols : (row + 1) * num_cols]
-                slices.append(
-                    "".join(self.slice_start_token + self.image_token * n + self.slice_end_token for n in row_tokens)
-                )
-            image_placeholder += "\n".join(slices)
-
-        return image_placeholder
+    pass
 
 
 class MiniCPMOcrModel(MiniCPMV4_6Model):
