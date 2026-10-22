@@ -24,10 +24,13 @@ model = AutoModel.from_pretrained("google-bert/bert-base-cased", device_map="aut
 ```
 
 This creates a model instance of [`BertModel`].
+
 Each task has a corresponding `AutoModel` class.
+
 ## Extending the Auto Classes
 
-Each auto class provides a method that allows it to be extended with custom classes.For example, if you define a custom model class `NewModel`, ensure that you also define a corresponding `NewModelConfig`. You can then register them with the auto classes as shown below:
+Each auto class provides a method that allows it to be extended with custom classes. For example, if you define a custom model class `NewModel`, ensure that you also define a corresponding `NewModelConfig`. You can then register them with the auto classes as shown below:
+
 ```python
 from transformers import AutoConfig, AutoModel
 
@@ -37,6 +40,7 @@ AutoModel.register(NewModelConfig, NewModel)
 ```
 
 You can then use the auto classes as you normally would.
+
 <Tip warning={true}>
 
 If your `NewModelConfig` is a subclass of [`~transformers.PreTrainedConfig`], make sure its
