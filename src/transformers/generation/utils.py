@@ -4327,17 +4327,23 @@ class GenerationMixin(ContinuousMixin):
 
             # Pre-encoded features are consumed in placeholder order over (batch, seq): feature row `i` of a modality
             # fills its `i`-th placeholder token, so each chunk gets the rows of the placeholders it contains
-            placeholder_masks = {}
+            chunk_mm_encoder_outputs = [None] * len(input_chunks)
             if is_first_iteration and mm_encoder_outputs:
                 for modality, output in mm_encoder_outputs.items():
-                    if output is not None:
-                        mask = prefill_ids == getattr(self.config, f"{modality}_token_id")
-                        placeholder_masks[modality] = (mask, mask.flatten().cumsum(0).view_as(mask) - 1)
+                    if output is None:
+                        continue
+                    mask = prefill_ids == getattr(self.config, f"{modality}_token_id")
+                    feature_rows = mask.flatten().cumsum(0).view_as(mask) - 1
+                    for chunk_idx, (chunk_mask, chunk_rows) in enumerate(
+                        zip(mask.split(chunk_size, dim=-1), feature_rows.split(chunk_size, dim=-1))
+                    ):
+                        if chunk_mask.any():
+                            chunk_outputs = chunk_mm_encoder_outputs[chunk_idx] or {}
+                            chunk_outputs[modality] = _slice_mm_encoder_output(output, chunk_rows[chunk_mask])
+                            chunk_mm_encoder_outputs[chunk_idx] = chunk_outputs
 
             past_length = cache.get_seq_length()
-            chunk_start = 0
             for chunk_idx, input_chunk in enumerate(input_chunks):
-                chunk_end = chunk_start + input_chunk.shape[-1]
                 current_length = past_length + input_chunk.shape[-1]
                 if attention_mask is not None:
                     model_kwargs["attention_mask"] = attention_mask[:, :current_length]
@@ -4348,21 +4354,13 @@ class GenerationMixin(ContinuousMixin):
                     input_chunk, is_first_iteration=is_first_iteration and chunk_idx == 0, **model_kwargs
                 )
 
-                chunk_mm_encoder_outputs = {}
-                for modality, (mask, feature_rows) in placeholder_masks.items():
-                    chunk_mask = mask[:, chunk_start:chunk_end]
-                    if chunk_mask.any():
-                        chunk_mm_encoder_outputs[modality] = _slice_mm_encoder_output(
-                            mm_encoder_outputs[modality], feature_rows[:, chunk_start:chunk_end][chunk_mask]
-                        )
-                if chunk_mm_encoder_outputs:
-                    model_inputs["mm_encoder_outputs"] = chunk_mm_encoder_outputs
+                if chunk_mm_encoder_outputs[chunk_idx] is not None:
+                    model_inputs["mm_encoder_outputs"] = chunk_mm_encoder_outputs[chunk_idx]
 
                 outputs = model_forward(**model_inputs, return_dict=True)
 
                 model_kwargs["past_key_values"] = outputs.past_key_values
                 past_length = current_length
-                chunk_start = chunk_end
 
             # Recreate the kwargs based on the full length
             model_kwargs["attention_mask"] = attention_mask
