@@ -30,9 +30,12 @@ The model checkpoints can be found [here](https://huggingface.co/collections/Qwe
 <!-- TODO: contact Qwen to add checkpoints to their org! -->
 
 Qwen3-TTS generates codes for a separate audio codec, which decodes them to a waveform. That codec is its own
-model, documented in [Qwen3-TTS Tokenizer](./qwen3_tts_tokenizer); the processor
-loads it alongside the text tokenizer and the feature extractor, so [`~Qwen3TTSProcessor.decode`] works
-without setting it up yourself.
+model, documented in [Qwen3-TTS Tokenizer](./qwen3_tts_tokenizer). Its configuration is stored in
+`model.config.audio_config`, defaulting to [`Qwen3TTSTokenizerConfig`]. The conversion script's
+`--audio_tokenizer_id` selects both this configuration and the codec checkpoint referenced by the processor.
+The processor loads the codec alongside the text tokenizer and the feature extractor, so
+[`~Qwen3TTSProcessor.decode`] works without setting it up yourself. Codec weights remain separate from the
+TTS model weights; loading the TTS model does not instantiate a second codec.
 
 This model was contributed by [Vandit Shah](https://huggingface.co/shahvandit).
 
