@@ -71,6 +71,7 @@ class MiniCPM4Config(LlamaConfig):
         if self.dim_model_base is None:
             self.dim_model_base = self.hidden_size
         super().__post_init__(**kwargs)
+        # Recompute after the parent restores saved attributes so a serialized logits_scaling cannot override this ratio.
         self.logits_scaling = self.hidden_size / self.dim_model_base
 
 

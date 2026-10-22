@@ -31,6 +31,8 @@ MiniCPM4 uses the `minicpm4` model type and the `MiniCPM4` class prefix in Trans
 
 The original code can be found at [OpenBMB/MiniCPM](https://github.com/OpenBMB/MiniCPM).
 
+This model was contributed by [Sushmanth Reddy](https://github.com/sushmanthreddy).
+
 The following checkpoints use the same native [`MiniCPM4ForCausalLM`] implementation:
 
 - [`openbmb/MiniCPM4-0.5B`](https://huggingface.co/openbmb/MiniCPM4-0.5B)

@@ -105,6 +105,7 @@ class MiniCPM4Config(PreTrainedConfig):
             self.num_key_value_heads = self.num_attention_heads
 
         super().__post_init__(**kwargs)
+        # Recompute after the parent restores saved attributes so a serialized logits_scaling cannot override this ratio.
         self.logits_scaling = self.hidden_size / self.dim_model_base
 
     def validate_architecture(self):
