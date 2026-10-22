@@ -275,11 +275,6 @@ class AutoHfQuantizer:
         ):
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
-                if attr == "dtype_plan" and isinstance(quantization_config, FineGrainedConfig):
-                    val = {
-                        **quantization_config.dtype_plan,
-                        **{pattern: None for pattern, entry in val.items() if entry is None},
-                    }
                 setattr(quantization_config, attr, val)
 
             if loading_attr_dict:

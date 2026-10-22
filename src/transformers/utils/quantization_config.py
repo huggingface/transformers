@@ -1770,19 +1770,21 @@ class FineGrainedConfig(QuantizationConfigMixin):
         }
 
     def get_loading_attributes(self):
-        # A passed plan adds its `None` entries to a checkpoint's plan. The weights keep the checkpoint's formats.
-        skipped = {pattern: None for pattern, entry in self.dtype_plan.items() if entry is None}
-        return {"dequantize": self.dequantize, **({"dtype_plan": skipped} if skipped else {})}
+        return {"dtype_plan": self.dtype_plan, "dequantize": self.dequantize}
 
     def loading_attributes_source(self, config):
-        # The config of a plan entry's method lends its loading options to the plan. Its skip-list becomes `None` entries.
+        # A passed plan adds its `None` entries to this plan. The config of an entry's method adds its skip-list as
+        # `None` entries. The weights keep this plan's formats.
         from ..quantizers.quantizers_utils import skip_pattern
 
-        if not any(type(entry) is type(config) for entry in self.dtype_plan.values() if entry is not None):
-            return super().loading_attributes_source(config)
-        skipped = getattr(config, "modules_to_not_convert", None) or []
+        if isinstance(config, FineGrainedConfig):
+            skipped = [pattern for pattern, entry in config.dtype_plan.items() if entry is None]
+        elif any(type(entry) is type(config) for entry in self.dtype_plan.values() if entry is not None):
+            skipped = [skip_pattern(entry) for entry in getattr(config, "modules_to_not_convert", None) or []]
+        else:
+            return None
         return FineGrainedConfig(
-            dtype_plan=dict.fromkeys(map(skip_pattern, skipped)), dequantize=getattr(config, "dequantize", False)
+            dtype_plan={**self.dtype_plan, **dict.fromkeys(skipped)}, dequantize=getattr(config, "dequantize", False)
         )
 
 
