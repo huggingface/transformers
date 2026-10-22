@@ -17,6 +17,9 @@ import unittest
 import unittest.mock
 from types import SimpleNamespace
 
+from parameterized import parameterized
+from safetensors import safe_open
+
 from transformers import MixtralConfig, NVFP4Config
 from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.testing_utils import require_kernels, require_torch, require_torch_accelerator, slow, torch_device
@@ -78,6 +81,10 @@ def _mixtral_config(**kwargs):
         "num_experts_per_tok": 2,
     }
     return MixtralConfig(**{**options, **kwargs})
+
+
+def _cosine(got, expected):
+    return torch.nn.functional.cosine_similarity(got.float().flatten(), expected.float().flatten(), dim=0)
 
 
 def _modelopt_checkpoint(path):
@@ -167,13 +174,11 @@ class NVFP4ConfigTest(unittest.TestCase):
             AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4"}).quantized_layers
         )
 
-    def test_a_modelopt_export_without_nvfp4_or_with_other_formats_raises(self):
-        for algos in (["FP8"], ["NVFP4", "W4A8_AWQ"]):
-            layers = {f"layer{i}": {"quant_algo": algo} for i, algo in enumerate(algos)}
-            with self.subTest(algos=algos), self.assertRaises(ValueError):
-                read_modelopt(
-                    {"quant_method": "modelopt", "quant_algo": "MIXED_PRECISION", "quantized_layers": layers}
-                )
+    @parameterized.expand([("without_nvfp4", ["FP8"]), ("with_another_format", ["NVFP4", "W4A8_AWQ"])])
+    def test_a_modelopt_export_raises(self, _, algos):
+        layers = {f"layer{i}": {"quant_algo": algo} for i, algo in enumerate(algos)}
+        with self.assertRaises(ValueError):
+            read_modelopt({"quant_method": "modelopt", "quant_algo": "MIXED_PRECISION", "quantized_layers": layers})
 
 
 @require_torch
@@ -267,8 +272,7 @@ class NVFP4DequantizeTest(unittest.TestCase):
         self.assertFalse(any(isinstance(m, (NVFP4Linear, NVFP4Experts)) for m in model.modules()))
         ids = torch.randint(0, 512, (2, 12))
         with torch.no_grad():
-            got, expected = model(ids).logits.float(), reference(ids).logits.float()
-        self.assertGreater(torch.nn.functional.cosine_similarity(got.flatten(), expected.flatten(), dim=0), 0.999)
+            self.assertGreater(_cosine(model(ids).logits, reference(ids).logits), 0.999)
 
 
 def _requires_fp8_triton(test):
@@ -281,88 +285,90 @@ def _requires_fp8_triton(test):
 
 @require_kernels
 @require_torch_accelerator
+@_requires_fp8_triton
 class NVFP4LoadTest(unittest.TestCase):
-    @_requires_fp8_triton
-    def test_a_modelopt_checkpoint_matches_its_dequantized_model(self):
-        with tempfile.TemporaryDirectory() as path:
-            reference = _modelopt_checkpoint(path).to(torch_device)
-            ids = torch.randint(0, 512, (2, 24), device=torch_device)
-            with torch.no_grad():
-                expected = reference(ids).logits.float()
-            for implementation in ("eager", "grouped_mm", "batched_mm"):
-                with self.subTest(implementation=implementation):
-                    model, info = AutoModelForCausalLM.from_pretrained(
-                        path,
-                        dtype=torch.bfloat16,
-                        device_map=torch_device,
-                        experts_implementation=implementation,
-                        output_loading_info=True,
-                    )
-                    self.assertFalse(any(info.values()), info)
-                    self.assertIsInstance(model.model.layers[0].mlp.experts, NVFP4Experts)
-                    self.assertIs(type(model.model.layers[0].self_attn.o_proj), torch.nn.Linear)
-                    with torch.no_grad():
-                        got = model(ids).logits.float()
-                    self.assertGreater(
-                        torch.nn.functional.cosine_similarity(got.flatten(), expected.flatten(), dim=0), 0.995
-                    )
+    @classmethod
+    def setUpClass(cls):
+        cls.directory = tempfile.TemporaryDirectory()
+        reference = _modelopt_checkpoint(cls.directory.name).to(torch_device)
+        cls.ids = torch.randint(0, 512, (2, 24), device=torch_device)
+        cls.expected = cls._logits(reference)
 
-    @_requires_fp8_triton
-    def test_a_passed_config_sets_the_activation_format_or_dequantizes(self):
-        """Check that a passed config runs a checkpoint weight-only, or loads it dequantized."""
-        with tempfile.TemporaryDirectory() as path:
-            reference = _modelopt_checkpoint(path).to(torch_device)
-            ids = torch.randint(0, 512, (2, 24), device=torch_device)
-            with torch.no_grad():
-                expected = reference(ids).logits.float()
-            for config, threshold in (
-                (NVFP4Config(activation_format="bf16"), 0.998),
-                (NVFP4Config(dequantize=True), 0.999),
-            ):
-                with self.subTest(config=config.to_dict()):
-                    model = AutoModelForCausalLM.from_pretrained(
-                        path, quantization_config=config, dtype=torch.bfloat16, device_map=torch_device
-                    )
-                    if config.dequantize:
-                        self.assertIsInstance(model.model.layers[0].self_attn.q_proj, torch.nn.Linear)
-                    else:
-                        self.assertEqual(model.model.layers[0].mlp.experts.activation_format, "bf16")
-                    with torch.no_grad():
-                        got = model(ids).logits.float()
-                    self.assertGreater(
-                        torch.nn.functional.cosine_similarity(got.flatten(), expected.flatten(), dim=0), threshold
-                    )
+    @classmethod
+    def tearDownClass(cls):
+        cls.directory.cleanup()
 
-    @_requires_fp8_triton
+    @classmethod
+    def _logits(cls, model):
+        with torch.no_grad():
+            return model(cls.ids).logits.float()
+
+    def _load(self, path, **kwargs):
+        return AutoModelForCausalLM.from_pretrained(path, dtype=torch.bfloat16, device_map=torch_device, **kwargs)
+
+    @parameterized.expand(["eager", "grouped_mm", "batched_mm"])
+    def test_a_modelopt_checkpoint_matches_its_dequantized_model(self, implementation):
+        model, info = self._load(self.directory.name, experts_implementation=implementation, output_loading_info=True)
+        self.assertFalse(any(info.values()), info)
+        self.assertIsInstance(model.model.layers[0].mlp.experts, NVFP4Experts)
+        self.assertIs(type(model.model.layers[0].self_attn.o_proj), torch.nn.Linear)
+        self.assertGreater(_cosine(self._logits(model), self.expected), 0.995)
+
+    @parameterized.expand(
+        [("weight_only", {"activation_format": "bf16"}, 0.998), ("dequantize", {"dequantize": True}, 0.999)]
+    )
+    def test_a_passed_config_overrides_the_checkpoint(self, _, options, threshold):
+        model = self._load(self.directory.name, quantization_config=NVFP4Config(**options))
+        if options.get("dequantize"):
+            self.assertIs(type(model.model.layers[0].self_attn.q_proj), torch.nn.Linear)
+        else:
+            self.assertEqual(model.model.layers[0].mlp.experts.activation_format, "bf16")
+        self.assertGreater(_cosine(self._logits(model), self.expected), threshold)
+
     def test_a_full_precision_checkpoint_quantizes_on_load(self):
         torch.manual_seed(0)
         reference = MixtralForCausalLM(_mixtral_config()).to(torch.bfloat16).eval()
         with tempfile.TemporaryDirectory() as path:
             reference.save_pretrained(path)
-            model = AutoModelForCausalLM.from_pretrained(
-                path, quantization_config=NVFP4Config(), dtype=torch.bfloat16, device_map=torch_device
-            )
+            model = self._load(path, quantization_config=NVFP4Config())
         self.assertIsInstance(model.model.layers[0].mlp.experts, NVFP4Experts)
         self.assertEqual(model.model.layers[0].self_attn.q_proj.weight.dtype, torch.int8)
-        ids = torch.randint(0, 512, (2, 24), device=torch_device)
-        with torch.no_grad():
-            got, expected = model(ids).logits.float(), reference.to(torch_device)(ids).logits.float()
-        self.assertGreater(torch.nn.functional.cosine_similarity(got.flatten(), expected.flatten(), dim=0), 0.95)
+        self.assertGreater(_cosine(self._logits(model), self._logits(reference.to(torch_device))), 0.95)
+
+    @parameterized.expand(["modelopt", "on_the_fly"])
+    def test_a_saved_model_reloads_with_the_same_outputs(self, source):
+        with tempfile.TemporaryDirectory() as full_precision, tempfile.TemporaryDirectory() as saved:
+            if source == "modelopt":
+                model = self._load(self.directory.name)
+            else:
+                MixtralForCausalLM(_mixtral_config()).to(torch.bfloat16).save_pretrained(full_precision)
+                model = self._load(full_precision, quantization_config=NVFP4Config())
+            model.save_pretrained(saved)
+            with safe_open(f"{saved}/model.safetensors", "pt") as file:
+                keys = list(file.keys())
+            reloaded, info = self._load(saved, output_loading_info=True)
+        # the scales split per expert, like their weights
+        self.assertIn("model.layers.0.block_sparse_moe.experts.0.w1.weight_scale_inv", keys)
+        self.assertFalse(any(".experts.gate_up_proj" in key for key in keys))
+        self.assertFalse(any(info.values()), info)
+        torch.testing.assert_close(self._logits(reloaded), self._logits(model))
 
     @slow
-    @_requires_fp8_triton
-    def test_muse_spark_loads_its_fused_experts_and_post_expert_norm(self):
+    def test_muse_spark_loads_and_saves_its_fused_experts_and_post_expert_norm(self):
         from transformers import MuseSparkForConditionalGeneration
 
         repo = "IlyasMoutawwakil/tiny-random-Muse-Spark-NVFP4"
-        reference = MuseSparkForConditionalGeneration.from_pretrained(
-            repo, subfolder="reference", dtype=torch.bfloat16, device_map=torch_device
-        )
-        model = MuseSparkForConditionalGeneration.from_pretrained(repo, dtype=torch.bfloat16, device_map=torch_device)
+        load = {"dtype": torch.bfloat16, "device_map": torch_device}
+        reference = MuseSparkForConditionalGeneration.from_pretrained(repo, subfolder="reference", **load)
+        model = MuseSparkForConditionalGeneration.from_pretrained(repo, **load)
         experts = model.model.language_model.layers[1].mlp.experts
         self.assertIsInstance(experts, NVFP4Experts)
         self.assertIsNotNone(experts.post_expert_norm)
         ids = torch.randint(0, reference.config.get_text_config().vocab_size, (2, 16), device=torch_device)
         with torch.no_grad():
-            got, expected = model(ids).logits.float(), reference(ids).logits.float()
-        self.assertGreater(torch.nn.functional.cosine_similarity(got.flatten(), expected.flatten(), dim=0), 0.99)
+            got = model(ids).logits
+            self.assertGreater(_cosine(got, reference(ids).logits), 0.99)
+            with tempfile.TemporaryDirectory() as path:
+                model.save_pretrained(path)
+                reloaded = MuseSparkForConditionalGeneration.from_pretrained(path, **load)
+            torch.testing.assert_close(reloaded(ids).logits, got)

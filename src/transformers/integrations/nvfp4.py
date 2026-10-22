@@ -23,7 +23,7 @@ import functools
 import re
 
 from ..activations import ACT2FN
-from ..core_model_loading import ConversionOps
+from ..core_model_loading import ConversionOps, _IdentityOp
 from ..quantizers.quantizers_utils import should_convert_module
 from ..utils import is_torch_available, logging
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
@@ -462,6 +462,11 @@ class NVFP4ExpertLayout(ConversionOps):
             out[key] = value
         return out
 
+    @property
+    def reverse_op(self) -> ConversionOps:
+        # a save gets the experts' tensors in the checkpoint layout, from `nvfp4_checkpoint_state_dict`
+        return _IdentityOp()
+
 
 class NVFP4ExpertGlobals(ConversionOps):
     """Reduce the per-expert globals of the checkpoint's projections to the one per expert the experts hold.
@@ -486,6 +491,19 @@ class NVFP4ExpertGlobals(ConversionOps):
                 "the gate's, as vLLM does, which may cost some accuracy."
             )
         return {full_layer_name: values[0].contiguous()}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return NVFP4CopyGlobals()
+
+
+class NVFP4CopyGlobals(ConversionOps):
+    """Give each of the checkpoint's projections the experts' global, the reverse of `NVFP4ExpertGlobals`."""
+
+    def convert(self, input_dict, target_patterns=None, **kwargs):
+        ((_, value),) = input_dict.items()
+        value = value[0] if isinstance(value, list) else value
+        return {target: value.clone() for target in target_patterns}
 
 
 class NVFP4Deserialize(Fp8Dequantize):
@@ -537,8 +555,53 @@ class NVFP4Deserialize(Fp8Dequantize):
             dequantized = dequantized * global_scale.float().reshape(-1, *([1] * (dequantized.ndim - 1)))
         return dequantized.to(output_dtype or torch.bfloat16)
 
+    @property
+    def reverse_op(self) -> ConversionOps:
+        # NVFP4 tensors save as they are held, and the layers loaded dequantized save in the model dtype
+        return _IdentityOp()
 
-def nvfp4_checkpoint_conversions(hf_quantizer, weight_conversions: list, dequantize: bool = False) -> list:
+
+def nvfp4_checkpoint_state_dict(model: nn.Module) -> dict[str, torch.Tensor]:
+    """Return the state dict of `model` with its NVFP4 tensors in the checkpoint layout.
+
+    Scales are unswizzled, gate|up rows go back to stacked, and packed E2M1 bytes are uint8. A layer quantized on the
+    fly runs its activations with a global of 1, which it saves as its input global.
+    """
+    state_dict = model.state_dict()
+    for name, module in model.named_modules():
+        if isinstance(module, NVFP4Linear):
+            slots = [("weight", "weight_scale_inv", "weight_global_scale", "input_global_scale")]
+        elif isinstance(module, NVFP4Experts):
+            slots = [
+                (proj, f"{proj}_scale_inv", f"{proj}_weight_global_scale", f"{proj}_input_global_scale")
+                for proj in (module.gate_up_name, "down_proj")
+            ]
+        else:
+            continue
+        for weight_slot, scale_slot, global_slot, input_slot in slots:
+            weight, scale = getattr(module, weight_slot), getattr(module, scale_slot)
+            if scale.ndim == 5:
+                experts = scale.shape[0] if isinstance(module, NVFP4Experts) else None
+                rows, cols = weight.shape[-2], weight.shape[-1] * 2 // GROUP_SIZE
+                plain = load_finegrained_kernels().unswizzle_mx_scales(
+                    scale.view(torch.uint8), rows, cols, num_experts=experts
+                )
+                scale = plain.view(scale.dtype)
+            if weight_slot == "gate_up_proj" and module.has_gate:
+                # interleaved rows `g0, u0, g1, u1, ...` back to `gate | up`
+                weight, scale = (
+                    value.unflatten(1, (-1, 2)).transpose(1, 2).flatten(1, 2) for value in (weight, scale)
+                )
+            state_dict[f"{name}.{weight_slot}"] = weight.view(torch.uint8).contiguous()
+            state_dict[f"{name}.{scale_slot}"] = scale.contiguous()
+            if module.activation_format is None and getattr(module, input_slot) is None:
+                state_dict[f"{name}.{input_slot}"] = torch.ones_like(getattr(module, global_slot))
+    return state_dict
+
+
+def nvfp4_checkpoint_conversions(
+    hf_quantizer, weight_conversions: list, dequantize: bool = False, for_save: bool = False
+) -> list:
     """Return the conversions that load a ModelOpt NVFP4 checkpoint.
 
     ModelOpt names a module's tensors `weight_scale`, `weight_scale_2` and `input_scale`, and those of a fused experts
@@ -583,6 +646,10 @@ def nvfp4_checkpoint_conversions(hf_quantizer, weight_conversions: list, dequant
                     operations=[MergeModulelist(dim=0), NVFP4ExpertGlobals(hf_quantizer, reduce)],
                 )
             )
+    if for_save:
+        # a save writes the modules' own names. The fused stacks' converters would match first and keep the weights
+        # fused, where the model's converters split them.
+        return conversions
     # a fused experts stack ships in the model's layout, and only needs the experts' own
     conversions += [
         WeightConverter(f"experts.{proj}{slot}", f"experts.{proj}{slot}", [NVFP4ExpertLayout(hf_quantizer)])

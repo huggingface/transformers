@@ -161,7 +161,25 @@ class NVFP4HfQuantizer(HfQuantizer):
         }
 
     def _process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs):
-        from ..integrations.nvfp4 import NVFP4Linear
+        from ..core_model_loading import WeightRenaming
+        from ..integrations.nvfp4 import NVFP4Linear, nvfp4_checkpoint_conversions
+
+        conversions = getattr(model, "_weight_conversions", None) or []
+        if not self.pre_quantized:
+            # an on-the-fly load matched no scale or global, so the loader dropped their converters. A save needs them
+            # to split the scales and globals per expert, like their weights.
+            conversions = nvfp4_checkpoint_conversions(
+                self, super().update_weight_conversions(conversions, model), for_save=True
+            )
+        # a save writes the modules' own names, which load as they are, so it does not reverse the ModelOpt renames
+        model._weight_conversions = [
+            conversion
+            for conversion in conversions
+            if not (
+                isinstance(conversion, WeightRenaming)
+                and conversion._original_source_patterns[0].endswith(("_scale$", "_scale_2$"))
+            )
+        ]
 
         # a distributed load holds shards, so only a full load checks the shapes
         if getattr(model.config, "distributed_config", None) is None:
@@ -216,9 +234,13 @@ class NVFP4HfQuantizer(HfQuantizer):
             return conversions
         return nvfp4_checkpoint_conversions(self, conversions, dequantize=self.quantization_config.dequantize)
 
-    @property
+    def get_state_dict_and_metadata(self, model):
+        from ..integrations.nvfp4 import nvfp4_checkpoint_state_dict
+
+        return nvfp4_checkpoint_state_dict(model), {}
+
     def is_serializable(self) -> bool:
-        return False
+        return True
 
     @property
     def is_trainable(self) -> bool:
