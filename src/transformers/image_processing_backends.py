@@ -137,6 +137,8 @@ class TorchvisionBackend(BaseImageProcessor):
         # Normalize to channel-first
         if image.ndim == 2:
             image = image.unsqueeze(0)
+            input_data_format = ChannelDimension.FIRST
+
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
         if input_data_format == ChannelDimension.LAST:
