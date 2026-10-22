@@ -242,10 +242,6 @@ class OlmoHybridAttention(nn.Module):
 
 
 class OlmoHybridRotaryEmbedding(nn.Module):
-    """
-    RoPE for OLMo Hybrid that returns float32 cos/sin to match OLMo-core.
-    """
-
     def __init__(self, config: OlmoHybridConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -288,8 +284,6 @@ class OlmoHybridRotaryEmbedding(nn.Module):
         emb = torch.cat((freqs, freqs), dim=-1)
         cos = emb.cos() * self.attention_scaling
         sin = emb.sin() * self.attention_scaling
-
-        # KEY difference from parent: return float32, don't cast to x.dtype
         return cos, sin
 
 

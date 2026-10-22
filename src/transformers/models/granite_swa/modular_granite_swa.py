@@ -48,9 +48,8 @@ from ..granite.modeling_granite import (
     GraniteForCausalLM,
     GraniteModel,
     GranitePreTrainedModel,
-    GraniteRotaryEmbedding,
 )
-from ..llama.modeling_llama import apply_rotary_pos_emb, repeat_kv
+from ..llama.modeling_llama import LlamaRotaryEmbedding, apply_rotary_pos_emb, repeat_kv
 
 
 logger = logging.get_logger(__name__)
@@ -237,7 +236,7 @@ class GraniteSWAPreTrainedModel(GranitePreTrainedModel):
             init.zeros_(module.sinks)
 
 
-class GraniteSWARotaryEmbedding(GraniteRotaryEmbedding):
+class GraniteSWARotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

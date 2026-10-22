@@ -38,6 +38,7 @@ from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
     LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
     repeat_kv,
 )
 from ..mixtral.modeling_mixtral import (
@@ -47,7 +48,6 @@ from ..mixtral.modeling_mixtral import (
     MixtralModel,
 )
 from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
-from ..qwen2.modeling_qwen2 import Qwen2RotaryEmbedding
 from .configuration_gpt_oss import GptOssConfig
 
 
@@ -139,7 +139,7 @@ class GptOssMLP(nn.Module):
         return hidden_states, router_scores
 
 
-class GptOssRotaryEmbedding(Qwen2RotaryEmbedding):
+class GptOssRotaryEmbedding(LlamaRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
@@ -148,7 +148,7 @@ class GptOssRotaryEmbedding(Qwen2RotaryEmbedding):
         cos = emb.cos() * self.attention_scaling
         sin = emb.sin() * self.attention_scaling
 
-        return cos.to(x.dtype), sin.to(x.dtype)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def _apply_rotary_emb(

@@ -121,9 +121,7 @@ class Qwen2_5_VisionPatchEmbed(PatchEmbed):
 
 class Qwen2_5_VLVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
     # override: this model uses standard config names (`hidden_size`) opposed to `embed_dim`
-    def compute_axial_rope_parameters(
-        config: Qwen2_5_VLVisionConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: Qwen2_5_VLVisionConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -139,7 +137,7 @@ class Qwen2_5_VLVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
 
 class Qwen2_5_VLPatchMerger(PatchMerger):

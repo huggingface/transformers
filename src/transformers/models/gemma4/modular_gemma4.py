@@ -74,7 +74,7 @@ from ..llama.modeling_llama import LlamaMLP
 from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
-from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
 
 
@@ -793,13 +793,7 @@ def apply_multidimensional_rope(
 
 
 # override -- Gemma4 doesn't pack inputs for attention and thus needs a proper batch dim
-class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
-    def __init__(self, config: Gemma4VisionConfig, device=None):
-        super().__init__(config, device)
-
-    def compute_axial_rope_parameters(config: Gemma4VisionConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
-        return super().compute_axial_rope_parameters(config, device, **kwargs)
-
+class Gemma4VisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
@@ -807,7 +801,7 @@ class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
-        return cos.to(x.dtype), sin.to(x.dtype)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     def recomposition_frequencies(self, freq):
         """
@@ -975,33 +969,28 @@ class Gemma4TextMLP(MistralMLP):
 
 
 class Gemma4TextRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: Gemma4TextConfig, device=None):
+    def __init__(self, config: Gemma4TextConfig):
         nn.Module.__init__(self)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
         self.layer_types = sorted(set(config.layer_types))
-        self.rope_init_fns: dict[str, Callable[..., tuple[torch.Tensor, float]]] = {}
-        self.rope_type: dict[str, str] = {}
-
+        self.rope_type = {}
+        self.rope_init_fns = {}  # diff with Gemma3: kept for `_init_weights`
         for layer_type in self.layer_types:
             rope_params = self.config.rope_parameters[layer_type]
             if rope_params is None:
                 continue
 
-            if (rope_type := rope_params["rope_type"]) != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-            else:
-                rope_init_fn = self.compute_default_rope_parameters
-
+            self.rope_type[layer_type] = rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
             self.rope_init_fns[layer_type] = rope_init_fn
-            self.rope_type[layer_type] = rope_type
-
-            # `inv_freq` depends on the head dim, which varies by layer type, so initialise
-            # from a config resolved for this layer type rather than the global one.
+            # diff with Gemma3: the head dim varies by layer type, so use the config resolved for this layer type
             rope_config = config.per_layer_config[layer_type]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, layer_type=layer_type)
             setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
             setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)

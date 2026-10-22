@@ -10,7 +10,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
@@ -18,6 +17,7 @@ from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
 )
 from ..mistral.modeling_mistral import MistralAttention, MistralMLP, MistralModel
 from .configuration_qwen2 import Qwen2Config
@@ -30,7 +30,7 @@ class Qwen2MLP(MistralMLP):
     pass
 
 
-class Qwen2RotaryEmbedding(Gemma2RotaryEmbedding):
+class Qwen2RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

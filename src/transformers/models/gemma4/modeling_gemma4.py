@@ -717,7 +717,7 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
     The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    def __init__(self, config: Gemma4VisionConfig, device=None):
+    def __init__(self, config: Gemma4VisionConfig):
         super().__init__()
         self.config = config
 
@@ -731,7 +731,7 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_axial_rope_parameters(config: Gemma4VisionConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: Gemma4VisionConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -747,7 +747,7 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
@@ -757,9 +757,8 @@ class Gemma4VisionRotaryEmbedding(nn.Module):
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
-        return cos.to(x.dtype), sin.to(x.dtype)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
-    # Ignore copy
     def recomposition_frequencies(self, freq):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
@@ -1078,40 +1077,35 @@ class Gemma4TextMLP(nn.Module):
 
 
 class Gemma4TextRotaryEmbedding(nn.Module):
-    def __init__(self, config: Gemma4TextConfig, device=None):
+    def __init__(self, config: Gemma4TextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
         self.layer_types = sorted(set(config.layer_types))
-        self.rope_init_fns: dict[str, Callable[..., tuple[torch.Tensor, float]]] = {}
-        self.rope_type: dict[str, str] = {}
-
+        self.rope_type = {}
+        self.rope_init_fns = {}  # diff with Gemma3: kept for `_init_weights`
         for layer_type in self.layer_types:
             rope_params = self.config.rope_parameters[layer_type]
             if rope_params is None:
                 continue
 
-            if (rope_type := rope_params["rope_type"]) != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-            else:
-                rope_init_fn = self.compute_default_rope_parameters
-
+            self.rope_type[layer_type] = rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
             self.rope_init_fns[layer_type] = rope_init_fn
-            self.rope_type[layer_type] = rope_type
-
-            # `inv_freq` depends on the head dim, which varies by layer type, so initialise
-            # from a config resolved for this layer type rather than the global one.
+            # diff with Gemma3: the head dim varies by layer type, so use the config resolved for this layer type
             rope_config = config.per_layer_config[layer_type]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, layer_type=layer_type)
             setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
             setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Gemma4TextConfig, device=None, layer_type: str | None = None, **kwargs
+        config: Gemma4TextConfig, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -1133,7 +1127,7 @@ class Gemma4TextRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)

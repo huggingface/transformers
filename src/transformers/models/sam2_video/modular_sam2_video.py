@@ -942,10 +942,10 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
 
 
 class Sam2VideoVisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
-    def __init__(self, config: Sam2VideoConfig, device=None):
-        super().__init__(config, device=device)
+    def __init__(self, config: Sam2VideoConfig):
+        super().__init__(config)
 
-    def compute_axial_rope_parameters(config: Sam2VideoConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: Sam2VideoConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -963,7 +963,7 @@ class Sam2VideoVisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
 
 def rotate_pairwise(x):

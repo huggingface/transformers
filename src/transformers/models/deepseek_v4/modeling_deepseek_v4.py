@@ -87,7 +87,7 @@ class DeepseekV4RotaryEmbedding(nn.Module):
     when building the per-type inv_freq buffers.
     """
 
-    def __init__(self, config: DeepseekV4Config, device=None):
+    def __init__(self, config: DeepseekV4Config):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -103,14 +103,14 @@ class DeepseekV4RotaryEmbedding(nn.Module):
             rope_init_fn = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            inv_freq, attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
-            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(inv_freq, persistent=False))
-            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(inv_freq.clone(), persistent=False))
-            setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(config, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
+            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: DeepseekV4Config, device=None, layer_type: str | None = None, **kwargs
+        config: DeepseekV4Config, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -134,11 +134,11 @@ class DeepseekV4RotaryEmbedding(nn.Module):
 
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids, layer_type=None):
+    def forward(self, x, position_ids, layer_type):
         # Key difference vs Laguna's forward: no `torch.cat([freqs, freqs], dim=-1)`
         # duplication. V4's interleaved RoPE pairs consecutive channels, so we only need
         # `rope_head_dim // 2` unique θ entries — the `apply_rotary_pos_emb` helper does

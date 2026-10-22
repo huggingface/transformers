@@ -29,10 +29,9 @@ from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..lfm2.modeling_lfm2 import (
     Lfm2Attention,
     Lfm2DecoderLayer,
-    Lfm2RotaryEmbedding,
     Lfm2ShortConv,
 )
-from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm
+from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralModel
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP, Qwen2MoeTopKRouter
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
@@ -46,7 +45,7 @@ class Lfm2MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Lfm2MoeRotaryEmbedding(Lfm2RotaryEmbedding):
+class Lfm2MoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

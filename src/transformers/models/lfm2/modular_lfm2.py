@@ -26,13 +26,13 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
+    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -48,7 +48,7 @@ class Lfm2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class Lfm2RotaryEmbedding(Gemma2RotaryEmbedding):
+class Lfm2RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

@@ -26,6 +26,7 @@ from ...utils import TransformersKwargs, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaRMSNorm,
+    LlamaRotaryEmbedding,
 )
 from ..mistral.modeling_mistral import MistralMLP
 from ..qwen2.modeling_qwen2 import (
@@ -33,7 +34,6 @@ from ..qwen2.modeling_qwen2 import (
     Qwen2ForQuestionAnswering,
     Qwen2ForSequenceClassification,
     Qwen2ForTokenClassification,
-    Qwen2RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -53,7 +53,7 @@ class Qwen3MLP(MistralMLP):
     pass
 
 
-class Qwen3RotaryEmbedding(Qwen2RotaryEmbedding):
+class Qwen3RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

@@ -30,9 +30,9 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ..glm4_moe.modeling_glm4_moe import (
-    Glm4MoeRotaryEmbedding,
     apply_rotary_pos_emb,  # noqa: F401
 )
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
     MixtralExperts,
@@ -161,7 +161,7 @@ class MiniMaxM2RMSNorm(LlamaRMSNorm):
     pass
 
 
-class MiniMaxM2RotaryEmbedding(Glm4MoeRotaryEmbedding):
+class MiniMaxM2RotaryEmbedding(GPTNeoXRotaryEmbedding):
     pass
 
 

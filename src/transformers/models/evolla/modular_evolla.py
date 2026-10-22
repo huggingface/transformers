@@ -105,10 +105,10 @@ class EvollaSaProtEmbeddings(EsmEmbeddings):
 
 
 class EvollaSaProtRotaryEmbedding(EsmRotaryEmbedding):
-    def __init__(self, config: SaProtConfig, device=None):
+    def __init__(self, config: SaProtConfig):
         super().__init__(config)
 
-    def compute_default_rope_parameters(config: SaProtConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: SaProtConfig, **kwargs) -> tuple[torch.Tensor, float]:
         return super().compute_default_rope_parameters(config)
 
 

@@ -24,18 +24,17 @@ from ...modeling_layers import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...utils.output_capturing import OutputRecorder
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralForCausalLM,
     MixtralModel,
     MixtralPreTrainedModel,
-    MixtralRotaryEmbedding,
 )
 from .configuration_phimoe import PhimoeConfig
 
 
-class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
+class PhimoeRotaryEmbedding(LlamaRotaryEmbedding):
     def __init__(self, config: PhimoeConfig):
         nn.Module.__init__()
         self.max_seq_len_cached = config.max_position_embeddings

@@ -42,12 +42,11 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32Model,
     DeepseekV32MoE,
     DeepseekV32PreTrainedModel,
-    DeepseekV32RotaryEmbedding,
     DeepseekV32TopkRouter,
     yarn_apply_mscale,
 )
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -209,7 +208,7 @@ class AXK2GatedRMSNorm(nn.Module):
         return (y * torch.sigmoid(self.gate_mlp(y).float())).to(y.dtype)
 
 
-class AXK2RotaryEmbedding(DeepseekV32RotaryEmbedding):
+class AXK2RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

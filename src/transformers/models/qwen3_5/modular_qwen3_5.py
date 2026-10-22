@@ -40,6 +40,7 @@ from ...vision_utils import (
 )
 from ..auto import AutoModel
 from ..gemma.modeling_gemma import GemmaRMSNorm
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLModel
 from ..qwen3.modeling_qwen3 import Qwen3ForCausalLM
@@ -61,7 +62,6 @@ from ..qwen3_vl.modeling_qwen3_vl import (
     Qwen3VLModelOutputWithPast,
     Qwen3VLTextRotaryEmbedding,
     Qwen3VLVisionModel,
-    Qwen3VLVisionRotaryEmbedding,
 )
 
 
@@ -178,7 +178,7 @@ class Qwen3_5Config(Qwen3VLConfig):
     vision_end_token_id: int = 248054
 
 
-class Qwen3_5VisionRotaryEmbedding(Qwen3VLVisionRotaryEmbedding):
+class Qwen3_5VisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 
@@ -187,9 +187,7 @@ class Qwen3_5TextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
         super().__init__(config)
         self.mrope_section = config.rope_parameters.get("mrope_section", [11, 11, 10])
 
-    def compute_default_rope_parameters(
-        config: Qwen3_5TextConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: Qwen3_5TextConfig, **kwargs) -> tuple[torch.Tensor, float]:
         base = config.rope_parameters["rope_theta"]
         partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
@@ -198,7 +196,7 @@ class Qwen3_5TextRotaryEmbedding(Qwen3VLTextRotaryEmbedding):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
 
 @use_kernel_forward_from_hub("Qwen3_5GatedDeltaNet")

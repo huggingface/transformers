@@ -284,7 +284,7 @@ class NeoMMERotaryEmbedding(LagunaRotaryEmbedding):
     """Two-axis interleaved M-RoPE with per-layer-type frequency spectra."""
 
     def forward(
-        self, x: torch.Tensor, position_ids: torch.LongTensor, layer_type: str | None = None
+        self, x: torch.Tensor, position_ids: torch.LongTensor, layer_type: str
     ) -> tuple[torch.Tensor, torch.Tensor]:
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
@@ -298,7 +298,7 @@ class NeoMMERotaryEmbedding(LagunaRotaryEmbedding):
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
-        return cos.to(x.dtype), sin.to(x.dtype)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     def recomposition_frequencies(self, freq):
         """

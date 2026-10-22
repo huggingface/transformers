@@ -162,7 +162,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
     Implementation based on [ModernBERT's RotaryEmbedding](https://github.com/huggingface/transformers/blob/aad13b87ed59f2afcfaebc985f403301887a35fc/src/transformers/models/modernbert/modeling_modernbert.py#L94).
     """
 
-    def __init__(self, config: SaProtConfig, device=None):
+    def __init__(self, config: SaProtConfig):
         super().__init__()
 
         self.config = config
@@ -173,7 +173,7 @@ class EvollaSaProtRotaryEmbedding(nn.Module):
         setattr(self, "attention_scaling", curr_attention_scaling)
 
     @staticmethod
-    def compute_default_rope_parameters(config: SaProtConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: SaProtConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:

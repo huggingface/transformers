@@ -25,9 +25,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import (
-    ROPE_INIT_FUNCTIONS,
     RopeParameters,
-    dynamic_rope_update,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -39,11 +37,10 @@ from ..gemma.modeling_gemma import (
     GemmaModel,
     GemmaPreTrainedModel,
     GemmaRMSNorm,
-    GemmaRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
 )
-from ..llama.modeling_llama import LlamaAttention
+from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
 from ..mistral.modeling_mistral import MistralMLP
 
 
@@ -142,32 +139,8 @@ class Gemma2MLP(MistralMLP):
     pass
 
 
-class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
-    def __init__(self, config: Gemma2Config):
-        nn.Module.__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config)
-
-        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos() * self.attention_scaling
-        sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+class Gemma2RotaryEmbedding(LlamaRotaryEmbedding):
+    pass
 
 
 def eager_attention_forward(

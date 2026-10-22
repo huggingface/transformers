@@ -32,7 +32,7 @@ from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.output_capturing import OutputRecorder
-from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRMSNorm
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralForCausalLM,
@@ -41,7 +41,6 @@ from ..mistral.modeling_mistral import (
     MistralForTokenClassification,
     MistralModel,
     MistralPreTrainedModel,
-    MistralRotaryEmbedding,
 )
 from .configuration_mixtral import MixtralConfig
 
@@ -199,7 +198,7 @@ class MixtralRMSNorm(LlamaRMSNorm):
     pass
 
 
-class MixtralRotaryEmbedding(MistralRotaryEmbedding):
+class MixtralRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

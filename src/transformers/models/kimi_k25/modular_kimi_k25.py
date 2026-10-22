@@ -44,8 +44,9 @@ from ...vision_utils import (
 from ..auto import AutoConfig, AutoModel
 from ..auto import AutoConfig, AutoModel
 from ..clip.modeling_clip import CLIPMLP
-from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration, Glm4vVisionRotaryEmbedding
+from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaModelOutputWithPast
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLPreTrainedModel,
     Qwen2VLVisionBlock,
@@ -236,7 +237,7 @@ class Kimi_K25VisionPatchEmbed(nn.Module):
         return hidden_states
 
 
-class Kimi_K25VisionRotaryEmbedding(Glm4vVisionRotaryEmbedding):
+class Kimi_K25VisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     def recomposition_frequencies(self, freq):
         """
         Recompose the frequencies into the final spatial layout used per each grid.

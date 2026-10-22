@@ -42,14 +42,13 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
     DeepseekV3PreTrainedModel,
-    DeepseekV3RotaryEmbedding,
     apply_rotary_pos_emb,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
 from ..glm4_moe_lite.configuration_glm4_moe_lite import Glm4MoeLiteConfig
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -167,7 +166,7 @@ class DeepseekV32RMSNorm(LlamaRMSNorm):
     pass
 
 
-class DeepseekV32RotaryEmbedding(DeepseekV3RotaryEmbedding):
+class DeepseekV32RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

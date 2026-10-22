@@ -41,14 +41,13 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Model,
     DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
-    DeepseekV3RotaryEmbedding,
     DeepseekV3TopkRouter,
     apply_rotary_pos_emb,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
@@ -137,7 +136,7 @@ class AXK1RMSNorm(LlamaRMSNorm):
     pass
 
 
-class AXK1RotaryEmbedding(DeepseekV3RotaryEmbedding):
+class AXK1RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

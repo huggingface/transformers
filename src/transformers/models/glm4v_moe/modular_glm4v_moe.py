@@ -38,10 +38,10 @@ from ..glm4v.modeling_glm4v import (
     Glm4vTextModel,
     Glm4vTextRotaryEmbedding,
     Glm4vVisionModel,
-    Glm4vVisionRotaryEmbedding,
 )
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa: F401
 from ..llama.modeling_llama import LlamaAttention
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeCausalLMOutputWithPast,
@@ -187,7 +187,7 @@ class Glm4vMoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
     pass
 
 
-class Glm4vMoeVisionRotaryEmbedding(Glm4vVisionRotaryEmbedding):
+class Glm4vMoeVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 

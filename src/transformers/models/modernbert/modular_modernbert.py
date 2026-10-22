@@ -232,11 +232,11 @@ class ModernBertMLP(Phi3MLP):
 
 
 class ModernBertRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: ModernBertConfig, device=None):
+    def __init__(self, config: ModernBertConfig):
         super().__init__(config)
 
     def compute_default_rope_parameters(
-        config: ModernBertConfig, device=None, layer_type: str | None = None, **kwargs
+        config: ModernBertConfig, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         return super().compute_default_rope_parameters(config, layer_type)
 

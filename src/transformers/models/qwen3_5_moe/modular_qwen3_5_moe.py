@@ -24,6 +24,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
@@ -33,7 +34,6 @@ from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5TextModel,
     Qwen3_5TextRotaryEmbedding,
     Qwen3_5VisionModel,
-    Qwen3_5VisionRotaryEmbedding,
     causal_conv1d_fn,
     causal_conv1d_update,
     torch_chunk_gated_delta_rule,
@@ -159,7 +159,7 @@ class Qwen3_5MoeConfig(Qwen3VLConfig):
     vision_end_token_id: int = 248054
 
 
-class Qwen3_5MoeVisionRotaryEmbedding(Qwen3_5VisionRotaryEmbedding):
+class Qwen3_5MoeVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 

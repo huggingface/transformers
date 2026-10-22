@@ -39,6 +39,7 @@ from ...vision_utils import get_vision_position_ids
 from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
 from ..gemma.modeling_gemma import GemmaRMSNorm
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..laguna.modeling_laguna import LagunaSparseMoeBlock
 from ..llama.modeling_llama import LlamaDecoderLayer, eager_attention_forward
 from ..llava.modeling_llava import (
@@ -52,7 +53,6 @@ from ..minimax_m2.modeling_minimax_m2 import (
     MiniMaxM2ForCausalLM,
     MiniMaxM2Model,
     MiniMaxM2PreTrainedModel,
-    MiniMaxM2RotaryEmbedding,
     MiniMaxM2TopKRouter,
     apply_rotary_pos_emb,
 )
@@ -378,7 +378,7 @@ class MiniMaxM3VLSparseMoeBlock(LagunaSparseMoeBlock):
         self.shared_experts = MiniMaxM3VLDenseMLP(config, intermediate_size=config.shared_intermediate_size)
 
 
-class MiniMaxM3VLRotaryEmbedding(MiniMaxM2RotaryEmbedding):
+class MiniMaxM3VLRotaryEmbedding(GPTNeoXRotaryEmbedding):
     pass
 
 
@@ -743,7 +743,7 @@ class MiniMaxM3VLVisionEmbeddings(Qwen2_5_VisionPatchEmbed):
 class MiniMaxM3VLVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     """Partial 3D RoPE with equal frequency bands for temporal, height and width coordinates."""
 
-    def compute_axial_rope_parameters(config: MiniMaxM3VLVisionConfig, device=None, **kwargs):
+    def compute_axial_rope_parameters(config: MiniMaxM3VLVisionConfig, **kwargs):
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -760,24 +760,17 @@ class MiniMaxM3VLVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     def forward(self, x, position_ids):
-        # position_ids: (3, N) - with direct THW order
+        # position_ids: (N, 3) - with direct THW order
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
         sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
-        return cos.to(x.dtype), sin.to(x.dtype)
-
-    def recomposition_frequencies(self, freq):
-        """
-        Recompose the frequencies into the final spatial layout used per each grid.
-        """
-        freq = freq.flatten(1)  # We already have THW order
-        return torch.cat([freq, freq], dim=-1)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def rotate_half(x):

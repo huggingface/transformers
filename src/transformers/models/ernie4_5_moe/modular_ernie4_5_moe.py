@@ -38,6 +38,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
     MixtralPreTrainedModel,
 )
+from ..olmo.modeling_olmo import OlmoRotaryEmbedding
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from .configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 
@@ -58,7 +59,7 @@ class Ernie4_5_MoeMLP(Qwen2MoeMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
 
-class Ernie4_5_MoeRotaryEmbedding(Ernie4_5RotaryEmbedding):
+class Ernie4_5_MoeRotaryEmbedding(OlmoRotaryEmbedding):
     pass
 
 

@@ -33,8 +33,8 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ..auto import AutoConfig, AutoModel
 from ..granite.configuration_granite import GraniteConfig
-from ..granite.modeling_granite import GraniteDecoderLayer, GraniteModel, GraniteRotaryEmbedding
-from ..llama.modeling_llama import LlamaAttention
+from ..granite.modeling_granite import GraniteDecoderLayer, GraniteModel
+from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
 from ..llava_next.configuration_llava_next import LlavaNextConfig
 from ..llava_next.modeling_llava_next import (
     LlavaNextCausalLMOutputWithPast,
@@ -342,7 +342,7 @@ class Granite4VisionWindowQFormerDownsampler(nn.Module):
 # ── Model ───────────────────────────────────────────────────────────────────
 
 
-class Granite4VisionTextRotaryEmbedding(GraniteRotaryEmbedding):
+class Granite4VisionTextRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

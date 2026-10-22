@@ -49,7 +49,6 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLForConditionalGeneration,
     Qwen2_5_VLModelOutputWithPast,
     Qwen2_5_VLPreTrainedModel,
-    Qwen2_5_VLRotaryEmbedding,
     Qwen2_5_VLTextModel,
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionRotaryEmbedding,
@@ -361,7 +360,7 @@ class Glm4vTextRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
         super().__init__()
         self.mrope_section = config.rope_parameters.get("mrope_section", [8, 12, 12])
 
-    def compute_default_rope_parameters(config: Glm4vConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: Glm4vConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -379,7 +378,7 @@ class Glm4vTextRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     def recomposition_frequencies(self, freq):
         """

@@ -55,9 +55,9 @@ from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
     Gemma2PreTrainedModel,
-    Gemma2RotaryEmbedding,
     eager_attention_forward,
 )
+from ..llama.modeling_llama import LlamaRotaryEmbedding
 from ..mistral.modeling_mistral import MistralMLP
 
 
@@ -157,7 +157,7 @@ class T5GemmaMLP(MistralMLP):
         return down_proj
 
 
-class T5GemmaRotaryEmbedding(Gemma2RotaryEmbedding):
+class T5GemmaRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

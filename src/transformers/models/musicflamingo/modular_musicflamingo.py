@@ -44,7 +44,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
 )
 from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
 from ..auto.configuration_auto import AutoConfig
-from ..moonshine.modeling_moonshine import MoonshineRotaryEmbedding
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -192,7 +192,7 @@ def apply_rotary_time_emb(hidden_states, cos, sin):
     return torch.cat((rotated, passthrough), dim=-1).to(original_dtype)
 
 
-class MusicFlamingoRotaryEmbedding(MoonshineRotaryEmbedding):
+class MusicFlamingoRotaryEmbedding(GPTNeoXRotaryEmbedding):
     """Rotary time embedding module used by MusicFlamingo checkpoints.
 
     This is a checkpoint-faithful integration, not a direct implementation of the RoTE formulation described in

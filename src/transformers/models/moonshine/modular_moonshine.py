@@ -40,7 +40,8 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..clip.modeling_clip import CLIPMLP
-from ..glm.modeling_glm import GlmRotaryEmbedding, apply_rotary_pos_emb
+from ..glm.modeling_glm import apply_rotary_pos_emb
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaModel, eager_attention_forward
 from ..phi3.modeling_phi3 import Phi3MLP
 from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
@@ -172,7 +173,7 @@ class MoonshineDecoderMLP(Phi3MLP):
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
 
-class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
+class MoonshineRotaryEmbedding(GPTNeoXRotaryEmbedding):
     pass
 
 

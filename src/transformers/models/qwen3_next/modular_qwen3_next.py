@@ -34,7 +34,7 @@ from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..bamba.modeling_bamba import apply_mask_to_padding_states, apply_rotary_pos_emb
 from ..gemma.modeling_gemma import GemmaRMSNorm
-from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForQuestionAnswering,
@@ -79,26 +79,8 @@ class Qwen3NextRMSNormGated(nn.Module):
         return hidden_states.to(input_dtype)
 
 
-class Qwen3NextRotaryEmbedding(Gemma2RotaryEmbedding):
-    def compute_default_rope_parameters(config: Qwen3NextConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        dim = int(head_dim * partial_rotary_factor)
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+class Qwen3NextRotaryEmbedding(GPTNeoXRotaryEmbedding):
+    pass
 
 
 class Qwen3NextRMSNorm(GemmaRMSNorm):

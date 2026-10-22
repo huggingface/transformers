@@ -48,7 +48,6 @@ from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGen
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
 from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma3.modeling_gemma3 import Gemma3TextModel, _bidirectional_window_overlay
-from ..kimi_k25.modeling_kimi_k25 import Kimi_K25VisionRotaryEmbedding
 from ..laguna.modeling_laguna import (
     LagunaAttention,
     LagunaRotaryEmbedding,
@@ -66,6 +65,7 @@ from ..minimax_m3_vl.modeling_minimax_m3_vl import (
 # Unused here, but load-bearing: `Step3p7VisionAttention` inherits `MiniMaxM3VLVisionAttention`, so
 # without this import the converter would pull MiniMax's 3-axis `apply_rotary_pos_emb_vision` into the
 # generated file. This tower is 2-D (t=1, spatial_merge_size=1), so it needs Qwen2-VL's 2-axis one.
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.modeling_qwen2_vl import apply_rotary_pos_emb_vision  # noqa: F401
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipVisionEmbeddings
@@ -584,13 +584,8 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 #  Vision encoder
 
 
-class Step3p7VisionRotaryEmbedding(Kimi_K25VisionRotaryEmbedding):
-    def recomposition_frequencies(self, freq):
-        """
-        Recompose the frequencies into the final spatial layout used per each grid.
-        """
-        freq_hw = freq.flatten(1)
-        return torch.cat((freq_hw, freq_hw), dim=-1)
+class Step3p7VisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
+    pass
 
 
 class Step3p7VisionMLP(CLIPMLP):

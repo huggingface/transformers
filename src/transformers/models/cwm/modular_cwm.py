@@ -27,9 +27,9 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaModel,
     LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
 )
 from ..mistral.modeling_mistral import MistralAttention
-from ..qwen2.modeling_qwen2 import Qwen2RotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -91,7 +91,7 @@ class CwmConfig(LlamaConfig):
         super().__post_init__(**kwargs)
 
 
-class CwmRotaryEmbedding(Qwen2RotaryEmbedding):
+class CwmRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
