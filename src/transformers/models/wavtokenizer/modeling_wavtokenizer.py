@@ -673,8 +673,8 @@ class WavTokenizerModel(WavTokenizerPreTrainedModel):
             Mask indicating valid audio samples (1) versus padding (0), used to compute `audio_codes_mask`.
         """
         length = input_values.shape[-1]
-        encoder_outputs = self.encode(input_values, padding_mask=padding_mask, return_dict=True)
-        audio_values = self.decode(encoder_outputs.audio_codes, return_dict=True).audio_values[..., :length]
+        encoder_outputs = self.encode(input_values, padding_mask=padding_mask)
+        audio_values = self.decode(encoder_outputs.audio_codes).audio_values[..., :length]
         return WavTokenizerOutput(
             audio_values=audio_values,
             audio_codes=encoder_outputs.audio_codes,
