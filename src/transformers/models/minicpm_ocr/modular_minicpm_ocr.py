@@ -133,37 +133,14 @@ class MiniCPMOcrImageProcessorKwargs(MiniCPMV4_6ImageProcessorKwargs, total=Fals
         Whether to prepend an image-id tag (``<image_id>N</image_id>``) before
         each image placeholder. Consumed by the Processor for placeholder
         generation, not by the image processing pipeline itself.
-    disable_small_image_upsize (`bool`, *optional*, defaults to `False`):
-        Whether to keep images smaller than `scale_resolution` squared at their native resolution
-        instead of upscaling them, aligning them to the patch grid only.
-    adaptive_small_image_upsize (`bool`, *optional*, defaults to `False`):
-        Whether to pick the resize target of those small images from their glyph size and density
-        instead of applying `disable_small_image_upsize` uniformly. Requires OpenCV
-        (`opencv-python`); see [`adaptive_upsize_tier`].
-    adaptive_upsize_font_px (`float`, *optional*, defaults to 12.0):
-        Largest median glyph height, in pixels, still treated as small text.
-    adaptive_upsize_dense_per_kpx (`float`, *optional*, defaults to 2.0):
-        Smallest number of glyphs per 1000 pixels still treated as dense text.
-    adaptive_upsize_tiny_pixels (`int`, *optional*, defaults to 6272):
-        Images with fewer pixels than this are treated as tiny, unless small dense text was
-        detected first.
-    adaptive_upsize_tiny_target_resolution (`int`, *optional*, defaults to 84):
-        Resolution those tiny images are upscaled to.
-    adaptive_tile_upsize (`bool`, *optional*, defaults to `False`):
-        Whether to apply per-tile adaptive resolution when slicing large images. When enabled,
-        each tile whose original-image crop is at most `scale_resolution` squared is classified
-        with the same CV heuristic as `adaptive_small_image_upsize` and may be kept at its native
-        resolution instead of being upscaled to the slice grid. Requires
-        `adaptive_small_image_upsize` to also be `True`. Requires OpenCV (`opencv-python`).
+    small_image_upsize (`str`, *optional*, defaults to `"always"`):
+        How images and slices no larger than `scale_resolution` squared are resized. `"always"` upscales them to
+        `scale_resolution`, `"never"` keeps their native resolution aligned to the patch grid, and `"adaptive"`
+        picks per image and per slice from glyph size and density (requires OpenCV, see
+        [`adaptive_upsize_resolution`]).
     """
 
-    disable_small_image_upsize: bool
-    adaptive_small_image_upsize: bool
-    adaptive_upsize_font_px: float
-    adaptive_upsize_dense_per_kpx: float
-    adaptive_upsize_tiny_pixels: int
-    adaptive_upsize_tiny_target_resolution: int
-    adaptive_tile_upsize: bool
+    small_image_upsize: str
 
 
 class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
