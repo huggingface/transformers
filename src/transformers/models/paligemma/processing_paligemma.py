@@ -37,7 +37,7 @@ IMAGE_TOKEN = "<image>"
 EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
 
 
-class DeprecatedPaliGemmaTextKwargs(TextKwargs):
+class DeprecatedPaliGemmaTextKwargs(TextKwargs, total=False):
     """
     suffix (`str | list[str] | list[list[str]]`, *optional*):
         Deprecated, pass directly to [`PaliGemmaProcessor.__call__`] instead.
