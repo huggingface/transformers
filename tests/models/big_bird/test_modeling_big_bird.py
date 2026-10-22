@@ -22,6 +22,7 @@ from transformers.models.auto import get_values
 from transformers.models.big_bird.tokenization_big_bird import BigBirdTokenizer
 from transformers.testing_utils import require_torch, slow, torch_device
 
+from ...generation.test_utils import assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
@@ -538,6 +539,27 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             torch.allclose(res_orig[:, :-1], res_mod[:, :-1], atol=1e-4),
             "Decoder model attended to future tokens!",
         )
+
+    def test_generate_block_sparse_with_static_cache(self):
+        # Regression test: a static cache used to hand block-sparse attention a 4D mask, which it cannot unpack
+        config, input_ids = self.model_tester.prepare_config_and_inputs_for_decoder()[:2]
+        config.attention_type = "block_sparse"
+        model = BigBirdForCausalLM(config).to(torch_device).eval()
+        generation_kwargs = {
+            "max_new_tokens": 5,
+            "do_sample": False,
+            "pad_token_id": None,
+            "return_dict_in_generate": True,
+            "output_scores": True,
+        }
+
+        # Generating falls back to full attention once the decoded length is below the block-sparse minimum, and
+        # that switch sticks to the model, so the attention type is restored before each call.
+        model.bert.set_attention_type("block_sparse")
+        dynamic_output = model.generate(input_ids, **generation_kwargs)
+        model.bert.set_attention_type("block_sparse")
+        static_output = model.generate(input_ids, cache_implementation="static", **generation_kwargs)
+        assert_similar_generate_outputs(dynamic_output, static_output)
 
     def test_retain_grad_hidden_states_attentions(self):
         # bigbird cannot keep gradients in attentions when `attention_type=block_sparse`

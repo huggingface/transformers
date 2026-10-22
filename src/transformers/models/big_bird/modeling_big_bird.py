@@ -1994,6 +1994,18 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
+    def create_masks_for_generate(
+        self,
+        config: BigBirdConfig,
+        inputs_embeds: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None,
+        **kwargs,
+    ) -> torch.Tensor | None:
+        # Overwritten because block-sparse attention needs a 2D mask whose length matches the input, while the
+        # generic function returns a 4D one. The full-attention path builds its own 4D mask inside the model.
+        return attention_mask
+
     @can_return_tuple
     @auto_docstring
     def forward(
