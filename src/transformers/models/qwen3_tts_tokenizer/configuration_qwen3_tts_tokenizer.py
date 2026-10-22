@@ -34,10 +34,31 @@ logger = logging.get_logger(__name__)
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
 @strict
+class Qwen3TTSTokenizerSemanticQuantizerConfig(PreTrainedConfig):
+    r"""
+    vector_quantization_hidden_dimension (`int`, *optional*, defaults to 256):
+        Dimension used within the semantic vector quantizers.
+    """
+
+    model_type = "qwen3_tts_tokenizer_semantic_quantizer"
+    base_config_key = "semantic_quantizer_config"
+    attribute_map = {"num_quantizers": "n_codebooks"}
+
+    codebook_size: int = 2048
+    codebook_dim: int = 256
+    n_codebooks: int = 1
+    vector_quantization_hidden_dimension: int = 256
+    hidden_size: int = 512
+
+
+@auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
+@strict
 class Qwen3TTSTokenizerQuantizerConfig(PreTrainedConfig):
     r"""
-    num_semantic_quantizers (`int`, *optional*, defaults to 1):
-        Number of quantizers assigned to semantic codes.
+    semantic_quantizer_config (`dict` or `Qwen3TTSTokenizerSemanticQuantizerConfig`, *optional*):
+        Configuration for the semantic residual vector quantizer. Unspecified dictionary fields inherit the shared
+        quantizer settings, with one semantic codebook by default. `n_codebooks` on this config counts both semantic
+        and acoustic codebooks; the remaining settings configure the acoustic quantizer.
     vector_quantization_hidden_dimension (`int`, *optional*, defaults to 256):
         Dimension used within the vector quantizers.
     """
@@ -45,13 +66,31 @@ class Qwen3TTSTokenizerQuantizerConfig(PreTrainedConfig):
     model_type = "qwen3_tts_tokenizer_quantizer"
     base_config_key = "quantizer_config"
     attribute_map = {"num_quantizers": "n_codebooks"}
+    sub_configs = {"semantic_quantizer_config": Qwen3TTSTokenizerSemanticQuantizerConfig}
 
     codebook_size: int = 2048
     codebook_dim: int = 256
     n_codebooks: int = 16
-    num_semantic_quantizers: int = 1
     vector_quantization_hidden_dimension: int = 256
     hidden_size: int = 512
+    semantic_quantizer_config: dict | PreTrainedConfig | None = None
+
+    def __post_init__(self, **kwargs):
+        # Older configs stored the semantic count alongside settings shared by both quantizers.
+        num_semantic_quantizers = kwargs.pop("num_semantic_quantizers", 1)
+        if self.semantic_quantizer_config is None:
+            self.semantic_quantizer_config = {}
+        if isinstance(self.semantic_quantizer_config, dict):
+            semantic_config = {
+                "codebook_size": self.codebook_size,
+                "codebook_dim": self.codebook_dim,
+                "n_codebooks": num_semantic_quantizers,
+                "vector_quantization_hidden_dimension": self.vector_quantization_hidden_dimension,
+                "hidden_size": self.hidden_size,
+                **self.semantic_quantizer_config,
+            }
+            self.semantic_quantizer_config = Qwen3TTSTokenizerSemanticQuantizerConfig(**semantic_config)
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
@@ -299,7 +338,9 @@ class Qwen3TTSTokenizerConfig(Qwen3TTSTokenizerDecoderConfig):
                 codebook_size=decoder_quantizer_settings.get("codebook_size", 2048),
                 codebook_dim=self.codebook_dim // 2,
                 n_codebooks=decoder_quantizer_settings.get("num_quantizers", 16),
-                num_semantic_quantizers=decoder_quantizer_settings.get("num_semantic_quantizers", 1),
+                semantic_quantizer_config={
+                    "n_codebooks": decoder_quantizer_settings.get("num_semantic_quantizers", 1)
+                },
                 vector_quantization_hidden_dimension=self.codebook_dim // 2,
                 hidden_size=self.codebook_dim,
             )
@@ -321,4 +362,5 @@ __all__ = [
     "Qwen3TTSTokenizerEncoderConfig",
     "Qwen3TTSTokenizerDecoderConfig",
     "Qwen3TTSTokenizerQuantizerConfig",
+    "Qwen3TTSTokenizerSemanticQuantizerConfig",
 ]
