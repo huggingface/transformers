@@ -25,15 +25,14 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
 
 
-# Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
-# and does not use them in video processor class
-class Qwen2_5_OmniVideosKwargs(VideosKwargs, total=False):
+class DeprecatedQwen2_5_OmniVideosKwargs(VideosKwargs, total=False):
     """
     min_pixels (`int`, *optional*):
         Minimum number of pixels (height × width) for video frames after resizing. Frames smaller than this
@@ -95,7 +94,7 @@ class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
         of position embeddings and is used to align video tokens with audio tokens when `use_audio_in_video=True`.
     """
 
-    videos_kwargs: Qwen2_5_OmniVideosKwargs
+    videos_kwargs: DeprecatedQwen2_5_OmniVideosKwargs
 
     seconds_per_chunk: float
     position_id_per_seconds: int | float
@@ -410,4 +409,8 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         )
 
 
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={"Qwen2_5_OmniVideosKwargs": (DeprecatedQwen2_5_OmniVideosKwargs, "5.29.0")},
+)
 __all__ = ["Qwen2_5OmniProcessor"]

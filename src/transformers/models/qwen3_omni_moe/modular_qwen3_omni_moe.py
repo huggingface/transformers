@@ -46,6 +46,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import (
     TransformersKwargs,
     accepts_precomputed_kwargs,
@@ -68,6 +69,7 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniThinkerForConditionalGeneration,
 )
 from ..qwen2_5_omni.processing_qwen2_5_omni import (
+    DeprecatedQwen2_5_OmniVideosKwargs,
     Qwen2_5OmniProcessor,
     Qwen2_5OmniProcessorKwargs,
     SinusoidsPositionEmbedding,
@@ -2686,6 +2688,10 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
         return thinker_result.sequences, talker_wavs
 
 
+class DeprecatedQwen3OmniMoeVideosKwargs(DeprecatedQwen2_5_OmniVideosKwargs, total=False):
+    pass
+
+
 class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs, total=False):
     """
     use_audio_in_video (`bool`, *optional*, defaults to `False`):
@@ -2701,6 +2707,7 @@ class Qwen3OmniMoeProcessorKwargs(Qwen2_5OmniProcessorKwargs, total=False):
         The audio encoder window size. This should match `n_window` in the model configuration.
     """
 
+    videos_kwargs: DeprecatedQwen3OmniMoeVideosKwargs
     n_window: int
 
 
@@ -2904,6 +2911,10 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
         return ProcessorMixin.apply_chat_template(self, conversations, chat_template, **kwargs)
 
+
+__getattr__ = deprecate_attr(
+    __name__, remove={"Qwen3OmniMoeVideosKwargs": (DeprecatedQwen3OmniMoeVideosKwargs, "5.29.0")}
+)
 
 __all__ = [
     "Qwen3OmniMoeAudioEncoderConfig",

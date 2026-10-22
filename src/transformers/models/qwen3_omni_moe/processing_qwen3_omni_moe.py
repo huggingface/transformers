@@ -28,15 +28,14 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
 
 
-# Redefine kwargs for videos because Qwen-Omni uses some kwargs for processing omni
-# and does not use them in video processor class
-class Qwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
+class DeprecatedQwen3OmniMoeVideosKwargs(VideosKwargs, total=False):
     """
     min_pixels (`int`, *optional*):
         Minimum number of pixels (height × width) for video frames after resizing. Frames smaller than this
@@ -100,12 +99,11 @@ class Qwen3OmniMoeProcessorKwargs(ProcessingKwargs, total=False):
         The audio encoder window size. This should match `n_window` in the model configuration.
     """
 
-    videos_kwargs: Qwen3OmniMoeVideosKwargs
+    videos_kwargs: DeprecatedQwen3OmniMoeVideosKwargs
 
     seconds_per_chunk: float
     position_id_per_seconds: int | float
     use_audio_in_video: bool
-
     n_window: int
 
 
@@ -445,5 +443,9 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
     def apply_chat_template(self, conversations, chat_template=None, **kwargs):
         return super().apply_chat_template(conversations, chat_template, **kwargs)
 
+
+__getattr__ = deprecate_attr(
+    __name__, remove={"Qwen3OmniMoeVideosKwargs": (DeprecatedQwen3OmniMoeVideosKwargs, "5.29.0")}
+)
 
 __all__ = ["Qwen3OmniMoeProcessor"]
