@@ -376,13 +376,13 @@ class DynamicIndexedLayer(DynamicLayer):
 
     def crop(self, tokens_to_remove: int) -> None:
         super().crop(tokens_to_remove)
-        if not self.is_indexer_initialized or self.indexer_keys.numel() == 0:
-            return
         if tokens_to_remove == 0:
             return
-        self.indexer_keys = self.indexer_keys[:, : -abs(tokens_to_remove), :]
         if self.indexer_position_ids is not None:
             self.indexer_position_ids = self.indexer_position_ids[..., : -abs(tokens_to_remove)]
+        if not self.is_indexer_initialized or self.indexer_keys.numel() == 0:
+            return
+        self.indexer_keys = self.indexer_keys[:, : -abs(tokens_to_remove), :]
 
     def batch_repeat_interleave(self, repeats: int) -> None:
         super().batch_repeat_interleave(repeats)
