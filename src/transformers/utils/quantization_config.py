@@ -19,6 +19,7 @@ import fnmatch
 import importlib.metadata
 import json
 import os
+import re
 import warnings
 from dataclasses import dataclass
 from enum import Enum
@@ -1713,6 +1714,36 @@ def _subtree_patterns(globs: list[str]) -> list[str]:
     return patterns
 
 
+def _names_pattern(names: list[str]) -> str:
+    """Return one regex that matches exactly the modules `names` and their sub-trees, like `_subtree_patterns`.
+
+    The names share a trie of their dotted parts. Siblings with the same sub-tree share one alternation. So the
+    per-expert names of a whole model become one short pattern, such as `layers\\.(?:0|1)\\.experts\\.(?:0|1|2)`.
+    """
+    tree = {}
+    # a name covers its sub-tree, so a longer name under it adds nothing
+    for name in sorted(names, key=lambda name: name.count(".")):
+        *parents, leaf = name.split(".")
+        node = tree
+        for part in parents:
+            node = node.setdefault(part, {})
+            if node is None:
+                break
+        else:
+            node[leaf] = None
+
+    def body(node: dict) -> str:
+        rests = {}
+        for part, child in node.items():
+            rests.setdefault("" if child is None else rf"\.{body(child)}", []).append(part)
+        branches = [
+            "(?:" + "|".join(re.escape(part) for part in sorted(parts)) + ")" + rest for rest, parts in rests.items()
+        ]
+        return "(?:" + "|".join(branches) + ")"
+
+    return r"(?:^|.*\.)" + body(tree) + r"(\..*)?$"
+
+
 def _loading_attributes(config, **attributes) -> dict[str, Any]:
     """Return the loading attributes a passed config lends to a pre-quantized checkpoint's config.
 
@@ -2101,14 +2132,20 @@ def read_modelopt(config_dict: dict) -> QuantizationConfigMixin:
         layers = config_dict.get("quantized_layers")
         if not isinstance(layers, dict) or not layers:
             raise ValueError("modelopt MIXED_PRECISION requires a non-empty quantized_layers mapping")
-        dtype_plan = {}
+        # one entry per format. A big MoE lists tens of thousands of modules, and the plan matches every module name
+        # against every pattern.
+        formats, names = {}, {}
         for name, spec in layers.items():
             if not isinstance(name, str) or not name or "*" in name:
                 raise ValueError(f"modelopt quantized_layers requires concrete module names; got {name!r}")
-            try:
-                dtype_plan[_subtree_patterns([name])[0]] = _modelopt_format(spec)
-            except ValueError as error:
-                raise ValueError(f"modelopt module {name!r}: {error}") from error
+            key = json.dumps(spec, sort_keys=True)
+            if key not in formats:
+                try:
+                    formats[key] = _modelopt_format(spec)
+                except ValueError as error:
+                    raise ValueError(f"modelopt module {name!r}: {error}") from error
+            names.setdefault(key, []).append(name)
+        dtype_plan = {_names_pattern(names[key]): config for key, config in formats.items()}
         return _config_for_plan(dtype_plan, modules_to_not_convert)
     if groups := config_dict.get("config_groups"):
         dtype_plan = {}
