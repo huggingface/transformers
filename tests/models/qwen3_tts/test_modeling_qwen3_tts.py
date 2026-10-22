@@ -22,6 +22,7 @@ from unittest.mock import patch
 from parameterized import parameterized
 
 from transformers import (
+    GenerationConfig,
     Qwen3TTSConfig,
     Qwen3TTSForConditionalGeneration,
     Qwen3TTSTalkerCodePredictorModelForConditionalGeneration,
@@ -111,8 +112,8 @@ class Qwen3TTSCodePredictorTrainingTest(unittest.TestCase):
 
 @require_torch
 class Qwen3TTSTeacherForcingTest(unittest.TestCase):
-    def get_model(self, num_code_groups=2, predictor_hidden_size=32):
-        config = Qwen3TTSModelTester(self).get_config()
+    def get_model(self, num_code_groups=2, predictor_hidden_size=32, with_speaker_encoder=False):
+        config = Qwen3TTSModelTester(self).get_config(with_speaker_encoder=with_speaker_encoder)
         config.talker_config.num_code_groups = num_code_groups
         config.talker_config.code_predictor_config.num_code_groups = num_code_groups
         config.talker_config.code_predictor_config.hidden_size = predictor_hidden_size
@@ -126,6 +127,61 @@ class Qwen3TTSTeacherForcingTest(unittest.TestCase):
             "audio_attention_mask": torch.tensor([[1, 1, 1], [1, 0, 0]], device=torch_device),
             "speaker_embeddings": torch.randn(2, 32, device=torch_device),
         }
+
+    def test_raw_speaker_features_match_cached_conditioning_and_gradients(self):
+        model = self.get_model(with_speaker_encoder=True).train()
+        inputs = self.prepare_inputs()
+        features = torch.randn(2, 12, 8, device=torch_device, requires_grad=True)
+        mask = torch.tensor([[1] * 12, [1] * 8 + [0] * 4], device=torch_device)
+        with torch.no_grad():
+            inputs["speaker_embeddings"] = torch.cat(
+                [model.speaker_encoder(features[index : index + 1, :length]) for index, length in enumerate((12, 8))]
+            )
+        cached = model(**inputs, labels=inputs["audio_codes"])
+        cached.loss.backward()
+        expected_gradients = {
+            name: parameter.grad.detach().clone()
+            for name, parameter in model.named_parameters()
+            if parameter.grad is not None
+        }
+        model.zero_grad(set_to_none=True)
+        del inputs["speaker_embeddings"]
+        raw = model(**inputs, input_features=features, feature_attention_mask=mask, labels=inputs["audio_codes"])
+        self.assertTrue(torch.isfinite(raw.loss))
+        torch.testing.assert_close(raw.logits, cached.logits)
+        torch.testing.assert_close(raw.loss, cached.loss)
+        raw.loss.backward()
+        self.assertIsNone(features.grad)
+        for name, parameter in model.named_parameters():
+            if name in expected_gradients:
+                torch.testing.assert_close(parameter.grad, expected_gradients[name], atol=1e-6, rtol=1e-5, msg=name)
+            else:
+                self.assertIsNone(parameter.grad, name)
+        changed_padding = features.detach().clone()
+        changed_padding[1, 8:] = float("nan")
+        padded = model(
+            **inputs, input_features=changed_padding, feature_attention_mask=mask, labels=inputs["audio_codes"]
+        )
+        torch.testing.assert_close(padded.loss, cached.loss)
+        torch.testing.assert_close(padded.logits, cached.logits)
+
+    def test_raw_speaker_feature_validation(self):
+        inputs = self.prepare_inputs()
+        features = torch.randn(2, 12, 8, device=torch_device)
+        model = self.get_model(with_speaker_encoder=True)
+        with self.assertRaisesRegex(ValueError, "not both"):
+            model(**inputs, input_features=features)
+        del inputs["speaker_embeddings"]
+        with self.assertRaisesRegex(ValueError, "speaker encoder"):
+            self.get_model()(**inputs, input_features=features)
+        for mask, message in (
+            (torch.ones(2, 11, device=torch_device), "first two dimensions"),
+            (torch.zeros(2, 12, device=torch_device), "at least one valid mel frame"),
+        ):
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                model(**inputs, input_features=features, feature_attention_mask=mask)
+        with self.assertRaisesRegex(ValueError, "requires `input_features`"):
+            model(**inputs, feature_attention_mask=torch.ones(2, 12, device=torch_device))
 
     def test_residual_training_drops_ignored_frames(self):
         model = self.get_model(num_code_groups=4)
@@ -473,9 +529,9 @@ class Qwen3TTSTeacherForcingTest(unittest.TestCase):
 
 @require_torch
 class Qwen3TTSGenerationTest(unittest.TestCase):
-    def get_model(self):
+    def get_model(self, with_speaker_encoder=False):
         set_seed(42)
-        config = Qwen3TTSModelTester(self).get_config()
+        config = Qwen3TTSModelTester(self).get_config(with_speaker_encoder=with_speaker_encoder)
         config.talker_config.vocab_size = 2048
         config.talker_config.code_predictor_config.vocab_size = 2048
         config.talker_config.num_code_groups = 4
@@ -555,6 +611,103 @@ class Qwen3TTSGenerationTest(unittest.TestCase):
             if mode in ("x_vector", "icl"):
                 pad = model.text_projection(model.get_text_embeddings()(input_ids[index].new_tensor([0])))
                 torch.testing.assert_close(single_embeddings[0, 6], speakers[index] + pad[0])
+
+    def test_raw_speaker_generation_matches_precomputed_prompt(self):
+        model = self.get_model(with_speaker_encoder=True)
+        features = torch.randn(2, 12, 8, device=torch_device)
+        mask = torch.tensor([[1] * 12, [1] * 8 + [0] * 4], device=torch_device)
+        with torch.no_grad():
+            embeddings = [
+                model.speaker_encoder(features[index : index + 1, :length])[0] for index, length in enumerate((12, 8))
+            ]
+        inputs = {
+            "input_ids": [torch.arange(length, device=torch_device)[None] for length in (11, 9)],
+            "languages": ["Auto", "Auto"],
+            "max_new_tokens": 4,
+            "do_sample": False,
+        }
+        prompt = {
+            "ref_spk_embedding": embeddings,
+            "x_vector_only_mode": [True, True],
+            "icl_mode": [False, False],
+            "ref_code": None,
+        }
+        cached = model.generate(**inputs, voice_clone_prompt=prompt)
+        raw = model.generate(**inputs, input_features=features, feature_attention_mask=mask)
+        features[1, 8:] = float("nan")
+        padded = model.generate(**inputs, input_features=features, feature_attention_mask=mask)
+        for expected, actual, changed in zip(cached.sequences, raw.sequences, padded.sequences):
+            self.assertEqual(actual.shape, (3, 4))
+            torch.testing.assert_close(actual, expected)
+            torch.testing.assert_close(changed, expected)
+        with self.assertRaisesRegex(ValueError, "cannot be combined"):
+            model.generate(**inputs, input_features=features, voice_clone_prompt=prompt)
+        with self.assertRaisesRegex(ValueError, "speaker encoder"):
+            self.get_model().generate(**inputs, input_features=features)
+
+    def test_saved_generation_settings_and_call_overrides_produce_expected_frames(self):
+        model = self.get_model()
+        inputs = {
+            "input_ids": [torch.arange(11, device=torch_device)[None]],
+            "languages": ["Auto"],
+        }
+        expected = torch.tensor(
+            [[730, 27, 1960, 1134], [869, 905, 1892, 371], [49, 1802, 1516, 352]], device=torch_device
+        )
+        config = GenerationConfig(
+            max_new_tokens=4,
+            do_sample=True,
+            top_k=1,
+            top_p=0.8,
+            temperature=0.7,
+            subtalker_dosample=True,
+            subtalker_top_k=1,
+            subtalker_top_p=0.8,
+            subtalker_temperature=0.6,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            config.save_pretrained(directory)
+            saved = GenerationConfig.from_pretrained(directory)
+        model.generation_config = saved
+        for seed in (11, 29):
+            set_seed(seed)
+            torch.testing.assert_close(model.generate(**inputs).sequences[0], expected)
+        # The explicit config wins over the model's saved length; call kwargs win over both.
+        explicit = copy.deepcopy(saved)
+        explicit.max_new_tokens = 3
+        torch.testing.assert_close(model.generate(**inputs, generation_config=explicit).sequences[0], expected[:2])
+        torch.testing.assert_close(
+            model.generate(**inputs, generation_config=explicit, max_new_tokens=4).sequences[0], expected
+        )
+        # A custom call override must replace the serialized value, not be dropped or treated as a forward kwarg.
+        explicit.subtalker_top_k = 2
+        torch.testing.assert_close(
+            model.generate(**inputs, generation_config=explicit, subtalker_top_k=1).sequences[0], expected[:2]
+        )
+        self.assertEqual(saved.max_new_tokens, 4)
+        self.assertEqual(explicit.subtalker_top_k, 2)
+
+    def test_greedy_generation_disables_default_residual_sampling_and_honors_standard_kwargs(self):
+        model = self.get_model()
+        inputs = {
+            "input_ids": [torch.arange(11, device=torch_device)[None]],
+            "languages": ["Auto"],
+            "max_new_tokens": 4,
+            "do_sample": False,
+        }
+        expected = torch.tensor(
+            [[730, 27, 1960, 1134], [869, 905, 1892, 371], [49, 1802, 1516, 352]], device=torch_device
+        )
+        for seed in (11, 29):
+            set_seed(seed)
+            torch.testing.assert_close(model.generate(**inputs).sequences[0], expected)
+        # bad_words_ids used to disappear in the custom generate wrapper.
+        banned = model.generate(**inputs, bad_words_ids=[[730]], output_scores=True)
+        self.assertNotEqual(banned.sequences[0][0, 0].item(), 730)
+        self.assertEqual(len(banned.scores), 4)
+        self.assertTrue(torch.isneginf(banned.scores[0][0, 730]))
+        with self.assertRaisesRegex(ValueError, "not used by the model"):
+            model.generate(**inputs, subtalker_temperatur=0.4)
 
     def test_generation_preserves_codec_frames(self):
         model = self.get_model()
@@ -789,9 +942,21 @@ class Qwen3TTSModelTester:
         self.num_hidden_layers = self.talker_config["num_hidden_layers"]
         self.num_attention_heads = self.talker_config["num_attention_heads"]
 
-    def get_config(self):
+    def get_config(self, with_speaker_encoder=False):
         return Qwen3TTSConfig(
             talker_config=self.talker_config,
+            speaker_encoder_config={
+                "mel_dim": 8,
+                "enc_dim": 32,
+                "enc_channels": [8, 8, 8, 8, 24],
+                "enc_kernel_sizes": [3, 3, 3, 3, 1],
+                "enc_dilations": [1, 1, 1, 1, 1],
+                "enc_attention_channels": 8,
+                "enc_res2net_scale": 2,
+                "enc_se_channels": 8,
+            }
+            if with_speaker_encoder
+            else None,
             tts_pad_token_id=0,
             tts_bos_token_id=1,
             tts_eos_token_id=2,

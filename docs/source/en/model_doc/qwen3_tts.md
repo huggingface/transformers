@@ -149,12 +149,12 @@ processor.save_audio(audio, "output_voice_design.wav")
 
 ### Voice Cloning
 
-Base checkpoints carry a speaker encoder, which turns a reference recording into a speaker embedding that
-conditions generation. The reference has to be mono 24 kHz:
+Base checkpoints carry a speaker encoder, which turns a reference recording into speaker conditioning.
+Include the reference audio in the conversation: the processor loads it at 24 kHz and extracts mel features,
+and the model computes the speaker embedding internally.
 
 ```python
 from transformers import AutoProcessor, AutoModelForTextToWaveform
-from transformers.audio_utils import load_audio_librosa
 
 
 model_id = "shahvandit/qwen3-tts-base-hf"
@@ -162,35 +162,30 @@ model_id = "shahvandit/qwen3-tts-base-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 
-reference = load_audio_librosa(
-    "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
-    sampling_rate=processor.feature_extractor.sampling_rate,
-)
-speaker_embedding = model.extract_speaker_embedding(
-    reference, processor.feature_extractor.sampling_rate, processor.feature_extractor
-)
-
 conversation = [
     {
         "role": "user",
-        "content": [{"type": "text", "text": "This sentence is spoken in the voice of the reference clip."}],
+        "content": [
+            {"type": "text", "text": "This sentence is spoken in the voice of the reference clip."},
+            {
+                "type": "audio",
+                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+            },
+        ],
         "language": "English",
     },
 ]
-inputs = processor.apply_chat_template(conversation)
+inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True).to(model.device, model.dtype)
 
-codes = model.generate(
-    **inputs,
-    voice_clone_prompt={
-        "ref_spk_embedding": [speaker_embedding],
-        "x_vector_only_mode": [True],
-        "icl_mode": [False],
-        "ref_code": None,
-    },
-).sequences
+codes = model.generate(**inputs).sequences
 audio = processor.decode(codes)
 processor.save_audio(audio, "output_cloned.wav")
 ```
+
+Generation options can be supplied to `generate` or stored on `model.generation_config`; call-time values take
+precedence. The residual code predictor has separate `subtalker_dosample`, `subtalker_top_k`, `subtalker_top_p`,
+and `subtalker_temperature` options. For example, `model.generate(**inputs, do_sample=True, top_p=0.9,
+subtalker_top_p=0.9)` samples both stages with nucleus sampling.
 
 ### Pipeline usage
 
@@ -213,20 +208,23 @@ conversation = [
         "speaker": "Ryan",
     },
 ]
-output = pipe(conversation)
+generate_kwargs = {"do_sample": True, "top_p": 0.9, "subtalker_top_p": 0.9}
+output = pipe(conversation, generate_kwargs=generate_kwargs)
 sf.write("output.wav", output["audio"], output["sampling_rate"])
 ```
 
 ### Training
 
-Qwen3-TTS Base checkpoints can be trained with the loss returned by the model. Training uses target audio codes
-and a speaker embedding, which should be precomputed once for a larger dataset.
+Qwen3-TTS Base checkpoints can be trained with the loss returned by the model. Pass the target speech and its
+transcript in a conversation with `output_labels=True`. The processor encodes the target speech into codec
+labels and extracts its speaker features; the model computes the frozen speaker conditioning internally.
+For larger datasets, cache the audio codes and speaker embeddings and pass them to the processor's
+`audio_codes` and `speaker_embeddings` arguments instead of re-encoding the audio at every step.
 
 ```python
 import torch
 
 from transformers import AutoModelForTextToWaveform, AutoProcessor
-from transformers.audio_utils import load_audio
 
 
 model_id = "shahvandit/qwen3-tts-base-hf"
@@ -239,24 +237,27 @@ model.gradient_checkpointing_enable()
 model.speaker_encoder.requires_grad_(False)
 model.speaker_encoder.eval()
 
-audio_url = "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav"
-reference_url = "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav"
-text = "VibeVoice is this novel framework designed for generating expressive, long-form, multi-speaker conversational audio."
-
-target_audio = load_audio(audio_url, sampling_rate=processor.audio_tokenizer.config.input_sampling_rate)
-reference_audio = load_audio(reference_url, sampling_rate=model.speaker_encoder_sample_rate)
-with torch.inference_mode():
-    audio_codes = processor.audio_tokenizer.encode(torch.from_numpy(target_audio)[None, None]).audio_codes
-    speaker_embedding = model.extract_speaker_embedding(
-        reference_audio, model.speaker_encoder_sample_rate, processor.feature_extractor
-    )
-
-inputs = processor(
-    text=[text],
-    audio_codes=audio_codes,
-    speaker_embeddings=[speaker_embedding],
-    output_labels=True,
-).to(model.device)
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "text",
+                "text": "VibeVoice is this novel framework designed for generating expressive, long-form, multi-speaker conversational audio.",
+            },
+            {
+                "type": "audio",
+                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/realtime_model/vibevoice_tts_german.wav",
+            },
+        ],
+    },
+]
+inputs = processor.apply_chat_template(
+    conversation,
+    tokenize=True,
+    return_dict=True,
+    processor_kwargs={"output_labels": True},
+).to(model.device, model.dtype)
 
 outputs = model(**inputs)
 outputs.loss.backward()
