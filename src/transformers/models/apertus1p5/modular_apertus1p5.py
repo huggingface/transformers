@@ -641,7 +641,6 @@ class Apertus1p5TextForCausalLM(ApertusForCausalLM):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            return_dict=True,
             **kwargs,
         )
 
@@ -896,7 +895,6 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            return_dict=True,
             **kwargs,
         )
 
@@ -1006,7 +1004,6 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             mm_encoder_outputs=mm_encoder_outputs,
-            return_dict=True,
             **kwargs,
         )
 
