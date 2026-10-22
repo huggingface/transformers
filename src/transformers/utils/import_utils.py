@@ -1221,8 +1221,6 @@ def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bo
     return is_available and version.parse(bitsandbytes_version) >= version.parse(min_version)
 
 
-@lru_cache
-@_make_compile_constant
 def is_flash_attn_kernel_fallback_available(fa_version):
     if is_kernels_available():
         try:
