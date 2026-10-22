@@ -269,9 +269,7 @@ def _grouped_mm_fallback_backward_fake(
 def _grouped_mm_fallback_backward(ctx, grad_output):
     """Backward pass for `_grouped_mm_fallback`."""
     input, weight = ctx.saved_tensors
-    grad_input, grad_weight = torch.ops.transformers.grouped_mm_fallback_backward(
-        input, weight, ctx.offs, grad_output
-    )
+    grad_input, grad_weight = torch.ops.transformers.grouped_mm_fallback_backward(input, weight, ctx.offs, grad_output)
     return grad_input, grad_weight, None
 
 
