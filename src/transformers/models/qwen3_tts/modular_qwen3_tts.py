@@ -28,6 +28,7 @@ from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.import_utils import is_torchdynamo_compiling
+from ..auto import CONFIG_MAPPING, AutoConfig
 from ..qwen2_5_omni.configuration_qwen2_5_omni import Qwen2_5OmniDiTConfig
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     ECAPA_TimeDelayNet,
@@ -273,8 +274,9 @@ class Qwen3TTSConfig(PreTrainedConfig):
         Configuration for the talker sub-model (text-to-acoustic backbone).
     speaker_encoder_config (`Union[Qwen3TTSSpeakerEncoderConfig, dict]`, *optional*):
         Configuration for the speaker encoder sub-model (extracts speaker embeddings).
-    tokenizer_type (`str`, *optional*):
-        Type of audio tokenizer to use (e.g., "12hz", "25hz").
+    audio_config (`Union[AutoConfig, dict]`, *optional*):
+        Configuration of the audio tokenizer used by the processor to encode and decode audio codes.
+        Defaults to [`Qwen3TTSTokenizerConfig`].
     tts_model_size (`str`, *optional*):
         Size of the TTS model.
     im_start_token_id (`int`, *optional*, defaults to 151644):
@@ -293,13 +295,14 @@ class Qwen3TTSConfig(PreTrainedConfig):
 
     model_type = "qwen3_tts"
     sub_configs = {
+        "audio_config": AutoConfig,
         "talker_config": Qwen3TTSTalkerConfig,
         "speaker_encoder_config": Qwen3TTSSpeakerEncoderConfig,
     }
 
+    audio_config: dict | PreTrainedConfig | None = None
     talker_config: dict | PreTrainedConfig | None = None
     speaker_encoder_config: dict | PreTrainedConfig | None = None
-    tokenizer_type: str | None = None
     tts_model_size: str | None = None
     im_start_token_id: int | None = 151644
     im_end_token_id: int | None = 151645
@@ -309,6 +312,14 @@ class Qwen3TTSConfig(PreTrainedConfig):
     code_predictor_loss_weight: float = 0.3
 
     def __post_init__(self, **kwargs):
+        # Original checkpoints identify the codec with a string rather than a nested configuration.
+        kwargs.pop("tokenizer_type", None)
+        if isinstance(self.audio_config, dict):
+            model_type = self.audio_config.get("model_type", "qwen3_tts_tokenizer_12hz")
+            self.audio_config = CONFIG_MAPPING[model_type](**self.audio_config)
+        elif self.audio_config is None:
+            self.audio_config = CONFIG_MAPPING["qwen3_tts_tokenizer_12hz"]()
+
         if self.talker_config is None:
             self.talker_config = Qwen3TTSTalkerConfig()
             logger.info("talker_config is None. Initializing talker model with default values")
@@ -713,8 +724,6 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
         else:
             self.speaker_encoder = None
 
-        # Optional: speech_tokenizer and generate_config loaded separately
-        self.speech_tokenizer = None
         self.generate_config = None
 
         # Model metadata
@@ -733,15 +742,10 @@ class Qwen3TTSForConditionalGeneration(Qwen3TTSPreTrainedModel, Qwen3TTSGenerati
             # CODEPATH: base checkpoints only; the others never resample a reference clip
             config.speaker_encoder_config.sample_rate if config.speaker_encoder_config is not None else 24000
         )
-        self.tokenizer_type = getattr(config, "tokenizer_type", "qwen2")
         self.tts_model_size = getattr(config, "tts_model_size", "base")
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def load_speech_tokenizer(self, speech_tokenizer):
-        """Load the speech tokenizer for audio encoding/decoding."""
-        self.speech_tokenizer = speech_tokenizer
 
     def load_generate_config(self, generate_config):
         """Load the generation configuration."""

@@ -213,6 +213,8 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_diffusion_samples",
         "max_atomic_number",
     ],
+    # The processor owns codec weights; audio_config is consumed by convert_qwen3_tts_to_hf.py.
+    "Qwen3TTSConfig": ["audio_config"],
     "Qwen3TTSTalkerConfig": [
         # Read in generation_qwen3_tts.py (speaker dialect and think-token prefill), which this check does not scan --
         # it only looks at files named modeling_*.
