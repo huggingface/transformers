@@ -297,9 +297,7 @@ def decide_use_async_batching(cb_config: ContinuousBatchingConfig, is_attn_mask_
 
 
 def resolve_max_memory_percent(
-    cb_config: ContinuousBatchingConfig,
-    has_logit_processors: bool,
-    device: torch.device | None = None
+    cb_config: ContinuousBatchingConfig, has_logit_processors: bool, device: torch.device | None = None
 ) -> None:
     """Fallback function if the max memory percent is not set. Since logit processors use a lot of memory, we default to
     0.8 if there are logit processors, and 0.9 otherwise, to keep a reasonnable margin for temporary tensors."""
