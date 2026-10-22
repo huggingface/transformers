@@ -1504,7 +1504,7 @@ class DeepseekOcr2Model(DeepseekOcr2PreTrainedModel):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | DeepseekOcr2ModelOutputWithPast:
+    ) -> DeepseekOcr2ModelOutputWithPast:
         r"""
         pixel_values_local (`torch.FloatTensor`, *optional*):
             Local patch pixel values of shape `(total_patches, 3, H, W)`.
@@ -1574,7 +1574,7 @@ class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, Generati
         pixel_values_local: torch.FloatTensor | None = None,
         num_local_patches: list[int] | torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
             The tensors corresponding to the global view input images.
@@ -1607,7 +1607,7 @@ class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, Generati
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | DeepseekOcr2CausalLMOutputWithPast:
+    ) -> DeepseekOcr2CausalLMOutputWithPast:
         r"""
         pixel_values_local (`torch.FloatTensor`, *optional*):
             Local patch pixel values of shape `(total_patches, 3, H, W)`.

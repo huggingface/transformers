@@ -202,7 +202,7 @@ class QianfanOCRVisionModel(InternVLVisionModel):
         pixel_values: torch.Tensor,
         bool_masked_pos: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | QianfanOCRVisionModelOutputWithPooling:
+    ) -> QianfanOCRVisionModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -251,7 +251,7 @@ class QianfanOCRCausalLMOutputWithPast(InternVLCausalLMOutputWithPast):
 class QianfanOCRForConditionalGeneration(InternVLForConditionalGeneration):
     @can_return_tuple
     @auto_docstring
-    def forward(self, **super_kwargs) -> tuple | QianfanOCRCausalLMOutputWithPast:
+    def forward(self, **super_kwargs) -> QianfanOCRCausalLMOutputWithPast:
         r"""
         Example:
         ```python

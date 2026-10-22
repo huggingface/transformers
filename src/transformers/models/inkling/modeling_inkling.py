@@ -1036,7 +1036,7 @@ class InklingModel(InklingPreTrainedModel):
     @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         return self.vision_tower(pixel_values=pixel_values, **kwargs)
 
     @can_return_tuple
@@ -1045,7 +1045,7 @@ class InklingModel(InklingPreTrainedModel):
         self,
         audio_input_ids: torch.LongTensor,
         audio_input_ids_mask: torch.Tensor | None = None,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         audio_input_ids (`torch.LongTensor` of shape `(num_audios, max_num_frames, n_mel_bins)`):
             Batch of (padded) dMel bin tokens produced by [`InklingProcessor`].
@@ -1102,7 +1102,7 @@ class InklingModel(InklingPreTrainedModel):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | InklingModelOutputWithPast:
+    ) -> InklingModelOutputWithPast:
         r"""
         audio_input_ids (`torch.LongTensor` of shape `(num_audios, max_num_frames, n_mel_bins)`, *optional*):
             Batch of (padded) discretized dMel bin tokens produced by [`InklingProcessor`].
@@ -1240,7 +1240,7 @@ class InklingForConditionalGeneration(InklingPreTrainedModel, GenerationMixin):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | InklingCausalLMOutputWithPast:
+    ) -> InklingCausalLMOutputWithPast:
         r"""
         audio_input_ids (`torch.LongTensor` of shape `(num_audios, max_num_frames, n_mel_bins)`, *optional*):
             Batch of (padded) discretized dMel bin tokens produced by [`InklingProcessor`].

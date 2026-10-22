@@ -1017,7 +1017,7 @@ class Step3p7Model(DeepseekOcr2Model):
         pixel_values_local: torch.Tensor | None = None,
         num_local_patches: list[int] | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         vision_output = self.vision_model(pixel_values, **kwargs)
         image_features = self.multi_modal_projector(vision_output.last_hidden_state)
         patch_image_features = (

@@ -1209,7 +1209,7 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
         norm=None,
         mask_feat=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> PPDocLayoutV3DecoderOutput:
         r"""
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             The query embeddings that are passed into the decoder.
@@ -1726,7 +1726,7 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         encoder_outputs: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ModelOutput:
+    ) -> PPDocLayoutV3ModelOutput:
         r"""
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
@@ -2044,7 +2044,7 @@ class PPDocLayoutV3ForObjectDetection(PPDocLayoutV3PreTrainedModel):
         encoder_outputs: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | PPDocLayoutV3ForObjectDetectionOutput:
+    ) -> PPDocLayoutV3ForObjectDetectionOutput:
         r"""
         Examples:
 

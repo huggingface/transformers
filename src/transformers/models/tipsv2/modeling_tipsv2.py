@@ -998,7 +998,7 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         return self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1014,7 +1014,7 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         bool_masked_pos: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0). Only relevant for

@@ -243,7 +243,7 @@ class GotOcr2Model(LlavaModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         last_hidden_state = image_outputs.last_hidden_state
         image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)
@@ -263,7 +263,7 @@ class GotOcr2Model(LlavaModel):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GotOcr2ModelOutputWithPast:
+    ) -> GotOcr2ModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -321,7 +321,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GotOcr2CausalLMOutputWithPast:
+    ) -> GotOcr2CausalLMOutputWithPast:
         r"""
         Example:
 

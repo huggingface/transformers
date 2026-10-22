@@ -18,6 +18,7 @@ REPO_CONSISTENCY_CHECKERS := \
 	auto_mappings, \
 	imports, \
 	import_complexity, \
+	decorator_return_types, \
 	copies, \
 	modular_conversion, \
 	inits, \

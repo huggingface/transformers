@@ -522,7 +522,7 @@ class MBartEncoder(MBartPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
+    ) -> BaseModelOutput:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -636,7 +636,7 @@ class MBartDecoder(MBartPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -797,7 +797,7 @@ class MBartModel(MBartPreTrainedModel):
         use_cache: bool | None = None,
         return_dict: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Seq2SeqModelOutput | tuple[torch.FloatTensor]:
+    ) -> Seq2SeqModelOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1065,7 +1065,7 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Seq2SeqSequenceClassifierOutput:
+    ) -> Seq2SeqSequenceClassifierOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1191,7 +1191,7 @@ class MBartForQuestionAnswering(MBartPreTrainedModel):
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Seq2SeqQuestionAnsweringModelOutput:
+    ) -> Seq2SeqQuestionAnsweringModelOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1321,7 +1321,7 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithCrossAttentions:
+    ) -> CausalLMOutputWithCrossAttentions:
         r"""
         Example:
 

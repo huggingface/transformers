@@ -326,7 +326,7 @@ class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
     @capture_outputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -375,7 +375,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
         | None = None,  # Kept in the signature for compatibility to avoid duplicate-keyword errors.
         use_cache: bool | None = None,
         **kwargs,
-    ) -> tuple | Seq2SeqModelOutput:
+    ) -> Seq2SeqModelOutput:
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             decoder_input_ids = shift_tokens_right(input_ids, self.config.text_config.pad_token_id)
 
@@ -438,7 +438,7 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Seq2SeqLMOutput:
+    ) -> Seq2SeqLMOutput:
         r"""
         Example:
 

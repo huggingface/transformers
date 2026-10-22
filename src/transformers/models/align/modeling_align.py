@@ -844,7 +844,7 @@ class AlignTextModel(AlignPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -943,7 +943,7 @@ class AlignVisionModel(AlignPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPoolingAndNoAttention:
+    ) -> BaseModelOutputWithPoolingAndNoAttention:
         r"""
         Examples:
 
@@ -1028,7 +1028,7 @@ class AlignModel(AlignPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -1060,7 +1060,7 @@ class AlignModel(AlignPreTrainedModel):
     @auto_docstring
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -1093,7 +1093,7 @@ class AlignModel(AlignPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         return_loss: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | AlignOutput:
+    ) -> AlignOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.

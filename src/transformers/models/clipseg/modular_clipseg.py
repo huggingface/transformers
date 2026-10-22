@@ -381,7 +381,7 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
 
 
 class CLIPSegTextModel(CLIPTextModel):
-    def forward(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
+    def forward(self, **super_kwargs) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -406,7 +406,7 @@ class CLIPSegVisionModel(CLIPVisionModel):
         pixel_values: torch.FloatTensor | None,
         interpolate_pos_encoding: bool | None = True,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -455,7 +455,7 @@ class CLIPSegModel(CLIPModel):
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = True,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -565,7 +565,7 @@ class CLIPSegForImageSegmentation(CLIPSegPreTrainedModel):
         labels: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = True,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CLIPSegOutput:
+    ) -> CLIPSegOutput:
         r"""
         conditional_pixel_values (`torch.FloatTensor`, *optional*):
             The pixel values of the conditional images.

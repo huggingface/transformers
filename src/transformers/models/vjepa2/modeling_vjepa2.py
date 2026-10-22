@@ -994,7 +994,7 @@ class VJEPA2ForVideoClassification(VJEPA2PreTrainedModel):
         pixel_values_videos: torch.Tensor,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | ImageClassifierOutput:
+    ) -> ImageClassifierOutput:
         r"""
         Examples:
 

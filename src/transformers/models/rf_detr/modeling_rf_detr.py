@@ -1274,7 +1274,7 @@ class RfDetrDecoder(RfDetrPreTrainedModel):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> RfDetrDecoderOutput:
         intermediate = ()
         intermediate_reference_points = (reference_points,)
 

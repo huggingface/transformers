@@ -365,7 +365,7 @@ class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
         input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Sam3LiteTextTextEncoderOutput:
+    ) -> Sam3LiteTextTextEncoderOutput:
         hidden_states = self.embeddings(input_ids)
         attention_mask = create_bidirectional_mask(self.config, hidden_states, attention_mask)
 

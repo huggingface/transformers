@@ -343,7 +343,7 @@ class SplinterModel(SplinterPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
+    ) -> BaseModelOutput:
         r"""
         token_type_ids (`torch.LongTensor` of shape `batch_size, sequence_length`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
@@ -483,7 +483,7 @@ class SplinterForQuestionAnswering(SplinterPreTrainedModel):
         end_positions: torch.LongTensor | None = None,
         question_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | QuestionAnsweringModelOutput:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         token_type_ids (`torch.LongTensor` of shape `batch_size, sequence_length`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
@@ -616,7 +616,7 @@ class SplinterForPreTraining(SplinterPreTrainedModel):
         end_positions: torch.LongTensor | None = None,
         question_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | SplinterForPreTrainingOutput:
+    ) -> SplinterForPreTrainingOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_questions, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.

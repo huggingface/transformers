@@ -1164,7 +1164,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | BridgeTowerModelOutput:
+    ) -> BridgeTowerModelOutput:
         r"""
         image_embeds (`torch.FloatTensor` of shape `(batch_size, num_patches, hidden_size)`, *optional*):
             Optionally, instead of passing `pixel_values`, you can choose to directly pass an embedded representation.

@@ -621,7 +621,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -699,7 +699,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         labels: torch.LongTensor | None = None,
         next_sentence_label: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MobileBertForPreTrainingOutput:
+    ) -> MobileBertForPreTrainingOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -797,7 +797,7 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MaskedLMOutput:
+    ) -> MaskedLMOutput:
         outputs = self.mobilebert(
             input_ids,
             attention_mask=attention_mask,
@@ -860,7 +860,7 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | NextSentencePredictorOutput:
+    ) -> NextSentencePredictorOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the next sequence prediction (classification) loss. Input should be a sequence pair
@@ -947,7 +947,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         outputs = self.mobilebert(
             input_ids,
             attention_mask=attention_mask,
@@ -1019,7 +1019,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
         start_positions: torch.Tensor | None = None,
         end_positions: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | QuestionAnsweringModelOutput:
+    ) -> QuestionAnsweringModelOutput:
         outputs = self.mobilebert(
             input_ids,
             attention_mask=attention_mask,
@@ -1090,7 +1090,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | MultipleChoiceModelOutput:
+    ) -> MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -1186,7 +1186,7 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         outputs = self.mobilebert(
             input_ids,
             attention_mask=attention_mask,

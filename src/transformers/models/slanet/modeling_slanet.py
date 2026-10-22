@@ -162,7 +162,7 @@ class SLANetSLAHead(SLANetPreTrainedModel):
         hidden_states: torch.FloatTensor,
         targets: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutput:
         features = torch.zeros(
             (hidden_states.shape[0], self.config.hidden_size), dtype=torch.float32, device=hidden_states.device
         )
@@ -437,7 +437,7 @@ class SLANetBackbone(SLANetPreTrainedModel):
     @auto_docstring
     def forward(
         self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> BaseModelOutputWithNoAttention:
         outputs = self.vision_backbone(hidden_states, **kwargs)
         hidden_states = self.post_csp_pan(outputs.feature_maps)
         return BaseModelOutputWithNoAttention(
@@ -465,7 +465,7 @@ class SLANetForTableRecognition(SLANetPreTrainedModel):
     @auto_docstring
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple[torch.FloatTensor] | SLANetForTableRecognitionOutput:
+    ) -> SLANetForTableRecognitionOutput:
         outputs = self.backbone(pixel_values, **kwargs)
         head_outputs = self.head(outputs.last_hidden_state, **kwargs)
         # Key difference: no attentions in its vision model

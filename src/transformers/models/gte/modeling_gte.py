@@ -372,7 +372,7 @@ class GteModel(GtePreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling | tuple:
+    ) -> BaseModelOutputWithPooling:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -470,7 +470,7 @@ class GteForMaskedLM(GtePreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | MaskedLMOutput:
+    ) -> MaskedLMOutput:
         # Unlike JinaEmbeddingsV3ForMaskedLM, the backbone is bound as `self.gte`, which modular cannot rename.
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -537,7 +537,7 @@ class GteForSequenceClassification(GtePreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         outputs = self.gte(
             input_ids,
             attention_mask=attention_mask,
@@ -611,7 +611,7 @@ class GteForTokenClassification(GtePreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         outputs = self.gte(
             input_ids,
             attention_mask=attention_mask,

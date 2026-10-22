@@ -636,7 +636,7 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         past_key_values=None,
         use_cache=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         if input_ids is not None and inputs_embeds is not None:
             err_msg_prefix = "decoder_" if self.is_decoder else ""
             raise ValueError(

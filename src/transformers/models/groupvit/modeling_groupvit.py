@@ -1139,7 +1139,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -1172,7 +1172,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -1210,7 +1210,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
         output_hidden_states: bool | None = None,
         output_segmentation: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GroupViTModelOutput:
+    ) -> GroupViTModelOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.

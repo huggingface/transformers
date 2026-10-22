@@ -284,7 +284,9 @@ class PPOCRV6SmallRecEncoderWithSVTR(PPOCRV6SmallRecPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
-    def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+    def forward(
+        self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> BaseModelOutputWithNoAttention:
         # PP-OCRv6_small_rec uses the output of the first conv block as the residual.
         residual = self.conv_block[0](hidden_states)
 
@@ -335,7 +337,7 @@ class PPOCRV6SmallRecModel(PPOCRV6SmallRecPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> BaseModelOutputWithNoAttention:
         outputs = self.backbone(pixel_values, **kwargs)
         hidden_state = outputs.feature_maps[-1]
         hidden_state = F.avg_pool2d(hidden_state, (3, 2))
@@ -374,7 +376,7 @@ class PPOCRV6SmallRecForTextRecognition(PPOCRV6SmallRecPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> BaseModelOutputWithNoAttention:
         outputs = self.model(pixel_values, **kwargs)
         head_outputs = self.head(outputs.last_hidden_state, **kwargs)
 

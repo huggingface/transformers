@@ -1377,7 +1377,7 @@ class MuseSparkModel(MuseSparkPreTrainedModel):
         input_values_mask: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MuseSparkModelOutputWithPast:
+    ) -> MuseSparkModelOutputWithPast:
         r"""
         input_values_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
             Which entries of `input_values` are real audio rather than padding, as produced by
@@ -1607,7 +1607,7 @@ class MuseSparkForConditionalGeneration(MuseSparkPreTrainedModel, GenerationMixi
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MuseSparkCausalLMOutputWithPast:
+    ) -> MuseSparkCausalLMOutputWithPast:
         r"""
         input_values_mask (`torch.Tensor` of shape `(batch_size, num_samples)`, *optional*):
             Which entries of `input_values` are real audio rather than padding, as produced by

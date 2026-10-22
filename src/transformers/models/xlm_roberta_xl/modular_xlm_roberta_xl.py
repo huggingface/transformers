@@ -298,7 +298,7 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithCrossAttentions:
+    ) -> CausalLMOutputWithCrossAttentions:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
@@ -396,7 +396,7 @@ class XLMRobertaXLForMaskedLM(XLMRobertaXLPreTrainedModel):
         encoder_attention_mask: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MaskedLMOutput:
+    ) -> MaskedLMOutput:
         outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
@@ -452,7 +452,7 @@ class XLMRobertaXLForSequenceClassification(XLMRobertaXLPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | SequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
@@ -518,7 +518,7 @@ class XLMRobertaXLForMultipleChoice(XLMRobertaXLPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MultipleChoiceModelOutput:
+    ) -> MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`AutoTokenizer`]. See
@@ -605,7 +605,7 @@ class XLMRobertaXLForTokenClassification(XLMRobertaXLPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
@@ -666,7 +666,7 @@ class XLMRobertaXLForQuestionAnswering(XLMRobertaXLPreTrainedModel):
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | QuestionAnsweringModelOutput:
+    ) -> QuestionAnsweringModelOutput:
         outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,

@@ -334,7 +334,7 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         use_padding_cache: bool | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         padding_cache (`VoxtralRealtimeConv1dPaddingCache`, *optional*):
             Cache for padding in convolutional layers to maintain state across streaming chunks.
@@ -515,7 +515,7 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         input_features (`torch.FloatTensor`):
             Float values of mel features extracted from the raw speech waveform.
@@ -560,7 +560,7 @@ class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
         use_cache: bool | None = None,
         num_delay_tokens: int | torch.Tensor = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | VoxtralRealtimeModelOutputWithPast:
+    ) -> VoxtralRealtimeModelOutputWithPast:
         r"""
         encoder_past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and value in the self-attention blocks) for the encoder.
@@ -665,7 +665,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
         logits_to_keep: int | torch.Tensor = 0,
         num_delay_tokens: int | torch.Tensor = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | VoxtralRealtimeCausalLMOutputWithPast:
+    ) -> VoxtralRealtimeCausalLMOutputWithPast:
         r"""
         encoder_past_key_values (`Cache`, *optional*):
             Pre-computed hidden-states (key and value in the self-attention blocks) for the encoder that can be used to speed up sequential decoding.

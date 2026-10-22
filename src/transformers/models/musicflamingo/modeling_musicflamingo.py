@@ -223,7 +223,7 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
         input_features_mask: torch.Tensor,
         input_ids: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
@@ -286,7 +286,7 @@ class MusicFlamingoModel(MusicFlamingoPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MusicFlamingoModelOutputWithPast:
+    ) -> MusicFlamingoModelOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices.
@@ -425,7 +425,7 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MusicFlamingoCausalLMOutputWithPast:
+    ) -> MusicFlamingoCausalLMOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices.

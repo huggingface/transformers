@@ -804,7 +804,7 @@ class ClapAudioEncoder(nn.Module):
         output_hidden_states_before_downsampling: bool | None = False,
         always_partition: bool | None = False,
         return_dict: bool | None = True,
-    ) -> tuple | ClapAudioModelOutput:
+    ) -> ClapAudioModelOutput:
         # Unique logic so no refactor here yet
         output_hidden_states = output_hidden_states or self.config.output_hidden_states
         output_attentions = output_attentions or self.config.output_attentions
@@ -1472,7 +1472,7 @@ class ClapModel(ClapPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -1506,7 +1506,7 @@ class ClapModel(ClapPreTrainedModel):
         is_longer: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
             Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
@@ -1545,7 +1545,7 @@ class ClapModel(ClapPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         return_loss: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | ClapOutput:
+    ) -> ClapOutput:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
             Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
@@ -1649,7 +1649,7 @@ class ClapTextModelWithProjection(ClapPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | ClapTextModelOutput:
+    ) -> ClapTextModelOutput:
         r"""
         Examples:
 
@@ -1704,7 +1704,7 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
         input_features: torch.FloatTensor | None = None,
         is_longer: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | ClapAudioModelOutput:
+    ) -> ClapAudioModelOutput:
         r"""
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
             Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance

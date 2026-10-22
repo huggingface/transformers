@@ -246,7 +246,7 @@ class XCLIPTextModel(CLIPTextModel, XCLIPPreTrainedModel):
         self.encoder = XCLIPEncoder(config)
         self.eos_token_id = 2  # Force legacy behaviour
 
-    def forward(self, **super_kwargs) -> tuple | BaseModelOutputWithPooling:
+    def forward(self, **super_kwargs) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -283,7 +283,7 @@ class XCLIPVisionModel(CLIPVisionModel, XCLIPPreTrainedModel):
         pixel_values: torch.FloatTensor | None,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -555,7 +555,7 @@ class XCLIPModel(CLIPModel, XCLIPPreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -651,7 +651,7 @@ class XCLIPModel(CLIPModel, XCLIPPreTrainedModel):
         return_loss: bool | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | XCLIPOutput:
+    ) -> XCLIPOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.

@@ -154,7 +154,7 @@ class PerceptionLMModel(LlavaModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(pixel_values.flatten(0, 1), return_dict=True, **kwargs)
         last_hidden_state = image_outputs.last_hidden_state
         if self.config.vision_use_cls_token:
@@ -219,7 +219,7 @@ class PerceptionLMModel(LlavaModel):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | PerceptionLMModelOutputWithPast:
+    ) -> PerceptionLMModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -290,7 +290,7 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | PerceptionLMCausalLMOutputWithPast:
+    ) -> PerceptionLMCausalLMOutputWithPast:
         r"""
         Example:
 

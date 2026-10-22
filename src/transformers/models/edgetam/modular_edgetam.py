@@ -204,7 +204,7 @@ class EdgeTamVisionModel(Sam2VisionModel):
         self,
         pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | EdgeTamVisionEncoderOutput:
+    ) -> EdgeTamVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -245,7 +245,7 @@ class EdgeTamModel(Sam2Model):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | EdgeTamVisionEncoderOutput:
+    ) -> EdgeTamVisionEncoderOutput:
         # original_sizes is returned by the processor for post-processing only and must not
         # reach the timm backbone (FeatureListNet) which does not accept it.
         kwargs.pop("original_sizes", None)

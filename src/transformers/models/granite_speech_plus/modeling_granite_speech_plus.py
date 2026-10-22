@@ -140,7 +140,7 @@ class GraniteSpeechPlusModel(GraniteSpeechPlusPreTrainedModel):
     @auto_docstring
     def get_audio_features(
         self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         audio_outputs = self.encoder(input_features, return_dict=True, **kwargs)
         projected_embeds = self.projector(audio_outputs.last_hidden_state)
         audio_outputs.pooler_output = projected_embeds
@@ -214,7 +214,7 @@ class GraniteSpeechPlusModel(GraniteSpeechPlusPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GraniteSpeechPlusModelOutputWithPast:
+    ) -> GraniteSpeechPlusModelOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor`, *optional*):
             Mask to be applied to audio features prior to scattering into the language embeddings.
@@ -551,7 +551,7 @@ class GraniteSpeechPlusForConditionalGeneration(GraniteSpeechPlusPreTrainedModel
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> tuple | GraniteSpeechPlusCausalLMOutputWithPast:
+    ) -> GraniteSpeechPlusCausalLMOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor`, *optional*):
             Mask to be applied to audio features prior to scattering into the language embeddings.

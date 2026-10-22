@@ -359,7 +359,7 @@ class TextNetBackbone(BackboneMixin, TextNetPreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[tuple] | BackboneOutput:
+    ) -> BackboneOutput:
         r"""
         Examples:
 

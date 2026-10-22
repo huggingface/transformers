@@ -795,7 +795,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         inputs_embeds=None,
         output_hidden_states=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutput:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -947,7 +947,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         inputs_embeds=None,
         use_cache=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -1139,7 +1139,7 @@ class PegasusXModel(PegasusXPreTrainedModel):
         decoder_inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Seq2SeqModelOutput:
+    ) -> Seq2SeqModelOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1267,7 +1267,7 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel, GenerationMixin)
         labels: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Seq2SeqLMOutput:
+    ) -> Seq2SeqLMOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.

@@ -251,7 +251,7 @@ class Qwen3ASRModel(AudioFlamingo3Model):
         input_features: torch.FloatTensor,
         input_features_mask: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         input_features_mask (`torch.LongTensor` of shape `(batch_size, padded_feature_length)`):
             1 for valid mel frames and 0 for padding.

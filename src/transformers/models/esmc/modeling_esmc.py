@@ -437,7 +437,7 @@ class EsmcForMaskedLM(EsmcPreTrainedModel):
         sequence_id: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, ...] | MaskedLMOutput:
+    ) -> MaskedLMOutput:
         r"""
         sequence_id (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Integer chain-ID tensor forwarded to the encoder for chain-aware
@@ -528,7 +528,7 @@ class EsmcForSequenceClassification(EsmcPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | SequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         outputs = self.esmc(
             input_ids,
             attention_mask=attention_mask,

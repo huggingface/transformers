@@ -90,7 +90,7 @@ class Glm4ForCausalLM(GlmForCausalLM):
     def forward(
         self,
         **super_kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> CausalLMOutputWithPast:
         r"""
         Example:
 

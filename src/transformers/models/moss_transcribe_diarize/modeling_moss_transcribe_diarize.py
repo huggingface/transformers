@@ -300,7 +300,7 @@ class MossTranscribeDiarizeAudioModel(MossTranscribeDiarizePreTrainedModel):
         input_features,
         attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
             Log-mel features extracted from the raw speech waveform, one row per 30s Whisper window. See
@@ -401,7 +401,7 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
         input_features_mask: torch.Tensor,
         padding_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`):
             Mask marking valid (non-padded) feature indices, one row per chunked log-mel feature row in
@@ -467,7 +467,7 @@ class MossTranscribeDiarizeModel(MossTranscribeDiarizePreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MossTranscribeDiarizeModelOutputWithPast:
+    ) -> MossTranscribeDiarizeModelOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`, *optional*):
             Mask marking valid (non-padded) feature indices, one row per chunked log-mel feature row in
@@ -546,7 +546,7 @@ class MossTranscribeDiarizeForConditionalGeneration(MossTranscribeDiarizePreTrai
         logits_to_keep: int | torch.Tensor = 0,
         padding_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | MossTranscribeDiarizeCausalLMOutputWithPast:
+    ) -> MossTranscribeDiarizeCausalLMOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor` of shape `(num_chunks, feature_sequence_length)`, *optional*):
             Mask marking valid (non-padded) feature indices, one row per chunked log-mel feature row in

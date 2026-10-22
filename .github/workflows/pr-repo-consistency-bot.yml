@@ -181,6 +181,7 @@ jobs:
               'utils/check_pipeline_typing.py',
               'utils/check_doctest_list.py',
               'utils/check_docstrings.py',
+              'utils/check_decorator_return_types.py',
               'utils/add_dates.py',
             ]);
 
@@ -217,6 +218,7 @@ jobs:
           
           # Run fix-repo commands
           python setup.py deps_table_update
+          python utils/check_decorator_return_types.py --fix_and_overwrite
           python utils/check_doc_toc.py --fix_and_overwrite
           python utils/check_copies.py --fix_and_overwrite
           python utils/check_modular_conversion.py --fix_and_overwrite

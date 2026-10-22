@@ -673,7 +673,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         bbox (`torch.LongTensor` of shape `((batch_size, sequence_length), 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -816,7 +816,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | SequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `batch_size, sequence_length`):
             Indices of input sequence tokens in the vocabulary.
@@ -1010,7 +1010,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `batch_size, sequence_length`):
             Indices of input sequence tokens in the vocabulary.
@@ -1150,7 +1150,7 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
         start_positions: torch.LongTensor | None = None,
         end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | QuestionAnsweringModelOutput:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `batch_size, sequence_length`):
             Indices of input sequence tokens in the vocabulary.

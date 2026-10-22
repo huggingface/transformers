@@ -630,7 +630,7 @@ class PeAudioEncoder(PeAudioPreTrainedModel):
         input_values: torch.Tensor,
         padding_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding samples of `input_values`. Mask values selected in `[0, 1]`:

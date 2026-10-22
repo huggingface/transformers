@@ -1943,7 +1943,7 @@ class UnlimitedOcrModel(UnlimitedOcrPreTrainedModel):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | UnlimitedOcrModelOutputWithPast:
+    ) -> UnlimitedOcrModelOutputWithPast:
         r"""
         pixel_values_local (`torch.FloatTensor`, *optional*):
             Local patch pixel values of shape `(total_patches, 3, H, W)`.
@@ -2012,7 +2012,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         num_local_patches: list[int] | None = None,
         patches_grid: list[list[int]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
             The tensors corresponding to the global view input images.
@@ -2049,7 +2049,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | UnlimitedOcrCausalLMOutputWithPast:
+    ) -> UnlimitedOcrCausalLMOutputWithPast:
         r"""
         pixel_values_local (`torch.FloatTensor`, *optional*):
             Local patch pixel values of shape `(total_patches, 3, H, W)`.

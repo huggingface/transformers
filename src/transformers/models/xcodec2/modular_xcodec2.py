@@ -641,7 +641,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         input_features_mask: torch.Tensor | None = None,
         output_latents: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Xcodec2EncoderOutput:
+    ) -> Xcodec2EncoderOutput:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Input audio waveform.
@@ -692,7 +692,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         audio_codes: torch.Tensor | None = None,
         latents: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Xcodec2DecoderOutput:
+    ) -> Xcodec2DecoderOutput:
         r"""
         audio_codes (`torch.LongTensor`  of shape `(batch_size, 1, codes_length)`):
             Discrete code indices computed using `model.encode`.
@@ -720,7 +720,7 @@ class Xcodec2Model(Xcodec2PreTrainedModel):
         input_features_mask: torch.Tensor | None = None,
         output_latents: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Xcodec2Output:
+    ) -> Xcodec2Output:
         r"""
         input_values (`torch.Tensor` of shape `(batch_size, 1, sequence_length)`):
             Input audio waveform.

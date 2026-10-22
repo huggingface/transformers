@@ -299,7 +299,7 @@ class PPOCRV6SmallDetModel(PPOCRV6SmallDetPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> BaseModelOutputWithNoAttention:
         backbone_outputs = self.backbone(pixel_values, **kwargs)
         hidden_state = backbone_outputs.feature_maps
         hidden_state = self.neck(hidden_state)
@@ -325,7 +325,7 @@ class PPOCRV6SmallDetForObjectDetection(PPOCRV6SmallDetPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> BaseModelOutputWithNoAttention:
         outputs = self.model(pixel_values, **kwargs)
         logits = self.head(outputs.last_hidden_state)
 

@@ -300,7 +300,7 @@ class GlmAsrEncoder(GlmAsrPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
-    def forward(self, input_features, **kwargs: Unpack[TransformersKwargs]):
+    def forward(self, input_features, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
         inputs_embeds = inputs_embeds.transpose(1, 2)
@@ -372,7 +372,7 @@ class GlmAsrModel(GlmAsrPreTrainedModel):
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         input_features (`torch.FloatTensor`):
             Float values of mel features extracted from the raw speech waveform.
@@ -434,7 +434,7 @@ class GlmAsrModel(GlmAsrPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GlmAsrModelOutputWithPast:
+    ) -> GlmAsrModelOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices.

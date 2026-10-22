@@ -531,7 +531,7 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         xpath_tags_seq (`torch.LongTensor` of shape `(batch_size, sequence_length, config.max_depth)`, *optional*):
             Tag IDs for each token in the input sequence, padded up to config.max_depth.
@@ -626,7 +626,7 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
         start_positions: torch.Tensor | None = None,
         end_positions: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | QuestionAnsweringModelOutput:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         xpath_tags_seq (`torch.LongTensor` of shape `(batch_size, sequence_length, config.max_depth)`, *optional*):
             Tag IDs for each token in the input sequence, padded up to config.max_depth.
@@ -735,7 +735,7 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | MaskedLMOutput:
+    ) -> MaskedLMOutput:
         r"""
         xpath_tags_seq (`torch.LongTensor` of shape `(batch_size, sequence_length, config.max_depth)`, *optional*):
             Tag IDs for each token in the input sequence, padded up to config.max_depth.
@@ -829,7 +829,7 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         r"""
         xpath_tags_seq (`torch.LongTensor` of shape `(batch_size, sequence_length, config.max_depth)`, *optional*):
             Tag IDs for each token in the input sequence, padded up to config.max_depth.

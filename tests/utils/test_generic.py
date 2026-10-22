@@ -35,6 +35,7 @@ from transformers.utils import (
     transpose,
 )
 from transformers.utils.generic import retry
+from transformers.utils.output_capturing import capture_outputs
 
 
 if is_torch_available():
@@ -370,6 +371,30 @@ class CanReturnTupleDecoratorTester(unittest.TestCase):
                 hasattr(module, "_is_top_level_module"),
                 f"Module `{name}` should not have `_is_top_level_module` attribute",
             )
+
+
+@require_torch
+@pytest.mark.parametrize(
+    "decorator", [capture_outputs, capture_outputs(), capture_outputs(tie_last_hidden_states=False)]
+)
+@pytest.mark.parametrize("config_return_dict", [True, False])
+@pytest.mark.parametrize("return_dict", [True, False, None])
+def test_capture_outputs_decorator_forms(decorator, config_return_dict, return_dict):
+    class Model(torch.nn.Module):
+        config = PreTrainedConfig(return_dict=config_return_dict)
+
+        @decorator
+        def forward(self, hidden_states: torch.Tensor, *, scale: int = 1) -> BaseModelOutput:
+            return BaseModelOutput(last_hidden_state=hidden_states * scale)
+
+    model = Model()
+    hidden_states = torch.tensor([1.0])
+    output = model(hidden_states, scale=2, return_dict=return_dict)
+    assert isinstance(output, tuple if return_dict is False else BaseModelOutput)
+    torch.testing.assert_close(output[0], hidden_states * 2)
+    default_output = model(hidden_states, scale=3)
+    assert isinstance(default_output, BaseModelOutput if config_return_dict else tuple)
+    torch.testing.assert_close(default_output[0], hidden_states * 3)
 
 
 class RetryTest(unittest.TestCase):

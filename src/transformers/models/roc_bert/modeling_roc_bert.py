@@ -675,7 +675,7 @@ class RoCBertModel(RoCBertPreTrainedModel):
         past_key_values: Cache | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         input_shape_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the shape vocabulary.
@@ -827,7 +827,7 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
         labels_attention_mask: torch.Tensor | None = None,
         labels_token_type_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | MaskedLMOutput:
+    ) -> MaskedLMOutput:
         r"""
         input_shape_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the shape vocabulary.
@@ -1023,7 +1023,7 @@ class RoCBertForMaskedLM(RoCBertPreTrainedModel):
         encoder_attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | MaskedLMOutput:
+    ) -> MaskedLMOutput:
         r"""
         input_shape_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the shape vocabulary.
@@ -1142,7 +1142,7 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
+    ) -> CausalLMOutputWithCrossAttentions:
         r"""
         input_shape_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the shape vocabulary.
@@ -1278,7 +1278,7 @@ class RoCBertForSequenceClassification(RoCBertPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         r"""
         input_shape_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the shape vocabulary.
@@ -1372,7 +1372,7 @@ class RoCBertForMultipleChoice(RoCBertPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | MultipleChoiceModelOutput:
+    ) -> MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -1492,7 +1492,7 @@ class RoCBertForTokenClassification(RoCBertPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         r"""
         input_shape_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the shape vocabulary.
@@ -1566,7 +1566,7 @@ class RoCBertForQuestionAnswering(RoCBertPreTrainedModel):
         start_positions: torch.Tensor | None = None,
         end_positions: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | QuestionAnsweringModelOutput:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         input_shape_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the shape vocabulary.

@@ -630,7 +630,7 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
+    ) -> BaseModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, token_sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -864,7 +864,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         labels: torch.LongTensor | None = None,
         pixel_values: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -959,7 +959,7 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         bbox: torch.LongTensor | None = None,
         pixel_values: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | QuestionAnsweringModelOutput:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -1073,7 +1073,7 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
         bbox: torch.LongTensor | None = None,
         pixel_values: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | SequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,

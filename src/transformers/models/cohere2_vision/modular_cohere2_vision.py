@@ -97,7 +97,7 @@ class Cohere2VisionModel(AyaVisionModel):
     )
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         selected_image_feature = image_outputs.last_hidden_state
         pooler_output = self.multi_modal_projector(selected_image_feature)
@@ -118,7 +118,7 @@ class Cohere2VisionModel(AyaVisionModel):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple | Cohere2VisionModelOutputWithPast:
+    ) -> Cohere2VisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -179,7 +179,7 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
         image_sizes: torch.Tensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Cohere2VisionCausalLMOutputWithPast:
+    ) -> Cohere2VisionCausalLMOutputWithPast:
         r"""
         Example:
 

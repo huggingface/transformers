@@ -108,7 +108,7 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Args:
             input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
@@ -197,7 +197,7 @@ class AudioFlamingo3Model(VoxtralModel):
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         input_features (`torch.FloatTensor`):
             Float values of mel features extracted from the raw speech waveform.
@@ -231,7 +231,7 @@ class AudioFlamingo3Model(VoxtralModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> AudioFlamingo3ModelOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices.
@@ -301,7 +301,7 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | AudioFlamingo3CausalLMOutputWithPast:
+    ) -> AudioFlamingo3CausalLMOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices.

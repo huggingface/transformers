@@ -341,7 +341,7 @@ class Qwen2AudioEncoder(Qwen2AudioPreTrainedModel):
         input_features: torch.FloatTensor,
         attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutput:
         r"""
         attention_mask (`torch.Tensor`)`, *optional*):
             Qwen2Audio does not support masking of the `input_features`, this argument is preserved for compatibility,
@@ -652,7 +652,7 @@ class Qwen2AudioModel(Qwen2AudioPreTrainedModel):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen2AudioModelOutputWithPast:
+    ) -> Qwen2AudioModelOutputWithPast:
         r"""
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
@@ -789,7 +789,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen2AudioCausalLMOutputWithPast:
+    ) -> Qwen2AudioCausalLMOutputWithPast:
         r"""
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:

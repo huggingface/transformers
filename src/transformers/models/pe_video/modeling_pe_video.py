@@ -525,7 +525,7 @@ class PeVideoEncoder(PeVideoPreTrainedModel):
         pixel_values_videos: torch.Tensor,
         padding_mask_videos: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Mask to avoid performing attention on padding video frames. Mask values selected in `[0, 1]`:
@@ -587,7 +587,7 @@ class PeVideoModel(PeVideoPreTrainedModel):
             input_ids: torch.Tensor,
             attention_mask: torch.Tensor | None = None,
             **kwargs: Unpack[TransformersKwargs],
-        ) -> tuple | BaseModelOutputWithPooling:
+        ) -> BaseModelOutputWithPooling:
             text_outputs: BaseModelOutputWithPooling = self.text_model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
@@ -604,7 +604,7 @@ class PeVideoModel(PeVideoPreTrainedModel):
             pixel_values_videos: torch.Tensor,
             padding_mask_videos: torch.Tensor | None = None,
             **kwargs: Unpack[TransformersKwargs],
-        ) -> tuple | BaseModelOutputWithPooling:
+        ) -> BaseModelOutputWithPooling:
             video_outputs: BaseModelOutputWithPooling = self.video_encoder(
                 pixel_values_videos=pixel_values_videos,
                 padding_mask_videos=padding_mask_videos,

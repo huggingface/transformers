@@ -480,7 +480,7 @@ class BrosEncoder(BrosPreTrainedModel):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | BaseModelOutputWithCrossAttentions:
+    ) -> BaseModelOutputWithCrossAttentions:
         for layer_module in self.layer:
             hidden_states = layer_module(
                 hidden_states,
@@ -533,7 +533,7 @@ class BrosModel(BrosPreTrainedModel):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
             Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
@@ -646,7 +646,7 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         r"""
         bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
             Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
@@ -759,7 +759,7 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         initial_token_labels: torch.Tensor | None = None,
         subsequent_token_labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | BrosSpadeOutput:
+    ) -> BrosSpadeOutput:
         r"""
         bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
             Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
@@ -890,7 +890,7 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         r"""
         bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
             Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values

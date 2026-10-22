@@ -1524,7 +1524,7 @@ class Molmo2Model(LlavaModel):
         image_token_pooling: torch.Tensor,
         image_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         image_shape = None
         if pixel_values.dim() == 4:
             image_shape = pixel_values.shape[:3]
@@ -1557,7 +1557,7 @@ class Molmo2Model(LlavaModel):
         video_token_pooling: torch.Tensor,
         video_grids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         # Video frames only go through the low-res path: `num_frames` frames of `rows x cols` tokens, no high-res crops.
         num_frames, rows, cols = video_grids.unbind(-1)
         image_grids = torch.stack([num_frames * rows, cols, torch.zeros_like(cols), torch.zeros_like(cols)], dim=-1)
@@ -1583,7 +1583,7 @@ class Molmo2Model(LlavaModel):
         use_cache: bool | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Molmo2ModelOutputWithPast:
+    ) -> Molmo2ModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if pixel_values is not None and pixel_values_videos is not None:
@@ -1718,7 +1718,7 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Molmo2CausalLMOutputWithPast:
+    ) -> Molmo2CausalLMOutputWithPast:
         r"""
         Example:
 
