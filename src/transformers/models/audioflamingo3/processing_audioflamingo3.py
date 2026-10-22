@@ -21,6 +21,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -31,19 +32,9 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class AudioFlamingo3ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "common_kwargs": {
-            "padding_side": "left",  # Don't move to "text_kwargs" as it will no longer override the tokenizer defaults
-        },
-    }
-
-
 @requires(backends=("torch",))
 @auto_docstring
 class AudioFlamingo3Processor(ProcessorMixin):
-    valid_processor_kwargs = AudioFlamingo3ProcessorKwargs
-
     text_kwargs = {
         "padding": True,
         "return_tensors": "pt",
@@ -83,7 +74,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         text: TextInput | list[TextInput],
         audio: AudioInput | None = None,
         output_labels: bool | None = False,
-        **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
@@ -99,6 +90,12 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         if output_labels:
             kwargs["return_mm_token_type_ids"] = True
+
+        # For BC, was previously set in AudioFlamingo3ProcessorKwargs._defaults
+        text_kwargs = kwargs.get("text_kwargs", {})
+        if not any("padding_side" in group for group in (kwargs, text_kwargs, kwargs.get("common_kwargs", {}))):
+            kwargs["text_kwargs"] = text_kwargs | {"padding_side": "left"}
+
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
 
         if output_labels:
@@ -184,7 +181,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
         self,
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
-        **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
         Prepare inputs for automatic speech recognition without manually writing the default transcription prompt.
@@ -294,5 +291,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
         return stripped
 
+
+__getattr__ = deprecate_attr(__name__, rename={"AudioFlamingo3ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["AudioFlamingo3Processor"]

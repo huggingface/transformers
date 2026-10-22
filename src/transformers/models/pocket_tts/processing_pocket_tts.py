@@ -42,8 +42,6 @@ class PocketTTSAudioKwargs(AudioKwargs, total=False):
 
 class PocketTTSProcessorKwargs(ProcessingKwargs, total=False):
     audio_kwargs: PocketTTSAudioKwargs
-    # call defaults (`padding`, `padding_side`, `return_tensors`) ship in the checkpoint's `tokenizer_config.json`
-    _defaults = {}
 
 
 @requires(backends=("torch",))

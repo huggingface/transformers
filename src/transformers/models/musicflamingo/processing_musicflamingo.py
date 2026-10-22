@@ -36,19 +36,9 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class MusicFlamingoProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "common_kwargs": {
-            "padding_side": "left",  # Don't move to "text_kwargs" as it will no longer override the tokenizer defaults
-        },
-    }
-
-
 @requires(backends=("torch",))
 @auto_docstring
 class MusicFlamingoProcessor(ProcessorMixin):
-    valid_processor_kwargs = MusicFlamingoProcessorKwargs
-
     text_kwargs = {
         "padding": True,
         "return_tensors": "pt",
@@ -94,7 +84,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
         text: TextInput | list[TextInput],
         audio: AudioInput | None = None,
         output_labels: bool | None = False,
-        **kwargs: Unpack[MusicFlamingoProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
@@ -110,6 +100,12 @@ class MusicFlamingoProcessor(ProcessorMixin):
 
         if output_labels:
             kwargs["return_mm_token_type_ids"] = True
+
+        # For BC, was previously set in MusicFlamingoProcessorKwargs._defaults
+        text_kwargs = kwargs.get("text_kwargs", {})
+        if not any("padding_side" in group for group in (kwargs, text_kwargs, kwargs.get("common_kwargs", {}))):
+            kwargs["text_kwargs"] = text_kwargs | {"padding_side": "left"}
+
         model_inputs = super().__call__(audio=audio, text=text, **kwargs)
 
         if output_labels:

@@ -45,12 +45,11 @@ LANGUAGE_CODE_TO_NAME = {
 
 @auto_docstring
 class FunAsrNanoProcessor(ProcessorMixin):
-    valid_processor_kwargs = ProcessingKwargs
-
     text_kwargs = {"return_tensors": "pt"}
     audio_kwargs = {
         "sampling_rate": 16000,
     }
+    valid_processor_kwargs = ProcessingKwargs
 
     def __init__(
         self,
