@@ -1641,10 +1641,10 @@ class ProcessorMixin(PushToHubMixin):
 
         # 5): update defaults with arguments from tokenizer init
         if tokenizer_init_kwargs is not None:
-            # Yes, we update all modalities with tokenizer defaults. This is no bug.
-            for modality, modality_kwargs in modality_valid_kwargs.items():
-                for key in modality_kwargs:
-                    if key in tokenizer_init_kwargs:
+            for key in valid_kwarg_to_modalities:
+                if key in tokenizer_init_kwargs:
+                    # Yes, we update all modalities with tokenizer defaults. This is no bug.
+                    for modality in valid_kwarg_to_modalities[key]:
                         output_kwargs[modality][key] = getattr(self.tokenizer, key, tokenizer_init_kwargs[key])
 
         # 4): `_defaults.common_kwargs` overrides (BC)
