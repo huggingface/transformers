@@ -699,6 +699,7 @@ class BaseQuantizedLayer(DynamicLayer):
     def __init__(self):
         super().__init__()
         self.cumulative_length = 0
+        self._quantized_keys = self._quantized_values = None
 
     @abstractmethod
     def _quantize(self, tensor): ...

@@ -133,36 +133,6 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(cached_keys.shape == (1, 1, 10, 128))
         self.assertTrue(cached_values.shape == (1, 1, 10, 128))
 
-    def test_fp8_quantized_layer(self):
-        """Tests that `Fp8QuantizedLayer` appends new tokens using the scale calibrated on the first `update`."""
-        layer = Fp8QuantizedLayer()
-
-        # As in the attention layer, the states come out of a transpose, so they are not contiguous
-        keys, values = torch.randn(1, 5, 2, 8).transpose(1, 2), torch.randn(1, 5, 2, 8).transpose(1, 2)
-        layer.update(keys, values)
-        quantized_keys, calibrated_scale = layer._quantized_keys
-        self.assertEqual(quantized_keys.dtype, torch.float8_e4m3fn)
-        self.assertEqual(quantized_keys.shape, keys.shape)
-        calibrated_scale = calibrated_scale.clone()
-
-        # Even states with a much larger amplitude do not change the scale, which is frozen after calibration
-        cached_keys, _ = layer.update(torch.randn(1, 2, 1, 8) * 100, torch.randn(1, 2, 1, 8))
-        self.assertEqual(cached_keys.shape, (1, 2, 6, 8))
-        self.assertEqual(cached_keys.dtype, keys.dtype)
-        quantized_keys, scale = layer._quantized_keys
-        self.assertTrue(torch.equal(scale, calibrated_scale))
-        self.assertEqual(quantized_keys.shape, (1, 2, 6, 8))
-
-    def test_fp8_quantized_cache_rejects_group_wise_options(self):
-        """Tests that the `fp8` backend, which quantizes per-tensor, does not silently drop the group-wise options."""
-        config = LlamaConfig(num_hidden_layers=2)
-        with self.assertRaisesRegex(ValueError, "does not support"):
-            QuantizedCache(backend="fp8", config=config, q_group_size=128, nbits=2)
-
-        layer = QuantizedCache(backend="fp8", config=config).layers[0]
-        self.assertIsInstance(layer, Fp8QuantizedLayer)
-        self.assertFalse(hasattr(layer, "q_group_size"))
-
     def test_early_initialization_does_not_corrupt_linear_attention_layers(self):
         """
         Regression test: `early_initialization` initialized *every* layer through the attention `(num_heads, head_dim)`
@@ -215,16 +185,23 @@ class CacheTest(unittest.TestCase):
         cache = StaticCache(config=config, max_cache_len=8)
         self.assertEqual(cache.get_max_length(), 8)
 
-    @require_optimum_quanto
-    def test_quantized_layer_beam_reorder(self):
+    @parameterized.expand(["quanto", "fp8"])
+    def test_quantized_layer_beam_reorder(self, backend):
         """
         `reorder_cache` must reorder the quantized states as well, not only the residual cache. It used to index the
         (emptied) residual cache while guarding on the total sequence length, so it either raised or silently left
-        the quantized states in the previous beam order.
+        the quantized states in the previous beam order. FP8 has no residual cache, and reorders right away.
         """
-        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
-        # Row `i` of the states holds the constant `i + 1`, so the beam order can be read back off the cache
-        row_values = torch.arange(1, 5, dtype=torch.float32).view(4, 1, 1, 1)
+        if backend == "quanto":
+            if not is_optimum_quanto_available():
+                self.skipTest("Quanto is not available")
+            layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+            # Row `i` of the states holds the constant `i + 1`, so the beam order can be read back off the cache
+            row_values, atol = torch.arange(1, 5, dtype=torch.float32).view(4, 1, 1, 1), 1e-2
+        else:
+            layer = Fp8QuantizedLayer()
+            # Same, with constants exactly representable in `float8_e4m3fn` once divided by the calibrated scale
+            row_values, atol = torch.tensor([1.0, 2.0, 4.0, 8.0]).view(4, 1, 1, 1), 0
 
         def states(order, seq_len):
             # Row `i` is filled with the constant of the original row `order[i]`, as the model would produce it
@@ -242,8 +219,8 @@ class CacheTest(unittest.TestCase):
             keys, values = layer.update(states(order, 1), states(order, 1))
             # Every cached position of a row must hold that row's constant, whatever the beam shuffling
             expected = row_values.index_select(0, order).expand_as(keys)
-            torch.testing.assert_close(keys, expected, rtol=0, atol=1e-2)
-            torch.testing.assert_close(values, expected, rtol=0, atol=1e-2)
+            torch.testing.assert_close(keys, expected, rtol=0, atol=atol)
+            torch.testing.assert_close(values, expected, rtol=0, atol=atol)
 
     @parameterized.expand(
         [
@@ -273,58 +250,61 @@ class CacheTest(unittest.TestCase):
                 layer._dequantize(layer._quantized_keys).shape[-2], sequence_length - expected_residual_length
             )
 
-    @require_optimum_quanto
-    def test_quantized_layer_reset(self):
-        """`reset` must also drop the quantized states, which hold most of the cache."""
-        layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+    @parameterized.expand(["quanto", "fp8"])
+    def test_quantized_layer_reset(self, backend):
+        """`reset` must also drop the quantized states, which hold most of the cache, and any calibrated scale."""
+        if backend == "quanto":
+            if not is_optimum_quanto_available():
+                self.skipTest("Quanto is not available")
+            layer = QuantoQuantizedLayer(nbits=4, q_group_size=16, residual_length=4)
+        else:
+            layer = Fp8QuantizedLayer()
 
-        # 5 tokens for a residual length of 4: the first flush has happened, so most of the cache is quantized
-        layer.update(torch.rand(4, 2, 5, 8), torch.rand(4, 2, 5, 8))
-        layer.reset()
-
-        self.assertEqual(layer.get_seq_length(), 0)
-        keys, _ = layer.update(torch.rand(4, 2, 3, 8), torch.rand(4, 2, 3, 8))
-        self.assertEqual(keys.shape[-2], 3)
-        self.assertEqual(layer.get_seq_length(), 3)
-
-    def test_fp8_quantized_layer_beam_reorder(self):
-        """Same as `test_quantized_layer_beam_reorder`, except that FP8 reorders right away instead of deferring."""
-        layer = Fp8QuantizedLayer()
-        # Row `i` holds a constant exactly representable in `float8_e4m3fn` once divided by the calibrated scale
-        row_values = torch.tensor([1.0, 2.0, 4.0, 8.0]).view(4, 1, 1, 1)
-
-        def states(order, seq_len):
-            return row_values.index_select(0, order).expand(4, 2, seq_len, 8).clone()
-
-        order = torch.arange(4)
-        layer.update(states(order, 5), states(order, 5))
-
-        for beam_idx in [[1, 0, 3, 2], [2, 2, 0, 1], [3, 1, 2, 0], [0, 1, 2, 3], [1, 3, 0, 2], [2, 0, 1, 3]]:
-            beam_idx = torch.tensor(beam_idx)
-            layer.reorder_cache(beam_idx)
-            order = order.index_select(0, beam_idx)
-            keys, values = layer.update(states(order, 1), states(order, 1))
-            expected = row_values.index_select(0, order).expand_as(keys)
-            torch.testing.assert_close(keys, expected, rtol=0, atol=0)
-            torch.testing.assert_close(values, expected, rtol=0, atol=0)
-
-    def test_fp8_quantized_layer_reset(self):
-        """`reset` must drop the quantized states and the calibrated scales, so the next `update` starts over."""
-        layer = Fp8QuantizedLayer()
-
-        # Calibrate on states with a large amplitude, so a stale scale would be obvious on the next calibration
+        # 5 tokens for a residual length of 4, so the first flush has happened and most of the cache is quantized.
+        # The large amplitude makes a stale FP8 scale obvious on the next calibration.
         layer.update(torch.rand(4, 2, 5, 8) * 100, torch.rand(4, 2, 5, 8) * 100)
-        calibrated_scale = layer._quantized_keys[1].clone()
+        calibrated_scale = layer._quantized_keys[1].clone() if backend == "fp8" else None
         layer.reset()
 
         self.assertEqual(layer.get_seq_length(), 0)
-        # The scales are dropped along with the states, as they are stored with them
         self.assertIsNone(layer._quantized_keys)
+        self.assertIsNone(layer._quantized_values)
 
         keys, _ = layer.update(torch.rand(4, 2, 3, 8), torch.rand(4, 2, 3, 8))
         self.assertEqual(keys.shape[-2], 3)
         self.assertEqual(layer.get_seq_length(), 3)
-        self.assertLess(layer._quantized_keys[1].item(), calibrated_scale.item())
+        if backend == "fp8":
+            self.assertLess(layer._quantized_keys[1].item(), calibrated_scale.item())
+
+    def test_fp8_quantized_layer(self):
+        """Tests that `Fp8QuantizedLayer` appends new tokens using the scale calibrated on the first `update`."""
+        layer = Fp8QuantizedLayer()
+
+        # As in the attention layer, the states come out of a transpose, so they are not contiguous
+        keys, values = torch.randn(1, 5, 2, 8).transpose(1, 2), torch.randn(1, 5, 2, 8).transpose(1, 2)
+        layer.update(keys, values)
+        quantized_keys, calibrated_scale = layer._quantized_keys
+        self.assertEqual(quantized_keys.dtype, torch.float8_e4m3fn)
+        self.assertEqual(quantized_keys.shape, keys.shape)
+        calibrated_scale = calibrated_scale.clone()
+
+        # Even states with a much larger amplitude do not change the scale, which is frozen after calibration
+        cached_keys, _ = layer.update(torch.randn(1, 2, 1, 8) * 100, torch.randn(1, 2, 1, 8))
+        self.assertEqual(cached_keys.shape, (1, 2, 6, 8))
+        self.assertEqual(cached_keys.dtype, keys.dtype)
+        quantized_keys, scale = layer._quantized_keys
+        self.assertTrue(torch.equal(scale, calibrated_scale))
+        self.assertEqual(quantized_keys.shape, (1, 2, 6, 8))
+
+    def test_fp8_quantized_cache_rejects_group_wise_options(self):
+        """Tests that the `fp8` backend, which quantizes per-tensor, does not silently drop the group-wise options."""
+        config = LlamaConfig(num_hidden_layers=2)
+        with self.assertRaisesRegex(ValueError, "does not support"):
+            QuantizedCache(backend="fp8", config=config, q_group_size=128, nbits=2)
+
+        layer = QuantizedCache(backend="fp8", config=config).layers[0]
+        self.assertIsInstance(layer, Fp8QuantizedLayer)
+        self.assertFalse(hasattr(layer, "q_group_size"))
 
     def test_dynamic_cache_uses_per_layer_sliding_windows(self):
         config = LlamaConfig(
