@@ -18,6 +18,7 @@ import unittest
 from pathlib import Path
 
 import torch
+from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import (
     AutoModel,
@@ -145,6 +146,16 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    def test_quantizer_config_rejects_invalid_codebook_counts(self):
+        for total_count, semantic_count in ((-1, 1), (0, 1), (3, -1), (3, 0), (3, 4)):
+            with (
+                self.subTest(total_count=total_count, semantic_count=semantic_count),
+                self.assertRaises(StrictDataclassClassValidationError),
+            ):
+                Qwen3TTSTokenizerQuantizerConfig(
+                    n_codebooks=total_count, semantic_quantizer_config={"n_codebooks": semantic_count}
+                )
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
