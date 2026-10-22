@@ -40,8 +40,8 @@ import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-model_id = "nvidia/Muse-Glimmer-30B-NVFP4"
-model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model_id = "nvidia/Qwen3-30B-A3B-NVFP4"
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="cuda")
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 inputs = tokenizer("NVFP4 is", return_tensors="pt").to(model.device)
@@ -73,10 +73,9 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## MoE experts
 
-The experts run on the kernels' fused MoE chain. Pick the chain with `experts_implementation`: `"grouped_mm"` or
-`"batched_mm"`. `"eager"` runs one kernel call per expert. At load, the gate and up rows are interleaved, so the kernels
-fuse the gated activation. On Blackwell GPUs, the scales are swizzled into the layout the scaled MMA reads. Dense
-layers swizzle theirs too, except under tensor parallelism, which splits their scale grids.
+Pick the experts' kernels with `experts_implementation`: `"grouped_mm"` or `"batched_mm"` run the fused MoE chain, and
+`"eager"` runs one call per expert. On Blackwell GPUs, scales load swizzled into the layout the scaled MMA reads, except
+for dense layers under tensor parallelism.
 
 [`DistributedConfig`] shards the experts by expert, with masked expert parallelism. Each rank runs its own experts on
 every token, so there is no all-to-all dispatch. Set `ep_size` equal to `tp_size`.

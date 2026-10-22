@@ -139,8 +139,8 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "gemma": GemmaQuantizationConfig,
 }
 
-# Readers for other tools' checkpoint configs, keyed by `quant_method`. `None` falls back to the config class.
-AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
+# Readers that turn another tool's checkpoint config into a Transformers config, keyed by `quant_method`
+AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin]] = {
     "modelopt": read_modelopt,
 }
 
@@ -177,9 +177,8 @@ class AutoQuantizationConfig:
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
 
-        reader = AUTO_QUANTIZATION_CONFIG_READERS.get(quant_method)
-        if reader is not None and (config := reader(quantization_config_dict)) is not None:
-            return config
+        if (reader := AUTO_QUANTIZATION_CONFIG_READERS.get(quant_method)) is not None:
+            return reader(quantization_config_dict)
 
         if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
             raise ValueError(

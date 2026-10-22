@@ -2100,9 +2100,9 @@ class NVFP4Config(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.NVFP4
         self.modules_to_not_convert = modules_to_not_convert
         self.quantized_layers = quantized_layers
-        if activation_format not in (None, "nvfp4", "bf16"):
-            raise ValueError(f"NVFP4 activation_format must be None, 'nvfp4' or 'bf16'; got {activation_format!r}")
-        self.activation_format = None if activation_format == "nvfp4" else activation_format
+        if activation_format not in (None, "bf16"):
+            raise ValueError(f"NVFP4 activation_format must be None or 'bf16'; got {activation_format!r}")
+        self.activation_format = activation_format
         self.dequantize = dequantize
         if kwargs:
             logger.info(
@@ -2126,11 +2126,12 @@ def read_modelopt(config_dict: dict) -> NVFP4Config:
         algos = set(quantized_layers.values())
     else:
         algos = {quant_algo}
-    if not algos & {"NVFP4", "W4A16_NVFP4"}:
+    nvfp4, fp8 = {"NVFP4", "W4A16_NVFP4"}, {"FP8", "FP8_PB_WO", "MXFP8"}
+    if not algos & nvfp4:
         raise ValueError(f"This ModelOpt export has no NVFP4 layer; its formats are {sorted(algos)}.")
-    if unsupported := algos - {"NVFP4", "W4A16_NVFP4", "FP8", "FP8_PB_WO", "MXFP8"}:
+    if unsupported := algos - nvfp4 - fp8:
         raise ValueError(f"ModelOpt formats {sorted(unsupported)} are not supported next to NVFP4.")
-    if fp8_formats := algos & {"FP8", "FP8_PB_WO", "MXFP8"}:
+    if fp8_formats := algos & fp8:
         logger.warning_once(
             f"This checkpoint has FP8 layers ({', '.join(sorted(fp8_formats))}) next to its NVFP4 layers. The FP8 "
             "layers load dequantized to the model dtype."

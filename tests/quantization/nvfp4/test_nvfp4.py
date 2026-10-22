@@ -232,8 +232,9 @@ class NVFP4ModulesTest(unittest.TestCase):
         self.assertEqual(attention.q_proj.weight.dtype, torch.int8)
         self.assertIsNotNone(attention.q_proj.input_global_scale)
         self.assertEqual((attention.k_proj.activation_format, attention.k_proj.input_global_scale), ("bf16", None))
-        # a layer in another format loads dequantized into the model's own module
+        # an FP8 layer keeps the model's own module, with a slot for its scale until it dequantizes
         self.assertIs(type(attention.o_proj), torch.nn.Linear)
+        self.assertIn("weight_scale_inv", attention.o_proj._parameters)
         self.assertIs(type(attention.v_proj), torch.nn.Linear)
 
     def test_expert_parallelism_is_masked_and_shards_the_globals(self):

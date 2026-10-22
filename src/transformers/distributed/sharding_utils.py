@@ -113,14 +113,8 @@ class DtensorShardOperation:
           of the same axis-0 size back to back (e.g. text then vision experts as in ernie), so `tensor_idx` wraps around it.
         """
         source_shape = list(source.shape) if isinstance(source, torch.Tensor) else source.get_shape()
-        squeezed = [size for size in source_shape if size != 1]
-        if len(source_shape) > self.param_ndim and len(squeezed) == self.param_ndim:
-            # Drop extra size-1 dims, e.g. ModelOpt's `[N / 128, 1, K / 128, 1]` block-scale grid
-            source, source_shape = source[...].reshape(squeezed), squeezed
-        # A slice of axis 0 has fewer dims than the param, e.g. one expert's scale grid of a swizzled stack. A scalar
-        # only slices a 1-D stack, e.g. per-expert globals. Elsewhere it is a per-tensor scale.
-        is_whole = len(source_shape) >= self.param_ndim or (not source_shape and self.param_ndim > 1)
-        if tensor_idx is not None and is_whole:
+        # a slice of axis 0 has fewer dims than the param, e.g. one expert's scale grid of a 5-D swizzled stack
+        if tensor_idx is not None and len(source_shape) >= self.param_ndim:
             tensor_idx = None  # not a slice of axis 0, the list holds whole tensors
         dim_placements = [
             (mesh_dim, placement) for mesh_dim, placement in enumerate(self.placements) if hasattr(placement, "dim")
@@ -128,8 +122,7 @@ class DtensorShardOperation:
 
         # Dense path
         if tensor_idx is None:
-            # a scalar, e.g. a per-tensor scale, has nothing to shard
-            if not dim_placements or not source_shape:
+            if not dim_placements:
                 return source[...].to(device=device, dtype=dtype)
 
             # Determine for each tensor dimension, which type of sharding operations to apply (_StridedShard or Shard) and which rank to apply it to.

@@ -119,12 +119,12 @@ class NVFP4HfQuantizer(HfQuantizer):
         return formats
 
     def _process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs):
-        from ..integrations.nvfp4 import NVFP4Experts, NVFP4Linear, replace_with_nvfp4
+        from ..integrations.nvfp4 import replace_with_nvfp4
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
-        self._nvfp4_shapes = {}
+        self._formats = None
         # no slot for calibrated `input_scale`s or FP8 KV-cache scales
         model._keys_to_ignore_on_load_unexpected = {
             *(model._keys_to_ignore_on_load_unexpected or ()),
@@ -133,23 +133,25 @@ class NVFP4HfQuantizer(HfQuantizer):
         }
         if self.quantization_config.dequantize:
             return
-        formats = self._module_formats(model)
+        formats = self._formats = self._module_formats(model)
         weight_only = self.quantization_config.activation_format == "bf16"
         tensor_parallel = getattr(model.config, "distributed_config", None) is not None
         if not replace_with_nvfp4(
             model, self.modules_to_not_convert, formats, self.pre_quantized, weight_only, tensor_parallel
         ):
             raise ValueError("NVFP4 found no linear or experts module to quantize in this model.")
-        # the loader accepts any shape for a quantized tensor
-        self._nvfp4_shapes = {
-            name: param.shape
-            for name, param in model.named_parameters()
-            if self.pre_quantized
-            and isinstance(model.get_submodule(name.rpartition(".")[0]), (NVFP4Experts, NVFP4Linear))
-        }
 
     def _process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs):
-        from ..integrations.nvfp4 import modelopt_renames
+        from ..integrations.nvfp4 import FP8_BLOCKS, dequantize_fp8_linears, modelopt_renames
+
+        dequantize_fp8_linears(model, self._formats or {})
+        # the FP8 layers are now in the model dtype, so a save lists them no more
+        if self.quantization_config.quantized_layers is not None:
+            self.quantization_config.quantized_layers = {
+                layer: algo
+                for layer, algo in self.quantization_config.quantized_layers.items()
+                if algo not in FP8_BLOCKS
+            }
 
         conversions = getattr(model, "_weight_conversions", None) or []
         if not self.pre_quantized:
@@ -159,14 +161,6 @@ class NVFP4HfQuantizer(HfQuantizer):
         # the renames run before the converters.
         shipped = {tuple(rename._original_source_patterns) for rename in modelopt_renames()}
         model._weight_conversions = [c for c in conversions if tuple(c._original_source_patterns) not in shipped]
-        # a distributed load holds shards, so only a full load checks the shapes
-        if getattr(model.config, "distributed_config", None) is None:
-            for name, param in model.named_parameters():
-                expected = self._nvfp4_shapes.get(name)
-                if expected is not None and param.shape != expected:
-                    raise ValueError(
-                        f"{name} loaded with shape {tuple(param.shape)}, but its module holds {tuple(expected)}."
-                    )
         return model
 
     def get_quantize_ops(self):
@@ -222,10 +216,17 @@ class NVFP4HfQuantizer(HfQuantizer):
         # first matching converter wins. On save, skip the params a model converter writes back, as they would match
         # first there.
         reverse = [c.reverse_transform() for c in conversions if isinstance(c, WeightConverter)] if for_save else []
+        # An FP8 layer's weight and scale load into their own slots too, so the scale shards by its own plan.
+        fp8_linears = {
+            name
+            for name, module in model.named_modules()
+            if type(module) is torch.nn.Linear and "weight_scale_inv" in module._parameters
+        }
         per_param = [
             WeightConverter(re.escape(name), name, [NVFP4Deserialize(self)])
             for name, _ in model.named_parameters()
-            if self.get_param_ops(model, name) and not any(c.rename_source_key(name)[1] for c in reverse)
+            if (self.get_param_ops(model, name) or name.rpartition(".")[0] in fp8_linears)
+            and not any(c.rename_source_key(name)[1] for c in reverse)
         ]
         renames = [c for c in conversions if not isinstance(c, WeightConverter)]
         return renames + per_param + [c for c in conversions if isinstance(c, WeightConverter)]
