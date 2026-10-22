@@ -136,10 +136,12 @@ with torch.no_grad():
     # Reconstructed audio shape: torch.Size([2, 142080])
 ```
 
-### Speed-up with `torch.compile`
+### Using `torch.compile`
 
-You can speed up inference with [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html). The first
-few calls are slower due to compilation overhead, but subsequent calls with the same input shape are faster.
+You can pass the full model to [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html).
+The model allows graph breaks, so some operations may remain in eager mode. Initial calls include compilation
+overhead, and later calls may trigger recompilation. Benchmark after warmup on your target hardware;
+compilation does not guarantee lower latency.
 
 ```python
 import torch
