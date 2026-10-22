@@ -62,6 +62,17 @@ quantized in the format of its entry. A typical plan puts the MoE experts in a 4
 - A module that no entry matches stays in full precision.
 - `dequantize` belongs to the plan, not to its entries.
 - An entry can be the config of any registered quantization method. Its modules load through that method's quantizer.
+- An entry that matches no module raises an error. A `None` entry may match none.
+- A pattern also matches the names a module has in the checkpoint. A fused module, such as the experts, takes one
+  entry. Entries that name its pieces, such as `experts.3.gate_proj`, must give all of them the same one.
+
+A pre-quantized plan keeps its formats when you pass a config.
+
+- A format config applies its loading options to the whole model. Its `activation_format` applies to the entries in
+  its format.
+- A [`FineGrainedConfig`] adds its `None` entries and sets `dequantize`.
+
+A plan passed with a single-format checkpoint raises an error. Pass that format's config instead.
 
 ## Tensor and expert parallelism
 
