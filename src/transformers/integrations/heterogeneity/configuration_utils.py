@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from transformers.utils import logging
@@ -30,6 +30,16 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 _SENTINEL = object()
+_MISSING = object()
+_GLOBAL_ONLY_ATTRIBUTES = {
+    # Set and read on the global config in multiple places
+    "_attn_implementation",
+    "_attn_implementation_internal",
+    "_experts_implementation",
+    "_experts_implementation_internal",
+    # Read from the global config in multiple places
+    "is_causal",
+}
 
 
 class AmbiguousGlobalPerLayerAttributeError(RuntimeError):
@@ -37,10 +47,26 @@ class AmbiguousGlobalPerLayerAttributeError(RuntimeError):
 
 
 @dataclass
+class _GenericModelingState:
+    """Records the layers in which skips removed every attention mask consumer, and the caches in each layer that no
+    longer have a writer. Generic heterogeneous modeling sets this state on the config when it builds a model, because
+    this information is needed for mask and cache creation, which receive only the config."""
+
+    unconsumed_attention_mask_layers: set[int] = field(default_factory=set)
+    per_layer_unwritten_caches: dict[int, set[str]] = field(default_factory=dict)
+
+
+@dataclass
 class _HeterogeneitySpec:
     per_layer_overrides: dict[int, dict[str, Any]]
     per_layer_attributes: set[str]
     explicit_per_layer_attributes: set[str]
+
+    # Layer configs, created on first access to `per_layer_config` and reused after.
+    # Not compared, since creating them doesn't change the config.
+    layer_configs: dict[int, PreTrainedConfig] = field(default_factory=dict, compare=False, repr=False)
+    # Set by generic heterogeneous modeling after it builds a model
+    generic_modeling_state: _GenericModelingState | None = None
 
 
 def _normalize_layer_overrides(layer_overrides: dict[str, Any]) -> dict[str, Any]:
@@ -74,6 +100,20 @@ def _validate_layer_indices(config: PreTrainedConfig, per_layer_overrides: dict[
             f"`per_layer_config` keys must be integer layer indices in the range [0, {num_hidden_layers}); "
             f"got {invalid_layer_indices}."
         )
+
+
+def _validate_per_layer_config_is_not_nested(per_layer_overrides: dict[int, dict[str, Any]]) -> None:
+    if any("per_layer_config" in layer_overrides for layer_overrides in per_layer_overrides.values()):
+        raise ValueError("`per_layer_config` cannot be nested within itself.")
+
+
+def _validate_global_only_attributes(per_layer_overrides: dict[int, dict[str, Any]]) -> None:
+    for layer_idx, layer_overrides in per_layer_overrides.items():
+        if attributes := _GLOBAL_ONLY_ATTRIBUTES.intersection(layer_overrides):
+            raise ValueError(
+                f"`per_layer_config` for layer {layer_idx} overrides global-only attributes: {sorted(attributes)}. "
+                "Set these attributes on the global config instead."
+            )
 
 
 def _validate_sliding_window_and_attention_chunk_size(
@@ -111,7 +151,7 @@ def _get_per_layer_attributes(per_layer_overrides: dict[int, dict[str, Any]]) ->
     return per_layer_attributes
 
 
-def _modify_config_and_create_heterogeneity_spec(
+def _create_heterogeneity_spec(
     config: PreTrainedConfig, per_layer_overrides: dict[int, dict[str, Any]]
 ) -> _HeterogeneitySpec:
     explicit_per_layer_attributes = _get_per_layer_attributes(per_layer_overrides)
@@ -131,32 +171,40 @@ def _modify_config_and_create_heterogeneity_spec(
 
     if missing_required_global_attributes:
         raise ValueError(
-            f"The following attributes are missing: {sorted(missing_required_global_attributes)}\nPlease define them globally, or provide them for every layer in `per_layer_config`"
+            f"The following attributes are missing: {sorted(missing_required_global_attributes)}\n"
+            "Please define them globally, or provide them for every layer in `per_layer_config`"
         )
 
-    # Remove per-layer overrides that match the global value
-    for attr in explicit_per_layer_attributes:
-        if not config._hasattr_without_heterogeneous_validation(attr):
+    heterogeneity_spec = _HeterogeneitySpec(
+        per_layer_overrides=per_layer_overrides,
+        per_layer_attributes=set(explicit_per_layer_attributes),
+        explicit_per_layer_attributes=explicit_per_layer_attributes,
+    )
+    _remove_overrides_equal_to_global(config, heterogeneity_spec, explicit_per_layer_attributes)
+
+    return heterogeneity_spec
+
+
+def _remove_overrides_equal_to_global(
+    config: PreTrainedConfig, heterogeneity_spec: _HeterogeneitySpec, attributes: Iterable[str]
+) -> None:
+    """Remove the overrides of `attributes` that equal the global value, and the layers left without overrides, so
+    those layers follow the global value."""
+    per_layer_overrides = heterogeneity_spec.per_layer_overrides
+    for attr in attributes:
+        global_value = config._getattr_without_heterogeneous_validation(attr, _MISSING)
+        if global_value is _MISSING:
             continue
 
-        global_value = config._getattr_without_heterogeneous_validation(attr)
         for layer_overrides in per_layer_overrides.values():
             if attr in layer_overrides and layer_overrides[attr] == global_value:
                 del layer_overrides[attr]
 
-    # Delete all empty layer configs
     for layer_idx, layer_overrides in list(per_layer_overrides.items()):
         if not layer_overrides:
             del per_layer_overrides[layer_idx]
 
-    per_layer_attributes = _get_per_layer_attributes(per_layer_overrides)
-    heterogeneity_spec = _HeterogeneitySpec(
-        per_layer_overrides=per_layer_overrides,
-        per_layer_attributes=per_layer_attributes,
-        explicit_per_layer_attributes=explicit_per_layer_attributes,
-    )
-
-    return heterogeneity_spec
+    heterogeneity_spec.per_layer_attributes = _get_per_layer_attributes(per_layer_overrides)
 
 
 def _apply_heterogeneous_config(
@@ -170,8 +218,6 @@ def _apply_heterogeneous_config(
     sub-layers skipped via the ``skip`` attribute).
 
     This function validates the overrides and stores a ``_HeterogeneitySpec`` on ``config._heterogeneity_spec``.
-    At model-init time, ``apply_heterogeneous_modeling`` reads this spec to patch
-    each layer with its resolved config.
 
     Args:
         config: The global model config to modify in-place.
@@ -186,9 +232,11 @@ def _apply_heterogeneous_config(
     }
 
     _validate_layer_indices(config, normalized_per_layer_overrides)
+    _validate_per_layer_config_is_not_nested(normalized_per_layer_overrides)
+    _validate_global_only_attributes(normalized_per_layer_overrides)
     _validate_sliding_window_and_attention_chunk_size(config, normalized_per_layer_overrides)
 
-    config._heterogeneity_spec = _modify_config_and_create_heterogeneity_spec(config, normalized_per_layer_overrides)
+    config._heterogeneity_spec = _create_heterogeneity_spec(config, normalized_per_layer_overrides)
 
 
 def _get_layer_config(
@@ -232,16 +280,17 @@ class _PerLayerConfigView(Sequence["PreTrainedConfig"]):
                 return self._config
 
             # Ensure that all layers of the requested type have the same overrides
-            layer_overrides = self._config._heterogeneity_spec.per_layer_overrides
-            reference_overrides = layer_overrides.get(layer_types.index(layer_idx), {})
+            per_layer_overrides = self._config._heterogeneity_spec.per_layer_overrides
+            reference_layer_idx = layer_types.index(layer_idx)
+            reference_overrides = per_layer_overrides.get(reference_layer_idx, {})
             for idx, layer_type in enumerate(layer_types):
-                if layer_type == layer_idx and layer_overrides.get(idx, {}) != reference_overrides:
+                if layer_type == layer_idx and per_layer_overrides.get(idx, {}) != reference_overrides:
                     raise ValueError(
                         f"Layer type '{layer_idx}' is not homogeneous across layers (layer {idx} differs). "
                         f"Use an integer index to access a specific layer's config."
                     )
 
-            return _get_layer_config(self._config, reference_overrides)
+            return self[reference_layer_idx]
 
         # Return a list of configs for a slice of layers
         if isinstance(layer_idx, slice):
@@ -257,10 +306,12 @@ class _PerLayerConfigView(Sequence["PreTrainedConfig"]):
             return self._config
 
         heterogeneity_spec = self._config._heterogeneity_spec
-        return _get_layer_config(
-            self._config,
-            heterogeneity_spec.per_layer_overrides.get(layer_idx, {}),
-        )
+        layer_config = heterogeneity_spec.layer_configs.get(layer_idx)
+        if layer_config is None:
+            layer_config = _get_layer_config(self._config, heterogeneity_spec.per_layer_overrides.get(layer_idx, {}))
+            heterogeneity_spec.layer_configs[layer_idx] = layer_config
+
+        return layer_config
 
 
 def _get_explicit_per_layer_overrides(config: PreTrainedConfig) -> dict[int, dict[str, Any]]:
@@ -287,6 +338,55 @@ class HeterogeneousConfigMixin:
     property in the post-init phase and calls hook methods where heterogeneity needs to participate in the config lifecycle: attribute
     access, key iteration, and serialization.
     """
+
+    def _get_layer_configs_tracking_global(self, key: str) -> list[PreTrainedConfig]:
+        """Return the layer configs created so far that take their value for `key` from this config."""
+
+        heterogeneity_spec = self.__dict__.get("_heterogeneity_spec")
+
+        # No layer configs track the global value when:
+        # - The config is homogeneous, or no layer config was created yet
+        # - `key` is `skip`: each layer has its own
+        # - `key` is `per_layer_config` or `_heterogeneity_spec`: assigning it replaces the heterogeneity spec and its
+        #   layer configs
+        if (
+            heterogeneity_spec is None
+            or not heterogeneity_spec.layer_configs
+            or key in ("skip", "per_layer_config", "_heterogeneity_spec")
+        ):
+            return []
+
+        global_value = self._getattr_without_heterogeneous_validation(key, _MISSING)
+        # Excludes layers with their own value.
+        # `_remove_overrides_equal_to_global` removes overrides equal to the global value, so an override always
+        # differs from it.
+        return [
+            layer_config
+            for layer_config in heterogeneity_spec.layer_configs.values()
+            if getattr(layer_config, key, _MISSING) == global_value
+        ]
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        tracking_layer_configs = self._get_layer_configs_tracking_global(key)
+        super().__setattr__(key, value)
+        for layer_config in tracking_layer_configs:
+            setattr(layer_config, key, value)
+
+        # Remove overrides that now equal the global value, as on creation, to match a saved and loaded config
+        heterogeneity_spec = self.__dict__.get("_heterogeneity_spec")
+        if heterogeneity_spec is not None and key in heterogeneity_spec.per_layer_attributes:
+            _remove_overrides_equal_to_global(self, heterogeneity_spec, [key])
+
+    def __delattr__(self, key: str) -> None:
+        tracking_layer_configs = self._get_layer_configs_tracking_global(key)
+        super().__delattr__(key)
+        for layer_config in tracking_layer_configs:
+            delattr(layer_config, key)
+
+        # Remove overrides that now equal the global value, as on creation, to match a saved and loaded config
+        heterogeneity_spec = self.__dict__.get("_heterogeneity_spec")
+        if heterogeneity_spec is not None and key in heterogeneity_spec.per_layer_attributes:
+            _remove_overrides_equal_to_global(self, heterogeneity_spec, [key])
 
     def __getattribute__(self, key: str) -> Any:
         # In heterogeneous configs, per-layer attributes are ambiguous on the global config.
@@ -316,7 +416,18 @@ class HeterogeneousConfigMixin:
         return hasattr(self, "_heterogeneity_spec")
 
     @property
+    def generic_heterogeneous_modeling_applied(self) -> bool:
+        """Whether generic heterogeneous modeling has been applied successfully during model initialization."""
+        return self.is_heterogeneous and self._heterogeneity_spec.generic_modeling_state is not None
+
+    @property
     def per_layer_config(self) -> Sequence[PreTrainedConfig]:
+        """Return copies of this config with per-layer overrides applied.
+
+        For homogeneous configs, return this config for every layer.
+        For heterogeneous configs, each copy is created once and reused, and changes to this config pass on to the
+        per-layer copies unless a copy has its own value.
+        """
         return _PerLayerConfigView(self)
 
     @per_layer_config.setter
