@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import DeepseekV4Config, is_torch_available
 from transformers.testing_utils import (
     backend_device_count,
     is_flaky,
@@ -108,6 +108,12 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
     # No SequenceClassification / TokenClassification / QA heads on V4.
     def is_pipeline_test_to_skip(self, *args, **kwargs):
         return True
+
+    def test_expert_dtype_of_the_quantization_config_reaches_the_model_config(self):
+        """Check that V4.1's `expert_dtype`, shipped in its quantization config, reaches the model config like V4's."""
+        shipped = {"quant_method": "fp8", "expert_dtype": "fp4"}
+        self.assertEqual(DeepseekV4Config(quantization_config=shipped).expert_dtype, "fp4")
+        self.assertEqual(DeepseekV4Config(expert_dtype="fp8", quantization_config=shipped).expert_dtype, "fp8")
 
     @unittest.skip(
         "V4's `DeepseekV4GroupedLinear` uses `torch.bmm` for the per-group matmul; "

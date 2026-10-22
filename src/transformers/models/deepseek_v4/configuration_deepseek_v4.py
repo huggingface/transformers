@@ -244,6 +244,13 @@ class DeepseekV4Config(PreTrainedConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
         n = self.num_hidden_layers
 
+        # V4 names its experts' dtype on the model config, and V4.1 in its quantization config. The FP8 experts read
+        # the model config, so V4.1's moves there.
+        quantization_config = getattr(self, "quantization_config", None)
+        if isinstance(quantization_config, dict) and getattr(self, "expert_dtype", None) is None:
+            if (expert_dtype := quantization_config.get("expert_dtype")) is not None:
+                self.expert_dtype = expert_dtype
+
         # `compress_rates`: dict, default per attention type. Legacy scalar overrides fold in.
         if self.compress_rates is None:
             self.compress_rates = dict(self.default_compress_rates)
