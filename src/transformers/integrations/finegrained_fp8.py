@@ -647,8 +647,8 @@ class FP8Experts(nn.Module):
         self.act_fn = ACT2FN[_first_attr(config, "hidden_activation", "hidden_act")]
         self.limit = getattr(config, "swiglu_limit", None)
 
-        # Expert weight precision is FP8 by default; DeepSeek V4-style checkpoints declare
-        # `expert_dtype = "fp4"` in their quantization config for FP4-packed expert weights. FP4 storage:
+        # Expert weight precision is FP8 by default; DeepSeek V4-style models declare
+        # `expert_dtype = "fp4"` for FP4-packed expert weights. FP4 storage:
         #   - weight is `int8`, K dim halved (2 e2m1 values per byte).
         #   - per-row SF at gran_k=32 (no block-wise SF; `block_size` ignored).
         is_fp4 = expert_dtype == "fp4"

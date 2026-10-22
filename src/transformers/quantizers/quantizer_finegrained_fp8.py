@@ -150,9 +150,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         plan.update({name: "replicate" for name in scalars if _get_parameter_plan(name, plan) is not None})
         overwrite = FP8Experts._impl_tp_layer_overrides.get(getattr(model.config, "_experts_implementation", None), {})
         plan.update({key: overwrite.get(style, style) for key, style in plan.items()})
-        # Run `ep_dispatch_experts` as masked expert parallelism, so the quantized experts need no all-to-all.
-        # Each rank runs its own experts on every token, the router masks the other ranks' experts and an all-reduce
-        # sums the outputs. An implementation with its own styles, such as Mega MoE, has already replaced them.
+        # Masked expert parallelism: each rank runs its own experts on every token, so no all-to-all
         modules = {replace_layer_number_by_wildcard(name) for name, _ in model.named_modules()}
         for name, style in list(plan.items()):
             if style != "ep_dispatch_experts":

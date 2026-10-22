@@ -92,7 +92,7 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
             DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(config.base_model_ep_plan)
 
     def test_expert_parallelism_is_masked(self):
-        """Check that token-dispatch expert parallelism becomes masked: each rank runs its own experts on every token."""
+        """Check that token-dispatch expert parallelism becomes masked."""
         model = torch.nn.Module()
         model.config = DeepseekV4Config()
         model.layers = torch.nn.ModuleList([torch.nn.Module()])

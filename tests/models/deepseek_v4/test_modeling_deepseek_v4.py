@@ -15,7 +15,7 @@ import subprocess
 import tempfile
 import unittest
 
-from transformers import DeepseekV4Config, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     backend_device_count,
     is_flaky,

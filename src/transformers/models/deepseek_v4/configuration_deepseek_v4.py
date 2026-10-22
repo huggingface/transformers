@@ -244,8 +244,7 @@ class DeepseekV4Config(PreTrainedConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
         n = self.num_hidden_layers
 
-        # V4 names its experts' dtype on the model config, and V4.1 in its quantization config. It describes the
-        # quantization, so V4's moves into the quantization config, where the FP8 experts read it.
+        # V4.1 ships `expert_dtype` in the quantization config, so V4's moves there too
         quantization_config = getattr(self, "quantization_config", None)
         expert_dtype = getattr(self, "expert_dtype", None)
         if (
