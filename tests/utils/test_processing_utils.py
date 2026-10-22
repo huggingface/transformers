@@ -127,6 +127,9 @@ class ProcessorMixinTest(unittest.TestCase):
         )
         self.assertEqual(merged_kwargs["text_kwargs"]["max_length"], 128)
 
+        # tokenizer init kwargs are also set for other modalities :(
+        self.assertEqual(merged_kwargs["audio_kwargs"]["max_length"], 128)
+
         # tokenizer attributes have higher prio than tokenizer init kwargs
         self.assertEqual(merged_kwargs["text_kwargs"]["padding_side"], "right")
 
@@ -135,9 +138,14 @@ class ProcessorMixinTest(unittest.TestCase):
 
         # user kwargs have higher prio than tokenizer attributes
         merged_kwargs = processor._merge_kwargs(
-            DefaultsProcessingKwargs, tokenizer_init_kwargs=processor.tokenizer.init_kwargs, padding_side="left"
+            DefaultsProcessingKwargs,
+            tokenizer_init_kwargs=processor.tokenizer.init_kwargs,
+            padding_side="left",
+            max_length=256,
         )
         self.assertEqual(merged_kwargs["text_kwargs"]["padding_side"], "left")
+        self.assertEqual(merged_kwargs["text_kwargs"]["max_length"], 256)
+        self.assertEqual(merged_kwargs["audio_kwargs"]["max_length"], 256)
 
     def test_merge_kwargs_with_default_processor_kwargs(self):
         """Check that processor class attribute defaults are inserted"""
