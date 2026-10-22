@@ -52,6 +52,10 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # processor expects bare text without placeholders!
         pass
 
-    @unittest.skip(reason="Skip for BC")
-    def test_call_arguments_not_in_processor_kwargs_or_attributes(self):
+    @unittest.skip(reason="Cannot change the default of tokenizer arguments in __call__ without breaking BC.")
+    def test_call_arguments_default_none(self):
+        pass
+
+    @unittest.skip(reason="Cannot remove tokenizer arguments from __call__ without breaking BC.")
+    def test_call_arguments_not_in_processor_kwargs(self):
         pass

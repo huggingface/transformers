@@ -256,6 +256,8 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(messages_list=messages_list, proteins=proteins, padding="longest", return_tensors="pt")
         self.assertSetEqual(set(inputs.keys()), set(self.input_keys))
 
-    @unittest.skip(reason="Skip for BC")
-    def test_call_arguments_not_in_processor_kwargs_or_attributes(self):
+    @unittest.skip(
+        reason="Cannot remove protein_max_length and text_max_length arguments from __call__ without breaking BC."
+    )
+    def test_call_arguments_not_in_attributes(self):
         pass

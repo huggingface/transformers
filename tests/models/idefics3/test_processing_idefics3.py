@@ -460,6 +460,6 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor(text=texts, images=None)
         self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
 
-    @unittest.skip(reason="Skip for BC")
-    def test_call_arguments_not_in_processor_kwargs_or_attributes(self):
+    @unittest.skip(reason="Cannot remove image_seq_len argument from __call__ without breaking BC.")
+    def test_call_arguments_not_in_attributes(self):
         pass

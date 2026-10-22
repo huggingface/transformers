@@ -1959,31 +1959,50 @@ class ProcessorTesterMixin:
                 kwargs_names.update(annotation.__annotations__)
         return kwargs_names
 
+    def test_init_arguments_not_in_class_attributes(self):
+        """Check that explicit `__init__` arguments are not also class attributes.
+
+        This avoids having defaults defined in __init__ and as a class attribute.
+        """
+        processor_class = self.processor_class
+        init_arguments = self._get_explicit_arguments(processor_class.__init__)
+        overlapping_attributes = {name for name in init_arguments if hasattr(processor_class, name)}
+        self.assertFalse(
+            overlapping_attributes,
+            f"`{processor_class.__name__}.__init__` has arguments {sorted(overlapping_attributes)} that are also "
+            f"class attributes of `{processor_class.__name__}`. Define the default only in `__init__`.",
+        )
+
     def test_init_arguments_not_in_processor_kwargs(self):
         """Check that explicit `__init__` arguments don't overlap with `valid_processor_kwargs`.
 
         We want to avoid that arguments can have defaults in many different places.
         An argument passed to __init__ should not be overrideable at call time and therefore not
         be in valid_processor_kwargs.
+
+        This test might be too strict and we can relax it in the future. There is a case for
+        arguments that have a default in __init__ (and therefore the config) and that can be
+        modified at runtime through a __call__ argument. Image and video processors support
+        this use case.
         """
         processor_class = self.processor_class
         init_arguments = self._get_explicit_arguments(processor_class.__init__)
         overlapping_arguments = init_arguments & self._get_valid_processor_kwargs_names()
+        # Ignore image_seq_length for BC. It is in ImagesKwargs but is only used by the
+        # processor and not the image processor. It was added as a hack to save it as part
+        # of the image processor config.
+        overlapping_arguments -= {"image_seq_length"}
         self.assertFalse(
             overlapping_arguments,
             f"`{processor_class.__name__}.__init__` has arguments {sorted(overlapping_arguments)} that are also "
             f"defined in `{processor_class.valid_processor_kwargs.__name__}`.",
         )
 
-    def test_call_arguments_not_in_processor_kwargs_or_attributes(self):
-        """Check that explicit `__call__` arguments are neither in `valid_processor_kwargs` nor processor attributes.
+    def test_call_arguments_not_in_processor_kwargs(self):
+        """Check that explicit `__call__` arguments are not in `valid_processor_kwargs`.
 
-        We want to avoid that arguments can have defaults in many different places.
-        Explicit __call__ arguments are only for inputs known at runtime that cannot have a default. E.g. the input
-        text or image. Arguments that can have a default must be part of valid_processor_kwargs instead and be passed
-        as **kwargs to __call__.
+        This ensures that we don't duplicate arguments unnecessarily.
         """
-        processor = self.get_processor()
         processor_class = self.processor_class
         call_arguments = self._get_explicit_arguments(processor_class.__call__)
 
@@ -1996,10 +2015,40 @@ class ProcessorTesterMixin:
             f"`{processor_class.valid_processor_kwargs.__name__} if this is the case, otherwise remove them from `__call__`.",
         )
 
+    def test_call_arguments_not_in_attributes(self):
+        """Check that explicit `__call__` arguments are not in processor attributes.
+
+        This ensures that explicit arguments don't have attribute based default values.
+        """
+        processor = self.get_processor()
+        processor_class = self.processor_class
+        call_arguments = self._get_explicit_arguments(processor_class.__call__)
+
         overlapping_attributes = {name for name in call_arguments if hasattr(processor, name)}
         self.assertFalse(
             overlapping_attributes,
             f"`{processor_class.__name__}.__call__` has explicit arguments {sorted(overlapping_attributes)} that are "
             f"also attributes of `{processor_class.__name__}`. Explicit `__call__` arguments must not have a processor "
             "default value. They are reserved for values only known at runtime (e.g. input text or image).",
+        )
+
+    def test_call_arguments_default_none(self):
+        """Check that explicit `__call__` arguments either have no default or default to `None`.
+
+        This ensures that `__call__` arguments which can have defaults are in `valid_processor_kwargs` instead.
+        """
+        processor_class = self.processor_class
+        parameters = inspect.signature(processor_class.__call__).parameters
+        call_arguments = self._get_explicit_arguments(processor_class.__call__)
+
+        non_none_defaults = {
+            name
+            for name in call_arguments
+            if parameters[name].default is not inspect.Parameter.empty and parameters[name].default is not None
+        }
+        self.assertFalse(
+            non_none_defaults,
+            f"`{processor_class.__name__}.__call__` has explicit arguments {sorted(non_none_defaults)} with a default "
+            "other than `None`. Explicit `__call__` arguments must either have no default or default to `None`. "
+            "Arguments which can have a default must be added to `valid_processor_kwargs` instead.",
         )

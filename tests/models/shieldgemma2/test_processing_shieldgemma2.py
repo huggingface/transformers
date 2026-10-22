@@ -201,7 +201,3 @@ class ShieldGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs_dict_no_vision = {"text": text, "images": image_inputs_nested}
         inputs_nested = processor(**inputs_dict_no_vision, **processing_kwargs)
         self.assertTrue(self.text_input_name in inputs_nested)
-
-    @unittest.skip(reason="Skip for BC")
-    def test_init_arguments_not_in_processor_kwargs(self):
-        pass

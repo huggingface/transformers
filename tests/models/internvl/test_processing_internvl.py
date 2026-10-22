@@ -309,7 +309,3 @@ class InternVLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         actual_num_frames = inputs.pixel_values.shape[0]
         expected_num_frames = sum(x.shape[0] for x in videos[:batch_size])
         assert actual_num_frames == expected_num_frames
-
-    @unittest.skip(reason="Skip for BC")
-    def test_init_arguments_not_in_processor_kwargs(self):
-        pass

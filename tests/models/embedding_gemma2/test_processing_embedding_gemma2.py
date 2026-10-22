@@ -442,7 +442,3 @@ class EmbeddingGemma2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertNotIn("<|audio|>", rendered_partial)
         with self.assertRaisesRegex(ValueError, "audio"):
             processor(text=[rendered_partial], images=[[img]], audio=[aud], return_tensors="pt")
-
-    @unittest.skip(reason="Skip for BC")
-    def test_init_arguments_not_in_processor_kwargs(self):
-        pass

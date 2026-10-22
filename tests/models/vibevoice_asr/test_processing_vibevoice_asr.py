@@ -245,3 +245,7 @@ class VibeVoiceAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             transcript = processor.decode(generated_ids, return_format="transcription_only")
             self.assertIsInstance(transcript, list)
             self.assertIsInstance(transcript[0], str)
+
+    @unittest.skip(reason="Cannot change the default of output_labels in __call__ without breaking BC.")
+    def test_call_arguments_default_none(self):
+        pass

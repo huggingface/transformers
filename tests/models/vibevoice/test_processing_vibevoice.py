@@ -90,3 +90,7 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self._test_apply_chat_template(
             "audio", batch_size, return_tensors, "audio_input_name", "feature_extractor", MODALITY_INPUT_DATA["audio"]
         )
+
+    @unittest.skip(reason="Cannot change the default of output_labels in __call__ without breaking BC.")
+    def test_call_arguments_default_none(self):
+        pass

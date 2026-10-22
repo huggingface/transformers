@@ -86,7 +86,3 @@ class ChameleonProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertTrue("num_image_patches" in output)
         self.assertEqual(len(output["num_image_patches"]), 3)
-
-    @unittest.skip(reason="Skip for BC")
-    def test_init_arguments_not_in_processor_kwargs(self):
-        pass

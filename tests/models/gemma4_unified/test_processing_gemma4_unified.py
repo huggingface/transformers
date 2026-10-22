@@ -212,7 +212,3 @@ class Gemma4UnifiedProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         num_image_tokens_from_call = inputs.mm_token_type_ids.sum(-1).tolist()
         num_image_tokens_from_helper = processor._get_num_multimodal_tokens(image_sizes=image_sizes)
         self.assertListEqual(num_image_tokens_from_call, num_image_tokens_from_helper["num_image_tokens"])
-
-    @unittest.skip(reason="Skip for BC")
-    def test_init_arguments_not_in_processor_kwargs(self):
-        pass
