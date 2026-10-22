@@ -23,6 +23,7 @@ from transformers import (
     AutoModel,
     Qwen3TTSTokenizerConfig,
     Qwen3TTSTokenizerModel,
+    Qwen3TTSTokenizerQuantizerConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -116,6 +117,10 @@ class Qwen3TTSTokenizerModelTester:
 if is_torch_available():
     import torch
 
+    from transformers.models.qwen3_tts_tokenizer.modeling_qwen3_tts_tokenizer import (
+        Qwen3TTSTokenizerSplitResidualVectorQuantizer,
+    )
+
 
 @require_torch
 class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
@@ -168,6 +173,84 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
                     expected = expected.last_hidden_state
                     actual = actual.last_hidden_state
                 torch.testing.assert_close(actual, expected)
+
+    def test_independent_semantic_quantizer_encode_decode(self):
+        config = Qwen3TTSTokenizerQuantizerConfig(
+            n_codebooks=3,
+            codebook_size=5,
+            codebook_dim=2,
+            vector_quantization_hidden_dimension=2,
+            hidden_size=2,
+            semantic_quantizer_config={
+                "n_codebooks": 2,
+                "codebook_size": 3,
+                "codebook_dim": 1,
+                "vector_quantization_hidden_dimension": 1,
+            },
+        )
+        quantizer = Qwen3TTSTokenizerSplitResidualVectorQuantizer(config).eval()
+        semantic = quantizer.semantic_residual_vector_quantizer
+        with torch.no_grad():
+            semantic.input_proj.weight.copy_(torch.tensor([[[1.0], [0.0]]]))
+            semantic.output_proj.weight.copy_(torch.tensor([[[1.0]], [[2.0]]]))
+            for layer in semantic.layers:
+                layer.codebook.embed_sum.copy_(torch.tensor([[0.0], [2.0], [4.0]]))
+            quantizer.acoustic_residual_vector_quantizer.layers[0].codebook.embed_sum.copy_(
+                torch.tensor([[0.0, 0.0], [1.0, 1.0], [3.0, 1.0], [5.0, 3.0], [7.0, 5.0]])
+            )
+            embeddings = torch.tensor([[[3.25, 7.25], [1.0, 5.0]]])
+            codes = quantizer.encode(embeddings)
+            expected_codes = torch.tensor([[[2, 2]], [[0, 2]], [[2, 4]]])
+            torch.testing.assert_close(codes, expected_codes)
+            torch.testing.assert_close(
+                quantizer.decode(codes.transpose(0, 1)), torch.tensor([[[7.0, 15.0], [9.0, 21.0]]])
+            )
+            semantic_codes = quantizer.encode(embeddings, num_quantizers=2)
+            torch.testing.assert_close(semantic_codes, expected_codes[:2])
+            torch.testing.assert_close(
+                quantizer.decode(semantic_codes.transpose(0, 1)), torch.tensor([[[4.0, 8.0], [8.0, 16.0]]])
+            )
+        for invalid_count in (1, 4):
+            with self.subTest(num_quantizers=invalid_count), self.assertRaises(ValueError):
+                quantizer.encode(embeddings, num_quantizers=invalid_count)
+
+    def test_semantic_quantizer_save_load_preserves_outputs(self):
+        for legacy_config in (False, True):
+            with self.subTest(legacy_config=legacy_config), tempfile.TemporaryDirectory() as directory:
+                config, inputs = self.model_tester.prepare_config_and_inputs()
+                config_dict = config.to_dict()
+                quantizer_config = config_dict["quantizer_config"]
+                if legacy_config:
+                    quantizer_config.pop("semantic_quantizer_config")
+                    quantizer_config["num_semantic_quantizers"] = 2
+                else:
+                    quantizer_config["semantic_quantizer_config"] = {
+                        "n_codebooks": 2,
+                        "codebook_size": 5,
+                        "codebook_dim": 4,
+                        "vector_quantization_hidden_dimension": 4,
+                    }
+                model = Qwen3TTSTokenizerModel(Qwen3TTSTokenizerConfig.from_dict(config_dict))
+                model = model.to(torch_device).eval()
+                with torch.no_grad():
+                    for module in model.quantizer.modules():
+                        if hasattr(module, "embed_sum"):
+                            module.embed_sum.normal_()
+                    expected = model(**inputs)
+                model.save_pretrained(directory)
+                with open(Path(directory) / "config.json", encoding="utf-8") as config_file:
+                    saved_quantizer_config = json.load(config_file)["quantizer_config"]
+                self.assertNotIn("num_semantic_quantizers", saved_quantizer_config)
+                self.assertEqual(saved_quantizer_config["semantic_quantizer_config"]["n_codebooks"], 2)
+                restored, loading_info = AutoModel.from_pretrained(directory, output_loading_info=True)
+                self.assertFalse(loading_info["missing_keys"])
+                self.assertFalse(loading_info["unexpected_keys"])
+                self.assertFalse(loading_info["mismatched_keys"])
+                restored = restored.to(torch_device).eval()
+                with torch.no_grad():
+                    actual = restored(**inputs)
+                torch.testing.assert_close(actual.audio_codes, expected.audio_codes)
+                torch.testing.assert_close(actual.audio_values, expected.audio_values)
 
     def test_forward_returns_encode_codes_and_truncates_audio(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
