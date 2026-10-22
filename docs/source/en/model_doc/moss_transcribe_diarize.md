@@ -212,7 +212,7 @@ model.train()
 
 inputs = processor.apply_transcription_request(
     "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/intro_sample.wav",
-    transcription="[0.00][S01] Mister quilter is apostle of the middle classes, and we are glad to welcome his gospel.[3.00]",
+    transcription="[0.00][S01] Welcome to this demonstration of automatic speech recognition and speaker diarization using an end-to-end transformer model.[7.47]",
 ).to(model.device, dtype=model.dtype)
 
 loss = model(**inputs).loss
