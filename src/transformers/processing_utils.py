@@ -1554,7 +1554,7 @@ class ProcessorMixin(PushToHubMixin):
                 ```python
                 tokenizer = tokenizer_class(..., {"padding": "max_length"})
                 image_processor = image_processor_class(...)
-                processor(tokenizer, image_processor) # will pass max_length unless overridden by kwargs at call
+                processor(tokenizer, image_processor) # will pass max_length to all modalities that support it unless overridden by kwargs at call
                 ```
             6) Deprecated in favor of 7): defaults kwargs specified at processor level
                 ```python
