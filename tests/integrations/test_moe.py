@@ -21,11 +21,12 @@ gradient explicitly.
 
 import types
 import unittest
+from unittest.mock import patch
 
 import torch
 
 from transformers.activations import ACT2FN
-from transformers.integrations.moe import batched_mm_experts_forward
+from transformers.integrations.moe import batched_mm_experts_forward, grouped_mm_experts_forward
 from transformers.testing_utils import require_torch, torch_device
 
 
@@ -90,3 +91,62 @@ class BatchedMmExpertsForwardTest(unittest.TestCase):
         moved = self.top_k_index.masked_fill(self.top_k_index >= NUM_EXPERTS, NUM_EXPERTS + 1)
         out_moved = batched_mm_experts_forward(self.experts, self.hidden_states, moved, self._weights())
         torch.testing.assert_close(out, out_moved)
+
+
+@require_torch
+class GroupedMmFallbackCompileTest(unittest.TestCase):
+    def setUp(self):
+        torch.manual_seed(0)
+
+        self.experts = make_experts(num_experts=NUM_EXPERTS, hidden=8, inter=16, is_expert_parallel=False)
+        self.experts.gate_up_proj.requires_grad_(True)
+        self.experts.down_proj.requires_grad_(True)
+
+        self.hidden_states = torch.randn(3, 8, device=torch_device, requires_grad=True)
+        # Leave experts 1 and 3 empty
+        self.top_k_index = torch.tensor(
+            [[0, 2], [2, 0], [0, 2]], device=torch_device
+        )
+        self.top_k_weights = torch.tensor(
+            [[0.7, 0.3], [0.4, 0.6], [0.2, 0.8]],
+            device=torch_device,
+        )
+
+    def test_forward_backward_fullgraph(self):
+        def forward():
+            return grouped_mm_experts_forward(
+                self.experts,
+                self.hidden_states,
+                self.top_k_index,
+                self.top_k_weights,
+            )
+
+        def run(fn):
+            self.hidden_states.grad = None
+            self.experts.gate_up_proj.grad = None
+            self.experts.down_proj.grad = None
+
+            output = fn()
+            output.square().sum().backward()  # arbitrary we only want the bwd to be triggered
+
+            return (
+                output.detach().clone(),
+                self.hidden_states.grad.detach().clone(),
+                self.experts.gate_up_proj.grad.detach().clone(),
+                self.experts.down_proj.grad.detach().clone(),
+            )
+
+        # Force the fallback to be selected
+        with patch(
+            "transformers.integrations.moe._can_use_grouped_mm",
+            new=lambda *args: False,
+        ):
+            eager_results = run(forward)
+            compiled_results = run(torch.compile(forward, fullgraph=True))
+
+        for eager, compiled in zip(eager_results, compiled_results):
+            torch.testing.assert_close(compiled, eager, rtol=1e-4, atol=1e-4)
+
+        # Unused experts should have zero gradients
+        for grad in compiled_results[2:]:
+            self.assertTrue(torch.all(grad[1::2] == 0))
