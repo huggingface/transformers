@@ -21,7 +21,7 @@ import re
 from typing import TYPE_CHECKING
 
 from .base import HfQuantizer, get_keys_to_not_convert
-from .quantizers_utils import checkpoint_module_namer, fused_module_names, plan_entry_for, skip_pattern
+from .quantizers_utils import checkpoint_module_names, plan_entry_for, skip_pattern
 
 
 if TYPE_CHECKING:
@@ -180,15 +180,15 @@ class FineGrainedHfQuantizer(HfQuantizer):
         entry that matches no module raises. The saved config keeps the patterns as passed.
         """
         plan = self._plan
-        targeted = [pattern for pattern in plan if pattern != ".*"]
-        resolved = dict(plan)
-        matched = set()
-        for name, _ in model.named_modules():
-            checkpoint_name = to_checkpoint(name)
-            matched.update(
-                pattern for pattern in plan if re.search(pattern, name) or re.search(pattern, checkpoint_name)
-            )
-            if checkpoint_name == name or not any(re.search(pattern, checkpoint_name) for pattern in targeted):
+        targeted = {pattern: re.compile(pattern) for pattern in plan if pattern != ".*"}
+        resolved, matched = dict(plan), set()
+        for name, checkpoint_names in checkpoint_module_names(model).items():
+            hits = {
+                candidate: [pattern for pattern, regex in targeted.items() if regex.search(candidate)]
+                for candidate in dict.fromkeys([name, *checkpoint_names])
+            }
+            selected = [candidate for candidate, patterns in hits.items() if patterns]
+            if not selected:
                 continue
             matched.update(pattern for candidate in selected for pattern in hits[candidate])
             # only the patterns that hit a name can give its entry
@@ -203,36 +203,12 @@ class FineGrainedHfQuantizer(HfQuantizer):
                 raise ValueError(f"{name!r} is one module, so its checkpoint names cannot load in different formats.")
             if selected[0] == name:
                 continue
-            resolved[rf"^{re.escape(name)}$"] = source
-        unmatched = [pattern for pattern in targeted if pattern not in matched and plan[pattern] is not None]
-        if unmatched:
-            resolved.update(self._resolve_fused_entries(model, unmatched))
+            if len(selected) < len(checkpoint_names):
+                raise ValueError(f"{name!r} is one fused module, so a dtype_plan entry must cover all of its pieces.")
+            resolved[rf"^{re.escape(name)}$"] = entries.popitem()[1]
+        if unmatched := [pattern for pattern in targeted if pattern not in matched and plan[pattern] is not None]:
+            raise ValueError(f"The dtype_plan entries {unmatched} match no module.")
         self._plan = resolved
-
-    def _resolve_fused_entries(self, model: "PreTrainedModel", patterns: list[str]) -> dict:
-        """Return a model-name entry for each fused module that `patterns` name piece by piece.
-
-        A ModelOpt export names one module per expert, e.g. `experts.3.gate_proj`. The model fuses the experts into
-        one module, which holds one format. So every piece needs an entry, and all of them the same member.
-        """
-        fused = fused_module_names(model)
-        resolved, owners = {}, {}
-        for pattern in patterns:
-            pieces = [
-                piece for piece, names in fused.items() if any(re.search(pattern, name) for name in (piece, names[0]))
-            ]
-            if not pieces:
-                raise ValueError(f"dtype_plan entry {pattern!r} matches no module.")
-            for piece in pieces:
-                owners.setdefault(fused[piece][1], {})[piece] = self._plan[pattern]
-        for module, members in owners.items():
-            pieces = [piece for piece, (_, owner) in fused.items() if owner == module]
-            if len(set(map(id, members.values()))) > 1:
-                raise ValueError(f"{module!r} is one fused module, so its pieces cannot load in different formats.")
-            if len(members) < len(pieces):
-                raise ValueError(f"{module!r} is one fused module, so a plan entry must cover all of its pieces.")
-            resolved[rf"^{re.escape(module)}$"] = next(iter(members.values()))
-        return resolved
 
     def update_parallel_plan(self, model, plan):
         super().update_parallel_plan(model, plan)

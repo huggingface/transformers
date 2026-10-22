@@ -190,7 +190,7 @@ class BlockScaledCheckpointReaderTest(unittest.TestCase):
                     "quantized_layers": {target: {"quant_algo": "NVFP4"}},
                 }
             )
-            with self.subTest(target=target), self.assertRaisesRegex(ValueError, "matches no module"):
+            with self.subTest(target=target), self.assertRaisesRegex(ValueError, "match no module"):
                 _quantizer_for(config)._process_model_before_weight_loading(model)
 
 
