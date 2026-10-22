@@ -740,6 +740,9 @@ src/transformers/configuration_utils.py
         # video_processing_qwen2_vl.py from the test side.
         video_proc_file = f"{models_dir}/qwen2_vl/video_processing_qwen2_vl.py"
         triggered = set(reverse_map[video_proc_file])
+        assert "tests/models/qwen2_vl/test_video_processing_qwen2_vl.py" in triggered, (
+            f"{video_proc_file} must trigger test_video_processing_qwen2_vl.py"
+        )
         assert "tests/models/qwen2_vl/test_processing_qwen2_vl.py" in triggered, (
             f"{video_proc_file} must trigger test_processing_qwen2_vl.py"
         )
