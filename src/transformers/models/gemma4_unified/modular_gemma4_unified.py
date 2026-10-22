@@ -345,7 +345,6 @@ class Gemma4UnifiedProcessorKwargs(Gemma4ProcessorKwargs):
 
 
 @auto_docstring
-@requires(backends=("torch", "torchvision"))
 class Gemma4UnifiedProcessor(Gemma4Processor):
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         """Replace the audio placeholder with the correct number of audio tokens.

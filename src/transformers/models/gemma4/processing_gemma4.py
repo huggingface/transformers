@@ -21,7 +21,6 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import requires
 from ...video_utils import VideoInput
 
 
@@ -98,7 +97,6 @@ class Gemma4ProcessorKwargs(ProcessingKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("vision",))
 class Gemma4Processor(ProcessorMixin):
     valid_processor_kwargs = Gemma4ProcessorKwargs
 
