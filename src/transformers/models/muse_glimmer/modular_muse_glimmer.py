@@ -296,12 +296,15 @@ class MuseGlimmerVideoProcessorInitKwargs(VideosKwargs, total=False):
         Maximum number of vision tokens per video frame; frames are resized to stay under this cap.
     merge_size (`int`, *optional*):
         Factor by which the patch grid is downsampled by pixel shuffling after the vision encoder.
+    frame_timestamp_format (`str`, *optional*):
+        Format in which frame timestamps are inserted when constructing prompts.
     """
 
     patch_size: int
     temporal_patch_size: int
     max_video_frame_tokens: int
     merge_size: int
+    frame_timestamp_format: str
 
 
 @auto_docstring
@@ -321,6 +324,7 @@ class MuseGlimmerVideoProcessor(BaseVideoProcessor):
     num_frames = 96
     fps = 2.0
     do_sample_frames = True
+    frame_timestamp_format = "Time: {timestamp:.1f}s"
 
     valid_kwargs = MuseGlimmerVideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw"]
@@ -581,7 +585,6 @@ class MuseGlimmerTextConfig(Gemma2Config, PreTrainedConfig):
 
     model_type = "muse_glimmer_text"
     base_model_tp_plan = {
-        "embed_tokens": "embedding_rowwise",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
@@ -768,6 +771,7 @@ class MuseGlimmerTextDecoderLayer(Gemma2DecoderLayer):
 
 class MuseGlimmerPreTrainedModel(Gemma2PreTrainedModel):
     _no_split_modules = ["MuseGlimmerTextDecoderLayer", "MuseGlimmerVisionEncoderLayer"]
+    _supports_sdpa = True
     _can_record_outputs = None  # set on children directly as they are different for text and vision
 
     def _init_weights(self, module):  # trf-ignore: TRF018  @Tarek this ignore of the rule should not be needed!!
@@ -1063,6 +1067,8 @@ class MuseGlimmerVisionAdapter(nn.Module):
 
 
 class MuseGlimmerModel(Kimi_K25Model):
+    input_modalities = ("image", "video", "text")
+
     def __init__(self, config: MuseGlimmerConfig):
         super().__init__(config)
         del self.mm_projector
@@ -1090,6 +1096,7 @@ class MuseGlimmerModel(Kimi_K25Model):
 
 
 class MuseGlimmerForConditionalGeneration(Kimi_K25ForConditionalGeneration):
+    input_modalities = ("image", "video", "text")
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def forward(

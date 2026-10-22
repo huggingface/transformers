@@ -84,11 +84,6 @@ class MiniMaxM3VLSparseCacheLayer(DynamicLayer):
 
     def crop(self, tokens_to_remove: int) -> None:
         super().crop(tokens_to_remove)
-        if tokens_to_remove > 0:
-            current_length = self.idx_keys.shape[-2]
-            if tokens_to_remove >= current_length:
-                return
-            tokens_to_remove = current_length - tokens_to_remove
         if tokens_to_remove == 0:
             return
         self.idx_keys = self.idx_keys[..., : -abs(tokens_to_remove), :]
@@ -1466,6 +1461,7 @@ class MiniMaxM3VLModel(MiniMaxM3VLPreTrainedModel):
 @auto_docstring(custom_intro="MiniMax M3 VL full model with LM head (text + vision).")
 class MiniMaxM3SparseForConditionalGeneration(MiniMaxM3VLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     config: MiniMaxM3VLConfig
 
     def __init__(self, config: MiniMaxM3VLConfig):

@@ -2367,6 +2367,12 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
         super().__init__(config)
 
         self.model = MMGroundingDinoModel(config)
+        if not config.decoder_bbox_embed_share:
+            self._tied_weights_keys = self._tied_weights_keys.copy()
+            del self._tied_weights_keys[r"bbox_embed.(?![0])\d+"]
+        if not config.decoder_cls_embed_share:
+            self._tied_weights_keys = self._tied_weights_keys.copy()
+            del self._tied_weights_keys[r"class_embed.(?![0])\d+"]
 
         self.class_embed = nn.ModuleList(
             [MMGroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
@@ -2381,7 +2387,7 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
             ]
         )
         # Initialize weights and apply final processing
-        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
+        self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed
         self.post_init()
 

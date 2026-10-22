@@ -491,7 +491,6 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     # The small SWITCH_TRANSFORMERS model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
     # `SwitchTransformers` is a MOE in which not all experts will get gradients because they are not all used in a single forward pass
-    test_all_params_have_gradient = False
 
     def setUp(self):
         self.model_tester = SwitchTransformersModelTester(self)
@@ -1025,6 +1024,12 @@ class SwitchTransformerModelIntegrationTests(unittest.TestCase):
                     0.0378, 0.0525, -0.2119, 0.1328, 0.3926, -0.2012, -0.1240, -0.1826,
                     0.0405, -0.3477, -0.0229, -0.1025, -0.1572, -0.1309
                 ],
+                ("xpu",5): [
+                    -0.2002, -0.1973,  0.5312, -0.2988,  0.1064,  0.0219,  0.6211, -0.1035,
+                    -0.0530,  0.2988,  0.0055,  0.1748,  0.1377, -0.1680, -0.0996,  0.0265,
+                    0.0374,  0.0537, -0.2119,  0.1299,  0.3906, -0.2041, -0.1250, -0.1807,
+                    0.0396, -0.3477, -0.0247, -0.1011, -0.1562, -0.1309
+                ]
             }
         )
         EXPECTED_MEAN_LOGITS = torch.tensor(expectations.get_expectation()).to(torch_device, dtype=torch.bfloat16)

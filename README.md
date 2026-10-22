@@ -43,6 +43,7 @@ limitations under the License.
         <a href="i18n/README_es.md">Español</a> |
         <a href="i18n/README_ja.md">日本語</a> |
         <a href="i18n/README_hd.md">हिन्दी</a> |
+        <a href="i18n/README_mr.md">मराठी</a> |
         <a href="i18n/README_ru.md">Русский</a> |
         <a href="i18n/README_pt-br.md">Português</a> |
         <a href="i18n/README_te.md">తెలుగు</a> |
@@ -84,7 +85,7 @@ Explore the [Hub](https://huggingface.co/) today to find a model and use Transfo
 
 ## Installation
 
-Transformers works with Python 3.10+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.5+.
+Transformers works with Python 3.10+, and [PyTorch](https://pytorch.org/get-started/locally/) 2.6+.
 
 Create and activate a virtual environment with [venv](https://docs.python.org/3/library/venv.html) or [uv](https://docs.astral.sh/uv/), a fast Rust-based Python package and project manager.
 
@@ -245,7 +246,6 @@ pipeline(
 
 - This library is not a modular toolbox of building blocks for neural nets. The code in the model files is not refactored with additional abstractions on purpose, so that researchers can quickly iterate on each of the models without diving into additional abstractions/files.
 - The training API is optimized to work with PyTorch models provided by Transformers. For generic machine learning loops, you should use another library like [Accelerate](https://huggingface.co/docs/accelerate).
-- The [example scripts](https://github.com/huggingface/transformers/tree/main/examples) are only *examples*. They may not necessarily work out-of-the-box on your specific use case and you'll need to adapt the code for it to work.
 
 ## 100 projects using Transformers
 

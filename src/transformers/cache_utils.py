@@ -10,7 +10,6 @@ from .utils import (
     is_quanto_greater,
     is_torch_greater_or_equal,
     is_torchdynamo_compiling,
-    logging,
 )
 
 
@@ -18,9 +17,6 @@ if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
 
 _is_torch_greater_or_equal_than_2_7 = is_torch_greater_or_equal("2.7", accept_dev=True)
-
-
-logger = logging.get_logger(__name__)
 
 
 class CacheLayerMixin(ABC):
@@ -103,12 +99,6 @@ class CacheLayerMixin(ABC):
             self.keys = self.keys.index_select(0, beam_idx.to(self.keys.device))
             self.values = self.values.index_select(0, beam_idx.to(self.values.device))
 
-    def get_max_cache_shape(self) -> int:
-        logger.warning(
-            "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
-        )
-        return self.get_max_length()
-
 
 class DynamicLayer(CacheLayerMixin):
     """
@@ -176,16 +166,10 @@ class DynamicLayer(CacheLayerMixin):
         """
         # Legacy path: `tokens_to_remove` represents the final absolute size that the cache should have
         if tokens_to_remove > 0:
-            logger.warning_once(
-                "Calling `crop` with a positive value is deprecated and will be removed in version 5.18. Please use a negative "
-                "integer to remove that number of tokens from the cache instead."
+            raise ValueError(
+                f"Calling `crop` with a positive value (`{tokens_to_remove}`) is not supported. "
+                "Please use a negative integer to remove that number of tokens from the cache instead."
             )
-            current_length = self.get_seq_length()
-            # If the absolute value requested is larger than current length, just do nothing
-            if tokens_to_remove >= current_length:
-                return
-            else:
-                tokens_to_remove = self.get_seq_length() - tokens_to_remove
 
         # Nothing to do in this case
         if tokens_to_remove == 0:
@@ -387,11 +371,6 @@ class DynamicIndexedLayer(DynamicLayer):
         super().crop(tokens_to_remove)
         if not self.is_indexer_initialized or self.indexer_keys.numel() == 0:
             return
-        if tokens_to_remove > 0:
-            current_length = self.indexer_keys.shape[1]
-            if tokens_to_remove >= current_length:
-                return
-            tokens_to_remove = current_length - tokens_to_remove
         if tokens_to_remove == 0:
             return
         self.indexer_keys = self.indexer_keys[:, : -abs(tokens_to_remove), :]
@@ -1476,6 +1455,9 @@ class Cache:
         if self.offloading:
             # Wait for the stream to finish if needed, and start prefetching the next layer
             torch.cuda.default_stream(key_states.device).wait_stream(self.prefetch_stream)
+            # The prefetch must also wait for the default stream: the offloading copies to cpu are not finished yet,
+            # and the previously prefetched tensors may still be read there before their memory is reused
+            self.prefetch_stream.wait_stream(torch.cuda.default_stream(key_states.device))
             self.prefetch(layer_idx + 1, self.only_non_sliding)
 
         keys, values = self.layers[layer_idx].update(key_states, value_states, *args, **kwargs)
@@ -1484,6 +1466,21 @@ class Cache:
             self.offload(layer_idx, self.only_non_sliding)
 
         return keys, values
+
+    def get_conv_state(self, layer_idx: int, state_idx: int = 0) -> torch.Tensor | None:
+        """Returns the conv state `state_idx` for the layer `layer_idx`, or None if the layer is not initialized.
+        Raises if the layer is not a linear attention layer."""
+        layer = self.layers[layer_idx]
+        if not isinstance(layer, LinearAttentionCacheLayerMixin):
+            raise ValueError(
+                f"Cannot get conv state for non linear attention layer {layer_idx} of type {type(layer).__name__}."
+            )
+        # After __init__ and before the first update, the conv_state is None, so this branch is redundant. But after a
+        # reset, the conv_state is still a tensor, only zeroed. To have consistent behavior where returning None means
+        # there is no previous state, we need this branch.
+        if layer.has_previous_state[state_idx]:
+            return layer.conv_states[state_idx]
+        return None
 
     def update_conv_state(
         self, conv_states: torch.Tensor, layer_idx: int, state_idx: int = 0, **kwargs
@@ -1506,6 +1503,19 @@ class Cache:
             raise ValueError("Cannot call `update_conv_state` on a non-LinearAttention layer!")
         conv_states = self.layers[layer_idx].update_conv_state(conv_states, state_idx, **kwargs)
         return conv_states
+
+    def get_recurrent_state(self, layer_idx: int, state_idx: int = 0) -> torch.Tensor | None:
+        """Returns the recurrent state `state_idx` for the layer `layer_idx`, or None if the layer is not initialized.
+        Raises an error if the layer is not a linear attention layer."""
+        layer = self.layers[layer_idx]
+        if not isinstance(layer, LinearAttentionCacheLayerMixin):
+            raise ValueError(
+                f"Cannot get recurrent state for non linear attention layer {layer_idx} of type {type(layer).__name__}."
+            )
+        # Same as in `get_conv_state`: this is needed so that returning None means there is no previous state.
+        if layer.has_previous_state[state_idx]:
+            return layer.recurrent_states[state_idx]
+        return None
 
     def update_recurrent_state(
         self, recurrent_states: torch.Tensor, layer_idx: int, state_idx: int = 0, **kwargs
@@ -1733,6 +1743,11 @@ class Cache:
             if hasattr(self.layers[layer_idx], "activate_past_recording"):
                 self.layers[layer_idx].activate_past_recording()
 
+    def is_recording_past(self, layer_idx: int) -> bool:
+        """Returns a boolean indicating if the layer at index `layer_idx` is recording past states. If the layer cannot
+        record past states and is missing the `record_past` attribute, this returns False."""
+        return getattr(self.layers[layer_idx], "record_past", False)
+
     @property
     def batch_size(self) -> int:
         """Return the batch size of the cache, or ``-1`` if no layer has been initialized yet
@@ -1780,26 +1795,6 @@ class Cache:
             for layer in self.layers
         ]
 
-    def get_max_cache_shape(self, layer_idx: int = 0) -> int:
-        logger.warning_once(
-            "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
-        )
-        return self.get_max_length(layer_idx)
-
-    @property
-    def max_cache_len(self) -> int:
-        logger.warning_once(
-            "`max_cache_len` is deprecated, and will be removed in version 5.16. Please use `get_max_length()` instead"
-        )
-        return self.get_max_length()
-
-    @property
-    def max_batch_size(self) -> int:
-        logger.warning_once(
-            "`max_batch_size` is deprecated, and will be removed in version 5.16. Please use the simpler `batch_size` instead"
-        )
-        return self.batch_size
-
 
 def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], list[dict]]:
     """
@@ -1830,7 +1825,7 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
     per_layer_kwargs = []
     for layer_type, layer_config in zip(layer_types, layer_configs):
         layer_kwargs = {}
-        if layer_type in ("sliding_attention", "hybrid_sliding"):
+        if layer_type in ("sliding_attention", "hybrid_sliding", "reference_sliding_attention"):
             layer_kwargs["sliding_window"] = layer_config.sliding_window
         elif layer_type == "chunked_attention":
             layer_kwargs["sliding_window"] = layer_config.attention_chunk_size
@@ -2206,12 +2201,6 @@ class EncoderDecoderCache(Cache):
 
     def activate_past_recording(self):
         self.self_attention_cache.activate_past_recording()
-
-    def get_max_cache_shape(self, layer_idx: int = 0) -> int:
-        logger.warning_once(
-            "`get_max_cache_shape` is deprecated, and will be removed in version 5.16. Please use `get_max_length` instead"
-        )
-        return self.get_max_length(layer_idx)
 
 
 # Deprecated alias: SlidingWindowCache was removed in transformers v5. StaticCache is the replacement.

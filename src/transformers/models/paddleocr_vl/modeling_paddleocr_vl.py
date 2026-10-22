@@ -465,6 +465,7 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    input_modalities = ("image", "text")
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
@@ -864,7 +865,7 @@ class PaddleOCRVisionEncoder(nn.Module):
 class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
     config: PaddleOCRVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _can_record_outputs = {
         "hidden_states": PaddleOCRVisionEncoderLayer,
         "attentions": PaddleOCRVisionAttention,
@@ -919,7 +920,7 @@ class PaddleOCRVisionTransformer(PaddleOCRVLPreTrainedModel):
 class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
     config: PaddleOCRVisionConfig
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__(config)
@@ -1300,6 +1301,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
 
 class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
     def __init__(self, config):
@@ -1337,6 +1339,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
         image_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | PaddleOCRVLCausalLMOutputWithPast:
         r"""
@@ -1386,6 +1389,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
             use_cache=use_cache,
             pixel_values=pixel_values,
             mm_token_type_ids=mm_token_type_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
