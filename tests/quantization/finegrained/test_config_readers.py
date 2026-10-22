@@ -337,3 +337,27 @@ class FusedModuleEntryTest(unittest.TestCase):
         ):
             with self.subTest(name), self.assertRaisesRegex(ValueError, name):
                 self._resolve(plan)
+
+    def test_listed_modules_read_as_one_exact_entry_per_format(self):
+        """Check that a per-module export reads as one entry per format, which matches only the listed modules."""
+        import re
+
+        layers = {
+            f"model.layers.{layer}.mlp.experts.{expert}.{proj}": {"quant_algo": "NVFP4"}
+            for layer in range(2)
+            for expert in range(12)
+            for proj in ("gate_proj", "up_proj")
+        }
+        layers["model.layers.1.self_attn"] = {"quant_algo": "FP8"}
+        config = read_modelopt({"quant_algo": "MIXED_PRECISION", "quantized_layers": layers})
+        self.assertEqual(len(config.dtype_plan), 2)
+        (nvfp4,) = [pattern for pattern, entry in config.dtype_plan.items() if isinstance(entry, NVFP4Config)]
+        for name, listed in (
+            ("model.layers.1.mlp.experts.10.up_proj", True),
+            ("language_model.model.layers.0.mlp.experts.3.gate_proj.weight", True),
+            ("model.layers.1.mlp.experts.12.up_proj", False),
+            ("model.layers.11.mlp.experts.1.up_proj", False),
+            ("model.layers.0.mlp.experts.1.down_proj", False),
+        ):
+            with self.subTest(name):
+                self.assertEqual(bool(re.search(nvfp4, name)), listed)
