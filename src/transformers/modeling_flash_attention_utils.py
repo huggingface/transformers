@@ -692,8 +692,13 @@ def _process_flash_attention_kwargs(
             deterministic if deterministic is not None else os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
         )
 
-    if supports_mapping["softcap"] and softcap is not None:
-        flash_kwargs["softcap"] = softcap
+    if softcap is not None:
+        if supports_mapping["softcap"]:
+            flash_kwargs["softcap"] = softcap
+        else:
+            raise ValueError(
+                "This flash attention implementation does not support `softcap`. Try using `eager` or `flex_attention` instead."
+            )
 
     if s_aux is not None:
         if supports_mapping["s_aux"]:
