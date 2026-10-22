@@ -1946,10 +1946,10 @@ class ProcessorTesterMixin:
         for name, annotation in self.processor_class.valid_processor_kwargs.__annotations__.items():
             kwargs_names.add(name)
 
-            # Also add nested kwargs as _merge_kwargs promotes flat to nested kwargs.
+            # Also add nested kwargs as _merge_kwargs promotes flat to nested kwargs.
             if is_typeddict(annotation):
                 if annotation.__name__.startswith("Deprecated"):
-                    # Fall back to default in case class is Deprecated
+                    # Fall back to default in case class is Deprecated
                     annotation = {
                         "text_kwargs": TextKwargs,
                         "images_kwargs": ImagesKwargs,

@@ -101,3 +101,35 @@ class SeamlessM4TProcessorTest(unittest.TestCase):
         decoded_tok = tokenizer.batch_decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
+
+    def test_tokenizer_src_tgt_lang(self):
+        feature_extractor = self.get_feature_extractor()
+        processor = SeamlessM4TProcessor(tokenizer=self.get_tokenizer(), feature_extractor=feature_extractor)
+        tokenizer = self.get_tokenizer()
+
+        input_str = "This is a test string"
+
+        encoded_processor = processor(text=input_str, src_lang="fra", tgt_lang="spa")
+        encoded_tok = tokenizer(input_str, src_lang="fra", tgt_lang="spa")
+
+        for key in encoded_tok:
+            self.assertListEqual(encoded_tok[key], encoded_processor[key])
+        self.assertEqual(encoded_processor["input_ids"][0], tokenizer.convert_tokens_to_ids("__fra__"))
+        self.assertEqual(processor.tokenizer.src_lang, "__fra__")
+        self.assertEqual(processor.tokenizer.tgt_lang, "__spa__")
+
+    def test_tokenizer_src_tgt_lang_text_kwargs(self):
+        feature_extractor = self.get_feature_extractor()
+        processor = SeamlessM4TProcessor(tokenizer=self.get_tokenizer(), feature_extractor=feature_extractor)
+        tokenizer = self.get_tokenizer()
+
+        input_str = "This is a test string"
+
+        encoded_processor = processor(text=input_str, text_kwargs={"src_lang": "fra", "tgt_lang": "spa"})
+        encoded_tok = tokenizer(input_str, src_lang="fra", tgt_lang="spa")
+
+        for key in encoded_tok:
+            self.assertListEqual(encoded_tok[key], encoded_processor[key])
+        self.assertEqual(encoded_processor["input_ids"][0], tokenizer.convert_tokens_to_ids("__fra__"))
+        self.assertEqual(processor.tokenizer.src_lang, "__fra__")
+        self.assertEqual(processor.tokenizer.tgt_lang, "__spa__")
