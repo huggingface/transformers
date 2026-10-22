@@ -189,6 +189,44 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertIn(key, helper_outputs)
             self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
 
+    @require_torch
+    def test_apply_transcription_request_with_transcription(self):
+        processor = self.get_processor()
+        audio = self.prepare_audio_inputs(batch_size=2)
+        transcriptions = ["Hello world.", "A longer transcription so that padding is applied."]
+
+        helper_outputs = processor.apply_transcription_request(audio=audio, transcription=transcriptions)
+        conversations = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": processor.default_transcription_prompt},
+                        {"type": "audio", "audio": audio_el},
+                    ],
+                },
+                {"role": "assistant", "content": [{"type": "text", "text": text}]},
+            ]
+            for audio_el, text in zip(audio, transcriptions)
+        ]
+        manual_outputs = processor.apply_chat_template(
+            conversations, tokenize=True, return_dict=True, processor_kwargs={"output_labels": True}
+        )
+
+        self.assertIn("labels", helper_outputs)
+        self.assertEqual(set(helper_outputs.keys()), set(manual_outputs.keys()))
+        for key in helper_outputs:
+            self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
+
+        # user `processor_kwargs` are merged with the labels request
+        outputs = processor.apply_transcription_request(
+            audio=audio, transcription=transcriptions, processor_kwargs={"text_kwargs": {"padding": True}}
+        )
+        self.assertTrue(outputs["labels"].equal(helper_outputs["labels"]))
+
+        with self.assertRaises(ValueError):
+            processor.apply_transcription_request(audio=audio, transcription="Only one transcription.")
+
     # Overwrite to remove skip numpy inputs (still need to keep as many cases as parent)
     @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])

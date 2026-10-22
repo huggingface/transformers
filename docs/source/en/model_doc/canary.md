@@ -113,35 +113,29 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 
 ### Training
 
-Canary can be trained with the loss outputted by the model. Put the target transcript in the assistant turn and pass `output_labels=True`. Padding positions are masked automatically.
+Canary can be trained with the loss outputted by the model. Pass the target transcripts to `apply_transcription_request` with `transcription`, which writes them as the assistant turn and returns `labels`. With `apply_chat_template`, the same is done by putting the transcript in the assistant turn and passing `processor_kwargs={"output_labels": True}`.
 
 ```python
-...
+from datasets import Audio, load_dataset
+from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
+model_id = "nvidia/canary-1b-v2"
+NUM_SAMPLES = 2
+
+processor = AutoProcessor.from_pretrained(model_id)
+model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, device_map="auto")
 model.train()
-transcription = "mister Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."
 
-conversation = [
-    [
-        {
-            "role": "user",
-            "content": [
-                {"type": "audio", "audio": ds[0]["audio"]["array"]},
-                {"type": "text", "source_language": "en", "target_language": "en", "punctuation": True},
-            ],
-        },
-        {"role": "assistant", "content": transcription},
-    ]
-]
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+speech_samples = [el["array"] for el in ds["audio"][:NUM_SAMPLES]]
+text_samples = ds["text"][:NUM_SAMPLES]
 
-inputs = processor.apply_chat_template(
-    conversation,
-    tokenize=True,
-    return_dict=True,
-    processor_kwargs={"output_labels": True},
-).to(model.device)
+inputs = processor.apply_transcription_request(speech_samples, source_language="en", transcription=text_samples)
+inputs.to(model.device, dtype=model.dtype)
 
 outputs = model(**inputs)
+print("Loss:", outputs.loss.item())
 outputs.loss.backward()
 ```
 

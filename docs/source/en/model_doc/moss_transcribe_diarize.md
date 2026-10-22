@@ -196,10 +196,11 @@ print(transcription)
 
 ### Training
 
-MOSS-Transcribe-Diarize can be trained with the loss returned by the model when `labels` are provided. Build a
-conversation with the audio in the user turn and the target transcription as the assistant turn, then set
-`output_labels=True` when tokenizing so the processor builds the labels for you (audio and padding tokens are masked
-out with `-100`).
+MOSS-Transcribe-Diarize can be trained with the loss returned by the model when `labels` are provided. Pass the target
+transcriptions, in the model's timestamped and speaker-tagged output format, to `apply_transcription_request` with
+`transcription`. They are written as the assistant turn and `labels` are returned, with the audio and padding tokens
+masked out with `-100`. With the [chat template](#advanced-usage-with-the-chat-template), the same is done by putting
+the transcription in the assistant turn and passing `processor_kwargs={"output_labels": True}`.
 
 ```python
 from transformers import AutoProcessor, AutoModelForCausalLM
@@ -209,33 +210,9 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 model.train()
 
-conversation = [
-    [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "audio",
-                    "url": "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/intro_sample.wav",
-                },
-            ],
-        },
-        {
-            "role": "assistant",
-            "content": [
-                {
-                    "type": "text",
-                    "text": "[0.00][S01] Mister quilter is apostle of the middle classes, and we are glad to welcome his gospel.[3.00]",
-                },
-            ],
-        },
-    ],
-]
-inputs = processor.apply_chat_template(
-    conversation,
-    tokenize=True,
-    return_dict=True,
-    output_labels=True,
+inputs = processor.apply_transcription_request(
+    "https://huggingface.co/datasets/itazap/audio_samples/resolve/main/intro_sample.wav",
+    transcription="[0.00][S01] Mister quilter is apostle of the middle classes, and we are glad to welcome his gospel.[3.00]",
 ).to(model.device, dtype=model.dtype)
 
 loss = model(**inputs).loss
