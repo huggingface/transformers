@@ -98,14 +98,15 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
     total_size = grad.shape[dim]
     # Packed weights have 2 blocks (gate and up)
     block_size = total_size // 2
-    shard_block_size = block_size // world_size
+    # every shard but the last is ceil(block_size / world_size) long, like DTensor's split
+    shard_block_size = -(-block_size // world_size)
 
     # Build interleaved indices
     indices = []
     for block_idx in range(2):  # gate block, then up block
         block_offset = block_idx * block_size
-        start = block_offset + rank * shard_block_size
-        stop = block_offset + (rank + 1) * shard_block_size
+        start = block_offset + min(rank * shard_block_size, block_size)
+        stop = block_offset + min((rank + 1) * shard_block_size, block_size)
         indices.extend(range(start, stop))
 
     # Select along the sharded dimension
@@ -226,6 +227,20 @@ def _verify_tp_sharding(rank, model_tp, model_ref):
     return sharded_params
 
 
+def _reference_grad_shard(name, grad, local_grad, rank, world_size, tp_plan, expert_weights=()):
+    """The slice of the unsharded reference gradient `grad` that this rank holds as `local_grad`."""
+    # Expert weights hold this rank's experts along dim 0 (`grouped_gemm`), whatever `_tp_plan` still says for them
+    if name in expert_weights:
+        return grad.narrow(0, rank * local_grad.size(0), local_grad.size(0))
+    for dim in range(grad.ndim):
+        if grad.size(dim) != local_grad.size(dim):
+            if _get_parameter_plan(name, tp_plan, is_weight=True) in ("packed_colwise", "packed_rowwise"):
+                return get_packed_grad_shard(grad, world_size, rank, dim)
+            # regular slicing: every shard but the last is ceil(size / world_size) long
+            return grad.narrow(dim, rank * -(-grad.size(dim) // world_size), local_grad.size(dim))
+    return grad
+
+
 def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
     """Implementation for comparing TP and non-TP model outputs."""
     set_seed(0)
@@ -292,20 +307,7 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
             if isinstance(grad_tp, DTensor):
                 grad_tp = grad_tp.to_local()
 
-            # Slice reference gradient to match local shard if parameter is sharded
-            if grad.shape != grad_tp.shape:
-                for dim in range(grad.ndim):
-                    if grad.size(dim) != grad_tp.size(dim):
-                        param_plan = _get_parameter_plan(name, model_tp._tp_plan, is_weight=True)
-                        if param_plan in ("packed_colwise", "packed_rowwise"):
-                            # interleaved slicing
-                            grad = get_packed_grad_shard(grad, world_size, rank, dim)
-                        else:
-                            # regular slicing
-                            shard_size = grad_tp.size(dim)
-                            start = rank * shard_size
-                            grad = grad.narrow(dim, start, shard_size)
-                        break
+            grad = _reference_grad_shard(name, grad, grad_tp, rank, world_size, model_tp._tp_plan)
 
             if not torch.allclose(grad.cpu(), grad_tp.cpu(), atol=atol, rtol=rtol):
                 failed_grads[name] = (grad.cpu() - grad_tp.cpu()).abs().max().item()
@@ -460,7 +462,7 @@ def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_im
     dist.barrier()
 
 
-def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation):
+def _test_ep_backward_impl(rank, model_path, model_class, atol, rtol, experts_implementation):
     """Implementation for comparing EP and non-EP model backward passes."""
     set_seed(0)
 
@@ -485,6 +487,26 @@ def _test_ep_backward_impl(_rank, model_path, model_class, atol, rtol, experts_i
         f"EP and non-EP model losses differ. "
         f"Non-EP loss: {loss_ref.item()}, EP loss: {loss_ep.item()}, "
         f"Diff: {(loss_ref - loss_ep).abs().item()}"
+    )
+
+    world_size = dist.get_world_size()
+    expert_weights = set(_get_expert_weight_names(model_ep))
+    failed_grads = {}
+    for (name, param), (_, param_ep) in zip(model_ref.named_parameters(), model_ep.named_parameters()):
+        if param.grad is None and param_ep.grad is None:
+            continue
+        if param.grad is None or param_ep.grad is None:
+            failed_grads[name] = "no gradient on the " + ("EP" if param_ep.grad is None else "non-EP") + " model"
+            continue
+        local_grad = param_ep.grad.to_local() if isinstance(param_ep.grad, DTensor) else param_ep.grad
+        expected = _reference_grad_shard(
+            name, param.grad, local_grad, rank, world_size, model_ep._tp_plan, expert_weights
+        ).cpu()
+        if not torch.allclose(expected, local_grad.cpu(), atol=atol, rtol=rtol):
+            failed_grads[name] = f"max diff = {(expected - local_grad.cpu()).abs().max().item()}"
+
+    assert not failed_grads, f"Gradients differ for {len(failed_grads)} parameter(s):\n" + "\n".join(
+        f"  {name}: {failure}" for name, failure in failed_grads.items()
     )
 
     dist.barrier()
@@ -549,12 +571,10 @@ class TensorParallelTesterMixin(ABC):
         )
 
     def _get_tp_config(self, tie_word_embeddings: bool | None = None):
-        """Tiny config with `vocab_size` rounded up to a multiple of the world size, as sharded dims (typically `lm_head`) have to be split across ranks."""
+        """The tester's tiny config. Its vocab stays as it is: 99 does not divide by the world size, which is
+        the uneven sharding of `lm_head` that real vocabs need."""
         config = self.model_tester.get_config()
         text_config = config.get_text_config()
-        remainder = text_config.vocab_size % self.tensor_parallel_size
-        if remainder:
-            text_config.vocab_size += self.tensor_parallel_size - remainder
         if tie_word_embeddings is not None:
             if hasattr(text_config, "tie_word_embeddings"):
                 text_config.tie_word_embeddings = tie_word_embeddings
@@ -598,6 +618,24 @@ class TensorParallelTesterMixin(ABC):
         # config = self.model_tester.get_config()
         # if hasattr(config, "vision_config") and config.vision_config is not None:
         #     self.skipTest("VLM models are not yet supported in TP tests")
+
+    def test_tp_plan_shards_input_embeddings(self):
+        """A model whose TP plan shards its decoder must shard its input embeddings too: replicated, they cost
+        `vocab x hidden` on every rank, and a tied `lm_head` sharded on the vocabulary would not match the embedding
+        weight it shares. A plan that only covers the `lm_head` is not a decoder plan."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config))
+            if not any(key.rsplit(".", 1)[-1] != "lm_head" for key in model.tp_plan):
+                continue
+            embeddings = model.get_input_embeddings()
+            if not isinstance(embeddings, torch.nn.Embedding):
+                continue
+            name = next(name for name, module in model.named_modules() if module is embeddings)
+            self.assertIsNotNone(
+                _get_parameter_plan(f"{name}.weight", model.tp_plan, is_weight=True),
+                f"{model_class.__name__}: the TP plan leaves `{name}` replicated; shard it with `embedding_rowwise`",
+            )
 
     def test_moe_parallel_plans_shard_experts(self):
         """An MoE model's expert weights, the bulk of its parameters, must be sharded by every parallel plan it defines.
