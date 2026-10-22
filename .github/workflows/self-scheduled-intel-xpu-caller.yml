@@ -41,7 +41,7 @@ jobs:
   setup:
     permissions: {}
     name: Setup
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - name: Setup
         env:
