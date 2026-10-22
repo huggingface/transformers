@@ -404,3 +404,32 @@ class TestTrainingArguments(unittest.TestCase):
                 args_dict = args.to_dict()
                 self.assertIn("dtype", args_dict)
                 self.assertEqual(args_dict["dtype"], dtype)
+
+    def test_json_file_round_trip(self):
+        """Test that to_json_file/from_json_file round-trip without leaking tokens."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(
+                output_dir=tmp_dir,
+                eval_strategy="steps",
+                eval_steps=10,
+                hub_token="secret",
+                debug="underflow_overflow",
+                lr_scheduler_kwargs={"factor": 0.5},
+                report_to=None,
+            )
+            json_file = os.path.join(tmp_dir, "training_args.json")
+            args.to_json_file(json_file)
+            with open(json_file, encoding="utf-8") as f:
+                self.assertNotIn("secret", f.read())
+
+            loaded = TrainingArguments.from_json_file(json_file)
+            self.assertEqual(loaded.to_dict(), args.to_dict())
+            self.assertIsNone(loaded.hub_token)
+            self.assertEqual(loaded.eval_strategy, IntervalStrategy.STEPS)
+            self.assertEqual(loaded.debug, [DebugOption.UNDERFLOW_OVERFLOW])
+
+    def test_from_dict_ignores_unknown_keys(self):
+        """Test that keys unknown to the current version are ignored when loading."""
+        args = TrainingArguments.from_dict({"output_dir": "tmp", "report_to": None, "not_an_arg": 1})
+        self.assertEqual(args.output_dir, "tmp")
+        self.assertFalse(hasattr(args, "not_an_arg"))
