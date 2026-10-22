@@ -571,12 +571,19 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertEqual(pil_image.mode, "RGBA")
         self.assertEqual(pil_image.size, (2, 1))
 
-        # test that it works also for numpy images
+        # test that it works also for numpy images. Dummy image
+        # has ambiguous channel format so by default it is assumed to
+        # be RGB image
         rgb_image = convert_to_rgb(image, return_numpy=True)
         self.assertEqual(rgb_image.shape, (3, 2, 4))
         self.assertTrue(np.allclose(rgb_image, image))
 
-        # And PIL images are converted
+        # If we pass explicit channel-format, it is converted from RGBA to RGB
+        rgb_image = convert_to_rgb(image, return_numpy=True, input_data_format="channels_last")
+        self.assertEqual(rgb_image.shape, (1, 2, 3))
+        self.assertTrue(np.array_equal(rgb_image, np.array([[[255, 255, 255], [5, 6, 7]]])))
+
+        # And PIL images are converted same way but without channel-layout ambiguity
         rgb_image = convert_to_rgb(pil_image)
         self.assertEqual(rgb_image.mode, "RGB")
         self.assertEqual(rgb_image.size, (2, 1))
@@ -585,11 +592,12 @@ class ImageTransformsTester(unittest.TestCase):
         semi_transparent = PIL.Image.new("RGBA", (1, 1), (255, 0, 0, 128))
         self.assertEqual(convert_to_rgb(semi_transparent).getpixel((0, 0)), (255, 127, 127))
 
-        # Test that a grayscale image is converted to RGB
+        # Test that a grayscale image can also be converted to RGB
         image = np.array([[0, 255]], dtype=np.uint8)
         pil_image = PIL.Image.fromarray(image)
         self.assertEqual(pil_image.mode, "L")
         self.assertEqual(pil_image.size, (2, 1))
+
         rgb_image = convert_to_rgb(pil_image)
         self.assertEqual(rgb_image.mode, "RGB")
         self.assertEqual(rgb_image.size, (2, 1))

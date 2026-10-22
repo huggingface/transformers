@@ -787,7 +787,7 @@ def convert_to_rgb(
 
     if isinstance(image, np.ndarray):
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
+            input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
         channel_axis = -1 if input_data_format == ChannelDimension.LAST else 0
 
         # work in channels-last and permute back before returning
