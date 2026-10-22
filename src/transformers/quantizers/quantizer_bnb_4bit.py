@@ -47,6 +47,7 @@ class Bnb4BitHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    skip_list_attribute = "llm_int8_skip_modules"
     quantization_config: "BitsAndBytesConfig"
 
     @property

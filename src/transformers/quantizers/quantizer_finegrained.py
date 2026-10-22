@@ -36,8 +36,8 @@ class FineGrainedHfQuantizer(HfQuantizer):
     DeepSeek-V4 is an example, with MXFP4 experts and block FP8 linears.
 
     A registered quantizer can be a member. The host relies on it to:
-    - build its skip-list with `get_modules_to_not_convert`. The host scopes each member through `dtype_plan_skip`.
-      A member that converts a module of another entry raises.
+    - build its skip-list with `get_modules_to_not_convert`, from the config field `skip_list_attribute` names. The host
+      writes each member's scope there. A member that converts a module of another entry raises.
     - take its loading options, such as `dequantize`, from its config. The host sets them on the member's own copy.
     - keep its whole-model hooks to its own modules, or make them safe to run once per member.
 
@@ -159,15 +159,17 @@ class FineGrainedHfQuantizer(HfQuantizer):
             # a skipped module takes its sub-tree with it, so a member never skips a parent of a module it owns
             parents = {parent for name, owner in owners.items() if owner is member for parent in _parents(name)}
             parents |= {to_checkpoint(parent) for parent in parents}
-            member.dtype_plan_skip = _skip_unowned(own, others, parents)
+            # each member works on its own config copy, so the scope never reaches the saved config
+            setattr(member.quantization_config, member.skip_list_attribute, [_skip_unowned(own, others, parents)])
             before = {name: type(module) for name, module in model.named_modules()}
             member._process_model_before_weight_loading(model, **kwargs)
-            # a member that ignores `dtype_plan_skip` would take modules of other entries
+            # a member that ignores its skip-list would take modules of other entries
             for name, module in model.named_modules():
                 if name in before and type(module) is not before[name] and owners[name] is not member:
                     raise ValueError(
                         f"{type(member).__name__} converted {name!r}, which its `dtype_plan` entry does not cover. "
-                        "A member must build its skip-list with `get_modules_to_not_convert`."
+                        f"A member must build its skip-list from `{member.skip_list_attribute}` with "
+                        "`get_modules_to_not_convert`."
                     )
 
     def _resolve_plan(self, model: "PreTrainedModel"):
