@@ -4333,26 +4333,6 @@ class GenerationMixin(ContinuousMixin):
                     if output is not None:
                         mask = prefill_ids == getattr(self.config, f"{modality}_token_id")
                         placeholder_masks[modality] = (mask, mask.flatten().cumsum(0).view_as(mask) - 1)
-            elif is_first_iteration and any(
-                model_kwargs.get(key) is not None for key in MULTIMODAL_INPUTS_TO_DROP_OUTSIDE_PREFILL
-            ):
-                # Raw multimodal inputs are encoded inside the first forward, so all their placeholders must be in it
-                placeholder_ids = [
-                    token_id
-                    for modality in ("image", "video", "audio")
-                    if (token_id := getattr(self.config, f"{modality}_token_id", None)) is not None
-                ]
-                if (
-                    placeholder_ids
-                    and torch.isin(
-                        prefill_ids[:, chunk_size:], torch.tensor(placeholder_ids, device=prefill_ids.device)
-                    ).any()
-                ):
-                    raise ValueError(
-                        f"`prefill_chunk_size={chunk_size}` splits the multimodal placeholder tokens across chunks, but "
-                        f"{self.__class__.__name__} encodes the multimodal inputs in its first forward. Use a "
-                        "`prefill_chunk_size` that keeps all placeholder tokens in the first chunk."
-                    )
 
             past_length = cache.get_seq_length()
             chunk_start = 0
@@ -4407,12 +4387,11 @@ def _slice_mm_encoder_output(output: ModelOutput, rows: torch.LongTensor) -> Mod
         return [rows_features]
 
     output = copy.copy(output)
-    if getattr(output, "pooler_output", None) is not None:
-        output.pooler_output = slice_features(output.pooler_output)
-    if getattr(output, "deepstack_features", None) is not None and isinstance(
-        output.deepstack_features[0][0], torch.Tensor
-    ):
-        output.deepstack_features = [slice_features(layer_features) for layer_features in output.deepstack_features]
+    if output.get("pooler_output") is not None:
+        output["pooler_output"] = slice_features(output["pooler_output"])
+    deepstack_features = output.get("deepstack_features")
+    if deepstack_features is not None and isinstance(deepstack_features[0][0], torch.Tensor):
+        output["deepstack_features"] = [slice_features(layer_features) for layer_features in deepstack_features]
     return output
 
 
