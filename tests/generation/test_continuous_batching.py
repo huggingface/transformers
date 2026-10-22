@@ -831,10 +831,9 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                     slot_to_token[idx] = past_length + offset
             past_length += query_length
 
-    @slow
     def test_continuous_batching_no_accelerators(self) -> None:
         """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
-        environment by mocking all acceleratoravailability checks to return False"""
+        environment by mocking all accelerator availability checks to return False"""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         # Accelerator availability are cached, so we clear the cache before mocking to ensure the CPU-only
         cached_availability_checks = [is_torch_cuda_available, is_torch_mps_available, is_torch_xpu_available]
@@ -853,15 +852,20 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 self.assertFalse(is_torch_xpu_available())
                 self.assertFalse(torch.backends.mps.is_available())
 
-                tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu")
-                user_messages = _DEFAULT_USER_MESSAGES[:1]
+                tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu", dtype=torch.float32)
+                user_messages = ["Where is Paris?"]
                 input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
+                num_input_tokens = len(input_ids[0])
 
                 model.generation_config.max_new_tokens = 10
                 model.generation_config.do_sample = False
 
                 continuous_batching_config = ContinuousBatchingConfig(
-                    use_cuda_graph=False, use_async_batching=False, auto_switch_to_flash=False
+                    use_cuda_graph=False,
+                    use_async_batching=False,
+                    auto_switch_to_flash=False,
+                    num_blocks=16,
+                    max_batch_tokens=256,
                 )
 
                 # This should not crash even with all accelerators unavailable
@@ -870,12 +874,20 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                     generation_config=model.generation_config,
                     continuous_batching_config=continuous_batching_config,
                 )
+                cb_output_tokens = outputs["req_0"].generated_tokens
 
                 # Verify we got outputs
                 self.assertEqual(len(outputs), len(input_ids))
                 for output in outputs.values():
                     self.assertIsNotNone(output.generated_tokens)
                     self.assertGreater(len(output.generated_tokens), 0)
+
+                # Run regular generation to compare
+                inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
+                generate_outputs = model.generate(**inputs, generation_config=model.generation_config)
+                generate_output_tokens = generate_outputs[0, num_input_tokens:].tolist()
+
+                self.assertEqual(cb_output_tokens, generate_output_tokens)
         finally:
             # Clear the caches again so the mocked availabilities do not leak into subsequent tests.
             for check in cached_availability_checks:
@@ -977,35 +989,6 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 os.environ.pop("WORLD_SIZE", None)
             else:
                 os.environ["WORLD_SIZE"] = original_ws
-
-    def test_continuous_batching_matches_generate_on_cpu(self) -> None:
-        """Continuous batching should return the same greedy tokens as regular `generate` on CPU.
-
-        The other CPU continuous batching test (`test_continuous_batching_no_accelerators`) only checks that
-        generation runs, and the parity tests require an accelerator and are mostly slow. This keeps a fast,
-        CPU-only accuracy check that runs in the regular test suite.
-        """
-        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
-        user_messages = ["Hello"]
-        generation_config = GenerationConfig(max_new_tokens=10, do_sample=False, eos_token_id=-1)
-
-        tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu", torch.float32)
-        continuous_batching_outputs = model.generate_batch(
-            inputs=get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True),
-            generation_config=generation_config,
-            continuous_batching_config=ContinuousBatchingConfig(
-                use_cuda_graph=False, use_async_batching=False, auto_switch_to_flash=False
-            ),
-        )
-        continuous_batching_output = next(iter(continuous_batching_outputs.values())).generated_tokens
-
-        # Reload the model so that no state from the continuous batching run leaks into regular generation.
-        _, model = get_tokenizer_and_model(model_id, "sdpa", "cpu", torch.float32)
-        generate_inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
-        generate_output = model.generate(**generate_inputs.to("cpu"), generation_config=generation_config)
-        generate_output = generate_output[0, generate_inputs.input_ids.shape[1] :].tolist()
-
-        self.assertEqual(continuous_batching_output, generate_output)
 
 
 class ContinuousBatchingPauseTest(unittest.TestCase):
