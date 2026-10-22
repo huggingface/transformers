@@ -41,6 +41,8 @@ class HYV4Config(PreTrainedConfig):
         Hidden dimension of each DSA indexer head.
     index_n_heads (`int`, *optional*, defaults to 16):
         Number of DSA indexer heads.
+    index_chunk_size (`int`, *optional*, defaults to 256):
+        Chunk size along the query dimension for the indexer scores (DSA). `None` disables chunking.
     indexer_types (`list[str]`, *optional*):
         Per-layer DSA indexer type, either `"full"` or `"shared"`. A shared layer reuses the
         most recent full indexer in the same forward request.
@@ -127,6 +129,7 @@ class HYV4Config(PreTrainedConfig):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 16
+    index_chunk_size: int | None = 256
     indexer_types: list[str] | None = None
     hc_mult: int = 4
     hc_magnitude: float = 2.0

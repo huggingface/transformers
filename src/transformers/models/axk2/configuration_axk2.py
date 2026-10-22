@@ -41,6 +41,8 @@ class AXK2Config(PreTrainedConfig):
         Head dimension for the indexer projections (DSA).
     index_n_heads (`int`, *optional*, defaults to 16):
         Number of heads for the indexer projections (DSA).
+    index_chunk_size (`int`, *optional*, defaults to 256):
+        Chunk size along the query dimension for the indexer scores (DSA). `None` disables chunking.
     gated_norm_rank (`int`, *optional*, defaults to 16):
         Bottleneck rank for the low-rank input-dependent gate used by `AXK2GatedRMSNorm`. The gate wraps
         `input_layernorm` on every layer and `post_attention_layernorm` on MoE layers.
@@ -127,6 +129,7 @@ class AXK2Config(PreTrainedConfig):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 16
+    index_chunk_size: int | None = 256
     head_dim: int = 64
     layer_types: list[str] | None = None
     gated_norm_rank: int = 16
