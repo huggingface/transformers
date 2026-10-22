@@ -114,6 +114,15 @@ class Qwen3TTSTokenizerQuantizerConfig(PreTrainedConfig):
             self.semantic_quantizer_config = Qwen3TTSTokenizerSemanticQuantizerConfig(**semantic_config)
         super().__post_init__(**kwargs)
 
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        semantic_count = self.semantic_quantizer_config.n_codebooks
+        if not 1 <= semantic_count <= self.n_codebooks:
+            raise ValueError(
+                f"The number of semantic codebooks must be between 1 and the total number of codebooks "
+                f"({self.n_codebooks}), but is currently {semantic_count}."
+            )
+
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
 @strict
