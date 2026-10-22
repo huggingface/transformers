@@ -613,7 +613,6 @@ class CacheTest(unittest.TestCase):
                 self.assertTrue(torch.equal(out.sequences, expected.sequences), case)
                 torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores), msg=case)
 
-    @pytest.mark.xfail(strict=True, reason="later prefill chunks drop `token_type_ids`")
     def test_chunked_prefill_keeps_token_type_ids(self):
         """
         Gemma3 builds a bidirectional mask over each image run from `token_type_ids`. Every chunk of a chunked prefill

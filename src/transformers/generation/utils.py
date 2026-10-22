@@ -4323,6 +4323,11 @@ class GenerationMixin(ContinuousMixin):
 
             attention_mask = model_kwargs.pop("attention_mask", None)
             position_ids = model_kwargs.pop("position_ids", None)
+            token_types = {
+                key: model_kwargs.pop(key)
+                for key in ("token_type_ids", "mm_token_type_ids")
+                if model_kwargs.get(key) is not None
+            }
             mm_encoder_outputs = model_kwargs.pop("mm_encoder_outputs", None)
 
             # Pre-encoded features are consumed in placeholder order over (batch, seq): feature row `i` of a modality
@@ -4350,9 +4355,19 @@ class GenerationMixin(ContinuousMixin):
                 if position_ids is not None:
                     # Always slice on `seq-length` (last dim)
                     model_kwargs["position_ids"] = position_ids[..., past_length:current_length]
+                for key, token_type in token_types.items():
+                    model_kwargs[key] = token_type[..., past_length:current_length]
                 model_inputs = self.prepare_inputs_for_generation(
                     input_chunk, is_first_iteration=is_first_iteration and chunk_idx == 0, **model_kwargs
                 )
+                # Models with a bidirectional mask over image tokens (e.g. Gemma3) drop `token_type_ids` outside the
+                # first iteration, but every prefill chunk needs them up to its end, as the mask reads them by position
+                if (
+                    is_first_iteration
+                    and "token_type_ids" in token_types
+                    and model_inputs.get("token_type_ids") is None
+                ):
+                    model_inputs["token_type_ids"] = token_types["token_type_ids"][..., :current_length]
 
                 if chunk_mm_encoder_outputs[chunk_idx] is not None:
                     model_inputs["mm_encoder_outputs"] = chunk_mm_encoder_outputs[chunk_idx]
@@ -4365,6 +4380,7 @@ class GenerationMixin(ContinuousMixin):
             # Recreate the kwargs based on the full length
             model_kwargs["attention_mask"] = attention_mask
             model_kwargs["position_ids"] = position_ids
+            model_kwargs.update(token_types)
             if mm_encoder_outputs is not None:
                 model_kwargs["mm_encoder_outputs"] = mm_encoder_outputs
 
