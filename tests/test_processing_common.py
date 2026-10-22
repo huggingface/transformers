@@ -30,13 +30,14 @@ from parameterized import parameterized
 from transformers import ProcessorMixin
 from transformers.processing_utils import MODALITY_TO_AUTOPROCESSOR_MAPPING
 from transformers.testing_utils import (
+    CaptureLogger,
     check_json_file_has_correct_format,
     require_librosa,
     require_torch,
     require_torchcodec,
     require_vision,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available, logging
 from transformers.video_utils import get_video_size
 
 
@@ -714,6 +715,44 @@ class ProcessorTesterMixin:
         for key in input_subproc:
             if input_processor and key in processor.model_input_names:
                 torch.testing.assert_close(input_subproc[key], input_processor[key])
+
+    def _prepare_sampling_rate_test(self):
+        attributes = self.processor_class.get_attributes()
+        self.maybe_skip_typed_test_for_modality("audio", attributes)
+
+        processor = self.get_processor()
+        subprocessor = getattr(processor, self.get_subprocessor_name("audio", attributes))
+        inputs = {
+            "text": self.prepare_text_inputs(modalities="audio"),
+            "audio": self._prepare_modality_input("audio"),
+            "return_tensors": "pt",
+        }
+        return processor, subprocessor, inputs
+
+    def test_audio_without_sampling_rate_warns(self):
+        """
+        `sampling_rate` describes the user's input audio, so the processor must not make one up. Without it, the
+        audio subprocessor can't check the input rate and must warn, instead of silently processing audio at any other
+        rate as if it were at the expected one.
+        """
+        processor, _, inputs = self._prepare_sampling_rate_test()
+
+        with CaptureLogger(logging.get_logger()) as cl:
+            processor(**inputs)
+        self.assertIn("sampling_rate", cl.out)
+
+    def test_audio_with_matching_sampling_rate_does_not_warn(self):
+        processor, subprocessor, inputs = self._prepare_sampling_rate_test()
+
+        with CaptureLogger(logging.get_logger()) as cl:
+            processor(**inputs, sampling_rate=subprocessor.sampling_rate)
+        self.assertNotIn("sampling_rate", cl.out)
+
+    def test_audio_with_mismatched_sampling_rate_raises(self):
+        processor, subprocessor, inputs = self._prepare_sampling_rate_test()
+
+        with self.assertRaises(ValueError):
+            processor(**inputs, sampling_rate=2 * subprocessor.sampling_rate)
 
     def test_tokenizer_decode_defaults(self):
         """

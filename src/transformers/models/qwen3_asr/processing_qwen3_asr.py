@@ -335,7 +335,6 @@ class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
             "padding_side": "left",
         },
         "audio_kwargs": {
-            "sampling_rate": 16000,
             "padding": True,
             "truncation": False,
             "return_attention_mask": True,
