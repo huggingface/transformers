@@ -17,7 +17,15 @@ import re
 import time
 from typing import Optional, TypeVar
 
-import IPython.display as disp
+from .import_utils import is_ipython_available
+
+
+try:
+    import IPython.display as disp
+except ImportError:
+    disp = None
+if is_ipython_available():
+    import IPython.display as disp
 
 from ..trainer_callback import TrainerCallback
 from ..trainer_utils import IntervalStrategy, has_length
