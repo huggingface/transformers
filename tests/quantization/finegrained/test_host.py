@@ -303,7 +303,7 @@ class FineGrainedHostTest(unittest.TestCase):
 
         with (
             mock.patch("transformers.quantizers.base.checkpoint_module_namer", renamer),
-            mock.patch("transformers.quantizers.quantizer_finegrained.checkpoint_module_namer", renamer),
+            mock.patch("transformers.quantizers.quantizers_utils.checkpoint_module_namer", renamer),
         ):
             self._load({r"layers\.1\.mlp": TagTestConfig(tag="mlp"), "self_attn": OtherTagTestConfig(tag="attn")})
         tags = _tags(self.model)
@@ -328,6 +328,46 @@ class FineGrainedHostTest(unittest.TestCase):
         merged = AutoHfQuantizer.merge_quantization_configs(checkpoint, passed)
         self.assertIsNone(merged.dtype_plan["lm_head"])
         self.assertEqual(merged.dtype_plan[".*"].tag, "shipped")
+
+    def test_an_entry_that_matches_no_module_raises(self):
+        with self.assertRaisesRegex(ValueError, "match no module"):
+            self._load({"vision_tower": TagTestConfig()})
+
+    def test_a_fused_module_takes_the_entry_of_all_its_pieces(self):
+        """Check that per-expert entries, as a checkpoint names them, select the model's fused experts."""
+        from transformers import Qwen2MoeConfig
+
+        config = Qwen2MoeConfig(
+            vocab_size=32,
+            hidden_size=16,
+            moe_intermediate_size=16,
+            shared_expert_intermediate_size=16,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            num_experts=2,
+            num_experts_per_tok=1,
+        )
+        with torch.device("meta"):
+            model = AutoModelForCausalLM.from_config(config)
+        tag, other = TagTestConfig(tag="experts"), OtherTagTestConfig(tag="other")
+        pieces = {(expert, proj): tag for expert in range(2) for proj in ("gate_proj", "up_proj", "down_proj")}
+        for name, entries in (
+            ("loads", pieces),
+            ("different formats", {**pieces, (1, "down_proj"): other}),
+            ("all of its pieces", {key: entry for key, entry in pieces.items() if key[0] == 0}),
+        ):
+            plan = {rf"experts\.{expert}\.{proj}$": entry for (expert, proj), entry in entries.items()}
+            quantizer = FineGrainedHfQuantizer(FineGrainedConfig(dtype_plan=plan))
+            with self.subTest(name):
+                if name == "loads":
+                    quantizer._resolve_plan(model)
+                    self.assertEqual(
+                        quantizer.member_for("model.layers.0.mlp.experts").quantization_config.tag, "experts"
+                    )
+                else:
+                    with self.assertRaisesRegex(ValueError, name):
+                        quantizer._resolve_plan(model)
 
 
 @require_bitsandbytes

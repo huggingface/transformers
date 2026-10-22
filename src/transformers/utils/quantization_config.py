@@ -1824,21 +1824,6 @@ class BlockScaledConfig(QuantizationConfigMixin):
         """Raise if this checkpoint cannot run with the `activation_format` passed to `from_pretrained`."""
         # first overridden by `NVFP4Config` in #49779, which rejects weight-only checkpoints
 
-    def loading_attributes_source(self, config):
-        # A `FineGrainedConfig` lends to a single-format checkpoint if its plan holds no other format.
-        # Its format entry lends its activation format. Its `None` entries become the skip-list.
-        if not isinstance(config, FineGrainedConfig):
-            return super().loading_attributes_source(config)
-        entries = [entry for entry in config.dtype_plan.values() if entry is not None]
-        if len(entries) > 1 or any(type(entry) is not type(self) for entry in entries):
-            return None
-        source = copy.copy(entries[0] if entries else self)
-        source.dequantize = config.dequantize
-        # `should_convert_module` matches from the start, so `.*?` and `.*` make it search for the pattern
-        skipped = [rf".*?(?:{pattern}).*" for pattern, entry in config.dtype_plan.items() if entry is None]
-        source.modules_to_not_convert = skipped or None
-        return source
-
 
 class Fp8Config(BlockScaledConfig):
     """FP8 weights, as DeepSeek-V3 and Qwen3 ship them.
@@ -2326,22 +2311,30 @@ class FineGrainedConfig(QuantizationConfigMixin):
         }
 
     def get_loading_attributes(self):
-        # A passed plan adds its `None` entries and lends its activation formats. The weights keep their formats.
-        return {"dequantize": self.dequantize, **({"dtype_plan": self.dtype_plan} if self.dtype_plan else {})}
+        return {"dtype_plan": self.dtype_plan, "dequantize": self.dequantize}
 
     def loading_attributes_source(self, config):
-        # The config of a plan entry's method lends its loading options to the plan. Its skip-list becomes `None` entries.
-        # It lends its activation format to the plan entries of the same format.
+        # A passed plan adds its `None` entries to this plan. The config of an entry's method adds its skip-list as
+        # `None` entries, and lends its activation format to the entries of its format. The weights keep this plan's
+        # formats.
         from ..quantizers.quantizers_utils import skip_pattern
 
-        if not any(type(entry) is type(config) for entry in self.dtype_plan.values() if entry is not None):
-            return super().loading_attributes_source(config)
-        entry = copy.copy(config)
-        entry.dequantize, entry.modules_to_not_convert = False, None
-        same_format = {pattern: entry for pattern, own in self.dtype_plan.items() if type(own) is type(config)}
-        skipped = dict.fromkeys(map(skip_pattern, getattr(config, "modules_to_not_convert", None) or []))
+        plan = dict(self.dtype_plan)
+        if isinstance(config, FineGrainedConfig):
+            skipped = [pattern for pattern, entry in config.dtype_plan.items() if entry is None]
+        elif any(type(entry) is type(config) for entry in plan.values() if entry is not None):
+            skipped = [skip_pattern(entry) for entry in getattr(config, "modules_to_not_convert", None) or []]
+            for pattern, entry in plan.items():
+                if isinstance(config, BlockScaledConfig) and type(entry) is type(config):
+                    if not config.dequantize:
+                        entry._check_activation_format(config.activation_format)
+                    plan[pattern] = copy.copy(entry)
+                    plan[pattern].activation_format = config.activation_format
+                    plan[pattern].post_init()
+        else:
+            return None
         return FineGrainedConfig(
-            dtype_plan={**skipped, **same_format}, dequantize=getattr(config, "dequantize", False)
+            dtype_plan={**plan, **dict.fromkeys(skipped)}, dequantize=getattr(config, "dequantize", False)
         )
 
 
