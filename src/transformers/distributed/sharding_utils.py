@@ -111,9 +111,15 @@ class DtensorShardOperation:
           return None if this rank does not own that slice, else slice inner dims only. Surviving slices are
           stacked by the converter into this rank's local [n_local, in, out] shard. A list can fill several params
           of the same axis-0 size back to back (e.g. text then vision experts as in ernie), so `tensor_idx` wraps around it.
+          A slice can have fewer dims than `[in, out]`, e.g. a 0-dim per-expert scale.
         """
         source_shape = list(source.shape) if isinstance(source, torch.Tensor) else source.get_shape()
-        if tensor_idx is not None and len(source_shape) != self.param_ndim - 1:
+        squeezed = [size for size in source_shape if size != 1]
+        if len(source_shape) > self.param_ndim and len(squeezed) == self.param_ndim:
+            # Extra size-1 dims, e.g. a ModelOpt block-scale grid `[N / 128, 1, K / 128, 1]`, would hide the dims the
+            # param shards. Without them the tensor lines up with the param.
+            source, source_shape = source[...].reshape(squeezed), squeezed
+        if tensor_idx is not None and len(source_shape) >= self.param_ndim:
             tensor_idx = None  # not a slice of axis 0, the list holds whole tensors
         dim_placements = [
             (mesh_dim, placement) for mesh_dim, placement in enumerate(self.placements) if hasattr(placement, "dim")

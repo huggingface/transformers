@@ -11,157 +11,358 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
+import tempfile
 import unittest
+import unittest.mock
 from types import SimpleNamespace
-from unittest.mock import patch
 
-from transformers import NVFP4Config
-from transformers.integrations.nvfp4 import NVFP4Linear, NVFP4Quantize, replace_with_nvfp4_linear
-from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
-from transformers.utils import is_torch_available
-from transformers.utils.quantization_config import QuantizationMethod
+from transformers import MixtralConfig, NVFP4Config
+from transformers.quantizers.auto import AutoQuantizationConfig
+from transformers.testing_utils import require_kernels, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.utils import is_torch_available, logging
+from transformers.utils.quantization_config import QuantizationMethod, read_modelopt
 
 
 if is_torch_available():
     import torch
-    from torch import nn
 
-
-class _PackedWeight:
-    def __init__(self, **kwargs):
-        self.__dict__.update(kwargs)
-
-
-def _fake_kernel():
-    def pack(weight, device):
-        out_features, in_features = weight.shape
-        return SimpleNamespace(
-            qweight=torch.empty(out_features, in_features // 2, dtype=torch.uint8, device=device),
-            sf=torch.empty(out_features, in_features // 64, dtype=torch.int32, device=device),
-            sf_rowmajor=torch.empty(out_features, in_features // 16, dtype=torch.uint8, device=device),
-            global_scale=torch.ones(1, dtype=torch.float32, device=device),
-        )
-
-    return SimpleNamespace(
-        PackedWeight=_PackedWeight,
-        gemm=lambda packed_weight, input: input.new_zeros((*input.shape[:-1], packed_weight.n)),
-        pack=pack,
-        swizzled_sf_shape=lambda rows, columns: (rows, columns // 64),
+    from transformers import AutoModelForCausalLM, MixtralForCausalLM
+    from transformers.integrations.nvfp4 import (
+        NVFP4Deserialize,
+        NVFP4ExpertGlobals,
+        NVFP4Experts,
+        NVFP4Linear,
+        replace_with_nvfp4,
+        update_nvfp4_parallel_plan,
     )
 
+E2M1 = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
 
-@unittest.skipUnless(is_torch_available(), "test requires PyTorch")
+
+def _nvfp4(weight, amax=None):
+    """Quantize a `(N, K)` weight like ModelOpt. Return `(packed uint8, E4M3 scales, global, dequantized)`."""
+    weight = weight.float()
+    values = torch.tensor(E2M1)
+    global_scale = (weight.abs().amax() if amax is None else amax) / (6 * 448)
+    blocks = weight.reshape(weight.shape[0], -1, 16)
+    scales = (blocks.abs().amax(-1) / 6 / global_scale).clamp(min=2**-9).to(torch.float8_e4m3fn)
+    scaled = blocks / (scales.float() * global_scale).unsqueeze(-1)
+    index = (scaled.abs().unsqueeze(-1) - values).abs().argmin(-1)
+    codes = (index | ((scaled < 0).long() << 3)).reshape(weight.shape[0], -1)
+    packed = (codes[:, 0::2] | (codes[:, 1::2] << 4)).to(torch.uint8)
+    dequantized = values[index] * scaled.sign() * scales.float().unsqueeze(-1) * global_scale
+    return packed, scales, global_scale.reshape(()), dequantized.reshape(weight.shape)
+
+
+def _fp8_block(weight):
+    """Quantize a `(N, K)` weight to block FP8 with ModelOpt's `[N / 128, 1, K / 128, 1]` grid."""
+    rows, cols = weight.shape
+    blocks = weight.float().reshape(rows // 128, 128, cols // 128, 128)
+    scales = blocks.abs().amax(dim=(1, 3), keepdim=True) / 448
+    quantized = (blocks / scales).to(torch.float8_e4m3fn)
+    dequantized = (quantized.float() * scales).reshape(rows, cols)
+    return quantized.reshape(rows, cols), scales.reshape(rows // 128, 1, cols // 128, 1), dequantized
+
+
+def _mixtral_config(**kwargs):
+    options = {
+        "vocab_size": 512,
+        "hidden_size": 256,
+        "intermediate_size": 256,
+        "num_hidden_layers": 2,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 64,
+        "num_local_experts": 4,
+        "num_experts_per_tok": 2,
+    }
+    return MixtralConfig(**{**options, **kwargs})
+
+
+def _modelopt_checkpoint(path):
+    """Save a tiny Mixtral as a ModelOpt export and return its dequantized reference model.
+
+    The experts are NVFP4 per expert. The attention mixes NVFP4, weight-only NVFP4 and block FP8.
+    """
+    torch.manual_seed(0)
+    config = _mixtral_config()
+    reference = MixtralForCausalLM(config).to(torch.bfloat16).eval()
+    state = {name: param.clone() for name, param in reference.state_dict().items() if ".mlp.experts." not in name}
+    layers = {}
+    for i, layer in enumerate(reference.model.layers):
+        experts = layer.mlp.experts
+        for expert in range(config.num_local_experts):
+            gate, up = experts.gate_up_proj.data[expert].chunk(2, dim=0)
+            # ModelOpt calibrates w1 and w3 together, so they share one global
+            shared = experts.gate_up_proj.data[expert].float().abs().amax()
+            for proj, weight, amax in (
+                ("w1", gate, shared),
+                ("w3", up, shared),
+                ("w2", experts.down_proj.data[expert], None),
+            ):
+                packed, scales, global_scale, dequantized = _nvfp4(weight, amax)
+                key = f"model.layers.{i}.block_sparse_moe.experts.{expert}.{proj}"
+                state[f"{key}.weight"], state[f"{key}.weight_scale"] = packed, scales
+                state[f"{key}.weight_scale_2"], state[f"{key}.input_scale"] = global_scale, torch.tensor(4 / (6 * 448))
+                weight.copy_(dequantized.to(weight.dtype))
+        layers[f"model.layers.{i}.block_sparse_moe.experts"] = {"quant_algo": "NVFP4"}
+        for proj, algo in (("q_proj", "NVFP4"), ("k_proj", "W4A16_NVFP4"), ("o_proj", "FP8_PB_WO")):
+            linear = getattr(layer.self_attn, proj)
+            key = f"model.layers.{i}.self_attn.{proj}"
+            if algo == "FP8_PB_WO":
+                quantized, scales, dequantized = _fp8_block(linear.weight.data)
+                state[f"{key}.weight"], state[f"{key}.weight_scale"] = quantized, scales
+            else:
+                packed, scales, global_scale, dequantized = _nvfp4(linear.weight.data)
+                state[f"{key}.weight"], state[f"{key}.weight_scale"], state[f"{key}.weight_scale_2"] = (
+                    packed,
+                    scales,
+                    global_scale,
+                )
+                if algo == "NVFP4":
+                    state[f"{key}.input_scale"] = torch.tensor(8 / (6 * 448))
+            linear.weight.data.copy_(dequantized.to(linear.weight.dtype))
+            layers[key] = {"quant_algo": algo}
+
+    from safetensors.torch import save_file
+
+    config.save_pretrained(path)
+    with open(f"{path}/config.json", encoding="utf-8") as file:
+        saved = json.load(file)
+    saved["quantization_config"] = {
+        "quant_method": "modelopt",
+        "quant_algo": "MIXED_PRECISION",
+        "quantized_layers": layers,
+    }
+    with open(f"{path}/config.json", "w", encoding="utf-8") as file:
+        json.dump(saved, file)
+    save_file({key: value.contiguous() for key, value in state.items()}, f"{path}/model.safetensors")
+    return reference
+
+
+@require_torch
 class NVFP4ConfigTest(unittest.TestCase):
-    def test_config_uses_quantization_method_enum(self):
-        config = NVFP4Config(modules_to_not_convert=["lm_head"])
-
-        self.assertEqual(config.quant_method, QuantizationMethod.NVFP4)
-        self.assertEqual(config.to_dict()["modules_to_not_convert"], ["lm_head"])
-
-
-@unittest.skipUnless(is_torch_available(), "test requires PyTorch")
-class NVFP4IntegrationTest(unittest.TestCase):
-    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
-    def test_replaces_only_eligible_linears(self, _):
-        model = nn.ModuleDict(
-            {
-                "convert": nn.Linear(64, 32, bias=False),
-                "skip": nn.Linear(64, 32, bias=False),
-                "biased": nn.Linear(64, 32, bias=True),
-                "unaligned": nn.Linear(63, 32, bias=False),
-            }
-        )
-
-        replace_with_nvfp4_linear(model, modules_to_not_convert=["skip"])
-
-        self.assertIsInstance(model["convert"], NVFP4Linear)
-        self.assertIsInstance(model["skip"], nn.Linear)
-        self.assertIsInstance(model["biased"], nn.Linear)
-        self.assertIsInstance(model["unaligned"], nn.Linear)
-        self.assertEqual(model["convert"].weight_sf.dtype, torch.int32)
-        self.assertEqual(model["convert"].weight_sf_rowmajor.dtype, torch.uint8)
-        self.assertEqual(model["convert"].weight_global_scale.dtype, torch.float32)
-
-    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
-    def test_linear_forward_uses_normal_function_entry_point(self, _):
-        layer = NVFP4Linear(64, 32)
-        output = layer(torch.randn(2, 3, 64))
-
-        self.assertEqual(output.shape, (2, 3, 32))
-
-    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
-    def test_packed_tensors_are_registered_in_state_dict(self, _):
-        layer = NVFP4Linear(64, 32)
-
-        for buffer_name in ("weight", "weight_sf", "weight_sf_rowmajor", "weight_global_scale"):
-            self.assertIsInstance(getattr(layer, buffer_name), nn.Buffer)
-        self.assertEqual(
-            set(layer.state_dict()),
-            {"weight", "weight_sf", "weight_sf_rowmajor", "weight_global_scale"},
-        )
-        self.assertNotIn("nvfp4_kernel", layer.state_dict())
-
-    @patch("transformers.integrations.nvfp4.load_nvfp4_kernel", side_effect=_fake_kernel)
-    def test_conversion_produces_all_registered_buffers(self, _):
-        conversion = NVFP4Quantize(torch.device("cpu"))
-
-        output = conversion.convert({"model.proj.weight": torch.randn(32, 64)})
-
-        self.assertEqual(
-            set(output),
-            {
-                "model.proj.weight",
-                "model.proj.weight_sf",
-                "model.proj.weight_sf_rowmajor",
-                "model.proj.weight_global_scale",
+    def test_a_modelopt_export_reads_its_formats_and_skip_list(self):
+        shipped = {
+            "quant_method": "modelopt",
+            "quant_algo": "MIXED_PRECISION",
+            "quantized_layers": {
+                "layers.0.experts": {"quant_algo": "NVFP4"},
+                "layers.0.attention.wq": {"quant_algo": "FP8_PB_WO"},
             },
-        )
-        self.assertEqual(output["model.proj.weight"].shape, (32, 32))
-
-
-@unittest.skipUnless(is_torch_available(), "test requires PyTorch")
-class NVFP4QuantizerValidationTest(unittest.TestCase):
-    def setUp(self):
-        self.quantizer = NVFP4HfQuantizer(NVFP4Config(), pre_quantized=False)
-
-    def test_rejects_pre_quantized_checkpoints(self):
-        quantizer = NVFP4HfQuantizer(NVFP4Config(), pre_quantized=True)
-
-        with self.assertRaisesRegex(ValueError, "pre-quantized NVFP4"):
-            quantizer.validate_environment(device_map={"": "cuda"})
-
-    @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
-    @patch("torch.cuda.is_available", return_value=True)
-    @patch("torch.cuda.get_device_capability", return_value=(10, 0))
-    def test_accepts_one_blackwell_cuda_device(self, _, __, ___):
-        self.quantizer.validate_environment(device_map={"": "cuda:1"})
-
-        self.assertEqual(self.quantizer.quantization_device, torch.device("cuda:1"))
-
-    @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
-    @patch("torch.cuda.is_available", return_value=True)
-    def test_rejects_multi_device_map_until_tp_metadata_is_supported(self, _, __):
-        with self.assertRaisesRegex(ValueError, "Tensor parallelism"):
-            self.quantizer.validate_environment(device_map={"model.layers.0": 0, "model.layers.1": 1})
-
-    def test_rejects_native_tp_until_scale_metadata_is_supported(self):
-        model = SimpleNamespace(config=SimpleNamespace(distributed_config=SimpleNamespace(tp_size=2)))
-
-        with self.assertRaisesRegex(ValueError, "scale metadata does not have a sharding plan"):
-            self.quantizer.update_parallel_plan(model, {})
-
-    def test_update_parallel_plan_keeps_non_tp_configs(self):
-        configs = (
-            SimpleNamespace(),
-            SimpleNamespace(distributed_config=SimpleNamespace(tp_size=1)),
+            "exclude_modules": ["lm_head"],
+            # some exports write the list as its string
+            "modules_to_not_convert": "['model.layers.0.mlp.gate']",
+        }
+        logging.warning_once.cache_clear()
+        with self.assertLogs("transformers", level="WARNING") as logs:
+            config = AutoQuantizationConfig.from_dict(shipped)
+        self.assertIn("FP8_PB_WO", logs.output[0])
+        self.assertIsInstance(config, NVFP4Config)
+        self.assertEqual(config.quant_method, QuantizationMethod.NVFP4)
+        self.assertEqual(config.quantized_layers, {"layers.0.experts": "NVFP4", "layers.0.attention.wq": "FP8_PB_WO"})
+        self.assertEqual(config.modules_to_not_convert, ["model.layers.0.mlp.gate", r".*lm_head"])
+        self.assertIsNone(
+            AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4"}).quantized_layers
         )
 
-        for config in configs:
-            with self.subTest(config=config):
-                self.quantizer.update_parallel_plan(SimpleNamespace(config=config), {})
+    def test_a_modelopt_export_without_nvfp4_or_with_other_formats_raises(self):
+        for algos in (["FP8"], ["NVFP4", "W4A8_AWQ"]):
+            layers = {f"layer{i}": {"quant_algo": algo} for i, algo in enumerate(algos)}
+            with self.subTest(algos=algos), self.assertRaises(ValueError):
+                read_modelopt(
+                    {"quant_method": "modelopt", "quant_algo": "MIXED_PRECISION", "quantized_layers": layers}
+                )
 
-    @patch("transformers.quantizers.quantizer_nvfp4.is_kernels_available", return_value=True)
-    @patch("torch.cuda.is_available", return_value=True)
-    def test_rejects_cpu_offload(self, _, __):
-        with self.assertRaisesRegex(ValueError, "CPU or disk offload"):
-            self.quantizer.validate_environment(device_map={"model": "cuda", "lm_head": "cpu"})
+
+@require_torch
+class NVFP4ModulesTest(unittest.TestCase):
+    def _model(self):
+        with torch.device("meta"):
+            return MixtralForCausalLM(_mixtral_config(num_hidden_layers=1))
+
+    def test_on_the_fly_quantizes_linears_and_experts_but_not_routers(self):
+        model = self._model()
+        replace_with_nvfp4(model, modules_to_not_convert=["lm_head"])
+        layer = model.model.layers[0]
+        self.assertIsInstance(layer.mlp.experts, NVFP4Experts)
+        self.assertIsInstance(layer.self_attn.q_proj, NVFP4Linear)
+        self.assertNotIsInstance(layer.mlp.gate, NVFP4Linear)
+        # the weights start as full-precision placeholders, which the loader quantizes
+        self.assertEqual(layer.self_attn.q_proj.weight.dtype, torch.float32)
+        self.assertIsNone(layer.self_attn.q_proj.input_global_scale)
+
+    def test_pre_quantized_modules_follow_the_formats(self):
+        model = self._model()
+        formats = {
+            "model.layers.0.mlp.experts": "NVFP4",
+            "model.layers.0.self_attn.q_proj": "NVFP4",
+            "model.layers.0.self_attn.k_proj": "W4A16_NVFP4",
+            "model.layers.0.self_attn.o_proj": "FP8_PB_WO",
+        }
+        replace_with_nvfp4(model, formats=formats, pre_quantized=True)
+        attention = model.model.layers[0].self_attn
+        self.assertEqual(attention.q_proj.weight.dtype, torch.int8)
+        self.assertIsNotNone(attention.q_proj.input_global_scale)
+        self.assertEqual((attention.k_proj.activation_format, attention.k_proj.input_global_scale), ("bf16", None))
+        # a layer in another format loads dequantized into the model's own module
+        self.assertIs(type(attention.o_proj), torch.nn.Linear)
+        self.assertIs(type(attention.v_proj), torch.nn.Linear)
+
+    def test_expert_parallelism_is_masked_and_shards_the_globals(self):
+        model = self._model()
+        replace_with_nvfp4(model)
+        model.config.distributed_config = SimpleNamespace()
+        plan = {
+            "model.layers.*.mlp.experts": "ep_dispatch_experts",
+            "model.layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+            "model.layers.*.mlp.experts.down_proj": "grouped_gemm",
+        }
+        update_nvfp4_parallel_plan(model, plan)
+        self.assertEqual(plan["model.layers.*.mlp.experts"], "moe_tp_experts")
+        self.assertEqual(plan["model.layers.*.mlp.gate"], "ep_router")
+        self.assertEqual(plan["model.layers.*.mlp.experts.down_proj_weight_global_scale"], "grouped_gemm")
+        # tensor parallelism replicates the experts, since it would cut their scale groups
+        plan = {"model.layers.*.mlp.experts": "moe_tp_experts", "model.layers.*.mlp.experts.down_proj": "rowwise"}
+        update_nvfp4_parallel_plan(model, plan)
+        self.assertEqual(plan, {})
+
+
+@require_torch
+class NVFP4LoadingOpsTest(unittest.TestCase):
+    def test_a_block_fp8_layer_dequantizes_from_the_modelopt_grid(self):
+        weight = torch.randn(256, 256)
+        quantized, scales, dequantized = _fp8_block(weight)
+        model = torch.nn.Module()
+        model.proj = torch.nn.Linear(256, 256, bias=False, dtype=torch.bfloat16)
+        out = NVFP4Deserialize(SimpleNamespace(quantization_config=NVFP4Config())).convert(
+            {"weight": quantized, "weight_scale_inv": scales}, full_layer_name="proj.weight", model=model
+        )
+        torch.testing.assert_close(out["proj.weight"].float(), dequantized, rtol=1e-2, atol=1e-2)
+
+    def test_the_globals_reduce_to_one_per_expert(self):
+        gate, up = torch.tensor([1.0, 2.0]), torch.tensor([3.0, 1.0])
+        out = NVFP4ExpertGlobals(None, "max").convert({"w1": gate, "w3": up}, full_layer_name="x")
+        self.assertEqual(out["x"].tolist(), [3.0, 2.0])
+        with self.assertLogs("transformers", level="WARNING"):
+            out = NVFP4ExpertGlobals(None, "first").convert({"w1": gate, "w3": up}, full_layer_name="y")
+        self.assertEqual(out["y"].tolist(), [1.0, 2.0])
+
+
+@require_torch
+class NVFP4DequantizeTest(unittest.TestCase):
+    def test_without_a_gpu_a_checkpoint_loads_dequantized(self):
+        """Check that a ModelOpt checkpoint loads dequantized without a GPU, its NVFP4 globals included."""
+        with tempfile.TemporaryDirectory() as path:
+            reference = _modelopt_checkpoint(path)
+            with (
+                unittest.mock.patch("torch.cuda.is_available", return_value=False),
+                unittest.mock.patch(
+                    "transformers.quantizers.quantizer_nvfp4.is_torch_xpu_available", return_value=False
+                ),
+            ):
+                model = AutoModelForCausalLM.from_pretrained(path, dtype=torch.bfloat16, device_map="cpu")
+        self.assertIsNone(getattr(model.config, "quantization_config", None))
+        self.assertFalse(any(isinstance(m, (NVFP4Linear, NVFP4Experts)) for m in model.modules()))
+        ids = torch.randint(0, 512, (2, 12))
+        with torch.no_grad():
+            got, expected = model(ids).logits.float(), reference(ids).logits.float()
+        self.assertGreater(torch.nn.functional.cosine_similarity(got.flatten(), expected.flatten(), dim=0), 0.999)
+
+
+def _requires_fp8_triton(test):
+    # the NVFP4 kernels use Triton's FP8 type, which NVIDIA GPUs only have from compute capability 8.9
+    capable = torch_device == "xpu" or (
+        torch_device == "cuda" and (torch.version.hip is not None or torch.cuda.get_device_capability() >= (8, 9))
+    )
+    return unittest.skipUnless(capable, "NVFP4 needs a GPU with FP8 support")(test)
+
+
+@require_kernels
+@require_torch_accelerator
+class NVFP4LoadTest(unittest.TestCase):
+    @_requires_fp8_triton
+    def test_a_modelopt_checkpoint_matches_its_dequantized_model(self):
+        with tempfile.TemporaryDirectory() as path:
+            reference = _modelopt_checkpoint(path).to(torch_device)
+            ids = torch.randint(0, 512, (2, 24), device=torch_device)
+            with torch.no_grad():
+                expected = reference(ids).logits.float()
+            for implementation in ("eager", "grouped_mm", "batched_mm"):
+                with self.subTest(implementation=implementation):
+                    model, info = AutoModelForCausalLM.from_pretrained(
+                        path,
+                        dtype=torch.bfloat16,
+                        device_map=torch_device,
+                        experts_implementation=implementation,
+                        output_loading_info=True,
+                    )
+                    self.assertFalse(any(info.values()), info)
+                    self.assertIsInstance(model.model.layers[0].mlp.experts, NVFP4Experts)
+                    self.assertIs(type(model.model.layers[0].self_attn.o_proj), torch.nn.Linear)
+                    with torch.no_grad():
+                        got = model(ids).logits.float()
+                    self.assertGreater(
+                        torch.nn.functional.cosine_similarity(got.flatten(), expected.flatten(), dim=0), 0.995
+                    )
+
+    @_requires_fp8_triton
+    def test_a_passed_config_sets_the_activation_format_or_dequantizes(self):
+        """Check that a passed config runs a checkpoint weight-only, or loads it dequantized."""
+        with tempfile.TemporaryDirectory() as path:
+            reference = _modelopt_checkpoint(path).to(torch_device)
+            ids = torch.randint(0, 512, (2, 24), device=torch_device)
+            with torch.no_grad():
+                expected = reference(ids).logits.float()
+            for config, threshold in (
+                (NVFP4Config(activation_format="bf16"), 0.998),
+                (NVFP4Config(dequantize=True), 0.999),
+            ):
+                with self.subTest(config=config.to_dict()):
+                    model = AutoModelForCausalLM.from_pretrained(
+                        path, quantization_config=config, dtype=torch.bfloat16, device_map=torch_device
+                    )
+                    if config.dequantize:
+                        self.assertIsInstance(model.model.layers[0].self_attn.q_proj, torch.nn.Linear)
+                    else:
+                        self.assertEqual(model.model.layers[0].mlp.experts.activation_format, "bf16")
+                    with torch.no_grad():
+                        got = model(ids).logits.float()
+                    self.assertGreater(
+                        torch.nn.functional.cosine_similarity(got.flatten(), expected.flatten(), dim=0), threshold
+                    )
+
+    @_requires_fp8_triton
+    def test_a_full_precision_checkpoint_quantizes_on_load(self):
+        torch.manual_seed(0)
+        reference = MixtralForCausalLM(_mixtral_config()).to(torch.bfloat16).eval()
+        with tempfile.TemporaryDirectory() as path:
+            reference.save_pretrained(path)
+            model = AutoModelForCausalLM.from_pretrained(
+                path, quantization_config=NVFP4Config(), dtype=torch.bfloat16, device_map=torch_device
+            )
+        self.assertIsInstance(model.model.layers[0].mlp.experts, NVFP4Experts)
+        self.assertEqual(model.model.layers[0].self_attn.q_proj.weight.dtype, torch.int8)
+        ids = torch.randint(0, 512, (2, 24), device=torch_device)
+        with torch.no_grad():
+            got, expected = model(ids).logits.float(), reference.to(torch_device)(ids).logits.float()
+        self.assertGreater(torch.nn.functional.cosine_similarity(got.flatten(), expected.flatten(), dim=0), 0.95)
+
+    @slow
+    @_requires_fp8_triton
+    def test_muse_spark_loads_its_fused_experts_and_post_expert_norm(self):
+        from transformers import MuseSparkForConditionalGeneration
+
+        repo = "IlyasMoutawwakil/tiny-random-Muse-Spark-NVFP4"
+        reference = MuseSparkForConditionalGeneration.from_pretrained(
+            repo, subfolder="reference", dtype=torch.bfloat16, device_map=torch_device
+        )
+        model = MuseSparkForConditionalGeneration.from_pretrained(repo, dtype=torch.bfloat16, device_map=torch_device)
+        experts = model.model.language_model.layers[1].mlp.experts
+        self.assertIsInstance(experts, NVFP4Experts)
+        self.assertIsNotNone(experts.post_expert_norm)
+        ids = torch.randint(0, reference.config.get_text_config().vocab_size, (2, 16), device=torch_device)
+        with torch.no_grad():
+            got, expected = model(ids).logits.float(), reference(ids).logits.float()
+        self.assertGreater(torch.nn.functional.cosine_similarity(got.flatten(), expected.flatten(), dim=0), 0.99)

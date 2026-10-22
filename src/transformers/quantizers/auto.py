@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from collections.abc import Callable
 
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
@@ -44,6 +45,7 @@ from ..utils.quantization_config import (
     SpQRConfig,
     TorchAoConfig,
     VptqConfig,
+    read_modelopt,
 )
 from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
@@ -137,6 +139,12 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "gemma": GemmaQuantizationConfig,
 }
 
+# Readers for checkpoints written by other tools, keyed by `quant_method`.
+# A reader returns the config the checkpoint describes, or `None` to fall back to the method's config class.
+AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
+    "modelopt": read_modelopt,
+}
+
 LOADING_ATTRIBUTES_CONFIG_TYPES = (
     GPTQConfig,
     AwqConfig,
@@ -146,6 +154,7 @@ LOADING_ATTRIBUTES_CONFIG_TYPES = (
     Mxfp4Config,
     MetalConfig,
     FineGrainedFP8Config,
+    NVFP4Config,
 )
 
 logger = logging.get_logger(__name__)
@@ -168,6 +177,10 @@ class AutoQuantizationConfig:
             raise ValueError(
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
+
+        reader = AUTO_QUANTIZATION_CONFIG_READERS.get(quant_method)
+        if reader is not None and (config := reader(quantization_config_dict)) is not None:
+            return config
 
         if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
             raise ValueError(
@@ -293,7 +306,10 @@ class AutoHfQuantizer:
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
 
-        if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
+        if (
+            quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING
+            and quant_method not in AUTO_QUANTIZATION_CONFIG_READERS
+        ):
             logger.warning(
                 f"Unknown quantization type, got {quant_method} - supported types are:"
                 f" {list(AUTO_QUANTIZER_MAPPING.keys())}. Hence, we will skip the quantization. "

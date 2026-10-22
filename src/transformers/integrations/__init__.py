@@ -146,7 +146,7 @@ _import_structure = {
         "deactivate_neftune",
         "neftune_post_forward_hook",
     ],
-    "nvfp4": ["NVFP4Linear", "NVFP4Quantize", "replace_with_nvfp4_linear"],
+    "nvfp4": ["NVFP4Experts", "NVFP4Linear", "NVFP4Quantize", "replace_with_nvfp4"],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
     "sinq": ["SinqDeserialize", "SinqQuantize"],
@@ -293,7 +293,7 @@ if TYPE_CHECKING:
         swizzle_mxfp4,
     )
     from .neftune import activate_neftune, deactivate_neftune, neftune_post_forward_hook
-    from .nvfp4 import NVFP4Linear, NVFP4Quantize, replace_with_nvfp4_linear
+    from .nvfp4 import NVFP4Experts, NVFP4Linear, NVFP4Quantize, replace_with_nvfp4
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
     from .sinq import SinqDeserialize, SinqQuantize
