@@ -66,6 +66,7 @@ class DeepseekOcr2VisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("moe_intermediate_size", 64)
         kwargs.setdefault("num_experts_per_tok", 2)
 
+        kwargs.setdefault("vision_sam_hidden_size", 32)
         kwargs.setdefault("vision_sam_output_channels", 16)
         kwargs.setdefault("vision_sam_patch_size", 2)
         kwargs.setdefault("vision_sam_hidden_act", "gelu")
