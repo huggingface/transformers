@@ -105,31 +105,15 @@ class MiniCPMOcrVisionConfig(MiniCPMV4_6VisionConfig):
 @strict
 class MiniCPMOcrConfig(MiniCPMV4_6Config):
     r"""
-    insert_layer_id (`int`, *optional*, defaults to 6):
-        Vision encoder layer index after which the window-attention merger is applied.
     downsample_mode (`str`, *optional*, defaults to `"4x"`):
         Visual token downsampling ratio. `"4x"` keeps 4× more tokens than `"16x"`, which is what
         text-dense document images are read with.
-    merge_kernel_size (`tuple[int, int]`, *optional*, defaults to `(2, 2)`):
-        Kernel size `(h, w)` for merging adjacent visual patches in the Merger.
-    merger_times (`int`, *optional*, defaults to 1):
-        Number of iterative merge rounds in the Merger.
     """
 
     tie_word_embeddings: bool = True
     downsample_mode: str = "4x"
     drop_vision_last_layer = AttributeError()
     image_size = AttributeError()
-
-    def __post_init__(self, **kwargs):
-        raise AttributeError()
-
-    def validate_architecture(self):
-        if self.insert_layer_id != self.vision_config.insert_layer_id:
-            raise ValueError(
-                f"`insert_layer_id` ({self.insert_layer_id}) must match "
-                f"`vision_config.insert_layer_id` ({self.vision_config.insert_layer_id})."
-            )
 
 
 class MiniCPMOcrImageProcessorKwargs(MiniCPMV4_6ImageProcessorKwargs, total=False):
