@@ -17,7 +17,15 @@ import math
 import unittest
 
 from transformers import is_torch_available
-from transformers.testing_utils import cleanup, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    cleanup,
+    require_deterministic_for_xpu,
+    require_torch,
+    require_torch_accelerator,
+    slow,
+    torch_device,
+)
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -178,11 +186,18 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
         EXPECTED_SLICE = torch.tensor([-1.2188, -0.7422, -0.0201, -2.8281, 1.2500, -2.6094, -0.7266, -2.9219, -2.5313, -0.5469, -0.3223, -1.8281, -2.1094, -0.8125, -3.7813], device=torch_device)  # fmt: skip
         torch.testing.assert_close(out.logits[0, 0, :15].float(), EXPECTED_SLICE, atol=1e-3, rtol=1e-3)
 
+    @require_deterministic_for_xpu
     def test_batch_fa2(self):
-        EXPECTED_TEXT = [
-            "Simply put, the theory of relativity states that , the theory of relativity is a theory of space and time. It is a theory that explains the relationship between space and time. It is a theory that explains how space and time are related to each",  # fmt: skip
-            "My favorite all time favorite condiment is ketchup. I love it on everything. I also love mustard, but I don\u2019t like it on hot dogs. I like it on hamburgers, and I like it on sandwiches. I like it",  # fmt: skip
-        ]
+        EXPECTED_TEXTS = Expectations({
+            ("cuda", None): [
+                "Simply put, the theory of relativity states that , the theory of relativity is a theory of space and time. It is a theory that explains the relationship between space and time. It is a theory that explains how space and time are related to each",
+                "My favorite all time favorite condiment is ketchup. I love it on everything. I also love mustard, but I don\u2019t like it on hot dogs. I like it on hamburgers, and I like it on sandwiches. I like it",
+            ],
+            ("xpu", 5): [
+                "Simply put, the theory of relativity states that , the theory of relativity is a theory of space and time. It is a theory that explains the relationship between space and time.\nThe theory of relativity is a theory that explains the relationship between space",
+                "My favorite all time favorite condiment is ketchup. I love it on everything. I also love mustard, but I don\u2019t like it on hot dogs. I like it on hamburgers, and I like it on sandwiches. I like it",
+            ],
+        }).get_expectation()  # fmt: skip
 
         prompts = [
             "Simply put, the theory of relativity states that ",
@@ -201,7 +216,7 @@ class DeepseekV2IntegrationTest(unittest.TestCase):
 
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT, generated_text)
+        self.assertEqual(EXPECTED_TEXTS, generated_text)
 
 
 @require_torch
