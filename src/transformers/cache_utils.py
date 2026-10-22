@@ -324,6 +324,8 @@ class DynamicIndexedLayer(DynamicLayer):
     def __init__(self, **kwargs):
         super().__init__()
         self.indexer_keys: torch.Tensor | None = None
+        # Optional indexer positions, shaped [position_dims, batch_size, seq_len].
+        self.indexer_position_ids: torch.Tensor | None = None
         self.is_indexer_initialized: bool = False
 
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
@@ -360,18 +362,25 @@ class DynamicIndexedLayer(DynamicLayer):
         super().reset()
         # Dropped rather than zeroed, as `update_indexer` grows them by concatenation, like the main states
         self.indexer_keys = None
+        self.indexer_position_ids = None
         self.is_indexer_initialized = False
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
         super().reorder_cache(beam_idx)
         if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
             self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
+        if self.indexer_position_ids is not None:
+            self.indexer_position_ids = self.indexer_position_ids.index_select(
+                1, beam_idx.to(self.indexer_position_ids.device)
+            )
 
     def crop(self, tokens_to_remove: int) -> None:
         super().crop(tokens_to_remove)
-        if not self.is_indexer_initialized or self.indexer_keys.numel() == 0:
-            return
         if tokens_to_remove == 0:
+            return
+        if self.indexer_position_ids is not None:
+            self.indexer_position_ids = self.indexer_position_ids[..., : -abs(tokens_to_remove)]
+        if not self.is_indexer_initialized or self.indexer_keys.numel() == 0:
             return
         self.indexer_keys = self.indexer_keys[:, : -abs(tokens_to_remove), :]
 
@@ -379,11 +388,15 @@ class DynamicIndexedLayer(DynamicLayer):
         super().batch_repeat_interleave(repeats)
         if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
             self.indexer_keys = self.indexer_keys.repeat_interleave(repeats, dim=0)
+        if self.indexer_position_ids is not None:
+            self.indexer_position_ids = self.indexer_position_ids.repeat_interleave(repeats, dim=1)
 
     def batch_select_indices(self, indices: torch.Tensor) -> None:
         super().batch_select_indices(indices)
         if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
             self.indexer_keys = self.indexer_keys[indices, ...]
+        if self.indexer_position_ids is not None:
+            self.indexer_position_ids = self.indexer_position_ids[:, indices, :]
 
 
 class StaticLayer(CacheLayerMixin):
@@ -632,6 +645,8 @@ class StaticIndexedLayer(StaticLayer):
     def __init__(self, max_cache_len: int, **kwargs):
         super().__init__(max_cache_len=max_cache_len)
         self.indexer_keys: torch.Tensor | None = None
+        # Optional indexer positions, shaped [position_dims, batch_size, seq_len].
+        self.indexer_position_ids: torch.Tensor | None = None
         self.indexer_cumulative_length: torch.Tensor | None = None
         self.is_indexer_initialized: bool = False
 
@@ -679,6 +694,7 @@ class StaticIndexedLayer(StaticLayer):
 
     def reset(self) -> None:
         super().reset()
+        self.indexer_position_ids = None
         if self.is_indexer_initialized:
             self.indexer_keys.zero_()
             self.indexer_cumulative_length.zero_()
@@ -687,6 +703,10 @@ class StaticIndexedLayer(StaticLayer):
         super().reorder_cache(beam_idx)
         if self.is_indexer_initialized and self.indexer_keys.numel() > 0:
             self.indexer_keys = self.indexer_keys.index_select(0, beam_idx.to(self.indexer_keys.device))
+        if self.indexer_position_ids is not None:
+            self.indexer_position_ids = self.indexer_position_ids.index_select(
+                1, beam_idx.to(self.indexer_position_ids.device)
+            )
 
 
 class BaseQuantizedLayer(DynamicLayer):
