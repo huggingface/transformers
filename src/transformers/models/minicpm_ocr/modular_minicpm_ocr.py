@@ -13,28 +13,20 @@
 # limitations under the License.
 
 
-import math
-
 import numpy as np
 import torch
 from huggingface_hub.dataclasses import strict
-from PIL import Image as PILImage
 from PIL.Image import Resampling as PILImageResampling
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
 from ...image_utils import SizeDict
 from ...utils import TensorType, auto_docstring, is_cv2_available, logging, requires_backends
-from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
-from ..minicpmv4_6.image_processing_minicpmv4_6 import (
-    MiniCPMV4_6ImageProcessor,
-    MiniCPMV4_6ImageProcessorKwargs,
-    ensure_divide,
-)
+from ..minicpmv4_6.image_processing_minicpmv4_6 import MiniCPMV4_6ImageProcessor, MiniCPMV4_6ImageProcessorKwargs
 from ..minicpmv4_6.modeling_minicpmv4_6 import MiniCPMV4_6ForConditionalGeneration, MiniCPMV4_6Model
 from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor
-from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor, MiniCPMV4_6VideoProcessorKwargs
+from ..minicpmv4_6.video_processing_minicpmv4_6 import MiniCPMV4_6VideoProcessor
 
 
 if is_cv2_available():
