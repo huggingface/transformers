@@ -80,9 +80,8 @@ class LEDLearnedPositionalEmbedding(nn.Embedding):
     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         bsz, seq_len = input_ids_shape[:2]
-        positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        )
+        # Offsetting a fixed-length arange keeps the length static when `past_key_values_length` is data-dependent
+        positions = torch.arange(seq_len, dtype=torch.long, device=self.weight.device) + past_key_values_length
         return super().forward(positions)
 
 
