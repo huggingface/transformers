@@ -1443,7 +1443,7 @@ class GenerationMixin(ContinuousMixin):
 
         # We need the value check as it can be a dummy filled with -100
         has_encoder_input_ids = (
-            encoder_input_ids is not None and len(encoder_input_ids.shape) == 2 and not (encoder_input_ids < 0).any()
+            encoder_input_ids is not None and encoder_input_ids.dim() == 2 and not (encoder_input_ids < 0).any()
         )
 
         if (
