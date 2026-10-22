@@ -331,11 +331,8 @@ def _init_weights(self, module):
 Always initialize weights through the `transformers.initialization` helpers. In-place operations such as `module.bias.zero_()` or anything that touches `module.weight.data` bypass `_is_hf_initialized` that flags which parameters are already loaded. [`~PreTrainedModel.from_pretrained`] runs `_init_weights` after loading the checkpoint, so in-place operations silently overwrite the loaded weights with random values. This is enforced for Transformers models by the [TRF012](./modeling_rules#trf012) rule.
 
 > [!WARNING]
-> Non-persistent buffers registered with `persistent=False` are not saved in checkpoints. During
-> [`~PreTrainedModel.from_pretrained`], models are initially created on the `meta` device, so values assigned
-> to these buffers in `__init__` are not preserved when the model is materialized. Reinitialize them in
-> `_init_weights` (for example, with `init.copy_`) or they may contain uninitialized values after loading.
-> See [#43644](https://github.com/huggingface/transformers/issues/43644) for an example.
+> Non-persistent buffers are not saved in checkpoints. During [`~PreTrainedModel.from_pretrained`], models are initially created on the `meta` device, so values assigned to these buffers in `__init__` are not preserved when the model is materialized.
+> Reinitialize them in `_init_weights` (for example, with `init.copy_`) or they may contain uninitialized values after loading.
 
 The initialization scheme can look different if you need to adapt it to your model. A submodule with its own `reset_parameters` method can call it directly. For example, [`Wav2Vec2ForPreTraining`] initializes [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) in its last two linear layers. The call is safe because [`~PreTrainedModel.from_pretrained`] patches the underlying `torch.nn.init` functions to respect the `_is_hf_initialized` flag while it runs `_init_weights`, so loaded weights aren't overwritten.
 
