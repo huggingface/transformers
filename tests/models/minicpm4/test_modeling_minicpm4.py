@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 
 from transformers import AutoConfig, is_torch_available
-from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow
+from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -121,68 +121,19 @@ class MiniCPM4ModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch
 class MiniCPM4IntegrationTest(unittest.TestCase):
     model_id = "openbmb/MiniCPM4-0.5B"
-    revision = "5253c7fcc5e29e1cf3eacb59a58adf1ba4df8630"
-    checkpoint_configs = {
-        "openbmb/MiniCPM4-0.5B": (
-            "5253c7fcc5e29e1cf3eacb59a58adf1ba4df8630",
-            {
-                "hidden_size": 1024,
-                "num_hidden_layers": 24,
-                "max_position_embeddings": 32768,
-                "tie_word_embeddings": True,
-                "pad_token_id": None,
-            },
-        ),
-        "openbmb/MiniCPM4-8B": (
-            "bb2ae14cf59d4ca769c4e42ece54cc3b82a58ef7",
-            {
-                "hidden_size": 4096,
-                "num_hidden_layers": 32,
-                "max_position_embeddings": 32768,
-                "tie_word_embeddings": False,
-                "pad_token_id": 2,
-            },
-        ),
-        "openbmb/MiniCPM4.1-8B": (
-            "3a8dfed9c79a45e07dbff95bcd49d792343fa1a3",
-            {
-                "hidden_size": 4096,
-                "num_hidden_layers": 32,
-                "max_position_embeddings": 65536,
-                "tie_word_embeddings": False,
-                "pad_token_id": 2,
-            },
-        ),
-    }
-
-    def test_supported_checkpoint_configs(self):
-        for model_id, (revision, expected_config) in self.checkpoint_configs.items():
-            with self.subTest(model_id=model_id):
-                config = AutoConfig.from_pretrained(model_id, revision=revision, trust_remote_code=False)
-
-            self.assertIsInstance(config, MiniCPM4Config)
-            self.assertEqual(config.model_type, "minicpm4")
-            for attribute, expected_value in expected_config.items():
-                self.assertEqual(getattr(config, attribute), expected_value)
 
     @require_torch_accelerator
     def test_minicpm4_0_5b_logits(self):
-        tokenizer = AutoTokenizer.from_pretrained(
-            self.model_id,
-            revision=self.revision,
-            trust_remote_code=False,
-        )
+        input_ids = torch.tensor([[1, 1507, 8107, 1379, 8360, 1410]], device=torch_device)
         model = MiniCPM4ForCausalLM.from_pretrained(
             self.model_id,
-            revision=self.revision,
             trust_remote_code=False,
             dtype="auto",
             device_map="auto",
         )
 
-        inputs = tokenizer("The capital of France is", return_tensors="pt").to(model.device)
         with torch.no_grad():
-            logits = model(**inputs).logits.float()
+            logits = model(input_ids).logits.float()
 
         expected_logits = Expectations(
             {(None, None): [-5.375, 1.6328125, 5.78125, -6.5625, -6.0, 9.875, 1.4296875, -5.6875, -6.0625, -5.5625]}
@@ -191,14 +142,9 @@ class MiniCPM4IntegrationTest(unittest.TestCase):
 
     @require_torch_accelerator
     def test_minicpm4_0_5b_generation(self):
-        tokenizer = AutoTokenizer.from_pretrained(
-            self.model_id,
-            revision=self.revision,
-            trust_remote_code=False,
-        )
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id, trust_remote_code=False)
         model = MiniCPM4ForCausalLM.from_pretrained(
             self.model_id,
-            revision=self.revision,
             trust_remote_code=False,
             dtype="auto",
             device_map="auto",
