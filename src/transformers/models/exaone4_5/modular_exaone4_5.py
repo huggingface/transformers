@@ -23,7 +23,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import get_max_seqlen, is_flash_attention_requested
@@ -221,6 +221,8 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel, Qwen2_5_VisionTransformer
 
 
 class Exaone4_5_Model(Exaone4_5_PreTrainedModel, Qwen2VLModel):
+    input_modalities = ("image", "video", "text")
+
     def __init__(self, config: Exaone4_5_Config):
         super().__init__(config)
         self.visual = Exaone4_5_VisionModel._from_config(config.vision_config)
@@ -323,6 +325,8 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
     and adopts a Grouped Query Attention (GQA) structure throughout the multimodal stack.
     """
 
+    input_modalities = ("image", "video", "text")
+
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -382,8 +386,8 @@ class Exaone4_5_ForConditionalGeneration(Exaone4_5_PreTrainedModel, Qwen2_5_VLFo
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

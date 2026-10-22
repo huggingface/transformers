@@ -2089,7 +2089,7 @@ class PreTrainedModel(
             else experts_implementation.get("", self.config._experts_implementation)
         )
 
-        # MegaMoE is locked at load time: its TP plan is baked into `base_model_tp_plan` by `update_tp_plan` (and isn't
+        # MegaMoE is locked at load time: its TP plan is baked into `model.tp_plan` by `update_parallel_plan` (and isn't
         # re-evaluated) and `setup_megamoe_weights` mutates the expert weights into UTCCP layout on first forward.
         # Either side of a switch would silently produce garbage, so reject it with a clear pointer.
         current = self.config._experts_implementation
@@ -5005,6 +5005,36 @@ def is_accelerator_device(device: str | int | torch.device) -> bool:
         return torch.device(device).type not in ["meta", "cpu"]
 
 
+def slice_logits_to_keep(hidden_states: torch.Tensor, logits_to_keep: int | torch.Tensor) -> torch.Tensor:
+    """
+    Slice `hidden_states` according to `logits_to_keep`, before the `lm_head` projection, so logits are only
+    computed for the positions that are actually needed. `logits_to_keep` can be:
+        - an `int`: keep the last `logits_to_keep` positions (`0` keeps all of them), e.g. in `generate`'s prefill.
+        - a 1D tensor: keep these positions for every sample.
+        - a 2D tensor, either:
+            - integer `(batch_size, num_positions)`: keep these positions for each sample (same count for all).
+            - boolean `(batch_size, sequence_length)`: keep the `True` positions, the count can differ per sample
+              (e.g. packed training). The output is flattened to `(num_true, hidden_size)`.
+        - an `int`: keep the last `logits_to_keep` positions (`0` keeps all of them). E.g. in `generate`, we use `logits_to_keep=1` whenever possible to only project the last logit onto the (usually huge) vocab size dimension since we only care about the next token.
+        - a 1D tensor: keep these positions for every batch sample.
+        - a 2D tensor, either:
+            - integer `(batch_size, num_positions)`: keep these positions for each sample (same count for all).
+            - boolean `(batch_size, sequence_length)`: keep the `True` positions, the count can differ per sample
+              (e.g. packed training). The output is flattened to `(num_true, hidden_size)`.
+    Except for the boolean mask, the output has shape `(batch_size, num_positions, hidden_size)`.
+
+    NOTE: a 2D integer tensor holds positions, not a mask: so a valid mask casted to integer dtype would be understood as positions, not mask. To slice with a mask, the tensor really needs to be of dtype `bool`.
+    """
+    if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.ndim == 2:
+        if logits_to_keep.dtype == torch.bool:
+            return hidden_states[logits_to_keep]
+        return torch.take_along_dim(hidden_states, logits_to_keep[..., None], dim=1)
+
+    if isinstance(logits_to_keep, int):
+        logits_to_keep = slice(-logits_to_keep, None)
+    return hidden_states[:, logits_to_keep, :]
+
+
 def get_total_byte_count(
     model: PreTrainedModel, accelerator_device_map: dict, hf_quantizer: HfQuantizer | None = None
 ):
@@ -5165,8 +5195,9 @@ class PreTrainedAudioTokenizerBase(PreTrainedModel):
     """
     Class that additionally defines the behavior of any `audio_tokenizer` to be added.
     Characteristic for any of them:
-        1. Encode raw audio into discrete audio codebooks (with x channels)
-        2. Decode from discrete audio codebooks back to raw audio
+        1. Encode raw audio into its audio representation: discrete audio codebooks (with x channels), or continuous
+           latents
+        2. Decode from that representation back to raw audio
     It is possible that they can decode in different ways given a different representation
     but they are forced to support 2. nonetheless, e.g. see `DAC`.
     """
@@ -5175,8 +5206,9 @@ class PreTrainedAudioTokenizerBase(PreTrainedModel):
     def encode(self, input_values: torch.Tensor, *args, **kwargs):
         """
         Encode raw audio retrieved from a respective `FeatureExtractor` into discrete audio codebooks (with x channels)
+        or continuous latents
         """
 
     @abstractmethod
     def decode(self, audio_codes: torch.Tensor, *args, **kwargs):
-        """Decode from discrete audio codebooks back to raw audio"""
+        """Decode from discrete audio codebooks or continuous latents back to raw audio"""

@@ -28,7 +28,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
@@ -743,7 +743,7 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
-                "allow_is_causal_skip": not (isinstance(logits_to_keep, int) and logits_to_keep > 1),
+                "allow_is_causal_skip": isinstance(logits_to_keep, int) and logits_to_keep <= 1,
             }
             # Create the masks
             causal_mask_mapping = {
@@ -808,37 +808,49 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
         **kwargs,
     ):
         """
-        Slices sequence-length inputs to the last `logits_to_keep` token positions before entering the
+        Slices sequence-length inputs to the `logits_to_keep` token positions before entering the
         KV-shared layers. Because KV-shared layers reuse keys and values computed by earlier non-shared
-        layers and do not write to the KV cache, earlier prompt positions do not need to be recomputed
+        layers and do not write to the KV cache, unselected prompt positions do not need to be computed
         through these layers unless full-sequence intermediate states (e.g. `output_hidden_states`,
         `output_attentions`) are requested.
         """
         seq_len = hidden_states.shape[1]
+        if isinstance(logits_to_keep, int):
+            can_slice = 0 < logits_to_keep < seq_len
+            masks_valid = all(
+                m is None or (isinstance(m, torch.Tensor) and m.ndim == 4) for m in causal_mask_mapping.values()
+            )
+        else:
+            can_slice = logits_to_keep.dtype != torch.bool and 0 < logits_to_keep.shape[-1] < seq_len
+            masks_valid = all(isinstance(m, torch.Tensor) and m.ndim == 4 for m in causal_mask_mapping.values())
+
         if (
-            not (isinstance(logits_to_keep, int) and 0 < logits_to_keep < seq_len)
+            not can_slice
+            or not masks_valid
             or any(
                 kwargs.get(k) or getattr(self.config, k, False) for k in ("output_hidden_states", "output_attentions")
-            )
-            or not all(
-                m is None or (isinstance(m, torch.Tensor) and m.ndim == 4) for m in causal_mask_mapping.values()
             )
         ):
             return hidden_states, position_ids, position_embeddings, causal_mask_mapping
 
-        def slice_dim(tensor, slice_obj, dim=1):
+        def slice_dim(tensor, dim=1):
             if tensor is None:
                 return None
+            if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.ndim == 2:
+                tensor = tensor.expand(logits_to_keep.shape[0], *tensor.shape[1:])
+                view_shape = [
+                    logits_to_keep.shape[0],
+                    *(logits_to_keep.shape[1] if i == dim else 1 for i in range(1, tensor.ndim)),
+                ]
+                return torch.take_along_dim(tensor, logits_to_keep.view(*view_shape), dim=dim)
+            slice_obj = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
             idx = tuple(slice_obj if i == dim else slice(None) for i in range(tensor.ndim))
             return tensor[idx]
 
-        slice_indices = slice(-logits_to_keep, None)
-        hidden_states = slice_dim(hidden_states, slice_indices)
-        position_ids = slice_dim(position_ids, slice_indices)
-        position_embeddings = {
-            k: (slice_dim(v[0], slice_indices), slice_dim(v[1], slice_indices)) for k, v in position_embeddings.items()
-        }
-        causal_mask_mapping = {k: slice_dim(v, slice_indices, dim=2) for k, v in causal_mask_mapping.items()}
+        hidden_states = slice_dim(hidden_states)
+        position_ids = slice_dim(position_ids)
+        position_embeddings = {k: (slice_dim(v[0]), slice_dim(v[1])) for k, v in position_embeddings.items()}
+        causal_mask_mapping = {k: slice_dim(v, dim=2) for k, v in causal_mask_mapping.items()}
         if getattr(past_key_values, "is_compileable", False):
             for k, (key_states, value_states) in shared_kv_states.items():
                 if causal_mask_mapping.get(k) is None and key_states.shape[-2] > seq_len:
@@ -890,9 +902,9 @@ class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        if hidden_states.shape[1] == (input_ids if input_ids is not None else inputs_embeds).shape[1]:
+            hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if self.config.final_logit_softcapping is not None:
             logits = logits / self.config.final_logit_softcapping
             logits = torch.tanh(logits)
@@ -1348,9 +1360,9 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        if hidden_states.shape[1] == (input_ids if input_ids is not None else inputs_embeds).shape[1]:
+            hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if (final_logit_softcapping := self.config.get_text_config().final_logit_softcapping) is not None:
             logits = logits / final_logit_softcapping
             logits = torch.tanh(logits)

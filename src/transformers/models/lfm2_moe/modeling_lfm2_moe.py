@@ -39,7 +39,7 @@ from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
@@ -438,10 +438,12 @@ class Lfm2MoeShortConv(nn.Module):
         B, C, x = BCx.chunk(3, dim=-2)
         hidden_states = B * x
 
-        use_precomputed_states = past_key_values is not None and past_key_values.has_previous_state(self.layer_idx)
+        if past_key_values is not None:
+            conv_state = past_key_values.get_conv_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state = None
 
-        if use_precomputed_states and seq_len == 1 and not past_key_values.layers[self.layer_idx].record_past:
-            conv_state = past_key_values.layers[self.layer_idx].conv_states[0]
+        if conv_state is not None and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             hidden_states = causal_conv1d_update(
                 hidden_states, conv_state, self.conv.weight.squeeze(1), self.conv.bias
@@ -686,8 +688,8 @@ class Lfm2MoeForCausalLM(Lfm2MoePreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

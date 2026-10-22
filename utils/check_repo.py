@@ -302,6 +302,10 @@ IGNORE_NON_TESTED = (
         "Ernie4_5_VL_MoeTextModel",  # BC alias
         "PeAudioFrameLevelModel",
         "PeAudioVideoModel",
+        "MimiEncoderModel",  # Tested through MimiModel
+        "MimiDecoderModel",  # Tested through MimiModel
+        "PocketTTSAudioTokenizerEncoderModel",  # Tested through PocketTTSAudioTokenizerModel
+        "PocketTTSAudioTokenizerDecoderModel",  # Tested through PocketTTSAudioTokenizerModel
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
@@ -317,12 +321,16 @@ IGNORE_NON_TESTED = (
         "Kimi_K25VisionModel",
         "MuseGlimmerTextModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
         "MuseGlimmerVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
+        "MuseSparkTextModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
+        "MuseSparkVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
+        "MuseSparkAudioModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
         "HunYuanVLTextModel",
         "HunYuanVLVisionTransformer",
         "InklingForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "Nemotron3DiarizationAudioModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3DiarizationModel.
+        "MossTranscribeDiarizeAudioModel",  # Building part of bigger (tested) model. Tested implicitly through MossTranscribeDiarizeForConditionalGeneration.
     ]
 )
 

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from copy import deepcopy
+from functools import partial
 
 from ..utils import is_compressed_tensors_available, is_torch_available, is_torch_greater_or_equal, logging
 from ..utils.quantization_config import CompressedTensorsConfig
@@ -23,7 +24,7 @@ if is_torch_available():
     import torch
 
     from ..core_model_loading import WeightConverter
-    from ..integrations.compressed_tensors import DecompressExperts, get_experts_scheme
+    from ..integrations.compressed_tensors import CompressedTensorsDequantize, get_experts_scheme
 
 
 logger = logging.get_logger(__name__)
@@ -63,7 +64,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         from compressed_tensors.compressors import ModelCompressor
 
         self.compressor = ModelCompressor.from_compression_config(quantization_config)
-        self.quantization_config = quantization_config
 
     def validate_environment(self, *args, **kwargs):
         if not is_compressed_tensors_available():
@@ -131,21 +131,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         if self.quantization_config.dequantize and self.quantization_config.is_quantization_compressed:
             self.compressor.decompress_model(model=model)
 
-    # NOTE: TP plan override for compressed tensors removed - unsupported styles were used.
-    # TODO: Implement proper TP support for compressed tensors quantization
-    def update_tp_plan(self, config):
-        additional_plan = {
-            "layers.*.feed_forward.experts.*.gate_proj.weight": "colwise",
-            "layers.*.feed_forward.experts.*.gate_proj.weight_scale": "colwise",
-            "layers.*.feed_forward.experts.*.up_proj.weight": "colwise",
-            "layers.*.feed_forward.experts.*.up_proj.weight_scale": "colwise",
-            "layers.*.feed_forward.experts.*.down_proj.weight": "rowwise",
-        }
-        if config.get_text_config() is not None and config.get_text_config().base_model_tp_plan is not None:
-            config.get_text_config().base_model_tp_plan.update(additional_plan)
-
-        return config
-
     @property
     def is_trainable(self):
         # The FP8 kernel path is inference-only; load with `dequantize=True` to fine-tune.
@@ -183,44 +168,14 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             )
         ]
 
-    def update_weight_conversions(self, weight_conversions):
-        """Attach the quantization sources (scales, packed weights) of MoE expert converters
-        to their bucket and prepend a :class:`DecompressExperts` op, so the per-expert
-        (weight, scale) pairs are dequantized *before* the merge / concat ops collapse the
-        per-expert structure. FP8 checkpoints keep the plain ``weight`` name; packed formats
-        use ``weight_packed`` / ``weight_shape``.
+    @property
+    def serialized_names(self):
+        if self.quantization_config.quantization_config is None:  # e.g. sparsity only
+            return {}
+        if _is_fp8_scheme(get_experts_scheme(self.quantization_config.quantization_config)):
+            return {"weight": ["weight", "weight_scale"]}
+        return {"weight": ["weight_packed", "weight_scale", "weight_shape"]}
 
-        The generic converters from :meth:`get_weight_conversions` are appended at the end:
-        converters are matched in order, so the expert converters keep their scale keys.
-        """
-        updated: list = []
-        for conv in weight_conversions:
-            # Only WeightConverter for experts have ``.operations`` to extend with the dequant op
-            if not isinstance(conv, WeightConverter) or any("experts" not in p for p in conv.source_patterns):
-                updated.append(conv)
-                continue
-            weight_sources = [p for p in conv.source_patterns if p.endswith(".weight")]
-            if weight_sources:
-                scheme = get_experts_scheme(self.quantization_config.quantization_config)
-                scale_sources = [p + "_scale$" for p in weight_sources]
-                other = [p for p in conv.source_patterns if not p.endswith(".weight")]
-                if _is_fp8_scheme(scheme):
-                    # Merged experts cannot stay FP8 (they are not nn.Linear): they are
-                    # dequantized to the model dtype before the merge. The weight patterns
-                    # must be anchored with `$`: patterns are regex-searched, so unanchored
-                    # `.weight` would also match the `.weight_scale` keys.
-                    new_sources = [p + "$" for p in weight_sources] + scale_sources + other
-                else:
-                    packed_weight = [p + "_packed$" for p in weight_sources]
-                    shape_sources = [p + "_shape$" for p in weight_sources]
-                    new_sources = packed_weight + scale_sources + shape_sources + other
-                new_ops = [DecompressExperts(self, scheme=scheme)] + list(conv.operations)
-                conv = WeightConverter(
-                    source_patterns=new_sources,
-                    target_patterns=conv._original_target_patterns,
-                    operations=new_ops,
-                )
-            updated.append(conv)
-
-        updated.extend(self.get_weight_conversions())
-        return updated
+    def get_load_operations(self):
+        scheme = get_experts_scheme(self.quantization_config.quantization_config)
+        return {"dequantize": partial(CompressedTensorsDequantize, scheme=scheme)}

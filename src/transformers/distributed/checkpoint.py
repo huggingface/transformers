@@ -96,7 +96,7 @@ def _redistribute_state_dict(state_dict, reference_state_dict: dict | None = Non
     DTensors in `reference_state_dict`, which undoes a previous call (e.g. after loading).
     """
     if not _check_distributed_checkpointing_available():
-        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
+        raise OSError("Distributed checkpointing requires `torch>=2.8` with `torch.distributed` available.")
 
     def redistribute(value, reference=None):
         if not is_dtensor(value):
@@ -118,7 +118,7 @@ def _redistribute_state_dict(state_dict, reference_state_dict: dict | None = Non
 def _save_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike) -> None:
     """Save rank-local model shards as safetensors with DCP."""
     if not _check_distributed_checkpointing_available():
-        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
+        raise OSError("Distributed checkpointing requires `torch>=2.8` with `torch.distributed` available.")
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
@@ -175,7 +175,7 @@ def is_sharded_checkpoint(checkpoint_dir: str | os.PathLike) -> bool:
 def _load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike, strict: bool = True) -> None:
     """Load rank-local DCP files from checkpoint_dir into an initialized model, preserving its mesh and placements."""
     if not _check_distributed_checkpointing_available():
-        raise OSError("Distributed checkpointing requires `torch>=2.7` with `torch.distributed` available.")
+        raise OSError("Distributed checkpointing requires `torch>=2.8` with `torch.distributed` available.")
 
     # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
     # being emitted if the function is not used
@@ -194,6 +194,48 @@ def _load_model_checkpoint_distributed(model, checkpoint_dir: str | os.PathLike,
     dcp.load(state, storage_reader=reader, planner=DefaultLoadPlanner(allow_partial_load=not strict))
     state = _redistribute_state_dict(state, reference_state_dict=original_state)
     set_model_state_dict(model, state)
+
+
+def save_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
+    """Save optimizer state via DCP. All ranks must call."""
+    if not _check_distributed_checkpointing_available():
+        raise OSError("Distributed checkpointing requires `torch>=2.8` with `torch.distributed` available.")
+
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.state_dict import StateDictOptions, get_optimizer_state_dict
+
+    # Flatten optimizer state and group options into fully qualified name entries.
+    # A mesh change can alter which parameters are DTensors and therefore how optimizer groups are constructed, fully
+    # qualified name keys make the checkpoint independent of grouping.
+    options = StateDictOptions(flatten_optimizer_state_dict=True)
+    optimizer_state_dict = _redistribute_state_dict(get_optimizer_state_dict(model, optimizer, options=options))
+    dcp.save({"optimizer": optimizer_state_dict}, checkpoint_id=checkpoint_dir)
+
+
+def load_optimizer_distributed(model, optimizer, checkpoint_dir: str) -> None:
+    """Load optimizer state from a DCP directory."""
+    if not _check_distributed_checkpointing_available():
+        raise OSError("Distributed checkpointing requires `torch>=2.8` with `torch.distributed` available.")
+
+    # Import here because otherwise it emits a warning every time it's imported on some hardware - this keeps the warning from
+    # being emitted if the function is not used
+    import torch.distributed.checkpoint as dcp
+    from torch.distributed.checkpoint.state_dict import (
+        StateDictOptions,
+        get_optimizer_state_dict,
+        set_optimizer_state_dict,
+    )
+
+    # Use the same fully qualified name keys format as for saving so PyTorch can map the checkpoint into the destination
+    # optimizer's current groups, even when a mesh change has altered their structure.
+    options = StateDictOptions(flatten_optimizer_state_dict=True)
+    optimizer_state_dict = get_optimizer_state_dict(model, optimizer, options=options)
+    checkpoint_state_dict = _redistribute_state_dict(optimizer_state_dict)
+    dcp.load({"optimizer": checkpoint_state_dict}, checkpoint_id=checkpoint_dir)
+    optimizer_state_dict = _redistribute_state_dict(checkpoint_state_dict, reference_state_dict=optimizer_state_dict)
+    set_optimizer_state_dict(model, optimizer, optimizer_state_dict)
 
 
 def get_distributed_checkpoint_dir(
@@ -216,7 +258,7 @@ def _get_resolved_distributed_checkpoint_files(
     hf_quantizer: HfQuantizer | None = None,
 ) -> list[str]:
     if not _check_distributed_checkpointing_available():
-        raise OSError("Loading a distributed checkpoint requires torch>=2.7.")
+        raise OSError("Loading a distributed checkpoint requires torch>=2.8.")
     if hf_quantizer is not None:
         raise ValueError("Quantization is not supported when loading a distributed checkpoint.")
     return sorted(

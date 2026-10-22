@@ -185,8 +185,15 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
         model = Gemma4ForCausalLM(config).to(torch_device, dtype=torch.float32)
         model.eval()
 
-        input_ids = inputs_dict["input_ids"]
+        input_ids = inputs_dict["input_ids"][:3]
         seq_len = input_ids.shape[1]
+
+        idx_1d = torch.tensor([1, 4], device=torch_device)
+        idx_2d = torch.tensor([[1, 2], [3, 4], [0, 6]], device=torch_device)
+        mask_2d = torch.zeros_like(input_ids, dtype=torch.bool)
+        mask_2d[0, [1, 2, 3]] = True
+        mask_2d[1, 0] = True
+        mask_2d[2, [4, 5]] = True
 
         seen_q_lens = []
         handle = model.model.layers[-1].register_forward_pre_hook(
@@ -198,18 +205,27 @@ class Gemma4TextModelTest(CausalLMModelTest, unittest.TestCase):
                 out_full = model(input_ids=input_ids, use_cache=True, logits_to_keep=0)
                 out_sliced = model(input_ids=input_ids, use_cache=True, logits_to_keep=1)
                 out_sliced_3_sdpa = model(input_ids=input_ids, use_cache=True, logits_to_keep=3)
+                out_sliced_1d = model(input_ids=input_ids, use_cache=True, logits_to_keep=idx_1d)
+                out_sliced_2d = model(input_ids=input_ids, use_cache=True, logits_to_keep=idx_2d)
+                out_bool_2d = model(input_ids=input_ids, use_cache=True, logits_to_keep=mask_2d)
                 out_with_hs = model(input_ids=input_ids, use_cache=True, logits_to_keep=1, output_hidden_states=True)
                 model.config._attn_implementation = "eager"
                 out_sliced_3_eager = model(input_ids=input_ids, use_cache=True, logits_to_keep=3)
+                out_sliced_2d_eager = model(input_ids=input_ids, use_cache=True, logits_to_keep=idx_2d)
         finally:
             model.config._attn_implementation = orig_attn_impl
             handle.remove()
 
-        # logits_to_keep=0 runs full seq_len; logits_to_keep=1 and 3 slice to 1 and 3; output_hidden_states=True keeps full seq_len
-        self.assertEqual(seen_q_lens, [seq_len, 1, 3, seq_len, 3])
+        # Verify KV-shared layers receive sliced q_len for int, 1D tensor, and 2D int tensor
+        self.assertEqual(seen_q_lens, [seq_len, 1, 3, 2, 2, seq_len, seq_len, 3, 2])
         torch.testing.assert_close(out_sliced.logits, out_full.logits[:, -1:, :], rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(out_sliced_3_sdpa.logits, out_full.logits[:, -3:, :], rtol=1e-4, atol=1e-4)
         torch.testing.assert_close(out_sliced_3_eager.logits, out_full.logits[:, -3:, :], rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(out_sliced_1d.logits, out_full.logits[:, idx_1d, :], rtol=1e-4, atol=1e-4)
+        expected_2d = torch.take_along_dim(out_full.logits, idx_2d[..., None], dim=1)
+        torch.testing.assert_close(out_sliced_2d.logits, expected_2d, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(out_sliced_2d_eager.logits, expected_2d, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(out_bool_2d.logits, out_full.logits[mask_2d], rtol=1e-4, atol=1e-4)
         for l_full, l_sliced in zip(out_full.past_key_values.layers, out_sliced.past_key_values.layers):
             torch.testing.assert_close(l_sliced.keys, l_full.keys, rtol=0, atol=0)
             torch.testing.assert_close(l_sliced.values, l_full.values, rtol=0, atol=0)
@@ -386,6 +402,10 @@ class Gemma4Audio2TextModelTest(ALMModelTest, unittest.TestCase):
     @parameterized.expand([True, False, None])
     @unittest.skip("The tester has no image in input dict")
     def test_get_image_features_output(self, return_dict: bool | None):
+        pass
+
+    @unittest.skip("The tester has no image in input dict")
+    def test_get_image_features_pooler_output(self):
         pass
 
     @unittest.skip("The tester has no videos in input dict")
@@ -1129,7 +1149,9 @@ class Gemma4IntegrationTest(unittest.TestCase):
         model = Gemma4ForConditionalGeneration.from_pretrained(
             self.model_name,
             device_map=torch_device,
-            attn_implementation=attn_implementation,
+            # Audio tower chunked local attention is eager-only (#49404); vary only text
+            # attention.
+            attn_implementation={"text_config": attn_implementation, "audio_config": "eager"},
         )
 
         # Make sure prefill is larger than sliding window
