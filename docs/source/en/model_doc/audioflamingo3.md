@@ -245,8 +245,8 @@ print(decoded_outputs)
 ➡️ Training:
 
 The model can be trained with the loss it outputs. Pass the target transcripts to `apply_transcription_request` with
-`transcription`, which writes them as the assistant turn and returns `labels`. The audio placeholders and the padding
-are masked automatically. For other tasks, put the target in an assistant turn of a conversation passed to
+`transcription`, which writes them as the assistant turn and returns `labels`. Only the assistant turn contributes to
+the loss: the prompt, the audio placeholders and the padding are masked automatically. For other tasks, put the target in an assistant turn of a conversation passed to
 `apply_chat_template` and pass `processor_kwargs={"output_labels": True}`.
 
 ```python

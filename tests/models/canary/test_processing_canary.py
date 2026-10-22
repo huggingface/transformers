@@ -95,12 +95,11 @@ class CanaryProcessorTest(unittest.TestCase):
         for key in helper_outputs:
             self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
 
-        # each target ends with EOS, and the shorter one is padded with -100
+        # only the transcripts and their EOS are kept, the decoder prompt and the padding are masked
         labels = helper_outputs["labels"]
-        self.assertTrue((labels[0] == -100).any())
-        self.assertEqual(
-            processor.tokenizer.decode(labels[1][labels[1] != -100])[-len("<|endoftext|>") :], "<|endoftext|>"
-        )
+        for row, text in enumerate(transcriptions):
+            kept = processor.tokenizer.decode(labels[row][labels[row] != -100])
+            self.assertEqual(kept.strip(), f"{text}<|endoftext|>")
 
     def test_punctuation_flag(self):
         processor = self.get_processor()

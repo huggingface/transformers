@@ -54,6 +54,10 @@ class GlmAsrProcessorKwargs(AudioFlamingo3ProcessorKwargs): ...
 @requires(backends=("torch",))
 @auto_docstring
 class GlmAsrProcessor(AudioFlamingo3Processor):
+    # `<|user|>` opens the next turn and is one of the model's EOS tokens
+    assistant_header = "<|assistant|>\n"
+    assistant_end = "<|user|>"
+
     def __init__(
         self,
         feature_extractor,
