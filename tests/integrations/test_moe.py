@@ -104,9 +104,7 @@ class GroupedMmFallbackCompileTest(unittest.TestCase):
 
         self.hidden_states = torch.randn(3, 8, device=torch_device, requires_grad=True)
         # Leave experts 1 and 3 empty
-        self.top_k_index = torch.tensor(
-            [[0, 2], [2, 0], [0, 2]], device=torch_device
-        )
+        self.top_k_index = torch.tensor([[0, 2], [2, 0], [0, 2]], device=torch_device)
         self.top_k_weights = torch.tensor(
             [[0.7, 0.3], [0.4, 0.6], [0.2, 0.8]],
             device=torch_device,
