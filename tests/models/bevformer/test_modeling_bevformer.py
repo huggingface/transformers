@@ -40,10 +40,10 @@ class BevformerModelTester:
         bev_height=4,
         bev_width=4,
         hidden_size=32,
-        num_encoder_layers=1,
-        num_decoder_layers=1,
+        encoder_layers=1,
+        decoder_layers=1,
         num_queries=4,
-        num_classes=10,
+        num_labels=10,
         num_points_in_pillar=2,
         num_points_in_bev=4,
     ):
@@ -56,10 +56,10 @@ class BevformerModelTester:
         self.bev_height = bev_height
         self.bev_width = bev_width
         self.hidden_size = hidden_size
-        self.num_encoder_layers = num_encoder_layers
-        self.num_decoder_layers = num_decoder_layers
+        self.encoder_layers = encoder_layers
+        self.decoder_layers = decoder_layers
         self.num_queries = num_queries
-        self.num_classes = num_classes
+        self.num_classes = num_labels
         self.num_points_in_pillar = num_points_in_pillar
         self.num_points_in_bev = num_points_in_bev
 
@@ -88,10 +88,10 @@ class BevformerModelTester:
             bev_height=self.bev_height,
             bev_width=self.bev_width,
             hidden_size=self.hidden_size,
-            num_encoder_layers=self.num_encoder_layers,
-            num_decoder_layers=self.num_decoder_layers,
+            encoder_layers=self.encoder_layers,
+            decoder_layers=self.decoder_layers,
             num_queries=self.num_queries,
-            num_classes=self.num_classes,
+            num_labels=self.num_classes,
             num_points_in_pillar=self.num_points_in_pillar,
             num_points_in_bev=self.num_points_in_bev,
             is_training=self.is_training,
@@ -114,11 +114,11 @@ class BevformerModelTester:
         result = model(pixel_values=pixel_values, lidar2img=lidar2img, can_bus=can_bus)
         self.parent.assertEqual(
             result.logits.shape,
-            (self.batch_size, self.num_decoder_layers, self.num_queries, self.num_classes),
+            (self.batch_size, self.decoder_layers, self.num_queries, self.num_classes),
         )
         self.parent.assertEqual(
             result.pred_boxes.shape,
-            (self.batch_size, self.num_decoder_layers, self.num_queries, 10),
+            (self.batch_size, self.decoder_layers, self.num_queries, 10),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -165,7 +165,7 @@ class BevformerModelTest(ModelTesterMixin, unittest.TestCase):
             self,
             config_class=BevformerConfig,
             has_text_modality=False,
-            common_properties=["hidden_size", "num_encoder_layers", "num_decoder_layers"],
+            common_properties=["hidden_size", "encoder_layers", "decoder_layers"],
         )
 
     def test_config(self):

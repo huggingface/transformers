@@ -296,13 +296,13 @@ class BevformerClsHead(nn.Module):
         config ([`BevformerConfig`]):
             Configuration of the model.
         num_classes (`int`, *optional*):
-            Number of object detection classes. Defaults to `config.num_classes`.
+            Number of object detection classes. Defaults to `len(config.id2label)`.
     """
 
     def __init__(self, config: BevformerConfig, num_classes: int | None = None):
         super().__init__()
         self.config = config
-        num_classes = num_classes if num_classes is not None else config.num_classes
+        num_classes = num_classes if num_classes is not None else len(config.id2label)
         layers = []
         for _ in range(2):
             layers.append(nn.Linear(config.d_model, config.d_model))
@@ -654,7 +654,7 @@ class BevformerTemporalSelfAttention(nn.Module):
         super().__init__()
         if isinstance(config, BevformerConfig):
             embed_dims = config.d_model
-            num_heads = config.num_attention_heads
+            num_heads = config.encoder_attention_heads
             num_levels = config.num_feature_levels
             num_points = 4
             dropout = config.dropout
@@ -849,7 +849,7 @@ class BevformerSpatialCrossAttention(nn.Module):
 
         self.deformable_attention = BevformerMSDeformableAttention3D(
             embed_dims=config.d_model,
-            num_heads=config.num_attention_heads,
+            num_heads=config.encoder_attention_heads,
             num_levels=config.num_feature_levels,
             num_points=config.num_points_in_bev,
             dropout=config.dropout,
@@ -987,10 +987,10 @@ class BevformerEncoderLayer(nn.Module):
         self.norm2 = nn.LayerNorm(config.d_model, eps=1e-5)
 
         self.ffn = nn.Sequential(
-            nn.Linear(config.d_model, config.ffn_dim),
+            nn.Linear(config.d_model, config.encoder_ffn_dim),
             nn.ReLU(inplace=True),
             nn.Dropout(config.dropout),
-            nn.Linear(config.ffn_dim, config.d_model),
+            nn.Linear(config.encoder_ffn_dim, config.d_model),
             nn.Dropout(config.dropout),
         )
         self.norm3 = nn.LayerNorm(config.d_model, eps=1e-5)
@@ -1167,7 +1167,7 @@ class BevformerEncoder(nn.Module):
     def __init__(self, config: BevformerConfig):
         super().__init__()
         self.config = config
-        self.num_layers = config.num_encoder_layers
+        self.num_layers = config.encoder_layers
         self.pc_range = config.point_cloud_range
         self.num_points_in_pillar = config.num_points_in_pillar
         self.bev_h = config.bev_height
@@ -1474,7 +1474,7 @@ class BevformerDecoderLayer(nn.Module):
         self.config = config
         self.self_attn = nn.MultiheadAttention(
             embed_dim=config.d_model,
-            num_heads=config.num_attention_heads,
+            num_heads=config.decoder_attention_heads,
             dropout=config.dropout,
             batch_first=True,
         )
@@ -1483,7 +1483,7 @@ class BevformerDecoderLayer(nn.Module):
 
         self.cross_attn = BevformerMSDeformableAttention3D(
             embed_dims=config.d_model,
-            num_heads=config.num_attention_heads,
+            num_heads=config.decoder_attention_heads,
             num_levels=1,
             num_points=4,
             dropout=config.dropout,
@@ -1492,10 +1492,10 @@ class BevformerDecoderLayer(nn.Module):
         self.norm2 = nn.LayerNorm(config.d_model, eps=1e-5)
 
         self.ffn = nn.Sequential(
-            nn.Linear(config.d_model, config.ffn_dim),
+            nn.Linear(config.d_model, config.decoder_ffn_dim),
             nn.ReLU(inplace=True),
             nn.Dropout(config.dropout),
-            nn.Linear(config.ffn_dim, config.d_model),
+            nn.Linear(config.decoder_ffn_dim, config.d_model),
             nn.Dropout(config.dropout),
         )
         self.norm3 = nn.LayerNorm(config.d_model, eps=1e-5)
@@ -1545,7 +1545,7 @@ class BevformerDetrTransformerDecoder(nn.Module):
     def __init__(self, config: BevformerConfig):
         super().__init__()
         self.config = config
-        self.num_layers = config.num_decoder_layers
+        self.num_layers = config.decoder_layers
         self.layers = nn.ModuleList([BevformerDecoderLayer(config) for _ in range(self.num_layers)])
 
     def forward(
@@ -1605,9 +1605,9 @@ class BevformerObjectDetectionOutput(ModelOutput):
     """Output type of [`BevformerFor3DObjectDetection`].
 
     Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, num_decoder_layers, num_queries, num_classes)`):
+        logits (`torch.FloatTensor` of shape `(batch_size, decoder_layers, num_queries, num_classes)`):
             Classification logits (pre-sigmoid) for each query at each decoder layer.
-        pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_decoder_layers, num_queries, 10)`):
+        pred_boxes (`torch.FloatTensor` of shape `(batch_size, decoder_layers, num_queries, 10)`):
             Predicted 3D bounding box coordinates `[cx, cy, w, l, cz, h, sin(yaw), cos(yaw), vx, vy]` in
             metric LiDAR frame.
         bev_embed (`torch.FloatTensor` of shape `(batch_size, bev_height * bev_width, d_model)`):
@@ -1698,8 +1698,8 @@ class BevformerFor3DObjectDetection(BevformerPreTrainedModel):
         self.bevformer = BevformerModel(config)
         self.decoder = BevformerDetrTransformerDecoder(config)
 
-        self.cls_branches = nn.ModuleList([BevformerClsHead(config) for _ in range(config.num_decoder_layers)])
-        self.reg_branches = nn.ModuleList([BevformerRegHead(config) for _ in range(config.num_decoder_layers)])
+        self.cls_branches = nn.ModuleList([BevformerClsHead(config) for _ in range(config.decoder_layers)])
+        self.reg_branches = nn.ModuleList([BevformerRegHead(config) for _ in range(config.decoder_layers)])
         self.post_init()
 
     def forward(

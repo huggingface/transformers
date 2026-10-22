@@ -64,28 +64,40 @@ class BevformerConfig(PreTrainedConfig):
             The number of image feature levels fed to the encoder.
         d_model (`int`, *optional*, defaults to 256):
             Dimensionality of the BEV queries, image features and attention layers.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer.
-        num_encoder_layers (`int`, *optional*, defaults to 3):
+        encoder_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each BEVFormer encoder layer.
+        decoder_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each object detection decoder layer.
+        encoder_layers (`int`, *optional*, defaults to 3):
             Number of BEVFormer encoder layers.
-        num_decoder_layers (`int`, *optional*, defaults to 6):
+        decoder_layers (`int`, *optional*, defaults to 6):
             Number of object detection decoder layers.
-        ffn_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of the "intermediate" (feed-forward) layer inside the transformer layers.
-        hidden_act (`str` or `function`, *optional*, defaults to `"relu"`):
+        encoder_ffn_dim (`int`, *optional*, defaults to 512):
+            Dimensionality of the "intermediate" (feed-forward) layer inside the encoder layers.
+        decoder_ffn_dim (`int`, *optional*, defaults to 512):
+            Dimensionality of the "intermediate" (feed-forward) layer inside the decoder layers.
+        activation_function (`str` or `function`, *optional*, defaults to `"relu"`):
             The non-linear activation function in the feed-forward layers.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability of attention weights and feed-forward layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for attention probabilities in the decoder layers.
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for activations inside the feed-forward layers of the decoder.
         num_queries (`int`, *optional*, defaults to 900):
             Number of object queries.
         num_points_in_pillar (`int`, *optional*, defaults to 4):
             Number of sampled depth positions (pillar points) along the z axis for each BEV query.
         num_points_in_bev (`int`, *optional*, defaults to 8):
             Number of sampling points on the image plane for each pillar point in the spatial cross attention.
+        encoder_n_points (`int`, *optional*, defaults to 4):
+            Number of sampling points per attention head in the temporal self-attention of the encoder.
+        decoder_n_points (`int`, *optional*, defaults to 4):
+            Number of sampling points per attention head in the deformable attention of the decoder.
+        disable_custom_kernels (`bool`, *optional*, defaults to `False`):
+            Whether to disallow the use of a custom CUDA kernel for the multiscale deformable attention.
         with_box_refine (`bool`, *optional*, defaults to `True`):
             Whether to refine 3D bounding box references across decoder layers.
-        as_two_stage (`bool`, *optional*, defaults to `False`):
-            Whether the model operates in a two-stage mode.
         rotate_prev_bev (`bool`, *optional*, defaults to `True`):
             Whether to rotate the previous BEV embeddings before temporal fusion.
         use_shift (`bool`, *optional*, defaults to `True`):
@@ -101,6 +113,10 @@ class BevformerConfig(PreTrainedConfig):
     """
 
     model_type = "bevformer"
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+    }
     sub_configs_defaults = {
         "backbone_config": SubConfigSpec(
             config_class=AutoConfig,
@@ -116,23 +132,29 @@ class BevformerConfig(PreTrainedConfig):
     num_cameras: int = 6
     num_feature_levels: int = 1
     d_model: int = 256
-    num_attention_heads: int = 8
-    num_encoder_layers: int = 3
-    num_decoder_layers: int = 6
-    ffn_dim: int = 512
-    hidden_act: str = "relu"
+    encoder_layers: int = 3
+    encoder_ffn_dim: int = 512
+    encoder_attention_heads: int = 8
+    encoder_n_points: int = 4
+    decoder_layers: int = 6
+    decoder_ffn_dim: int = 512
+    decoder_attention_heads: int = 8
+    decoder_n_points: int = 4
+    activation_function: str = "relu"
     dropout: float = 0.1
+    attention_dropout: float = 0.0
+    activation_dropout: float = 0.0
     num_queries: int = 900
     num_points_in_pillar: int = 4
     num_points_in_bev: int = 8
     with_box_refine: bool = True
-    as_two_stage: bool = False
     rotate_prev_bev: bool = True
     use_shift: bool = True
     use_can_bus: bool = True
     can_bus_dim: int = 18
     can_bus_norm: bool = True
     rotate_center: list[float] | None = None
+    disable_custom_kernels: bool = False
 
     def __post_init__(self, **kwargs):
         if self.point_cloud_range is None:
@@ -142,22 +164,6 @@ class BevformerConfig(PreTrainedConfig):
         if self.id2label is None:
             self.id2label = dict(enumerate(NUSCENES_CLASS_NAMES))
         super().__post_init__(**kwargs)
-
-    @property
-    def num_classes(self) -> int:
-        return len(self.id2label)
-
-    @num_classes.setter
-    def num_classes(self, value: int):
-        pass
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
-    @hidden_size.setter
-    def hidden_size(self, value: int):
-        self.d_model = value
 
 
 __all__ = ["BevformerConfig"]
