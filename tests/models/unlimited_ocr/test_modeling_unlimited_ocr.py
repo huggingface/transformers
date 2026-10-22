@@ -331,6 +331,7 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 ("cuda", 9): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
                 ("cuda", 8): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
                 ("rocm", 9): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 87, 497, 171]]),
+                ("xpu", 5): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 87, 497, 171]]),
                 ("cpu", None): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 87, 497, 171]]),
             }
         ).get_expectation()  # fmt: skip
@@ -367,6 +368,7 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 ("cuda", 9): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
                 ("cuda", 8): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
                 ("rocm", 9): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 88, 497, 171]]),
+                ("xpu", 5): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 87, 497, 171]]),
                 ("cpu", None): (r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+", [[383, 87, 497, 171]]),
             }
         ).get_expectation()  # fmt: skip
@@ -434,6 +436,13 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                     ],
                     [[[383, 88, 497, 171]], [[53, 23, 365, 41]]],
                 ),
+                ("xpu", 5): (
+                    [
+                        r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+",
+                        r"<\|det\|>header \[\d+, \d+, \d+, \d+\]<\|/det\|>Advanced Template and Styl",
+                    ],
+                    [[[383, 87, 497, 171]], [[53, 23, 365, 41]]],
+                ),
                 ("cpu", None): (
                     [
                         r"<\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>title \[\d+",
@@ -489,6 +498,7 @@ class UnlimitedOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 ("cuda", 9): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>", [[382, 87, 489, 174]]),
                 ("cuda", 8): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>", [[382, 87, 489, 174]]),
                 ("rocm", 9): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>", [[384, 87, 489, 174]]),
+                ("xpu", 5): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>", [[384, 87, 489, 174]]),
                 ("cpu", None): (r"<PAGE><\|det\|>image \[\d+, \d+, \d+, \d+\]<\|/det\|>\n<\|det\|>", [[384, 87, 489, 174]]),
             }
         ).get_expectation()  # fmt: skip

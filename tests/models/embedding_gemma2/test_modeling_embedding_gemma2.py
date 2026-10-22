@@ -159,6 +159,12 @@ class EmbeddingGemma2TextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(
+        reason="EmbeddingGemma 2 is bidirectional and always builds an attention mask, which the SDPA flash backend rejects"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 class EmbeddingGemma2ModelTester:
     """Builds a tiny composite config: text backbone + reused Gemma 4 vision and audio towers."""
@@ -307,6 +313,12 @@ class EmbeddingGemma2ModelTest(ModelTesterMixin, unittest.TestCase):
     # NOTE: no `test_config` here (unlike the text-model test): `ConfigTester.run_common_tests`
     # asserts a `vocab_size` attribute, which on a composite config only lives on `text_config`.
     # Gemma 4's multimodal test leaves its config tester unused for the same reason.
+
+    @unittest.skip(
+        reason="EmbeddingGemma 2 is bidirectional and always builds an attention mask, which the SDPA flash backend rejects"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     def test_vision_axial_rope(self):
         # Override: the inherited Gemma 4 vision rope takes position IDs with a batch dim, which the

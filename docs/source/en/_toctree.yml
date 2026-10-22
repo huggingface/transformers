@@ -659,6 +659,8 @@
         title: FlauBERT
       - local: model_doc/flex_olmo
         title: FlexOlmo
+      - local: model_doc/flint
+        title: Flint
       - local: model_doc/fnet
         title: FNet
       - local: model_doc/fsmt
@@ -951,6 +953,8 @@
         title: UL2
       - local: model_doc/ultrabert
         title: UltraBERT
+      - local: model_doc/ultravbert
+        title: UltraVBert
       - local: model_doc/umt5
         title: UMT5
       - local: model_doc/vaultgemma
