@@ -145,13 +145,7 @@ class MiniCPMOcrImageProcessorKwargs(MiniCPMV4_6ImageProcessorKwargs, total=Fals
 
 class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
     downsample_mode = "4x"
-    disable_small_image_upsize = False
-    adaptive_small_image_upsize = False
-    adaptive_upsize_font_px = 12.0
-    adaptive_upsize_dense_per_kpx = 2.0
-    adaptive_upsize_tiny_pixels = 6272
-    adaptive_upsize_tiny_target_resolution = 84
-    adaptive_tile_upsize = False
+    small_image_upsize = "always"
     valid_kwargs = MiniCPMOcrImageProcessorKwargs
 
     def find_best_resize(
