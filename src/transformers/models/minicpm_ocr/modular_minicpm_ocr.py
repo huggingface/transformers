@@ -190,60 +190,6 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
             cell, size=SizeDict(height=target_height, width=target_width), resample=PILImageResampling.BICUBIC
         )
 
-    def _preprocess_image_like_inputs(
-        self,
-        images,
-        *args,
-        adaptive_small_image_upsize: bool = False,
-        adaptive_upsize_font_px: float = 12.0,
-        adaptive_upsize_dense_per_kpx: float = 2.0,
-        adaptive_upsize_tiny_pixels: int = 6272,
-        adaptive_upsize_tiny_target_resolution: int = 84,
-        scale_resolution: int = 448,
-        disable_small_image_upsize: bool = False,
-        **kwargs,
-    ):
-        # Classify each image before the backend converts it to a tensor: `resolve_source_resolution`
-        # needs a numpy array, and doing it here avoids a tensor→numpy round-trip in `_preprocess`.
-        from ...image_utils import make_flat_list_of_images
-
-        _source_resolutions = []
-        for img in make_flat_list_of_images(self.fetch_images(images)):
-            if adaptive_small_image_upsize:
-                np_img = np.array(img) if isinstance(img, PILImage.Image) else img
-                # Bring to channels-first uint8 for adaptive_upsize_tier
-                if np_img.ndim == 3 and np_img.shape[2] in (1, 3, 4):
-                    np_img = np_img.transpose(2, 0, 1)
-            else:
-                np_img = None
-            _source_resolutions.append(
-                self.resolve_source_resolution(
-                    np_img,
-                    scale_resolution,
-                    disable_small_image_upsize=disable_small_image_upsize,
-                    adaptive_small_image_upsize=adaptive_small_image_upsize,
-                    adaptive_upsize_font_px=adaptive_upsize_font_px,
-                    adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
-                    adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
-                    adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
-                )
-            )
-
-        prepared = self._prepare_image_like_inputs(images, **kwargs)
-        return self._preprocess(
-            prepared,
-            *args,
-            adaptive_small_image_upsize=adaptive_small_image_upsize,
-            adaptive_upsize_font_px=adaptive_upsize_font_px,
-            adaptive_upsize_dense_per_kpx=adaptive_upsize_dense_per_kpx,
-            adaptive_upsize_tiny_pixels=adaptive_upsize_tiny_pixels,
-            adaptive_upsize_tiny_target_resolution=adaptive_upsize_tiny_target_resolution,
-            scale_resolution=scale_resolution,
-            disable_small_image_upsize=disable_small_image_upsize,
-            _source_resolutions=_source_resolutions,
-            **kwargs,
-        )
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
