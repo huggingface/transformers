@@ -155,6 +155,22 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        original_hidden_size = config.backbone_config.hidden_size
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+
+        # Keep backbone dimensions and FPN channels consistent
+        scale = config.backbone_config.hidden_size // original_hidden_size
+        config.backbone_config.embed_dim_per_stage = [
+            dim * scale for dim in config.backbone_config.embed_dim_per_stage
+        ]
+        config.backbone_channel_list = [
+            dim * scale for dim in config.backbone_channel_list
+        ]
+
+        return config
+
     @unittest.skip(reason="SAM's vision encoder does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass

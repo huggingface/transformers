@@ -200,6 +200,13 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         self.model_tester = PaliGemmaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PaliGemmaConfig, has_text_modality=False)
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+        config.projection_dim = config.text_config.hidden_size
+        config.vision_config.projection_dim = config.text_config.hidden_size
+        return config
+
     # Copied from tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest.test_mismatching_num_image_tokens
     def test_mismatching_num_image_tokens(self):
         """
