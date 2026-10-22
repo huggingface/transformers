@@ -27,9 +27,8 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
-from ...processing_utils import ProcessingKwargs, Unpack
 from ...modeling_utils import slice_logits_to_keep
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.deprecation import deprecate_attr
 from ...utils.generic import accepts_precomputed_kwargs

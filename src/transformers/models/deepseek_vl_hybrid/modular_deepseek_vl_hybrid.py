@@ -34,10 +34,8 @@ from ...image_utils import (
     SizeDict,
 )
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, Unpack
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
