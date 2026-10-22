@@ -148,48 +148,6 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
     small_image_upsize = "always"
     valid_kwargs = MiniCPMOcrImageProcessorKwargs
 
-    def find_best_resize(
-        self,
-        image_size: tuple[int, int],
-        scale_resolution: int,
-        patch_size: int,
-        allow_upscale: bool = False,
-        downsample_mode: str = "4x",
-    ) -> tuple[int, int]:
-        height, width = image_size
-        if (height * width > scale_resolution * scale_resolution) or allow_upscale:
-            aspect_ratio = width / height
-            height = int(scale_resolution / math.sqrt(aspect_ratio))
-            width = int(height * aspect_ratio)
-
-        merge_factor = 2 if downsample_mode == "4x" else 4
-        best_width = ensure_divide(width, patch_size * merge_factor)
-        best_height = ensure_divide(height, patch_size * merge_factor)
-        return best_height, best_width
-
-    def get_refine_size(
-        self,
-        image_size: tuple[int, int],
-        grid: list[int],
-        scale_resolution: int,
-        patch_size: int,
-        downsample_mode: str,
-        allow_upscale: bool = False,
-    ) -> tuple[int, int]:
-        height, width = image_size
-        grid_y, grid_x = grid
-        refine_width = ensure_divide(width, grid_x)
-        refine_height = ensure_divide(height, grid_y)
-
-        best_height, best_width = self.find_best_resize(
-            image_size=(refine_height / grid_y, refine_width / grid_x),
-            scale_resolution=scale_resolution,
-            patch_size=patch_size,
-            allow_upscale=allow_upscale,
-            downsample_mode=downsample_mode,
-        )
-        return best_height * grid_y, best_width * grid_x
-
     def resolve_source_resolution(
         self,
         image: "np.ndarray",
