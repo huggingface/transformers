@@ -786,7 +786,6 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
 
         hidden_states = mamba_outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
 
         loss = None

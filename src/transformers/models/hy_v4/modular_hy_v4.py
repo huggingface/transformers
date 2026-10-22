@@ -620,7 +620,6 @@ class HYV4ForCausalLM(Glm4MoeLiteForCausalLM):
 
         hidden_states = outputs.last_hidden_state
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         # Key difference of the lm_head being kept in float
         logits = self.lm_head(hidden_states.to(dtype=self.lm_head.weight.dtype))
 

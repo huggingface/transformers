@@ -1630,8 +1630,6 @@ class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, Generati
 
         hidden_states = outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
-        hidden_states = hidden_states
         logits = self.lm_head(hidden_states)
 
         loss = None

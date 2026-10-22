@@ -1202,8 +1202,6 @@ class Step3p7ForConditionalGeneration(Step3p7PreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0]
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
-        hidden_states = hidden_states
         logits = self.lm_head(hidden_states)
 
         loss = None

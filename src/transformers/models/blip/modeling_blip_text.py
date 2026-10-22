@@ -668,7 +668,6 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-
         prediction_scores = self.cls(hidden_states)
 
         if return_logits:
