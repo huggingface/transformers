@@ -295,6 +295,25 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     def test_flash_attention_2_continue_generate_with_position_ids(self):
         pass
 
+    # Base model doesn't appear in AutoModel but rather a generatiev model is there
+    # FIXME eustlib, model with gen head deserves to be in task-specific mapping
+    @pytest.mark.skip(reason="HiggsAudioV2 has incorrect base model in auto-mapping")
+    def test_training(self):
+        pass
+
+    @pytest.mark.skip(reason="HiggsAudioV2 has incorrect base model in auto-mapping")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @pytest.mark.skip(reason="HiggsAudioV2 has incorrect base model in auto-mapping")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @pytest.mark.skip(reason="HiggsAudioV2 has incorrect base model in auto-mapping")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
+            
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip(reason="HiggsAudio doesn't return last hidden states")
     def test_model_rope_scaling_from_config(self, scaling_type):

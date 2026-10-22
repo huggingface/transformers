@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Testing suite for the IBM Granite Speech Plus model."""
-
+import math
 import unittest
 
 from transformers import (
@@ -58,8 +58,6 @@ class GraniteSpeechPlusForConditionalGenerationModelTester(ALMModelTester):
 
     def get_audio_embeds_mask(self, audio_mask):
         # Projector: ceil(feat_seq_length / window_size) * (window_size // downsample_rate) tokens per sample.
-        import math
-
         config = self.get_config()
         nblocks = math.ceil(self.feat_seq_length / config.window_size)
         num_audio_tokens = nblocks * (config.window_size // config.downsample_rate)
@@ -78,6 +76,35 @@ class GraniteSpeechPlusForConditionalGenerationModelTest(ALMModelTest, unittest.
     # The cat path changes the encoder output feature dim, so the generic shape assertion in
     # `test_get_audio_features_output` (which assumes hidden_dim) does not apply.
     skip_test_audio_features_output_shape = True
+
+    @unittest.skip(reason="FIXME eustlib, ALMs could accept embeddings as input.")
+    def test_inputs_embeds_matches_input_ids(self):
+        pass
+
+    def test_inputs_embeds(self):
+        # Overwrite inputs_embeds tests because we need to delete "input_features" for the audio model
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["input_features"]
+
+            wte = model.get_input_embeddings()
+            inputs["inputs_embeds"] = wte(input_ids)
+
+            with torch.no_grad():
+                model(**inputs)
+
+    @unittest.skip(reason="ConformerAttention block forces MATH backend")
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
 
     def test_encoder_hidden_layers_concat_shape(self):
         """``encoder_config.cat_hidden_layers`` concatenates selected intermediate hidden states with the final

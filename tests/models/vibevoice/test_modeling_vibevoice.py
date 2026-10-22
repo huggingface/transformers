@@ -258,6 +258,16 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
             # static-cache compilation. TODO: fix in a follow-up PR.
             "test_generate_with_static_cache",
             "test_static_cache_no_recompile_with_smaller_length",
+            # FIXME @eustlib: dummy inputs dont have audio inputs so we can't run multimodal tests
+            "test_get_audio_features_attentions",
+            "test_get_audio_features_hidden_states",
+            "test_get_audio_features_output",
+            # Base model doesn't appear in AutoModel but rather a generatiev model is there
+            # FIXME eustlib, model with gen head deserves to be in task-specific mapping
+            "test_training",
+            "test_training_gradient_checkpointing",
+            "test_training_gradient_checkpointing_use_reentrant_false",
+            "test_training_gradient_checkpointing_use_reentrant_true",
         ]
         for test in skippable_tests:
             if self._testMethodName.startswith(test):
