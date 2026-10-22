@@ -5,7 +5,7 @@ Once merged, your PR is going to appear in the release notes with the title you 
 
 Then, please replace this with a description of the change. Please also include relevant motivation and context. List any dependencies (if any) that are required for this change. If you're fixing a bug, describe the regression test you added: it should fail without your fix.
 
-Fill in the issue number below. It must be an issue you're allowed to work on, or the PR will be closed. See https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#contribution-rules
+If your PR fixes an issue, fill in the issue number below. It must be an issue you're allowed to work on, or the PR will be closed. If no issue exists, this is a standalone PR: delete the line below and include your evidence here (e.g. a reproducer that fails on `main`, or before/after benchmark numbers). If an issue already exists for the problem, you can't open a standalone PR for it. See https://github.com/huggingface/transformers/blob/main/CONTRIBUTING.md#contribution-rules
 
 Once you're done, someone will review your PR shortly (see the section "Who can review?" below to tag some potential reviewers). They may suggest changes to make the code even better. If no one reviewed your PR after a week has passed, don't hesitate to post a new comment @-mentioning the same persons---sometimes notifications get lost.
 -->

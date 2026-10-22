@@ -18,14 +18,26 @@ limitations under the License.
 
 ## Contribution rules
 
-Every PR must link an open issue that you're allowed to work on. That means either:
+There are two ways to open a PR: fix an issue you're allowed to work on, or open a standalone PR that carries its own evidence. New models can also be added with a standalone PR, see [Adding a new model](#adding-a-new-model). Hugging Face staff, maintainers and some long-standing contributors are exempt from these rules.
+
+**Fixing an issue.** Link the issue with a closing keyword like `Fixes #123` in the PR description. You can work on:
 
 - an issue you opened, once a maintainer has labeled it `triaged`
 - an issue labeled [`contributions-welcome`](https://github.com/huggingface/transformers/labels/contributions-welcome)
+- an issue labeled [`New model`](https://github.com/huggingface/transformers/labels/New%20model), see [Adding a new model](#adding-a-new-model)
 
-Other people's issues aren't open for PRs unless a maintainer has said so. PRs that don't link a qualifying issue will be closed. Hugging Face staff, maintainers and some long-standing contributors are exempt.
+Other people's issues aren't open for PRs unless a maintainer has said so. PRs that link an issue you can't work on will be closed.
 
-Before working on a `contributions-welcome` issue, check whether someone has already opened a PR for it. If so, don't open another one. If you spot mistakes, leave suggestions on the existing PR instead. Only open a competing PR if the existing one is fundamentally flawed, and explain why in the issue first.
+Before working on a `contributions-welcome` or `New model` issue, check whether someone has already opened a PR for it. If so, don't open another one. If you spot mistakes, leave suggestions on the existing PR instead. Only open a competing PR if the existing one is abandoned or fundamentally flawed, and explain why in the issue first.
+
+**Standalone PRs.** If nobody has reported the problem yet, you can open a PR without an issue. Standalone PRs are for short changes with real impact, like a bug fix, a performance improvement, or a fix for a broken example in the docs. The PR description needs the same evidence as an issue:
+
+- for a bug, a short script that fails on `main` and passes with your fix, using a published checkpoint, a default config, or a documented workflow
+- for a performance improvement, before and after numbers on a realistic workload, like a published checkpoint or default config, and the hardware you ran on. A faster microbenchmark of a function that isn't on a hot path doesn't count.
+
+If an issue already exists for the problem, your PR goes through that issue whether you link it or not. Standalone PRs that fix an existing issue, or that come without evidence, will be closed. These requirements don't apply to new models.
+
+**Changes that need an issue first.** Mechanical cleanups that don't affect correctness or performance, and bulk fixes to typos or wording in the docs, need an issue before a PR. Propose the change, how you'd make it, and how many files it touches. A single typo fix is too small for a PR on either path.
 
 How you write your code is up to you, but you're responsible for everything you submit, and we may block accounts that repeatedly open low-quality issues or PRs. Please also respect our [code of conduct](https://github.com/huggingface/transformers/blob/main/CODE_OF_CONDUCT.md).
 
@@ -45,7 +57,7 @@ report too much leads to bad solutions, sometimes for problems that do not exist
 fixing a bug, it's valuable to see if the bug exists in other models. If your PR says
 "fixed by using the same approach as (other model)", with a link to the relevant code, that is very helpful for maintainers,
 because it tells us that the fix is likely to be correct and compatible with the rest of the codebase.
-- Avoid small or "busywork" PRs. We don't have time for small style changes or typo fixes in comments, or for
+- Avoid "busywork" PRs. We don't have time for small style changes or typo fixes in comments, or for
 "theoretical bugs" found by code analysis that rarely if ever cause problems in practice. These are generally not worth
 fixing unless they can be exploited by an attacker.
 - Verify tests locally and in the CI. Before opening a PR, run `make fix-repo` and use `utils/tests_fetcher.py` to 
@@ -147,7 +159,7 @@ There are four timelines for model additions depending on the model contributor 
 
 - Post-release integration: models without strong demand, or that we don't have bandwidth to take on, land after the upstream release.
 
-  Open ["New model"](https://github.com/huggingface/transformers/issues?q=is%3Aopen+is%3Aissue+label%3A%22New+model%22+label%3Acontributions-welcome) issues labeled `contributions-welcome` are the entry point for outside contributors. We'll review and guide you through it.
+  Outside contributors can open a PR for a new model directly, with or without an issue. Before you start, check the open ["New model"](https://github.com/huggingface/transformers/issues?q=is%3Aopen+is%3Aissue+label%3A%22New+model%22) issues and the open PRs to make sure nobody is already adding it. We'll review and guide you through it.
 
 - Hub-first release: ship your model directly on the Hub via Transformers' [remote-code](https://github.com/huggingface/transformers/blob/main/docs/source/en/models.md#custom-models) support, with no upstream PR required.
 
