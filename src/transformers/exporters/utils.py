@@ -519,6 +519,9 @@ def _prepare_grid_thw_vision_inputs(model: torch.nn.Module, inputs: dict[str, An
     include_temporal = _find_submodule_attr(model, "axis_dim") is not None
     inputs["position_ids"] = get_vision_position_ids(grid_thw, spatial_merge_size, include_temporal=include_temporal)
 
+    if model.config.model_type == "llava_onevision1_5_vision":
+        inputs["frame_lengths"] = module.get_vision_frame_lengths(inputs["cu_seqlens"])
+
     window_size = _find_submodule_attr(model, "window_size")
     patch_size = _find_submodule_attr(model, "patch_size")
     if window_size is not None and patch_size is not None:

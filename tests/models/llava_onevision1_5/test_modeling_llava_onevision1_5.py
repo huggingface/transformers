@@ -36,6 +36,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_torch_greater_or_equal,
     slow,
     torch_device,
 )
@@ -337,6 +338,42 @@ class LlavaOnevision15ForConditionalGenerationModelTest(ModelTesterMixin, Genera
 @require_torch
 class LlavaOnevision15VisionModelTest(unittest.TestCase):
     all_model_classes = (LlavaOnevision15VisionModel,) if is_torch_available() else ()
+
+    @slow
+    @require_torch_greater_or_equal("2.11")
+    def test_export_preserves_class_tokens_and_frame_isolation(self):
+        from transformers.exporters import DynamoConfig, DynamoExporter
+        from transformers.exporters.utils import prepare_for_export
+
+        config = LlavaOnevision15VisionConfig(
+            hidden_size=32, out_hidden_size=32, intermediate_size=48, depth=2, num_heads=4
+        )
+        model = LlavaOnevision15VisionModel(config).to(torch_device).eval()
+        # One image and two video frames, with 16 patches per frame.
+        inputs = {
+            "hidden_states": floats_tensor([48, 3 * 14 * 14]),
+            "grid_thw": torch.tensor([[1, 4, 4], [2, 4, 4]], device=torch_device),
+        }
+        for dynamic in (False, True):
+            with self.subTest(dynamic=dynamic):
+                sample = copy.deepcopy(inputs)
+                exported = DynamoExporter().export(model, sample, config=DynamoConfig(dynamic=dynamic))
+                # Replay with new pixels and aspect ratio, retaining 16 patches per frame.
+                sample["hidden_states"] = floats_tensor([48, 3 * 14 * 14])
+                sample["grid_thw"] = torch.tensor([[1, 2, 8], [2, 2, 8]], device=torch_device)
+                model, sample, _ = prepare_for_export(model, sample)
+                with torch.no_grad():
+                    actual = exported.module()(**sample)
+                    expected = model(sample["hidden_states"], sample["grid_thw"])
+                    separate = torch.cat(
+                        [
+                            model(frame, sample["grid_thw"][:1]).pooler_output
+                            for frame in sample["hidden_states"].split(16)
+                        ]
+                    )
+                torch.testing.assert_close(actual.last_hidden_state, expected.last_hidden_state)
+                torch.testing.assert_close(actual.pooler_output, expected.pooler_output)
+                torch.testing.assert_close(actual.pooler_output, separate)
 
     def test_standalone_save_load_and_frame_isolation(self):
         config = LlavaOnevision15VisionConfig(

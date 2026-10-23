@@ -27,7 +27,7 @@ from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ...vision_utils import get_vision_position_ids
+from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..auto import AutoConfig, AutoModel
 from ..qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLVisionConfig
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
@@ -112,6 +112,13 @@ class LlavaOnevision15Config(Qwen2_5_VLConfig):
         self.tie_word_embeddings = self.tie_word_embeddings or self.text_config.tie_word_embeddings
         if self.vision_config.out_hidden_size != self.text_config.hidden_size:
             raise ValueError("vision_config.out_hidden_size must match text_config.hidden_size")
+
+
+def get_vision_frame_lengths(cu_seqlens: torch.Tensor, kwargs: dict | None = None) -> list[int]:
+    """Get patch counts per frame, or consume geometry prepared before graph capture."""
+    if kwargs is not None and (frame_lengths := kwargs.pop("frame_lengths", None)) is not None:
+        return frame_lengths
+    return (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
 
 
 class LlavaOnevision15VisionPatchEmbed(nn.Module):
@@ -239,10 +246,13 @@ class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
             Temporal, height and width dimensions of the patch grid for each image or video.
         """
         hidden_states = self.patch_embed(hidden_states)
-        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
+        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size, kwargs=kwargs)
         cos, sin = self.rotary_pos_emb(hidden_states, position_ids)
-        lengths = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0])
-        frame_lengths = lengths.tolist()
+        cu_seqlens, max_seqlen = get_vision_attention_seqlens(grid_thw, self.config, kwargs=kwargs)
+        frame_lengths = get_vision_frame_lengths(cu_seqlens, kwargs=kwargs)
+        cu_seqlens = cu_seqlens + torch.arange(cu_seqlens.shape[0], device=cu_seqlens.device, dtype=cu_seqlens.dtype)
+        if max_seqlen is not None:
+            max_seqlen += 1
         cls_hidden = self.class_embedding.to(hidden_states.dtype).unsqueeze(0)
         cls_freqs = torch.cat((self.class_pos_emb, self.class_pos_emb), dim=-1).to(cos.dtype)
         cls_cos, cls_sin = cls_freqs.cos().to(cos.dtype), cls_freqs.sin().to(sin.dtype)
@@ -250,11 +260,9 @@ class LlavaOnevision15VisionModel(LlavaOnevision15PreTrainedModel):
             torch.cat([torch.cat((cls, frame), dim=0) for frame in torch.split(value, frame_lengths)], dim=0)
             for value, cls in ((hidden_states, cls_hidden), (cos, cls_cos), (sin, cls_sin))
         ]
-        cu_seqlens = nn.functional.pad((lengths + 1).cumsum(0, dtype=torch.int32), (1, 0))
-
         hidden_states = self.pre_layernorm(hidden_states)
         for block in self.blocks:
-            hidden_states = block(hidden_states, cu_seqlens, cos, sin, **kwargs)
+            hidden_states = block(hidden_states, cu_seqlens, cos, sin, max_seqlen=max_seqlen, **kwargs)
 
         hidden_states = torch.cat(
             [frame[1:] for frame in torch.split(hidden_states, [length + 1 for length in frame_lengths])], dim=0

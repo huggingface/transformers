@@ -388,6 +388,7 @@ def _reshaped_vision_attention_forward(
     # Combined `qkv` + `(cos, sin)` rotary + `.proj`
     "transformers.models.qwen2_vl.modeling_qwen2_vl.VisionAttention.forward",
     "transformers.models.qwen2_5_vl.modeling_qwen2_5_vl.Qwen2_5_VLVisionAttention.forward",
+    "transformers.models.llava_onevision1_5.modeling_llava_onevision1_5.LlavaOnevision15VisionAttention.forward",
     "transformers.models.qwen3_vl.modeling_qwen3_vl.Qwen3VLVisionAttention.forward",
     "transformers.models.qwen3_vl_moe.modeling_qwen3_vl_moe.Qwen3VLMoeVisionAttention.forward",
     "transformers.models.qwen3_5.modeling_qwen3_5.Qwen3_5VisionAttention.forward",

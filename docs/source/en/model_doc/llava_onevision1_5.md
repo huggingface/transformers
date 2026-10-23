@@ -40,6 +40,10 @@ output = model.generate(**inputs, max_new_tokens=64)
 processor.batch_decode(output[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 ```
 
+## Export
+
+The vision encoder can be exported with `DynamoExporter`, which prepares grid metadata before tracing. The shared vision attention export adapter requires equal patch counts per frame. The number of frames and their patch counts are specialized to the export inputs; export a new graph when these change.
+
 ## LlavaOnevision15Config
 
 [[autodoc]] LlavaOnevision15Config
