@@ -403,6 +403,8 @@ class ColModernVBertProcessor(ProcessorMixin):
             images=images,
             images_kwargs=output_kwargs["images_kwargs"],
             text_kwargs=output_kwargs["text_kwargs"],
+            return_mm_token_type_ids=output_kwargs["return_mm_token_type_ids"],
+            return_text_replacement_offsets=output_kwargs["return_text_replacement_offsets"],
         )
 
         # When suffix is provided, generate labels by masking non-suffix tokens
@@ -470,6 +472,8 @@ class ColModernVBertProcessor(ProcessorMixin):
             text=texts_query,
             return_token_type_ids=False,
             text_kwargs=output_kwargs["text_kwargs"],
+            return_mm_token_type_ids=output_kwargs["return_mm_token_type_ids"],
+            return_text_replacement_offsets=output_kwargs["return_text_replacement_offsets"],
         )
 
         return batch_query

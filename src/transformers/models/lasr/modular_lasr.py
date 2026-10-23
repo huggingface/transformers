@@ -584,7 +584,7 @@ class LasrForCTC(ParakeetForCTC):
         return super().generate(**super_kwargs)
 
 
-__getattr__ = deprecate_attr(__name__, rename={"LasrProcessorKwargs": (ProcessingKwargs, "6.0.0")})
+__getattr__ = deprecate_attr(__name__, rename={"LasrProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "LasrForCTC",

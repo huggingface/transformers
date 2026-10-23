@@ -136,14 +136,15 @@ class GlmImageProcessor(ProcessorMixin):
                     "and will be removed in v5.29.0. "
                     "Pass it directly to the processor instead."
                 )
+                # "images_kwargs" has priority for backwards compatibility
+                output_kwargs[key] = output_kwargs["images_kwargs"].pop(key)
 
         model_inputs = super().__call__(images=images, text=text, **output_kwargs)
         if text is None:  # early exit if cond only on image
             return model_inputs
 
-        # "images_kwargs" has priority for backwards compatibility
-        target_h = output_kwargs["images_kwargs"].get("target_h", output_kwargs["target_h"])
-        target_w = output_kwargs["images_kwargs"].get("target_w", output_kwargs["target_w"])
+        target_h = output_kwargs["target_h"]
+        target_w = output_kwargs["target_w"]
         return_tensors = output_kwargs["text_kwargs"].get("return_tensors")
         is_text_to_image = images is None
 
@@ -197,9 +198,8 @@ class GlmImageProcessor(ProcessorMixin):
         processed_text = text
         if text is not None:
             processed_text = []
-            # "images_kwargs" has priority for backwards compatibility
-            target_h = kwargs["images_kwargs"].get("target_h", kwargs["target_h"])
-            target_w = kwargs["images_kwargs"].get("target_w", kwargs["target_w"])
+            target_h = kwargs["target_h"]
+            target_w = kwargs["target_w"]
 
             for sample in text:
                 token_h, token_w, prev_token_h, prev_token_w = self._get_target_shape(height=target_h, width=target_w)

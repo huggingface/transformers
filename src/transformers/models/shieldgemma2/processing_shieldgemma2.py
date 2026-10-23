@@ -69,16 +69,13 @@ DEFAULT_SHIELDGEMMA2_POLICIES = {
 @auto_docstring
 class ShieldGemma2Processor(ProcessorMixin):
     images_kwargs = {
+        # Value is "null" in preprocessor_config.json
+        "do_convert_rgb": True,
         "do_pan_and_scan": False,
     }
     return_mm_token_type_ids = True
     valid_processor_kwargs = ShieldGemma2ProcessorKwargs
 
-    # TODO: This is a BC breaking bugfix.
-    # Because this processor incorrectly inherits from Gemma3Processor and didn't assign
-    # valid_processor_kwargs it applied defaults from Gemma3ProcessorKwargs._defaults.
-    # With the new refactoring those defaults are now empty and the class attribute defaults
-    # below are applied instead. # Q: Do we want to fix it or keep BC compat?
     text_kwargs = {
         "padding": True,
     }
@@ -155,6 +152,12 @@ class ShieldGemma2Processor(ProcessorMixin):
         if "padding" not in text_kwargs:
             text_kwargs["padding"] = kwargs.pop("padding", True)
             text_kwargs["padding_side"] = kwargs.pop("padding_side", "left")
+
+        # Kwargs validation only accepts lists and dicts, convert for BC
+        if kwargs.get("policies") is not None:
+            kwargs["policies"] = list(kwargs["policies"])
+        if kwargs.get("custom_policies") is not None:
+            kwargs["custom_policies"] = dict(kwargs["custom_policies"])
 
         policy_definitions: Mapping[str, str] = {
             **self.policy_definitions,

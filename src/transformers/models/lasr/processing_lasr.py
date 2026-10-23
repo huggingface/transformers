@@ -88,6 +88,6 @@ class LasrProcessor(ProcessorMixin):
         return feature_extractor_input_names + ["labels"]
 
 
-__getattr__ = deprecate_attr(__name__, rename={"LasrProcessorKwargs": (ProcessingKwargs, "6.0.0")})
+__getattr__ = deprecate_attr(__name__, rename={"LasrProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["LasrProcessor"]

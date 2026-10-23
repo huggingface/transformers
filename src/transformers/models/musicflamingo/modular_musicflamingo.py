@@ -25,7 +25,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
@@ -34,6 +34,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config
 from ..audioflamingo3.modeling_audioflamingo3 import (
@@ -399,6 +400,8 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
     def get_audio_features(self, input_features, input_features_mask, input_ids, **kwargs):
         return self.model.get_audio_features(input_features, input_features_mask, input_ids, **kwargs)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"MusicFlamingoProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "MusicFlamingoConfig",

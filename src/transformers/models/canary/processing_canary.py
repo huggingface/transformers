@@ -171,6 +171,6 @@ class CanaryProcessor(ProcessorMixin):
         return feature_extractor_input_names + ["decoder_input_ids", "labels"]
 
 
-__getattr__ = deprecate_attr(__name__, rename={"CanaryProcessorKwargs": (ProcessingKwargs, "6.0.0")})
+__getattr__ = deprecate_attr(__name__, rename={"CanaryProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["CanaryProcessor"]

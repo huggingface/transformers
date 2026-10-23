@@ -26,6 +26,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -198,5 +199,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
         logger.warning_once("`audio_ids` is deprecated; please use `audio_token_ids` instead.")
         return self.audio_token_ids
 
+
+__getattr__ = deprecate_attr(__name__, rename={"MusicFlamingoProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["MusicFlamingoProcessor"]
