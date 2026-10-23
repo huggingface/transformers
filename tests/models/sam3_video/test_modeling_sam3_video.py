@@ -15,11 +15,13 @@
 
 import gc
 import unittest
+from types import SimpleNamespace
 
 from transformers.testing_utils import (
     backend_empty_cache,
     is_torch_bf16_available_on_device,
     is_torch_fp16_available_on_device,
+    require_torch,
     slow,
     torch_device,
 )
@@ -31,12 +33,107 @@ if is_torch_available():
     import torch
 
     from transformers import Sam3VideoModel, Sam3VideoProcessor
+    from transformers.models.sam3_tracker_video.modeling_sam3_tracker_video import Sam3TrackerVideoModel
 
 
 def prepare_video():
     video_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/bedroom.mp4"
     raw_video, _ = load_video(video_url)
     return raw_video
+
+
+@require_torch
+class Sam3VideoModelTest(unittest.TestCase):
+    def test_recondition_correction_masks_use_zero_logit_threshold(self):
+        model = SimpleNamespace(recondition_on_trk_masks=False, high_conf_thresh=0.8)
+        inference_session = SimpleNamespace(obj_id_to_idx=lambda obj_id: obj_id)
+        detector_logits = torch.tensor([[[-8.0, 0.0], [0.25, 6.0]]])
+
+        reconditioned_masks, reconditioned_obj_ids = Sam3VideoModel._prepare_recondition_masks(
+            model,
+            inference_session,
+            frame_idx=0,
+            det_out={"mask": detector_logits},
+            trk_masks=torch.zeros_like(detector_logits),
+            trk_id_to_max_iou_high_conf_det={0: 0},
+            tracker_obj_scores_global=torch.tensor([0.95]),
+        )
+
+        expected_mask = torch.tensor([[[[False, False], [True, True]]]])
+        torch.testing.assert_close(reconditioned_masks[0], expected_mask)
+        self.assertEqual(reconditioned_obj_ids, {0})
+
+    def test_recondition_memory_encoding(self):
+        for correction_mode, reconditioned_indices, shared_features in [
+            (True, [], False),
+            (True, [1], False),
+            (True, [0, 1, 2], False),
+            (False, [1], False),
+            (True, [1], True),
+        ]:
+            with self.subTest(
+                correction_mode=correction_mode,
+                reconditioned_indices=reconditioned_indices,
+                shared_features=shared_features,
+            ):
+                encoded_masks = []
+
+                def memory_encoder(vision_features, masks):
+                    encoded_masks.append(masks.clone())
+                    return masks, vision_features.expand_as(masks)
+
+                tracker = SimpleNamespace(
+                    training=False,
+                    hidden_dim=1,
+                    backbone_feature_sizes=[(1, 1)],
+                    prompt_encoder=SimpleNamespace(mask_input_size=(1, 1)),
+                    config=SimpleNamespace(sigmoid_scale_for_mem_enc=20.0, sigmoid_bias_for_mem_enc=-10.0),
+                    memory_encoder=memory_encoder,
+                    occlusion_spatial_embedding_parameter=None,
+                )
+                tracker._encode_new_memory = Sam3TrackerVideoModel._encode_new_memory.__get__(tracker)
+                model = SimpleNamespace(recondition_on_trk_masks=not correction_mode, tracker_model=tracker)
+                model.run_memory_encoder = Sam3VideoModel.run_memory_encoder.__get__(model)
+                model._suppress_object_pw_area_shrinkage = lambda masks, prompt_ids: masks
+                outputs = {i: {"cond_frame_outputs": {}, "non_cond_frame_outputs": {0: {}}} for i in range(3)}
+                vision_features = torch.tensor([[[1.0]]]) if shared_features else torch.tensor([[[1.0], [2.0], [3.0]]])
+                session = SimpleNamespace(
+                    obj_ids=[0, 1, 2],
+                    obj_id_to_idx=lambda obj_id: obj_id,
+                    obj_id_to_prompt_id={i: i for i in range(3)},
+                    output_dict_per_obj=outputs,
+                    cache=SimpleNamespace(get_vision_features=lambda frame_idx: {"vision_feats": [vision_features]}),
+                )
+                detector_logits = torch.tensor([[[-8.0, 0.0], [0.25, 6.0]]]).repeat(3, 2, 2)
+                tracker_logits = torch.full((3, 4, 4), -2.0)
+                model.high_conf_thresh = 0.8
+                masks, _ = Sam3VideoModel._prepare_recondition_masks(
+                    model,
+                    session,
+                    0,
+                    {"mask": detector_logits},
+                    tracker_logits,
+                    {i: i for i in reconditioned_indices},
+                    torch.ones(3),
+                )
+
+                Sam3VideoModel._tracker_update_memories(model, session, 0, tracker_logits.clone(), masks)
+
+                for i in range(3):
+                    storage_key = "cond_frame_outputs" if i in reconditioned_indices else "non_cond_frame_outputs"
+                    result = outputs[i][storage_key][0]
+                    if correction_mode and i in reconditioned_indices:
+                        expected = (detector_logits[i] > 0).float() * 20.0 - 10.0
+                    else:
+                        expected = tracker_logits[i].sigmoid() * 20.0 - 10.0
+                    torch.testing.assert_close(
+                        result["maskmem_features"], expected.to(torch.bfloat16).reshape(16, 1, 1)
+                    )
+                    expected_position = 1.0 if shared_features else float(i + 1)
+                    torch.testing.assert_close(result["maskmem_pos_enc"], torch.full((16, 1, 1), expected_position))
+                if correction_mode and reconditioned_indices:
+                    binary_inputs = [m for m in encoded_masks if torch.all((m == -10.0) | (m == 10.0))]
+                    self.assertEqual(sum(m.shape[0] for m in binary_inputs), len(reconditioned_indices))
 
 
 @slow
