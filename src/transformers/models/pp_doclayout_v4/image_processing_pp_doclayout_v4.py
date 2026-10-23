@@ -37,12 +37,8 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
     Constructs a PP-DocLayoutV4 image processor.
 
     Images are resized to a fixed 800x800 square with bicubic interpolation and rescaled to `[0, 1]` without further
-    normalization, matching the reference `cv2.resize` based preprocessing.
-
-    Unlike the usual `resize` -> `rescale` -> `normalize` order, this processor rescales *before* resizing. The
-    reference preprocessing resizes `uint8` with `cv2.resize`, which rounds once; resizing an integer tensor with
-    torchvision rounds a second time, and the two roundings compound to ~22/255 on high contrast edges -- enough to
-    permute the predicted reading order.
+    normalization. Resizing uses torchvision on the input device. Uint8 inputs are rounded and clipped before
+    rescaling; interpolation can differ slightly from the reference OpenCV implementation.
 
     Post-processing differs from [`PPDocLayoutV3ImageProcessor`], because PP-DocLayoutV4 regresses a four point
     quadrilateral per query instead of predicting a segmentation mask, and emits raw relative/successor order logits
@@ -57,7 +53,6 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
     do_rescale = True
     do_normalize = True
 
-    # We require `self.resize(..., antialias=False)` to approximate the output of `cv2.resize`
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -85,16 +80,23 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
             is_unit_interval = all(image.is_floating_point() for image in images) and (
                 float(max(image.amax() for image in images)) <= 1.0
             )
-            upper_bound = (1.0 if is_unit_interval else 255.0) * (rescale_factor if do_rescale else 1.0)
+            upper_bound = 1.0 if is_unit_interval else 255.0
 
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                is_uint8 = stacked_images.dtype == torch.uint8
+                if is_uint8:
+                    stacked_images = stacked_images.float()
+                stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=False)
+                if is_uint8:
+                    # Reproduce uint8 rounding and saturation before rescaling.
+                    stacked_images = stacked_images.round().clamp(0, 255).to(torch.uint8)
+                else:
+                    stacked_images = stacked_images.clamp(0, upper_bound)
             if do_rescale:
                 stacked_images = self.rescale(stacked_images.to(dtype=torch.float32), rescale_factor)
-            if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, resample=resample, antialias=False)
-                stacked_images = stacked_images.clamp(0, upper_bound)
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
@@ -141,6 +143,9 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
             `list[Dict]`: A list of dictionaries, one per image, each containing the `scores`, `labels`, `boxes`,
             `polygon_points` and `order_seq` predicted by the model. Predictions are sorted by reading order, so
             `order_seq` is non-decreasing (a query selected under several labels keeps a single rank).
+
+            Geometry-enabled models also return a page-level `warp_params` tensor with roll, quadrant confidence,
+            shear, kx and ky, without rescaling or applying it to the detections.
         """
         requires_backends(self, ["torch", "scipy"])
         if target_sizes is None:
@@ -198,6 +203,10 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
                 }
             )
 
+        warp_params = outputs.warp_params
+        if warp_params is not None:
+            for result, page_geometry in zip(results, warp_params):
+                result["warp_params"] = page_geometry
         return results
 
     def _quad_to_corners(self, pred_boxes: "torch.Tensor") -> "torch.Tensor":
@@ -227,32 +236,56 @@ class PPDocLayoutV4ImageProcessor(TorchvisionBackend):
         data = np.ones(len(edges), dtype=np.int8)
         return coo_matrix((data, (rows, columns)), shape=(num_nodes, num_nodes), dtype=np.int8)
 
+    def _find_cycle(self, num_nodes, edges):
+        """Finds the first DFS cycle, visiting nodes by index and neighbors in edge insertion order.
+
+        PaddleX removes the weakest edge in this first cycle. SciPy's strongly connected components group all
+        mutually reachable nodes, which can contain overlapping cycles; they do not select an individual cycle.
+        Removing the weakest edge in the whole component can therefore produce a different reading order.
+        """
+        graph = defaultdict(list)
+        for source, target in edges:
+            graph[source].append(target)
+        visited = [False] * num_nodes
+        on_path = [False] * num_nodes
+
+        def visit(node, path):
+            visited[node] = True
+            on_path[node] = True
+            path.append(node)
+            for neighbor in graph[node]:
+                if not visited[neighbor]:
+                    cycle = visit(neighbor, path)
+                    if cycle is not None:
+                        return cycle
+                elif on_path[neighbor]:
+                    return path[path.index(neighbor) :]
+            path.pop()
+            on_path[node] = False
+            return None
+
+        for node in range(num_nodes):
+            if not visited[node]:
+                cycle = visit(node, [])
+                if cycle is not None:
+                    return cycle
+        return None
+
     def _remove_cycles(self, num_nodes, edges):
         """
-        Drops the lowest confidence edge of every cyclic component until the graph is a DAG.
+        Drops the weakest edge of the first DFS cycle repeatedly, matching PaddleX's reading order decoder.
 
-        A strongly connected component of more than one node is exactly a set of nodes that lie on a common cycle, so
-        every edge inside one is a cycle edge and dropping the weakest of them always breaks at least one cycle. The
-        graph is a DAG once every strongly connected component is a single node.
+        Choosing the weakest edge across an entire strongly connected component can remove additional successor
+        relations when cycles overlap. Confidence ties keep the first edge in the cycle's traversal order.
         """
         edges = dict(edges)
         while True:
-            _, labels = connected_components(
-                self._to_sparse_graph(num_nodes, edges), directed=True, connection="strong"
-            )
-            # Self loops are excluded from `edges`, so a shared label already implies a component of several nodes.
-            weakest = {}
-            for edge, confidence in edges.items():
-                component = labels[edge[0]]
-                if component != labels[edge[1]]:
-                    continue
-                # Ties keep the first edge in insertion order, which keeps the decode deterministic.
-                if component not in weakest or confidence < edges[weakest[component]]:
-                    weakest[component] = edge
-            if not weakest:
+            cycle = self._find_cycle(num_nodes, edges)
+            if cycle is None:
                 return list(edges)
-            for edge in weakest.values():
-                del edges[edge]
+            cycle_edges = zip(cycle, cycle[1:] + cycle[:1])
+            weakest = min(cycle_edges, key=edges.__getitem__)
+            del edges[weakest]
 
     def _find_connected_components(self, num_nodes, edges):
         """Groups nodes into the connected components of the undirected view of the DAG."""

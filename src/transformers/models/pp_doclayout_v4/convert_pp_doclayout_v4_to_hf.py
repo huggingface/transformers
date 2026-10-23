@@ -22,7 +22,7 @@ Example:
 
 ```bash
 python src/transformers/models/pp_doclayout_v4/convert_pp_doclayout_v4_to_hf.py \
-    --pdparams_path 126.pdparams \
+    --pdparams_path /path/to/model.pdparams \
     --output_dir PP-DocLayoutV4_safetensors
 ```
 """
@@ -135,16 +135,24 @@ DECODER_MAPPING = [
     (r"^transformer\.query_pos_head\.", r"decoder.query_pos_head."),
     (r"^transformer\.dec_bbox_head\.", r"decoder.bbox_embed."),
     (r"^transformer\.dec_score_head\.(\d+)\.", r"decoder.class_embed.\1."),
-    (r"^transformer\.dec_roor_order_head\.(\d+)\.", r"decoder.successor_order_head.proj.\1."),
-    (r"^transformer\.dec_roor_global_pointer\.", r"decoder.successor_order_head.global_pointer."),
-    (r"^transformer\.dec_order_head\.(\d+)\.", r"decoder.relative_order_head.proj.\1."),
-    (r"^transformer\.dec_global_pointer\.", r"decoder.relative_order_head.global_pointer."),
-    (r"^transformer\.s2r_fusion\.a$", r"decoder.relative_order_head.s2r_fusion.closure_weight"),
-    (r"^transformer\.s2r_fusion\.", r"decoder.relative_order_head.s2r_fusion."),
+    (r"^transformer\.(?:dec_roor_order_head|dec_succ_head)\.(\d+)\.", r"decoder.successor_order_head.proj.\1."),
+    (r"^transformer\.(?:dec_roor_global_pointer|succ_scorer)\.", r"decoder.successor_order_head.global_pointer."),
+    (r"^transformer\.(?:dec_order_head|dec_rel_head)\.(\d+)\.", r"decoder.relative_order_head.proj.\1."),
+    (r"^transformer\.(?:dec_global_pointer|rel_scorer)\.", r"decoder.relative_order_head.global_pointer."),
+    (r"^transformer\.(?:s2r_fusion|s2r)\.a$", r"decoder.relative_order_head.s2r_fusion.closure_weight"),
+    (r"^transformer\.(?:s2r_fusion|s2r)\.", r"decoder.relative_order_head.s2r_fusion."),
     (r"^transformer\.(enc_bbox_head|enc_score_head|enc_output|denoising_class_embed)\.", r"\1."),
 ]
 
-MAPPING = BACKBONE_MAPPING + ENCODER_MAPPING + DECODER_MAPPING
+MAPPING = (
+    BACKBONE_MAPPING
+    + ENCODER_MAPPING
+    + DECODER_MAPPING
+    + [
+        (r"^detr_head\.deform_head", "deform_head"),
+        (r"^detr_head\.deform_bin_centers$", "deform_head.bin_centers"),
+    ]
+)
 
 
 def rename_key(key: str) -> str:
@@ -217,6 +225,37 @@ def convert_state_dict(paddle_state_dict: dict, model: PPDocLayoutV4ForObjectDet
     return state_dict
 
 
+def infer_geometry_config(paddle_state_dict: dict) -> dict:
+    """Infer the optional geometry branch dimensions from the checkpoint; reject partial branches."""
+    prefix = "detr_head."
+    geometry_keys = [key for key in paddle_state_dict if key.startswith(prefix + "deform_")]
+    if not geometry_keys:
+        return {"deform_pred": False}
+    required = [
+        prefix + "deform_bin_centers",
+        prefix + "deform_head.body.0.weight",
+        prefix + "deform_head.body.6.weight",
+    ]
+    if any(key not in paddle_state_dict for key in required):
+        raise ValueError("Incomplete geometry head in the Paddle checkpoint.")
+    centers, first, last = (paddle_state_dict[key] for key in required)
+    bins = len(centers)
+    radius = float(centers[-1])
+    centers_tensor = torch.as_tensor(centers)
+    # EMA checkpoints can slightly perturb the bin spacing. Preserve their exact buffer values during conversion.
+    if (
+        bins < 2
+        or radius <= 0
+        or not torch.isfinite(centers_tensor).all()
+        or not (centers_tensor[1:] > centers_tensor[:-1]).all()
+        or not torch.allclose(centers_tensor, -centers_tensor.flip(0), atol=1e-6, rtol=1e-6)
+    ):
+        raise ValueError("Geometry bin centers must be increasing and symmetric over a positive range.")
+    if last.shape[0] != 7 + 2 * bins:
+        raise ValueError("Geometry output channels do not match the perspective bins.")
+    return {"deform_pred": True, "deform_conv_width": first.shape[0], "deform_kbins": bins, "deform_krange": radius}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pdparams_path", required=True, help="Path to the PaddleDetection `.pdparams` checkpoint.")
@@ -230,6 +269,7 @@ def main():
     paddle_state_dict.pop("StructuredToParameterName@@", None)
 
     config = PPDocLayoutV4Config(
+        **infer_geometry_config(paddle_state_dict),
         id2label=dict(enumerate(LABELS)),
         label2id={label: index for index, label in enumerate(LABELS)},
     )
