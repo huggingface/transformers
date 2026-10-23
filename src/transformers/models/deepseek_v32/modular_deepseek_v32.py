@@ -160,7 +160,7 @@ class DeepseekV32Config(Glm4MoeLiteConfig):
         # BC: re-route `num_experts` to `n_routed_experts`
         if (num_experts := kwargs.get("num_experts")) is not None:
             self.n_routed_experts = num_experts
-        PreTrainedConfig.__post_init__(**kwargs)
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 class DeepseekV32RMSNorm(DeepseekV3RMSNorm):
