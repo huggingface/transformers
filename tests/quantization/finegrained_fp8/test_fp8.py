@@ -573,34 +573,36 @@ class FP8Ue8m0LoadingTest(unittest.TestCase):
             self.assertEqual(scale.dtype, torch.float8_e8m0fnu, name)
             torch.testing.assert_close(scale.float(), expected[name], rtol=0, atol=0)
 
-    @patch(
-        "transformers.quantizers.quantizer_finegrained_fp8.FineGrainedFP8HfQuantizer.validate_environment",
-        lambda *args, **kwargs: None,
-    )
-    def test_a_dequantized_load_saves_as_an_unquantized_model(self):
-        """Check that a dequantized load saves the unquantized keys. Mixtral's fused-experts converter must reverse."""
-        from safetensors.torch import load_file
+    @parameterized.expand(["per_expert", "fused"])
+    def test_dequantized_model_saves_unquantized(self, layout):
+        """A dequantized model saves like the unquantized one, in the layout of the checkpoint it was loaded from."""
+        from safetensors.torch import load_file, save_file
 
         from transformers import MixtralConfig, MixtralForCausalLM
 
         config = MixtralConfig(
-            vocab_size=64, hidden_size=128, intermediate_size=128, num_hidden_layers=1,
-            num_attention_heads=4, num_key_value_heads=2, num_local_experts=4, num_experts_per_tok=2,
-        )  # fmt: skip
+            vocab_size=64, hidden_size=128, intermediate_size=128, num_hidden_layers=1, num_attention_heads=4
+        )
+        config.quantization_config = {"quant_method": "fp8", "weight_block_size": [128, 128]}
+        model = MixtralForCausalLM(config)
         with tempfile.TemporaryDirectory() as tmp:
-            MixtralForCausalLM(config).save_pretrained(f"{tmp}/bf16")
-            unquantized_keys = set(load_file(f"{tmp}/bf16/model.safetensors"))
-            MixtralForCausalLM.from_pretrained(
-                f"{tmp}/bf16", quantization_config=FineGrainedFP8Config(), device_map="cpu"
-            ).save_pretrained(f"{tmp}/fp8")
+            model.save_pretrained(tmp)
+            # Mimic an FP8 checkpoint from the Hub (experts per expert) or in transformers' layout (experts fused):
+            # each attention and expert weight in fp8, with a scale per 128x128 block
+            state_dict = load_file(f"{tmp}/model.safetensors") if layout == "per_expert" else dict(model.state_dict())
+            unquantized_keys = set(state_dict)
+            for key in [k for k in unquantized_keys if "proj" in k or "experts" in k]:
+                weight = state_dict[key]
+                scale = weight.abs().max() / torch.finfo(torch.float8_e4m3fn).max
+                state_dict[key] = (weight / scale).to(torch.float8_e4m3fn)
+                blocks = (*weight.shape[:-2], weight.shape[-2] // 128, weight.shape[-1] // 128)
+                state_dict[f"{key}_scale_inv"] = scale.expand(blocks).contiguous()
+            save_file(state_dict, f"{tmp}/model.safetensors", metadata={"format": "pt"})
 
             dequantized = MixtralForCausalLM.from_pretrained(
-                f"{tmp}/fp8", quantization_config=FineGrainedFP8Config(dequantize=True), device_map="cpu"
+                tmp, quantization_config=FineGrainedFP8Config(dequantize=True)
             )
             dequantized.save_pretrained(f"{tmp}/dequantized")
             self.assertEqual(set(load_file(f"{tmp}/dequantized/model.safetensors")), unquantized_keys)
-
-            reloaded = MixtralForCausalLM.from_pretrained(f"{tmp}/dequantized", device_map="cpu")
-        expected = dequantized.state_dict()
-        for name, tensor in reloaded.state_dict().items():
-            torch.testing.assert_close(tensor.float(), expected[name].float(), rtol=0, atol=0, msg=name)
+            reloaded = MixtralForCausalLM.from_pretrained(f"{tmp}/dequantized")
+        torch.testing.assert_close(reloaded.state_dict(), model.state_dict(), rtol=0, atol=1e-2)

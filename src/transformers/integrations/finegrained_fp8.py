@@ -1095,7 +1095,7 @@ class Fp8Dequantize(ConversionOps):
         # Generic chain path: dequantize every weight pattern that has a sibling scale.
         result: dict[str, list[torch.Tensor] | torch.Tensor] = {}
         for key, value in input_dict.items():
-            if "activation_scale" in key or "weight_scale_inv" in key:
+            if "activation_scale" in key or key.endswith("_scale_inv"):
                 continue  # consumed by the dequant; drop from the chain
             scale_key = f"{key}_scale_inv"
             if scale_key not in input_dict:
