@@ -401,6 +401,7 @@ class SST(Optimizer):
                     groups = [model.process_group]
                 model = model.module
             if not groups and model is not None:
+                model = cast(nn.Module, model)
                 units = [
                     (_canonical_name(prefix), unit)
                     for prefix, unit in model.named_modules()
