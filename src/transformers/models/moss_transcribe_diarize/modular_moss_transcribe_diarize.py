@@ -295,6 +295,12 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
     """
 
     valid_processor_kwargs = MossTranscribeDiarizeProcessorKwargs
+    # Chat template markers delimiting the assistant turns, which are the only positions kept in the labels
+    assistant_header = "<|im_start|>assistant\n"
+    assistant_end = "<|im_end|>"
+    # The chat template opens the final assistant turn with an empty think block, which the model doesn't generate at
+    # inference, so it is kept out of the labels
+    empty_think_block = "<think>\n\n</think>\n\n"
 
     def __init__(
         self,
@@ -350,7 +356,9 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
-            Whether to return labels for training.
+            Whether to return labels for training. Only the assistant turns (up to and including their end-of-turn
+            token) are kept, so that the prompt, the audio placeholders and the padding are masked out of the loss.
+            Text without an assistant turn only has its audio placeholders and padding masked.
 
         Returns:
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
@@ -375,9 +383,32 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
             labels[labels == self.audio_bos_token_id] = -100
             labels[labels == self.audio_eos_token_id] = -100
             labels[labels == self.tokenizer.pad_token_id] = -100
-            model_inputs["labels"] = labels
+            model_inputs["labels"] = self._mask_non_assistant_tokens(model_inputs["input_ids"], labels)
 
         return BatchFeature(data=model_inputs, tensor_type="pt", skip_tensor_conversion=self.skip_tensor_conversion)
+
+    def _mask_non_assistant_tokens(self, input_ids: "torch.Tensor", labels: "torch.Tensor") -> "torch.Tensor":
+        """
+        Mask everything outside the assistant turns, e.g. the system and user prompts, out of the loss. Each assistant
+        turn is kept from the token after `assistant_header` (and after the `empty_think_block` if any) up to and
+        including `assistant_end` (or the end of the sequence). Sequences without an assistant turn are left unchanged.
+        """
+        header_ids = self.tokenizer.encode(self.assistant_header, add_special_tokens=False)
+        think_ids = self.tokenizer.encode(self.empty_think_block, add_special_tokens=False)
+        end_id = self.tokenizer.convert_tokens_to_ids(self.assistant_end)
+        header_len = len(header_ids)
+        for row, ids in enumerate(input_ids.tolist()):
+            starts = [i + header_len for i in range(len(ids)) if ids[i : i + header_len] == header_ids]
+            if not starts:
+                continue
+            keep = torch.zeros(len(ids), dtype=torch.bool)
+            for start in starts:
+                if ids[start : start + len(think_ids)] == think_ids:
+                    start += len(think_ids)
+                end = ids.index(end_id, start) + 1 if end_id in ids[start:] else len(ids)
+                keep[start:end] = True
+            labels[row, ~keep] = -100
+        return labels
 
     def _get_audio_token_length(self, audio_lengths, audio_chunk_mapping):
         num_samples = int(audio_chunk_mapping[-1]) + 1

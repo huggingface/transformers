@@ -21,8 +21,12 @@ from ...audio_utils import (
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, is_torch_available, logging
 from ...utils.import_utils import requires
+
+
+if is_torch_available():
+    import torch
 
 
 logger = logging.get_logger(__name__)
@@ -76,6 +80,9 @@ class CanaryProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF01
 @auto_docstring
 class CanaryProcessor(ProcessorMixin):
     valid_processor_kwargs = CanaryProcessorKwargs
+    # The decoder prompt (task tokens) ends with `<|nodiarize|>`, and the transcript that follows with `<|endoftext|>`
+    assistant_header = "<|nodiarize|>"
+    assistant_end = "<|endoftext|>"
 
     def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
@@ -92,7 +99,9 @@ class CanaryProcessor(ProcessorMixin):
         text (`str`, `list[str]`, *optional*):
             The decoder prompt(s) produced by the chat template. It is tokenized into `decoder_input_ids`.
         output_labels (`bool`, *optional*, defaults to `False`):
-            Whether to return labels for training.
+            Whether to return labels for training. Only the transcript (up to and including its end-of-text token) is
+            kept, so that the decoder prompt and the padding are masked out of the loss. Text without the decoder
+            prompt only has its padding masked.
         """
 
         if "return_tensors" in kwargs and kwargs["return_tensors"] != "pt":
@@ -104,12 +113,32 @@ class CanaryProcessor(ProcessorMixin):
             if output_labels:
                 # the decoder inputs are already right-shifted with respect to `labels`
                 model_inputs["decoder_input_ids"] = input_ids[..., :-1]
-                labels = input_ids[..., 1:].clone()
+                labels = self._mask_non_assistant_tokens(input_ids, input_ids.clone())[..., 1:]
                 labels[labels == self.tokenizer.pad_token_id] = -100
                 model_inputs["labels"] = labels
             else:
                 model_inputs["decoder_input_ids"] = input_ids
         return BatchFeature(data=model_inputs, tensor_type="pt")
+
+    def _mask_non_assistant_tokens(self, input_ids: "torch.Tensor", labels: "torch.Tensor") -> "torch.Tensor":
+        """
+        Mask everything outside the assistant turns, e.g. the decoder prompt, out of the loss. Each assistant turn is
+        kept from the token after `assistant_header` up to and including `assistant_end` (or the end of the
+        sequence). Sequences without an assistant turn are left unchanged.
+        """
+        header_ids = self.tokenizer.encode(self.assistant_header, add_special_tokens=False)
+        end_id = self.tokenizer.convert_tokens_to_ids(self.assistant_end)
+        header_len = len(header_ids)
+        for row, ids in enumerate(input_ids.tolist()):
+            starts = [i + header_len for i in range(len(ids)) if ids[i : i + header_len] == header_ids]
+            if not starts:
+                continue
+            keep = torch.zeros(len(ids), dtype=torch.bool)
+            for start in starts:
+                end = ids.index(end_id, start) + 1 if end_id in ids[start:] else len(ids)
+                keep[start:end] = True
+            labels[row, ~keep] = -100
+        return labels
 
     def apply_transcription_request(
         self,

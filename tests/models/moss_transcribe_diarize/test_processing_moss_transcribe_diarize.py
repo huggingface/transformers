@@ -226,6 +226,12 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
         for key in helper_outputs:
             self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
 
+        # only the transcripts and their end-of-turn token are kept, not the template's empty think block
+        labels, input_ids = helper_outputs["labels"], helper_outputs["input_ids"]
+        for row, text in enumerate(transcriptions):
+            self.assertIn(processor.empty_think_block, processor.tokenizer.decode(input_ids[row]))
+            self.assertEqual(processor.tokenizer.decode(labels[row][labels[row] != -100]), f"{text}<|im_end|>")
+
     @require_librosa
     def test_apply_transcription_request_with_prompt_and_keywords(self):
         processor = AutoProcessor.from_pretrained(self.tmpdirname)

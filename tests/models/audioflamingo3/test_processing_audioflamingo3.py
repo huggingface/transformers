@@ -293,3 +293,27 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue((labels[pad_positions] == -100).all())
         kept_positions = ~pad_positions
         self.assertTrue((labels[kept_positions] == input_ids[kept_positions]).all())
+
+    @require_torch
+    def test_output_labels_mask_non_assistant_turns(self):
+        processor = self.get_processor()
+        audio = self.prepare_audio_inputs(batch_size=1)[0]
+
+        conversation = [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "What is this?"}, {"type": "audio", "audio": audio}],
+            },
+            {"role": "assistant", "content": [{"type": "text", "text": "A dog barking."}]},
+            {"role": "user", "content": [{"type": "text", "text": "How many dogs?"}]},
+            {"role": "assistant", "content": [{"type": "text", "text": "Two."}]},
+        ]
+        inputs = processor.apply_chat_template(
+            conversation, tokenize=True, return_dict=True, processor_kwargs={"output_labels": True}
+        )
+
+        # only the assistant turns (up to and including their end-of-turn token) are kept
+        labels, input_ids = inputs["labels"][0], inputs["input_ids"][0]
+        kept_positions = labels != -100
+        self.assertTrue((labels[kept_positions] == input_ids[kept_positions]).all())
+        self.assertEqual(processor.tokenizer.decode(labels[kept_positions]), "A dog barking.<|im_end|>Two.<|im_end|>")
