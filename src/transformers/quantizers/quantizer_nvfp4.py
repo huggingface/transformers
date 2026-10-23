@@ -43,20 +43,17 @@ class NVFP4HfQuantizer(HfQuantizer):
     def serialized_names(self) -> dict[str, list[str]]:
         """The tensors a weight ships as. A dequantized load also folds each global in.
 
-        Expert stacks come first, as `weight_global_scale` also ends a stack's `{proj}_weight_global_scale`. They keep
-        their `experts.` prefix, so a dense MLP's `down_proj` does not match.
+        Expert stacks come first, as `weight_global_scale` also ends a stack's `{proj}_weight_global_scale`. A stack
+        keeps its `experts.` prefix and starts at a name boundary, so neither a dense MLP's `down_proj` nor a shared
+        expert's `shared_experts.down_proj` matches. Core strips the boundary from targets.
         """
         from ..integrations.nvfp4 import EXPERT_PROJECTIONS
 
         globals_ = self.quantization_config.dequantize
-        stacks = {
-            f"experts.{proj}": [
-                f"experts.{proj}",
-                f"experts.{proj}_scale_inv",
-                *([f"experts.{proj}_weight_global_scale"] if globals_ else []),
-            ]
-            for proj in EXPERT_PROJECTIONS
-        }
+        stacks = {}
+        for proj in EXPERT_PROJECTIONS:
+            stack = rf"(?<!\w)experts.{proj}"
+            stacks[stack] = [stack, f"{stack}_scale_inv", *([f"{stack}_weight_global_scale"] if globals_ else [])]
         return {**stacks, "weight": ["weight", "weight_scale_inv", *(["weight_global_scale"] if globals_ else [])]}
 
     @property

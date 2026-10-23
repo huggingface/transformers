@@ -417,17 +417,19 @@ class NVFP4LoadingOpsTest(unittest.TestCase):
         self.assertIn("swizzled layout", logs.output[0])
 
     def test_a_dense_down_proj_does_not_load_as_an_expert_stack(self):
-        """An expert stack ships its packed values under its own name, e.g. `experts.down_proj`. A converter pattern
-        only ends at a name boundary, so a bare `down_proj` would also claim a dense MLP's `mlp.down_proj.weight`.
+        """An expert stack ships its packed values under its own name, e.g. `experts.down_proj`. A bare `down_proj`
+        would also claim a dense MLP's `mlp.down_proj.weight`, and `experts.down_proj` a shared expert's
+        `shared_experts.down_proj.weight`, since a converter pattern only ends at a name boundary.
         """
         quantizer = NVFP4HfQuantizer(NVFP4Config(), pre_quantized=True)
         for key, target in (
             ("model.layers.0.mlp.down_proj.weight", "weight"),
+            ("model.layers.0.mlp.shared_experts.down_proj.weight", "weight"),
             ("model.layers.0.mlp.experts.down_proj", "experts.down_proj"),
             ("model.layers.0.mlp.experts.down_proj_scale_inv", "experts.down_proj"),
         ):
             converter = next(c for c in quantizer.get_weight_conversions() if c.rename_source_key(key)[1])
-            self.assertEqual(converter._original_target_patterns, [target], key)
+            self.assertEqual(converter.target_patterns, [target], key)
 
 
 def _requires_fp8_triton(test):
