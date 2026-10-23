@@ -47,6 +47,10 @@ def module_kind(module_name: str, module) -> str | None:
     return None
 
 
+# Matches the `experts` module and its parameters, not `shared_experts`
+EXPERTS_PATTERN = r"\.experts($|\.)"
+
+
 def embedding_pattern(name: str) -> str:
     """Return the `dtype_plan` key of an embedding table, named by suffix."""
     return rf"{re.escape(name)}$"

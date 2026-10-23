@@ -45,7 +45,6 @@ from transformers.utils.quantization_config import (
     QuantizationMethod,
 )
 
-from ...quantization.finegrained.test_machinery import GroupFp4TestConfig, GroupFp4TestQuantizer
 from .utils import (
     E,
     H,
@@ -96,15 +95,9 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-        # MXFP8 and MXFP4 ship in later PRs: test-only stand-ins under their `quant_method`
-        self.enterContext(
-            mock.patch.dict(qc.BLOCK_SCALED_CONFIGS, {"mxfp8": Mxfp8LikeTestConfig, "mxfp4": GroupFp4TestConfig})
-        )
-        self.enterContext(
-            mock.patch.dict(
-                auto.AUTO_QUANTIZER_MAPPING, {"mxfp8": Mxfp8LikeTestQuantizer, "mxfp4": GroupFp4TestQuantizer}
-            )
-        )
+        # MXFP8 ship in later PRs: test-only stand-ins under their `quant_method`
+        self.enterContext(mock.patch.dict(qc.BLOCK_SCALED_CONFIGS, {"mxfp8": Mxfp8LikeTestConfig}))
+        self.enterContext(mock.patch.dict(auto.AUTO_QUANTIZER_MAPPING, {"mxfp8": Mxfp8LikeTestQuantizer}))
 
     def _experts(self, weight_format, activation_format=None, impl="grouped_mm", sm100=True):
         cfg = _Cfg()
@@ -308,16 +301,23 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         """Check that an op unwrapping a one-element list refuses a list of several tensors."""
         from transformers.integrations.finegrained.conversions import (
             FineGrainedInputScalesSplit,
+            FineGrainedPackedBlocks,
             FineGrainedQuantize,
+            FineGrainedViewPackedInt8,
         )
 
         tensor = torch.zeros(2, 4, 32, 16, dtype=torch.uint8)
         for op in (
+            FineGrainedPackedBlocks(None),
+            FineGrainedViewPackedInt8(None),
             FineGrainedInputScalesSplit(None),
             FineGrainedQuantize(None),
         ):
             with self.subTest(op=type(op).__name__), self.assertRaises(ValueError):
                 op.convert({"experts.down_proj": [tensor, tensor]})
+        # The op re-keys a single target before reading it
+        with self.assertRaises(ValueError):
+            FineGrainedViewPackedInt8(None).convert({"x": [tensor, tensor]}, target_patterns=["experts.down_proj"])
 
     def test_block_fp8_holds_gate_up_stacked_off_sm100(self):
         """A block scale spans 128 rows, so off SM100 block-FP8 gate|up stay stacked as DeepGEMM reads them."""
