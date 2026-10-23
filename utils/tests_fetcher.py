@@ -319,7 +319,7 @@ def get_impacted_files_from_tiny_model_summary(diff_with_last_commit: bool = Fal
         for model_class in impacted_model_classes:
             module = reversed_structure[model_class]
             fn = f"modeling_{module.split('.')[-1]}.py"
-            files.add(f"src.transformers.{module}.{fn}".replace(".", os.path.sep).replace(f"{os.path.sep}py", ".py"))
+            files.add(f"src.transformers.{module}.{fn}".replace(".", "/").replace("/py", ".py"))
 
     return sorted(files)
 
@@ -637,7 +637,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
     splits = content.split('\"\"\"')  # fmt: skip
     content = "".join(splits[::2])
 
-    module_parts = str(module_fname).split(os.path.sep)
+    module_parts = str(module_fname).replace("\\", "/").split("/")
     imported_modules = []
 
     # Let's start with relative imports
@@ -659,7 +659,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
             dep_parts = module_parts[: len(module_parts) - level] + module.split(".")
         else:
             dep_parts = module_parts[: len(module_parts) - level]
-        imported_module = os.path.sep.join(dep_parts)
+        imported_module = "/".join(dep_parts)
         imported_modules.append((imported_module, [imp.strip() for imp in imports.split(",")]))
 
     # Let's continue with direct imports
@@ -672,7 +672,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
     for module, imports in direct_imports:
         import_parts = module.split(".")[1:]  # ignore the name of the repo since we add it below.
         dep_parts = ["src", "transformers"] + import_parts
-        imported_module = os.path.sep.join(dep_parts)
+        imported_module = "/".join(dep_parts)
         imported_modules.append((imported_module, [imp.strip() for imp in imports.split(",")]))
 
     result = []
@@ -681,7 +681,7 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
         if (PATH_TO_REPO / f"{module_file}.py").is_file():
             module_file = f"{module_file}.py"
         elif (PATH_TO_REPO / module_file).is_dir() and (PATH_TO_REPO / module_file / "__init__.py").is_file():
-            module_file = os.path.sep.join([module_file, "__init__.py"])
+            module_file = "/".join([module_file, "__init__.py"])
         else:
             # Some supported imports, such as deprecated module aliases, have no file on disk.
             continue
@@ -738,8 +738,8 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                 for mapping in new_imported_modules_from_import_structure.values():
                     for _module, _imports in mapping.items():
                         # Import Structure returns _module keys as import paths rather than local paths
-                        # We replace with os.path.sep so that it's Windows-compatible
-                        _module = _module.replace(".", os.path.sep)
+                        # Convert dotted import path to forward-slash file path
+                        _module = _module.replace(".", "/")
                         _module = module.replace("__init__.py", f"{_module}.py")
                         if _module not in new_imported_modules:
                             new_imported_modules[_module] = list(_imports)
@@ -760,7 +760,7 @@ def get_module_dependencies(module_fname: str, cache: dict[str, list[str]] | Non
                     path_to_module = PATH_TO_REPO / module.replace("__init__.py", "")
                     dependencies.extend(
                         [
-                            os.path.join(module.replace("__init__.py", ""), f"{i}.py")
+                            f"{module.replace('__init__.py', '')}{i}.py"
                             for i in imports
                             if (path_to_module / f"{i}.py").is_file()
                         ]
@@ -786,7 +786,7 @@ def create_reverse_dependency_tree() -> list[tuple[str, str]]:
     all_modules = list(PATH_TO_TRANSFORMERS.glob("**/*.py"))
     all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
     all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
-    all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
+    all_modules = [mod.relative_to(PATH_TO_REPO).as_posix() for mod in all_modules]
     edges = [(dep, mod) for mod in all_modules for dep in get_module_dependencies(mod, cache=cache)]
     edges += create_backbone_edges()
     return list(set(edges))
@@ -868,7 +868,7 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
     all_modules = list(PATH_TO_TRANSFORMERS.glob("**/*.py"))
     all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
     all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
-    all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
+    all_modules = [mod.relative_to(PATH_TO_REPO).as_posix() for mod in all_modules]
     # Compute the direct dependencies of all modules.
     direct_deps = {m: get_module_dependencies(m, cache=cache) for m in all_modules}
 
@@ -1105,7 +1105,7 @@ def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, te
 
     test_files_to_run = sorted(set(test_files_to_run))
     # Remove SageMaker tests
-    test_files_to_run = [f for f in test_files_to_run if f.split(os.path.sep)[1] != "sagemaker"]
+    test_files_to_run = [f for f in test_files_to_run if f.replace("\\", "/").split("/")[1] != "sagemaker"]
     # Make sure we did not end up with a test file that was removed
     test_files_to_run = [f for f in test_files_to_run if (PATH_TO_REPO / f).exists()]
 
@@ -1143,9 +1143,9 @@ def filter_tests(output_file: str, filters: list[str]):
         return
 
     if test_files == ["tests"]:
-        test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py"] + filters]
+        test_files = [f"tests/{f}" for f in os.listdir("tests") if f not in ["__init__.py"] + filters]
     else:
-        test_files = [f for f in test_files if f.split(os.path.sep)[1] not in filters]
+        test_files = [f for f in test_files if f.replace("\\", "/").split("/")[1] not in filters]
 
     with open(output_file, "w", encoding="utf-8") as f:
         f.write(" ".join(test_files))
