@@ -819,7 +819,7 @@ class AriaModel(LlavaModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         patch_attention_mask = self._create_patch_attention_mask(pixel_mask)
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = output_hidden_states or vision_feature_layer
         image_outputs = self.vision_tower(
             pixel_values,
             patch_attention_mask=patch_attention_mask,

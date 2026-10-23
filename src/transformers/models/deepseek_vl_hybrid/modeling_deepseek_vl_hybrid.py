@@ -386,7 +386,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ):
-        kwargs["output_hidden_states"] = True
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or self.global_attn_index + 1
         high_res_outputs = self.high_res_vision_model(
             pixel_values=pixel_values,
             return_dict=True,
