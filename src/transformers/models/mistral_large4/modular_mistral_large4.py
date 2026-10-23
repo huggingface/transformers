@@ -32,12 +32,11 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..deepseek_v32.modeling_deepseek_v32 import eager_attention_forward
+from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer, eager_attention_forward
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
 from ..glm_moe_dsa.modeling_glm_moe_dsa import (
     GlmMoeDsaAttention,
     GlmMoeDsaDecoderLayer,
-    GlmMoeDsaIndexer,
     GlmMoeDsaModel,
     GlmMoeDsaPreTrainedModel,
 )
@@ -293,7 +292,7 @@ class MistralLarge4TextSoftmaxScaling(nn.Module):
         return query_states * scale.unsqueeze(-1)
 
 
-class MistralLarge4TextIndexer(GlmMoeDsaIndexer):  # TODO: inherit from DeepseekV32Indexer instead.
+class MistralLarge4TextIndexer(DeepseekV32Indexer):
     """Indexer from glm_moe_dsa, but since there is no Q-LoRA in the attention, the indexer queries are derived from
     hidden states, using norm -> proj -> softmax scaling. Also, for layers with no RoPE, the indexer does not use RoPE
     as well."""
