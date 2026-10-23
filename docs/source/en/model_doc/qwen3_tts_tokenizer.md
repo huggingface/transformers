@@ -175,9 +175,18 @@ print("Audio values shape:", output.audio_values.shape)
 
 ## Separate encoder and decoder
 
-The tokenizer builds its encoder and decoder through `AutoModel.from_config`. The encoder uses
-`model.config.encoder_config`; the decoder settings remain in the main config and are exposed as a decoder-only
-`model.config.decoder_config`. The quantizer has its own `model.config.quantizer_config`.
+[`Qwen3TTSTokenizerConfig`] is the source of truth for both components. Encoder architecture settings are flat
+`encoder_*` fields, such as `encoder_hidden_size`, `encoder_num_hidden_layers`, and `encoder_upsampling_ratios`.
+The encoder's sampling rate comes from `input_sampling_rate`. Decoder settings keep their unprefixed names,
+such as `hidden_size`, `num_hidden_layers`, `upsampling_ratios`, and `codebook_dim`; the latter is the decoder's
+continuous input width, not the quantizer's codebook embedding dimension.
+
+The tokenizer builds its encoder and decoder through `AutoModel.from_config`, using the computed
+`model.config.encoder_config` and `model.config.decoder_config` views. These return independent component configs
+containing only that component's settings, with the root dtype and attention implementation forwarded.
+Mutating a view does not update the main config; configure the root fields before constructing the model.
+Neither view is stored as a nested configuration. The only stored subconfig is `quantizer_config`, which in turn
+owns `semantic_quantizer_config`.
 
 The loaded components are available as `model.encoder` and `model.decoder`. Their `forward` methods operate on
 continuous representations; the top-level `encode` and `decode` methods handle quantization separately.
@@ -215,8 +224,19 @@ Unspecified semantic dictionary fields inherit the outer quantizer settings, exc
 [`Qwen3TTSTokenizerSemanticQuantizerConfig`] instance with its own settings. Keep dimensions and codebook sizes
 consistent with the weights when loading a pretrained checkpoint.
 
-Older configs with `num_semantic_quantizers` are migrated on loading. Saved configs store the semantic count
-only as `semantic_quantizer_config.n_codebooks`.
+Configure codebook sizes and counts in `quantizer_config`. Its `hidden_size` is the quantizer's input/output
+width; `codebook_dim` and `vector_quantization_hidden_dimension` describe its internal embeddings and projections.
+These are separate from the components' transformer hidden sizes and the decoder's continuous input width.
+When `quantizer_config` is omitted, its `hidden_size` defaults to the decoder's `codebook_dim`, and its
+`codebook_dim` and `vector_quantization_hidden_dimension` default to half that width.
+
+`Qwen3TTSTokenizerConfig.from_dict` and `from_pretrained` normalize published checkpoint dictionaries that contain
+nested `encoder_config` and `decoder_config`, including their older quantizer fields. The same normalization is
+used for an embedded `Qwen3TTSConfig.audio_config`. Input dictionaries are not modified, and explicitly supplied
+canonical fields or keyword overrides take precedence over imported nested settings.
+Saved configs use flat `encoder_*` fields and unprefixed decoder fields, with only `quantizer_config` nested;
+the semantic count is saved only as `quantizer_config.semantic_quantizer_config.n_codebooks`, not
+`num_semantic_quantizers`.
 
 ## Qwen3TTSTokenizerConfig
 

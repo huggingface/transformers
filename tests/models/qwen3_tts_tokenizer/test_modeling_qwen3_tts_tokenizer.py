@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import inspect
 import json
 import tempfile
@@ -57,48 +58,41 @@ class Qwen3TTSTokenizerModelTester:
         self.audio_samples = audio_samples
         self.is_training = is_training
 
-        self.encoder_config = {
-            "hidden_size": 16,
-            "num_hidden_layers": 1,
-            "num_attention_heads": 2,
-            "num_key_value_heads": 2,
-            "intermediate_size": 32,
-            "num_filters": 8,
-            "kernel_size": 7,
-            "residual_kernel_size": 3,
-            "last_kernel_size": 3,
-            "num_residual_layers": 1,
-            "upsampling_ratios": [8, 6],
-            "codebook_size": 8,
-            "codebook_dim": 4,
-            "vector_quantization_hidden_dimension": 4,  # must match codebook_dim
-            "num_quantizers": num_quantizers,
-            "num_semantic_quantizers": 1,
-            # upsample_groups must divide hidden_size; default 512 does not divide 16
-            "upsample_groups": 8,
-        }
-
-        self.decoder_config = {
+        self.config_kwargs = {
+            "encoder_hidden_size": 16,
+            "encoder_num_hidden_layers": 1,
+            "encoder_num_attention_heads": 2,
+            "encoder_num_key_value_heads": 2,
+            "encoder_intermediate_size": 32,
+            "encoder_num_filters": 8,
+            "encoder_kernel_size": 7,
+            "encoder_residual_kernel_size": 3,
+            "encoder_last_kernel_size": 3,
+            "encoder_num_residual_layers": 1,
+            "encoder_upsampling_ratios": [8, 6],
             "hidden_size": 16,
             "num_hidden_layers": 1,
             "num_attention_heads": 2,
             "num_key_value_heads": 2,
             "head_dim": 8,
             "intermediate_size": 32,
-            "num_quantizers": num_quantizers,
-            "codebook_size": 8,
-            "codebook_dim": 16,  # must match encoder hidden_size, the quantizer input
+            "codebook_dim": 16,
             "latent_dim": 16,
-            "decoder_dim": 32,  # must be divisible by upsample groups
+            "decoder_dim": 32,
             "upsample_rates": [2, 12],
             "upsampling_ratios": [2, 12],
+            "quantizer_config": {
+                "codebook_size": 8,
+                "codebook_dim": 8,
+                "vector_quantization_hidden_dimension": 8,
+                "hidden_size": 16,
+                "n_codebooks": num_quantizers,
+                "semantic_quantizer_config": {"n_codebooks": 1},
+            },
         }
 
-    def get_config(self):
-        return Qwen3TTSTokenizerConfig(
-            encoder_config=self.encoder_config,
-            decoder_config=self.decoder_config,
-        )
+    def get_config(self, **kwargs):
+        return Qwen3TTSTokenizerConfig(**{**copy.deepcopy(self.config_kwargs), **kwargs})
 
     def prepare_config_and_inputs(self):
         input_values = torch.randn([self.batch_size, 1, self.audio_samples], device=torch_device)
@@ -162,14 +156,44 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_model_forward(*config_and_inputs)
 
     def test_component_save_load_preserves_outputs(self):
-        config, inputs = self.model_tester.prepare_config_and_inputs()
+        _, inputs = self.model_tester.prepare_config_and_inputs()
+        config = self.model_tester.get_config(
+            encoder_num_hidden_layers=2,
+            encoder_num_attention_heads=4,
+            encoder_num_key_value_heads=2,
+            encoder_head_dim=4,
+            encoder_intermediate_size=24,
+            encoder_upsampling_ratios=(8, 6),
+            hidden_size=24,
+            num_attention_heads=3,
+            num_key_value_heads=1,
+        )
         model = Qwen3TTSTokenizerModel(config).to(torch_device).eval()
         with torch.no_grad():
+            for module in model.quantizer.modules():
+                if hasattr(module, "embed_sum"):
+                    module.embed_sum.normal_()
+            expected_outputs = model(**inputs)
             embeddings = model.encoder(inputs["input_values"]).last_hidden_state
             codes = model.quantizer.encode(embeddings)
             quantized = model.quantizer.decode(codes.transpose(0, 1))
+        components = ((model.encoder, inputs["input_values"]), (model.decoder, quantized))
 
-        for component, component_input in ((model.encoder, inputs["input_values"]), (model.decoder, quantized)):
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            projected_configs = [type(component.config).from_pretrained(directory) for component, _ in components]
+            restored, loading_info = AutoModel.from_pretrained(directory, output_loading_info=True)
+            restored = restored.to(torch_device).eval()
+            self.assertFalse(loading_info["missing_keys"])
+            self.assertFalse(loading_info["unexpected_keys"])
+            self.assertFalse(loading_info["mismatched_keys"])
+            with torch.no_grad():
+                actual_outputs = restored(**inputs)
+            torch.testing.assert_close(actual_outputs.audio_codes, expected_outputs.audio_codes)
+            torch.testing.assert_close(actual_outputs.audio_values, expected_outputs.audio_values)
+            torch.testing.assert_close(actual_outputs.audio_codes_mask, expected_outputs.audio_codes_mask)
+
+        for (component, component_input), projected_config in zip(components, projected_configs):
             with self.subTest(component=type(component).__name__), tempfile.TemporaryDirectory() as directory:
                 component.save_pretrained(directory)
                 restored, loading_info = AutoModel.from_pretrained(directory, output_loading_info=True)
@@ -177,13 +201,155 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertFalse(loading_info["missing_keys"])
                 self.assertFalse(loading_info["unexpected_keys"])
                 self.assertFalse(loading_info["mismatched_keys"])
+                projected = AutoModel.from_config(projected_config).to(torch_device).eval()
+                projected.load_state_dict(component.state_dict())
                 with torch.no_grad():
                     expected = component(component_input)
                     actual = restored(component_input)
+                    projected_output = projected(component_input)
                 if component is model.encoder:
                     expected = expected.last_hidden_state
                     actual = actual.last_hidden_state
+                    projected_output = projected_output.last_hidden_state
                 torch.testing.assert_close(actual, expected)
+                torch.testing.assert_close(projected_output, expected)
+
+    def test_published_nested_config_preserves_outputs_and_canonical_overrides(self):
+        # A tiny version of the published checkpoint schema, including unused Mimi quantizer settings.
+        published_config = {
+            "model_type": "qwen3_tts_tokenizer_12hz",
+            "encoder_valid_num_quantizers": 4,
+            "input_sample_rate": 24000,
+            "output_sample_rate": 24000,
+            "encoder_config": {
+                "_frame_rate": 125,
+                "sampling_rate": 24000,
+                "hidden_size": 16,
+                "num_hidden_layers": 2,
+                "num_attention_heads": 4,
+                "num_key_value_heads": 2,
+                "head_dim": 4,
+                "intermediate_size": 24,
+                "num_filters": 8,
+                "kernel_size": 7,
+                "residual_kernel_size": 3,
+                "last_kernel_size": 3,
+                "num_residual_layers": 1,
+                "upsampling_ratios": [8, 6],
+                "rope_theta": 2.0,
+                "layer_scale_initial_scale": 1.0,
+                "codebook_size": 13,
+                "codebook_dim": 4,
+                "vector_quantization_hidden_dimension": 4,
+                "num_quantizers": 8,
+                "num_semantic_quantizers": 1,
+                "upsample_groups": 8,
+            },
+            "decoder_config": {
+                "hidden_size": 24,
+                "num_hidden_layers": 1,
+                "num_attention_heads": 3,
+                "num_key_value_heads": 1,
+                "head_dim": 8,
+                "intermediate_size": 32,
+                "codebook_dim": 16,
+                "latent_dim": 16,
+                "decoder_dim": 32,
+                "upsample_rates": [2, 12],
+                "upsampling_ratios": [2, 12],
+                "rope_theta": 4.0,
+                "layer_scale_initial_scale": 1.0,
+                "codebook_size": 8,
+                "num_quantizers": 4,
+                "num_semantic_quantizers": 1,
+                "semantic_codebook_size": 11,
+                "vector_quantization_hidden_dimension": 16,
+            },
+        }
+        canonical_settings = {
+            "encoder_num_hidden_layers": 2,
+            "encoder_num_attention_heads": 4,
+            "encoder_num_key_value_heads": 2,
+            "encoder_head_dim": 4,
+            "encoder_intermediate_size": 24,
+            "encoder_frame_rate": 125,
+            "encoder_rope_parameters": {"rope_type": "default", "rope_theta": 2.0},
+            "encoder_layer_scale_initial_scale": 1.0,
+            "rope_parameters": {"rope_type": "default", "rope_theta": 4.0},
+            "layer_scale_initial_scale": 1.0,
+            "hidden_size": 24,
+            "num_attention_heads": 3,
+            "num_key_value_heads": 1,
+        }
+        overrides = {
+            "encoder_intermediate_size": 40,
+            "intermediate_size": 48,
+            "quantizer_config": {
+                "codebook_size": 7,
+                "codebook_dim": 4,
+                "vector_quantization_hidden_dimension": 4,
+                "hidden_size": 16,
+                "n_codebooks": 3,
+                "semantic_quantizer_config": {"n_codebooks": 2, "codebook_size": 5},
+            },
+        }
+        input_values = torch.linspace(
+            -1, 1, self.model_tester.batch_size * self.model_tester.audio_samples, device=torch_device
+        ).reshape(self.model_tester.batch_size, 1, self.model_tester.audio_samples)
+        inputs = {
+            "input_values": input_values,
+            "padding_mask": torch.ones_like(input_values[:, 0], dtype=torch.bool),
+        }
+        for override_source in (None, "dictionary", "kwargs"):
+            with self.subTest(override_source=override_source), tempfile.TemporaryDirectory() as directory:
+                config_dict = copy.deepcopy(published_config)
+                explicit_settings = overrides if override_source is not None else {}
+                kwargs = {}
+                if override_source == "dictionary":
+                    config_dict.update(copy.deepcopy(overrides))
+                elif override_source == "kwargs":
+                    config_dict.update({"encoder_intermediate_size": 36, "intermediate_size": 44})
+                    kwargs = copy.deepcopy(overrides)
+                original_dict = copy.deepcopy(config_dict)
+                original_kwargs = copy.deepcopy(kwargs)
+                normalized_config = Qwen3TTSTokenizerConfig.from_dict(config_dict, **kwargs)
+                self.assertEqual(config_dict, original_dict)
+                self.assertEqual(kwargs, original_kwargs)
+
+                set_seed(0)
+                reference_config = self.model_tester.get_config(**{**canonical_settings, **explicit_settings})
+                reference = Qwen3TTSTokenizerModel(reference_config).to(torch_device).eval()
+                with torch.no_grad():
+                    for module in reference.quantizer.modules():
+                        if hasattr(module, "embed_sum"):
+                            module.embed_sum.normal_()
+                    expected = reference(**inputs)
+                    expected_embeddings = reference.encoder(input_values).last_hidden_state
+                model = Qwen3TTSTokenizerModel(normalized_config).to(torch_device).eval()
+                model.load_state_dict(reference.state_dict())
+                with torch.no_grad():
+                    actual = model(**inputs)
+                    actual_embeddings = model.encoder(input_values).last_hidden_state
+                torch.testing.assert_close(actual_embeddings, expected_embeddings, atol=1e-7, rtol=1e-6)
+                torch.testing.assert_close(actual.audio_codes, expected.audio_codes)
+                torch.testing.assert_close(actual.audio_values, expected.audio_values, atol=1e-7, rtol=1e-6)
+                torch.testing.assert_close(actual.audio_codes_mask, expected.audio_codes_mask)
+
+                model.save_pretrained(directory)
+                restored, loading_info = AutoModel.from_pretrained(directory, output_loading_info=True)
+                restored = restored.to(torch_device).eval()
+                self.assertFalse(loading_info["missing_keys"])
+                self.assertFalse(loading_info["unexpected_keys"])
+                self.assertFalse(loading_info["mismatched_keys"])
+                with torch.no_grad():
+                    actual = restored(**inputs)
+                    actual_embeddings = restored.encoder(input_values).last_hidden_state
+                torch.testing.assert_close(actual_embeddings, expected_embeddings, atol=1e-7, rtol=1e-6)
+                torch.testing.assert_close(actual.audio_codes, expected.audio_codes)
+                torch.testing.assert_close(actual.audio_values, expected.audio_values, atol=1e-7, rtol=1e-6)
+                torch.testing.assert_close(actual.audio_codes_mask, expected.audio_codes_mask)
+                self.assertEqual(config_dict, original_dict)
+                self.assertEqual(kwargs, original_kwargs)
 
     def test_independent_semantic_quantizer_encode_decode(self):
         config = Qwen3TTSTokenizerQuantizerConfig(
@@ -306,13 +472,6 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
         "so they cannot be reinitialized from the meta device"
     )
     def test_can_init_all_missing_weights(self):
-        pass
-
-    @unittest.skip(
-        reason="`attn_implementation` set on Qwen3TTSTokenizerConfig is not propagated to the "
-        "encoder sub-config, which reports None instead of the requested value"
-    )
-    def test_config_attn_implementation_setter(self):
         pass
 
     @unittest.skip(reason="The codec forward method does not expose submodel capture outputs.")
