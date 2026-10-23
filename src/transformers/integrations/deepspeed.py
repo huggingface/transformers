@@ -744,3 +744,4 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
     loss = total_loss / total_good_tokens.clamp(min=1)
 
     return (loss, outputs) if return_outputs else loss
+
