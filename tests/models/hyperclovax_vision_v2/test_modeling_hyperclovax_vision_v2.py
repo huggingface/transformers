@@ -90,8 +90,9 @@ class HyperCLOVAXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
         C = config.vision_config.in_channels
         T = config.vision_config.temporal_patch_size
         P = config.vision_config.patch_size
+        seq_length = 15
 
-        input_ids = ids_tensor([B, self.model_tester.seq_length], self.model_tester.vocab_size)
+        input_ids = ids_tensor([B, seq_length], self.model_tester.vocab_size)
 
         F = 4
         patch_H = self.model_tester.image_size // P
@@ -119,7 +120,7 @@ class HyperCLOVAXVisionV2ModelTest(VLMModelTest, unittest.TestCase):
 
         insertion_point = self.model_tester.num_image_tokens
 
-        self.assertLessEqual((B * patches_per_video) + insertion_point, self.model_tester.seq_length)
+        self.assertLessEqual(patches_per_video + insertion_point, seq_length)
         for b in range(B):
             input_ids[b, insertion_point : insertion_point + patches_per_video] = self.model_tester.video_token_id
 

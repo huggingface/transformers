@@ -14,6 +14,8 @@
 from copy import deepcopy
 from inspect import signature
 
+import torch
+
 from transformers import PreTrainedConfig
 from transformers.testing_utils import _TEXT_MODEL_TESTER_DEFAULTS
 
@@ -102,7 +104,7 @@ class MultiModalModelTester:
 
     def create_attention_mask(self, input_ids):
         """Default causal (lower-triangular) attention mask. Override for bidirectional models like Gemma3."""
-        return input_ids.ne(self.pad_token_id).to(torch_device)
+        return input_ids.ne(self.pad_token_id).to(device=torch_device, dtype=torch.int64)
 
     def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
         """Model-specific extra inputs (e.g. LlavaNext `image_sizes`, Qwen3VL `mm_token_type_ids`).
