@@ -158,6 +158,8 @@ manager.add_request(input_ids=inputs_b, temperature=0.1, top_k=10)
 
 Each parameter in [`GenerationConfig`] must be a non-default value in order to create the associated logits processor at runtime. For example, set `temperature` to a value other than `None` or `1` to support per-request temperature control. Requests with temperatures of `1` can still be created afterwards.
 
+You can also pass `min_length` to `add_request` to control when each request can select EOS. Set a positive `min_length` and an `eos_token_id` in the initial [`GenerationConfig`] to enable this processor. The minimum counts both prompt and generated tokens; an override of `0` allows EOS immediately, and requests without an override use the configured minimum.
+
 ### Retrieving results
 
 Iterate over the manager to receive results as they arrive.
