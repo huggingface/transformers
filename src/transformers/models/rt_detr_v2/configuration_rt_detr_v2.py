@@ -101,6 +101,10 @@ class RTDetrV2Config(PreTrainedConfig):
         Relative weight of the L1 bounding box loss in the object detection loss.
     weight_loss_giou (`float`, *optional*, defaults to 2.0):
         Relative weight of the generalized IoU loss in the object detection loss.
+    weight_loss_mask (`float`, *optional*, defaults to 1.0):
+        Relative weight of the sigmoid focal loss for segmentation masks.
+    weight_loss_dice (`float`, *optional*, defaults to 1.0):
+        Relative weight of the dice loss for segmentation masks.
     decoder_n_levels (`int`, *optional*, defaults to 3):
         The number of feature levels used by the decoder.
     decoder_offset_scale (`float`, *optional*, defaults to 0.5):
@@ -186,6 +190,8 @@ class RTDetrV2Config(PreTrainedConfig):
     weight_loss_vfl: float = 1.0
     weight_loss_bbox: float = 5.0
     weight_loss_giou: float = 2.0
+    weight_loss_mask: float = 1.0
+    weight_loss_dice: float = 1.0
     eos_coefficient: float = 1e-4
     decoder_n_levels: int = 3
     decoder_offset_scale: float = 0.5
