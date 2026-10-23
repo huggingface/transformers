@@ -47,7 +47,7 @@ logger = logging.get_logger(__name__)
 class VideoLlavaImageProcessorKwargs(ImagesKwargs, total=False):
     """
     return_legacy_image_output (`bool`, *optional*, defaults to `True`):
-        Whether to return outputs in lagacy format or not. From v5.20
+        Whether to return outputs in legacy format or not. From v5.20
         the legacy path will be dropped.
     """
 
