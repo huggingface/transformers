@@ -436,6 +436,7 @@ else:
     _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "RopeParameters", "dynamic_rope_update"]
     _import_structure["modeling_utils"] = ["AttentionInterface", "PreTrainedModel"]
     _import_structure["optimization"] = [
+        "SST",
         "Adafactor",
         "GreedyLR",
         "get_constant_schedule",
@@ -603,6 +604,7 @@ if TYPE_CHECKING:
     from .models.timm_wrapper import TimmWrapperImageProcessor as TimmWrapperImageProcessor
 
     # Optimization
+    from .optimization import SST as SST
     from .optimization import Adafactor as Adafactor
     from .optimization import GreedyLR as GreedyLR
     from .optimization import get_constant_schedule as get_constant_schedule
