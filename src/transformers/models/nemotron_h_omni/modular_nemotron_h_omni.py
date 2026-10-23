@@ -50,7 +50,7 @@ def compute_retention_mask(
     Computes the retention mask for video embeddings based on the grid dimensions.
 
     Args:
-        video_embeds (`torch.FloatTensor` of shape `(T * H * W, hidden_size)`):
+        video_embeds (`torch.FloatTensor` of shape `(T, H, W, hidden_size)` or `(T * H * W, hidden_size)`):
             The video embeddings to compute the retention mask for.
         thw (`torch.LongTensor` of shape `(3)`):
             The temporal, height and width of feature shape of each video in LLM.
@@ -111,8 +111,6 @@ class NemotronH_Omni_Reasoning_V3PreTrainedModel(PreTrainedModel):
     _is_stateful = True
     # mel extraction runs in the processor, so the checkpoint's in-encoder featurizer buffers are unused
     _keys_to_ignore_on_load_unexpected = [r"audio_tower\.feature_extractor\."]
-    # checkpoints never store the MTP vision norm; it keeps its identity affine initialization
-    _keys_to_ignore_on_load_missing = [r"vision_final_layernorm\."]
 
 
 class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, GenerationMixin):
@@ -244,8 +242,16 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
         )
         vision_outputs = self.vision_model(packed, **kwargs)
         patch_size = self.vision_model.patch_size
-        pooler_output = self.project_vision_features(
-            vision_outputs.features, height // patch_size, width // patch_size
+        grid_height, grid_width = height // patch_size, width // patch_size
+        video_embeds = self.project_vision_features(vision_outputs.features, grid_height, grid_width)
+        # One entry per video, like the per-image split of `get_image_features`; `pixel_values_videos` holds the frames
+        # of a single video. The post-pixel-shuffle token grid is kept, `(num_tubelets, grid_height, grid_width,
+        # hidden_size)`, because `forward` prunes on it and frames keep their aspect ratio, so it is rarely square.
+        scale_factor = self.config.downsample_ratio
+        pooler_output = (
+            video_embeds.view(
+                video_embeds.shape[0], int(grid_height * scale_factor), int(grid_width * scale_factor), -1
+            ),
         )
         return BaseModelOutputWithPooling(
             last_hidden_state=vision_outputs.last_hidden_state,
@@ -382,10 +388,9 @@ class NemotronH_Omni_Reasoning_V3(NemotronH_Omni_Reasoning_V3PreTrainedModel, Ge
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
 
             if self.video_pruning_rate > 0:
-                h = w = int(video_embeds.shape[1] ** 0.5)
                 evs_mask = compute_retention_mask(
                     video_embeds=video_embeds,
-                    thw=(video_embeds.shape[0], h, w),
+                    thw=video_embeds.shape[:3],
                     spatial_merge_size=1,
                     q=self.video_pruning_rate,
                 )

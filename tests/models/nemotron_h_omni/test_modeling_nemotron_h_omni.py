@@ -17,6 +17,7 @@ import copy
 import re
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -316,6 +317,19 @@ class NemotronHOmniModelTestMixin:
                         else:
                             self.assertEqual(tensor.dtype, dtype, f"{name} was upcasted but it should NOT be")
 
+    def test_reverse_loading_mapping(self):
+        # The `vision_projector.vision_final_layernorm` rename only applies to MTP checkpoints, so build the MTP vision
+        # norm here; otherwise the common test finds no saved key for that rule.
+        prepare = self.model_tester.prepare_config_and_inputs_for_common
+
+        def prepare_with_mtp_vision_norm():
+            config, inputs_dict = prepare()
+            config.text_config.num_nextn_predict_layers = 1
+            return config, inputs_dict
+
+        with patch.object(self.model_tester, "prepare_config_and_inputs_for_common", prepare_with_mtp_vision_norm):
+            super().test_reverse_loading_mapping()
+
     @unittest.skip(reason="NemotronH needs at least 3 layers to test (mamba, moe, attention)")
     def test_num_layers_is_small(self):
         pass
@@ -423,6 +437,43 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
 
         self.assertFalse(torch.allclose(torch.cat(expected, dim=0), torch.cat(normalized, dim=0)))
         torch.testing.assert_close(torch.cat(normalized, dim=0), manual)
+
+    @parameterized.expand([("square", 32, 32), ("non_square", 32, 64)])
+    def test_video_forward(self, _, frame_height, frame_width):
+        # The common `get_video_features` tests are skipped above, so this covers the video branch of `forward`: it
+        # concatenates the per-video `pooler_output` and, with `video_pruning_rate > 0`, drops redundant tokens on the
+        # tubelets' token grid, which is not square when the frames are not (the processor keeps the aspect ratio).
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        tester = self.model_tester
+        num_tubelets = 2
+        num_frames = num_tubelets * config.video_temporal_patch_size
+        pixel_values_videos = floats_tensor([num_frames, tester.num_channels, frame_height, frame_width])
+        grid_height = int(frame_height // tester.patch_size * config.downsample_ratio)
+        grid_width = int(frame_width // tester.patch_size * config.downsample_ratio)
+        tokens_per_tubelet = grid_height * grid_width
+        text_ids = inputs_dict["input_ids"][:1]
+        text_ids = text_ids[text_ids != config.image_token_id].unsqueeze(0)
+        video_ids = torch.full(
+            (1, num_tubelets * tokens_per_tubelet), config.image_token_id, dtype=text_ids.dtype, device=torch_device
+        )
+        input_ids = torch.cat([video_ids, text_ids], dim=1)
+
+        for video_pruning_rate in (0.0, 0.5):
+            config.video_pruning_rate = video_pruning_rate
+            model = NemotronH_Omni_Reasoning_V3(config).to(torch_device).eval()
+            with torch.no_grad():
+                video_features = model.get_video_features(pixel_values_videos, return_dict=True).pooler_output
+                logits = model(input_ids=input_ids, pixel_values_videos=pixel_values_videos).logits
+
+            self.assertEqual(len(video_features), 1)
+            self.assertEqual(
+                tuple(video_features[0].shape),
+                (num_tubelets, grid_height, grid_width, config.text_config.hidden_size),
+            )
+            kept_video_tokens = num_tubelets * tokens_per_tubelet
+            if video_pruning_rate > 0:
+                kept_video_tokens = max(tokens_per_tubelet, int(kept_video_tokens * (1 - video_pruning_rate)))
+            self.assertEqual(logits.shape[1], text_ids.shape[1] + kept_video_tokens)
 
 
 @require_torch
