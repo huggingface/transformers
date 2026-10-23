@@ -1,8 +1,0 @@
-- sections:
-  - local: index
-    title: Transformers
-  - local: installation
-    title: Kurulum
-  - local: quicktour
-    title: Hızlı Başlangıç
-  title: Başlarken

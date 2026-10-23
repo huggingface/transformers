@@ -91,7 +91,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             repos/${{ github.repository }}/issues/${NEEDS_GET_PR_NUMBER_OUTPUTS_PR_NUMBER}/comments \
-            -f "body=[Building docs for all languages...](${GITHUB_RUN_URL})"
+            -f "body=[Building docs...](${GITHUB_RUN_URL})"
 
   python-version:
     name: Read .python-version
@@ -122,12 +122,12 @@ jobs:
     name: Build doc
     needs: [get-pr-number, get-pr-info, verify_pr_commit, python-version]
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' && needs.verify_pr_commit.result == 'success' }}
-    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@9fc8a41d7729c424fdb2192f2f85ff63102ec9a3 # main
+    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@e008c246aaa2eaa86b7b95a19a1944d59917990a # main
     with:
       commit_sha: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
       package: transformers
-      languages: ar de en es fr hi it ja ko pt zh
+      languages: en
       python_version: ${{ needs.python-version.outputs.version }}
 
   update_run_status:
