@@ -14,14 +14,7 @@
 
 """English Normalizer class for CLVP."""
 
-import sys
-
-
-if sys.version_info >= (3, 11):
-    # Atomic grouping support was only added to the core RE in Python 3.11
-    import re
-else:
-    import regex as re
+import re
 
 
 class EnglishNormalizer:

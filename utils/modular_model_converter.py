@@ -233,6 +233,16 @@ def get_full_attribute_name(node: cst.Attribute | cst.Name) -> str | None:
     return None
 
 
+def get_assign_target(node: cst.CSTNode) -> cst.BaseAssignTargetExpression | None:
+    """Returns the target node of the assignment if `node` is a plain assignment (`self.x = ...`) or annotated assignment
+    (`self.x: int = ...`). Otherwise, returns `None`."""
+    if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+        return node.body[0].targets[0].target
+    if m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
+        return node.body[0].target
+    return None
+
+
 class ReplaceParentClassCallTransformer(cst.CSTTransformer):
     """
     This Transformer is used to replace all calls of the form `module.Class.func(...)` by a call of the form
@@ -304,16 +314,20 @@ class ReplaceSuperCallTransformer(cst.CSTTransformer):
         deduplicated_new_body = []
         existing_nodes = set()
         for node in new_statements:
-            if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
-                target = self.python_module.code_for_node(node.body[0].targets[0].target)
+            # Check if the node is an assign statement (typed or not)
+            target_node = get_assign_target(node)
+            if target_node is not None:
+                target = self.python_module.code_for_node(target_node)
                 self.all_assign_target[target] = node
+            # Check if the node is a delete statement
             if m.matches(node, m.SimpleStatementLine(body=[m.Del()])):
                 target = self.python_module.code_for_node(node.body[0].target)
                 self.deleted_targets[target] = node
 
         for stmt in existing_body:
-            if m.matches(stmt, m.SimpleStatementLine(body=[m.Assign()])):
-                target = self.python_module.code_for_node(stmt.body[0].targets[0].target)
+            target_node = get_assign_target(stmt)
+            if target_node is not None:
+                target = self.python_module.code_for_node(target_node)
                 if target in self.deleted_targets:
                     continue
                 if target in self.all_assign_target:
@@ -1054,20 +1068,18 @@ def replace_class_node(
     # Compute new class attributes
     original_modeling_class_attributes = {}
     for node in original_modeling_node.body.body:
-        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
-            original_modeling_class_attributes[node.body[0].targets[0].target.value] = node
-        elif m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
-            original_modeling_class_attributes[node.body[0].target.value] = node
+        target_node = get_assign_target(node)
+        if target_node is not None:
+            original_modeling_class_attributes[target_node.value] = node
 
     modular_class_attributes = {}
     for node in modular_class_node.body.body:
-        if m.matches(node, m.SimpleStatementLine(body=[m.Assign()])):
+        target_node = get_assign_target(node)
+        if target_node is not None:
             if hasattr(node.body[0].value, "func") and node.body[0].value.func.value == "AttributeError":
-                original_modeling_class_attributes.pop(node.body[0].targets[0].target.value)
+                original_modeling_class_attributes.pop(target_node.value)
                 continue  # delete unnecessary cls attribute, especially in configs
-            modular_class_attributes[node.body[0].targets[0].target.value] = node
-        elif m.matches(node, m.SimpleStatementLine(body=[m.AnnAssign()])):
-            modular_class_attributes[node.body[0].target.value] = node
+            modular_class_attributes[target_node.value] = node
 
     # Use all original modeling attributes, and potentially override some with values in the modular
     new_class_attributes = list({**original_modeling_class_attributes, **modular_class_attributes}.values())
@@ -1107,6 +1119,9 @@ def replace_class_node(
     new_class_methods = []
     # Iterate over the methods of the original modeling code, and add them to the list of methods to add
     for name, node in original_modeling_methods.items():
+        # A class attribute of the same name in modular shadows the method (e.g. a config field replacing a property)
+        if name.removesuffix("_setter") in modular_class_attributes:
+            continue
         # If the method was redefined in modular, make appropriate changes to the node
         if name in modular_methods:
             # Get the corresponding method node in modular
