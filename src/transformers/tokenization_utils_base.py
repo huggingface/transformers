@@ -97,6 +97,27 @@ def flatten(arr: list):
     return res
 
 
+def _is_empty_sequence(value) -> bool:
+    """Same answer as `len(flatten(value)) == 0`, without copying the batch."""
+    if isinstance(value, (str, bytes)) or value is None:
+        return value is None or len(value) == 0
+    if isinstance(value, np.ndarray):
+        if value.size == 0:
+            return True
+        if value.dtype != object:
+            return False
+    try:
+        length = len(value)
+    except TypeError:
+        return False
+    if length == 0:
+        return True
+    first = value[0]
+    if isinstance(first, (list, tuple, np.ndarray)):
+        return all(_is_empty_sequence(item) for item in value)
+    return False
+
+
 if is_tokenizers_available() or TYPE_CHECKING:
     from tokenizers import Encoding as EncodingFast
 
@@ -694,7 +715,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             def as_tensor(value, dtype=None):
                 if isinstance(value, list) and len(value) > 0 and isinstance(value[0], np.ndarray):
                     return torch.from_numpy(np.array(value))
-                if len(flatten(value)) == 0 and dtype is None:
+                if _is_empty_sequence(value) and dtype is None:
                     dtype = torch.int64
                 return torch.tensor(value, dtype=dtype)
 
@@ -706,7 +727,7 @@ class BatchEncoding(UserDict, Generic[_V]):
             import mlx.core as mx
 
             def as_tensor(value, dtype=None):
-                if len(flatten(value)) == 0 and dtype is None:
+                if _is_empty_sequence(value) and dtype is None:
                     dtype = mx.int32
                 return mx.array(value, dtype=dtype)
 
@@ -724,7 +745,7 @@ class BatchEncoding(UserDict, Generic[_V]):
                     if len(set(value_lens)) > 1 and dtype is None:
                         # we have a ragged list so handle explicitly
                         value = as_tensor([np.asarray(val) for val in value], dtype=object)
-                if len(flatten(value)) == 0 and dtype is None:
+                if _is_empty_sequence(value) and dtype is None:
                     dtype = np.int64
                 return np.asarray(value, dtype=dtype)
 
