@@ -68,6 +68,8 @@ if TYPE_CHECKING:
     from .camembert import *
     from .canary import *
     from .canine import *
+    from .cellpose import *
+    from .cellpose_dino import *
     from .chameleon import *
     from .chinese_clip import *
     from .chmv2 import *
