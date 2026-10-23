@@ -131,6 +131,9 @@ class TinyModelMLP(nn.Module):
 
 
 class TinyModelDecoderLayer(GradientCheckpointingLayer):
+    # Jais2 has a similar residual layout, but TinyModel replaces its attention/MLP
+    # and omits both normalization layers. Define this small block directly because
+    # inheriting Jais2 would still require a complete forward override.
     def __init__(self, config: TinyModelConfig):
         super().__init__()
         self.self_attn = TinyModelAttention(config)

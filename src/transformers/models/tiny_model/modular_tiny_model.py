@@ -19,6 +19,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -26,7 +27,6 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, loggi
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
-from ..jais2.modeling_jais2 import Jais2DecoderLayer
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaPreTrainedModel
 from ..vit.modeling_vit import ViTAttention
@@ -107,14 +107,14 @@ class TinyModelMLP(CLIPMLP):
         self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
 
 
-class TinyModelDecoderLayer(Jais2DecoderLayer):
+class TinyModelDecoderLayer(GradientCheckpointingLayer):
+    # Jais2 has a similar residual layout, but TinyModel replaces its attention/MLP
+    # and omits both normalization layers. Define this small block directly because
+    # inheriting Jais2 would still require a complete forward override.
     def __init__(self, config: TinyModelConfig):
-        super().__init__(config, layer_idx=0)
-        del self.hidden_size
+        super().__init__()
         self.self_attn = TinyModelAttention(config)
         self.mlp = TinyModelMLP(config)
-        del self.input_layernorm
-        del self.post_attention_layernorm
 
     def forward(
         self,
