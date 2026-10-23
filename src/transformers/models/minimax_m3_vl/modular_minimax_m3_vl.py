@@ -23,7 +23,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, DynamicLayer, StaticLayer
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
@@ -200,8 +200,8 @@ class MiniMaxM3VLVisionConfig(PreTrainedConfig):
 class MiniMaxM3VLConfig(PreTrainedConfig):
     model_type = "minimax_m3_vl"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=MiniMaxM3VLTextConfig),
-        "vision_config": SubConfigSpec(config_class=MiniMaxM3VLVisionConfig),
+        "text_config": MiniMaxM3VLTextConfig,
+        "vision_config": MiniMaxM3VLVisionConfig,
     }
 
     attribute_map = {
