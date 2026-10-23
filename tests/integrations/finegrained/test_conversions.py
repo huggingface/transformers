@@ -35,15 +35,11 @@ from transformers.core_model_loading import (
 )
 from transformers.integrations.moe import use_experts_implementation
 from transformers.modeling_utils import LoadStateDictConfig
-from transformers.quantizers import auto
-from transformers.quantizers.block_scaled_utils import BlockScaledQuantizer
 from transformers.testing_utils import require_torch
-from transformers.utils import quantization_config as qc
 from transformers.utils.quantization_config import (
-    BlockScaledConfig,
     Fp8Config,
+    Mxfp8Config,
     NVFP4Config,
-    QuantizationMethod,
 )
 
 from .utils import (
@@ -59,19 +55,6 @@ from .utils import (
     fake_finegrained_kernel,
     patch_finegrained_kernel,
 )
-
-
-class Mxfp8LikeTestConfig(BlockScaledConfig):
-    """Test-only stand-in for MXFP8, which ships in a later PR: FP8 values with a UE8M0 scale per 32."""
-
-    method = QuantizationMethod.MXFP8
-    activation_formats = (None, "mxfp8", "mxfp4", "bf16")
-    weight_block_size = (1, 32)
-    scale_fmt = "ue8m0"
-
-
-class Mxfp8LikeTestQuantizer(BlockScaledQuantizer):
-    pass
 
 
 @use_experts_implementation(is_transposed=True)
@@ -93,12 +76,6 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
     """
 
     E, HIDDEN, INTER = 4, 256, 256  # both projections have whole 128-row blocks and two K bands
-
-    def setUp(self):
-        super().setUp()
-        # MXFP8 ship in later PRs: test-only stand-ins under their `quant_method`
-        self.enterContext(mock.patch.dict(qc.BLOCK_SCALED_CONFIGS, {"mxfp8": Mxfp8LikeTestConfig}))
-        self.enterContext(mock.patch.dict(auto.AUTO_QUANTIZER_MAPPING, {"mxfp8": Mxfp8LikeTestQuantizer}))
 
     def _experts(self, weight_format, activation_format=None, impl="grouped_mm", sm100=True):
         cfg = _Cfg()
@@ -198,7 +175,7 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
     def test_fused_dense_scales_save_without_changing_the_runtime_dtype(self):
         from transformers.integrations.finegrained.conversions import FineGrainedDeserialize
 
-        config = Mxfp8LikeTestConfig()
+        config = Mxfp8Config()
         model = torch.nn.Module()
         model.config = PreTrainedConfig()
         model.mlp = torch.nn.Module()
@@ -238,8 +215,8 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
         The loader runs the module's ops in a one-to-one converter. The ops must return the tensor under the same key.
         """
         model, experts = self._experts("mxfp8")
-        experts.quantization_config = Mxfp8LikeTestConfig()  # as set by the module replacement
-        quantizer = _quantizer_for(Mxfp8LikeTestConfig())
+        experts.quantization_config = Mxfp8Config()  # as set by the module replacement
+        quantizer = _quantizer_for(Mxfp8Config())
         for key, shape in (("experts.gate_up_proj_bias", (4, 512)), ("experts.down_proj_scale_inv", (4, 256, 8))):
             converter = WeightConverter(key, key, operations=quantizer.get_param_ops(model, key))
             tensor = torch.zeros(shape, dtype=torch.float8_e8m0fnu if "scale" in key else torch.float32)
@@ -377,6 +354,48 @@ class FineGrainedLayoutOpsTest(unittest.TestCase):
 @require_torch
 class FineGrainedLoaderChainTest(unittest.TestCase):
     """Check conversion chains that combine core ops with fine-grained ops in one load."""
+
+    def test_dequantizing_a_fused_nvfp4_stack_applies_each_experts_globals(self):
+        """Check that dequantizing a fused NVFP4 stack applies each expert's own globals.
+
+        The vLLM layout ships `(E,)` globals and `(E, 2)` for a gate|up stack.
+        """
+        from transformers.integrations.finegrained.conversions import FineGrainedDequantize
+
+        torch.manual_seed(0)
+        checkpoint, expected = {}, {}
+        for proj, rows, cols, halves in (("gate_up_proj", 2 * I, H, 2), ("down_proj", H, I, 1)):
+            codes = torch.randint(0, 256, (E, rows, cols // 2), dtype=torch.uint8)
+            blocks = (torch.rand(E, rows, cols // 16) + 0.5).to(torch.float8_e4m3fn)
+            globals_ = torch.pow(2.0, torch.randint(-8, 0, (E, halves)).float())
+            prefix = f"model.layers.0.mlp.experts.{proj}"
+            checkpoint |= {
+                prefix: codes,
+                f"{prefix}_weight_scale": blocks,
+                f"{prefix}_weight_scale_2": globals_.squeeze(1) if halves == 1 else globals_,
+            }
+            half_rows = rows // halves
+            expected[proj] = torch.stack(
+                [
+                    torch.cat(
+                        [
+                            FineGrainedDequantize(None)._dequantize_one(
+                                codes[e, h * half_rows : (h + 1) * half_rows],
+                                blocks[e, h * half_rows : (h + 1) * half_rows],
+                                torch.float32,
+                                globals_[e, h],
+                            )
+                            for h in range(halves)
+                        ]
+                    )
+                    for e in range(E)
+                ]
+            )
+        model, info, _ = _load_and_save(checkpoint, NVFP4Config(dequantize=True))
+        self.assertEqual(info.conversion_errors, {})
+        experts = model.model.layers[0].mlp.experts
+        for proj, reference in expected.items():
+            torch.testing.assert_close(getattr(experts, proj).float(), reference, msg=proj)
 
     def test_on_the_fly_quantization_blocks_each_projection_whole(self):
         """Check that each quantization block holds rows of one projection only.
@@ -548,45 +567,3 @@ class FineGrainedLoaderChainTest(unittest.TestCase):
             model_state[q_weight_key], model_state[scale_key], output_dtype=torch.float32
         )
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
-
-    def test_dequantizing_a_fused_nvfp4_stack_applies_each_experts_globals(self):
-        """Check that dequantizing a fused NVFP4 stack applies each expert's own globals.
-
-        The vLLM layout ships `(E,)` globals and `(E, 2)` for a gate|up stack.
-        """
-        from transformers.integrations.finegrained.conversions import FineGrainedDequantize
-
-        torch.manual_seed(0)
-        checkpoint, expected = {}, {}
-        for proj, rows, cols, halves in (("gate_up_proj", 2 * I, H, 2), ("down_proj", H, I, 1)):
-            codes = torch.randint(0, 256, (E, rows, cols // 2), dtype=torch.uint8)
-            blocks = (torch.rand(E, rows, cols // 16) + 0.5).to(torch.float8_e4m3fn)
-            globals_ = torch.pow(2.0, torch.randint(-8, 0, (E, halves)).float())
-            prefix = f"model.layers.0.mlp.experts.{proj}"
-            checkpoint |= {
-                prefix: codes,
-                f"{prefix}_weight_scale": blocks,
-                f"{prefix}_weight_scale_2": globals_.squeeze(1) if halves == 1 else globals_,
-            }
-            half_rows = rows // halves
-            expected[proj] = torch.stack(
-                [
-                    torch.cat(
-                        [
-                            FineGrainedDequantize(None)._dequantize_one(
-                                codes[e, h * half_rows : (h + 1) * half_rows],
-                                blocks[e, h * half_rows : (h + 1) * half_rows],
-                                torch.float32,
-                                globals_[e, h],
-                            )
-                            for h in range(halves)
-                        ]
-                    )
-                    for e in range(E)
-                ]
-            )
-        model, info, _ = _load_and_save(checkpoint, NVFP4Config(dequantize=True))
-        self.assertEqual(info.conversion_errors, {})
-        experts = model.model.layers[0].mlp.experts
-        for proj, reference in expected.items():
-            torch.testing.assert_close(getattr(experts, proj).float(), reference, msg=proj)
