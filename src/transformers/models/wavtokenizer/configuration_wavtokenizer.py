@@ -151,6 +151,8 @@ class WavTokenizerConfig(PreTrainedConfig):
     def frame_rate(self) -> int:
         return math.ceil(self.sampling_rate / self.hop_length)
 
+    # derived, not `sub_configs`: the encoder shares every field with the full codec, and WavTokenizer checkpoints
+    # are flat
     @property
     def encoder_config(self):
         config_dict = self.to_dict()
