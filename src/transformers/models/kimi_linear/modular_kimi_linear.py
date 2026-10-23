@@ -236,7 +236,7 @@ class KimiLinearForgetGate(Glm5NextTextForgetGate):
 
 
 class KimiLinearDeltaAttention(Glm5NextTextLinearAttention):
-    """Kimi Linear Attention: this is essentialy the same a gated delta net (GDN) but decay is per-channel instead of
+    """Kimi Linear Attention: this is essentially the same a gated delta net (GDN) but decay is per-channel instead of
     per-token."""
 
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
