@@ -731,9 +731,6 @@ class RopeParameters(TypedDict, total=False):
         mrope_section (`list[int]`, *optional*):
             Used with Multimodal RoPE (MRoPE). Sizes of contiguous frequency bands for multimodal axes
             (typically temporal, height, and width, whose sum equals `head_dim // 2`).
-        mrope_interleaved (`bool`, *optional*):
-            Used with Multimodal RoPE (MRoPE). Whether the multimodal frequency sections are interleaved across
-            dimensions rather than grouped into contiguous blocks.
     """
 
     rope_theta: float | None
