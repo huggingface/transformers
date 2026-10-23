@@ -1846,7 +1846,7 @@ def _inverse_softplus(value: float) -> float:
 
 @auto_docstring
 class EsmFold2PreTrainedModel(PreTrainedModel):
-    config: EsmFold2Config
+    config_class = EsmFold2Config
     base_model_prefix = "esmfold2"
     main_input_name = "token_index"
     _no_split_modules = [

@@ -378,7 +378,7 @@ class RadioLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class RadioPreTrainedModel(PreTrainedModel):
-    config: RadioConfig
+    config_class = RadioConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True

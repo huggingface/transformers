@@ -284,6 +284,7 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     patch_size: int = 14
     spatial_merge_size: int = 2
     rope_parameters: dict | None = None
+    vision_use_head = AttributeError()
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")

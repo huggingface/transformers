@@ -518,6 +518,7 @@ class Exaone4_5_PreTrainedModel(PreTrainedModel):
         "hidden_states": Exaone4_5_DecoderLayer,
         "attentions": Exaone4_5_Attention,
     }
+    config_class = Exaone4_5_Config
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
 

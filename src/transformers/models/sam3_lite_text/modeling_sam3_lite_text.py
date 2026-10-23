@@ -349,6 +349,7 @@ class Sam3LiteTextPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    config_class = Sam3LiteTextConfig
     supports_gradient_checkpointing = True
 
     @torch.no_grad()
@@ -369,6 +370,7 @@ class Sam3LiteTextPreTrainedModel(PreTrainedModel):
 """
 )
 class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
+    config_class = Sam3LiteTextTextConfig
     config: Sam3LiteTextTextConfig
     _can_record_outputs = {
         "hidden_states": Sam3LiteTextTextEncoderLayer,

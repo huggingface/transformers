@@ -487,7 +487,7 @@ class CamembertLMHead(nn.Module):
 
 @auto_docstring
 class CamembertPreTrainedModel(PreTrainedModel):
-    config: CamembertConfig
+    config_class = CamembertConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True

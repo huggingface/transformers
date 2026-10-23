@@ -69,6 +69,9 @@ class SiglipTextConfig(PreTrainedConfig):
 @strict
 class SiglipVisionConfig(PreTrainedConfig):
     r"""
+    vision_use_head ('bool', *optional*):
+        Whether to use a vision head module or not.
+
     Example:
 
     ```python

@@ -534,7 +534,7 @@ class Molmo2VisionEncoderLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class Molmo2VisionModel(Molmo2PreTrainedModel):
-    config: Molmo2VisionConfig
+    config_class = Molmo2VisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = ["Molmo2VisionEncoderLayer"]
@@ -593,7 +593,7 @@ class Molmo2ImageProjectorMLP(nn.Module):
     """
 )
 class Molmo2Adapter(Molmo2PreTrainedModel):
-    config: Molmo2AdapterConfig
+    config_class = Molmo2AdapterConfig
     input_modalities = ("image",)
     _no_split_modules = ["Molmo2VisionAttention"]
     _can_record_outputs = {"attentions": Molmo2VisionAttention}

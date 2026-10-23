@@ -296,7 +296,7 @@ class EdgeTamFeedForward(nn.Module):
 
 @auto_docstring
 class EdgeTamPreTrainedModel(PreTrainedModel):
-    config: EdgeTamConfig
+    config_class = EdgeTamConfig
     base_model_prefix = "edgetam"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
@@ -450,7 +450,7 @@ class EdgeTamVisionNeck(nn.Module):
     """
 )
 class EdgeTamVisionModel(EdgeTamPreTrainedModel):
-    config: EdgeTamVisionConfig
+    config_class = EdgeTamVisionConfig
     main_input_name = "pixel_values"
     # TODO: TimmWrapper models aren't compatible with _can_record_outputs yet. We specifically set this to
     # an empty dict to avoid the _can_record_outputs from Sam2VisionModel being inherited here.

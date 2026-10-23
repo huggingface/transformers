@@ -937,7 +937,7 @@ class Xcodec2PreTrainedModel(PreTrainedModel):
 
 @auto_docstring(custom_intro="Xcodec2 neural audio codec model.")
 class Xcodec2Model(Xcodec2PreTrainedModel):
-    config: Xcodec2Config
+    config_class = Xcodec2Config
 
     def __init__(self, config: Xcodec2Config):
         super().__init__(config)

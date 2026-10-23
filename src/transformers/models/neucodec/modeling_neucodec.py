@@ -942,7 +942,7 @@ class NeuCodecSemanticAdapter(nn.Module):
 
 @auto_docstring(custom_intro="NeuCodec neural audio codec model.")
 class NeuCodecModel(NeuCodecPreTrainedModel):
-    config: NeuCodecConfig
+    config_class = NeuCodecConfig
 
     def __init__(self, config: NeuCodecConfig):
         super().__init__(config)

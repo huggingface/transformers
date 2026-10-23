@@ -295,6 +295,7 @@ class EsmcPreTrainedModel(PreTrainedModel):
         "hidden_states": EsmcLayer,
         "attentions": EsmcAttention,
     }
+    config_class = EsmcConfig
 
     # Are kept as non-persistent buffers to avoid being saved in the state dict
     # and causing mismatch when loading from a checkpoint that doesn't have them

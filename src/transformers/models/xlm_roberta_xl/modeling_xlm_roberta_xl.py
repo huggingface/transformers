@@ -504,7 +504,7 @@ class XLMRobertaXLEncoder(nn.Module):
 
 @auto_docstring
 class XLMRobertaXLPreTrainedModel(PreTrainedModel):
-    config: XLMRobertaXLConfig
+    config_class = XLMRobertaXLConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True

@@ -325,6 +325,7 @@ class NomicBertPreTrainedModel(PreTrainedModel):
         "hidden_states": NomicBertLayer,
         "attentions": NomicBertAttention,
     }
+    config_class = NomicBertConfig
 
     # Are kept as non-persistent buffers to avoid being saved in the state dict
     # and causing mismatch when loading from a checkpoint that doesn't have them

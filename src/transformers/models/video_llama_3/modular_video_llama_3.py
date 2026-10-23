@@ -81,6 +81,7 @@ class VideoLlama3VisionConfig(SiglipVisionConfig):
     default_rope_type = "axial"
 
     image_size = AttributeError()
+    vision_use_head = AttributeError()
     initializer_range: float = 0.02
     rope_parameters: dict | None = None
 

@@ -61,6 +61,7 @@ class MiniCPMV4_6VisionConfig(SiglipVisionConfig):
     model_type = "minicpmv4_6_vision"
     insert_layer_id: int = 6
     window_kernel_size: tuple[int, int] | list[int] = (2, 2)
+    vision_use_head = AttributeError()
 
     @property
     def window_hidden_size(self) -> int:
