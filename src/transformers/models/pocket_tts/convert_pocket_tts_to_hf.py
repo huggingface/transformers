@@ -11,16 +11,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Converts a Pocket TTS checkpoint (`kyutai/pocket-tts`, one language folder) to the transformers format."""
+"""
+Adds the transformers format to a Pocket TTS checkpoint folder (`kyutai/pocket-tts`, `languages/<checkpoint>/`), next to the
+runtime's files: its weights (`model.safetensors`, renamed at load by `conversion_mapping.py`), voices (`embeddings/`) and
+`tokenizer.json` are read as they are. Converts the codec, shared by every checkpoint, to an audio tokenizer of its own.
+"""
 
 import argparse
 import json
 import re
+import shutil
+import tempfile
 from pathlib import Path
 
 import torch
 from huggingface_hub import HfApi, hf_hub_download
-from safetensors.torch import load_file, save_file
+from safetensors.torch import load_file
 from tokenizers import AddedToken, Regex, Tokenizer, normalizers
 
 from transformers import (
@@ -66,66 +72,35 @@ CHECKPOINTS = {
         "text": {},
     },
 }
-# Original tensor name (regex) -> transformers name. Applied in order, first match wins. Fused `in_proj` weights are split
-# into q/k/v with the q/k rows permuted for rotate-half RoPE (the original rotates interleaved pairs), and the text
-# embedding table gets the placeholder rows, both below.
-STATE_DICT_MAPPING = [
-    (r"^flow_lm\.speaker_proj_weight$", "model.audio_prompt_proj.weight"),
-    (r"^flow_lm\.input_linear\.weight$", "model.audio_latent_proj.weight"),
-    (
-        r"^flow_lm\.transformer\.layers\.(\d+)\.self_attn\.out_proj\.weight$",
-        r"model.layers.\1.self_attn.o_proj.weight",
-    ),
-    (r"^flow_lm\.transformer\.layers\.(\d+)\.linear1\.weight$", r"model.layers.\1.mlp.fc1.weight"),
-    (r"^flow_lm\.transformer\.layers\.(\d+)\.linear2\.weight$", r"model.layers.\1.mlp.fc2.weight"),
-    (r"^flow_lm\.transformer\.layers\.(\d+)\.norm1\.(weight|bias)$", r"model.layers.\1.input_layernorm.\2"),
-    (r"^flow_lm\.transformer\.layers\.(\d+)\.norm2\.(weight|bias)$", r"model.layers.\1.post_attention_layernorm.\2"),
-    (r"^flow_lm\.out_norm\.(weight|bias)$", r"model.norm.\1"),
-    (r"^flow_lm\.out_eos\.(weight|bias)$", r"eos_head.\1"),
-    (r"^flow_lm\.bos_emb$", "model.bos_latent"),
-    (r"^flow_lm\.emb_mean$", "latent_mean"),
-    (r"^flow_lm\.emb_std$", "latent_std"),
-    (r"^flow_lm\.flow_net\.time_embed\.(\d+)\.freqs$", r"flow_head.timestep_embeddings.\1.freqs"),
-    (r"^flow_lm\.flow_net\.time_embed\.(\d+)\.mlp\.0\.(weight|bias)$", r"flow_head.timestep_embeddings.\1.fc1.\2"),
-    (r"^flow_lm\.flow_net\.time_embed\.(\d+)\.mlp\.2\.(weight|bias)$", r"flow_head.timestep_embeddings.\1.fc2.\2"),
-    (r"^flow_lm\.flow_net\.time_embed\.(\d+)\.mlp\.3\.alpha$", r"flow_head.timestep_embeddings.\1.norm.weight"),
-    (r"^flow_lm\.flow_net\.cond_embed\.(weight|bias)$", r"flow_head.cond_proj.\1"),
-    (r"^flow_lm\.flow_net\.input_proj\.(weight|bias)$", r"flow_head.input_proj.\1"),
-    (r"^flow_lm\.flow_net\.res_blocks\.(\d+)\.in_ln\.(weight|bias)$", r"flow_head.layers.\1.norm.\2"),
-    (r"^flow_lm\.flow_net\.res_blocks\.(\d+)\.mlp\.0\.(weight|bias)$", r"flow_head.layers.\1.fc1.\2"),
-    (r"^flow_lm\.flow_net\.res_blocks\.(\d+)\.mlp\.2\.(weight|bias)$", r"flow_head.layers.\1.fc2.\2"),
-    (
-        r"^flow_lm\.flow_net\.res_blocks\.(\d+)\.adaLN_modulation\.1\.(weight|bias)$",
-        r"flow_head.layers.\1.adaln_proj.\2",
-    ),
-    (r"^flow_lm\.flow_net\.final_layer\.linear\.(weight|bias)$", r"flow_head.final_layer.proj.\1"),
-    (r"^flow_lm\.flow_net\.final_layer\.adaLN_modulation\.1\.(weight|bias)$", r"flow_head.final_layer.adaln_proj.\1"),
-    # codec, encoder side (the audio tokenizer, a model of its own)
-    (r"^mimi\.downsample\.conv\.conv\.weight$", "audio_tokenizer.encoder.downsample.conv.weight"),
+# The codec's tensors (regex) -> the audio tokenizer's names. Applied in order, first match wins. Fused `in_proj` weights are
+# split into q/k/v with the q/k rows permuted for rotate-half RoPE (the original rotates interleaved pairs), below.
+CODEC_MAPPING = [
+    # encoder side
+    (r"^mimi\.downsample\.conv\.conv\.weight$", "encoder.downsample.conv.weight"),
     (
         r"^mimi\.encoder\.model\.(\d+)\.conv\.(weight|bias)$",
-        r"audio_tokenizer.encoder.encoder_seanet.layers.\1.conv.\2",
+        r"encoder.encoder_seanet.layers.\1.conv.\2",
     ),
     (
         r"^mimi\.encoder\.model\.(\d+)\.block\.(\d+)\.conv\.(weight|bias)$",
-        r"audio_tokenizer.encoder.encoder_seanet.layers.\1.block.\2.conv.\3",
+        r"encoder.encoder_seanet.layers.\1.block.\2.conv.\3",
     ),
-    # codec, decoder side; `.conv` / `.convtr` both become the `.conv` of the wrapper
-    (r"^mimi\.quantizer\.output_proj\.weight$", "audio_tokenizer.latent_proj.weight"),
-    (r"^mimi\.upsample\.convtr\.convtr\.weight$", "audio_tokenizer.decoder.upsample.conv.weight"),
+    # decoder side; `.conv` / `.convtr` both become the `.conv` of the wrapper
+    (r"^mimi\.quantizer\.output_proj\.weight$", "latent_proj.weight"),
+    (r"^mimi\.upsample\.convtr\.convtr\.weight$", "decoder.upsample.conv.weight"),
     (
         r"^mimi\.decoder\.model\.(\d+)\.(?:conv|convtr)\.(weight|bias)$",
-        r"audio_tokenizer.decoder.decoder_seanet.layers.\1.conv.\2",
+        r"decoder.decoder_seanet.layers.\1.conv.\2",
     ),
     (
         r"^mimi\.decoder\.model\.(\d+)\.block\.(\d+)\.conv\.(weight|bias)$",
-        r"audio_tokenizer.decoder.decoder_seanet.layers.\1.block.\2.conv.\3",
+        r"decoder.decoder_seanet.layers.\1.block.\2.conv.\3",
     ),
 ]
 # The codec transformers, encoder side and decoder side.
 CODEC_TRANSFORMERS = {
-    "encoder_transformer": "audio_tokenizer.encoder.encoder_transformer",
-    "decoder_transformer": "audio_tokenizer.decoder.decoder_transformer",
+    "encoder_transformer": "encoder.encoder_transformer",
+    "decoder_transformer": "decoder.decoder_transformer",
 }
 CODEC_TRANSFORMER_MAPPING = [
     (r"self_attn\.out_proj\.weight", "self_attn.o_proj.weight"),
@@ -136,8 +111,15 @@ CODEC_TRANSFORMER_MAPPING = [
     (r"layer_scale_1\.scale", "self_attn_layer_scale.scale"),
     (r"layer_scale_2\.scale", "mlp_layer_scale.scale"),
 ]
-TEXT_EMBEDDINGS = "flow_lm.conditioner.embed.weight"
-VOICE_BOS = "flow_lm.bos_before_voice"
+# The placeholders reuse rows of the original's text table it never reads: its padding row and the `<s>` / `</s>` rows (it
+# tokenizes without them). `<|audio_prompt_bos|>` is the row `conversion_mapping.py` appends: the learnt vector the
+# original prepends to the voice prompt.
+RESERVED_TOKENS = {"<s>": AUDIO_LATENT_TOKEN, "</s>": AUDIO_BOS_TOKEN}
+APPENDED_TOKENS = [AUDIO_PROMPT_TOKEN, AUDIO_PROMPT_BOS_TOKEN]
+# Next to the runtime's `tokenizer.json`, transformers reads a versioned tokenizer file (`fast_tokenizer_files`).
+TRANSFORMERS_TOKENIZER_FILE = "tokenizer.5.0.0.json"
+TRANSFORMERS_FILES = ["config.json", "generation_config.json", "processor_config.json", "chat_template.jinja"]
+TRANSFORMERS_FILES += [TRANSFORMERS_TOKENIZER_FILE, "tokenizer_config.json"]
 
 
 # The chat template lays out the prompt: the voice BOS and the voice placeholder (expanded by the processor to one token
@@ -203,9 +185,6 @@ def build_audio_tokenizer_config() -> PocketTTSAudioTokenizerConfig:
 def build_config(checkpoint: dict) -> PocketTTSConfig:
     return PocketTTSConfig(
         flow_head_config={"hidden_size": 512, "num_hidden_layers": 6, "flow_type": checkpoint["flow_type"]},
-        # n_bins (4000) + 1 embedding rows in the checkpoint; row 4000 is the audio-prompt placeholder (never read), then
-        # the audio-latent placeholder, the voice BOS and the first audio position (never read either)
-        vocab_size=4004,
         hidden_size=1024,
         num_hidden_layers=checkpoint["num_hidden_layers"],
         num_attention_heads=16,
@@ -215,64 +194,40 @@ def build_config(checkpoint: dict) -> PocketTTSConfig:
     )
 
 
-def convert_state_dict(
-    original: dict[str, torch.Tensor], config: PocketTTSConfig, audio_tokenizer_config: PocketTTSAudioTokenizerConfig
-) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
-    """Returns the state dicts of the TTS model and of the audio tokenizer."""
+def convert_audio_tokenizer_state_dict(
+    original: dict[str, torch.Tensor], audio_tokenizer_config: PocketTTSAudioTokenizerConfig
+) -> dict[str, torch.Tensor]:
+    """The codec's tensors (`mimi.`) as the audio tokenizer's state dict."""
     converted, unmatched = {}, []
+    num_heads = audio_tokenizer_config.num_attention_heads
     for name, tensor in original.items():
+        if not name.startswith("mimi."):
+            continue
         tensor = tensor.float()
-        if name in (TEXT_EMBEDDINGS, VOICE_BOS):
-            continue
-        if (match := re.match(r"^flow_lm\.transformer\.layers\.(\d+)\.self_attn\.in_proj\.weight$", name)) or (
-            match := re.match(
-                r"^mimi\.(encoder|decoder)_transformer\.transformer\.layers\.(\d+)\.self_attn\.in_proj\.weight$", name
-            )
-        ):
-            if name.startswith("flow_lm"):
-                prefix, num_heads = f"model.layers.{match.group(1)}.self_attn", config.num_attention_heads
-            else:
-                transformer = CODEC_TRANSFORMERS[f"{match.group(1)}_transformer"]
-                prefix = f"{transformer}.layers.{match.group(2)}.self_attn"
-                num_heads = audio_tokenizer_config.num_attention_heads
-            query, key, value = tensor.chunk(3, dim=0)
-            converted[f"{prefix}.q_proj.weight"] = permute_for_rope(query, num_heads)
-            converted[f"{prefix}.k_proj.weight"] = permute_for_rope(key, num_heads)
-            converted[f"{prefix}.v_proj.weight"] = value
-            continue
         if match := re.match(r"^mimi\.(encoder|decoder)_transformer\.transformer\.layers\.(\d+)\.(.+)$", name):
+            prefix = f"{CODEC_TRANSFORMERS[match.group(1) + '_transformer']}.layers.{match.group(2)}"
+            if match.group(3) == "self_attn.in_proj.weight":
+                query, key, value = tensor.chunk(3, dim=0)
+                converted[f"{prefix}.self_attn.q_proj.weight"] = permute_for_rope(query, num_heads)
+                converted[f"{prefix}.self_attn.k_proj.weight"] = permute_for_rope(key, num_heads)
+                converted[f"{prefix}.self_attn.v_proj.weight"] = value
+                continue
             for pattern, replacement in CODEC_TRANSFORMER_MAPPING:
                 if re.fullmatch(pattern, match.group(3)):
-                    suffix = re.sub(pattern, replacement, match.group(3))
-                    converted[
-                        f"{CODEC_TRANSFORMERS[match.group(1) + '_transformer']}.layers.{match.group(2)}.{suffix}"
-                    ] = tensor
+                    converted[f"{prefix}.{re.sub(pattern, replacement, match.group(3))}"] = tensor
                     break
             else:
                 unmatched.append(name)
             continue
-        for pattern, replacement in STATE_DICT_MAPPING:
+        for pattern, replacement in CODEC_MAPPING:
             if re.match(pattern, name):
                 converted[re.sub(pattern, replacement, name)] = tensor
                 break
         else:
             unmatched.append(name)
     if unmatched:
-        raise ValueError(f"Unmapped tensors in the checkpoint: {unmatched}")
-
-    # Text embeddings (4001 rows), then the audio-latent placeholder (never read, zero), the learnt vector the original
-    # prepends to the voice prompt, which the processor places as `<|audio_prompt_bos|>`, and the first audio position
-    # (never read, zero: the model embeds the BOS latent there).
-    text_embeddings = original[TEXT_EMBEDDINGS].float()
-    placeholder = text_embeddings.new_zeros(1, text_embeddings.shape[1])
-    voice_bos = original[VOICE_BOS].float().reshape(1, -1)
-    converted["model.embed_tokens.weight"] = torch.cat([text_embeddings, placeholder, voice_bos, placeholder], dim=0)
-    codec_prefix = "audio_tokenizer."
-    audio_tokenizer = {
-        name[len(codec_prefix) :]: tensor for name, tensor in converted.items() if name.startswith(codec_prefix)
-    }
-    model = {name: tensor for name, tensor in converted.items() if not name.startswith(codec_prefix)}
-    return model, audio_tokenizer
+        raise ValueError(f"Unmapped codec tensors in the checkpoint: {unmatched}")
+    return converted
 
 
 SENTENCE_END_MARKS = ".!?…"
@@ -315,29 +270,28 @@ def build_normalizer(
 
 
 def convert_tokenizer(checkpoint: dict, output_dir: Path):
+    """
+    The transformers tokenizer: the runtime's `tokenizer.json` with the placeholders on the rows the original never reads
+    (and the appended voice BOS), and the runtime's text preparation as its normalizer, and the tokenizer config.
+    """
     repo_id, filename, revision = checkpoint["tokenizer"]
-    tokenizer = Tokenizer.from_file(hf_hub_download(repo_id, filename, revision=revision))
+    tokenizer = json.loads(Path(hf_hub_download(repo_id, filename, revision=revision)).read_text(encoding="utf-8"))
+    for token in tokenizer["added_tokens"]:
+        token["content"] = RESERVED_TOKENS.get(token["content"], token["content"])
+    for piece in tokenizer["model"]["vocab"]:
+        piece[0] = RESERVED_TOKENS.get(piece[0], piece[0])
+    backend = Tokenizer.from_str(json.dumps(tokenizer))
     # the text preparation, then the original's normalizer (the word-start marker): the last step, which the processor
     # keeps alone for training transcripts, as the original's training tokenizes them as they are
-    letters = "".join(sorted(c for c in {c for piece in tokenizer.get_vocab() for c in piece} if c.upper() != c))
-    tokenizer.normalizer = normalizers.Sequence(
-        [*build_normalizer(letters, **checkpoint["text"]), tokenizer.normalizer]
-    )
-    # Appended in this order, they get the ids 4000, 4001, 4002 and 4003 of the config.
-    tokenizer.add_special_tokens(
-        [
-            AddedToken(AUDIO_PROMPT_TOKEN, special=True, normalized=False),
-            AddedToken(AUDIO_LATENT_TOKEN, special=True, normalized=False),
-            AddedToken(AUDIO_PROMPT_BOS_TOKEN, special=True, normalized=False),
-            AddedToken(AUDIO_BOS_TOKEN, special=True, normalized=False),
-        ]
-    )
-    tokenizer.save(str(output_dir / "tokenizer.json"))
+    letters = "".join(sorted(c for c in {c for piece in backend.get_vocab() for c in piece} if c.upper() != c))
+    backend.normalizer = normalizers.Sequence([*build_normalizer(letters, **checkpoint["text"]), backend.normalizer])
+    # appended in this order, they get the ids 4000 (the original's padding row) and 4001 (the appended voice BOS)
+    backend.add_special_tokens([AddedToken(token, special=True, normalized=False) for token in APPENDED_TOKENS])
+    backend.save(str(output_dir / TRANSFORMERS_TOKENIZER_FILE))
     tokenizer_config = {
         "tokenizer_class": "TokenizersBackend",
+        "fast_tokenizer_files": [TRANSFORMERS_TOKENIZER_FILE],
         "unk_token": "<unk>",
-        "bos_token": "<s>",
-        "eos_token": "</s>",
         "pad_token": "<pad>",
         # Call defaults of the processor (TRF019) travel with the tokenizer; the Unigram model has no post-processor,
         # so `add_special_tokens` adds nothing and needs no default.
@@ -357,45 +311,32 @@ def convert_tokenizer(checkpoint: dict, output_dir: Path):
     return AutoTokenizer.from_pretrained(output_dir)
 
 
-def convert_voices(checkpoint_name: str, checkpoint: dict, config: PocketTTSConfig, output_dir: Path):
-    """
-    The checkpoint's predefined voices, shipped by Kyutai as the KV cache of the voice prefix (the voice BOS and the voice
-    frames) of every layer, saved in the transformers cache layout: `layers.{i}.keys` / `layers.{i}.values` of shape
-    `(1, num_heads, num_positions, head_dim)`, the keys moved from interleaved RoPE pairs to rotate-half like the weights.
-    """
-    (output_dir / "voices").mkdir(exist_ok=True)
-    folder = f"languages/{checkpoint_name}/embeddings/"
-    files = HfApi().list_repo_files(ORIGINAL_REPO, revision=checkpoint["weights_revision"])
-    for filename in sorted(f for f in files if f.startswith(folder) and f.endswith(".safetensors")):
-        state = load_file(hf_hub_download(ORIGINAL_REPO, filename, revision=checkpoint["weights_revision"]))
-        tensors = {}
-        for layer in range(config.num_hidden_layers):
-            prefix = f"transformer.layers.{layer}.self_attn/"
-            cache = state[prefix + "cache"].float()  # (2, batch, positions, heads, head_dim): keys, values
-            if int(state[prefix + "pad"]) != 0 or int(state[prefix + "offset"]) != cache.shape[2]:
-                raise ValueError(f"{filename}: unexpected cache state at layer {layer}")
-            keys, values = cache[0].transpose(1, 2), cache[1].transpose(1, 2)
-            head_dim = keys.shape[-1]
-            keys = keys.unflatten(-1, (head_dim // 2, 2)).transpose(-1, -2).flatten(-2)
-            tensors[f"layers.{layer}.keys"] = keys.contiguous()
-            tensors[f"layers.{layer}.values"] = values.contiguous()
-        save_file(tensors, output_dir / "voices" / filename.split("/")[-1])
-
-
 def load_voice(path: Path, config: PocketTTSConfig) -> DynamicCache:
+    """
+    One of the runtime's voice states (`embeddings/<voice>.safetensors`, also what `pocket-tts export-voice` writes): the
+    KV cache of the voice prefix (the voice BOS and the voice frames) of every layer, keys moved from interleaved RoPE
+    pairs to rotate-half like the weights.
+    """
     state = load_file(path)
-    layers = [(state[f"layers.{i}.keys"], state[f"layers.{i}.values"]) for i in range(config.num_hidden_layers)]
+    layers = []
+    for i in range(config.num_hidden_layers):
+        # (2, 1, length, num_heads, head_dim) -> keys and values, each (1, num_heads, length, head_dim)
+        keys, values = state[f"transformer.layers.{i}.self_attn/cache"].float().transpose(2, 3)
+        keys = keys.unflatten(-1, (-1, 2)).transpose(-1, -2).flatten(-2)
+        layers.append((keys, values))
     return DynamicCache(layers, config=config)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", choices=sorted(CHECKPOINTS), default="english")
-    parser.add_argument("--output_dir", type=Path, required=True)
+    parser.add_argument(
+        "--output_dir", type=Path, required=True, help="Gets the checkpoint's weights and the transformers files"
+    )
     parser.add_argument(
         "--audio_tokenizer_repo",
         type=str,
-        default="eustlb/pocket-tts-audio-tokenizer",
+        default="eustlb/pocket-tts-mimi",
         help="Repo id (or local path) of the audio tokenizer, which the processor points to",
     )
     parser.add_argument(
@@ -404,32 +345,23 @@ def main():
         default=None,
         help="Where to save the audio tokenizer, shared by all",
     )
-    parser.add_argument("--push_to_hub", type=str, default=None, help="Repo id to upload the converted checkpoint to")
-    parser.add_argument("--push_audio_tokenizer", action="store_true", help="Upload the audio tokenizer too")
-    parser.add_argument("--private", action="store_true")
+    parser.add_argument("--push_to_hub", type=str, default=None, help="Repo id to add the transformers files to")
+    parser.add_argument("--create_pr", action="store_true", help="Open a pull request instead of committing")
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
     checkpoint = CHECKPOINTS[args.checkpoint]
+    folder = f"languages/{args.checkpoint}"
 
+    # The weights stay in the runtime's layout (copied for the loading check below, not uploaded).
+    weights = hf_hub_download(ORIGINAL_REPO, f"{folder}/model.safetensors", revision=checkpoint["weights_revision"])
+    shutil.copy(weights, args.output_dir / "model.safetensors")
     config = build_config(checkpoint)
+    config.save_pretrained(args.output_dir)
+
+    # The audio tokenizer is a model of its own, held by the processor and shared by every checkpoint.
     audio_tokenizer_config = build_audio_tokenizer_config()
-    weights = hf_hub_download(
-        ORIGINAL_REPO, f"languages/{args.checkpoint}/model.safetensors", revision=checkpoint["weights_revision"]
-    )
-    state_dict, audio_tokenizer_state_dict = convert_state_dict(load_file(weights), config, audio_tokenizer_config)
-
-    model = PocketTTSForConditionalGeneration(config)
-    missing, unexpected = model.load_state_dict(state_dict, strict=False)
-    # the training-only state (loss weighting, latent statistics counter) starts at its initialisation
-    missing = [
-        key for key in missing if not any(re.search(pattern, key) for pattern in model._keys_to_ignore_on_load_missing)
-    ]
-    if missing or unexpected:
-        raise ValueError(f"Missing keys: {missing}\nUnexpected keys: {unexpected}")
-    model.save_pretrained(args.output_dir)
-
-    # The audio tokenizer is a model of its own, held by the processor and shared by every language checkpoint.
     audio_tokenizer = PocketTTSAudioTokenizerModel(audio_tokenizer_config)
+    audio_tokenizer_state_dict = convert_audio_tokenizer_state_dict(load_file(weights), audio_tokenizer_config)
     missing, unexpected = audio_tokenizer.load_state_dict(audio_tokenizer_state_dict, strict=False)
     if missing or unexpected:
         raise ValueError(f"Audio tokenizer missing keys: {missing}\nUnexpected keys: {unexpected}")
@@ -447,14 +379,17 @@ def main():
     # what the processor's `processor_config.json` points to
     audio_tokenizer.name_or_path = args.audio_tokenizer_repo
 
-    tokenizer = convert_tokenizer(checkpoint, args.output_dir)
     processor = PocketTTSProcessor(
         PocketTTSFeatureExtractor(),
-        tokenizer,
+        convert_tokenizer(checkpoint, args.output_dir),
         audio_tokenizer=audio_tokenizer,
         chat_template=CHAT_TEMPLATE.strip() + "\n",
     )
-    processor.save_pretrained(args.output_dir)
+    # only the processor's own files: the tokenizer's stay as written above
+    with tempfile.TemporaryDirectory() as processor_dir:
+        processor.save_pretrained(processor_dir)
+        for name in ("processor_config.json", "chat_template.jinja"):
+            shutil.copy(Path(processor_dir) / name, args.output_dir / name)
     # The original's defaults: sampling with temperature 0.3 (the noise variance of the flow sampler), one LSD step, and
     # an end-of-speech logit threshold of -4 ignored on the first 6 frames. `generate` returns the padded latents with
     # their mask, which `processor.decode` takes as they are.
@@ -467,15 +402,24 @@ def main():
         eos_threshold=-4.0,
         min_frames_before_eos=6,
     ).save_pretrained(args.output_dir)
-    convert_voices(args.checkpoint, checkpoint, config, args.output_dir)
 
-    # Reload from disk, fail on any loading issue, and print one cheap sanity value.
+    # Reload from the folder (the runtime's weights through the conversion mapping), fail on any loading issue, and
+    # print one cheap sanity value, with one of the runtime's voices.
     model, loading_info = PocketTTSForConditionalGeneration.from_pretrained(args.output_dir, output_loading_info=True)
     if any(loading_info.values()):
         raise ValueError(f"Loading issues: {loading_info}")
-    processor = PocketTTSProcessor.from_pretrained(args.output_dir)
-    # the voice is the cache of its prefix: the prompt is the text only
-    voice = load_voice(args.output_dir / "voices" / "alba.safetensors", model.config)
+    if args.audio_tokenizer_output_dir is not None:
+        audio_tokenizer.name_or_path = str(args.audio_tokenizer_output_dir)
+    processor = PocketTTSProcessor(
+        PocketTTSFeatureExtractor(),
+        AutoTokenizer.from_pretrained(args.output_dir),
+        audio_tokenizer=audio_tokenizer,
+        chat_template=CHAT_TEMPLATE.strip() + "\n",
+    )
+    voice_file = hf_hub_download(
+        ORIGINAL_REPO, f"{folder}/embeddings/alba.safetensors", revision=checkpoint["weights_revision"]
+    )
+    voice = load_voice(Path(voice_file), model.config)
     text = "Hello world. I am Kyutai's Pocket TTS. I'm fast enough to run on small CPUs."
     conversation = [{"role": "user", "content": [{"type": "text", "text": text}]}]
     inputs = processor.apply_chat_template(conversation, tokenize=True, return_dict=True, add_generation_prompt=True)
@@ -485,15 +429,14 @@ def main():
     print(f"Sanity: {num_frames} frames generated (the original, english: 68 frames).")
 
     if args.push_to_hub:
-        api = HfApi()
-        api.create_repo(args.push_to_hub, private=args.private, exist_ok=True)
-        api.upload_folder(folder_path=str(args.output_dir), repo_id=args.push_to_hub)
-    if args.push_audio_tokenizer:
-        if args.audio_tokenizer_output_dir is None:
-            raise ValueError("`--push_audio_tokenizer` needs `--audio_tokenizer_output_dir`.")
-        api = HfApi()
-        api.create_repo(args.audio_tokenizer_repo, private=args.private, exist_ok=True)
-        api.upload_folder(folder_path=str(args.audio_tokenizer_output_dir), repo_id=args.audio_tokenizer_repo)
+        HfApi().upload_folder(
+            folder_path=str(args.output_dir),
+            repo_id=args.push_to_hub,
+            path_in_repo=folder,
+            allow_patterns=TRANSFORMERS_FILES,
+            commit_message=f"transformers 🤗: {args.checkpoint}",
+            create_pr=args.create_pr,
+        )
 
 
 if __name__ == "__main__":

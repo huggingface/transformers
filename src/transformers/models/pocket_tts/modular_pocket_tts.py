@@ -247,6 +247,7 @@ class PocketTTSModel(LlamaModel):
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.audio_prompt_proj = nn.Linear(config.latent_dim, config.hidden_size, bias=False)
         self.audio_latent_proj = nn.Linear(config.latent_dim, config.hidden_size, bias=False)
+        # not a row of the embedding table: as in the original, it goes through the audio latent projection
         self.bos_latent = nn.Parameter(torch.zeros(config.latent_dim))
 
     def embed_audio_latents(self, audio_latents: torch.Tensor) -> torch.Tensor:
@@ -406,6 +407,8 @@ class PocketTTSModel(LlamaModel):
 class PocketTTSForConditionalGeneration(PocketTTSPreTrainedModel, PocketTTSGenerationMixin):
     # training-only state, absent from the released checkpoints
     _keys_to_ignore_on_load_missing = [r"loss_weighting\.", r"latent_stats_num_updates"]
+    # Kyutai's checkpoint also holds the codec, the processor's audio tokenizer
+    _keys_to_ignore_on_load_unexpected = [r"^mimi\."]
     # in bf16, the EMA updates of the latent statistics round away; `freqs` is built in fp32 (and saved so)
     _keep_in_fp32_modules_strict = ["latent_mean", "latent_std", "freqs"]
     # the loss is a per-batch mean: the Trainer divides it by the gradient accumulation steps

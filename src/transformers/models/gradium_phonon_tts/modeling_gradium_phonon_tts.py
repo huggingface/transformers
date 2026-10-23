@@ -405,6 +405,7 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
         self.gradient_checkpointing = False
         self.audio_prompt_proj = nn.Linear(config.audio_prompt_dim, config.hidden_size, bias=False)
         self.audio_latent_proj = nn.Linear(config.latent_dim, config.hidden_size, bias=False)
+        # not a row of the embedding table: as in the original, it goes through the audio latent projection
         self.bos_latent = nn.Parameter(torch.zeros(config.latent_dim))
 
         self.num_speakers_embed = nn.Embedding(config.num_speakers_vocab_size, config.num_speakers_embedding_dim)
@@ -693,12 +694,12 @@ class GradiumPhononTTSFlowHead(nn.Module):
 class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, GradiumPhononTTSGenerationMixin):
     # training-only state, absent from the released checkpoints
     _keys_to_ignore_on_load_missing = [r"loss_weighting\.", r"latent_stats_num_updates"]
+    # Gradium's runtime checkpoint also holds the codec (the processor's audio tokenizer) and training-only tensors
+    _keys_to_ignore_on_load_unexpected = [r"^mimi\.", r"^flow_lm\.flow\.w_s_t\.", r"\.learnt_padding$"]
     # in bf16, the EMA updates of the latent statistics round away; `freqs` is built in fp32 (and saved so)
     _keep_in_fp32_modules_strict = ["latent_mean", "latent_std", "freqs"]
     # the loss is a per-batch mean: the Trainer divides it by the gradient accumulation steps
     accepts_loss_kwargs = False
-    # Gradium's runtime checkpoint also holds the codec (the processor's audio tokenizer) and training-only tensors
-    _keys_to_ignore_on_load_unexpected = [r"^mimi\.", r"^flow_lm\.flow\.w_s_t\.", r"\.learnt_padding$"]
 
     def __init__(self, config: GradiumPhononTTSConfig):
         super().__init__(config)
