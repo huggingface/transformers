@@ -78,7 +78,7 @@ class PagedAttentionCache:
         - layer-level units: pages
         - request-level units: blocks
         - attention-type-level units: sectors
-    You can find a more detailled description in the CacheAllocator class documentation. The PagedAttentionCache object
+    You can find a more detailed description in the CacheAllocator class documentation. The PagedAttentionCache object
     only concerns itself with the sectors, and anything beyond that granularity is handled by the CacheAllocators.
 
     For a given attention type, there is only one allocator, which is responsible for the cache of all layers with that
