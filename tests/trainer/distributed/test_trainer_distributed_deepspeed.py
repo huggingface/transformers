@@ -957,6 +957,14 @@ class TestTrainerIntegrationDeepSpeed(TestCasePlus):
 @require_deepspeed
 @require_torch_multi_accelerator
 class TestTrainerDistributedDeepSpeed(DeepSpeedCommandsMixin, TestCasePlus):
+    def test_zero3_rank0_checkpoint_loading(self):
+        cmd = self.get_torchrun_cmd(
+            os.path.join(SCRIPTS_DIR, "zero3_load_checkpoint.py"),
+            script_args=["--output_dir", self.get_auto_remove_tmp_dir()],
+            num_processes=2,
+        )
+        execute_subprocess_async(cmd, env=self.get_env(), timeout=180)
+
     def _run_env_check(self, cmd, num_processes):
         """Run the env check script and return per-rank results."""
         execute_subprocess_async(cmd, env=self.get_env())
