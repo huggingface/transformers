@@ -38,6 +38,8 @@ from transformers.testing_utils import (
     patch_psutil_cpu_memory,
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
+    record_ci_source_deps,
+    snapshot_ci_source_deps_baseline,
 )
 from transformers.utils import enable_tf32
 from transformers.utils.network_logging import register_network_debug_plugin
@@ -384,10 +386,15 @@ def pytest_terminal_summary(terminalreporter):
         pytest_terminal_summary_main(terminalreporter, id=make_reports)
 
 
+def pytest_sessionstart(session):
+    snapshot_ci_source_deps_baseline()
+
+
 def pytest_sessionfinish(session, exitstatus):
     # If no tests are collected, pytest exists with code 5, which makes the CI fail.
     if exitstatus == 5:
         session.exitstatus = 0
+    record_ci_source_deps()
 
 
 # Doctest custom flag to ignore output.

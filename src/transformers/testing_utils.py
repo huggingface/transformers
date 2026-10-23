@@ -4953,3 +4953,60 @@ def preserve_module_forwards(model: "PreTrainedModel"):
                 module.__dict__.pop("forward", None)
             else:
                 module.__dict__["forward"] = original_forward
+
+
+_ci_record_deps_baseline: set[str] | None = None
+
+
+def snapshot_ci_source_deps_baseline() -> None:
+    """Snapshot the set of already-imported ``src/transformers/`` files before test collection.
+
+    Called from ``pytest_sessionstart`` in ``conftest.py``.  The diff against
+    ``record_ci_source_deps()`` at session end gives what was imported during collection and
+    execution of these specific tests.  Noise from imports common to all model tests (e.g.
+    ``exporter_dynamo.py`` pulling in ~38 fixed model packages) is filtered out later in the
+    collation script by frequency: files appearing in the majority of test folders are excluded.
+    """
+    global _ci_record_deps_baseline
+    if not os.environ.get("CI_RECORD_DEPS_OUTPUT"):
+        return
+    _ci_record_deps_baseline = _ci_source_deps_current()
+
+
+def record_ci_source_deps() -> None:
+    """Write the list of ``src/transformers/`` source files imported by the tests to the path
+    given by ``CI_RECORD_DEPS_OUTPUT``.  No-op when the env var is not set.
+
+    Called from ``pytest_sessionfinish`` in ``conftest.py``.  Subtracts the baseline snapshot
+    taken at session start so that files already loaded by conftest / plugin initialisation
+    (e.g. all model packages pulled in by ``exporter_dynamo.py``) are excluded.
+    """
+    output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
+    if not output_path:
+        return
+
+    current = _ci_source_deps_current()
+    baseline = _ci_record_deps_baseline or set()
+    imported_files = sorted(current - baseline)
+
+    try:
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(imported_files, f)
+    except OSError:
+        pass
+
+
+def _ci_source_deps_current() -> set[str]:
+    """Return the set of ``src/transformers/`` source file paths currently in ``sys.modules``."""
+    src_transformers = Path(__file__).parent.parent.parent.resolve() / "src" / "transformers"
+    result = set()
+    for module in sys.modules.values():
+        file = getattr(module, "__file__", None)
+        if not file:
+            continue
+        try:
+            rel = Path(file).resolve().relative_to(src_transformers)
+        except ValueError:
+            continue
+        result.add(f"src/transformers/{rel.as_posix()}")
+    return result
