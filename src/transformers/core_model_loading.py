@@ -1862,7 +1862,7 @@ def revert_weight_conversion(model: PreTrainedModel, state_dict: dict[str, torch
     for original_key, tensor in state_dict:
         # In reverse order, we must first apply the converters, then the renamings on the results from the conversion. For many-to-one and
         # many-to-many conversions, this means that the renamings must be applied after calling `convert`, because otherwise the Converter
-        # itself cannot infer the future names based on only its internal patterns, as the renamings may act on some parts of the internal
+        # cannot infer the future names based on only its internal patterns, as the renamings may act on some parts of the internal
         # `self.source/target_patterns` (for one-to-many and one-to-one, the final name would be enough to infer it technically)
         renamed_key, source_pattern = apply_converters(original_key, converters)
         if source_pattern is not None:
