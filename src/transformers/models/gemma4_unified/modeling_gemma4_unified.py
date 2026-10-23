@@ -25,7 +25,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, KVCacheSharingStorage
+from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import (
@@ -80,12 +80,12 @@ class Gemma4UnifiedTextModelOutputWithPast(BaseModelOutputWithPast):
     BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
 
     Args:
-        shared_kv_states (`KVCacheSharingStorage`, *optional*):
+        shared_kv_states (`KVSharingDict`, *optional*):
             A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
             Used to pass shared KV states between layers during KV sharing.
     """
 
-    shared_kv_states: KVCacheSharingStorage | None = None
+    shared_kv_states: KVSharingDict | None = None
 
 
 @auto_docstring(
@@ -111,7 +111,7 @@ class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
     audio_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    shared_kv_states (`KVCacheSharingStorage`, *optional*):
+    shared_kv_states (`KVSharingDict`, *optional*):
         A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
     """
@@ -125,7 +125,7 @@ class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
 
     audio_hidden_states: torch.FloatTensor | None = None
 
-    shared_kv_states: KVCacheSharingStorage | None = None
+    shared_kv_states: KVSharingDict | None = None
 
 
 @auto_docstring(
@@ -147,7 +147,7 @@ class Gemma4UnifiedModelOutputWithPast(BaseModelOutputWithPast):
     audio_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    shared_kv_states (`KVCacheSharingStorage`, *optional*):
+    shared_kv_states (`KVSharingDict`, *optional*):
         A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
     """
@@ -156,7 +156,7 @@ class Gemma4UnifiedModelOutputWithPast(BaseModelOutputWithPast):
 
     audio_hidden_states: torch.FloatTensor | None = None
 
-    shared_kv_states: KVCacheSharingStorage | None = None
+    shared_kv_states: KVSharingDict | None = None
 
 
 class Gemma4UnifiedRMSNorm(nn.Module):
@@ -381,7 +381,7 @@ class Gemma4UnifiedTextAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
-        shared_kv_states: KVCacheSharingStorage,
+        shared_kv_states: KVSharingDict,
         past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
@@ -634,8 +634,8 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel):
 
         # Initialize as empty storage, or reuse past shared states
         shared_kv_states = kwargs.pop("shared_kv_states", None)
-        if not isinstance(shared_kv_states, KVCacheSharingStorage):
-            shared_kv_states = KVCacheSharingStorage(shared_kv_states)
+        if not isinstance(shared_kv_states, KVSharingDict):
+            shared_kv_states = KVSharingDict(shared_kv_states)
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):

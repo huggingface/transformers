@@ -21,7 +21,7 @@ from torch import nn
 from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
-from ...cache_utils import Cache, DynamicCache, KVCacheSharingStorage
+from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
@@ -755,8 +755,8 @@ class Gemma4UnifiedTextModel(Gemma4UnifiedPreTrainedModel, LlamaModel):
 
         # Initialize as empty storage, or reuse past shared states
         shared_kv_states = kwargs.pop("shared_kv_states", None)
-        if not isinstance(shared_kv_states, KVCacheSharingStorage):
-            shared_kv_states = KVCacheSharingStorage(shared_kv_states)
+        if not isinstance(shared_kv_states, KVSharingDict):
+            shared_kv_states = KVSharingDict(shared_kv_states)
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):

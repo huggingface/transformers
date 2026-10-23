@@ -28,7 +28,7 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, KVCacheSharingStorage
+from ...cache_utils import Cache, DynamicCache, KVSharingDict
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -1202,7 +1202,7 @@ class Gemma3nTextAttention(nn.Module):
         position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        shared_kv_states: KVCacheSharingStorage | None = None,
+        shared_kv_states: KVSharingDict | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
@@ -1282,7 +1282,7 @@ class Gemma3nTextDecoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         position_embeddings: torch.Tensor | None = None,
         per_layer_input: torch.Tensor | None = None,
-        shared_kv_states: KVCacheSharingStorage | None = None,
+        shared_kv_states: KVSharingDict | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -1709,7 +1709,7 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         # Initialize as empty storage and it will be filled in the right layers.
-        shared_kv_states = KVCacheSharingStorage()
+        shared_kv_states = KVSharingDict()
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             causal_mask = causal_mask_mapping[self.config.layer_types[i]]

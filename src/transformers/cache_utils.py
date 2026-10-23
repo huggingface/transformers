@@ -20,7 +20,7 @@ if is_hqq_available():
 _is_torch_greater_or_equal_than_2_7 = is_torch_greater_or_equal("2.7", accept_dev=True)
 
 
-class KVCacheSharingStorage(UserDict[str, tuple[torch.Tensor, ...]]):
+class KVSharingDict(UserDict[str, tuple[torch.Tensor, ...]]):
     """
     A lightweight dict-like container used to share the KV cache between layers. Maps key -> tuple of cache tensors.
     Inherits from UserDict so it won't trip isinstance(..., dict) and thus it won't be altered by torch's FSDP2 helpers,
@@ -29,7 +29,7 @@ class KVCacheSharingStorage(UserDict[str, tuple[torch.Tensor, ...]]):
     means that once we enter a new layer group on a new device, the shared KV states don't need to be moved again.
     """
 
-    def to(self, device: torch.device, non_blocking: bool = False) -> "KVCacheSharingStorage":
+    def to(self, device: torch.device, non_blocking: bool = False) -> "KVSharingDict":
         keys = list(self.keys())
         for key in keys:
             self[key] = tuple(v.to(device, non_blocking=non_blocking) for v in self[key])
