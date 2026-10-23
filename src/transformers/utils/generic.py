@@ -106,62 +106,6 @@ def strtobool(val) -> int:
     raise ValueError(f"invalid truth value {val!r}")
 
 
-def get_cgroup_memory_limit_bytes() -> int | None:
-    """
-    Memory limit enforced on the current cgroup, or `None` when there is no limit / no cgroup to read.
-
-    This is what the OOM killer actually enforces inside a container. `psutil.virtual_memory().total` reads the
-    *host* `/proc/meminfo`, so in a K8S pod it reports the whole node (~750 GiB) and says nothing about how much this
-    process may use before it is SIGKILLed.
-    """
-    candidates = (
-        ("/sys/fs/cgroup/memory.max", "max"),  # cgroup v2
-        ("/sys/fs/cgroup/memory/memory.limit_in_bytes", None),  # cgroup v1
-    )
-    for path, unlimited_marker in candidates:
-        try:
-            with open(path, encoding="utf-8") as f:
-                raw = f.read().strip()
-        except OSError:
-            continue
-        if raw == unlimited_marker:
-            return None
-        try:
-            limit = int(raw)
-        except ValueError:
-            continue
-        # cgroup v1 writes a huge sentinel (a page-aligned 2**63-1) rather than a marker when unlimited
-        if limit <= 0 or limit >= 2**62:
-            return None
-        return limit
-    return None
-
-
-def get_numa_bound_memory() -> int | None:
-    """
-    Capacity of the NUMA nodes the process is bound to, as set by `numactl --membind`, or `None` when it is not bound.
-
-    This is another limit `psutil.virtual_memory().total` does not see: it reports the whole machine, while a bound
-    process is OOM-killed once it has filled the nodes it may allocate from. Only a bind policy is a hard limit, the
-    interleave and preferred policies can spill over to any node.
-    """
-    try:
-        with open("/proc/self/numa_maps", encoding="utf-8") as f:
-            policy = f.readline().split()[1]  # e.g. "default", "bind:0", "bind:0-1,3", "interleave:0-5"
-        if not policy.startswith("bind:"):
-            return None
-        total_memory = 0
-        for node_range in policy.removeprefix("bind:").split(","):
-            first, _, last = node_range.partition("-")
-            for node in range(int(first), int(last or first) + 1):
-                # The first line of a node's meminfo is "Node <index> MemTotal: <size> kB"
-                with open(f"/sys/devices/system/node/node{node}/meminfo", encoding="utf-8") as f:
-                    total_memory += int(f.readline().split()[3]) * 1024
-        return total_memory
-    except (OSError, IndexError, ValueError):
-        return None
-
-
 def infer_framework_from_repr(x) -> str | None:
     """
     Tries to guess the framework of an object `x` from its repr (brittle but will help in `is_tensor` to try the
@@ -1277,3 +1221,65 @@ def maybe_replace_from_package(source_package: str, func_name: str):
         return function
 
     return decorator
+
+
+def get_cgroup_memory_limit_bytes() -> int | None:
+    """
+    Memory limit enforced on the current cgroup, or `None` when there is no limit / no cgroup to read.
+
+    This is what the OOM killer actually enforces inside a container. `psutil.virtual_memory().total` reads the
+    *host* `/proc/meminfo`, so in a K8S pod it reports the whole node (~750 GiB) and says nothing about how much this
+    process may use before it is SIGKILLed.
+    """
+    candidates = (
+        ("/sys/fs/cgroup/memory.max", "max"),  # cgroup v2
+        ("/sys/fs/cgroup/memory/memory.limit_in_bytes", None),  # cgroup v1
+    )
+    for path, unlimited_marker in candidates:
+        try:
+            with open(path, encoding="utf-8") as f:
+                raw = f.read().strip()
+        except OSError:
+            continue
+        if raw == unlimited_marker:
+            return None
+        try:
+            limit = int(raw)
+        except ValueError:
+            continue
+        # cgroup v1 writes a huge sentinel (a page-aligned 2**63-1) rather than a marker when unlimited
+        if limit <= 0 or limit >= 2**62:
+            return None
+        return limit
+    return None
+
+
+def get_numa_bound_memory() -> int | None:
+    """
+    Capacity of the NUMA nodes the process is bound to, as set by `numactl --membind`, or `None` when it is not bound.
+    Like the cgroup limit, this is a limit `psutil.virtual_memory().total` does not see.
+    The NUMA "bind" policy is the only one that is a hard limit.
+    """
+    numa_maps_path = "/proc/self/numa_maps"
+    if not os.path.exists(numa_maps_path):  # not Linux, or a kernel built without NUMA support
+        return None
+    with open(numa_maps_path, encoding="utf-8") as f:
+        first_mapping = f.readline()
+    # Each line is "<address> <policy> ...", the policy being e.g. "default", "bind:0-1,3", "interleave:0-5"
+    policy = first_mapping.split()[1]
+    if not policy.startswith("bind:"):
+        return None
+
+    bound_nodes = []
+    for node_range in policy.removeprefix("bind:").split(","):
+        first_node, _, last_node = node_range.partition("-")
+        last_node = last_node or first_node
+        bound_nodes.extend(range(int(first_node), int(last_node) + 1))
+
+    total_memory = 0
+    for node in bound_nodes:
+        # The first line of a node's meminfo is "Node <index> MemTotal: <size> kB"
+        with open(f"/sys/devices/system/node/node{node}/meminfo", encoding="utf-8") as f:
+            node_memory_kb = int(f.readline().split()[3])
+        total_memory += node_memory_kb * 1024
+    return total_memory
