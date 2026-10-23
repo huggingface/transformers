@@ -204,7 +204,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
         return kwargs
 
     @property
-    def kv_sharing_roles(self) -> list[str]:
+    def kv_sharing_roles(self) -> list[str | None]:
         # After this index, all layers are consumers
         layer_sharing_boundary = self.num_hidden_layers - self.num_kv_shared_layers
         # Accumulators to build the list of roles in one pass
