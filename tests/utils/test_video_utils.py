@@ -32,6 +32,8 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.video_utils import (
+    VideoMetadata,
+    default_sample_indices_fn,
     group_videos_by_shape,
     is_torchvision_video_decoding_available,
     make_batched_videos,
@@ -46,7 +48,7 @@ if is_vision_available():
     import PIL
 
     from transformers import BaseVideoProcessor
-    from transformers.video_utils import VideoMetadata, load_video
+    from transformers.video_utils import load_video
 
 
 def get_random_video(height, width, num_frames=8, return_torch=False):
@@ -56,6 +58,15 @@ def get_random_video(height, width, num_frames=8, return_torch=False):
         # move channel first
         return torch.from_numpy(video).permute(0, 3, 1, 2)
     return video
+
+
+class VideoFrameSamplingTester(unittest.TestCase):
+    def test_fps_sampling_short_video_keeps_one_frame(self):
+        metadata = VideoMetadata(total_num_frames=10, fps=30.0)
+
+        indices = default_sample_indices_fn(metadata, fps=1)
+
+        self.assertEqual(indices.tolist(), [0])
 
 
 @require_vision
