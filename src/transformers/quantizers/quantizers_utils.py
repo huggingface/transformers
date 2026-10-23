@@ -23,6 +23,23 @@ def get_module_from_name(module, tensor_name: str) -> tuple[Any, str]:
     return module, tensor_name
 
 
+def plan_entry_for(dtype_plan: dict, module_name: str, catch_all: bool = True):
+    """Return the entry `dtype_plan` gives `module_name`, or `None` if it stays in full precision.
+
+    A `None` entry keeps the module in full precision and wins over any other entry. A targeted entry wins over the
+    `".*"` catch-all in any order, since `config.json` does not keep the order. Two targeted entries on one module
+    raise. Without `catch_all`, only a targeted entry counts.
+    """
+    claimed = [pattern for pattern in dtype_plan if pattern != ".*" and re.search(pattern, module_name)]
+    if any(dtype_plan[pattern] is None for pattern in claimed):
+        return None
+    if len(claimed) > 1:
+        raise ValueError(f"{module_name!r} is claimed by more than one dtype_plan entry: {claimed}")
+    if claimed:
+        return dtype_plan[claimed[0]]
+    return dtype_plan.get(".*") if catch_all else None
+
+
 def should_convert_module(full_name, patterns: list[str] | None = None):
     if patterns is None:
         return True
@@ -35,6 +52,11 @@ def should_convert_module(full_name, patterns: list[str] | None = None):
     boundary = r"(?:(?<=\.)|(?=\.|$))"
     # Group the key so the boundary applies to every alternative.
     return not any(re.match(rf"(?:{key}){boundary}", full_name) or full_name.endswith(key) for key in patterns)
+
+
+def skip_pattern(entry: str) -> str:
+    """Return the `dtype_plan` pattern of a skip-list entry. It matches what `should_convert_module` skips."""
+    return rf"^(?:{entry})(?:(?<=\.)|(?=\.|$))|{re.escape(entry)}$"
 
 
 def checkpoint_module_namer(model):
@@ -61,6 +83,39 @@ def checkpoint_module_namer(model):
         return key.removesuffix(".weight")
 
     return checkpoint_name
+
+
+def checkpoint_module_names(model) -> dict[str, list[str]]:
+    """Return the names each module of `model` has in the checkpoint.
+
+    A module has one name, renamed as the loader does. A module that a converter fuses, such as `experts`, has one
+    name per piece, such as `experts.3.gate_proj`. Each param's reversed converter names the pieces, with `*` taken
+    over the param's first dim.
+    """
+    from ..conversion_mapping import get_model_conversion_mapping
+    from ..core_model_loading import WeightConverter
+
+    to_checkpoint = checkpoint_module_namer(model)
+    names = {name: [to_checkpoint(name)] for name, _ in model.named_modules()}
+    converters = [
+        rule.reverse_transform()
+        for rule in get_model_conversion_mapping(model, add_legacy=False)
+        if isinstance(rule, WeightConverter)
+    ]
+    pieces = {}
+    for param_name, param in model.named_parameters():
+        module_name = param_name.rpartition(".")[0]
+        for rule in converters:
+            renamed, source = rule.rename_source_key(param_name)
+            if source is None:
+                continue
+            for target in rule.target_patterns:
+                key = renamed.replace(rule.target_patterns[0], target, 1)
+                for index in range(param.shape[0] if "*" in key else 1):
+                    piece = to_checkpoint(key.replace("*", str(index)).rpartition(".")[0])
+                    pieces.setdefault(module_name, {})[piece] = None
+            break
+    return names | {name: list(module_pieces) for name, module_pieces in pieces.items()}
 
 
 @contextmanager
