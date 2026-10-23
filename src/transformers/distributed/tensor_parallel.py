@@ -23,6 +23,7 @@ from ..utils import logging
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 from .parallel_utils import (
     ALL_PARALLEL_STYLES,
+    ParallelInterface,  # noqa: F401
     _use_local_dtensor_params,
 )
 from .utils import _get_torch_distributed_rank
