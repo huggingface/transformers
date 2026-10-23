@@ -318,7 +318,7 @@ class BatchEncoding(UserDict, Generic[_V]):
     @property
     def encodings(self) -> list[EncodingFast] | None:
         """
-        `Optional[list[tokenizers.Encoding]]`: The list all encodings from the tokenization process. Returns `None` if
+        `Optional[list[tokenizers.Encoding]]`: The list of all encodings from the tokenization process. Returns `None` if
         the input was tokenized through Python (i.e., not a fast) tokenizer.
         """
         return self._encodings
