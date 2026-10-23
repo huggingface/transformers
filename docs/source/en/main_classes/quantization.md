@@ -104,11 +104,19 @@ The base class of the block-scaled format configs below. Build one of those conf
 
 [[autodoc]] BlockScaledConfig
 
+## Fp8Config
+
+[[autodoc]] Fp8Config
+
 ## FineGrainedConfig
 
 [[autodoc]] FineGrainedConfig
 
 ## FineGrainedFP8Config
+
+> [!WARNING]
+> `FineGrainedFP8Config` is deprecated and will be removed in a future release. Use [`Fp8Config`] (see
+> [Migrating from FineGrainedFP8Config](../quantization/fp8#migrating-from-finegrainedfp8config)).
 
 [[autodoc]] FineGrainedFP8Config
 
