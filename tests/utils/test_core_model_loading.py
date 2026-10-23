@@ -1305,7 +1305,9 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         reversed_qkv = {key: value for key, value in reversed_state_dict.items() if "qkv_proj" in key}
         self.assertTrue(compare_state_dicts(reversed_qkv, state_dict))
 
-    def test_reverse_renames_the_converter_outputs(self):
+    def test_reverse_renames_the_converter_outputs_many_to_one(self):
+        """Test that Converter and Renaming work well together even if they are applied on the same subkey during reverse conversion,
+        in the case of a many-to-one conversion during reverse conversion."""
         # The renaming writes the name the converter reads, so the save must convert before it renames back
         model = DummyRoot(PreTrainedConfig(), with_mlp=False)
 
@@ -1335,7 +1337,9 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         saved_qkv = {key: value for key, value in saved.items() if "qkv_proj" in key}
         self.assertTrue(compare_state_dicts(saved_qkv, state_dict))
 
-    def test_reverse_renames_the_converter_outputs_bis(self):
+    def test_reverse_renames_the_converter_outputs_one_to_many(self):
+        """Test that Converter and Renaming work well together even if they are applied on the same subkey during reverse conversion,
+        in the case of a one-to-many conversion during reverse conversion."""
         # The renaming writes the name the converter reads, so the save must convert before it renames back
         model = DummyRootMerged(PreTrainedConfig(), with_mlp=False)
 
