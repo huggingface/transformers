@@ -1441,11 +1441,16 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.sequence_bias is not None:
             processors.append(SequenceBiasLogitsProcessor(sequence_bias=generation_config.sequence_bias))
 
+        # We need the value check as it can be a dummy filled with -100
+        has_encoder_input_ids = (
+            encoder_input_ids is not None and encoder_input_ids.dim() == 2 and not (encoder_input_ids < 0).any()
+        )
+
         if (
             generation_config.encoder_repetition_penalty is not None
             and generation_config.encoder_repetition_penalty != 1.0
         ):
-            if encoder_input_ids is not None and len(encoder_input_ids.shape) == 2:
+            if has_encoder_input_ids:
                 processors.append(
                     EncoderRepetitionPenaltyLogitsProcessor(
                         penalty=generation_config.encoder_repetition_penalty,
@@ -1474,11 +1479,12 @@ class GenerationMixin(ContinuousMixin):
                     "apply n-gram constraints only to newly generated tokens, not to the prompt.",
                     UserWarning,
                 )
+
         if (
             generation_config.encoder_no_repeat_ngram_size is not None
             and generation_config.encoder_no_repeat_ngram_size > 0
         ):
-            if encoder_input_ids is not None and len(encoder_input_ids.shape) == 2:
+            if has_encoder_input_ids:
                 processors.append(
                     EncoderNoRepeatNGramLogitsProcessor(
                         generation_config.encoder_no_repeat_ngram_size,
@@ -1594,7 +1600,7 @@ class GenerationMixin(ContinuousMixin):
                 min_tokens_to_keep = 1
 
             # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
-            # all samplers can be found in `generation_utils_samplers.py`
+            # All logits processors are defined in `generation/logits_process.py`
             if generation_config.temperature is not None and generation_config.temperature != 1.0:
                 processors.append(TemperatureLogitsWarper(generation_config.temperature))
             if generation_config.top_h is not None:
@@ -4268,10 +4274,11 @@ class GenerationMixin(ContinuousMixin):
         # When restarting from `inputs_embeds`, it's always the FULL sequence, and we always need to slice
         next_sequence_length = None
         inputs_embeds = model_kwargs.get("inputs_embeds")
+        cache = model_kwargs.get("past_key_values")
         use_inputs_embeds = False
         if not self.config.is_encoder_decoder and inputs_embeds is not None and is_first_iteration:
             use_inputs_embeds = True
-        if (cache := model_kwargs.get("past_key_values")) is not None:
+        if cache is not None:
             past_length = cache.get_seq_length()
             # It will be sliced as inputs_embeds = inputs_embeds[:, -next_sequence_length:, :] in `prepare_inputs_for_generation`
             if use_inputs_embeds:
@@ -4301,15 +4308,17 @@ class GenerationMixin(ContinuousMixin):
 
         # Chunked prefill (for very large contexts)
         else:
+            if cache is None:
+                raise ValueError("Cannot use prefill chunking without a cache")
+
             # Even if we are not compiling the forward, flex is always compiled when used. With chunked prefill, we may
             # end up needing just a bit more graphs than the default (which is 8). Doing this avoids very cryptic warnings
             getattr(torch, "_dynamo").config.cache_size_limit = 64
 
             chunk_size = generation_config.prefill_chunk_size
-            input_chunks = torch.split(input_ids, chunk_size, dim=-1)
-
-            if "past_key_values" not in model_kwargs:
-                raise ValueError("Cannot use prefill chunking without a cache")
+            # In case we are restarting from non-empty Cache and the input_ids also contain the old ones, we need to slice
+            next_sequence_length = 0 if next_sequence_length is None else next_sequence_length
+            input_chunks = torch.split(input_ids[:, -next_sequence_length:], chunk_size, dim=-1)
 
             model_forward = (
                 self.get_compiled_call(generation_config.compile_config)
@@ -4319,7 +4328,7 @@ class GenerationMixin(ContinuousMixin):
 
             attention_mask = model_kwargs.pop("attention_mask", None)
             position_ids = model_kwargs.pop("position_ids", None)
-            past_length = 0
+            past_length = cache.get_seq_length()
             for input_chunk in input_chunks:
                 current_length = past_length + input_chunk.shape[-1]
                 if attention_mask is not None:

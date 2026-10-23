@@ -19,6 +19,8 @@ import shutil
 import warnings
 from typing import TYPE_CHECKING
 
+import torch
+
 from ..dynamic_module_utils import custom_object_save
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
@@ -90,6 +92,9 @@ class DistributedMixin:
             self._tp_plan.update(self.config.base_model_tp_plan or {})
             self._ep_plan.update(self.config.base_model_ep_plan or {})
             self._fsdp_plan.update(self.config.base_model_fsdp_plan or {})
+            # Shard the input embeddings on the vocabulary unless the plan already names them.
+            if self._tp_plan and isinstance(getattr(self, "embed_tokens", None), torch.nn.Embedding):
+                self._tp_plan = {"embed_tokens": "embedding_rowwise", **self._tp_plan}
 
         for name, module in self.named_children():
             if plan := getattr(module, "_ep_plan", None):
@@ -183,8 +188,8 @@ class DistributedMixin:
 
         if distributed_config.tp_size > 1 and device_map is not None:
             raise ValueError("Tensor parallelism and `device_map` are mutually exclusive.")
-        if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.7"):
-            raise OSError("FSDP2 requires `torch>=2.7` (distributed checkpoint save/load).")
+        if distributed_config.fsdp_size > 1 and not is_torch_greater_or_equal("2.8"):
+            raise OSError("FSDP2 requires `torch>=2.8` (distributed checkpoint save/load).")
 
         device_map, mesh_manager = initialize_distributed_mesh(distributed_config)
 
@@ -223,8 +228,9 @@ class DistributedMixin:
             tp_mesh = mesh_manager.get_mesh("tp")
             ep_mesh = mesh_manager.get_mesh("ep")
 
-            if {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()):
-                # Legacy masked EP: the EP group is the TP group, every rank keeps every token.
+            if "megamoe_experts" in ep_plan.values() or {"ep_router", "moe_tp_experts"}.issubset(ep_plan.values()):
+                # Legacy masked EP, or Mega MoE dispatching inside its kernel: the EP group is the TP group, every
+                # rank keeps every token.
                 model = apply_tensor_parallelism(model, tp_mesh, ep_plan)
             elif "ep_dispatch_experts" in ep_plan.values():
                 # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
@@ -257,7 +263,7 @@ class DistributedMixin:
     ) -> None:
         """Save rank-local DCP files, optionally consolidating into consolidated/ on rank 0 for Hub upload."""
         if not _check_distributed_checkpointing_available():
-            raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.7.")
+            raise OSError("save_pretrained(..., distributed_checkpoint=True) requires torch>=2.8.")
 
         distributed_config = getattr(model_to_save.config, "distributed_config", None)
         if distributed_config is None or (distributed_config.tp_size <= 1 and distributed_config.fsdp_size <= 1):

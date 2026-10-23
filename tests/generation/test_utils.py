@@ -23,6 +23,7 @@ import re
 import tempfile
 import unittest
 import warnings
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -608,6 +609,7 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
                     max_new_tokens=self.max_new_tokens,
                     num_beams=2,
                     **inputs_dict,
+                    **self._get_logits_processor_kwargs(config=config),
                 )
 
     @pytest.mark.generate
@@ -3307,6 +3309,55 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(torch.isfinite(p_prime).all())
         self.assertAlmostEqual(p_prime.sum().item(), 1.0, places=5)
 
+    def test_generation_device_placement_respect_type(self):
+        import transformers
+        from transformers.modeling_outputs import BaseModelOutput
+        from transformers.pytorch_utils import move_to_device
+
+        # Context manager instead of `patch` as it's a recursive function which is a real struggle to use with `patch`
+        @contextmanager
+        def patch_move_to_device():
+            COUNTER = [0]
+
+            def patched(value, device):
+                nonlocal COUNTER
+                COUNTER[0] += 1
+                return move_to_device(value, device)
+
+            try:
+                transformers.pytorch_utils.move_to_device = patched
+                transformers.generation.utils.move_to_device = patched
+
+                yield COUNTER
+            finally:
+                # Set back the original
+                transformers.pytorch_utils.move_to_device = move_to_device
+                transformers.generation.utils.move_to_device = move_to_device
+
+        out = BaseModelOutput(
+            last_hidden_state=torch.zeros(1, 2, 4), hidden_states=(torch.zeros(2, 4), torch.ones(2, 4))
+        )
+
+        with patch_move_to_device() as call_counter:
+            moved = transformers.pytorch_utils.move_to_device(out, torch.device("cpu"))
+
+        # Should have been called 5 times with recursion
+        self.assertEqual(call_counter[0], 5)
+        self.assertIsInstance(moved, BaseModelOutput)
+        self.assertIsInstance(moved.hidden_states, tuple)
+
+        ids = torch.randint(0, 100, (1, 10))
+        model = LlamaForCausalLM(LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=32, vocab_size=20))
+        # Patch the device property so that we trigger input_tensor.device != self.device
+        with patch.object(PreTrainedModel, "device", torch.device("cpu", 100000)):
+            with patch_move_to_device() as call_counter:
+                prepared_inputs = model.prepare_inputs_for_generation(ids, prev_outputs=out)
+
+        # Should have been called 7 times with recursion
+        self.assertEqual(call_counter[0], 7)
+        self.assertIsInstance(prepared_inputs["prev_outputs"], BaseModelOutput)
+        self.assertIsInstance(prepared_inputs["prev_outputs"].hidden_states, tuple)
+
 
 global_rng = random.Random()
 
@@ -5702,6 +5753,64 @@ class GenerationIntegrationTests(unittest.TestCase):
         EXPECTED_TEXT = 'Write a poem about the market crashing in summer wed digassethrte forec heav dent Var américaine dealing substr energcalc Christmas spé mak夢project askspush speech VBA sufficientjoint február retr Ostilingoser mehrere Mathemat jaarєдна Culturalomas prayerRAY gather ули Senate turn Publicterm cruel),( hardly virt Atlasisie mehrere Mathemat jaar'  # fmt: skip
         output = tokenizer.decode(output[0], skip_special_tokens=True)
         self.assertEqual(output, EXPECTED_TEXT)
+
+    def test_encoder_outputs_without_input_ids_with_encoder_penalties(self):
+        """
+        Tests that when precomputed `encoder_outputs` are passed without `input_ids`,
+        `encoder_repetition_penalty` and `encoder_no_repeat_ngram_size` emit the intended UserWarning
+        indicating that input_ids are required, and generation completes successfully instead of crashing.
+        See #49695.
+        """
+        model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-t5")
+        model.eval()
+        input_ids = torch.tensor([[3, 4, 5]])
+        with torch.no_grad():
+            encoder_outputs = model.get_encoder()(input_ids=input_ids, return_dict=True)
+
+        # 1. encoder_repetition_penalty with encoder_outputs only: must warn and generate without crashing
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            out = model.generate(encoder_outputs=encoder_outputs, encoder_repetition_penalty=1.5, max_new_tokens=5)
+            self.assertEqual(out.shape, (1, 6))
+            warn_msgs = [str(item.message) for item in w if issubclass(item.category, UserWarning)]
+            self.assertTrue(
+                any(
+                    "Passing `encoder_repetition_penalty` requires some form of `input_ids`" in msg
+                    for msg in warn_msgs
+                ),
+                f"Expected warning for encoder_repetition_penalty not found in {warn_msgs}",
+            )
+
+        # 2. encoder_no_repeat_ngram_size with encoder_outputs only: must warn and generate without crashing
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            out = model.generate(encoder_outputs=encoder_outputs, encoder_no_repeat_ngram_size=2, max_new_tokens=5)
+            self.assertEqual(out.shape, (1, 6))
+            warn_msgs = [str(item.message) for item in w if issubclass(item.category, UserWarning)]
+            self.assertTrue(
+                any(
+                    "Passing `encoder_no_repeat_ngram_size` requires some form of `input_ids`" in msg
+                    for msg in warn_msgs
+                ),
+                f"Expected warning for encoder_no_repeat_ngram_size not found in {warn_msgs}",
+            )
+
+        # 3. Control: passing input_ids alongside encoder_outputs must succeed without missing-input_ids warning
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            out = model.generate(
+                input_ids=input_ids,
+                encoder_outputs=encoder_outputs,
+                encoder_repetition_penalty=1.5,
+                encoder_no_repeat_ngram_size=2,
+                max_new_tokens=5,
+            )
+            self.assertEqual(out.shape, (1, 6))
+            warn_msgs = [str(item.message) for item in w if issubclass(item.category, UserWarning)]
+            self.assertFalse(
+                any("requires some form of `input_ids`" in msg for msg in warn_msgs),
+                f"Unexpected warning when input_ids are provided: {warn_msgs}",
+            )
 
 
 @require_torch

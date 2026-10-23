@@ -458,6 +458,20 @@ class TestFetcherTester(unittest.TestCase):
             with patch_transformer_repo_path(tmp_folder):
                 assert extract_imports(BERT_MODELING_FILE) == expected_bert_imports
 
+    def test_extract_imports_skips_modules_without_files(self):
+        with tempfile.TemporaryDirectory() as tmp_folder:
+            tmp_folder = Path(tmp_folder)
+            create_tmp_repo(tmp_folder)
+            with open(tmp_folder / BERT_MODELING_FILE, "a", encoding="utf-8") as f:
+                f.write("from transformers.tokenization_utils_fast import PreTrainedTokenizerFast\n")
+
+            with patch_transformer_repo_path(tmp_folder):
+                assert (
+                    "src/transformers/tokenization_utils_fast",
+                    ["PreTrainedTokenizerFast"],
+                ) not in extract_imports(BERT_MODELING_FILE)
+                create_reverse_dependency_map()
+
     def test_get_module_dependencies(self):
         with tempfile.TemporaryDirectory() as tmp_folder:
             tmp_folder = Path(tmp_folder)
@@ -655,60 +669,107 @@ src/transformers/configuration_utils.py
         as impacted file from reverse dependency
         """
         reverse_map = create_reverse_dependency_map()
-        models_dir = str(tests_fetcher.PATH_TO_TRANSFORMERS / "models")
+        models_dir = "src/transformers/models"
 
-        # impact of CLIP modeling file to all models where it is a backbone
-        expected_clip_multimodals = {
-            f"{models_dir}/video_llava/configuration_video_llava.py",
-            f"{models_dir}/llava/modeling_llava.py",
-            f"{models_dir}/vipllava/configuration_vipllava.py",
-            f"{models_dir}/granite4_vision/modeling_granite4_vision.py",
-            f"{models_dir}/llava/configuration_llava.py",
-            f"{models_dir}/sam3/configuration_sam3.py",
-            f"{models_dir}/llava_next/configuration_llava_next.py",
-            f"{models_dir}/sam3/modeling_sam3.py",
-            f"{models_dir}/llava_next/modeling_llava_next.py",
-            f"{models_dir}/llava_next_video/configuration_llava_next_video.py",
-            f"{models_dir}/llava_next_video/modeling_llava_next_video.py",
-            f"{models_dir}/vipllava/modeling_vipllava.py",
-            f"{models_dir}/video_llava/modeling_video_llava.py",
-            f"{models_dir}/granite4_vision/configuration_granite4_vision.py",
+        # impact of CLIP modeling file: changing clip must trigger tests for composite models that use it
+        expected_tests_for_clip = {
+            "tests/models/llava/test_modeling_llava.py",
+            "tests/models/llava_next/test_modeling_llava_next.py",
+            "tests/models/vipllava/test_modeling_vipllava.py",
+            "tests/models/video_llava/test_modeling_video_llava.py",
         }
-        assert expected_clip_multimodals.issubset(set(reverse_map[f"{models_dir}/clip/modeling_clip.py"]))
-        assert expected_clip_multimodals.issubset(set(reverse_map[f"{models_dir}/clip/configuration_clip.py"]))
+        assert expected_tests_for_clip.issubset(set(reverse_map[f"{models_dir}/clip/modeling_clip.py"]))
+        assert expected_tests_for_clip.issubset(set(reverse_map[f"{models_dir}/clip/configuration_clip.py"]))
 
         # reverse backbone mapping works only if modeling or configuration files are modified
         # because multimodals re-use only config/model of its backbone
-        assert expected_clip_multimodals.isdisjoint(set(reverse_map[f"{models_dir}/clip/image_processing_clip.py"]))
+        assert expected_tests_for_clip.isdisjoint(set(reverse_map[f"{models_dir}/clip/image_processing_clip.py"]))
 
         # Also lets check with a random text backbone
-        expected_qwen2_multimodals = {
-            f"{models_dir}/got_ocr2/configuration_got_ocr2.py",
-            f"{models_dir}/qwen2_audio/modeling_qwen2_audio.py",
-            f"{models_dir}/musicflamingo/modeling_musicflamingo.py",
-            f"{models_dir}/video_llama_3/configuration_video_llama_3.py",
-            f"{models_dir}/vibevoice_asr/modeling_vibevoice_asr.py",
-            f"{models_dir}/qwen2_audio/configuration_qwen2_audio.py",
-            f"{models_dir}/got_ocr2/modeling_got_ocr2.py",
-            f"{models_dir}/vibevoice/configuration_vibevoice.py",
-            f"{models_dir}/musicflamingo/configuration_musicflamingo.py",
-            f"{models_dir}/fast_vlm/modeling_fast_vlm.py",
-            f"{models_dir}/audioflamingo3/modeling_audioflamingo3.py",
-            f"{models_dir}/pp_chart2table/configuration_pp_chart2table.py",
-            f"{models_dir}/video_llama_3/modeling_video_llama_3.py",
-            f"{models_dir}/fast_vlm/configuration_fast_vlm.py",
-            f"{models_dir}/internvl/configuration_internvl.py",
-            f"{models_dir}/llava_onevision/configuration_llava_onevision.py",
-            f"{models_dir}/audioflamingo3/configuration_audioflamingo3.py",
-            f"{models_dir}/vibevoice/modeling_vibevoice.py",
-            f"{models_dir}/internvl/modeling_internvl.py",
-            f"{models_dir}/vibevoice_asr/configuration_vibevoice_asr.py",
-            f"{models_dir}/ovis2/configuration_ovis2.py",
-            f"{models_dir}/ovis2/modeling_ovis2.py",
-            f"{models_dir}/llava_onevision/modeling_llava_onevision.py",
+        expected_tests_for_qwen2 = {
+            "tests/models/qwen2_audio/test_modeling_qwen2_audio.py",
+            "tests/models/got_ocr2/test_modeling_got_ocr2.py",
         }
-        assert expected_qwen2_multimodals.issubset(set(reverse_map[f"{models_dir}/qwen2/modeling_qwen2.py"]))
-        assert expected_qwen2_multimodals.isdisjoint(set(reverse_map[f"{models_dir}/qwen2/tokenization_qwen2.py"]))
+        assert expected_tests_for_qwen2.issubset(set(reverse_map[f"{models_dir}/qwen2/modeling_qwen2.py"]))
+        assert expected_tests_for_qwen2.isdisjoint(set(reverse_map[f"{models_dir}/qwen2/tokenization_qwen2.py"]))
+
+    def test_preprocessor_files_trigger_their_tests_and_test_processing(self):
+        """
+        Preprocessor source files (image/video processors, feature extractors, tokenizers) are not
+        statically imported by their test files — class resolution is dynamic (e.g. via
+        IMAGE_PROCESSOR_MAPPING_NAMES, TOKENIZER_MAPPING) and processing_<model>.py often has no
+        static import of these classes (e.g. CLIP's processing_clip.py only imports ProcessorMixin).
+        This test ensures create_reverse_dependency_map explicitly wires all preprocessor source
+        files to both their type-specific test file and test_processing_<model>.py by naming
+        convention.
+        """
+        reverse_map = create_reverse_dependency_map()
+        models_dir = "src/transformers/models"
+
+        # --- image processors ---
+        # CLIP: processing_clip.py has zero deps (only imports ProcessorMixin), so
+        # test_processing_clip.py has no static path to image_processing_clip.py — both
+        # test files must be wired explicitly.
+        for img_proc_file in [
+            f"{models_dir}/clip/image_processing_clip.py",
+            f"{models_dir}/clip/image_processing_pil_clip.py",
+        ]:
+            triggered = set(reverse_map[img_proc_file])
+            assert "tests/models/clip/test_image_processing_clip.py" in triggered, (
+                f"{img_proc_file} must trigger test_image_processing_clip.py"
+            )
+            assert "tests/models/clip/test_processing_clip.py" in triggered, (
+                f"{img_proc_file} must trigger test_processing_clip.py"
+            )
+
+        # Fuyu: second model to avoid false positives
+        for img_proc_file in [
+            f"{models_dir}/fuyu/image_processing_fuyu.py",
+            f"{models_dir}/fuyu/image_processing_pil_fuyu.py",
+        ]:
+            triggered = set(reverse_map[img_proc_file])
+            assert "tests/models/fuyu/test_image_processing_fuyu.py" in triggered, (
+                f"{img_proc_file} must trigger test_image_processing_fuyu.py"
+            )
+            assert "tests/models/fuyu/test_processing_fuyu.py" in triggered, (
+                f"{img_proc_file} must trigger test_processing_fuyu.py"
+            )
+
+        # --- video processors ---
+        # qwen2_vl: processing_qwen2_vl.py only imports ProcessorMixin; no static path to
+        # video_processing_qwen2_vl.py from the test side.
+        video_proc_file = f"{models_dir}/qwen2_vl/video_processing_qwen2_vl.py"
+        triggered = set(reverse_map[video_proc_file])
+        assert "tests/models/qwen2_vl/test_video_processing_qwen2_vl.py" in triggered, (
+            f"{video_proc_file} must trigger test_video_processing_qwen2_vl.py"
+        )
+        assert "tests/models/qwen2_vl/test_processing_qwen2_vl.py" in triggered, (
+            f"{video_proc_file} must trigger test_processing_qwen2_vl.py"
+        )
+
+        # --- feature extractors ---
+        # whisper: processing_whisper.py only imports ProcessorMixin; feature_extraction_whisper.py
+        # is not statically reachable from test_processing_whisper.py.
+        feat_ext_file = f"{models_dir}/whisper/feature_extraction_whisper.py"
+        triggered = set(reverse_map[feat_ext_file])
+        assert "tests/models/whisper/test_feature_extraction_whisper.py" in triggered, (
+            f"{feat_ext_file} must trigger test_feature_extraction_whisper.py"
+        )
+        assert "tests/models/whisper/test_processing_whisper.py" in triggered, (
+            f"{feat_ext_file} must trigger test_processing_whisper.py"
+        )
+
+        # --- tokenizers ---
+        # CLIP: processing_clip.py has no static import of CLIPTokenizer, so
+        # tokenization_clip.py is not reachable from test_processing_clip.py.
+        tok_file = f"{models_dir}/clip/tokenization_clip.py"
+        triggered = set(reverse_map[tok_file])
+        assert "tests/models/clip/test_tokenization_clip.py" in triggered, (
+            f"{tok_file} must trigger test_tokenization_clip.py"
+        )
+        assert "tests/models/clip/test_processing_clip.py" in triggered, (
+            f"{tok_file} must trigger test_processing_clip.py"
+        )
 
     @unittest.skip("Broken for now TODO @ArthurZucker")
     def test_infer_tests_to_run(self):

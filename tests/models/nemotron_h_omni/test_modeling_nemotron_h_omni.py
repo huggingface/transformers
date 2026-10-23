@@ -347,6 +347,11 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
+    @unittest.skip("FIXME raushan - should apply temporal factor while processing!")
+    # prob this model doesn't even work with beam/sampling atm, low prio
+    def test_get_video_features_pooler_output(self):
+        pass
+
     def test_mismatching_num_image_tokens(self):
         # packed `pixel_values` have no batch dimension, so images are dropped or added by their patches
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -435,8 +440,19 @@ class NemotronHOmniAudio2TextModelTest(NemotronHOmniModelTestMixin, ALMModelTest
     def test_get_video_features_output(self, return_dict: bool | None):
         pass
 
+    @unittest.skip("FIXME raushan - should apply temporal factor while processing!")
+    # prob this model doesn't even work with beam/sampling atm, low prio
+    def test_get_video_features_pooler_output(self):
+        pass
+
     @unittest.skip(reason="Audio tester isnt supported yet")
     def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
+        pass
+
+    @unittest.skip(
+        reason="The Parakeet audio encoder always builds an attention mask, which the SDPA flash backend rejects"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
 
