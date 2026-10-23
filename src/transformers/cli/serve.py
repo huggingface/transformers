@@ -56,7 +56,10 @@ class Serve:
             typer.Option(help="Enable continuous batching with paged attention. Configure with --cb-* flags."),
         ] = False,
         attn_implementation: Annotated[
-            str | None, typer.Option(help="Attention implementation (e.g. flash_attention_2).")
+            str | None,
+            typer.Option(
+                help="Attention implementation (e.g. flash_attention_2). For multimodal models, only applies to the language model."
+            ),
         ] = None,
         compile: Annotated[bool, typer.Option(help="Enable torch.compile for faster inference.")] = False,
         quantization: Annotated[

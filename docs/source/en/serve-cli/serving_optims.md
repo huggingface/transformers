@@ -62,6 +62,8 @@ transformers serve \
   --attn-implementation "flash_attention_2"
 ```
 
+For multimodal models (models with a `text_config`, such as vision-language or text-to-speech models), `--attn-implementation` only applies to the language model. The other sub-models, such as vision or audio encoders, keep their default backend: SDPA when they support it, eager otherwise. This way, a sub-model that doesn't support the requested backend, such as an audio codec without attention layers, doesn't prevent the model from loading.
+
 ### Apple Silicon (Metal flash attention)
 
 Install [kernels](https://github.com/huggingface/kernels) to make `transformers serve` default to [kernels-community/metal-flash-sdpa](https://huggingface.co/kernels-community/metal-flash-sdpa) on MPS. The Metal flash kernel runs 1.66x faster than SDPA with `generate_batch` on 100 samples of gsm8k, Qwen2.5-0.5B-Instruct and MPS fp16. It matches SDPA token-for-token under greedy decoding.

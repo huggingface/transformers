@@ -282,6 +282,14 @@ class ModelManager:
             progress_callback({"status": "loading", "model": model_id_and_revision, "stage": "config"})
         config = AutoConfig.from_pretrained(model_id, **model_kwargs)
 
+        # A string backend goes to every sub-model and raises on unsupported ones (e.g. an audio codec), so only set it
+        # on the language model. `""` keeps `model.config._attn_implementation` in sync, as continuous batching reads it.
+        if self.attn_implementation is not None and getattr(config, "text_config", None) is not None:
+            model_kwargs["attn_implementation"] = {
+                "": self.attn_implementation,
+                "text_config": self.attn_implementation,
+            }
+
         from transformers.models.auto.modeling_auto import MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES
 
         if config.model_type in MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES:
