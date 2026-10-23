@@ -24,10 +24,8 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ProcessingKwargs, Unpack
@@ -40,7 +38,7 @@ from ...vision_utils import (
     get_vision_position_ids,
     get_vision_window_index,
 )
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig, Qwen2VLTextConfig
 from ..qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
@@ -50,6 +48,7 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
     Qwen2VLModelOutputWithPast,
     Qwen2VLPreTrainedModel,
+    Qwen2VLVisionBlock,
     Qwen2VLVisionRotaryEmbedding,
     TransformersKwargs,
     VisionAttention,
@@ -108,18 +107,12 @@ class Qwen2_5_VLRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Qwen2_5_VLMLP(nn.Module):
-    def __init__(self, config, bias: bool = False):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+class Qwen2_5_VLMLP(LlamaMLP):
+    def __init__(self, config):
+        super().__init__(config)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
 
 
 class Qwen2_5_VisionPatchEmbed(PatchEmbed):
@@ -128,9 +121,7 @@ class Qwen2_5_VisionPatchEmbed(PatchEmbed):
 
 class Qwen2_5_VLVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
     # override: this model uses standard config names (`hidden_size`) opposed to `embed_dim`
-    def compute_axial_rope_parameters(
-        config: Qwen2_5_VLVisionConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: Qwen2_5_VLVisionConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -146,7 +137,7 @@ class Qwen2_5_VLVisionRotaryEmbedding(Qwen2VLVisionRotaryEmbedding):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
 
 class Qwen2_5_VLPatchMerger(PatchMerger):
@@ -161,34 +152,13 @@ class Qwen2_5_VLVisionAttention(VisionAttention):
         self.dim = config.hidden_size
 
 
-class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
+class Qwen2_5_VLVisionBlock(Qwen2VLVisionBlock):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
-        super().__init__()
+        nn.Module.__init__(self)
         self.norm1 = Qwen2_5_VLRMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen2_5_VLRMSNorm(config.hidden_size, eps=1e-6)
         self.attn = Qwen2_5_VLVisionAttention(config=config)
-        self.mlp = Qwen2_5_VLMLP(config, bias=True)
-
-    @auto_docstring
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
-        hidden_states = hidden_states + self.attn(
-            self.norm1(hidden_states),
-            cu_seqlens=cu_seqlens,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
-        return hidden_states
+        self.mlp = Qwen2_5_VLMLP(config)
 
 
 class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):

@@ -279,15 +279,15 @@ class Sam3MLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -424,7 +424,7 @@ class Sam3ViTRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_axial_rope_parameters(config: Sam3ViTConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: Sam3ViTConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -440,11 +440,11 @@ class Sam3ViTRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        # position_ids: (N, 2) — column 0 = h coords, column 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
         sin = freqs.sin() * self.attention_scaling
@@ -458,10 +458,8 @@ class Sam3ViTRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)[None, ...]
-        return freq_hw.repeat_interleave(2, dim=-1)
+        freq = freq.flatten(1)[None, ...]
+        return freq.repeat_interleave(2, dim=-1)
 
 
 def rotate_pairwise(x):
@@ -740,10 +738,10 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
 
         self.config = config
         hidden_size = config.hidden_size
-        self.layer_norm1 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.rotary_emb = Sam3ViTRotaryEmbedding(config)
         self.attention = Sam3ViTRoPEAttention(config)
-        self.layer_norm2 = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
         self.mlp = Sam3MLP(config)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.window_size = window_size
@@ -780,7 +778,7 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
 
         if self.window_size > 0:
             height, width = hidden_states.shape[1], hidden_states.shape[2]
@@ -796,7 +794,7 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
 
         hidden_states = residual + hidden_states
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + self.dropout(hidden_states)
 

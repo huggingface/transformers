@@ -24,19 +24,17 @@ from ...modeling_layers import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...utils.output_capturing import OutputRecorder
-from ..llama.modeling_llama import LlamaAttention
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import (
-    MixtralDecoderLayer,
     MixtralExperts,
     MixtralForCausalLM,
     MixtralModel,
     MixtralPreTrainedModel,
-    MixtralRotaryEmbedding,
 )
 from .configuration_phimoe import PhimoeConfig
 
 
-class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
+class PhimoeRotaryEmbedding(LlamaRotaryEmbedding):
     def __init__(self, config: PhimoeConfig):
         nn.Module.__init__()
         self.max_seq_len_cached = config.max_position_embeddings
@@ -277,10 +275,10 @@ class PhimoeTopKRouter(nn.Linear):
                 1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
             )
         router_logits = super().forward(hidden_states)
-        routing_weights, selected_experts = sparsemixer(
+        top_k_weights, top_k_index = sparsemixer(
             router_logits, jitter_eps=self.router_jitter_noise, training=self.training, top_k=self.top_k
         )
-        return router_logits, routing_weights, selected_experts
+        return router_logits, top_k_weights, top_k_index
 
 
 class PhimoeSparseMoeBlock(nn.Module):
@@ -314,14 +312,15 @@ class PhimoeSparseMoeBlock(nn.Module):
 
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_dim)
-        _, routing_weights, selected_experts = self.router(hidden_states)
-        final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
+        final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
-class PhimoeDecoderLayer(MixtralDecoderLayer):
+class PhimoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: PhimoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.mlp = PhimoeSparseMoeBlock(config)
 
         # Phimoe uses nn.LayerNorm
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.rms_norm_eps, elementwise_affine=True)

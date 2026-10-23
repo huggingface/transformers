@@ -24,15 +24,16 @@ from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
-    Qwen3_5MLP,
     Qwen3_5Model,
+    Qwen3_5RMSNorm,
     Qwen3_5TextModel,
     Qwen3_5TextRotaryEmbedding,
     Qwen3_5VisionModel,
-    Qwen3_5VisionRotaryEmbedding,
     causal_conv1d_fn,
     causal_conv1d_update,
     torch_chunk_gated_delta_rule,
@@ -42,10 +43,8 @@ from ..qwen3_next.configuration_qwen3_next import Qwen3NextConfig
 from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextAttention,
     Qwen3NextDecoderLayer,
-    Qwen3NextExperts,
     Qwen3NextForCausalLM,
     Qwen3NextPreTrainedModel,
-    Qwen3NextRMSNorm,
     Qwen3NextSparseMoeBlock,
 )
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig
@@ -159,7 +158,7 @@ class Qwen3_5MoeConfig(Qwen3VLConfig):
     vision_end_token_id: int = 248054
 
 
-class Qwen3_5MoeVisionRotaryEmbedding(Qwen3_5VisionRotaryEmbedding):
+class Qwen3_5MoeVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 
@@ -180,11 +179,11 @@ class Qwen3_5MoeAttention(Qwen3NextAttention):
     pass
 
 
-class Qwen3_5MoeMLP(Qwen3_5MLP):
+class Qwen3_5MoeMLP(Qwen2MoeMLP):
     pass
 
 
-class Qwen3_5MoeExperts(Qwen3NextExperts):
+class Qwen3_5MoeExperts(Qwen2MoeExperts):
     pass
 
 
@@ -197,8 +196,7 @@ class Qwen3_5MoeSparseMoeBlock(Qwen3NextSparseMoeBlock):
     pass
 
 
-@use_kernel_forward_from_hub("RMSNormZeroCentered")
-class Qwen3_5MoeRMSNorm(Qwen3NextRMSNorm):
+class Qwen3_5MoeRMSNorm(Qwen3_5RMSNorm):
     pass
 
 
@@ -243,7 +241,7 @@ class Qwen3_5MoeVisionModel(Qwen3_5VisionModel):
 
 
 class Qwen3_5MoeModelOutputWithPast(Qwen3VLMoeModelOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
+    pass
 
 
 class Qwen3_5MoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):

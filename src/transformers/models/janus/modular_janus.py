@@ -46,10 +46,12 @@ from ..chameleon.modeling_chameleon import (
     ChameleonVQVAEEncoderResnetBlock,
     ChameleonVQVAEVectorQuantizer,
 )
+from ..clip.modeling_clip import CLIPEncoderLayer
+from ..dinov2.modeling_dinov2 import Dinov2MLP
 from ..idefics.modeling_idefics import IdeficsBaseModelOutputWithPast, IdeficsCausalLMOutputWithPast
 from ..llama.modeling_llama import eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.modeling_siglip import SiglipEncoder, SiglipEncoderLayer, SiglipVisionEmbeddings
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionEmbeddings
 
 
 logger = logging.get_logger(__name__)
@@ -309,34 +311,26 @@ class JanusVisionAttention(nn.Module):
         return output, attn_weights
 
 
-class JanusVisionMLP(nn.Module):
+class JanusVisionMLP(Dinov2MLP):
     def __init__(self, config: JanusVisionConfig):
-        super().__init__()
-        self.config = config
-        self.intermediate_size = int(config.hidden_size * config.mlp_ratio)
-        self.activation_fn = ACT2FN[config.hidden_act]  # Gelu act
-        self.fc1 = nn.Linear(config.hidden_size, self.intermediate_size)
-        self.fc2 = nn.Linear(self.intermediate_size, config.hidden_size)
+        super().__init__(config)
         self.dropout1 = nn.Dropout(config.hidden_dropout_rate)
         self.dropout2 = nn.Dropout(config.hidden_dropout_rate)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.dropout1(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = self.dropout2(hidden_states)
         return hidden_states
 
 
-class JanusVisionEncoderLayer(SiglipEncoderLayer):
+class JanusVisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: JanusVisionConfig):
         super().__init__(config)
         self.config = config
-        self.embed_dim = config.hidden_size
         self.self_attn = JanusVisionAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         self.mlp = JanusVisionMLP(config)
 
 

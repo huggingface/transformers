@@ -94,7 +94,7 @@ class LwDetrViTAttention(nn.Module):
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
         self.num_key_value_groups = 1
 
     def forward(
@@ -102,7 +102,7 @@ class LwDetrViTAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -127,23 +127,22 @@ class LwDetrViTAttention(nn.Module):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-
         return attn_output, attn_weights
 
 
 class LwDetrViTMlp(nn.Module):
     def __init__(self, config, in_features: int, hidden_features: int) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.up_proj = nn.Linear(in_features, hidden_features)
         self.act = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, in_features)
+        self.down_proj = nn.Linear(hidden_features, in_features)
         self.drop = nn.Dropout(config.dropout_prob)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.fc1(x)
+        x = self.up_proj(x)
         x = self.act(x)
         x = self.drop(x)
-        x = self.fc2(x)
+        x = self.down_proj(x)
         x = self.drop(x)
 
         return x
@@ -626,11 +625,10 @@ class LwDetrAttention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.d_model // config.decoder_self_attention_heads)
+        self.num_key_value_groups = 1
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
-        self.num_key_value_groups = 1
-
         self.q_proj = nn.Linear(
             config.d_model, config.decoder_self_attention_heads * self.head_dim, bias=config.attention_bias
         )
@@ -860,15 +858,15 @@ class LwDetrMLP(nn.Module):
         super().__init__()
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.decoder_activation_function]
-        self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
+        self.up_proj = nn.Linear(config.d_model, config.decoder_ffn_dim)
+        self.down_proj = nn.Linear(config.decoder_ffn_dim, config.d_model)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         return hidden_states

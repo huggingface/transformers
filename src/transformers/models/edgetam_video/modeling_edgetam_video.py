@@ -38,8 +38,8 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
-from ...utils.generic import TransformersKwargs, is_flash_attention_requested
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple, is_flash_attention_requested
 from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoModel
 from .configuration_edgetam_video import (
@@ -140,7 +140,7 @@ class EdgeTamVideoVisionRotaryEmbedding(nn.Module):
     The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    def __init__(self, config: EdgeTamVideoConfig, device=None):
+    def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
         self.config = config
 
@@ -154,7 +154,7 @@ class EdgeTamVideoVisionRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_axial_rope_parameters(config: EdgeTamVideoConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: EdgeTamVideoConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -172,11 +172,11 @@ class EdgeTamVideoVisionRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        # position_ids: (N, 2) — column 0 = h coords, column 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
         sin = freqs.sin() * self.attention_scaling
@@ -190,10 +190,8 @@ class EdgeTamVideoVisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)[None, ...]
-        return freq_hw.repeat_interleave(2, dim=-1)
+        freq = freq.flatten(1)[None, ...]
+        return freq.repeat_interleave(2, dim=-1)
 
 
 def eager_attention_forward(
@@ -1183,15 +1181,13 @@ class EdgeTamVideoMemoryAttentionMLP(nn.Module):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
         self.config = config
-        self.hidden_size = config.memory_attention_hidden_size
-        self.intermediate_size = config.memory_attention_mlp_hidden_size
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
+        self.activation_fn = ACT2FN[config.memory_attention_mlp_hidden_act]
+        self.up_proj = nn.Linear(config.memory_attention_hidden_size, config.memory_attention_mlp_hidden_size)
+        self.down_proj = nn.Linear(config.memory_attention_mlp_hidden_size, config.memory_attention_hidden_size)
         self.dropout = nn.Dropout(config.memory_attention_dropout)
-        self.act_fn = ACT2FN[config.memory_attention_mlp_hidden_act]
 
-    def forward(self, x):
-        return self.down_proj(self.dropout(self.act_fn(self.up_proj(x))))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.down_proj(self.dropout(self.activation_fn(self.up_proj(hidden_states))))
 
 
 class EdgeTamVideoMemoryAttentionLayer(nn.Module):

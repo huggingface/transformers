@@ -118,14 +118,17 @@ class Lfm2MoeRotaryEmbedding(nn.Module):
 class Lfm2MoeMLP(nn.Module):
     def __init__(self, config: Lfm2MoeConfig, intermediate_size: int | None = None):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.w1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.w3 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.w2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN["silu"]
 
     def forward(self, x):
-        return self.w2(F.silu(self.w1(x)) * self.w3(x))
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 @use_experts_implementation
@@ -134,12 +137,16 @@ class Lfm2MoeExperts(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = F.silu
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -159,8 +166,9 @@ class Lfm2MoeExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -172,44 +180,42 @@ class Lfm2MoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
-        self.norm_topk_prob = config.norm_topk_prob
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.norm_topk_prob = config.norm_topk_prob
         self.routed_scaling_factor = config.routed_scaling_factor
         self.use_expert_bias = config.use_expert_bias
-
-    def forward(self, hidden_states, expert_bias=None):
-        router_logits = F.linear(hidden_states, self.weight)
-        routing_weights = router_logits.sigmoid()
         if self.use_expert_bias:
-            scores_for_routing = routing_weights + expert_bias
-            _, selected_experts = torch.topk(scores_for_routing, k=self.top_k, dim=-1)
-            routing_weights = torch.gather(routing_weights, dim=1, index=selected_experts).type_as(router_logits)
+            self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_experts, dtype=torch.float32))
+
+    def forward(self, hidden_states):
+        router_logits = F.linear(hidden_states, self.weight)
+        router_probs = router_logits.sigmoid()
+        if self.use_expert_bias:
+            scores_for_choice = router_probs + self.e_score_correction_bias
+            _, top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1)
+            top_k_weights = torch.gather(router_probs, dim=1, index=top_k_index).type_as(router_logits)
         else:
-            routing_weights, selected_experts = torch.topk(routing_weights, k=self.top_k, dim=-1)
+            top_k_weights, top_k_index = torch.topk(router_probs, k=self.top_k, dim=-1)
 
         if self.norm_topk_prob:
-            routing_weights = routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-6)
-        routing_weights = routing_weights * self.routed_scaling_factor
-        return router_logits, routing_weights, selected_experts
+            top_k_weights = top_k_weights / (top_k_weights.sum(dim=-1, keepdim=True) + 1e-6)
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
 class Lfm2MoeSparseMoeBlock(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Lfm2MoeConfig):
         super().__init__()
         self.experts = Lfm2MoeExperts(config)
         self.gate = Lfm2MoeTopKRouter(config)
-        self.use_expert_bias = config.use_expert_bias
-        if self.use_expert_bias:
-            self.expert_bias = nn.Buffer(torch.zeros(config.num_experts, dtype=torch.float32))
 
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        expert_bias = self.expert_bias if self.use_expert_bias else None
-        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped, expert_bias)
-        final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
+        _, top_k_weights, top_k_index = self.gate(hidden_states_reshaped)
+        final_hidden_states = self.experts(hidden_states_reshaped, top_k_index, top_k_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
@@ -544,9 +550,8 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Lfm2MoeTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Lfm2MoeSparseMoeBlock):
             if module.use_expert_bias:
-                init.zeros_(module.expert_bias)
+                init.zeros_(module.e_score_correction_bias)
 
 
 @auto_docstring

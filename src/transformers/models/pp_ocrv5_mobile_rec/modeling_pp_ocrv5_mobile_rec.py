@@ -118,16 +118,16 @@ class PPOCRV5MobileRecMLP(nn.Module):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.up_proj = nn.Linear(in_features, hidden_features)
         self.activation = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, out_features)
+        self.down_proj = nn.Linear(hidden_features, out_features)
         self.drop = nn.Dropout(drop)
 
     def forward(self, hidden_state):
-        hidden_state = self.fc1(hidden_state)
+        hidden_state = self.up_proj(hidden_state)
         hidden_state = self.activation(hidden_state)
         hidden_state = self.drop(hidden_state)
-        hidden_state = self.fc2(hidden_state)
+        hidden_state = self.down_proj(hidden_state)
         hidden_state = self.drop(hidden_state)
         return hidden_state
 
@@ -135,15 +135,15 @@ class PPOCRV5MobileRecMLP(nn.Module):
 class PPOCRV5MobileRecBlock(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
-        self.embed_dim = config.hidden_size
+        self.hidden_size = config.hidden_size
         self.self_attn = PPOCRV5MobileRecAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = PPOCRV5MobileRecMLP(
             config=config,
-            in_features=self.embed_dim,
-            hidden_features=int(self.embed_dim * config.mlp_ratio),
+            in_features=self.hidden_size,
+            hidden_features=int(self.hidden_size * config.mlp_ratio),
         )
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -153,7 +153,7 @@ class PPOCRV5MobileRecBlock(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -162,7 +162,7 @@ class PPOCRV5MobileRecBlock(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 

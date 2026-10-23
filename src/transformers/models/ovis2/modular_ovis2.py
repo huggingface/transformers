@@ -27,12 +27,13 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..aimv2.modeling_aimv2 import Aimv2Attention, Aimv2EncoderLayer
+from ..aimv2.modeling_aimv2 import Aimv2EncoderLayer
 from ..auto import AutoModel
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel
 from ..llava_next.modeling_llava_next import LlavaNextCausalLMOutputWithPast, LlavaNextModelOutputWithPast
 from ..siglip.modeling_siglip import SiglipEncoder, SiglipVisionEmbeddings
+from ..vit.modeling_vit import ViTAttention
 from .configuration_ovis2 import Ovis2Config, Ovis2VisionConfig
 
 
@@ -92,8 +93,10 @@ class Ovis2VisionEmbeddings(SiglipVisionEmbeddings):
         return embeddings
 
 
-class Ovis2VisionAttention(Aimv2Attention):
-    pass
+class Ovis2VisionAttention(ViTAttention):
+    def __init__(self, config):
+        super().__init__(config)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.qkv_bias)
 
 
 class Ovis2VisionEncoderLayer(Aimv2EncoderLayer):

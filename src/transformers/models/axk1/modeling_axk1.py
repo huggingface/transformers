@@ -131,13 +131,13 @@ class AXK1MLP(nn.Module):
         return down_proj
 
 
-class AXK1TopkRouter(nn.Module):
+class AXK1TopKRouter(nn.Module):
     def __init__(self, config: AXK1Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
@@ -147,8 +147,8 @@ class AXK1TopkRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        scores = router_logits.sigmoid()
-        scores_for_choice = scores + self.e_score_correction_bias
+        router_probs = router_logits.sigmoid()
+        scores_for_choice = router_probs + self.e_score_correction_bias
         group_scores = (
             scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
             .topk(2, dim=-1)[0]
@@ -163,13 +163,13 @@ class AXK1TopkRouter(nn.Module):
             .reshape(-1, self.num_experts)
         )
         scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = scores.gather(1, topk_indices)
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        top_k_weights = router_probs.gather(1, top_k_index)
         if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights, topk_indices
+            denominator = top_k_weights.sum(dim=-1, keepdim=True) + 1e-20
+            top_k_weights /= denominator
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation
@@ -184,6 +184,10 @@ class AXK1Experts(nn.Module):
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -203,8 +207,9 @@ class AXK1Experts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -212,7 +217,7 @@ class AXK1Experts(nn.Module):
         return final_hidden_states
 
 
-class AXK1MoE(nn.Module):
+class AXK1SparseMoeBlock(nn.Module):
     """DeepSeek-V3 MoE with an extra `post_mlp_layernorm` on the block output (A.X-K1's single delta).
 
     The released checkpoints store the norm at the decoder-layer level (`post_mlp_layernorm.*`); the
@@ -223,7 +228,7 @@ class AXK1MoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = AXK1Experts(config)
-        self.gate = AXK1TopkRouter(config)
+        self.gate = AXK1TopKRouter(config)
         self.shared_experts = AXK1MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -232,9 +237,9 @@ class AXK1MoE(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return self.post_mlp_layernorm(hidden_states)
 
@@ -487,12 +492,11 @@ class AXK1DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: AXK1Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = AXK1Attention(config, layer_idx)
 
-        self.mlp = AXK1MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else AXK1MLP(config)
-
-        self.input_layernorm = AXK1RMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = AXK1RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.self_attn = AXK1Attention(config=config, layer_idx=layer_idx)
+        self.mlp = AXK1SparseMoeBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else AXK1MLP(config)
+        self.input_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -542,7 +546,7 @@ class AXK1PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": AXK1DecoderLayer,
         "attentions": AXK1Attention,
-        "router_logits": OutputRecorder(AXK1TopkRouter, index=0),
+        "router_logits": OutputRecorder(AXK1TopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = ["inv_freq"]
@@ -550,7 +554,7 @@ class AXK1PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, AXK1TopkRouter):
+        if isinstance(module, AXK1TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, AXK1Experts):

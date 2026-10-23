@@ -27,19 +27,19 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import no_inherit_decorator
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
-    DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
-    DeepseekV3TopkRouter,
+    DeepseekV3SparseMoeBlock,
+    DeepseekV3TopKRouter,
 )
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
-from ..glm4_moe.modeling_glm4_moe import Glm4MoeMLP, apply_rotary_pos_emb, repeat_kv
+from ..glm4_moe.modeling_glm4_moe import apply_rotary_pos_emb, repeat_kv
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..laguna.modeling_laguna import LagunaModel
-from ..mixtral.modeling_mixtral import MixtralRMSNorm
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2.modeling_qwen2 import Qwen2Attention
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="XiaomiMiMo/MiMo-V2-Flash")
@@ -136,16 +136,16 @@ class MiMoV2FlashConfig(Glm4MoeConfig):
         return kwargs
 
 
-class MiMoV2FlashRMSNorm(MixtralRMSNorm):
+class MiMoV2FlashRMSNorm(LlamaRMSNorm):
     pass
 
 
 class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: MiMoV2FlashConfig, device=None):
+    def __init__(self, config: MiMoV2FlashConfig):
         super().__init__(config)
 
     def compute_default_rope_parameters(
-        config: MiMoV2FlashConfig, device=None, layer_type: str | None = None, **kwargs
+        config: MiMoV2FlashConfig, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -168,20 +168,20 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
 
-class MiMoV2FlashTopkRouter(DeepseekV3TopkRouter):
+class MiMoV2FlashTopKRouter(DeepseekV3TopKRouter):
     pass
 
 
-class MiMoV2FlashExperts(DeepseekV3Experts):
+class MiMoV2FlashExperts(Qwen2MoeExperts):
     pass
 
 
-class MiMoV2FlashMoE(DeepseekV3MoE):
+class MiMoV2FlashSparseMoeBlock(DeepseekV3SparseMoeBlock):
     """
-    Only difference from `DeepseekV3MoE` is that we have no shared experts.
+    Only difference from `DeepseekV3SparseMoeBlock` is that we have no shared experts.
     So we drop it and override the forward to skip the shared expert (residual like) add.
     """
 
@@ -191,12 +191,12 @@ class MiMoV2FlashMoE(DeepseekV3MoE):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        return self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        return self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
 
 
-class MiMoV2FlashMLP(Glm4MoeMLP):
+class MiMoV2FlashMLP(Qwen2MoeMLP):
     pass
 
 

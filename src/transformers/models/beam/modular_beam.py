@@ -35,7 +35,7 @@ from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3PreTrainedModel,
-    DeepseekV3TopkRouter,
+    DeepseekV3TopKRouter,
 )
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32DecoderLayer
@@ -251,7 +251,7 @@ class BeamMLP(Qwen3MoeMLP):
         return self.down_proj(activated)
 
 
-class BeamTopKRouter(DeepseekV3TopkRouter):
+class BeamTopKRouter(DeepseekV3TopKRouter):
     def __init__(self, config: BeamConfig):
         super().__init__()
         self.num_experts = config.num_experts
@@ -280,11 +280,11 @@ class BeamTopKRouter(DeepseekV3TopkRouter):
         topk_weights = scores.gather(1, topk_indices)
         if self.norm_topk_prob:
             topk_weights /= topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-        # `routed_scaling_factor` is applied after expert aggregation in `BeamMoE`.
+        # `routed_scaling_factor` is applied after expert aggregation in `BeamSparseMoeBlock`.
         return router_logits, topk_weights, topk_indices
 
 
-class BeamMoE(Qwen3MoeSparseMoeBlock):
+class BeamSparseMoeBlock(Qwen3MoeSparseMoeBlock):
     def __init__(self, config: BeamConfig):
         super().__init__(config)
         self.routed_scaling_factor = config.routed_scaling_factor

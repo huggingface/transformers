@@ -29,36 +29,35 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
+from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
-    DeepseekV3MLP,
     DeepseekV3Model,
-    DeepseekV3RMSNorm,
-    DeepseekV3RotaryEmbedding,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
-from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Attention
+from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralTopKRouter
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from .configuration_longcat_flash import LongcatFlashConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class LongcatFlashRMSNorm(DeepseekV3RMSNorm):
+class LongcatFlashRMSNorm(LlamaRMSNorm):
     pass
 
 
-class LongcatFlashRotaryEmbedding(DeepseekV3RotaryEmbedding):
+class LongcatFlashRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class LongcatFlashMLP(DeepseekV3MLP):
+class LongcatFlashMLP(Qwen2MoeMLP):
     pass
 
 
-class LongcatFlashTopkRouter(MixtralTopKRouter):
+class LongcatFlashTopKRouter(MixtralTopKRouter):
     def __init__(self, config):
         super().__init__(config)
         del self.weight  # longcat routes through `classifier` (an nn.Linear) instead of a weight Parameter
@@ -69,19 +68,19 @@ class LongcatFlashTopkRouter(MixtralTopKRouter):
         self.classifier = nn.Linear(config.hidden_size, self.n_routed_experts, bias=self.router_bias)
 
     @torch.no_grad()
-    def get_topk_indices(self, scores):
-        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        return topk_indices
+    def get_topk_indices(self, router_probs):
+        scores_for_choice = router_probs.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        return top_k_index
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.classifier.weight.type(torch.float32))
-        scores = router_logits.softmax(dim=-1)
-        topk_indices = self.get_topk_indices(scores)
-        topk_weights = scores.gather(1, topk_indices)
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights.to(router_logits.dtype), topk_indices
+        router_probs = router_logits.softmax(dim=-1)
+        top_k_index = self.get_topk_indices(router_probs)
+        top_k_weights = router_probs.gather(1, top_k_index)
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights.to(router_logits.dtype), top_k_index
 
 
 class LongcatFlashExperts(nn.Module):
@@ -134,7 +133,7 @@ class LongcatFlashExperts(nn.Module):
 
 
 # remap config key expert_ffn_hidden_size -> moe_intermediate_size
-class LongcatFlashMoE(nn.Module):
+class LongcatFlashSparseMoeBlock(nn.Module):
     """
     A mixed expert module containing zero compute (identity) experts.
     """
@@ -145,22 +144,21 @@ class LongcatFlashMoE(nn.Module):
         self.config = config
         self.experts = LongcatFlashExperts(config)
 
-        self.router = LongcatFlashTopkRouter(config)
+        self.router = LongcatFlashTopKRouter(config)
 
     def forward(self, hidden_states):
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.router(hidden_states)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         return hidden_states
 
 
-class LongcatFlashMLA(DeepseekV32Attention):
+class LongcatFlashMLA(AXK1Attention):
     """MLA from Deepseek V3 with a Q-LoRA rank and LoRA scaling."""
 
     def __init__(self, config: LongcatFlashConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        del self.indexer
         self.qk_head_dim = config.qk_head_dim  # qk_head_dim is a settable attribute in LongcatFlashConfig
         self.mla_scale_q_lora = (config.hidden_size / self.q_lora_rank) ** 0.5
         self.mla_scale_kv_lora = (config.hidden_size / self.kv_lora_rank) ** 0.5
@@ -239,7 +237,7 @@ class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
         self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size
 
-        self.mlp = LongcatFlashMoE(config)
+        self.mlp = LongcatFlashSparseMoeBlock(config)
 
         self.self_attn = nn.ModuleList([LongcatFlashMLA(config=config, layer_idx=layer_idx * 2 + i) for i in [0, 1]])
         self.mlps = nn.ModuleList([LongcatFlashMLP(config) for _ in [0, 1]])
@@ -320,7 +318,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": LongcatFlashDecoderLayer,
         "attentions": LongcatFlashMLA,
-        "router_logits": OutputRecorder(LongcatFlashTopkRouter, index=0),
+        "router_logits": OutputRecorder(LongcatFlashTopKRouter, index=0),
     }
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
     _keep_in_fp32_modules = [
@@ -330,7 +328,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, LongcatFlashTopkRouter):
+        if isinstance(module, LongcatFlashTopKRouter):
             init.normal_(module.classifier.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         if isinstance(module, LongcatFlashExperts):

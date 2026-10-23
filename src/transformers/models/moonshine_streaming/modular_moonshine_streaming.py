@@ -26,15 +26,14 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..llama.modeling_llama import LlamaMLP, eager_attention_forward
+from ..clip.modeling_clip import CLIPAttention
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaMLP, eager_attention_forward  # noqa: F401
 from ..moonshine.modeling_moonshine import (
     MoonshineDecoder,
-    MoonshineEncoderLayer,
     MoonshineEncoderMLP,
     MoonshineForConditionalGeneration,
     MoonshineModel,
@@ -145,9 +144,9 @@ class MoonshineStreamingLayerNorm(nn.Module):
 class MoonshineStreamingEncoderMLP(MoonshineEncoderMLP): ...
 
 
-class MoonshineStreamingEncoderAttention(nn.Module):
+class MoonshineStreamingEncoderAttention(CLIPAttention):
     def __init__(self, config: MoonshineStreamingConfig, layer_idx: int):
-        super().__init__()
+        nn.Module.__init__(self)
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -169,40 +168,8 @@ class MoonshineStreamingEncoderAttention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
-
-
-class MoonshineStreamingEncoderLayer(MoonshineEncoderLayer):
+class MoonshineStreamingEncoderLayer(LlamaDecoderLayer):
     def __init__(self, config: MoonshineStreamingConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = MoonshineStreamingEncoderAttention(config, layer_idx)

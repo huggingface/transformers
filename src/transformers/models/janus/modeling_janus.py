@@ -329,21 +329,21 @@ class JanusVisionAttention(nn.Module):
 
 
 class JanusVisionMLP(nn.Module):
-    def __init__(self, config: JanusVisionConfig):
+    def __init__(self, config: JanusVisionConfig) -> None:
         super().__init__()
         self.config = config
-        self.intermediate_size = int(config.hidden_size * config.mlp_ratio)
-        self.activation_fn = ACT2FN[config.hidden_act]  # Gelu act
-        self.fc1 = nn.Linear(config.hidden_size, self.intermediate_size)
-        self.fc2 = nn.Linear(self.intermediate_size, config.hidden_size)
+        self.activation_fn = ACT2FN[config.hidden_act]
+        # the hidden size comes from mlp_ratio; the config has no intermediate_size
+        self.up_proj = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
+        self.down_proj = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
         self.dropout1 = nn.Dropout(config.hidden_dropout_rate)
         self.dropout2 = nn.Dropout(config.hidden_dropout_rate)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.dropout1(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = self.dropout2(hidden_states)
         return hidden_states
 
@@ -351,14 +351,13 @@ class JanusVisionMLP(nn.Module):
 class JanusVisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: JanusVisionConfig):
         super().__init__()
-        self.embed_dim = config.hidden_size
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.hidden_size = config.hidden_size
         self.self_attn = JanusVisionAttention(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = JanusVisionMLP(config)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.config = config
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -367,7 +366,7 @@ class JanusVisionEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -376,7 +375,7 @@ class JanusVisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 

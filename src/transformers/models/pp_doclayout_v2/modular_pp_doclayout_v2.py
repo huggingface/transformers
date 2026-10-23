@@ -531,11 +531,7 @@ class PPDocLayoutV2ReadingOrderAttention(LayoutLMv3Attention):
 
 
 class PPDocLayoutV2ReadingOrderLayer(LayoutLMv3Layer):
-    def __init__(self, config):
-        super().__init__()
-        self.attention = PPDocLayoutV2ReadingOrderAttention(config)
-        self.intermediate = PPDocLayoutV2ReadingOrderIntermediate(config)
-        self.output = PPDocLayoutV2ReadingOrderOutput(config)
+    pass
 
 
 class PPDocLayoutV2ReadingOrderEncoder(LayoutLMv3Encoder):

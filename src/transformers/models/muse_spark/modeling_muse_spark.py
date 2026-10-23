@@ -124,42 +124,38 @@ class MuseSparkRMSNorm(nn.Module):
 
 
 class MuseSparkTextCenteredRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))  # diff with Llama: zeros, scale is `1 + weight`
+        self.variance_epsilon = eps
 
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    def forward(self, x):
-        output = self._norm(x.float())
+    def forward(self, x) -> torch.Tensor:
+        output = x.float()
+        output = output * torch.rsqrt(output.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
         # (x * w).to(bfloat16) instead of x.to(bfloat16) * w
         # See https://github.com/huggingface/transformers/pull/29402
         output = output * (1.0 + self.weight).float()
         return output.type_as(x)
 
     def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class MuseSparkTextInputScaledRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))  # diff with Llama: zeros, scale is `1 + weight`
+        self.variance_epsilon = eps
 
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    def forward(self, x):
+    def forward(self, x) -> torch.Tensor:
         # Different order from MuseSparkTextCenteredRMSNorm: first scale, then normalize.
         output = x.float() * (1.0 + self.weight).float()
-        output = self._norm(output.type_as(x).float())  # round with fp32->bf16->f32 before norm
+        output = output.type_as(x).float()  # round with fp32->bf16->f32 before norm
+        output = output * torch.rsqrt(output.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
         return output.type_as(x)
 
     def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class MuseSparkTextMLP(nn.Module):
@@ -178,16 +174,16 @@ class MuseSparkTextMLP(nn.Module):
         return down_proj
 
 
-class MuseSparkTopkRouter(nn.Module):
+class MuseSparkTopKRouter(nn.Module):
     def __init__(self, config: MuseSparkTextConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
         self.output_multiplier = config.output_multiplier
         self.scoring_function = ACT2FN["sigmoid"]
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
         self.norm_topk_prob_eps = 1e-15
         self.routed_scaling_factor = config.routed_scaling_factor
 
@@ -196,14 +192,14 @@ class MuseSparkTopkRouter(nn.Module):
         # Different from MiniMaxM2: convert to float32 before linear projection and scale by output multiplier.
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         router_logits = router_logits * self.output_multiplier
-        routing_weights = self.scoring_function(router_logits)
-        scores_for_choice = routing_weights + self.e_score_correction_bias
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        top_k_weights = routing_weights.gather(1, topk_indices)
+        router_probs = self.scoring_function(router_logits)
+        scores_for_choice = router_probs + self.e_score_correction_bias
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        top_k_weights = router_probs.gather(1, top_k_index)
         # Different from MiniMaxM2: add topk prob eps and scale by routed scaling factor.
         top_k_weights = top_k_weights / (top_k_weights.sum(dim=-1, keepdim=True) + self.norm_topk_prob_eps)
         top_k_weights = top_k_weights * self.routed_scaling_factor
-        return router_logits, top_k_weights, topk_indices
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation(has_post_expert_norm=True)
@@ -219,6 +215,10 @@ class MuseSparkExperts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
         self.post_expert_norm = MuseSparkTextInputScaledRMSNorm(self.hidden_dim, eps=config.post_norm_eps)
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -249,11 +249,11 @@ class MuseSparkExperts(nn.Module):
         return final_hidden_states
 
 
-class MuseSparkMoE(nn.Module):
+class MuseSparkSparseMoeBlock(nn.Module):
     def __init__(self, config: MuseSparkTextConfig):
         super().__init__()
         self.config = config
-        self.gate = MuseSparkTopkRouter(config)
+        self.gate = MuseSparkTopKRouter(config)
         self.pre_expert_proj = nn.Linear(config.hidden_size, config.moe_hidden_size, bias=False)
         self.pre_expert_norm = MuseSparkTextCenteredRMSNorm(config.moe_hidden_size, eps=config.rms_norm_eps)
         self.experts = MuseSparkExperts(config)
@@ -261,11 +261,11 @@ class MuseSparkMoE(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.pre_expert_proj(hidden_states)
         hidden_states = self.pre_expert_norm(hidden_states)
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = self.post_expert_proj(hidden_states).view(*orig_shape)
         return hidden_states
 
@@ -449,7 +449,11 @@ class MuseSparkTextDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.config = config
         self.self_attn = MuseSparkTextAttention(config=config, layer_idx=layer_idx)
-        self.mlp = MuseSparkMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else MuseSparkTextMLP(config)
+        self.mlp = (
+            MuseSparkSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else MuseSparkTextMLP(config)
+        )
         self.input_layernorm = MuseSparkTextCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MuseSparkRMSNorm(
             config.hidden_size, eps=config.post_norm_eps, with_scale=False
@@ -513,7 +517,7 @@ class MuseSparkPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, MuseSparkTopkRouter):
+        if isinstance(module, MuseSparkTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MuseSparkExperts):
@@ -526,7 +530,7 @@ class MuseSparkPreTrainedModel(PreTrainedModel):
 
 
 class MuseSparkTextRotaryEmbedding(nn.Module):
-    def __init__(self, config: MuseSparkConfig):
+    def __init__(self, config: MuseSparkTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -543,7 +547,7 @@ class MuseSparkTextRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(config: MuseSparkConfig, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: MuseSparkTextConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -592,7 +596,7 @@ class MuseSparkTextModel(MuseSparkPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": MuseSparkTextDecoderLayer,
         "attentions": MuseSparkTextAttention,
-        "router_logits": OutputRecorder(MuseSparkTopkRouter, index=0),
+        "router_logits": OutputRecorder(MuseSparkTopKRouter, index=0),
     }
 
     def __init__(self, config: MuseSparkTextConfig):
@@ -823,14 +827,18 @@ class MuseSparkVisionAttention(nn.Module):
 
 
 class MuseSparkVisionMLP(nn.Module):
-    def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
+    def __init__(self, config):
         super().__init__()
-        self.fc1 = nn.Linear(dim, hidden_dim)
-        self.act = ACT2FN[hidden_act]
-        self.fc2 = nn.Linear(hidden_dim, dim)
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
-    def forward(self, x) -> torch.Tensor:
-        return self.fc2(self.act(self.fc1(x)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
+        return hidden_states
 
 
 class MuseSparkVisionEncoderLayer(GradientCheckpointingLayer):
@@ -839,7 +847,7 @@ class MuseSparkVisionEncoderLayer(GradientCheckpointingLayer):
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=1e-5)
         self.attn = MuseSparkVisionAttention(config=config)
-        self.mlp = MuseSparkVisionMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
+        self.mlp = MuseSparkVisionMLP(config)
 
     def forward(
         self,
@@ -879,9 +887,7 @@ class MuseSparkVisionRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_axial_rope_parameters(
-        config: MuseSparkVisionConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: MuseSparkVisionConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -897,7 +903,7 @@ class MuseSparkVisionRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
@@ -914,9 +920,8 @@ class MuseSparkVisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        freq = freq.flatten(1)
+        return torch.cat([freq, freq], dim=-1)
 
 
 def get_vision_pixel_shuffle_index(
@@ -1152,9 +1157,9 @@ class MuseSparkAudioMLP(nn.Module):
         self.activation_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 

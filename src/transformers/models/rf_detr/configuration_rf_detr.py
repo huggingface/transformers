@@ -62,6 +62,7 @@ class RfDetrDinov2Config(BackboneConfigMixin, PreTrainedConfig):
     ```"""
 
     model_type = "rf_detr_dinov2"
+    attribute_map = {"attention_probs_dropout_prob": "attention_dropout"}
 
     hidden_size: int = 768
     num_hidden_layers: int = 12
@@ -69,7 +70,7 @@ class RfDetrDinov2Config(BackboneConfigMixin, PreTrainedConfig):
     mlp_ratio: int = 4
     hidden_act: str = "gelu"
     hidden_dropout_prob: float | int = 0.0
-    attention_probs_dropout_prob: float | int = 0.0
+    attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-6
     image_size: int | list[int] | tuple[int, int] = 224

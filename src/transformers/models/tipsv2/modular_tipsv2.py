@@ -528,9 +528,9 @@ class Tipsv2TextAttention(CLIPAttention):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        queries = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        keys = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        values = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, text_eager_attention_forward
@@ -538,18 +538,18 @@ class Tipsv2TextAttention(CLIPAttention):
 
         attn_output, attn_weights = attention_interface(
             self,
-            queries,
-            keys,
-            values,
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.attention_dropout,
             is_causal=self.is_causal,
             **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.out_proj(attn_output)
+        attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
 

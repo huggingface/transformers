@@ -120,7 +120,7 @@ class HunYuanDenseV1PreTrainedModel(LlamaPreTrainedModel):
 
 class HunYuanDenseV1RotaryEmbedding(LlamaRotaryEmbedding):
     def __init__(self, config: HunYuanDenseV1Config):
-        nn.Module.__init__()
+        nn.Module.__init__(self)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 

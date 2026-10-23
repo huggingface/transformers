@@ -43,29 +43,29 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
+from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_ocr2.modeling_deepseek_ocr2 import DeepseekOcr2ForConditionalGeneration, DeepseekOcr2Model
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4MLP
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma3.modeling_gemma3 import Gemma3TextModel, _bidirectional_window_overlay
-from ..kimi_k25.modeling_kimi_k25 import Kimi_K25VisionRotaryEmbedding
 from ..laguna.modeling_laguna import (
     LagunaAttention,
-    LagunaDecoderLayer,
     LagunaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..llama.modeling_llama import LlamaDecoderLayer
+from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2TopKRouter
 from ..minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLTextConfig
 from ..minimax_m3_vl.modeling_minimax_m3_vl import (
-    MiniMaxM3VLRMSNorm,
     MiniMaxM3VLSparseMoeBlock,
-    MiniMaxM3VLTopKRouter,
     MiniMaxM3VLVisionAttention,
-    MiniMaxM3VLVisionMLP,
 )
 
 # Unused here, but load-bearing: `Step3p7VisionAttention` inherits `MiniMaxM3VLVisionAttention`, so
 # without this import the converter would pull MiniMax's 3-axis `apply_rotary_pos_emb_vision` into the
 # generated file. This tower is 2-D (t=1, spatial_merge_size=1), so it needs Qwen2-VL's 2-axis one.
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.modeling_qwen2_vl import apply_rotary_pos_emb_vision  # noqa: F401
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import SiglipVisionEmbeddings
@@ -584,16 +584,11 @@ class Step3p7ImageProcessor(TorchvisionBackend):
 #  Vision encoder
 
 
-class Step3p7VisionRotaryEmbedding(Kimi_K25VisionRotaryEmbedding):
-    def recomposition_frequencies(self, freq):
-        """
-        Recompose the frequencies into the final spatial layout used per each grid.
-        """
-        freq_hw = freq.flatten(1)
-        return torch.cat((freq_hw, freq_hw), dim=-1)
+class Step3p7VisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
+    pass
 
 
-class Step3p7VisionMLP(MiniMaxM3VLVisionMLP):
+class Step3p7VisionMLP(CLIPMLP):
     pass
 
 
@@ -771,7 +766,7 @@ class Step3p7RotaryEmbedding(LagunaRotaryEmbedding):
     pass
 
 
-class Step3p7RMSNorm(MiniMaxM3VLRMSNorm):
+class Step3p7RMSNorm(GemmaRMSNorm):
     pass
 
 
@@ -805,7 +800,7 @@ class Step3p7Experts(DeepseekV4Experts):
         return gate * up
 
 
-class Step3p7TopKRouter(MiniMaxM3VLTopKRouter):
+class Step3p7TopKRouter(MiniMaxM2TopKRouter):
     pass
 
 
@@ -872,7 +867,7 @@ class Step3p7Attention(LagunaAttention):
         return attn_output, attn_weights
 
 
-class Step3p7DecoderLayer(LagunaDecoderLayer):
+class Step3p7DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config, layer_idx):
         nn.Module.__init__(self)
         self.hidden_size = config.hidden_size

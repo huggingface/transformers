@@ -50,10 +50,10 @@ from ..mbart.configuration_mbart import MBartConfig
 from ..mbart.modeling_mbart import MBartDecoder, shift_tokens_right
 from ..nougat.image_processing_nougat import NougatImageProcessor
 from ..nougat.processing_nougat import NougatProcessor
+from ..sam.modeling_sam import SamVisionAttention
 from ..slanext.configuration_slanext import SLANeXtVisionConfig
 from ..slanext.modeling_slanext import (
     SLANeXtPreTrainedModel,
-    SLANeXtVisionAttention,
     SLANeXtVisionEncoder,
 )
 
@@ -287,7 +287,7 @@ class PPFormulaNetVisionEncoderOutput(BaseModelOutputWithPooling):
     pass
 
 
-class PPFormulaNetVisionAttention(SLANeXtVisionAttention):
+class PPFormulaNetVisionAttention(SamVisionAttention):
     pass
 
 

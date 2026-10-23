@@ -27,8 +27,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import AutoModel
 from ..clip.modeling_clip import CLIPMLP
-from ..llama.modeling_llama import LlamaMLP
-from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
+from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..voxtral.modeling_voxtral import (
     VoxtralModel,
     VoxtralMultiModalProjector,
@@ -65,7 +64,7 @@ class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
     audio_features: torch.FloatTensor | None = None
 
 
-class VibeVoiceRMSNorm(Qwen2RMSNorm):
+class VibeVoiceRMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -89,9 +88,9 @@ class VibeVoiceDiffusionHeadSinusoidalEmbedding(nn.Module):
 class VibeVoiceDiffusionHeadMLP(CLIPMLP):
     def __init__(self, config):
         super().__init__()
-        self.fc1 = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
+        self.up_proj = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        self.down_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
 
 class VibeVoiceMLP(LlamaMLP):

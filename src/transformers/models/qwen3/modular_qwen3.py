@@ -23,17 +23,17 @@ from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
+    LlamaRMSNorm,
+    LlamaRotaryEmbedding,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from ..qwen2.modeling_qwen2 import (
     Qwen2ForCausalLM,
     Qwen2ForQuestionAnswering,
     Qwen2ForSequenceClassification,
     Qwen2ForTokenClassification,
-    Qwen2RMSNorm,
-    Qwen2RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -45,15 +45,15 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "Qwen/Qwen3-8B"
 
 
-class Qwen3RMSNorm(Qwen2RMSNorm):
+class Qwen3RMSNorm(LlamaRMSNorm):
     pass
 
 
-class Qwen3MLP(GemmaMLP):
+class Qwen3MLP(MistralMLP):
     pass
 
 
-class Qwen3RotaryEmbedding(Qwen2RotaryEmbedding):
+class Qwen3RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

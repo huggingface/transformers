@@ -68,40 +68,35 @@ class EmbeddingGemma2RMSNorm(nn.Module):
 
 
 class EmbeddingGemma2RotaryEmbedding(nn.Module):
-    def __init__(self, config: EmbeddingGemma2TextConfig, device=None):
+    def __init__(self, config: EmbeddingGemma2TextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
         self.layer_types = sorted(set(config.layer_types))
-        self.rope_init_fns: dict[str, Callable[..., tuple[torch.Tensor, float]]] = {}
-        self.rope_type: dict[str, str] = {}
-
+        self.rope_type = {}
+        self.rope_init_fns = {}  # diff with Gemma3: kept for `_init_weights`
         for layer_type in self.layer_types:
             rope_params = self.config.rope_parameters[layer_type]
             if rope_params is None:
                 continue
 
-            if (rope_type := rope_params["rope_type"]) != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-            else:
-                rope_init_fn = self.compute_default_rope_parameters
-
+            self.rope_type[layer_type] = rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
             self.rope_init_fns[layer_type] = rope_init_fn
-            self.rope_type[layer_type] = rope_type
-
-            # `inv_freq` depends on the head dim, which varies by layer type, so initialise
-            # from a config resolved for this layer type rather than the global one.
+            # diff with Gemma3: the head dim varies by layer type, so use the config resolved for this layer type
             rope_config = config.per_layer_config[layer_type]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, layer_type=layer_type)
             setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
             setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: EmbeddingGemma2TextConfig, device=None, layer_type: str | None = None, **kwargs
+        config: EmbeddingGemma2TextConfig, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -123,7 +118,7 @@ class EmbeddingGemma2RotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -154,7 +149,7 @@ class EmbeddingGemma2TextScaledWordEmbedding(nn.Embedding):
 
 
 class EmbeddingGemma2MLP(nn.Module):
-    def __init__(self, config: EmbeddingGemma2TextConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -162,7 +157,7 @@ class EmbeddingGemma2MLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
@@ -212,7 +207,7 @@ class EmbeddingGemma2TextPLEBlock(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.per_layer_input_gate = nn.Linear(self.hidden_size, self.hidden_size_per_layer_input, bias=False)
         self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
         self.post_per_layer_input_norm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -316,14 +311,9 @@ class EmbeddingGemma2Attention(nn.Module):
 
     def __init__(self, config: EmbeddingGemma2TextConfig, layer_idx: int):
         super().__init__()
+        layer_config = config.per_layer_config[layer_idx]
         self.config = config
         self.layer_idx = layer_idx
-        # +1 is needed because flash attention sets inclusive boundaries (see modeling_flash_attention_utils.py)
-        self.sliding_window = (
-            config.sliding_window + 1 if config.layer_types[layer_idx] == "sliding_attention" else None
-        )
-
-        layer_config = config.per_layer_config[layer_idx]
         self.head_dim = layer_config.head_dim
         self.num_key_value_groups = config.num_attention_heads // layer_config.num_key_value_heads
         self.scaling = 1.0
@@ -342,7 +332,9 @@ class EmbeddingGemma2Attention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-
+        self.sliding_window = (
+            config.sliding_window + 1 if config.layer_types[layer_idx] == "sliding_attention" else None
+        )
         self.q_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps)
         self.v_norm = EmbeddingGemma2RMSNorm(dim=self.head_dim, eps=config.rms_norm_eps, with_scale=False)
@@ -394,15 +386,16 @@ class EmbeddingGemma2EncoderLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: EmbeddingGemma2TextConfig, layer_idx: int):
         super().__init__()
-        self.config = config
         self.hidden_size = config.hidden_size
-        self.layer_idx = layer_idx
+        self.config = config
         self.self_attn = EmbeddingGemma2Attention(config=config, layer_idx=layer_idx)
         self.mlp = EmbeddingGemma2MLP(config)
-        self.input_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.pre_feedforward_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = EmbeddingGemma2RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = EmbeddingGemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = EmbeddingGemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.pre_feedforward_layernorm = EmbeddingGemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_feedforward_layernorm = EmbeddingGemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.layer_idx = layer_idx
         self.layer_scalar = nn.Buffer(torch.ones(1))
         self.ple_block = EmbeddingGemma2TextPLEBlock(config)
 

@@ -436,6 +436,7 @@ class Granite4VisionTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Granite4VisionTextConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = Granite4VisionTextAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = Granite4VisionTextMLP(config)

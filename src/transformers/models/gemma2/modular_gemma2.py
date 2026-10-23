@@ -18,7 +18,6 @@ import torch
 import torch.nn as nn
 from huggingface_hub.dataclasses import strict
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
@@ -26,26 +25,23 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import (
-    ROPE_INIT_FUNCTIONS,
     RopeParameters,
-    dynamic_rope_update,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ..gemma.modeling_gemma import (
-    GemmaAttention,
     GemmaForCausalLM,
     GemmaForSequenceClassification,
     GemmaForTokenClassification,
-    GemmaMLP,
     GemmaModel,
     GemmaPreTrainedModel,
     GemmaRMSNorm,
-    GemmaRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
 )
+from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
+from ..mistral.modeling_mistral import MistralMLP
 
 
 logger = logging.get_logger(__name__)
@@ -75,6 +71,7 @@ class Gemma2Config(PreTrainedConfig):
     ```"""
 
     model_type = "gemma2"
+    attribute_map = {"hidden_activation": "hidden_act"}
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -98,7 +95,7 @@ class Gemma2Config(PreTrainedConfig):
     num_attention_heads: int = 8
     num_key_value_heads: int = 4
     head_dim: int = 256
-    hidden_activation: str = "gelu_pytorch_tanh"
+    hidden_act: str = "gelu_pytorch_tanh"
     max_position_embeddings: int = 8192
     initializer_range: float = 0.02
     rms_norm_eps: float = 1e-6
@@ -138,38 +135,12 @@ class Gemma2RMSNorm(GemmaRMSNorm):
     pass
 
 
-class Gemma2MLP(GemmaMLP):
-    def __init__(self, config):
-        super().__init__(config)
-        self.act_fn = ACT2FN[config.hidden_activation]
+class Gemma2MLP(MistralMLP):
+    pass
 
 
-class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
-    def __init__(self, config: Gemma2Config):
-        nn.Module.__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config)
-
-        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos() * self.attention_scaling
-        sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+class Gemma2RotaryEmbedding(LlamaRotaryEmbedding):
+    pass
 
 
 def eager_attention_forward(
@@ -206,13 +177,12 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class Gemma2Attention(GemmaAttention):
+class Gemma2Attention(LlamaAttention):
     def __init__(self, config: Gemma2Config, layer_idx: int):
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
 
         super().__init__(config, layer_idx)
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
-        self.attention_dropout = self.config.attention_dropout
         self.is_causal = not getattr(config, "use_bidirectional_attention", False)
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None

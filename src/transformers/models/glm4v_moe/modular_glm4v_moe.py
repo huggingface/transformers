@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections.abc import Callable
 
 import torch
 import torch.nn as nn
@@ -21,21 +20,17 @@ from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import can_return_tuple
+from ...utils.generic import can_return_tuple, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Experts
-from ..glm4.modeling_glm4 import Glm4Attention
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3DecoderLayer
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
-    Glm4MoeDecoderLayer,
-    Glm4MoeMLP,
-    Glm4MoeMoE,
     Glm4MoePreTrainedModel,
-    Glm4MoeTopkRouter,
-    eager_attention_forward,
+    Glm4MoeSparseMoeBlock,
+    Glm4MoeTopKRouter,
 )
 from ..glm4v.configuration_glm4v import Glm4vConfig
 from ..glm4v.modeling_glm4v import (
@@ -43,9 +38,11 @@ from ..glm4v.modeling_glm4v import (
     Glm4vTextModel,
     Glm4vTextRotaryEmbedding,
     Glm4vVisionModel,
-    Glm4vVisionRotaryEmbedding,
 )
-from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
+from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa: F401
+from ..llama.modeling_llama import LlamaAttention
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeCausalLMOutputWithPast,
     Qwen3VLMoeModelOutputWithPast,
@@ -142,83 +139,39 @@ class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
         return torch.cat([freq, freq], dim=-1)
 
 
-class Glm4vMoeTextAttention(Glm4Attention):
+@no_inherit_decorator
+class Glm4vMoeTextAttention(LlamaAttention):
     def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.rope_parameters = config.rope_parameters
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_proj(hidden_states).view(hidden_shape)
-        value_states = self.v_proj(hidden_states).view(hidden_shape)
-
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
-
-
-class Glm4vMoeTextTopkRouter(Glm4MoeTopkRouter, nn.Module):
-    def __init__(self, config: Glm4vMoeTextConfig):
-        super().__init__(config)
-
-
-class Glm4vMoeTextExperts(DeepseekV3Experts):
+class Glm4vMoeTextTopKRouter(Glm4MoeTopKRouter, nn.Module):
     pass
 
 
-class Glm4vMoeTextMoE(Glm4MoeMoE):
+class Glm4vMoeTextExperts(Qwen2MoeExperts):
+    pass
+
+
+class Glm4vMoeTextSparseMoeBlock(Glm4MoeSparseMoeBlock):
     def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)
         self.config = config
         self.experts = Glm4vMoeTextExperts(config)
-        self.gate = Glm4vMoeTextTopkRouter(config)
+        self.gate = Glm4vMoeTextTopKRouter(config)
         self.shared_experts = Glm4vMoeTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
 
 
-class Glm4vMoeTextMLP(Glm4MoeMLP):
+class Glm4vMoeTextMLP(Qwen2MoeMLP):
     pass
 
 
-class Glm4vMoeTextDecoderLayer(Glm4MoeDecoderLayer):
-    def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
+class Glm4vMoeTextDecoderLayer(DeepseekV3DecoderLayer):
+    pass
 
 
 class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
@@ -234,7 +187,7 @@ class Glm4vMoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
     pass
 
 
-class Glm4vMoeVisionRotaryEmbedding(Glm4vVisionRotaryEmbedding):
+class Glm4vMoeVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     pass
 
 
@@ -248,7 +201,7 @@ class Glm4vMoeTextModel(Glm4vTextModel):
     _can_record_outputs = {
         "hidden_states": Glm4vMoeTextDecoderLayer,
         "attentions": Glm4vMoeTextAttention,
-        "router_logits": OutputRecorder(Glm4vMoeTextTopkRouter, index=0),
+        "router_logits": OutputRecorder(Glm4vMoeTextTopKRouter, index=0),
     }
 
     def forward(

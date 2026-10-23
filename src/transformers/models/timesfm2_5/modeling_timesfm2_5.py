@@ -80,13 +80,13 @@ class TimesFm2_5MLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.activation]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -259,6 +259,7 @@ class TimesFm2_5Attention(nn.Module):
 
     def __init__(self, config: TimesFm2_5Config, layer_idx: int):
         super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -279,8 +280,11 @@ class TimesFm2_5Attention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = TimesFm2_5RMSNorm(self.head_dim, config.rms_norm_eps)
-        self.k_norm = TimesFm2_5RMSNorm(self.head_dim, config.rms_norm_eps)
+        self.q_norm = TimesFm2_5RMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = TimesFm2_5RMSNorm(
+            self.head_dim, eps=config.rms_norm_eps
+        )  # thus post q_norm does not need reshape
+        self.sliding_window = None
 
     def forward(
         self,
@@ -289,7 +293,7 @@ class TimesFm2_5Attention(nn.Module):
         attention_mask: torch.Tensor | None,
         past_key_values=None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 

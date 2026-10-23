@@ -21,13 +21,15 @@ import torch.nn as nn
 
 from ... import initialization as init
 from ...modeling_outputs import ModelOutput, Wav2Vec2BaseModelOutput
-from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import capture_outputs
+from ..unispeech.modeling_unispeech import UniSpeechPreTrainedModel
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Encoder,
+    Wav2Vec2EncoderLayer,
+    Wav2Vec2EncoderLayerStableLayerNorm,
     Wav2Vec2EncoderStableLayerNorm,
     Wav2Vec2FeatureEncoder,
     Wav2Vec2FeatureProjection,
@@ -92,12 +94,30 @@ class UniSpeechSatFeatureProjection(Wav2Vec2FeatureProjection):
     pass
 
 
+class UniSpeechSatEncoderLayer(Wav2Vec2EncoderLayer):
+    def __init__(self, config):
+        super().__init__(config)
+
+
 class UniSpeechSatEncoder(Wav2Vec2Encoder):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.pos_conv_embed = UniSpeechSatPositionalConvEmbedding(config)
+        self.layers = nn.ModuleList([UniSpeechSatEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+
+
+class UniSpeechSatEncoderLayerStableLayerNorm(Wav2Vec2EncoderLayerStableLayerNorm):
+    def __init__(self, config):
+        super().__init__(config)
 
 
 class UniSpeechSatEncoderStableLayerNorm(Wav2Vec2EncoderStableLayerNorm):
-    pass
+    def __init__(self, config):
+        super().__init__(config)
+        self.pos_conv_embed = UniSpeechSatPositionalConvEmbedding(config)
+        self.layers = nn.ModuleList(
+            [UniSpeechSatEncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
+        )
 
 
 class UniSpeechSatGumbelVectorQuantizer(Wav2Vec2GumbelVectorQuantizer):
@@ -150,19 +170,9 @@ class UniSpeechSatGumbelVectorQuantizer(Wav2Vec2GumbelVectorQuantizer):
 
 
 @auto_docstring
-class UniSpeechSatPreTrainedModel(PreTrainedModel):
+class UniSpeechSatPreTrainedModel(UniSpeechPreTrainedModel):
     config: UniSpeechSatConfig
     base_model_prefix = "unispeech_sat"
-    main_input_name = "input_values"
-    input_modalities = "audio"
-    supports_gradient_checkpointing = True
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _can_record_outputs = {
-        "hidden_states": [UniSpeechSatEncoderLayer, UniSpeechSatEncoderLayerStableLayerNorm],  # noqa: F821
-        "attentions": OutputRecorder(UniSpeechSatAttention, index=1, layer_name="encoder"),  # noqa: F821
-    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -190,36 +200,6 @@ class UniSpeechSatPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
-
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
-        """
-        Computes the output length of the convolutional layers
-        """
-
-        def _conv_out_length(input_length, kernel_size, stride):
-            # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
-
-        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
-            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
-
-        return input_lengths
-
-    def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
-        # Effectively attention_mask.sum(-1), but not inplace to be able to run
-        # on inference mode.
-        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
-        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths).to(torch.long)
-        batch_size = attention_mask.shape[0]
-
-        attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-        # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
-        return attention_mask
 
 
 UniSpeechSatBaseModelOutput = Wav2Vec2BaseModelOutput

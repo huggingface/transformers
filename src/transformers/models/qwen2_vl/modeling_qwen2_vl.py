@@ -257,7 +257,7 @@ class Qwen2VLVisionRotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        # position_ids: (N, 2) — column 0 = h coords, column 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
         sin = freqs.sin() * self.attention_scaling
@@ -270,9 +270,8 @@ class Qwen2VLVisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        freq = freq.flatten(1)
+        return torch.cat([freq, freq], dim=-1)
 
 
 class PatchEmbed(nn.Module):
@@ -320,12 +319,12 @@ class PatchMerger(nn.Module):
 class VisionMlp(nn.Module):
     def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
         super().__init__()
-        self.fc1 = nn.Linear(dim, hidden_dim)
+        self.up_proj = nn.Linear(dim, hidden_dim)
         self.act = ACT2FN[hidden_act]
-        self.fc2 = nn.Linear(hidden_dim, dim)
+        self.down_proj = nn.Linear(hidden_dim, dim)
 
     def forward(self, x) -> torch.Tensor:
-        return self.fc2(self.act(self.fc1(x)))
+        return self.down_proj(self.act(self.up_proj(x)))
 
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv
@@ -695,10 +694,10 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         self.post_init()
 
     def get_dtype(self) -> torch.dtype:
-        return self.blocks[0].mlp.fc2.weight.dtype
+        return self.blocks[0].mlp.down_proj.weight.dtype
 
     def get_device(self) -> torch.device:
-        return self.blocks[0].mlp.fc2.weight.device
+        return self.blocks[0].mlp.down_proj.weight.device
 
     @merge_with_config_defaults
     @capture_outputs

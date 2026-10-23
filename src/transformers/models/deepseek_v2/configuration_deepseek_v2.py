@@ -101,6 +101,7 @@ class DeepseekV2Config(PreTrainedConfig):
     }
     attribute_map = {
         "num_experts": "n_routed_experts",
+        "num_local_experts": "n_routed_experts",
     }
     first_k_dense_replace: int = 0
     kv_lora_rank: int = 512

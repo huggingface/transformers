@@ -51,6 +51,7 @@ class ZayaConfig(PreTrainedConfig):
     """
 
     model_type = "zaya"
+    attribute_map = {"num_local_experts": "num_experts"}
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",

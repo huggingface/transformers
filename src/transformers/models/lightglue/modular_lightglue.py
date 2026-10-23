@@ -25,7 +25,7 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TensorType, auto_docstring, can_return_tuple, logging
+from ...utils import ModelOutput, auto_docstring, can_return_tuple, logging
 from ...utils.generic import no_inherit_decorator
 from ...utils.import_utils import requires
 from ..auto import AutoConfig
@@ -156,25 +156,12 @@ class LightGlueImageProcessorKwargs(SuperGlueImageProcessorKwargs):
 
 
 class LightGlueImageProcessor(SuperGlueImageProcessor):
-    def post_process_keypoint_matching(
-        self,
-        outputs: "LightGlueKeypointMatchingOutput",
-        target_sizes: TensorType | list[tuple],
-        threshold: float = 0.0,
-    ) -> list[dict[str, torch.Tensor]]:
-        return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
+    pass
 
 
 @requires(backends=("torch",))
 class LightGlueImageProcessorPil(SuperGlueImageProcessorPil):
-    @requires(backends=("torch",))
-    def post_process_keypoint_matching(
-        self,
-        outputs: "LightGlueKeypointMatchingOutput",
-        target_sizes: TensorType | list[tuple],
-        threshold: float = 0.0,
-    ) -> list[dict[str, "torch.Tensor"]]:
-        return super().post_process_keypoint_matching(outputs, target_sizes, threshold)
+    pass
 
 
 class LightGluePositionalEncoder(nn.Module):
@@ -248,14 +235,14 @@ class LightGlueAttention(LlamaAttention):
 class LightGlueMLP(CLIPMLP):
     def __init__(self, config: LightGlueConfig):
         super().__init__(config)
-        self.fc1 = nn.Linear(config.intermediate_size, config.intermediate_size)
+        self.up_proj = nn.Linear(config.intermediate_size, config.intermediate_size)
         self.layer_norm = nn.LayerNorm(config.intermediate_size, elementwise_affine=True)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 

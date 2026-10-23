@@ -249,17 +249,17 @@ class VitPoseBackboneMoeMLP(nn.Module):
         part_features = config.part_features
 
         self.part_features = part_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.up_proj = nn.Linear(in_features, hidden_features)
         self.act = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, out_features - part_features)
+        self.down_proj = nn.Linear(hidden_features, out_features - part_features)
 
         self.num_experts = num_experts
         self.experts = VitPoseNaiveMoe(config)
 
     def forward(self, hidden_state: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.fc1(hidden_state)
+        hidden_state = self.up_proj(hidden_state)
         hidden_state = self.act(hidden_state)
-        shared_hidden_state = self.fc2(hidden_state)
+        shared_hidden_state = self.down_proj(hidden_state)
         indices = indices.view(-1, 1, 1)
 
         expert_hidden_state = self.experts(hidden_state, indices)
@@ -273,14 +273,14 @@ class VitPoseBackboneMLP(nn.Module):
         super().__init__()
         in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
-        self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
+        self.up_proj = nn.Linear(in_features, hidden_features, bias=True)
         self.activation = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
+        self.down_proj = nn.Linear(hidden_features, out_features, bias=True)
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.fc1(hidden_state)
+        hidden_state = self.up_proj(hidden_state)
         hidden_state = self.activation(hidden_state)
-        hidden_state = self.fc2(hidden_state)
+        hidden_state = self.down_proj(hidden_state)
         return hidden_state
 
 

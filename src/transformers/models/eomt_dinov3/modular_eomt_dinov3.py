@@ -193,10 +193,6 @@ class EomtDinov3PreTrainedModel(EomtPreTrainedModel):
     config_class = EomtDinov3Config
     base_model_prefix = "eomt_dinov3"
     _no_split_modules = ["EomtDinov3Layer"]
-    _can_record_outputs = {
-        "hidden_states": EomtDinov3Layer,
-        "attentions": EomtDinov3Attention,
-    }
 
     def _init_weights(self, module: nn.Module) -> None:
         PreTrainedModel._init_weights(self, module)

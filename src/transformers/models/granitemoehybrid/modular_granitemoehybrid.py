@@ -27,29 +27,32 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated
-from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteFlashAttentionKwargs,
-    GraniteMoeSharedAttention,
     GraniteMoeSharedDecoderLayer,
     GraniteMoeSharedForCausalLM,
     GraniteMoeSharedMLP,
     GraniteMoeSharedModel,
-    GraniteMoeSharedMoE,
     GraniteMoeSharedPreTrainedModel,
+    GraniteMoeSharedSparseMoeBlock,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
+class GraniteMoeHybridAttention(LlamaAttention):
     """Hybrid variant that handles ``position_embeddings is None`` — granitemoe-hybrid configs can
     opt out of RoPE via ``position_embedding_type=None``, in which case the model passes ``None``
     instead of a ``(cos, sin)`` tuple."""
+
+    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.scaling = config.attention_multiplier  # Only diff with llama
 
     def forward(
         self,
@@ -92,25 +95,22 @@ class GraniteMoeHybridAttention(GraniteMoeSharedAttention):
 
 
 class GraniteMoeHybridMambaLayer(BambaMixer):
-    def __init__(self, config: GraniteMoeHybridConfig, layer_idx: int, initialize_mixer_weights: bool = True):
-        super().__init__(config, layer_idx, initialize_mixer_weights)
-
-
-class GraniteMoeHybridRMSNormGated(BambaRMSNormGated):
-    def __init__(self, hidden_size, eps=1e-6):
-        super().__init__(hidden_size, eps)
-
-
-class GraniteMoeHybridMLP(GraniteMoeSharedMLP):
-    def __init__(self, config: GraniteMoeHybridConfig):
-        super().__init__(config)
-
-
-class GraniteMoeHybridRotaryEmbedding(Gemma2RotaryEmbedding):
     pass
 
 
-class GraniteMoeHybridMoE(GraniteMoeSharedMoE):
+class GraniteMoeHybridRMSNormGated(BambaRMSNormGated):
+    pass
+
+
+class GraniteMoeHybridMLP(GraniteMoeSharedMLP):
+    pass
+
+
+class GraniteMoeHybridRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
+
+
+class GraniteMoeHybridSparseMoeBlock(GraniteMoeSharedSparseMoeBlock):
     pass
 
 
@@ -129,7 +129,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         self.block_type = config.layers_block_type[layer_idx]
 
         # Allow non-MoE (dense)
-        self.block_sparse_moe = GraniteMoeHybridMoE(config) if config.num_local_experts > 0 else None
+        self.mlp = GraniteMoeHybridSparseMoeBlock(config) if config.num_local_experts > 0 else None
 
         # Accept 0 experts: skip MoE if num_local_experts == 0
         self.has_experts = getattr(config, "num_local_experts", 0) > 0
@@ -169,7 +169,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         hidden_states = self.post_attention_layernorm(hidden_states)
 
         if self.has_experts:
-            moe_hidden_states = self.block_sparse_moe(hidden_states)
+            moe_hidden_states = self.mlp(hidden_states)
             hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
         else:
             hidden_states = self.shared_mlp(hidden_states)

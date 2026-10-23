@@ -24,13 +24,13 @@ from ...backbone_utils import load_backbone
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, requires_backends
 from ..auto import AutoConfig
 from ..depth_anything.modeling_depth_anything import (
     DepthAnythingPreActResidualLayer,
 )
-from ..dpt.image_processing_dpt import DPTImageProcessor
+from ..dpt.image_processing_dpt import DPTImageProcessor, DPTImageProcessorKwargs
 from ..dpt.modeling_dpt import DPTReassembleLayer, _get_backbone_hidden_size
 
 
@@ -116,24 +116,8 @@ class CHMv2Config(PreTrainedConfig):
             self.post_process_channels = [128, 256, 512, 1024]
 
 
-class CHMv2ImageProcessorKwargs(ImagesKwargs, total=False):
-    r"""
-    ensure_multiple_of (`int`, *optional*, defaults to 1):
-        If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Can be overridden
-        by `ensure_multiple_of` in `preprocess`.
-    keep_aspect_ratio (`bool`, *optional*, defaults to `False`):
-        If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved. Can
-        be overridden by `keep_aspect_ratio` in `preprocess`.
-    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g.
-        ADE20k). The background label will be replaced by 255.
-    """
-
-    ensure_multiple_of: int
-    size_divisor: int
-    keep_aspect_ratio: bool
-    do_reduce_labels: bool
+class CHMv2ImageProcessorKwargs(DPTImageProcessorKwargs):
+    pass
 
 
 class CHMv2ImageProcessor(DPTImageProcessor):
@@ -144,7 +128,6 @@ class CHMv2ImageProcessor(DPTImageProcessor):
     keep_aspect_ratio = True
     image_mean = [0.420, 0.411, 0.296]
     image_std = [0.213, 0.156, 0.143]
-    valid_kwargs = CHMv2ImageProcessorKwargs
 
     def post_process_depth_estimation(
         self,

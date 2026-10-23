@@ -395,9 +395,9 @@ UNLIMITED_OCR_SAM_VISION_ATTENTION_CLASSES = {
 class UnlimitedOcrSamVisionLayer(GradientCheckpointingLayer):
     def __init__(self, config, window_size):
         super().__init__()
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = UNLIMITED_OCR_SAM_VISION_ATTENTION_CLASSES[config._attn_implementation](config, window_size)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = UnlimitedOcrSamMLPBlock(config)
         self.window_size = window_size
 
@@ -457,7 +457,7 @@ class UnlimitedOcrSamVisionLayer(GradientCheckpointingLayer):
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.FloatTensor]:
         residual = hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         # Window partition
         if self.window_size > 0:
             height, width = hidden_states.shape[1], hidden_states.shape[2]
@@ -471,7 +471,7 @@ class UnlimitedOcrSamVisionLayer(GradientCheckpointingLayer):
             hidden_states = self.window_unpartition(hidden_states, self.window_size, padding_shape, (height, width))
 
         hidden_states = residual + hidden_states
-        layernorm_output = self.layer_norm2(hidden_states)
+        layernorm_output = self.post_attention_layernorm(hidden_states)
         hidden_states = hidden_states + self.mlp(layernorm_output)
         return hidden_states
 
@@ -674,17 +674,16 @@ class UnlimitedOcrAttention(nn.Module):
     def __init__(self, config: UnlimitedOcrVisionEncoderConfig):
         super().__init__()
         self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.attention_dropout = config.attention_dropout
+        self.scaling = self.head_dim**-0.5
         self.is_causal = False
 
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
         # Required for GQA compatibility
         self.num_key_value_groups = 1
 
@@ -694,18 +693,12 @@ class UnlimitedOcrAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Input shape: Batch x Time x Channel"""
-
         input_shape = hidden_states.shape[:-1]
-
         hidden_shape = (*input_shape, -1, self.head_dim)
-        queries = self.q_proj(hidden_states)
-        keys = self.k_proj(hidden_states)
-        values = self.v_proj(hidden_states)
 
-        queries = queries.view(hidden_shape).transpose(1, 2)
-        keys = keys.view(hidden_shape).transpose(1, 2)
-        values = values.view(hidden_shape).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
@@ -713,18 +706,17 @@ class UnlimitedOcrAttention(nn.Module):
 
         attn_output, attn_weights = attention_interface(
             self,
-            queries,
-            keys,
-            values,
+            query_states,
+            key_states,
+            value_states,
             attention_mask,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
             **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.out_proj(attn_output)
-
+        attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
 
@@ -733,24 +725,24 @@ class UnlimitedOcrMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
 class UnlimitedOcrEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: UnlimitedOcrVisionConfig | UnlimitedOcrTextConfig):
         super().__init__()
-        self.embed_dim = config.hidden_size
+        self.hidden_size = config.hidden_size
         self.self_attn = UnlimitedOcrAttention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = UnlimitedOcrMLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -760,7 +752,7 @@ class UnlimitedOcrEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -769,7 +761,7 @@ class UnlimitedOcrEncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
@@ -1107,12 +1099,16 @@ class UnlimitedOcrTextExperts(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -1132,8 +1128,9 @@ class UnlimitedOcrTextExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -1141,13 +1138,13 @@ class UnlimitedOcrTextExperts(nn.Module):
         return final_hidden_states
 
 
-class UnlimitedOcrTextTopkRouter(nn.Module):
+class UnlimitedOcrTextTopKRouter(nn.Module):
     def __init__(self, config: UnlimitedOcrTextConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.topk_method = config.topk_method
         self.num_group = config.n_group
@@ -1156,11 +1153,11 @@ class UnlimitedOcrTextTopkRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        scores = router_logits.softmax(dim=-1, dtype=torch.float32)
+        router_probs = router_logits.softmax(dim=-1, dtype=torch.float32)
         if self.topk_method == "greedy":
-            topk_weights, topk_indices = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
+            top_k_weights, top_k_index = torch.topk(router_probs, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
-            group_scores = scores.view(-1, self.num_group, self.num_experts // self.num_group).max(dim=-1).values
+            group_scores = router_probs.view(-1, self.num_group, self.num_experts // self.num_group).max(dim=-1).values
             group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
             group_mask = torch.zeros_like(group_scores)
             group_mask.scatter_(1, group_idx, 1)
@@ -1169,18 +1166,18 @@ class UnlimitedOcrTextTopkRouter(nn.Module):
                 .expand(-1, self.num_group, self.num_experts // self.num_group)
                 .reshape(-1, self.num_experts)
             )
-            scores = scores.masked_fill(~score_mask.bool(), 0.0)
-            topk_weights, topk_indices = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights, topk_indices
+            router_probs = router_probs.masked_fill(~score_mask.bool(), 0.0)
+            top_k_weights, top_k_index = torch.topk(router_probs, k=self.top_k, dim=-1, sorted=False)
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
-class UnlimitedOcrTextMoe(nn.Module):
+class UnlimitedOcrTextSparseMoeBlock(nn.Module):
     def __init__(self, config: UnlimitedOcrTextConfig):
         super().__init__()
         self.config = config
         self.experts = UnlimitedOcrTextExperts(config)
-        self.gate = UnlimitedOcrTextTopkRouter(config)
+        self.gate = UnlimitedOcrTextTopKRouter(config)
         self.shared_experts = UnlimitedOcrTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -1188,9 +1185,9 @@ class UnlimitedOcrTextMoe(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
@@ -1220,13 +1217,13 @@ class UnlimitedOcrTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = UnlimitedOcrTextAttention(config=config, layer_idx=layer_idx)
         self.mlp = (
-            UnlimitedOcrTextMoe(config)
+            UnlimitedOcrTextSparseMoeBlock(config)
             if config.mlp_layer_types[layer_idx] == "sparse"
             else UnlimitedOcrTextMLP(config)
         )
-
         self.input_layernorm = UnlimitedOcrTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = UnlimitedOcrTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -1278,13 +1275,13 @@ class UnlimitedOcrTextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": UnlimitedOcrTextDecoderLayer,
         "attentions": UnlimitedOcrTextAttention,
-        "router_logits": OutputRecorder(UnlimitedOcrTextTopkRouter, index=0),
+        "router_logits": OutputRecorder(UnlimitedOcrTextTopKRouter, index=0),
     }
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, UnlimitedOcrTextTopkRouter):
+        if isinstance(module, UnlimitedOcrTextTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, UnlimitedOcrTextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)

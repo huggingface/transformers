@@ -35,14 +35,13 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    ModelOutput,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
@@ -85,13 +84,14 @@ class AriaProjectorMLP(nn.Module):
 
     def __init__(self, in_features, hidden_features, output_dim):
         super().__init__()
-        self.linear_in = nn.Linear(in_features, hidden_features, bias=False)
-        self.linear_out = nn.Linear(hidden_features, output_dim, bias=False)
-        self.act = ACT2FN["gelu_new"]
+        self.up_proj = nn.Linear(in_features, hidden_features, bias=False)
+        self.down_proj = nn.Linear(hidden_features, output_dim, bias=False)
+        self.activation_fn = ACT2FN["gelu_new"]
 
-    def forward(self, hidden_states):
-        hidden_states = self.act(self.linear_in(hidden_states))
-        hidden_states = self.linear_out(hidden_states)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -255,11 +255,12 @@ class AriaTextTopKRouter(nn.Module):
     `(router_logits, top_k_weights, top_k_index)`.
     """
 
-    def __init__(self, config: AriaTextConfig):
+    def __init__(self, config):
         super().__init__()
-        self.num_experts = config.moe_num_experts
         self.top_k = config.moe_topk
-        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
+        self.num_experts = config.moe_num_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         router_logits = nn.functional.linear(hidden_states, self.weight)  # (num_tokens, num_experts)
@@ -313,7 +314,7 @@ class AriaExperts(nn.Module):
         return final_hidden_states
 
 
-class AriaTextMoELayer(nn.Module):
+class AriaTextSparseMoeBlock(nn.Module):
     """Sparsely-gated mixture-of-experts block: router decides, experts compute, shared experts always run."""
 
     def __init__(self, config: AriaTextConfig):
@@ -487,7 +488,7 @@ class AriaTextDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = AriaTextAttention(config=config, layer_idx=layer_idx)
-        self.mlp = AriaTextMoELayer(config)
+        self.mlp = AriaTextSparseMoeBlock(config)
         self.input_layernorm = AriaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = AriaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

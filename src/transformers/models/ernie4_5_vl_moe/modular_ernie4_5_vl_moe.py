@@ -31,7 +31,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
@@ -43,29 +43,30 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
+from ..clip.modeling_clip import CLIPMLP
+from ..ernie4_5.modeling_ernie4_5 import Ernie4_5Attention
 from ..ernie4_5_moe.configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 from ..ernie4_5_moe.modeling_ernie4_5_moe import (
-    Ernie4_5_MoeAttention,
-    Ernie4_5_MoeExperts,
     Ernie4_5_MoeMLP,
     Ernie4_5_MoeModel,
-    Ernie4_5_MoeRMSNorm,
     Ernie4_5_MoeStatics,
     Ernie4_5_MoeTopKRouter,
 )
+from ..glm4v.image_processing_glm4v import Glm4vImageProcessorKwargs
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
+from ..llama.modeling_llama import LlamaRMSNorm
 from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionPatchEmbed,
     Qwen2_5_VLPreTrainedModel,
     Qwen2_5_VLVisionAttention,
-    Qwen2_5_VLVisionBlock,
     Qwen2_5_VLVisionRotaryEmbedding,
 )
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
-from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel, VisionMlp
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel, Qwen2VLVisionBlock
 
 
 logger = logging.get_logger(__name__)
@@ -82,8 +83,8 @@ class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
     model_type = "ernie4_5_vl_moe_vision"
 
     base_model_tp_plan = {
-        "blocks.*.mlp.fc1": "colwise",
-        "blocks.*.mlp.fc2": "rowwise",
+        "blocks.*.mlp.up_proj": "colwise",
+        "blocks.*.mlp.down_proj": "rowwise",
     }
 
     hidden_size: int = 1280
@@ -324,11 +325,11 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 @no_inherit_decorator
-class Ernie4_5_VLMoeTextAttention(Ernie4_5_MoeAttention):
+class Ernie4_5_VLMoeTextAttention(Ernie4_5Attention):
     pass
 
 
-class Ernie4_5_VLMoeRMSNorm(Ernie4_5_MoeRMSNorm):
+class Ernie4_5_VLMoeRMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -346,7 +347,7 @@ class Ernie4_5_VLMoeMoeTopKRouter(Ernie4_5_MoeTopKRouter):
         self.moe_statics = Ernie4_5_VLMoeMoeStatics(config)
 
 
-class Ernie4_5_VLMoeMoeExperts(Ernie4_5_MoeExperts):
+class Ernie4_5_VLMoeMoeExperts(Qwen2MoeExperts):
     def __init__(self, config, intermediate_size=None):
         super().__init__(config)
         self.intermediate_dim = config.moe_intermediate_size if intermediate_size is None else intermediate_size
@@ -495,17 +496,13 @@ class Ernie4_5_VLMoeVisionAttention(Qwen2_5_VLVisionAttention):
     pass
 
 
-class Ernie4_5_VLMoeVisionBlock(Qwen2_5_VLVisionBlock):
+class Ernie4_5_VLMoeVisionBlock(Qwen2VLVisionBlock):
     def __init__(self, config) -> None:
-        super().__init__(config, None)
-
+        nn.Module.__init__(self)
         self.norm1 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
         self.norm2 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
-        self.mlp = Ernie4_5VLVisionMLP(
-            dim=config.hidden_size,
-            hidden_dim=config.intermediate_size,
-            hidden_act=config.hidden_act,
-        )
+        self.attn = Ernie4_5_VLMoeVisionAttention(config=config)
+        self.mlp = Ernie4_5VLVisionMLP(config)
 
 
 class Ernie4_5_VLMoePreTrainedModel(Qwen2_5_VLPreTrainedModel):
@@ -615,7 +612,7 @@ class Ernie4_5_VLMoeTextModel(Ernie4_5_MoeModel):
         )
 
 
-class Ernie4_5VLVisionMLP(VisionMlp):
+class Ernie4_5VLVisionMLP(CLIPMLP):
     pass
 
 
@@ -696,15 +693,15 @@ class Ernie4_5_VLMoeVisionMLP(nn.Module):
     def __init__(self, config, in_dim, out_dim):
         super().__init__()
 
-        self.fc1 = nn.Linear(in_dim, out_dim)
+        self.up_proj = nn.Linear(in_dim, out_dim)
         self.act_fn = nn.GELU()
-        self.fc2 = nn.Linear(out_dim, out_dim)
+        self.down_proj = nn.Linear(out_dim, out_dim)
         self.ln = nn.LayerNorm(out_dim, eps=config.vision_config.rms_norm_eps)
 
     def forward(self, hidden_states):
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.act_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = self.ln(hidden_states)
         return hidden_states
 
@@ -1165,7 +1162,7 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
         raise AttributeError("Uses normal super call")
 
 
-class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
+class Ernie4_5_VLMoeImageProcessorKwargs(Glm4vImageProcessorKwargs):
     r"""
     patch_size (`int`, *optional*, defaults to 14):
         The spatial patch size of the vision encoder.
@@ -1174,10 +1171,6 @@ class Ernie4_5_VLMoeImageProcessorKwargs(ImagesKwargs, total=False):
     merge_size (`int`, *optional*, defaults to 2):
         The merge size of the vision encoder to llm encoder.
     """
-
-    patch_size: int
-    temporal_patch_size: int
-    merge_size: int
 
 
 class Ernie4_5_VLMoeImageProcessorPil(Qwen2VLImageProcessorPil):

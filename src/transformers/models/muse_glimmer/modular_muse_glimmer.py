@@ -46,18 +46,17 @@ from ...vision_utils import (
     get_vision_window_index,
 )
 from ..afmoe.modeling_afmoe import AfmoeAttention
+from ..clip.modeling_clip import CLIPMLP
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2DecoderLayer,
-    Gemma2MLP,
     Gemma2Model,
     Gemma2PreTrainedModel,
-    Gemma2RMSNorm,
-    Gemma2RotaryEmbedding,
     apply_rotary_pos_emb,
 )
 from ..gemma3.modeling_gemma3 import Gemma3CausalLMOutputWithPast, Gemma3ModelOutputWithPast
-from ..gemma4.modeling_gemma4 import Gemma4RMSNorm
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..kimi_k25.configuration_kimi_k25 import Kimi_K25VisionConfig
 from ..kimi_k25.modeling_kimi_k25 import (
@@ -65,9 +64,9 @@ from ..kimi_k25.modeling_kimi_k25 import (
     Kimi_K25Model,
     Kimi_K25VisionAttention,
     Kimi_K25VisionEncoderLayer,
-    Kimi_K25VisionMLP,
 )
-from ..llama.modeling_llama import eager_attention_forward
+from ..llama.modeling_llama import LlamaRotaryEmbedding, eager_attention_forward
+from ..mistral.modeling_mistral import MistralMLP
 from ..paddleocr_vl.modeling_paddleocr_vl import PaddleOCRVisionEmbeddings
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 
@@ -536,8 +535,8 @@ class MuseGlimmerVisionConfig(Kimi_K25VisionConfig):
         "layers.*.attn.k_proj": "colwise",
         "layers.*.attn.v_proj": "colwise",
         "layers.*.attn.proj": "rowwise",
-        "layers.*.mlp.fc1": "colwise",
-        "layers.*.mlp.fc2": "rowwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
 
     hidden_size: int = 1536
@@ -602,7 +601,7 @@ class MuseGlimmerTextConfig(Gemma2Config, PreTrainedConfig):
     num_attention_heads: int = 32
     num_key_value_heads: int = 2
     head_dim: int = 128
-    hidden_activation: str = "silu"
+    hidden_act: str = "silu"
     max_position_embeddings: int = 131_072
     rms_norm_eps: float = 1e-5
     tie_word_embeddings: bool = False
@@ -685,20 +684,20 @@ class MuseGlimmerConfig(PreTrainedConfig):
     projector_hidden_act: str = "gelu"
 
 
-class MuseGlimmerRMSNorm(Gemma4RMSNorm):
+class MuseGlimmerRMSNorm(Gemma3nRMSNorm):
     def __init__(self, dim: int | None = None, eps: float = 1e-6, with_scale: bool = True):
         super().__init__(dim, eps, with_scale)
 
 
-class MuseGlimmerTextCenteredRMSNorm(Gemma2RMSNorm):
+class MuseGlimmerTextCenteredRMSNorm(GemmaRMSNorm):
     pass
 
 
-class MuseGlimmerTextMLP(Gemma2MLP):
+class MuseGlimmerTextMLP(MistralMLP):
     pass
 
 
-class MuseGlimmerTextRotaryEmbedding(Gemma2RotaryEmbedding):
+class MuseGlimmerTextRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
@@ -877,7 +876,7 @@ class MuseGlimmerVisionAttention(Kimi_K25VisionAttention):
     pass
 
 
-class MuseGlimmerVisionMLP(Kimi_K25VisionMLP):
+class MuseGlimmerVisionMLP(CLIPMLP):
     pass
 
 

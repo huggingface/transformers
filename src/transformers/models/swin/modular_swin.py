@@ -31,11 +31,10 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..clip.modeling_clip import CLIPMLP
 from ..vit.modeling_vit import (
     PreTrainedModel,
     ViTAttention,
-    ViTLayer,
-    ViTMLP,
     ViTPreTrainedModel,
     eager_attention_forward,
 )
@@ -465,15 +464,15 @@ class SwinAttention(ViTAttention):
         return attn_output, attn_weights
 
 
-class SwinMLP(ViTMLP):
+class SwinMLP(CLIPMLP):
     def __init__(self, config: SwinConfig, dim: int):
         nn.Module.__init__(self)
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(dim, int(config.mlp_ratio * dim))
-        self.fc2 = nn.Linear(int(config.mlp_ratio * dim), dim)
+        self.up_proj = nn.Linear(dim, int(config.mlp_ratio * dim))
+        self.down_proj = nn.Linear(int(config.mlp_ratio * dim), dim)
 
 
-class SwinLayer(ViTLayer):
+class SwinLayer(GradientCheckpointingLayer):
     def __init__(
         self,
         config: SwinConfig,
@@ -484,11 +483,12 @@ class SwinLayer(ViTLayer):
         shift_size: int = 0,
     ):
         super().__init__()
-        self.window_size = config.window_size
         self.attention = SwinAttention(config, dim, num_heads, window_size=config.window_size)
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.mlp = SwinMLP(config, dim)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.window_size = config.window_size
         self.shift_size = shift_size
         self.input_resolution = input_resolution
         self.drop_path = SwinDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()

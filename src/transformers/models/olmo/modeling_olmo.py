@@ -273,6 +273,7 @@ class OlmoDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: OlmoConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = OlmoAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = OlmoMLP(config)

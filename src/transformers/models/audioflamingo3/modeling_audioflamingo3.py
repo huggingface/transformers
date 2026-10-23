@@ -311,11 +311,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     input_modalities = "audio"
     _input_embed_layer = "conv1"
     _no_split_modules = ["AudioFlamingo3EncoderLayer"]
-
-    _can_record_outputs = {
-        "hidden_states": AudioFlamingo3EncoderLayer,
-        "attentions": AudioFlamingo3Attention,
-    }
+    _can_record_outputs = {"hidden_states": AudioFlamingo3EncoderLayer, "attentions": AudioFlamingo3Attention}
 
     def __init__(self, config: AudioFlamingo3EncoderConfig):
         super().__init__(config)

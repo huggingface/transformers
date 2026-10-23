@@ -25,12 +25,12 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..clip.modeling_clip import CLIPMLP
 from ..vit.modeling_vit import (
     PreTrainedModel,
     ViTAttention,
     ViTEmbeddings,
     ViTLayer,
-    ViTMLP,
     ViTModel,
     ViTPooler,
     ViTPreTrainedModel,
@@ -121,7 +121,7 @@ class VivitAttention(ViTAttention):
     pass
 
 
-class VivitMLP(ViTMLP):
+class VivitMLP(CLIPMLP):
     pass
 
 

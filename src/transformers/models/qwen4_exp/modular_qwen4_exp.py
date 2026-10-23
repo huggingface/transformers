@@ -32,8 +32,8 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP, Qwen2MoeTopKRouter
 from ..qwen3_5.modeling_qwen3_5 import (
-    Qwen3_5Attention,
     Qwen3_5GatedDeltaNet,
     Qwen3_5RMSNorm,
     Qwen3_5TextRotaryEmbedding,
@@ -59,11 +59,9 @@ from ..qwen3_5_moe.modeling_qwen3_5_moe import (
     Qwen3_5MoeVisionModel,
 )
 from ..qwen3_next.modeling_qwen3_next import (
-    Qwen3NextExperts,
-    Qwen3NextMLP,
+    Qwen3NextAttention,
     Qwen3NextRMSNormGated,
     Qwen3NextSparseMoeBlock,
-    Qwen3NextTopKRouter,
 )
 
 
@@ -297,17 +295,22 @@ class Qwen4ExpTextRotaryEmbedding(Qwen3_5TextRotaryEmbedding):
 
 @no_inherit_decorator
 class Qwen4ExpTextRMSNorm(Qwen3_5RMSNorm):
-    def __init__(self, dim: int, group_size: int | None = None, eps: float = 1e-6):
-        super().__init__(dim, eps=eps)
+    def __init__(self, hidden_size, group_size: int | None = None, eps: float = 1e-6) -> None:
+        super().__init__(hidden_size, eps=eps)
         self.group_size = group_size
-        if group_size is not None and dim % group_size != 0:
-            raise ValueError(f"hidden_size ({dim}) must be divisible by group_size ({group_size}).")
+        if group_size is not None and hidden_size % group_size != 0:
+            raise ValueError(f"hidden_size ({hidden_size}) must be divisible by group_size ({group_size}).")
 
-    def _norm(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        if self.group_size is not None:  # diff with Gemma: normalise per group
+            hidden_states = hidden_states.reshape(*hidden_states.shape[:-1], -1, self.group_size)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         if self.group_size is not None:
-            x = x.reshape(*x.shape[:-1], -1, self.group_size)
-        out = x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-        return out.flatten(-2) if self.group_size is not None else out
+            hidden_states = hidden_states.flatten(-2)
+        return (hidden_states * (1.0 + self.weight.float())).to(input_dtype)
 
 
 class Qwen4ExpTextRMSNormGated(Qwen3NextRMSNormGated):
@@ -474,7 +477,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
         return selected_token_mask
 
 
-class Qwen4ExpTextAttention(Qwen3_5Attention):
+class Qwen4ExpTextAttention(Qwen3NextAttention):
     def __init__(self, config: Qwen4ExpTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.q_norm = Qwen4ExpTextRMSNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -508,15 +511,15 @@ class Qwen4ExpTextAttention(Qwen3_5Attention):
         )
 
 
-class Qwen4ExpTextMLP(Qwen3NextMLP):
+class Qwen4ExpTextMLP(Qwen2MoeMLP):
     pass
 
 
-class Qwen4ExpTextExperts(Qwen3NextExperts):
+class Qwen4ExpTextExperts(Qwen2MoeExperts):
     pass
 
 
-class Qwen4ExpTextTopKRouter(Qwen3NextTopKRouter):
+class Qwen4ExpTextTopKRouter(Qwen2MoeTopKRouter):
     pass
 
 
@@ -1035,7 +1038,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
 
 class Qwen4ExpForCausalLM(Qwen3_5MoeForCausalLM):
-    config: Qwen4ExpTextConfig
+    pass
 
 
 @auto_docstring

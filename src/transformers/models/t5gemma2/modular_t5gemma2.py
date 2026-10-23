@@ -48,13 +48,12 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoModel
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma3.configuration_gemma3 import Gemma3Config, Gemma3TextConfig
 from ..gemma3.modeling_gemma3 import (
     Gemma3Attention,
-    Gemma3MLP,
     Gemma3MultiModalProjector,
     Gemma3PreTrainedModel,
-    Gemma3RMSNorm,
     Gemma3RotaryEmbedding,
     Gemma3TextScaledWordEmbedding,
     apply_rotary_pos_emb,
@@ -62,6 +61,7 @@ from ..gemma3.modeling_gemma3 import (
     create_sliding_window_causal_mask,
     eager_attention_forward,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from ..t5gemma.modeling_t5gemma import (
     T5GemmaClassificationHead,
     T5GemmaEncoderLayer,
@@ -207,11 +207,11 @@ class T5Gemma2Config(PreTrainedConfig):
             )
 
 
-class T5Gemma2RMSNorm(Gemma3RMSNorm):
+class T5Gemma2RMSNorm(GemmaRMSNorm):
     pass
 
 
-class T5Gemma2MLP(Gemma3MLP):
+class T5Gemma2MLP(MistralMLP):
     def __init__(self, config: T5Gemma2TextConfig):
         super().__init__(config)
         self.dropout = nn.Dropout(config.dropout_rate)

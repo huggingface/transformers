@@ -3,7 +3,6 @@ from collections.abc import Callable
 import torch
 from torch import nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
@@ -21,6 +20,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import LlamaModel, LlamaPreTrainedModel, LlamaRotaryEmbedding, rotate_half
 from .configuration_gpt_neox import GPTNeoXConfig
 
@@ -28,22 +28,12 @@ from .configuration_gpt_neox import GPTNeoXConfig
 logger = logging.get_logger(__name__)
 
 
-class GPTNeoXMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense_h_to_4h = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.dense_4h_to_h = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.act = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_states):
-        hidden_states = self.dense_h_to_4h(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.dense_4h_to_h(hidden_states)
-        return hidden_states
+class GPTNeoXMLP(CLIPMLP):
+    pass
 
 
 class GPTNeoXRotaryEmbedding(LlamaRotaryEmbedding):
-    def compute_default_rope_parameters(config: GPTNeoXConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: GPTNeoXConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -54,6 +44,7 @@ class GPTNeoXRotaryEmbedding(LlamaRotaryEmbedding):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
+        # diff with Llama: only `partial_rotary_factor` of the head dim is rotated, as in `ROPE_INIT_FUNCTIONS`
         partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
@@ -61,7 +52,7 @@ class GPTNeoXRotaryEmbedding(LlamaRotaryEmbedding):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
 
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):

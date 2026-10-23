@@ -45,7 +45,9 @@ from ...utils import (
 )
 from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoConfig, AutoTokenizer
+from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
+from ..granitemoe.modeling_granitemoe import GraniteMoeTopKRouter
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -145,7 +147,7 @@ class AriaTextRMSNorm(LlamaRMSNorm):
     pass
 
 
-class AriaProjectorMLP(nn.Module):
+class AriaProjectorMLP(CLIPMLP):
     """
     Feed-Forward Network module for the Aria Projector.
 
@@ -159,15 +161,10 @@ class AriaProjectorMLP(nn.Module):
     """
 
     def __init__(self, in_features, hidden_features, output_dim):
-        super().__init__()
-        self.linear_in = nn.Linear(in_features, hidden_features, bias=False)
-        self.linear_out = nn.Linear(hidden_features, output_dim, bias=False)
-        self.act = ACT2FN["gelu_new"]
-
-    def forward(self, hidden_states):
-        hidden_states = self.act(self.linear_in(hidden_states))
-        hidden_states = self.linear_out(hidden_states)
-        return hidden_states
+        nn.Module.__init__(self)
+        self.up_proj = nn.Linear(in_features, hidden_features, bias=False)
+        self.down_proj = nn.Linear(hidden_features, output_dim, bias=False)
+        self.activation_fn = ACT2FN["gelu_new"]
 
 
 class AriaCrossAttention(nn.Module):
@@ -612,7 +609,7 @@ class AriaSharedExpertsMLP(LlamaMLP):
         self.intermediate_size = config.intermediate_size * config.moe_num_shared_experts
 
 
-class AriaTextTopKRouter(nn.Module):
+class AriaTextTopKRouter(GraniteMoeTopKRouter):
     """Top-k router for the Aria MoE block.
 
     Experts are selected on the raw logits and the routing weights are the softmax over the selected
@@ -620,11 +617,10 @@ class AriaTextTopKRouter(nn.Module):
     `(router_logits, top_k_weights, top_k_index)`.
     """
 
-    def __init__(self, config: AriaTextConfig):
-        super().__init__()
+    def __init__(self, config):
+        super().__init__(config)
         self.num_experts = config.moe_num_experts
         self.top_k = config.moe_topk
-        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         router_logits = nn.functional.linear(hidden_states, self.weight)  # (num_tokens, num_experts)
@@ -678,7 +674,7 @@ class AriaExperts(nn.Module):
         return final_hidden_states
 
 
-class AriaTextMoELayer(nn.Module):
+class AriaTextSparseMoeBlock(nn.Module):
     """Sparsely-gated mixture-of-experts block: router decides, experts compute, shared experts always run."""
 
     def __init__(self, config: AriaTextConfig):
@@ -697,7 +693,7 @@ class AriaTextMoELayer(nn.Module):
 
 
 class AriaTextAttention(LlamaAttention):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    pass
 
 
 class AriaTextDecoderLayer(LlamaDecoderLayer):
@@ -715,7 +711,7 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
 
     def __init__(self, config: AriaTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.mlp = AriaTextMoELayer(config)
+        self.mlp = AriaTextSparseMoeBlock(config)
 
 
 @auto_docstring
@@ -747,9 +743,7 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
     config: AriaConfig
-    base_model_prefix = "model"
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
-    _supports_attention_backend = True
     input_modalities = ("image", "text")
 
     @torch.no_grad()
@@ -901,8 +895,6 @@ class AriaModel(LlavaModel):
     """
 )
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
     @auto_docstring
     def get_image_features(
         self,

@@ -51,12 +51,11 @@ class DeepseekV4RMSNorm(nn.Module):
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states) -> torch.Tensor:
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        # DSV4: norm weights are kept in float32, so multiply in float32 and cast once at the end
         return (self.weight * hidden_states).to(input_dtype)
 
     def extra_repr(self):
@@ -88,7 +87,7 @@ class DeepseekV4RotaryEmbedding(nn.Module):
     when building the per-type inv_freq buffers.
     """
 
-    def __init__(self, config: DeepseekV4Config, device=None):
+    def __init__(self, config: DeepseekV4Config):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -104,14 +103,14 @@ class DeepseekV4RotaryEmbedding(nn.Module):
             rope_init_fn = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            inv_freq, attention_scaling = rope_init_fn(config, device, layer_type=layer_type)
-            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(inv_freq, persistent=False))
-            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(inv_freq.clone(), persistent=False))
-            setattr(self, f"{layer_type}_attention_scaling", attention_scaling)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(config, layer_type=layer_type)
+            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
+            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
+            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: DeepseekV4Config, device=None, layer_type: str | None = None, **kwargs
+        config: DeepseekV4Config, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -135,11 +134,11 @@ class DeepseekV4RotaryEmbedding(nn.Module):
 
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids, layer_type=None):
+    def forward(self, x, position_ids, layer_type):
         # Key difference vs Laguna's forward: no `torch.cat([freqs, freqs], dim=-1)`
         # duplication. V4's interleaved RoPE pairs consecutive channels, so we only need
         # `rope_head_dim // 2` unique θ entries — the `apply_rotary_pos_emb` helper does
@@ -1035,23 +1034,6 @@ class DeepseekV4Experts(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
         self.limit = config.swiglu_limit
 
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
-        final = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
-            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(mask[expert_idx])
-            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
-            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
-            final.index_add_(0, token_idx, current.to(final.dtype))
-        return final
-
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # Lives on the class (like gpt-oss's _apply_gate) so the grouped_mm / batched_mm
         # backends swapped in by `@use_experts_implementation` apply the same clamp +
@@ -1060,6 +1042,33 @@ class DeepseekV4Experts(nn.Module):
         gate = gate.clamp(max=self.limit)
         up = up.clamp(min=-self.limit, max=self.limit)
         return self.act_fn(gate) * up
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
 
 
 class DeepseekV4TopKRouter(nn.Module):
@@ -1074,13 +1083,13 @@ class DeepseekV4TopKRouter(nn.Module):
         self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        flat = hidden_states.reshape(-1, self.hidden_dim)
-        logits = F.linear(flat, self.weight)
-        scores = self.score_fn(logits)
-        indices = torch.topk(scores + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False).indices
-        weights = scores.gather(1, indices)
-        weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
-        return logits, weights * self.routed_scaling_factor, indices
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states, self.weight)
+        router_probs = self.score_fn(router_logits)
+        top_k_index = torch.topk(router_probs + self.e_score_correction_bias, self.top_k, dim=-1, sorted=False).indices
+        top_k_weights = router_probs.gather(1, top_k_index)
+        top_k_weights = top_k_weights / (top_k_weights.sum(dim=-1, keepdim=True) + 1e-20)
+        return router_logits, top_k_weights * self.routed_scaling_factor, top_k_index
 
 
 class DeepseekV4HashRouter(nn.Module):
@@ -1105,13 +1114,13 @@ class DeepseekV4HashRouter(nn.Module):
     def forward(
         self, hidden_states: torch.Tensor, input_ids: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        flat = hidden_states.reshape(-1, self.hidden_dim)
-        logits = F.linear(flat, self.weight)
-        scores = self.score_fn(logits)
-        indices = self.tid2eid[input_ids.reshape(-1)].long()
-        weights = scores.gather(1, indices)
-        weights = weights / (weights.sum(dim=-1, keepdim=True) + 1e-20)
-        return logits, weights * self.routed_scaling_factor, indices
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states, self.weight)
+        router_probs = self.score_fn(router_logits)
+        top_k_index = self.tid2eid[input_ids.reshape(-1)].long()
+        top_k_weights = router_probs.gather(1, top_k_index)
+        top_k_weights = top_k_weights / (top_k_weights.sum(dim=-1, keepdim=True) + 1e-20)
+        return router_logits, top_k_weights * self.routed_scaling_factor, top_k_index
 
 
 class DeepseekV4SparseMoeBlock(nn.Module):
@@ -1127,10 +1136,10 @@ class DeepseekV4SparseMoeBlock(nn.Module):
         residual = hidden_states
         flat = hidden_states.view(-1, hidden_dim)
         if self.is_hash:
-            _, weights, indices = self.gate(hidden_states, input_ids)
+            _, top_k_weights, top_k_index = self.gate(hidden_states, input_ids)
         else:
-            _, weights, indices = self.gate(hidden_states)
-        routed = self.experts(flat, indices, weights).view(batch, seq_len, hidden_dim)
+            _, top_k_weights, top_k_index = self.gate(hidden_states)
+        routed = self.experts(flat, top_k_index, top_k_weights).view(batch, seq_len, hidden_dim)
         return routed + self.shared_experts(residual)
 
 

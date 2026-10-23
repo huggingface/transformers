@@ -33,7 +33,6 @@ from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ...models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ...processing_utils import (
-    ProcessingKwargs,
     ProcessorMixin,
     Unpack,
 )
@@ -51,16 +50,14 @@ from ...vision_utils import (
     get_vision_interpolation_indices_and_weights,
     get_vision_position_ids,
 )
+from ..clip.modeling_clip import CLIPMLP
 from ..ernie4_5.configuration_ernie4_5 import Ernie4_5Config
 from ..ernie4_5.modeling_ernie4_5 import (
     Ernie4_5DecoderLayer,
     Ernie4_5MLP,
     Ernie4_5Model,
-    Ernie4_5RMSNorm,
 )
-from ..qwen2_5_omni.modeling_qwen2_5_omni import (
-    Qwen2_5OmniAttention,
-)
+from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from ..qwen2_vl.modeling_qwen2_vl import (
@@ -70,11 +67,9 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModelOutputWithPast,
     Qwen2VLRotaryEmbedding,
 )
+from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
 from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.modeling_siglip import (
-    SiglipMLP,
-    SiglipVisionEmbeddings,
-)
+from ..siglip.modeling_siglip import SiglipVisionEmbeddings
 from ..video_llama_3.modeling_video_llama_3 import (
     VideoLlama3VisionAttention,
     VideoLlama3VisionEncoder,
@@ -214,13 +209,8 @@ class PaddleOCRVLImageProcessor(Qwen2VLImageProcessor):
         return flatten_patches, grid_h, grid_w
 
 
-class PaddleOCRVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-    }
+class PaddleOCRVLProcessorKwargs(Qwen2VLProcessorKwargs):
+    pass
 
 
 class PaddleOCRVLProcessor(ProcessorMixin):
@@ -371,18 +361,17 @@ class PaddleOCRMLP(Ernie4_5MLP):
         super().__init__()
 
 
-class PaddleOCRAttention(Qwen2_5OmniAttention):
+class PaddleOCRAttention(LlamaAttention):
     def __init__(self, config: PaddleOCRVLConfig, layer_idx: int | None = None):
-        super().__init__()
-
+        super().__init__(config, layer_idx)
         self.attention_dropout = 0.0
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.use_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.use_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.use_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.use_bias)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.use_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
 
 
-class PaddleOCRRMSNorm(Ernie4_5RMSNorm):
+class PaddleOCRRMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -535,14 +524,12 @@ class PaddleOCRVisionAttention(VideoLlama3VisionAttention):
         super().__init__()
 
 
-class PaddleOCRVisionMLP(SiglipMLP):
-    def __init__(self, config: PaddleOCRVisionConfig):
-        super().__init__()
+class PaddleOCRVisionMLP(CLIPMLP):
+    pass
 
 
 class PaddleOCRVisionEncoderLayer(VideoLlama3VisionEncoderLayer):
-    def __init__(self, config: PaddleOCRVisionConfig):
-        super().__init__()
+    pass
 
 
 class PaddleOCRVisionEncoder(VideoLlama3VisionEncoder):

@@ -68,6 +68,7 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
     ```"""
 
     model_type = "beit"
+    attribute_map = {"attention_probs_dropout_prob": "attention_dropout"}
 
     vocab_size: int = 8192
     hidden_size: int = 768
@@ -76,7 +77,7 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
     intermediate_size: int = 3072
     hidden_act: str = "gelu"
     hidden_dropout_prob: float | int = 0.0
-    attention_probs_dropout_prob: float | int = 0.0
+    attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-12
     image_size: int | list[int] | tuple[int, int] = 224

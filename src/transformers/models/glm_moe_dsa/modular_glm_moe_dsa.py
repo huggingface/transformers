@@ -27,19 +27,18 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3RMSNorm,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
 from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 from ..deepseek_v32.modeling_deepseek_v32 import (
-    DeepseekV32DecoderLayer,
     DeepseekV32ForCausalLM,
     DeepseekV32Indexer,
     DeepseekV32Model,
     DeepseekV32PreTrainedModel,
-    DeepseekV32RotaryEmbedding,
 )
+from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
+from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -122,11 +121,11 @@ class GlmMoeDsaConfig(DeepseekV32Config):
         super().__post_init__(**kwargs)
 
 
-class GlmMoeDsaRMSNorm(DeepseekV3RMSNorm):
+class GlmMoeDsaRMSNorm(LlamaRMSNorm):
     pass
 
 
-class GlmMoeDsaRotaryEmbedding(DeepseekV32RotaryEmbedding):
+class GlmMoeDsaRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
@@ -291,7 +290,7 @@ class GlmMoeDsaAttention(AXK1Attention):
         return attn_output, attn_weights, topk_indices
 
 
-class GlmMoeDsaDecoderLayer(DeepseekV32DecoderLayer):
+class GlmMoeDsaDecoderLayer(Glm4MoeLiteDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -390,7 +389,7 @@ class GlmMoeDsaModel(DeepseekV32Model):
 
 
 class GlmMoeDsaForCausalLM(DeepseekV32ForCausalLM):
-    _fsdp_plan = {"lm_head": "keep_full_weight"}
+    pass
 
 
 __all__ = [

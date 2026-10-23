@@ -50,6 +50,7 @@ class Qwen2MoeConfig(PreTrainedConfig):
     """
 
     model_type = "qwen2_moe"
+    attribute_map = {"num_local_experts": "num_experts"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default tensor parallel plan for base model `Qwen2Moe`

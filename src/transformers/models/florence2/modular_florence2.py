@@ -35,7 +35,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..bart.modeling_bart import eager_attention_forward, shift_tokens_right
-from ..llama4.modeling_llama4 import Llama4VisionMLP
+from ..clip.modeling_clip import CLIPMLP
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
 from ..llava.processing_llava import LlavaProcessorKwargs
 from ..swin.modeling_swin import SwinDropPath
@@ -873,12 +873,12 @@ class Florence2VisionPositionalEmbeddingCosine1D(nn.Module):
         return pos_embeds
 
 
-class Florence2VisionMLP(Llama4VisionMLP):
+class Florence2VisionMLP(CLIPMLP):
     def __init__(self, config: Florence2VisionConfig, stage_idx: int):
         super().__init__(config)
-        self.fc1 = nn.Linear(config.embed_dim[stage_idx], int(config.embed_dim[stage_idx] * config.mlp_ratio))
+        self.up_proj = nn.Linear(config.embed_dim[stage_idx], int(config.embed_dim[stage_idx] * config.mlp_ratio))
         self.activation_fn = ACT2FN[config.activation_function]
-        self.fc2 = nn.Linear(int(config.embed_dim[stage_idx] * config.mlp_ratio), config.embed_dim[stage_idx])
+        self.down_proj = nn.Linear(int(config.embed_dim[stage_idx] * config.mlp_ratio), config.embed_dim[stage_idx])
 
 
 class Florence2VisionConvEmbed(nn.Module):

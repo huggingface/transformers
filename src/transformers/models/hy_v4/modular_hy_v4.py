@@ -31,6 +31,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import maybe_autocast
+from ..axk1.modeling_axk1 import AXK1Attention
 from ..deepseek_v4.modeling_deepseek_v4 import (
     DeepseekV4DecoderLayer,
     DeepseekV4HyperConnection,
@@ -38,19 +39,18 @@ from ..deepseek_v4.modeling_deepseek_v4 import (
     DeepseekV4UnweightedRMSNorm,
 )
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
+from ..glm4_moe.modeling_glm4_moe import Glm4MoeTopKRouter
 from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     Glm4MoeLiteForCausalLM,
-    Glm4MoeLiteMLP,
     Glm4MoeLiteModel,
-    Glm4MoeLiteMoE,
     Glm4MoeLitePreTrainedModel,
-    Glm4MoeLiteRMSNorm,
-    Glm4MoeLiteTopkRouter,
+    Glm4MoeLiteSparseMoeBlock,
     apply_rotary_pos_emb,
 )
 from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts
-from ..glm_moe_dsa.modeling_glm_moe_dsa import GlmMoeDsaAttention, GlmMoeDsaRotaryEmbedding
 from ..gpt_oss.modeling_gpt_oss import eager_attention_forward
+from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="tencent/Hy4-preview")
@@ -60,7 +60,7 @@ class HYV4Config(PreTrainedConfig):
     n_group (`int`, *optional*, defaults to 1):
         Number of expert groups for routing. HYV4 selects experts globally, so this is 1 (one group holding every expert).
     topk_group (`int`, *optional*, defaults to 1):
-        Number of expert groups kept during routing. With `n_group=1` this reuses `Glm4MoeLiteTopkRouter` as a plain global top-k.
+        Number of expert groups kept during routing. With `n_group=1` this reuses `Glm4MoeLiteTopKRouter` as a plain global top-k.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP type, either `"dense"` or `"sparse"`. Defaults to one dense layer followed by
         sparse MoE layers.
@@ -187,7 +187,7 @@ class HYV4Config(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class HYV4RMSNorm(Glm4MoeLiteRMSNorm):
+class HYV4RMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -197,7 +197,7 @@ class HYV4UnweightedRMSNorm(DeepseekV4UnweightedRMSNorm):
         return torch.rsqrt(x.float().square().mean(-1, keepdim=True) + self.eps).to(x.dtype)
 
 
-class HYV4RotaryEmbedding(GlmMoeDsaRotaryEmbedding):
+class HYV4RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
@@ -258,9 +258,19 @@ class HYV4Indexer(DeepseekV32Indexer):
         return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
-class HYV4Attention(GlmMoeDsaAttention):
+class HYV4Attention(AXK1Attention):
+    """
+    DeepSeek-V3.2 DSA extended with **cross-layer top-k sharing**.
+
+    `config.indexer_types[layer_idx]` decides whether this layer runs its own indexer (`"full"`) or reuses the previous
+    full layer's top-k selection (`"shared"`). `next_skip_topk` signals that the *next* layer will reuse this layer's
+    top-k, so it is propagated upward via `prev_topk_indices`.
+    """
+
     def __init__(self, config: HYV4Config, layer_idx: int):
+        self.skip_topk = config.indexer_types[layer_idx] == "shared"
         super().__init__(config, layer_idx)
+        self.indexer = None if self.skip_topk else HYV4Indexer(config, layer_idx)
         self.gate_projection_size = self.v_head_dim
         self.gate_proj = nn.Linear(config.hidden_size, self.num_heads * self.gate_projection_size, bias=False)
         self.sinks = nn.Parameter(torch.full((self.num_heads,), config.learnable_sink_init))
@@ -354,11 +364,11 @@ class HYV4Attention(GlmMoeDsaAttention):
         return self.o_proj(attn_output), attn_weights, topk_indices
 
 
-class HYV4MLP(Glm4MoeLiteMLP):
+class HYV4MLP(Qwen2MoeMLP):
     pass
 
 
-class HYV4TopkRouter(Glm4MoeLiteTopkRouter):
+class HYV4TopKRouter(Glm4MoeTopKRouter):
     pass
 
 
@@ -366,7 +376,7 @@ class HYV4Experts(Glm5NextTextExperts):
     pass
 
 
-class HYV4MoE(Glm4MoeLiteMoE):
+class HYV4SparseMoeBlock(Glm4MoeLiteSparseMoeBlock):
     pass
 
 
@@ -424,7 +434,7 @@ class HYV4DecoderLayer(DeepseekV4DecoderLayer):
 
     def __init__(self, config: HYV4Config, layer_idx: int):
         super().__init__(self, config, layer_idx)
-        self.mlp = HYV4MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4MLP(config)
+        self.mlp = HYV4SparseMoeBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4MLP(config)
 
     def forward(
         self,
@@ -488,7 +498,7 @@ class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, HYV4TopkRouter):
+        if isinstance(module, HYV4TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, HYV4Experts):

@@ -35,9 +35,9 @@ from ..gemma2.modeling_gemma2 import eager_attention_forward
 from ..qwen3_next.modeling_qwen3_next import l2norm
 from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig
 from ..t5.tokenization_t5 import T5Tokenizer
+from ..vit.modeling_vit import ViTAttention
 from ..vivit.configuration_vivit import VivitConfig
 from ..vivit.modeling_vivit import (
-    VivitAttention,
     VivitEmbeddings,
     VivitLayer,
     VivitPreTrainedModel,
@@ -99,17 +99,18 @@ class VideoPrismTextConfig(SiglipTextConfig):
         Softcapping constant for attention logits.
     """
 
+    attribute_map = {"attention_probs_dropout_prob": "attention_dropout"}
+
     hidden_act: str = "relu"
     pad_token_id: int | None = 0
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
-    attention_probs_dropout_prob: float | int = 0.0
+    attention_dropout: float | int = 0.0
     apply_l2norm: bool = True
     qkv_bias: bool = True
     hidden_dropout_prob: float = 0.0
     initializer_range: float = 0.02
     attn_logit_softcapping: float = 50.0
-    attention_dropout = AttributeError()
     projection_size = AttributeError()
 
     def __post_init__(self, **kwargs):
@@ -442,7 +443,7 @@ class VideoPrismTextEmbeddings(nn.Module):
         return embeddings
 
 
-class VideoPrismAttention(VivitAttention):
+class VideoPrismAttention(ViTAttention):
     def __init__(self, config: VideoPrismVisionConfig | VideoPrismTextConfig):
         super().__init__(config)
         del self.num_attention_heads
@@ -494,9 +495,8 @@ class VideoPrismLayerNorm(nn.LayerNorm):
 class VideoPrismLayer(VivitLayer):
     def __init__(self, config: VideoPrismVisionConfig | VideoPrismTextConfig):
         super().__init__(config)
-        self.attention = VideoPrismAttention(config)
-        self.layernorm_before = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.input_layernorm = VideoPrismLayerNorm(self.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = VideoPrismLayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
 
 @auto_docstring
@@ -614,7 +614,7 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         )
 
 
-class VideoPrismMultiheadAttentionPoolingHead(VivitAttention):
+class VideoPrismMultiheadAttentionPoolingHead(ViTAttention):
     def __init__(self, config: VideoPrismVisionConfig):
         super().__init__(config)
         del self.num_attention_heads

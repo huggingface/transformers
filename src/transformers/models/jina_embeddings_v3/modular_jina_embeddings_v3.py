@@ -22,6 +22,7 @@ from torch.nn import CrossEntropyLoss
 
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     MaskedLMOutput,
@@ -33,7 +34,6 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPMLP
-from ..gpt_neox.modeling_gpt_neox import GPTNeoXLayer
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding, apply_rotary_pos_emb
 from ..xlm_roberta.configuration_xlm_roberta import XLMRobertaConfig
 from ..xlm_roberta.modeling_xlm_roberta import (
@@ -187,18 +187,16 @@ class JinaEmbeddingsV3MLP(CLIPMLP):
     pass
 
 
-class JinaEmbeddingsV3Layer(GPTNeoXLayer):
+class JinaEmbeddingsV3Layer(GradientCheckpointingLayer):
     def __init__(self, config: JinaEmbeddingsV3Config):
-        super().__init__(config)
-        self.self_attn = JinaEmbeddingsV3Attention(config=config)
+        super().__init__()
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         self.post_attention_dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.post_mlp_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_mlp_dropout = nn.Dropout(config.hidden_dropout_prob)
-
-        del self.use_parallel_residual
-        del self.input_layernorm
-        del self.attention
+        self.mlp = JinaEmbeddingsV3MLP(config)
+        self.self_attn = JinaEmbeddingsV3Attention(config=config)
+        self.post_mlp_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,

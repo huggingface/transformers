@@ -32,14 +32,12 @@ from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
+from ..bert.modeling_bert import BertCrossAttention, BertLayer, BertSelfAttention
 from ..roberta.modeling_roberta import (
     RobertaClassificationHead,
-    RobertaCrossAttention,
     RobertaEmbeddings,
-    RobertaLayer,
     RobertaLMHead,
     RobertaModel,
-    RobertaSelfAttention,
 )
 from .configuration_data2vec_text import Data2VecTextConfig
 
@@ -51,15 +49,15 @@ class Data2VecTextEmbeddings(RobertaEmbeddings):
     pass
 
 
-class Data2VecTextSelfAttention(RobertaSelfAttention):
+class Data2VecTextSelfAttention(BertSelfAttention):
     pass
 
 
-class Data2VecTextCrossAttention(RobertaCrossAttention):
+class Data2VecTextCrossAttention(BertCrossAttention):
     pass
 
 
-class Data2VecTextLayer(RobertaLayer):
+class Data2VecTextLayer(BertLayer):
     pass
 
 
