@@ -23,10 +23,9 @@ from safetensors import safe_open
 from transformers import FineGrainedFP8Config, MixtralConfig, NVFP4Config
 from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
-from transformers.quantizers.quantizers_utils import read_modelopt
 from transformers.testing_utils import require_kernels, require_torch, require_torch_accelerator, slow, torch_device
 from transformers.utils import is_torch_available, logging
-from transformers.utils.quantization_config import QuantizationMethod
+from transformers.utils.quantization_config import QuantizationMethod, read_modelopt
 
 
 if is_torch_available():

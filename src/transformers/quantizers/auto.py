@@ -45,6 +45,8 @@ from ..utils.quantization_config import (
     SpQRConfig,
     TorchAoConfig,
     VptqConfig,
+    read_modelopt,
+    read_mxfp8,
 )
 from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
@@ -73,7 +75,6 @@ from .quantizer_sinq import SinqHfQuantizer
 from .quantizer_spqr import SpQRHfQuantizer
 from .quantizer_torchao import TorchAoHfQuantizer
 from .quantizer_vptq import VptqHfQuantizer
-from .quantizers_utils import read_modelopt, read_mxfp8
 
 
 AUTO_QUANTIZER_MAPPING = {
