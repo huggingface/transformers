@@ -66,14 +66,9 @@ SPECIAL_TOKENS = [
 
 MEDIA_FIXTURES = {
     "image": ("huggingface/documentation-images", "pipeline-cat-chonk.jpeg"),
-    "audio": ("hf-internal-testing/transformers-synthetic-assets", "audio/voice_sample.wav"),
-    "video": ("hf-internal-testing/test-videos", "sample_demo_1_320x240.mp4"),
+    "audio": ("hf-internal-testing/dummy-audio-samples", "f2641_0_throatclearing.wav"),
+    "video": ("hf-internal-testing/test-videos", "tiny_video_320x240.mp4"),
 }
-
-
-def media_url(modality):
-    repo_id, filename = MEDIA_FIXTURES[modality]
-    return hf_hub_url(repo_id, filename, repo_type="dataset")
 
 
 MULTIMODAL_CHAT_TEMPLATE = (
@@ -726,7 +721,9 @@ class MiMoV2ProcessorTest(unittest.TestCase):
     def test_url_messages_load_all_modalities_without_mutation(self, batched, nested_url):
         """Verify normalization and loader arguments without making network requests."""
         processor = make_processor(chat_template=MULTIMODAL_CHAT_TEMPLATE)
-        image_url, audio_url, video_url = (media_url(modality) for modality in ("image", "audio", "video"))
+        image_url = hf_hub_url(*MEDIA_FIXTURES["image"], repo_type="dataset")
+        audio_url = hf_hub_url(*MEDIA_FIXTURES["audio"], repo_type="dataset")
+        video_url = hf_hub_url(*MEDIA_FIXTURES["video"], repo_type="dataset")
 
         def content_block(modality, url):
             return {"type": f"{modality}_url", f"{modality}_url": {"url": url} if nested_url else url}
@@ -809,6 +806,34 @@ class MiMoV2ProcessorTest(unittest.TestCase):
         selected = output.input_ids[output.assistant_masks.bool()].tolist()
         self.assertEqual(selected, p.tokenizer.encode("after", add_special_tokens=False))
 
+    def test_mixed_media_batch_processor_round_trip(self):
+        processor = make_processor(chat_template=MULTIMODAL_CHAT_TEMPLATE)
+        kwargs = {
+            "text": [processor.image_token + processor.audio_token + processor.video_token, "text"],
+            "images": self.image,
+            "audio": np.zeros(24000, dtype=np.float32),
+            "videos": self.video,
+            "sampling_rate": 24000,
+            "padding": True,
+            "return_tensors": "pt",
+            **self.video_kwargs(),
+        }
+        expected = processor(**kwargs)
+        self.assertEqual(expected.input_ids.shape[0], 2)
+        self.assertEqual(expected.input_ids[0].eq(processor.image_token_id).sum().item(), 2)
+        self.assertEqual(expected.input_ids[0].eq(processor.video_token_id).sum().item(), 6)
+        self.assertEqual(expected.input_ids[0].eq(processor.audio_token_id).sum().item(), 7)
+        self.assertLess(expected.attention_mask[1].sum(), expected.attention_mask[0].sum())
+        with tempfile.TemporaryDirectory() as directory:
+            processor.save_pretrained(directory)
+            restored = AutoProcessor.from_pretrained(directory, local_files_only=True)
+            self.assertIsInstance(restored, MiMoV2Processor)
+            self.assertEqual(restored.chat_template, processor.chat_template)
+            actual = restored(**kwargs)
+        self.assertEqual(set(actual), set(expected))
+        for key in expected:
+            torch.testing.assert_close(actual[key], expected[key], rtol=0, atol=0)
+
 
 @slow
 @require_torch
@@ -816,7 +841,7 @@ class MiMoV2ProcessorTest(unittest.TestCase):
 @require_vision
 @require_torchcodec
 class MiMoV2ProcessorIntegrationTest(unittest.TestCase):
-    """Decode public Hub fixtures with the real processor; no model weights are downloaded."""
+    """Exercise real Hub downloads and media decoders without downloading model weights."""
 
     model_id = "XiaomiMiMo/MiMo-V2.6-Flash-RL"
 
@@ -829,17 +854,42 @@ class MiMoV2ProcessorIntegrationTest(unittest.TestCase):
             for modality, (repo_id, filename) in MEDIA_FIXTURES.items()
         }
 
-    @parameterized.expand([(False,), (True,)])
-    def test_mixed_media_files_match_aliases_and_saved_processor(self, batched):
-        self.assertIsInstance(self.processor, MiMoV2Processor)
-        alias_messages = [
+    @parameterized.expand([("image",), ("audio",), ("video",)])
+    def test_chat_template_single_modality(self, modality):
+        messages = [
             {
                 "role": "user",
                 "content": [
-                    *[
-                        {"type": f"{modality}_url", f"{modality}_url": {"url": path}}
-                        for modality, path in self.media_paths.items()
-                    ],
+                    {"type": modality, "path": self.media_paths[modality]},
+                    {"type": "text", "text": "Describe this input."},
+                ],
+            }
+        ]
+        output = self.processor.apply_chat_template(
+            messages, tokenize=True, return_dict=True, return_tensors="pt", add_generation_prompt=True
+        )
+        feature_key = {"image": "pixel_values", "audio": "input_features", "video": "pixel_values_videos"}[modality]
+        self.assertEqual(output.input_ids.shape[0], 1)
+        self.assertGreater(output.input_ids.eq(getattr(self.processor, f"{modality}_token_id")).sum().item(), 0)
+        self.assertGreater(output[feature_key].numel(), 0)
+        self.assertTrue(torch.isfinite(output[feature_key]).all())
+
+    @parameterized.expand([("url", False), ("url", True), ("alias", False), ("nested_alias", False)])
+    def test_mixed_media_urls_match_files_and_saved_processor(self, content_format, batched):
+        self.assertIsInstance(self.processor, MiMoV2Processor)
+        url_content = []
+        for modality, (repo_id, filename) in MEDIA_FIXTURES.items():
+            url = hf_hub_url(repo_id, filename, repo_type="dataset")
+            if content_format == "url":
+                url_content.append({"type": modality, "url": url})
+            else:
+                value = {"url": url} if content_format == "nested_alias" else url
+                url_content.append({"type": f"{modality}_url", f"{modality}_url": value})
+        url_messages = [
+            {
+                "role": "user",
+                "content": [
+                    *url_content,
                     {"type": "text", "text": "Describe what you can see and hear."},
                 ],
             }
@@ -854,15 +904,24 @@ class MiMoV2ProcessorIntegrationTest(unittest.TestCase):
             }
         ]
         if batched:
-            alias_messages, path_messages = [alias_messages], [path_messages]
-        original = copy.deepcopy(alias_messages)
-        kwargs = {"tokenize": True, "return_dict": True, "return_tensors": "pt", "add_generation_prompt": True}
-        actual = self.processor.apply_chat_template(alias_messages, **kwargs)
+            text_messages = [{"role": "user", "content": [{"type": "text", "text": "Hello!"}]}]
+            url_messages = [url_messages, text_messages]
+            path_messages = [path_messages, copy.deepcopy(text_messages)]
+        original = copy.deepcopy(url_messages)
+        kwargs = {
+            "tokenize": True,
+            "return_dict": True,
+            "return_tensors": "pt",
+            "add_generation_prompt": True,
+            "processor_kwargs": {"text_kwargs": {"padding": True}},
+        }
+        actual = self.processor.apply_chat_template(url_messages, **kwargs)
         expected = self.processor.apply_chat_template(path_messages, **kwargs)
-        self.assertEqual(alias_messages, original)
+        self.assertEqual(url_messages, original)
         self.assertEqual(set(actual), set(expected))
         for key in expected:
             torch.testing.assert_close(actual[key], expected[key], rtol=0, atol=0)
+        self.assertEqual(actual.input_ids.shape[0], 2 if batched else 1)
         self.assertEqual(actual.image_grid_thw.shape[0], 1)
         self.assertEqual(actual.video_grid_thw.shape[0], 1)
         self.assertEqual(actual.input_features.shape[0], 1)
@@ -870,11 +929,23 @@ class MiMoV2ProcessorIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.isfinite(actual.pixel_values_videos).all())
         self.assertTrue(torch.isfinite(actual.input_features).all())
         self.assertEqual(actual.input_ids.eq(self.processor.audio_token_id).sum(), actual.audio_feature_lens.sum())
+        merge_size = self.processor.image_processor.merge_size
+        self.assertEqual(
+            actual.input_ids.eq(self.processor.image_token_id).sum(),
+            actual.image_grid_thw.prod(-1).sum() // merge_size**2,
+        )
+        merge_size = self.processor.video_processor.merge_size
+        self.assertEqual(
+            actual.input_ids.eq(self.processor.video_token_id).sum(),
+            actual.video_grid_thw.prod(-1).sum() // merge_size**2,
+        )
 
         with tempfile.TemporaryDirectory() as directory:
             self.processor.save_pretrained(directory)
             restored = AutoProcessor.from_pretrained(directory, local_files_only=True)
             self.assertIsInstance(restored, MiMoV2Processor)
+            self.assertEqual(restored.chat_template, self.processor.chat_template)
             reloaded = restored.apply_chat_template(path_messages, **kwargs)
+            self.assertEqual(set(reloaded), set(expected))
             for key in expected:
                 torch.testing.assert_close(reloaded[key], expected[key], rtol=0, atol=0)

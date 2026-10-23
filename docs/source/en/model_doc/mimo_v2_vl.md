@@ -32,53 +32,30 @@ For the text-only MiMo-V2-Flash and MiMo-V2.5-Pro checkpoints, see [MiMo-V2-Flas
 
 ## Usage
 
-Use a Transformers installation that provides [`MiMoV2VLForConditionalGeneration`], together with PyTorch,
-torchvision, Accelerate, and Pillow. The audio/video examples also require a compatible TorchCodec installation
-and FFmpeg. The examples download public media fixtures from the Hub and require network access on the first run.
+Install Transformers from source with PyTorch, torchvision, Pillow, and Accelerate. For audio and video files,
+install [TorchCodec](https://github.com/pytorch/torchcodec#installing-torchcodec) 0.5 or newer and its FFmpeg dependencies,
+using a TorchCodec version compatible with your PyTorch installation.
 
-The walkthrough below first preprocesses a message, then optionally loads the model to generate a response, and
-finally saves and reloads both objects. Run the sections in order; the generation and saving sections reuse the
-variables created in preprocessing.
+### Image inputs
 
-### Preprocess images, audio, and video
-
-This example loads only the processor and media, so it can run on a CPU without loading the model weights.
-It uses the same public sample repositories as other Transformers multimodal examples and tests.
+Use [`AutoProcessor`] to load the checkpoint's tokenizer, chat template, and preprocessing configuration.
+The following example runs on CPU and downloads only the processor files and a sample image.
 
 ```python
-from huggingface_hub import hf_hub_download
 from transformers import AutoProcessor
 
 model_id = "XiaomiMiMo/MiMo-V2.6-Flash-RL"
 processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=False)
 
-image_path = hf_hub_download(
-    repo_id="huggingface/documentation-images",
-    filename="pipeline-cat-chonk.jpeg",
-    repo_type="dataset",
-)
-audio_path = hf_hub_download(
-    repo_id="hf-internal-testing/transformers-synthetic-assets",
-    filename="audio/voice_sample.wav",
-    repo_type="dataset",
-)
-video_path = hf_hub_download(
-    repo_id="hf-internal-testing/test-videos",
-    filename="sample_demo_1_320x240.mp4",
-    repo_type="dataset",
-)
-
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "path": image_path},
-            {"type": "audio", "path": audio_path},
-            {"type": "video", "path": video_path},
             {
-                "type": "text",
-                "text": "Describe the image, summarize the audio, and then describe the video.",
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
             },
+            {"type": "text", "text": "Describe this image."},
         ],
     }
 ]
@@ -86,6 +63,7 @@ messages = [
 inputs = processor.apply_chat_template(
     messages,
     add_generation_prompt=True,
+    enable_thinking=False,
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
@@ -93,25 +71,18 @@ inputs = processor.apply_chat_template(
 print({name: tuple(value.shape) for name, value in inputs.items()})
 ```
 
-For a single modality, keep its content block and the text question. `hf_hub_download` returns real local files
-and reuses the Hub cache on subsequent runs. For HTTP(S) resources, use `url` in place of `path`.
-The processor also supports `image_url`, `audio_url`, and `video_url` content types: the corresponding field accepts
-either a URL string or an object containing a `url` field. Normalizing these blocks does not modify the original messages.
-
-The returned inputs include:
-
-- `input_ids` and `attention_mask` for the expanded prompt.
-- `pixel_values` and `image_grid_thw` for images.
-- `pixel_values_videos` and `video_grid_thw` for video frames.
-- `input_features`, `feature_attention_mask`, and `audio_feature_lens` for audio.
-- `audio_segment_offsets` to align audio features with their prompt positions.
-
-The processor loads waveform files at the configured sampling rate. When supplying waveform arrays directly,
-resample them to that rate first. `audio_feature_lens` counts grouped audio tokens, not mel frames.
+For a local image, replace the image block with `{"type": "image", "path": "/path/to/image.jpg"}`.
+These examples set `enable_thinking=False` to request a direct answer. To enable reasoning, remove this option
+and increase `max_new_tokens` to leave room for both reasoning and the final answer.
 
 ### Generate a response
 
-Continue with `model_id`, `processor`, and `inputs` from the previous example:
+Load the model and pass the processor outputs directly to `generate`. This section uses `model_id`, `processor`,
+and `inputs` from the image example. It also works with the audio, video, and mixed inputs shown below.
+
+The original checkpoint loader dequantizes FP8/MXFP4 weights to the requested floating-point dtype. For example,
+MiMo-V2.6-Flash-RL needs approximately 620 GB for BF16 weights, plus activation and cache memory. Use a multi-device
+setup with sufficient memory. Native quantized inference and MTP/speculative decoding are not implemented by this loader.
 
 ```python
 import torch
@@ -125,7 +96,7 @@ model = AutoModelForImageTextToText.from_pretrained(
 )
 inputs = inputs.to(model.get_input_embeddings().weight.device)
 
-generated_ids = model.generate(**inputs, max_new_tokens=256, do_sample=False)
+generated_ids = model.generate(**inputs, max_new_tokens=256, do_sample=False, logits_to_keep=1)
 response = processor.batch_decode(
     generated_ids[:, inputs.input_ids.shape[1]:],
     skip_special_tokens=True,
@@ -133,20 +104,114 @@ response = processor.batch_decode(
 print(response)
 ```
 
-The original checkpoints contain TP-interleaved QKV and FP8/MXFP4 weights. The loading path converts them to
-the requested floating-point dtype in memory and includes the learned audio tokenizer. Loading MiMo-V2.6-Flash-RL
-in BF16 requires approximately 620 GB for weights, plus activation and cache memory, across the available devices.
-This is a dequantized implementation; it does not use a serving framework's quantized inference kernels.
-MTP/speculative-decoding weights are not required for this ordinary generation path.
+The model encodes images, converts audio mel features to codec IDs with its learned audio tokenizer, and fuses
+the resulting features with the text embeddings. During cached generation, media are encoded only during prefill.
 
-Pass processor outputs directly to [`MiMoV2VLForConditionalGeneration.forward`] or `generate`.
-The model converts mel features to codec IDs, encodes all supplied modalities, and replaces the corresponding
-placeholder embeddings. During cached generation, media are encoded only during prefill.
+### Audio and video inputs
+
+The following examples preprocess audio or video independently. They use public fixtures also used by the
+Transformers processor tests. Each tab can be run on CPU without loading model weights.
+
+<hfoptions id="media">
+<hfoption id="Audio">
+
+```python
+from huggingface_hub import hf_hub_download
+from transformers import AutoProcessor
+
+model_id = "XiaomiMiMo/MiMo-V2.6-Flash-RL"
+processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=False)
+audio_path = hf_hub_download(
+    repo_id="hf-internal-testing/dummy-audio-samples",
+    filename="f2641_0_throatclearing.wav",
+    repo_type="dataset",
+)
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "audio", "path": audio_path},
+            {"type": "text", "text": "Describe the sound in this audio."},
+        ],
+    }
+]
+inputs = processor.apply_chat_template(
+    messages, add_generation_prompt=True, enable_thinking=False, tokenize=True, return_dict=True, return_tensors="pt"
+)
+print(inputs.input_features.shape, inputs.audio_feature_lens)
+```
+
+</hfoption>
+<hfoption id="Video">
+
+```python
+from huggingface_hub import hf_hub_download
+from transformers import AutoProcessor
+
+model_id = "XiaomiMiMo/MiMo-V2.6-Flash-RL"
+processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=False)
+video_path = hf_hub_download(
+    repo_id="hf-internal-testing/test-videos",
+    filename="tiny_video_320x240.mp4",
+    repo_type="dataset",
+)
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "video", "path": video_path},
+            {"type": "text", "text": "Describe what happens in this video."},
+        ],
+    }
+]
+inputs = processor.apply_chat_template(
+    messages, add_generation_prompt=True, enable_thinking=False, tokenize=True, return_dict=True, return_tensors="pt"
+)
+print(inputs.pixel_values_videos.shape, inputs.video_grid_thw)
+```
+
+</hfoption>
+</hfoptions>
+
+`hf_hub_download` caches the media locally. Audio files are resampled to the checkpoint's sampling rate. When
+passing waveform arrays directly to the processor, resample them first and pass the matching `sampling_rate`.
+Video content blocks process frames; they do not automatically include the video's soundtrack.
+
+### Mixed inputs
+
+Combine image, audio, video, and text content blocks in the same message. After running the examples above,
+the following uses the downloaded `audio_path` and `video_path`:
+
+```python
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+            },
+            {"type": "audio", "path": audio_path},
+            {"type": "video", "path": video_path},
+            {"type": "text", "text": "Describe the image, the sound, and the video in that order."},
+        ],
+    }
+]
+inputs = processor.apply_chat_template(
+    messages, add_generation_prompt=True, enable_thinking=False, tokenize=True, return_dict=True, return_tensors="pt"
+)
+```
+
+For batches, pass a list of conversations and set `processor_kwargs={"text_kwargs": {"padding": True}}`.
+The processor also accepts `image_url`, `audio_url`, and `video_url` content types with a string or a nested
+`{"url": ...}` value, for example `{"type": "image_url", "image_url": {"url": "https://..."}}`.
+Applying the chat template leaves the original messages unchanged.
 
 ### Save and reload
 
-After running the generation example, save the model and processor to the same directory. The code releases the
-original model before loading the saved copy to avoid keeping two full models in memory.
+Save the model and processor to the same directory after generation. The saved weights use the native
+`mimo_v2_vl` format and include the audio tokenizer. A BF16 export requires approximately as much disk space
+as the in-memory weights. Release the original model before loading the saved copy.
 
 ```python
 import gc
@@ -169,24 +234,10 @@ model = AutoModelForImageTextToText.from_pretrained(
     dtype="auto",
     local_files_only=True,
 )
-inputs = processor.apply_chat_template(
-    messages,
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt",
-).to(model.get_input_embeddings().weight.device)
-
-generated_ids = model.generate(**inputs, max_new_tokens=256, do_sample=False)
-print(processor.batch_decode(generated_ids[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)[0])
 ```
 
-Native saves use `model_type="mimo_v2_vl"` and include the audio tokenizer. Audio codebooks and router correction
-biases retain FP32 precision when loading BF16/FP16 weights. RoPE initialization uses consistent arithmetic across
-initial loading and reloading. Exact generated text can still depend on the device, kernels, and numerical settings.
-
-To save only the processor, call `processor.save_pretrained()` without loading a model. Such a directory can be
-reloaded with [`AutoProcessor`], but it does not contain model weights.
+Preprocess `messages` again and use the generation example with the reloaded objects. To save only the processor,
+call `processor.save_pretrained()`; the resulting directory can be loaded with [`AutoProcessor`] on CPU.
 
 ## Configuration and input notes
 
@@ -194,11 +245,11 @@ reloaded with [`AutoProcessor`], but it does not contain model weights.
   `mimo_v2_vl` when a nonempty vision/audio encoder configuration is present, and `mimo_v2_flash` otherwise.
 - [`AutoProcessor`] recognizes legacy MiMo V2 VL checkpoints whose `preprocessor_config.json` still declares a
   Qwen processor. An explicit `processor_config.json` takes precedence.
-- Native `layer_types` and `sliding_window` are supported. If `layer_types` and `hybrid_layer_pattern` are both
-  supplied, they must agree. `rope_parameters` currently supports default RoPE; other scaling types are rejected.
-- The original `generation_config.json` supplies EOS IDs and generation defaults. Inactive sampling settings
-  that conflict with disabled sampling are cleared for native serialization. When enabling sampling, pass the
-  desired options explicitly, such as `do_sample=True, temperature=1.0, top_p=0.95`.
+- The returned model inputs include `pixel_values` / `image_grid_thw` for images, `pixel_values_videos` /
+  `video_grid_thw` for videos, and `input_features` / `feature_attention_mask` for waveforms. `audio_feature_lens`
+  counts grouped audio tokens, and `audio_segment_offsets` aligns them with the prompt.
+- The original `generation_config.json` supplies EOS IDs and generation defaults. When enabling sampling, pass
+  the desired options explicitly, such as `do_sample=True, temperature=1.0, top_p=0.95`.
 - Pre-tokenized audio uses `is_tokenized=True` with `(time, codec_channels)` integer arrays. The native model accepts
   the resulting `input_audio_codes` directly. `prepare_model_inputs()` is an optional adapter for legacy input names.
 - Decoded video arrays require `video_metadata` containing the source frame rate and frame indices. Use
@@ -206,9 +257,6 @@ reloaded with [`AutoProcessor`], but it does not contain model weights.
 - Video blocks process frames by default. To interleave a video's soundtrack, provide the decoded track through
   `audio` in a direct processor call and set `use_audio_in_video=True`. Audio inputs follow placeholder order.
   `video_audio_interleave_length` selects per-grid (`0`), video-then-audio (`-1`), or positive-duration grouping.
-- `audio_feature_lens` accounts for the learned tokenizer's `audio_segment_size`. Padding frames are excluded before
-  audio segmentation. For training templates with Jinja `generation` blocks, `return_assistant_tokens_mask=True`
-  uses replacement offsets to keep assistant spans aligned after multimodal placeholder expansion.
 
 ## MiMoV2VLConfig
 

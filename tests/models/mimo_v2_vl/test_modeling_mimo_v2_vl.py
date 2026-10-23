@@ -254,15 +254,43 @@ class MiMoV2VLModelTest(unittest.TestCase):
         self.assertTrue(torch.isfinite(gradient).all())
         self.assertGreater(gradient.abs().sum(), 0)
 
-    def test_save_load_native_auto_model(self):
-        inputs = self.image_inputs()
+    @parameterized.expand([("text",), ("image",), ("audio",), ("video",), ("mixed",)])
+    def test_save_load_native_auto_model(self, modality):
+        inputs = {"input_ids": torch.tensor([[2, 7, 8]])}
+        if modality in ("image", "mixed"):
+            inputs.update(self.image_inputs())
+        if modality in ("video", "mixed"):
+            inputs.update(
+                pixel_values_videos=torch.randn(8, 24),
+                video_grid_thw=torch.tensor([[2, 2, 2]]),
+                input_ids=torch.tensor([[2, 5, 5, 8]]),
+            )
+        if modality in ("audio", "mixed"):
+            inputs.update(
+                input_features=torch.randn(1, 9, 4),
+                feature_attention_mask=torch.ones(1, 9, dtype=torch.long),
+                audio_feature_lens=torch.tensor([2]),
+                input_ids=torch.tensor([[2, 6, 6, 8]]),
+            )
+        if modality == "mixed":
+            inputs["input_ids"] = torch.tensor([[2, 4, 5, 5, 6, 6, 8]])
+            inputs["audio_segment_offsets"] = torch.tensor([[0, 0, 2]])
+
+        generation_kwargs = {"max_new_tokens": 2, "min_new_tokens": 2, "do_sample": False}
+        with torch.no_grad():
+            expected_logits = self.model(**inputs).logits
+            expected_ids = self.model.generate(**inputs, **generation_kwargs)
         with tempfile.TemporaryDirectory() as directory:
             self.model.save_pretrained(directory)
-            config = AutoConfig.from_pretrained(directory)
+            config = AutoConfig.from_pretrained(directory, local_files_only=True)
             self.assertIsInstance(config, MiMoV2VLConfig)
-            restored = AutoModelForImageTextToText.from_pretrained(directory).eval()
+            restored = AutoModelForImageTextToText.from_pretrained(directory, local_files_only=True).eval()
+            self.assertIsInstance(restored, MiMoV2VLForConditionalGeneration)
             with torch.no_grad():
-                torch.testing.assert_close(self.model(**inputs).logits, restored(**inputs).logits)
+                torch.testing.assert_close(expected_logits, restored(**inputs).logits, rtol=0, atol=0)
+                torch.testing.assert_close(
+                    expected_ids, restored.generate(**inputs, **generation_kwargs), rtol=0, atol=0
+                )
 
     def test_sink_is_extra_softmax_mass(self):
         query = torch.zeros(1, 2, 1, 4)
