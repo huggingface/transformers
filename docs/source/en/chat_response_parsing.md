@@ -21,7 +21,7 @@ a [reasoning model](https://huggingface.co/reasoning-course) might emit a chain 
 while a [tool calling](./chat_extras) model might emit function names and arguments.
 
 The problem with structured outputs, though, is that LLMs outputs are not inherently structured. LLM APIs usually
-accept and return message dicts, with keys like `role` and `content` and `thinking`, but internally, LLMs actually 
+accept and return message dicts, with keys like `role` and `content` and `reasoning_content`, but internally, LLMs actually 
 just continue a single sequence of tokens. We use a glue layer to connect the user-facing API to the actual token
 stream of the model. To turn inputs into a token stream, we use [`chat_templates`](./chat_templating), which are covered in other
 documents. This document is about the other half of that glue layer: **Response templates**, the system for turning the
@@ -48,7 +48,7 @@ input_ids = tokenizer.apply_chat_template(messages, add_generation_prompt=True, 
 outputs = model.generate(input_ids, max_new_tokens=1024)[0, input_ids.shape[1]:]
 out_text = tokenizer.decode(outputs)
 print(tokenizer.parse_response(out_text, prefix=input_ids[0]))
-# Outputs a structured dict: {"role": "assistant", "thinking": "...", "content": "..."}
+# Outputs a structured dict: {"role": "assistant", "reasoning_content": "...", "content": "..."}
 ```
 
 When a tokenizer has a `response_template`, the `parse_response` method will cleanly turn an output message into a
@@ -107,7 +107,7 @@ Each streamed parsing event is a dict with a `type` key. There are three kinds:
 
 | Type           | Description                                                                         | Contents                                                                                                                        |
 |----------------|-------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| `region_open`  | Indicates that the model has started a new region, such as `content` or `thinking`. | `field` (str): the field name.                                                                                                  |
+| `region_open`  | Indicates that the model has started a new region, such as `content` or `reasoning_content`. | `field` (str): the field name.                                                                                                  |
 | `region_chunk` | A chunk of text for the current region.                                             | `field` (str): the field name. `text` (str): the new chunk. `dirty` (bool): `True` if the chunk is raw text that needs parsing. |
 | `region_close` | Indicates that a region has finished, and that key is now finalized.                | `field` (str): the field name. `value` (any): the fully parsed value for the region                                             |
 
@@ -129,17 +129,17 @@ sequence and their parsed value lands in the output dict, exactly as if the mode
 A typical event stream might look like this:
 
 ```python
-{"type": "region_open",  "field": "thinking"}
-{"type": "region_chunk", "field": "thinking", "text": "I should ", "dirty": False}
-{"type": "region_chunk", "field": "thinking", "text": "greet the user", "dirty": False}
-{"type": "region_close", "field": "thinking", "value": "I should greet the user"}
+{"type": "region_open",  "field": "reasoning_content"}
+{"type": "region_chunk", "field": "reasoning_content", "text": "I should ", "dirty": False}
+{"type": "region_chunk", "field": "reasoning_content", "text": "greet the user", "dirty": False}
+{"type": "region_close", "field": "reasoning_content", "value": "I should greet the user"}
 {"type": "region_open",  "field": "tool_calls"}
 {"type": "region_chunk", "field": "tool_calls", "text": '{"name": "greet_user", ', "dirty": True}
 {"type": "region_chunk", "field": "tool_calls", "text": '"arguments": {"greeting": "Hi!"}}', "dirty": True}
 {"type": "region_close", "field": "tool_calls", "value": {"type": "function", "function": {"name": "greet_user", "arguments": {"greeting": "Hi!"}}}}
 ```
 
-Note how `thinking` is emitted with `dirty=False`, because fields like `thinking` and `content` are usually just raw 
+Note how `reasoning_content` is emitted with `dirty=False`, because fields like `reasoning_content` and `content` are usually just raw 
 text. This means you can treat the chunks as valid "partial output". However, `tool_calls` is flagged as `dirty` because
 the raw text needs significant cleanup - tool calls often need to be parsed as JSON or another format and then
 restructured to generate the final tool call dict. As a result, the final output for these regions often looks very,
@@ -169,7 +169,7 @@ When we parse this output in the standard message dict format, it should look li
 ```json
 {
     "role": "assistant",
-    "thinking": "I should greet the user",
+    "reasoning_content": "I should greet the user",
     "tool_calls": [
         {"type": "function", "function": {"name": "greet_user", "arguments": {"greeting": "Hi!"}}}
     ]
@@ -183,7 +183,7 @@ And here's the template that parses it. Don't be intimidated - a lot of it is fa
     "defaults": {"role": "assistant"},
     "start_anchor": "<|im_start|>assistant\n",
     "fields": {
-        "thinking": {"open": "<think>", "close": "</think>", "content": "text"},
+        "reasoning_content": {"open": "<think>", "close": "</think>", "content": "text"},
         "tool_calls": {
             "open": "<tool_call>",
             "close": "</tool_call>",
@@ -204,6 +204,10 @@ output dict. Fields also include information for parsing the text inside their d
 `content` field has no `open`, because in SmolLM (and several other models), it's not marked by a special token. Instead,
 `content` is stored in the space after the other regions, but before the end of the sequence. In our template, we
 represent this as an **implicit / leftover** field that picks up any text not claimed by another region.
+
+Field names should match the keys that the model's chat template reads, so that a parsed message can be appended to
+the chat and rendered again. In particular, name the reasoning field `reasoning_content`. This is the standard key
+for reasoning in message dicts, and the one that almost all chat templates read reasoning from.
 
 In addition to `fields`, the template supports two top-level keys:
 
@@ -255,6 +259,7 @@ Each field supports several keys. We can divide these into two types. First, the
 | `close`         | str or list[str]   | Literal string (or list of strings) that closes this region. Omit to run to end-of-stream.    |
 | `close_pattern` | str (regex)        | Regex alternative to `close`. Named groups become capture variables available to `transform`. |
 | `repeats`       | bool               | If true, the field is a list and each match appends. Default `false`.                         |
+| `join`          | str                | With `repeats`, concatenate matches into one string with this separator instead of a list.    |
 | `optional`      | bool               | If false and the region never matches, we raise an error. Default `true`.                     |
 
 A field should have **either** `open` or `open_pattern`, but not both, and the same is true for `close` and `close_pattern`.
@@ -274,6 +279,20 @@ multiple tool calls simultaneously:
 '<tool_call>{"name": "a", ...}</tool_call><tool_call>{"name": "b", ...}</tool_call>'
 # Returns `"tool_calls": [{... "a" ...}, {... "b" ...}]` in a template with repeats: true
 ```
+
+Not every repeated field should become a list, though. Some models emit several `reasoning_content` or `content`
+blocks in a single message, and the natural output for those is one concatenated string. Setting `join`
+(a separator string, often just `""`) switches a `repeats` field from collecting a list to concatenating
+its matches:
+
+```python
+field = {"reasoning_content": {"open": "<think>", "close": "</think>", "repeats": True, "join": "\n"}}
+input = "<think>first</think>...<think>second</think>"
+# Returns: {"reasoning_content": "first\nsecond"}
+```
+
+Each match of a `join` field must parse to a string. When streaming, `region_close` still carries each
+block's own value; the separator only appears in the final message dict.
 
 Finally, you can specify `optional: false` for fields that must be present. If such a field is missing,
 we raise an error instead of just returning a message dict without it.
@@ -461,6 +480,23 @@ becomes (note `repeats: True` makes `tool_calls` a list):
 A whole-string placeholder like `"{content}"` returns the looked-up value with its type preserved — so above, the
 parsed JSON dict slots in directly as the value of `function`. A placeholder must be the entire string: mixing
 text and placeholders (`"abc {name} def"`) is not permitted. They're not f-strings!
+
+Placeholders can also take a dotted path like `"{content.args}"`, which looks up `content` and then descends into
+the `args` key of the parsed dict. This is how you reshape tool-call bodies whose key names don't match our
+standard format. For example, a model that emits `{"name": ..., "args": ...}` needs `args` renamed to `arguments`:
+
+```python
+"tool_calls": {
+    "open": "<tool>",
+    "close": "</tool>",
+    "repeats": True,
+    "content": "json",
+    "transform": {"type": "function", "function": {"name": "{content.name}", "arguments": "{content.args}"}},
+},
+```
+
+A path that doesn't resolve (here, a tool call whose body lacks `args`) raises an error rather than emitting a
+malformed tool call.
 
 `transform` is quite versatile, which becomes necessary when the model output has a wildly different format
 to our standard API. GPT-OSS is a good example - it embeds the function name in the channel header rather than in

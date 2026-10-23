@@ -900,9 +900,9 @@ class T5ForConditionalGeneration(T5PreTrainedModel, GenerationMixin):
         "decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
     _tied_weights_keys = {
-        "lm_head.weight": "shared.weight",
         "encoder.embed_tokens.weight": "shared.weight",
         "decoder.embed_tokens.weight": "shared.weight",
+        "lm_head.weight": "shared.weight",
     }
 
     def __init__(self, config: T5Config):
@@ -1194,9 +1194,6 @@ class T5ForSequenceClassification(T5PreTrainedModel):
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         if labels is not None:
             use_cache = False
@@ -1316,8 +1313,6 @@ class T5ForTokenClassification(T5PreTrainedModel):
             [What are input IDs?](../glossary#input-ids)
 
             To know more on how to prepare `input_ids` for pretraining take a look a [T5 Training](./t5#training).
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         outputs: BaseModelOutput = self.transformer(
             input_ids,

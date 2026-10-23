@@ -34,9 +34,17 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithCrossAttentions,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    logging,
+    torch_int,
+)
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_kosmos2 import Kosmos2Config, Kosmos2TextConfig, Kosmos2VisionConfig
@@ -615,7 +623,10 @@ class Kosmos2TextSinusoidalPositionalEmbedding(nn.Module):
 
         # expand embeddings if needed
         max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
-        if max_pos > self.weights.size(0):
+        # a compileable cache makes `past_key_values_length` a tensor, which this check cannot branch on.
+        # `is_torchdynamo_compiling()` alone is not enough: tracing with a non-compileable cache keeps it an
+        # int, and the table must still be allowed to grow there.
+        if not (is_torchdynamo_compiling() and torch.is_tensor(max_pos)) and max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, self.weights.shape[-1]).detach()
@@ -1232,9 +1243,8 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1273,7 +1283,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
 
         # appending `False` to `image_embeds_position_mask` (because sequence grows during generation)
         elif image_embeds_position_mask is not None:
-            batch_size, seq_len = inputs_embeds.size()[:-1] if inputs_embeds is not None else attention_mask.size()
+            batch_size, seq_len = inputs_embeds.size()[:-1] if inputs_embeds is not None else input_ids.size()
             mask_len = image_embeds_position_mask.size()[-1]
             image_embeds_position_mask = torch.cat(
                 (
@@ -1422,7 +1432,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Kosmos2Model
 
@@ -1450,7 +1460,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         >>> list(last_hidden_state.shape)
         [1, 91, 2048]
         ```"""
-        vision_model_output = None
+        image_features = None
         projection_attentions = None
         if image_embeds is None:
             if pixel_values is None:
@@ -1481,7 +1491,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
             attentions=outputs.attentions,
             image_embeds=image_embeds,
             projection_attentions=projection_attentions,
-            vision_model_output=vision_model_output,
+            vision_model_output=image_features,
         )
 
 
@@ -1554,7 +1564,7 @@ class Kosmos2ForConditionalGeneration(Kosmos2PreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Kosmos2ForConditionalGeneration
 

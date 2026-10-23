@@ -249,7 +249,7 @@ class UVDocPreTrainedModel(PreTrainedModel):
     """
 
     config: UVDocConfig
-    base_model_prefix = "uvdoc"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
@@ -292,6 +292,7 @@ class UVDocBridge(UVDocPreTrainedModel):
     """
 )
 class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
+    config: UVDocBackboneConfig
     has_attentions = False
     base_model_prefix = "backbone"
 

@@ -20,7 +20,7 @@ import numpy as np
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
-from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_image_processing_common import ImageProcessingTester, ImageProcessingTestMixin
 
 
 if is_torch_available():
@@ -33,49 +33,18 @@ if is_vision_available():
     from transformers.models.glm4v.image_processing_glm4v import smart_resize
 
 
-class Glm4vImageProcessingTester:
-    def __init__(
-        self,
-        parent,
-        batch_size=7,
-        num_channels=3,
-        min_resolution=30,
-        max_resolution=80,
-        do_resize=True,
-        size=None,
-        do_normalize=True,
-        image_mean=[0.5, 0.5, 0.5],
-        image_std=[0.5, 0.5, 0.5],
-        temporal_patch_size=2,
-        patch_size=14,
-        merge_size=2,
-    ):
-        size = size if size is not None else {"longest_edge": 20, "shortest_edge": 10}
-        self.parent = parent
-        self.batch_size = batch_size
-        self.num_channels = num_channels
-        self.min_resolution = min_resolution
-        self.max_resolution = max_resolution
-        self.do_resize = do_resize
-        self.size = size
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.temporal_patch_size = temporal_patch_size
-        self.patch_size = patch_size
-        self.merge_size = merge_size
+class Glm4vImageProcessingTester(ImageProcessingTester):
+    def __init__(self, **kwargs):
+        # Random test inputs kwargs
+        kwargs.setdefault("max_resolution", 80)
 
-    def prepare_image_processor_dict(self):
-        return {
-            "image_mean": self.image_mean,
-            "image_std": self.image_std,
-            "do_normalize": self.do_normalize,
-            "do_resize": self.do_resize,
-            "size": self.size,
-            "temporal_patch_size": self.temporal_patch_size,
-            "patch_size": self.patch_size,
-            "merge_size": self.merge_size,
-        }
+        # Image processor init kwargs
+        kwargs.setdefault("temporal_patch_size", 2)
+        kwargs.setdefault("patch_size", 14)
+        kwargs.setdefault("merge_size", 2)
+        kwargs.setdefault("size", {"longest_edge": 20, "shortest_edge": 10})
+
+        super().__init__(**kwargs)
 
     def expected_output_image_shape(self, images):
         grid_t = 1
@@ -113,47 +82,11 @@ class Glm4vImageProcessingTester:
             seq_len += grid_t * grid_h * grid_w
         return (seq_len, hidden_dim)
 
-    def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
-        return prepare_image_inputs(
-            batch_size=self.batch_size,
-            num_channels=self.num_channels,
-            min_resolution=self.min_resolution,
-            max_resolution=self.max_resolution,
-            equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
-        )
-
 
 @require_torch
 @require_vision
 class Glm4vImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    def setUp(self):
-        super().setUp()
-        self.image_processor_tester = Glm4vImageProcessingTester(self)
-
-    @property
-    def image_processor_dict(self):
-        return self.image_processor_tester.prepare_image_processor_dict()
-
-    def test_image_processor_properties(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            self.assertTrue(hasattr(image_processing, "image_mean"))
-            self.assertTrue(hasattr(image_processing, "image_std"))
-            self.assertTrue(hasattr(image_processing, "do_normalize"))
-            self.assertTrue(hasattr(image_processing, "do_resize"))
-            self.assertTrue(hasattr(image_processing, "size"))
-
-    def test_image_processor_from_dict_with_kwargs(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class.from_dict(self.image_processor_dict)
-            self.assertEqual(image_processor.size, {"shortest_edge": 10, "longest_edge": 20})
-
-            image_processor = image_processing_class.from_dict(
-                self.image_processor_dict, size={"shortest_edge": 42, "longest_edge": 42}
-            )
-            self.assertEqual(image_processor.size, {"shortest_edge": 42, "longest_edge": 42})
+    image_processor_tester_class = Glm4vImageProcessingTester
 
     # batch size is flattened
     def test_call_pil(self):

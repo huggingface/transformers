@@ -25,7 +25,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
-from ...masking_utils import create_bidirectional_mask
+from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -38,7 +38,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_megatron_bert import MegatronBertConfig
@@ -634,10 +634,12 @@ class MegatronBertModel(MegatronBertPreTrainedModel):
             past_key_values_length=past_key_values_length,
         )
 
-        attention_mask = create_bidirectional_mask(
+        mask_function = create_causal_mask if self.config.is_decoder else create_bidirectional_mask
+        attention_mask = mask_function(
             config=self.config,
             inputs_embeds=embedding_output,
             attention_mask=attention_mask,
+            past_key_values=past_key_values if self.config.is_decoder else None,
         )
 
         if self.config.is_decoder and encoder_attention_mask is not None:
@@ -874,9 +876,8 @@ class MegatronBertForCausalLM(MegatronBertPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.cls(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.cls(hidden_states)
 
         loss = None
         if labels is not None:
@@ -941,13 +942,6 @@ class MegatronBertForMaskedLM(MegatronBertPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | MaskedLMOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        """
-
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.bert(
@@ -1104,12 +1098,6 @@ class MegatronBertForSequenceClassification(MegatronBertPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.bert(
@@ -1213,10 +1201,6 @@ class MegatronBertForMultipleChoice(MegatronBertPreTrainedModel):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1292,10 +1276,6 @@ class MegatronBertForTokenClassification(MegatronBertPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.bert(

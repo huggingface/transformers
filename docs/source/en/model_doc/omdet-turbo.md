@@ -106,7 +106,7 @@ image2 = Image.open(BytesIO(requests.get(url2).content)).convert("RGB")
 text_labels2 = ["boat"]
 task2 = "Detect everything that looks like a boat."
 
-url3 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+url3 = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
 image3 = Image.open(BytesIO(requests.get(url3).content)).convert("RGB")
 text_labels3 = ["statue", "trees"]
 task3 = "Focus on the foreground, detect statue and trees."

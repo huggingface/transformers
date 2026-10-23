@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import re
 from itertools import accumulate
 from typing import TYPE_CHECKING, Optional, Union
 
@@ -86,10 +85,6 @@ class ColModernVBertProcessor(ProcessorMixin):
         self.row_col_ids = [
             tokenizer.convert_tokens_to_ids(f"<row_{i + 1}_col_{j + 1}>") for i in range(6) for j in range(6)
         ]
-
-        # This regex matches one or more occurrences of <global-img> tags (optionally surrounded by newline characters)
-        # or <row_x_col_y> tags (where x and y are digits, also optionally surrounded by newline characters).
-        self._regex_to_remove_extra_special_tokens = re.compile(r"(\n?<global-img>\n?|<row_\d+_col_\d+>\n?)+")
 
         tokens_to_add = {
             "additional_special_tokens": [

@@ -20,7 +20,6 @@
 # limitations under the License.
 
 import math
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -35,7 +34,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -61,7 +60,6 @@ from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
     is_flash_attention_requested,
-    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.hub import cached_file
@@ -153,9 +151,6 @@ class Qwen2_5OmniPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Qwen2_5OmniDownSample1d):
             filter_tensor = kaiser_sinc_filter1d(module.cutoff, module.half_width, module.kernel_size)
             init.copy_(module.filter, filter_tensor)
-        elif isinstance(module, Qwen2_5_VisionRotaryEmbedding):
-            inv_freq = 1.0 / (module.theta ** (torch.arange(0, module.dim, 2, dtype=torch.float) / module.dim))
-            init.copy_(module.inv_freq, inv_freq)
 
 
 class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedModel):
@@ -919,7 +914,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         # Post-process: stride-2 average pooling using precomputed indices, then project
         hidden_states = (hidden_states[pool_indices] + hidden_states[pool_indices + 1]) / 2
         hidden_states = self.proj(self.ln_post(hidden_states))
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states, pooler_output=hidden_states)
 
     # Ignore copy
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
@@ -930,48 +925,66 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         output_lengths = (input_lengths - 2) // 2 + 1
         return input_lengths, output_lengths
 
-    def padded_and_mask_function(self, tensor_list, tensor_len, padding_value=0, padding_side="right"):
-        """
-        Pads a sequence of tensors to their maximum length on indicated `padding_side`.
-        Then prepares a mask so that pad tokens are not attended to.
-        """
-        warnings.warn(
-            f"`{self.__class__.__name__}.padded_and_mask_function` is deprecated and will be removed in v5.11. Use `chunk_and_pad_features` and `get_audio_cu_seqlens` helpers instead.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        max_len = tensor_len.max()
-        dim = tensor_list[0].shape[0]
-        padded_tensor = torch.full(
-            size=(len(tensor_list), dim, max_len),
-            fill_value=padding_value,
-            dtype=self.dtype,
-            device=tensor_list[0].device,
-        )
 
-        batch_mask = torch.zeros(
-            (len(tensor_len), max_len),
-            dtype=torch.long,
-            device=padded_tensor.device,
-        )
-        for i, length in enumerate(tensor_len):
-            batch_mask[i, :length] = 1
-            padded_tensor[i, :, :length] = tensor_list[i]
+class Qwen2_5OmniVisionRotaryEmbedding(nn.Module):
+    """
+    Simple axial 2D rope with same freqs used for H and W grids. The freqs are
+    pre-computed using `head-dim//4` which is later used to concat H and W positions.
+    The final angles rotate over the whole head dim, no partial rotation involved.
+    """
 
-        feature_lens_after_cnn = (tensor_len - 1) // 2 + 1
-        max_len_after_cnn = feature_lens_after_cnn.max()
-        batch_mask_after_cnn = torch.zeros(
-            (len(tensor_len), max_len_after_cnn),
-            dtype=torch.long,
-            device=padded_tensor.device,
-        )
-        for i, length in enumerate(feature_lens_after_cnn):
-            batch_mask_after_cnn[i, :length] = 1
-        return (
-            padded_tensor,
-            batch_mask.unsqueeze(1),
-            batch_mask_after_cnn.bool(),
-        )
+    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, device=None):
+        super().__init__()
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_axial_rope_parameters
+        if self.rope_type != "axial":
+            raise ValueError(f"{self.__class__.__name__} supports only axial rope, but requested {self.rope_type}")
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_axial_rope_parameters(
+        config: Qwen2_5OmniVisionEncoderConfig, device=None, **kwargs
+    ) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        spatial_dim = dim // 2
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
+        return inv_freq.to(device), attention_factor
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
+
+        cos = self.recomposition_frequencies(cos)
+        sin = self.recomposition_frequencies(sin)
+        return cos, sin
+
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq_h, freq_w = freq[:, 0], freq[:, 1]
+        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
+        return torch.cat([freq_hw, freq_hw], dim=-1)
 
 
 def rotate_half(x):
@@ -981,16 +994,18 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
-    orig_dtype = tensor.dtype
-    tensor = tensor.float()
-    cos = freqs.cos()
-    sin = freqs.sin()
-    cos = cos.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
-    sin = sin.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
-    output = (tensor * cos) + (rotate_half(tensor) * sin)
-    output = output.to(orig_dtype)
-    return output
+def apply_rotary_pos_emb_vision(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    orig_q_dtype = q.dtype
+    orig_k_dtype = k.dtype
+    q, k = q.float(), k.float()
+    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = q_embed.to(orig_q_dtype)
+    k_embed = k_embed.to(orig_k_dtype)
+    return q_embed, k_embed
 
 
 class Qwen2_5OmniVisionAttention(nn.Module):
@@ -1023,8 +1038,8 @@ class Qwen2_5OmniVisionAttention(nn.Module):
         key_states = self.k(hidden_states).reshape(seq_length, self.num_heads, -1)
         value_states = self.v(hidden_states).reshape(seq_length, self.num_heads, -1)
 
-        query_states = apply_rotary_pos_emb_vision(query_states.unsqueeze(0), position_embeddings).squeeze(0)
-        key_states = apply_rotary_pos_emb_vision(key_states.unsqueeze(0), position_embeddings).squeeze(0)
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
 
         query_states = query_states.transpose(0, 1).unsqueeze(0)
         key_states = key_states.transpose(0, 1).unsqueeze(0)
@@ -1145,18 +1160,6 @@ class Qwen2_5OmniVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-class Qwen2_5_VisionRotaryEmbedding(nn.Module):
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        self.dim = dim
-        self.theta = theta
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
-
-    def forward(self, position_ids: torch.Tensor) -> torch.Tensor:
-        return (position_ids.unsqueeze(-1) * self.inv_freq).flatten(1)
-
-
 class Qwen2_5_VisionPatchEmbed(nn.Module):
     def __init__(
         self,
@@ -1224,8 +1227,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
             embed_dim=config.hidden_size,
         )
 
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = Qwen2_5_VisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Qwen2_5OmniVisionRotaryEmbedding(config)
         self.blocks = nn.ModuleList([Qwen2_5OmniVisionBlock(config) for _ in range(config.depth)])
         self.merger = Qwen2_5OmniPatchMerger(
             dim=config.out_hidden_size,
@@ -1236,29 +1238,11 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
 
         self.post_init()
 
-    def rot_pos_emb(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.rot_pos_emb` is deprecated and will be removed in v5.11. Use `get_vision_position_ids` from `transformers.vision_utils` and apply the rotary embedding module.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        position_ids = get_vision_position_ids(grid_thw, self.spatial_merge_size)
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        return rotary_pos_emb
-
-    def get_window_index(self, grid_thw):
-        warnings.warn(
-            f"`{self.__class__.__name__}.get_window_index` is deprecated and will be removed in v5.11. Use `get_vision_window_index` from `transformers.vision_utils` instead.",
-            FutureWarning,
-            stacklevel=2,
-        )
-        window_index, cu_window_seqlens = get_vision_window_index(
-            grid_thw,
-            spatial_merge_size=self.spatial_merge_size,
-            window_size=self.window_size,
-            patch_size=self.patch_size,
-        )
-        return window_index, cu_window_seqlens.tolist()
+    def permute_input_for_window_attn(self, input_tensor: torch.Tensor, window_index: torch.Tensor, seq_len: int):
+        input_tensor = input_tensor.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
+        input_tensor = input_tensor[window_index, :, :]
+        input_tensor = input_tensor.reshape(seq_len, -1)
+        return input_tensor
 
     @merge_with_config_defaults
     @capture_outputs
@@ -1290,16 +1274,14 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
 
         hidden_states = self.patch_embed(hidden_states)
 
-        seq_len, _ = hidden_states.size()
         reverse_indices = torch.argsort(window_index)
-        hidden_states = hidden_states.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
-        hidden_states = hidden_states[window_index, :, :]
-        hidden_states = hidden_states.reshape(seq_len, -1)
+        seq_len, _ = hidden_states.size()
+        hidden_states = self.permute_input_for_window_attn(hidden_states, window_index, seq_len=seq_len)
 
-        rotary_pos_emb = self.rotary_pos_emb(position_ids)
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len // self.spatial_merge_unit, self.spatial_merge_unit, -1)
-        rotary_pos_emb = rotary_pos_emb[window_index, :, :]
-        rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
+        position_embeddings = self.rotary_pos_emb(hidden_states, position_ids)
+        position_embeddings = tuple(
+            self.permute_input_for_window_attn(freq, window_index, seq_len=seq_len) for freq in position_embeddings
+        )
 
         # Modification here
         for layer_num, blk in enumerate(self.blocks):
@@ -1314,7 +1296,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
                 hidden_states,
                 cu_seqlens=cu_seqlens_now,
                 max_seqlen=max_seqlen_now,
-                position_embeddings=rotary_pos_emb,
+                position_embeddings=position_embeddings,
                 **kwargs,
             )
 
@@ -1328,8 +1310,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
 
 
 class Qwen2_5OmniRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Qwen2_5OmniConfig, device=None):
+    def __init__(self, config: Qwen2_5OmniConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -1340,16 +1321,14 @@ class Qwen2_5OmniRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+        self.mrope_section = config.rope_parameters.get("mrope_section", [16, 24, 24])
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: Qwen2_5OmniConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: Qwen2_5OmniConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -1365,47 +1344,39 @@ class Qwen2_5OmniRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
-    # Ignore copy
+    @torch.no_grad()
+    @dynamic_rope_update
     def forward(self, x, position_ids):
         # In contrast to other models, Qwen2_5Omni has different position ids for the grids
-        # So we expand the inv_freq to shape (3, ...)
-        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
-        position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
+        # So position_ids is broadcast to (3, bs, positions) and freqs has shape (3, bs, positions, dim // 2)
+        position_ids = position_ids.expand(3, -1, -1)
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
+        sin = self.recomposition_frequencies(sin)
+        cos = self.recomposition_frequencies(cos)
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
+    def recomposition_frequencies(self, freq):
+        """
+        Recompose the frequencies into the final spatial layout used per each grid.
+        """
+        freq = torch.cat([m[i % 3] for i, m in enumerate(freq.split(self.mrope_section, dim=-1))], dim=-1)
+        return torch.cat((freq, freq), dim=-1)
 
-def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding with Multimodal Sections to the query and key tensors (https://qwenlm.github.io/blog/qwen2-vl/).
 
-    Explanation:
-        Multimodal 3D rotary position embedding is an extension to 1D rotary position embedding. The input embedding
-        sequence contains vision (images / videos) embedding and text embedding or just contains text embedding. For
-        vision embedding part, we apply rotary position embedding on temporal, height and width dimension separately.
-        Here we split the channel dimension to 3 chunks for the temporal, height and width rotary position embedding.
-        For text embedding part, we just apply 1D rotary position embedding. The three rotary position index (temporal,
-        height and width) of text embedding is always the same, so the text embedding rotary position embedding has no
-        difference with modern LLMs.
+@use_kernel_forward_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
         q (`torch.Tensor`): The query tensor.
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`):
-            The position indices of the tokens corresponding to the query and key tensors. For example, this can be
-            used to pass offsetted position ids when working with a KV-cache.
-        mrope_section(`List(int)`):
-            Multimodal rope section is for channel dimension of temporal, height and width in rope calculation.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -1416,19 +1387,14 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    mrope_section = mrope_section * 2
-    cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-    sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Qwen2_5OmniAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
@@ -1469,8 +1435,6 @@ class Qwen2_5OmniAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
@@ -1485,9 +1449,7 @@ class Qwen2_5OmniAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_multimodal_rotary_pos_emb(
-            query_states, key_states, cos, sin, self.config.rope_parameters["mrope_section"]
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
@@ -1717,33 +1679,20 @@ class Qwen2_5OmniThinkerTextModel(Qwen2_5OmniPreTrainedModel):
     The Qwen2.5OmniThinker model which consists of an audio backbone and a language model.
     """
 )
-class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
+class Qwen2_5OmniThinkerModel(Qwen2_5OmniPreTrainedModelForConditionalGeneration):
     config: Qwen2_5OmniThinkerConfig
-    base_model_prefix = "thinker"
-    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _keys_to_ignore_on_load_unexpected = [r"^talker", r"^token2wav"]
     _no_split_modules = ["Qwen2_5OmniAudioEncoder", "Qwen2_5OmniVisionEncoder"]
+    _can_compile_fullgraph = True
 
     def __init__(self, config: Qwen2_5OmniThinkerConfig):
         super().__init__(config)
         self.audio_tower = Qwen2_5OmniAudioEncoder._from_config(config.audio_config)
         self.visual = Qwen2_5OmniVisionEncoder._from_config(config.vision_config)
-        self.vocab_size = config.text_config.vocab_size
-        self.model = Qwen2_5OmniThinkerTextModel._from_config(config.text_config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.language_model = Qwen2_5OmniThinkerTextModel._from_config(config.text_config)
         self.spatial_merge_size = config.vision_config.spatial_merge_size
         self.rope_deltas = None
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
-    def get_decoder(self):
-        # `base_model_prefix = "thinker"` means `self.base_model` falls back to `self`, so
-        # the default `get_decoder` can't find the LLM. The text model lives on `self.model`.
-        return self.model
 
     @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
@@ -1754,17 +1703,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = list(video_embeds)
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
         return vision_outputs
 
     @accepts_precomputed_kwargs(modality="image")
@@ -1776,19 +1718,13 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = list(image_embeds)
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="audio")
     @can_return_tuple
     @auto_docstring
     def get_audio_features(
@@ -1874,6 +1810,224 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         special_audio_mask = special_audio_mask.unsqueeze(-1).to(inputs_embeds.device)
         return special_image_mask, special_video_mask, special_audio_mask
 
+    def compute_3d_position_ids(
+        self,
+        input_ids: torch.Tensor | None,
+        image_grid_thw: torch.Tensor | None,
+        video_grid_thw: torch.Tensor | None,
+        inputs_embeds: torch.Tensor | None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None,
+        use_audio_in_video: bool | None = None,
+        audio_feature_lengths: torch.LongTensor | None = None,
+        video_second_per_grid: torch.LongTensor | None = None,
+    ) -> torch.Tensor | None:
+        past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
+        can_compute_mrope = input_ids is not None and attention_mask is not None
+
+        if can_compute_mrope and (self.rope_deltas is None or past_key_values_length == 0):
+            position_ids, rope_deltas = self.get_rope_index(
+                input_ids,
+                image_grid_thw,
+                video_grid_thw,
+                attention_mask,
+                use_audio_in_video or False,
+                audio_feature_lengths,
+                video_second_per_grid,
+            )
+            self.rope_deltas = rope_deltas
+        # Reuse the cached rope-deltas while decoding, or when only `inputs_embeds` is given. Recomputing above
+        # instead avoids stale deltas (e.g. a training forward right after generation).
+        elif self.rope_deltas is not None and (past_key_values_length > 0 or input_ids is None):
+            batch_size, seq_length = inputs_embeds.shape[:2]
+            if attention_mask is not None:
+                position_ids = attention_mask.long().cumsum(-1) - 1
+                position_ids = position_ids.masked_fill(attention_mask == 0, 0)
+                position_ids = position_ids.view(1, batch_size, -1).repeat(3, 1, 1).to(inputs_embeds.device)
+            else:
+                position_ids = torch.arange(past_key_values_length, past_key_values_length + seq_length)
+                position_ids = position_ids.view(1, 1, -1).expand(3, batch_size, -1).to(inputs_embeds.device)
+            delta = self.rope_deltas.repeat_interleave(batch_size // self.rope_deltas.shape[0], dim=0)
+            position_ids = position_ids + delta.to(device=position_ids.device)
+        else:
+            # Can't build correct 3D positions. Let the model infer it
+            position_ids = None
+        return position_ids
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        feature_attention_mask: torch.Tensor | None = None,
+        audio_feature_lengths: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        use_audio_in_video: bool | None = None,
+        video_second_per_grid: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
+        use_audio_in_video (`bool`, *optional*):
+            Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
+        video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
+            Number of seconds per grid for each video, used for temporal feature mapping.
+        """
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
+        if inputs_embeds is None:
+            # 1. Extract the input embeddings
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        # 2. Merge text , audios , image and video
+        if input_features is not None:
+            audio_features = self.get_audio_features(
+                input_features, feature_attention_mask, audio_feature_lengths, return_dict=True, **kwargs
+            ).last_hidden_state
+            audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
+            _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
+            inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
+
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"]: BaseModelOutputWithPooling = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"]: BaseModelOutputWithPooling = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0)
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            image_mask, _, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0)
+            video_embeds = video_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            _, video_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        if feature_attention_mask is not None:
+            audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
+        else:
+            audio_feature_lengths = None
+
+        if position_ids is None:
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                use_audio_in_video=use_audio_in_video,
+                audio_feature_lengths=audio_feature_lengths,
+                video_second_per_grid=video_second_per_grid,
+            )
+
+        outputs = self.language_model(
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            return_dict=True,
+            **kwargs,
+        )
+
+        return BaseModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForConditionalGeneration, GenerationMixin):
+    config: Qwen2_5OmniThinkerConfig
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _can_compile_fullgraph = True
+
+    def __init__(self, config: Qwen2_5OmniThinkerConfig):
+        super().__init__(config)
+        self.vocab_size = config.text_config.vocab_size
+        self.model = Qwen2_5OmniThinkerModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.spatial_merge_size = config.vision_config.spatial_merge_size
+        self.post_init()
+
+    @auto_docstring
+    def get_video_features(
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        """
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        """
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
+
+    @auto_docstring
+    def get_audio_features(
+        self,
+        input_features: torch.FloatTensor,
+        feature_attention_mask: torch.LongTensor | None = None,
+        audio_feature_lengths: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        input_features (`torch.FloatTensor`):
+            The tensors corresponding to the input audios.
+        feature_attention_mask (`torch.LongTensor`, *optional*):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
+        """
+        return self.model.get_audio_features(input_features, feature_attention_mask, audio_feature_lengths, **kwargs)
+
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1894,13 +2048,10 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         use_cache: bool | None = None,
         use_audio_in_video: bool | None = None,
         video_second_per_grid: torch.LongTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen2_5OmniThinkerCausalLMOutputWithPast:
         r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
 
@@ -1908,10 +2059,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             - 0 for tokens that are **masked**.
         audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
             The length of feature shape of each audio in LLM.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
         use_audio_in_video (`bool`, *optional*):
             Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
         video_second_per_grid (`torch.LongTensor` of shape `(num_videos)`, *optional*):
@@ -1920,10 +2067,6 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         Example:
 
         ```python
-        >>> from io import BytesIO
-        >>> from urllib.request import urlopen
-        >>> import librosa
-        >>> from qwen_vl_utils import process_vision_info
         >>> from transformers import Qwen2_5OmniProcessor, Qwen2_5OmniThinkerForConditionalGeneration
 
         >>> thinker = Qwen2_5OmniThinkerForConditionalGeneration.from_pretrained("Qwen/Qwen2.5-Omni-7B")
@@ -1932,92 +2075,42 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         >>> conversations = [
         >>>         {'role': 'system', 'content': 'You are a helpful voice chat bot, and please respond to me in a casual conversation manner using random voice.'},
         >>>         {"role": "user", "content": [
-        >>>             {"type": "image", "image_url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
-        >>>             {"type": "audio", "audio_url": "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"},
+        >>>             {"type": "image", "image": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+        >>>             {"type": "audio", "audio": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"},
         >>>         ]},
         >>> ]
 
-        >>> text = processor.apply_chat_template(conversation, add_generation_prompt=True, tokenize=False)
-        >>> audios = [ librosa.load(BytesIO(urlopen( conversations[1]['content'][1]['audio_url'] ).read()), sr=self.processor.feature_extractor.sampling_rate) ]
-        >>> images, videos = process_vision_info(conversations)
-        >>> inputs = processor(text=text, audio=audios, images=images, videos=videos, return_tensors="pt", padding=True)
+        >>> inputs = processor.apply_chat_template(
+            conversations,
+            tokenize=True,
+            add_generation_prompt=True,
+            return_dict=True,
+            return_tensors="pt"
+        )
 
         >>> # Generate
-        >>> inputs['use_audio_in_video'] = `True` or `False`
         >>> generation = thinker.generate(**inputs, max_new_tokens=2048)
         >>> generate_ids = generation[:, inputs.input_ids.size(1):]
 
         >>> response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         ```"""
-
-        if inputs_embeds is None:
-            # 1. Extract the input embeddings
-            inputs_embeds = self.get_input_embeddings()(input_ids)
-
-        # 2. Merge text , audios , image and video
-        if input_features is not None:
-            audio_features = self.get_audio_features(
-                input_features, feature_attention_mask, audio_feature_lengths, return_dict=True, **kwargs
-            ).last_hidden_state
-            audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            _, _, audio_mask = self.get_placeholder_mask(input_ids, inputs_embeds=inputs_embeds)
-            inputs_embeds = inputs_embeds.masked_scatter(audio_mask, audio_features)
-
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(
-                pixel_values, image_grid_thw, return_dict=True, **kwargs
-            ).pooler_output
-            image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            image_mask, _, _ = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
-            )
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
-
-        if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
-            ).pooler_output
-            video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
-            _, video_mask, _ = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
-            )
-            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
-
-        if feature_attention_mask is not None:
-            audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)
-        else:
-            audio_feature_lengths = None
-
-        if attention_mask is not None and position_ids is None:
-            past_key_values_length = 0 if past_key_values is None else past_key_values.get_seq_length()
-            if past_key_values_length == 0 or self.rope_deltas is None:
-                delta0 = (1 - attention_mask).sum(dim=-1).unsqueeze(1)
-                position_ids, rope_deltas = self.get_rope_index(
-                    input_ids,
-                    image_grid_thw,
-                    video_grid_thw,
-                    attention_mask,
-                    use_audio_in_video,
-                    audio_feature_lengths,
-                    video_second_per_grid,
-                )
-                rope_deltas = rope_deltas - delta0
-                self.rope_deltas = rope_deltas
-            else:
-                batch_size, seq_length = input_ids.shape
-                delta = (past_key_values_length + self.rope_deltas).to(input_ids.device)
-                position_ids = torch.arange(seq_length, device=input_ids.device)
-                position_ids = position_ids.view(1, -1).expand(batch_size, -1)
-                position_ids = position_ids.add(delta)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
-
-        outputs = self.model(
+        outputs: BaseModelOutputWithPast = self.model(
+            input_ids=input_ids,
+            input_features=input_features,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
             attention_mask=attention_mask,
+            feature_attention_mask=feature_attention_mask,
+            audio_feature_lengths=audio_feature_lengths,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
-            return_dict=True,
+            use_audio_in_video=use_audio_in_video,
+            video_second_per_grid=video_second_per_grid,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
@@ -2027,7 +2120,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         loss = None
         if labels is not None:
             loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size
+                logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size, **kwargs
             )
 
         return Qwen2_5OmniThinkerCausalLMOutputWithPast(
@@ -2036,13 +2129,53 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
+            rope_deltas=self.model.rope_deltas,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, inputs_embeds=None, **kwargs):
-        model_inputs = super().prepare_inputs_for_generation(input_ids, inputs_embeds=inputs_embeds, **kwargs)
-        model_inputs["position_ids"] = None
-        return model_inputs
+    def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
+        # Overwritten -- requires 3D position ids
+
+        text_positions = super()._prepare_position_ids_for_generation(inputs_tensor, model_kwargs)
+
+        # Early exit in case we are continuing generation from past kv
+        past_length = 0
+        if (cache := model_kwargs.get("past_key_values")) is not None:
+            past_length = cache.get_seq_length()
+        if past_length != 0 and self.model.rope_deltas is not None:
+            position_ids = text_positions[None, ...] + self.model.rope_deltas
+            return position_ids
+
+        # Otherwise compute 3d position ids for audio/vision tokens and concat with text position ids
+        if "input_ids" in model_kwargs and model_kwargs["input_ids"].shape[1] > 0:
+            inputs_tensor = model_kwargs["input_ids"]
+
+        is_input_ids = len(inputs_tensor.shape) == 2 and inputs_tensor.dtype in [torch.int, torch.long]
+        attention_mask = model_kwargs.get("attention_mask")
+        if is_input_ids and attention_mask is not None:
+            audio_feature_lengths = model_kwargs.get("audio_feature_lengths")
+            if (feature_attention_mask := model_kwargs.get("feature_attention_mask")) is not None:
+                audio_feature_lengths = feature_attention_mask.sum(dim=-1)
+            vision_positions, rope_deltas = self.get_rope_index(
+                inputs_tensor,
+                image_grid_thw=model_kwargs.get("image_grid_thw"),
+                video_grid_thw=model_kwargs.get("video_grid_thw"),
+                attention_mask=attention_mask,
+                use_audio_in_video=model_kwargs.get("use_audio_in_video") or False,
+                audio_seqlens=audio_feature_lengths,
+                second_per_grids=model_kwargs.get("video_second_per_grid"),
+            )
+            self.model.rope_deltas = rope_deltas
+        else:
+            vision_positions = text_positions.unsqueeze(0).expand(3, -1, -1)
+            self.model.rope_deltas = torch.zeros(
+                inputs_tensor.shape[0], 1, dtype=torch.long, device=inputs_tensor.device
+            )
+
+        # Concatenate "text + vision" positions into [4, bs, seq-len]
+        text_positions = text_positions[None, ...]
+        position_ids = torch.cat([text_positions, vision_positions], dim=0)
+
+        return position_ids
 
 
 ############################
@@ -2241,10 +2374,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
             Hidden states from the thinker model's output that represent the text reply part to be processed.
         input_text_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Input token IDs for text-only content, used for position calculation in multimodal contexts.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         use_audio_in_video (`bool`, *optional*):
             Whether or not use audio track in video, should same as the parameter in `process_audio_info`.
         audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
@@ -2264,7 +2393,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
         >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B")
 
         >>> prompt = "<|audio_bos|><|AUDIO|><|audio_eos|>Generate the caption in English:"
-        >>> url = "https://qianwen-res.oss-cn-beijing.aliyuncs.com/Qwen2-Audio/audio/glass-breaking-151256.mp3"
+        >>> url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/audio/glass_breaking.mp3"
         >>> audio, _ = librosa.load(BytesIO(urlopen(url).read()), sr=self.processor.feature_extractor.sampling_rate)
 
         >>> inputs = processor(text=prompt, audio=audio, return_tensors="pt")
@@ -2375,8 +2504,7 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
 
 
 class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: Qwen2_5OmniDiTConfig, device=None):
+    def __init__(self, config: Qwen2_5OmniDiTConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -2387,16 +2515,13 @@ class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: Qwen2_5OmniDiTConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: Qwen2_5OmniDiTConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -2412,23 +2537,15 @@ class Qwen2_5OmniDiTRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -2841,32 +2958,6 @@ class DiTMLP(nn.Module):
         for layer in self.ff:
             hidden_states = layer(hidden_states)
         return hidden_states
-
-
-@use_kernel_forward_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
 
 
 def deinterleave_head_dim(x: torch.Tensor) -> torch.Tensor:
@@ -4001,6 +4092,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
 __all__ = [
     "Qwen2_5OmniForConditionalGeneration",
     "Qwen2_5OmniThinkerTextModel",
+    "Qwen2_5OmniThinkerModel",
     "Qwen2_5OmniThinkerForConditionalGeneration",
     "Qwen2_5OmniTalkerModel",
     "Qwen2_5OmniTalkerForConditionalGeneration",

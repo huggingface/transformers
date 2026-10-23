@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 The pipelines are a great and easy way to use models for inference. These pipelines are objects that abstract most of
 the complex code from the library, offering a simple API dedicated to several tasks, including Named Entity
 Recognition, Masked Language Modeling, Sentiment Analysis, Feature Extraction and Question Answering. See the
-[task summary](../task_summary) for examples of use.
+[task list](https://huggingface.co/tasks) for examples of use.
 
 There are two categories of pipeline abstractions to be aware about:
 
@@ -68,7 +68,7 @@ from transformers.pipelines.pt_utils import KeyDataset
 from tqdm.auto import tqdm
 
 pipe = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h", device=0)
-dataset = datasets.load_dataset("superb", name="asr", split="test")
+dataset = datasets.load_dataset("s3prl/superb", name="asr", split="test")
 
 # KeyDataset (only *pt*) will simply return the item in the dict returned by the dataset item
 # as we're not interested in the *target* part of the dataset. For sentence pair use KeyPairDataset

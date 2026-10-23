@@ -40,7 +40,7 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -1032,6 +1032,7 @@ class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
 @auto_docstring
 class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: PPFormulaNetConfig):
         super().__init__(config)
@@ -1066,7 +1067,7 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
         ```python
         >>> from io import BytesIO
 
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, PPFormulaNetForConditionalGeneration
 
@@ -1074,7 +1075,7 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
         >>> model = PPFormulaNetForConditionalGeneration.from_pretrained(model_path, device_map="auto")
         >>> processor = AutoProcessor.from_pretrained(model_path)
 
-        >>> image_url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_formula_rec_001.png"
+        >>> image_url = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_formula_rec_001.png"
         >>> image = Image.open(BytesIO(httpx.get(image_url).content)).convert("RGB")
         >>> inputs = processor(images=image, return_tensors="pt").to(model.device)
         >>> outputs = model(**inputs)
@@ -1101,9 +1102,8 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1129,7 +1129,7 @@ class PPFormulaNetForConditionalGeneration(PPFormulaNetPreTrainedModel, Generati
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    # override this function to compatible with `_prepare_encoder_decoder_kwargs_for_generation`
+    # override this function to compatible with `_maybe_prepare_encoder_kwargs_for_generation`
     def get_encoder(self, modality: str | None = None):
         return self.model.get_encoder(modality=modality)
 

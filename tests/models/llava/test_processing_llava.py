@@ -78,7 +78,7 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = LlavaProcessor.from_pretrained("hf-internal-testing/tiny-processor-llava")
 
         input_str = self.prepare_text_inputs(batch_size=2, modalities="image")
-        image_input = self.prepare_image_inputs(batch_size=2)
+        image_input = self.prepare_images_inputs(batch_size=2)
 
         _ = processor(
             text=input_str,

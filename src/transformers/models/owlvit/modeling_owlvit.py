@@ -781,7 +781,7 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, OwlViTVisionModel
 
@@ -921,7 +921,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, OwlViTModel
 
@@ -1302,7 +1302,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
@@ -1390,7 +1390,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch

@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithCrossAttentions,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
@@ -42,6 +42,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     can_return_tuple,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -73,6 +74,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_sdpa = True
     _supports_attention_backend = True
+    _can_compile_fullgraph = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -678,7 +680,10 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
 
         # expand embeddings if needed
         max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
-        if max_pos > self.weights.size(0):
+        # a compileable cache makes `past_key_values_length` a tensor, which this check cannot branch on.
+        # `is_torchdynamo_compiling()` alone is not enough: tracing with a non-compileable cache keeps it an
+        # int, and the table must still be allowed to grow there.
+        if not (is_torchdynamo_compiling() and torch.is_tensor(max_pos)) and max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, self.weights.shape[-1]).detach()
@@ -1184,7 +1189,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Kosmos2_5Model
 
@@ -1326,9 +1331,8 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1460,7 +1464,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
         >>> from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration

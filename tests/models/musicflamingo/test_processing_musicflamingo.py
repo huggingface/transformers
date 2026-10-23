@@ -36,6 +36,8 @@ class MusicFlamingoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tiny_model_id = "hf-internal-testing/tiny-processor-musicflamingo"
     checkpoint = "nvidia/music-flamingo-2601-hf"
 
+    audio_unstructured_max_length = 201
+
     @classmethod
     @require_torch
     def setUpClass(cls):
@@ -155,7 +157,7 @@ class MusicFlamingoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     },
                     {
                         "type": "audio",
-                        "path": "https://huggingface.co/datasets/nvidia/AudioSkills/resolve/main/assets/dogs_barking_in_sync_with_the_music.wav",
+                        "path": "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/dogs_barking_in_sync_with_the_music.wav",
                     },
                 ],
             }

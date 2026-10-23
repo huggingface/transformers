@@ -42,12 +42,14 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
 )
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
@@ -116,7 +118,11 @@ class GlmImageVisionText2TextModelTester:
         self.image_end_token_id = image_end_token_id
         self.image_token_id = image_token_id
         self.text_config = text_config
-        self.vision_config = vision_config
+        # `image_size` controls the input image size in this tester. `GlmImageVisionConfig.image_size`
+        # only sets the base resolution of the learnable position-embedding grid, which is always
+        # bilinearly interpolated at runtime, so the two don't need to match exactly. We pass it
+        # here anyway so the tiny model config stays consistent (avoids a 256× oversized embedding table).
+        self.vision_config = {**vision_config, "image_size": image_size}
         self.vq_config = vq_config
         self.batch_size = batch_size
         self.num_channels = num_channels
@@ -205,57 +211,6 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # GlmImage has images shaped as (bs*patch_len, dim) so we can't slice to batches in generate
-    def prepare_config_and_inputs_for_generate(self, batch_size=2):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # We don't want a few model inputs in our model input dictionary for generation tests
-        input_keys_to_ignore = [
-            # we don't want to mask attention heads
-            # we don't want encoder-decoder models to start from filled decoder ids
-            "decoder_input_ids",
-            "decoder_attention_mask",
-            # we'll set cache use in each test differently
-            "use_cache",
-            # Ignore labels if it is in the input dict
-            "labels",
-            # model-specific exceptions should overload/overwrite this function
-        ]
-
-        # The diff from the general `prepare_config_and_inputs_for_generate` lies here
-        patch_size = config.vision_config.patch_size
-        num_patches_per_image = (self.model_tester.image_size**2) // (patch_size**2)
-        num_grids_per_sample = 2  # 1 source + 1 target
-
-        filtered_inputs_dict = {
-            k: v[:batch_size, ...]
-            if isinstance(v, torch.Tensor) and k not in ["pixel_values", "image_grid_thw", "images_per_sample"]
-            else v
-            for k, v in inputs_dict.items()
-            if k not in input_keys_to_ignore
-        }
-        # pixel_values: each sample has 1 source image
-        filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][: batch_size * num_patches_per_image]
-        # image_grid_thw: each sample has 2 grids (1 source + 1 target)
-        filtered_inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][: batch_size * num_grids_per_sample]
-        # images_per_sample: each sample has 2 images
-        filtered_inputs_dict["images_per_sample"] = torch.tensor(
-            [num_grids_per_sample] * batch_size, device=torch_device
-        )
-
-        # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
-        text_gen_config = config.get_text_config(decoder=True)
-        if text_gen_config.eos_token_id is not None and text_gen_config.pad_token_id is None:
-            text_gen_config.pad_token_id = (
-                text_gen_config.eos_token_id
-                if isinstance(text_gen_config.eos_token_id, int)
-                else text_gen_config.eos_token_id[0]
-            )
-        text_gen_config.eos_token_id = None
-        text_gen_config.forced_eos_token_id = None
-
-        return config, filtered_inputs_dict
-
     def test_training(self):
         # Model isn't in any auto-mapping so we need to build labels manually
         if not self.model_tester.is_training:
@@ -292,10 +247,6 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
     @unittest.skip(reason="No available kernels - not supported")
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="Size mismatch")
-    def test_multi_gpu_data_parallel_forward(self):
         pass
 
     @pytest.mark.xfail(
@@ -386,7 +337,7 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="GlmImage needs special input preparation to pass this test")
+    @unittest.skip(reason="GlmImage needs special positions that cannot be prepared in advance")
     def test_generate_compile_model_forward_fullgraph(self):
         pass
 
@@ -474,7 +425,9 @@ class GlmImageIntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "Add a red hat to this cat"},
                 ],
@@ -496,15 +449,9 @@ class GlmImageIntegrationTest(unittest.TestCase):
 
     def test_processor_image_to_image(self):
         """Test processor correctly prepares image-to-image inputs."""
-        from io import BytesIO
-
-        import requests
-        from PIL import Image
-
         # Load the image
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-        response = requests.get(url)
-        image = Image.open(BytesIO(response.content))
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+        image = load_test_image(url)
 
         # Create prompt with target shape and image token
         text = "<|dit_token_16384|><|image|><|dit_token_16385|>Add a red hat to this cat<sop>28 40<eop>"
@@ -603,7 +550,7 @@ class GlmImageIntegrationTest(unittest.TestCase):
         # fmt: off
         expected_tokens = Expectations(
             {
-                ("cuda", None): [9223, 11045, 5705, 14581, 4759, 11667, 1275, 10094, 572, 10543, 9223, 1275, 9223, 10543, 12265, 10543, 2007, 8200, 10543, 1153, 1153, 1153, 10094, 16304, 9223, 11045, 3114, 14581, 4759, 10094],
+                ("cuda", None): [ 9223, 11045, 7240, 14581, 4759, 3094, 10543, 8200, 572, 10543, 9223, 9223, 11667, 9223, 3114, 10543, 1143, 1143, 2007, 1153, 1153, 1153, 8932, 9223, 9223, 11045, 3114, 14581, 10543, 10094],
                 ("xpu", 3): [9223, 11045, 11045, 14581, 4759, 11667, 10543, 10094, 572, 10543, 9223, 1275, 9223, 9223, 4759, 10543, 2007, 4759, 10543, 1153, 1153, 1153, 8932, 9223, 10094, 11045, 5705, 14581, 4759, 10094],
             }
         )

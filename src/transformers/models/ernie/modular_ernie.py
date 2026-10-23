@@ -29,7 +29,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -403,9 +403,8 @@ class ErnieForCausalLM(BertLMHeadModel):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.cls(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.cls(hidden_states)
 
         loss = None
         if labels is not None:
@@ -448,10 +447,6 @@ class ErnieForMaskedLM(BertForMaskedLM):
             word-aware pre-training task, structure-aware pre-training task and semantic-aware pre-training task. We
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
         """
         outputs = self.ernie(
             input_ids,
@@ -576,10 +571,6 @@ class ErnieForSequenceClassification(BertForSequenceClassification):
             word-aware pre-training task, structure-aware pre-training task and semantic-aware pre-training task. We
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         outputs = self.ernie(
             input_ids,
@@ -672,10 +663,6 @@ class ErnieForMultipleChoice(BertForMultipleChoice):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
@@ -739,8 +726,6 @@ class ErnieForTokenClassification(BertForTokenClassification):
             word-aware pre-training task, structure-aware pre-training task and semantic-aware pre-training task. We
             assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
             config.task_type_vocab_size-1]
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         outputs = self.ernie(
             input_ids,

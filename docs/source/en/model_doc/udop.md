@@ -91,10 +91,6 @@ to fine-tune UDOP on a custom dataset as well as inference. 🌎
     - create_token_type_ids_from_sequences
     - save_vocabulary
 
-## UdopTokenizerFast
-
-[[autodoc]] UdopTokenizerFast
-
 ## UdopProcessor
 
 [[autodoc]] UdopProcessor

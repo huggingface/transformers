@@ -313,12 +313,6 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, labels: torch.LongTensor | None = None, **kwargs
     ) -> ImageClassifierOutputWithNoAttention:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         outputs: BaseModelOutputWithPoolingAndNoAttention = self.convnext(pixel_values, **kwargs)
         pooled_output = outputs.pooler_output
         logits = self.classifier(pooled_output)
@@ -373,7 +367,7 @@ class ConvNextBackbone(BackboneMixin, ConvNextPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

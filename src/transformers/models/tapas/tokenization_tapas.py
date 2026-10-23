@@ -2539,7 +2539,7 @@ def parse_text(text):
 
 
 _PrimitiveNumericValue = float | tuple[float | None]
-_SortKeyFn = Callable[[NumericValue], tuple[float, Ellipsis]]
+_SortKeyFn = Callable[[NumericValue], tuple[float, ...]]
 
 _DATE_TUPLE_SIZE = 3
 

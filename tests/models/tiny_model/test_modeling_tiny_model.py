@@ -97,6 +97,10 @@ class TinyModelModelTest(CausalLMModelTest, unittest.TestCase):
         return super()._beam_sample_generate(*args, use_cache=use_cache, **kwargs)
 
     @unittest.skip("TinyModel does not support caching, but this common test explicitly enables it")
+    def test_cached_decode_matches_cacheless(self):
+        pass
+
+    @unittest.skip("TinyModel does not support caching, but this common test explicitly enables it")
     def test_generate_methods_with_logits_to_keep(self):
         pass
 

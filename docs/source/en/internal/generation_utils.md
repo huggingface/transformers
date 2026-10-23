@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Utilities for Generation
+# Utilities for generation
 
 This page lists all the utility functions used by [`~generation.GenerationMixin.generate`].
 
@@ -237,6 +237,10 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
     - lazy_initialization
 
 [[autodoc]] HQQQuantizedLayer
+    - update
+    - lazy_initialization
+
+[[autodoc]] Fp8QuantizedLayer
     - update
     - lazy_initialization
 
