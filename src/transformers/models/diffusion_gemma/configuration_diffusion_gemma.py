@@ -144,11 +144,6 @@ class DiffusionGemmaTextConfig(PreTrainedConfig):
 
         super().__post_init__(**kwargs)
 
-    @property
-    def kv_sharing_roles(self) -> list[str]:
-        """DiffusionGemma does not use KV cache sharing."""
-        return ["independent"] * self.num_hidden_layers
-
     def to_dict(self) -> dict[str, Any]:
         output = super().to_dict()
         # Serialize the value `__post_init__` converted *from*, so that a reload converts once more
