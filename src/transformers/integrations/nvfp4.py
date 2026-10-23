@@ -394,17 +394,12 @@ def update_nvfp4_parallel_plan(model: nn.Module, plan: dict[str, str]):
                 raise ValueError(f"Cannot find a gate or router for masked expert parallelism at `{glob}`.")
             plan[glob] = "moe_tp_experts"
             plan[router] = "ep_router"
-        styles = {plan.get(f"{glob}.{proj}") for proj in (module.gate_up_name, "down_proj")} - {None}
-        if styles == {"grouped_gemm"}:
-            for proj in (module.gate_up_name, "down_proj"):
-                for slot in ("_scale_inv", "_weight_global_scale", "_input_global_scale"):
+        # The base plan gives the scales their weight's style. Expert parallelism splits the per-expert globals too,
+        # while tensor parallelism gives each rank a slice of every expert, so every global.
+        for proj in (module.gate_up_name, "down_proj"):
+            if plan.get(f"{glob}.{proj}") == "grouped_gemm":
+                for slot in ("_weight_global_scale", "_input_global_scale"):
                     plan[f"{glob}.{proj}{slot}"] = "grouped_gemm"
-        elif styles:
-            # intra-expert TP gives each rank a slice of every expert's weights, and of their scales alike
-            # the globals are one float per expert, so no plan entry
-            for proj in (module.gate_up_name, "down_proj"):
-                if (style := plan.get(f"{glob}.{proj}")) is not None:
-                    plan[f"{glob}.{proj}_scale_inv"] = style
 
 
 class _NVFP4Op(ConversionOps):
@@ -423,19 +418,14 @@ def _single(value):
     return value[0] if isinstance(value, list) else value
 
 
-def _nvfp4_module(model, name: str, checkpoint_name: bool = False):
+def _nvfp4_module(model, name: str, renames: list | None = None):
     """Return the name and the NVFP4 module that own the tensor `name`, or `(None, None)`.
 
-    On save `name` is a checkpoint key, e.g. `block_sparse_moe.experts.0.w1.weight`. The model's renames give its model
-    name, and its module is the closest parent.
+    On save `name` is a checkpoint key, e.g. `block_sparse_moe.experts.0.w1.weight`. The model's `renames` give its
+    model name, and its module is the closest parent.
     """
-    from ..conversion_mapping import get_model_conversion_mapping
-    from ..core_model_loading import WeightRenaming
-
-    if checkpoint_name:
-        for rule in get_model_conversion_mapping(model, add_legacy=False):
-            if isinstance(rule, WeightRenaming):
-                name, _ = rule.rename_source_key(name)
+    for rule in renames or ():
+        name, _ = rule.rename_source_key(name)
     while name:
         name = name.rpartition(".")[0]
         try:
@@ -676,7 +666,8 @@ class NVFP4Deserialize(_NVFP4Op):
     """
 
     def convert(self, input_dict, model=None, full_layer_name=None, **kwargs):
-        module_name, module = _nvfp4_module(model, full_layer_name, checkpoint_name=self.inverse)
+        renames = self.hf_quantizer.model_renames if self.inverse else None
+        module_name, module = _nvfp4_module(model, full_layer_name, renames)
         if module is None:
             if self.inverse:
                 return input_dict
@@ -729,37 +720,19 @@ def nvfp4_checkpoint_conversions(hf_quantizer, weight_conversions: list, dequant
     from ..core_model_loading import MergeModulelist, WeightConverter
 
     projections = "|".join(EXPERT_PROJECTIONS)
+    # a dequantized load needs nothing more, as `serialized_names` lists the globals it folds in
     if dequantize:
-        # fused stacks first, as the first matching converter wins
-        conversions = [
-            WeightConverter(
-                [f"experts.{proj}", f"experts.{proj}_scale_inv", f"experts.{proj}_weight_global_scale"],
-                f"experts.{proj}",
-                [NVFP4Dequantize(hf_quantizer)],
-            )
-            for proj in EXPERT_PROJECTIONS
-        ]
-        # every dequantizing converter also collects the globals
-        for converter in weight_conversions:
-            if isinstance(converter, WeightConverter) and isinstance(converter.operations[0], NVFP4Dequantize):
-                sources = converter._original_source_patterns
-                globals_ = [re.sub(r"weight$", "weight_global_scale", source) for source in sources]
-                globals_ = [name for name in globals_ if name.endswith("weight_global_scale") and name not in sources]
-                converter = converter.copy(
-                    [*sources, *globals_], converter._original_target_patterns, operations=converter.operations
-                )
-            conversions.append(converter)
-        return conversions
+        return weight_conversions
     conversions = []
     for converter in weight_conversions:
         conversions.append(converter)
         if not isinstance(converter, WeightConverter):
             continue
+        # every converter loads its tensors into their module's layout, e.g. a fused gate|up linear's scales
+        if not any(isinstance(op, NVFP4Deserialize) for op in converter.operations):
+            converter.operations = [*converter.operations, NVFP4Deserialize(hf_quantizer)]
         target = converter._original_target_patterns[0]
-        if not re.search(rf"experts\.({projections})(_scale_inv)?$", target):
-            continue
-        converter.operations = [*converter.operations, NVFP4Deserialize(hf_quantizer)]
-        if target.endswith("_scale_inv"):
+        if not re.search(rf"experts\.({projections})$", target):
             continue
         for slot, reduce in (("weight_global_scale", "first"), ("input_global_scale", "max")):
             conversions.append(

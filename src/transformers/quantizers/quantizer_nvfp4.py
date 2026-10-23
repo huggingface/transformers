@@ -38,7 +38,21 @@ class NVFP4HfQuantizer(HfQuantizer):
 
     requires_calibration = False
     quantization_config: NVFP4Config
-    serialized_names = {"weight": ["weight", "weight_scale_inv"]}
+
+    @property
+    def serialized_names(self) -> dict[str, list[str]]:
+        """The tensors a weight ships as. A dequantized load also folds each global in.
+
+        Expert stacks come first, as `weight_global_scale` also ends a stack's `{proj}_weight_global_scale`.
+        """
+        from ..integrations.nvfp4 import EXPERT_PROJECTIONS
+
+        globals_ = self.quantization_config.dequantize
+        stacks = {
+            proj: [proj, f"{proj}_scale_inv", *([f"{proj}_weight_global_scale"] if globals_ else [])]
+            for proj in EXPERT_PROJECTIONS
+        }
+        return {**stacks, "weight": ["weight", "weight_scale_inv", *(["weight_global_scale"] if globals_ else [])]}
 
     @property
     def quantized_element_size(self) -> float:
@@ -87,18 +101,11 @@ class NVFP4HfQuantizer(HfQuantizer):
         A module matches by its model or checkpoint name. Exact names win, and fused experts also match their per-expert
         entries, such as `experts.3.w1`. Otherwise the first pattern that matches applies.
         """
-        from ..conversion_mapping import get_model_conversion_mapping
-        from ..core_model_loading import WeightRenaming
-
         layers = self.quantization_config.quantized_layers
         if layers is None:
             return None
         # the model's renames, reversed, give a module's checkpoint name
-        reverse = [
-            rule.reverse_transform()
-            for rule in get_model_conversion_mapping(model, add_legacy=False)[::-1]
-            if isinstance(rule, WeightRenaming)
-        ]
+        reverse = [rule.reverse_transform() for rule in self.model_renames[::-1]]
         patterns = [(re.compile(layer), loads) for layer, loads in layers.items()]
         formats = {}
         for name, _ in model.named_modules():
@@ -122,11 +129,16 @@ class NVFP4HfQuantizer(HfQuantizer):
         return formats
 
     def _process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs):
+        from ..conversion_mapping import get_model_conversion_mapping
+        from ..core_model_loading import WeightRenaming
         from ..integrations.nvfp4 import replace_with_nvfp4
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
+        # the model's renames map its names to the checkpoint's and back
+        mapping = get_model_conversion_mapping(model, add_legacy=False)
+        self.model_renames = [rule for rule in mapping if isinstance(rule, WeightRenaming)]
         # no slot for calibrated `input_scale`s or FP8 KV-cache scales
         model._keys_to_ignore_on_load_unexpected = {
             *(model._keys_to_ignore_on_load_unexpected or ()),
@@ -159,10 +171,8 @@ class NVFP4HfQuantizer(HfQuantizer):
         # Save the modules' own names, which load as they are. A save cannot reverse the ModelOpt renames, as on save
         # the renames run before the converters.
         shipped = {tuple(rename._original_source_patterns) for rename in checkpoint_renames()}
-        # a plain attribute, not the tensor or module `nn.Module.__setattr__` is typed for
-        setattr(
-            model, "_weight_conversions", [c for c in conversions if tuple(c._original_source_patterns) not in shipped]
-        )
+        kept = [c for c in conversions if tuple(c._original_source_patterns) not in shipped]
+        model._weight_conversions = kept  # type: ignore[unresolved-attribute]
         return model
 
     def get_quantize_ops(self):

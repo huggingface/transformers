@@ -22,6 +22,7 @@ from safetensors import safe_open
 
 from transformers import FineGrainedFP8Config, MixtralConfig, NVFP4Config
 from transformers.quantizers.auto import AutoQuantizationConfig
+from transformers.quantizers.quantizer_nvfp4 import NVFP4HfQuantizer
 from transformers.testing_utils import require_kernels, require_torch, require_torch_accelerator, slow, torch_device
 from transformers.utils import is_torch_available, logging
 from transformers.utils.quantization_config import QuantizationMethod, read_modelopt
@@ -38,7 +39,6 @@ if is_torch_available():
         NVFP4Linear,
         NVFP4SwizzleScales,
         replace_with_nvfp4,
-        update_nvfp4_parallel_plan,
     )
 
 E2M1 = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
@@ -317,9 +317,11 @@ class NVFP4ModulesTest(unittest.TestCase):
             "model.layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
             "model.layers.*.mlp.experts.down_proj": "grouped_gemm",
         }
-        update_nvfp4_parallel_plan(model, plan)
+        quantizer = NVFP4HfQuantizer(NVFP4Config())
+        quantizer.update_parallel_plan(model, plan)
         self.assertEqual(plan["model.layers.*.mlp.experts"], "moe_tp_experts")
         self.assertEqual(plan["model.layers.*.mlp.gate"], "ep_router")
+        self.assertEqual(plan["model.layers.*.mlp.experts.down_proj_scale_inv"], "grouped_gemm")
         self.assertEqual(plan["model.layers.*.mlp.experts.down_proj_weight_global_scale"], "grouped_gemm")
         # tensor parallelism alone splits each weight's scales like the weight
         plan = {
@@ -327,7 +329,7 @@ class NVFP4ModulesTest(unittest.TestCase):
             "model.layers.*.mlp.experts.gate_up_proj": "packed_colwise",
             "model.layers.*.mlp.experts.down_proj": "rowwise",
         }
-        update_nvfp4_parallel_plan(model, plan)
+        quantizer.update_parallel_plan(model, plan)
         self.assertEqual(plan["model.layers.*.mlp.experts"], "moe_tp_experts")
         self.assertEqual(plan["model.layers.*.mlp.experts.gate_up_proj_scale_inv"], "packed_colwise")
         self.assertEqual(plan["model.layers.*.mlp.experts.down_proj_scale_inv"], "rowwise")
@@ -524,3 +526,11 @@ class NVFP4LoadTest(unittest.TestCase):
                 model.save_pretrained(path)
                 reloaded = MuseSparkForConditionalGeneration.from_pretrained(path, **load)
             torch.testing.assert_close(reloaded(ids).logits, got)
+            # the fused stacks also load dequantized, with their globals folded in
+            config = NVFP4Config(dequantize=True)
+            dequantized = MuseSparkForConditionalGeneration.from_pretrained(repo, quantization_config=config, **load)
+            self.assertIs(
+                type(dequantized.model.language_model.layers[1].mlp.experts),
+                type(reference.model.language_model.layers[1].mlp.experts),
+            )
+            self.assertGreater(_cosine(dequantized(ids).logits, reference(ids).logits), 0.99)
