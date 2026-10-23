@@ -23,7 +23,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images, to_channel_dimension_format
 from ...image_utils import (
@@ -37,7 +37,7 @@ from ...image_utils import (
 )
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -547,8 +547,8 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
     model_type = "deepseek_ocr2_vision"
     base_config_key = "vision_config"
     sub_configs_defaults = {
-        "sam_config": SubConfigSpec(config_class=DeepseekOcr2SamVisionConfig),
-        "encoder_config": SubConfigSpec(config_class=DeepseekOcr2VisionEncoderConfig),
+        "sam_config": DeepseekOcr2SamVisionConfig,
+        "encoder_config": DeepseekOcr2VisionEncoderConfig,
     }
     sam_config: dict | PreTrainedConfig | None = None
     encoder_config: dict | PreTrainedConfig | None = None
@@ -612,8 +612,8 @@ class DeepseekOcr2Config(PreTrainedConfig):
 
     model_type = "deepseek_ocr2"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=DeepseekOcr2VisionConfig),
-        "text_config": SubConfigSpec(config_class=DeepseekOcr2TextConfig),
+        "vision_config": DeepseekOcr2VisionConfig,
+        "text_config": DeepseekOcr2TextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -1122,8 +1122,7 @@ class DeepseekOcr2ForConditionalGeneration(LlavaNextForConditionalGeneration):
         )
 
         hidden_states = outputs[0]
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        hidden_states = hidden_states[:, slice_indices, :]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
 
         loss = None
