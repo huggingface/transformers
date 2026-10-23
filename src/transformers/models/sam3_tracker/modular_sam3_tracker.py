@@ -21,7 +21,6 @@ from ...configuration_utils import SubConfigSpec
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from ..auto import AutoConfig, AutoModel
-from ..auto import AutoModel
 from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..sam2.configuration_sam2 import (
     Sam2Config,

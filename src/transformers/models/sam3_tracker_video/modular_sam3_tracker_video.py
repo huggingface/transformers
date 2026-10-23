@@ -20,7 +20,6 @@ from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig, AutoModel
-from ..auto import AutoConfig, AutoModel
 from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..sam2.modeling_sam2 import Sam2Attention
 from ..sam2_video.configuration_sam2_video import Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig

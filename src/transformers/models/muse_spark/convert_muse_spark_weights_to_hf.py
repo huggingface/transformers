@@ -354,7 +354,7 @@ EXPECTED_SOURCE_VALUES = {
     "moe.n_dense_layers_before_moe": 0,
     "moe.use_pre_expert_norm": True,
     "moe.use_post_expert_norm": True,
-    # `MuseSparkTopkRouter` hardcodes the sigmoid over the router logits and the epsilon it adds to
+    # `MuseSparkTopKRouter` hardcodes the sigmoid over the router logits and the epsilon it adds to
     # the top-k score sum.
     "moe.router_score_normalization": "sigmoid",
     "moe.router_score_division_eps": 1e-15,

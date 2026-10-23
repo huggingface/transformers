@@ -42,7 +42,6 @@ from ...vision_utils import (
     get_vision_position_ids,
 )
 from ..auto import AutoConfig, AutoModel
-from ..auto import AutoConfig, AutoModel
 from ..clip.modeling_clip import CLIPMLP
 from ..glm4v.modeling_glm4v import Glm4vForConditionalGeneration
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaModelOutputWithPast

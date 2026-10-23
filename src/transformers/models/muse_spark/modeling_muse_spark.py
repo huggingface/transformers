@@ -130,7 +130,8 @@ class MuseSparkTextCenteredRMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, x) -> torch.Tensor:
-        output = self._norm(x.float())
+        output = x.float()
+        output = output * torch.rsqrt(output.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
         # (x * w).to(bfloat16) instead of x.to(bfloat16) * w
         # See https://github.com/huggingface/transformers/pull/29402
         output = output * (1.0 + self.weight).float()
@@ -149,7 +150,8 @@ class MuseSparkTextInputScaledRMSNorm(nn.Module):
     def forward(self, x) -> torch.Tensor:
         # Different order from MuseSparkTextCenteredRMSNorm: first scale, then normalize.
         output = x.float() * (1.0 + self.weight).float()
-        output = self._norm(output.type_as(x).float())  # round with fp32->bf16->f32 before norm
+        output = output.type_as(x).float()  # round with fp32->bf16->f32 before norm
+        output = output * torch.rsqrt(output.pow(2).mean(-1, keepdim=True) + self.variance_epsilon)
         return output.type_as(x)
 
     def extra_repr(self):
@@ -172,7 +174,7 @@ class MuseSparkTextMLP(nn.Module):
         return down_proj
 
 
-class MuseSparkTopkRouter(nn.Module):
+class MuseSparkTopKRouter(nn.Module):
     def __init__(self, config: MuseSparkTextConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -190,14 +192,14 @@ class MuseSparkTopkRouter(nn.Module):
         # Different from MiniMaxM2: convert to float32 before linear projection and scale by output multiplier.
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         router_logits = router_logits * self.output_multiplier
-        routing_weights = self.scoring_function(router_logits)
-        scores_for_choice = routing_weights + self.e_score_correction_bias
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        top_k_weights = routing_weights.gather(1, topk_indices)
+        router_probs = self.scoring_function(router_logits)
+        scores_for_choice = router_probs + self.e_score_correction_bias
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        top_k_weights = router_probs.gather(1, top_k_index)
         # Different from MiniMaxM2: add topk prob eps and scale by routed scaling factor.
         top_k_weights = top_k_weights / (top_k_weights.sum(dim=-1, keepdim=True) + self.norm_topk_prob_eps)
         top_k_weights = top_k_weights * self.routed_scaling_factor
-        return router_logits, top_k_weights, topk_indices
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation(has_post_expert_norm=True)
@@ -247,11 +249,11 @@ class MuseSparkExperts(nn.Module):
         return final_hidden_states
 
 
-class MuseSparkMoE(nn.Module):
+class MuseSparkSparseMoeBlock(nn.Module):
     def __init__(self, config: MuseSparkTextConfig):
         super().__init__()
         self.config = config
-        self.gate = MuseSparkTopkRouter(config)
+        self.gate = MuseSparkTopKRouter(config)
         self.pre_expert_proj = nn.Linear(config.hidden_size, config.moe_hidden_size, bias=False)
         self.pre_expert_norm = MuseSparkTextCenteredRMSNorm(config.moe_hidden_size, eps=config.rms_norm_eps)
         self.experts = MuseSparkExperts(config)
@@ -259,11 +261,11 @@ class MuseSparkMoE(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.pre_expert_proj(hidden_states)
         hidden_states = self.pre_expert_norm(hidden_states)
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = self.post_expert_proj(hidden_states).view(*orig_shape)
         return hidden_states
 
@@ -447,7 +449,11 @@ class MuseSparkTextDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.config = config
         self.self_attn = MuseSparkTextAttention(config=config, layer_idx=layer_idx)
-        self.mlp = MuseSparkMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else MuseSparkTextMLP(config)
+        self.mlp = (
+            MuseSparkSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else MuseSparkTextMLP(config)
+        )
         self.input_layernorm = MuseSparkTextCenteredRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MuseSparkRMSNorm(
             config.hidden_size, eps=config.post_norm_eps, with_scale=False
@@ -511,7 +517,7 @@ class MuseSparkPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, MuseSparkTopkRouter):
+        if isinstance(module, MuseSparkTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MuseSparkExperts):
@@ -590,7 +596,7 @@ class MuseSparkTextModel(MuseSparkPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": MuseSparkTextDecoderLayer,
         "attentions": MuseSparkTextAttention,
-        "router_logits": OutputRecorder(MuseSparkTopkRouter, index=0),
+        "router_logits": OutputRecorder(MuseSparkTopKRouter, index=0),
     }
 
     def __init__(self, config: MuseSparkTextConfig):

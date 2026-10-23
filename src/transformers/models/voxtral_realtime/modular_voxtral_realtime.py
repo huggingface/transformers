@@ -27,8 +27,6 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
-from ...models.llama.modeling_llama import LlamaRotaryEmbedding
-from ...modeling_utils import PreTrainedModel
 from ...models.llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 from ...models.mistral.modeling_mistral import (
     MistralAttention,

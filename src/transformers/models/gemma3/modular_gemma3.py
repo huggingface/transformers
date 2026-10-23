@@ -41,7 +41,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig
-from ..gemma.modeling_gemma import GemmaTextScaledWordEmbedding
 from ..gemma.modeling_gemma import GemmaRMSNorm, GemmaTextScaledWordEmbedding
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (

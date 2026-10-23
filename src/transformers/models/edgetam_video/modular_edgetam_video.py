@@ -31,7 +31,6 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoConfig
-from ..auto import AutoConfig
 from ..clip.modeling_clip import CLIPMLP
 from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..sam2.modeling_sam2 import Sam2Attention, Sam2TwoWayAttentionBlock, eager_attention_forward, window_partition

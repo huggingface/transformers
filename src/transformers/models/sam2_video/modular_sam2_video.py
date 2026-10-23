@@ -39,7 +39,6 @@ from ...utils.generic import TransformersKwargs
 from ...utils.output_capturing import OutputRecorder
 from ...video_utils import VideoInput
 from ..auto import AutoConfig
-from ..auto import AutoConfig
 from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..sam2.configuration_sam2 import (
     Sam2MaskDecoderConfig,

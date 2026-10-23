@@ -44,7 +44,6 @@ from ...utils import (
     logging,
 )
 from ..auto import AutoConfig, AutoModel
-from ..auto import AutoConfig, AutoModel
 from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..deepseek_vl.configuration_deepseek_vl import DeepseekVLConfig
 from ..deepseek_vl.image_processing_deepseek_vl import DeepseekVLImageProcessor

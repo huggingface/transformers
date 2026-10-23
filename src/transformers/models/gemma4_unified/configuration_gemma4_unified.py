@@ -313,11 +313,6 @@ class Gemma4UnifiedConfig(PreTrainedConfig):
     audio_token_id: int | None = 258_881
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool = True
-    sub_configs = {
-        "text_config": Gemma4UnifiedTextConfig,
-        "vision_config": Gemma4UnifiedVisionConfig,
-        "audio_config": Gemma4UnifiedAudioConfig,
-    }
 
 
 __all__ = ["Gemma4UnifiedAudioConfig", "Gemma4UnifiedConfig", "Gemma4UnifiedTextConfig", "Gemma4UnifiedVisionConfig"]

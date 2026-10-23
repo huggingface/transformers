@@ -32,8 +32,6 @@ from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWit
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...modeling_utils import PreTrainedModel
-from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,

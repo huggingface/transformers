@@ -24,7 +24,6 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
     group_images_by_shape,

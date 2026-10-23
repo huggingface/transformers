@@ -883,10 +883,10 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"\.attention\.wk", target_patterns=".self_attn.k_proj"),
             WeightRenaming(source_patterns=r"\.attention\.wv", target_patterns=".self_attn.v_proj"),
             WeightRenaming(source_patterns=r"\.attention\.wo", target_patterns=".self_attn.o_proj"),
-            WeightRenaming(source_patterns=r"\.feed_forward\.w1", target_patterns=".mlp.fc1"),
-            WeightRenaming(source_patterns=r"\.feed_forward\.w2", target_patterns=".mlp.fc2"),
-            WeightRenaming(source_patterns=r"\.attention_norm", target_patterns=".layer_norm1"),
-            WeightRenaming(source_patterns=r"\.ffn_norm", target_patterns=".layer_norm2"),
+            WeightRenaming(source_patterns=r"\.feed_forward\.w1", target_patterns=".mlp.up_proj"),
+            WeightRenaming(source_patterns=r"\.feed_forward\.w2", target_patterns=".mlp.down_proj"),
+            WeightRenaming(source_patterns=r"\.attention_norm", target_patterns=".input_layernorm"),
+            WeightRenaming(source_patterns=r"\.ffn_norm", target_patterns=".post_attention_layernorm"),
             WeightRenaming(source_patterns=r"image_pooling_2d\.wq", target_patterns="image_pooling_2d.q_proj"),
             WeightRenaming(source_patterns=r"image_pooling_2d\.wk", target_patterns="image_pooling_2d.k_proj"),
             WeightRenaming(source_patterns=r"image_pooling_2d\.wv", target_patterns="image_pooling_2d.v_proj"),
@@ -1837,8 +1837,8 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"(^|model\.)norm\.", r"\1language_model.norm."),
         ],
         "UnlimitedOcrSamVisionEncoder": [
-            WeightRenaming(r"blocks\.(\d+)\.norm1\.", r"layers.\1.layer_norm1."),
-            WeightRenaming(r"blocks\.(\d+)\.norm2\.", r"layers.\1.layer_norm2."),
+            WeightRenaming(r"blocks\.(\d+)\.norm1\.", r"layers.\1.input_layernorm."),
+            WeightRenaming(r"blocks\.(\d+)\.norm2\.", r"layers.\1.post_attention_layernorm."),
             WeightRenaming(r"blocks\.(\d+)\.attn\.", r"layers.\1.attn."),
             WeightRenaming(r"blocks\.(\d+)\.mlp\.", r"layers.\1.mlp."),
             WeightRenaming(r"patch_embed\.proj\.", "patch_embed.projection."),
@@ -2324,8 +2324,8 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"^flow_lm\.out_eos\.", "eos_head."),
         WeightRenaming(flow_layers + r"self_attn\.in_proj\.", r"model.layers.\1.self_attn.in_proj."),
         WeightRenaming(flow_layers + r"self_attn\.out_proj\.", r"model.layers.\1.self_attn.o_proj."),
-        WeightRenaming(flow_layers + r"linear1\.", r"model.layers.\1.mlp.fc1."),
-        WeightRenaming(flow_layers + r"linear2\.", r"model.layers.\1.mlp.fc2."),
+        WeightRenaming(flow_layers + r"linear1\.", r"model.layers.\1.mlp.up_proj."),
+        WeightRenaming(flow_layers + r"linear2\.", r"model.layers.\1.mlp.down_proj."),
         WeightRenaming(flow_layers + r"norm1\.", r"model.layers.\1.input_layernorm."),
         WeightRenaming(flow_layers + r"norm2\.", r"model.layers.\1.post_attention_layernorm."),
         WeightRenaming(flow_net + r"time_embed\.(\d+)\.freqs", r"flow_head.timestep_embeddings.\1.freqs"),
@@ -2408,6 +2408,7 @@ def _build_checkpoint_conversion_mapping():
         "mllama_vision_model",
         "moonshine_streaming_encoder",
         "muse_glimmer_vision",
+        "muse_spark_vision",
         "nanochat",
         "nemotron3_diarization_audio",
         "neucodec",
@@ -2435,12 +2436,17 @@ def _build_checkpoint_conversion_mapping():
         "idefics2_vision",
         "idefics3_vision",
         "smolvlm_vision",
-        "kosmos_2_vision_model",
         "owlvit_text_model",
         "owlvit_vision_model",
         "owlv2_text_model",
         "owlv2_vision_model",
         "mimi",
+        "MimiModel",
+        "MimiEncoderModel",
+        "MimiDecoderModel",
+        "pocket_tts",
+        "pocket_tts_audio_tokenizer",
+        "gradium_phonon_tts",
         "dab-detr",
         "vitdet",
         "focalnet",
@@ -2467,6 +2473,9 @@ def _build_checkpoint_conversion_mapping():
         "cosmos3_edge_vision",
     ]:
         mapping[key] = mapping.get(key, []) + ungated_mlp_renames()
+    mapping["UnlimitedOcrVisionEncoder"] = (
+        mapping["UnlimitedOcrVisionEncoder"] + clip_layer_renames + ungated_mlp_renames()
+    )
     for key in ["internvl_vision", "videoprism_vision_model", "videoprism_text_model"]:
         mapping[key] = mapping[key] + vit_layer_renames
     for key in [
@@ -2601,7 +2610,6 @@ def _build_checkpoint_conversion_mapping():
             ]
             + ungated_mlp_renames()
         )
-    mapping["kosmos_2_text_model"] = mapping.get("kosmos_2_text_model", []) + ungated_mlp_renames(r"\.ffn\.", ".ffn.")
     mapping["idefics"] = mapping.get("idefics", []) + ungated_mlp_renames(
         r"vision_model\.encoder\.layers\.(\d+)\.mlp\.", r"vision_model.encoder.layers.\1.mlp."
     )
@@ -2690,6 +2698,7 @@ def _build_checkpoint_conversion_mapping():
         "mlcd_vision_model",
         "minimax_m3_vl_vision",
         "step3p5_vision",
+        "UnlimitedOcrVisionEncoder",
     ]:
         mapping[key] = mapping.get(key, []) + attention_out_proj_renames()
     for key in ["xclip", "xclip_text_model", "xclip_vision_model"]:

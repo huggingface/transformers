@@ -45,7 +45,6 @@ from ...utils import (
 )
 from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoConfig, AutoTokenizer
-from ..auto import AutoConfig, AutoTokenizer
 from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..granitemoe.modeling_granitemoe import GraniteMoeTopKRouter

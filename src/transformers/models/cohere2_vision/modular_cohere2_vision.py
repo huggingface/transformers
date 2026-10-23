@@ -33,7 +33,6 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessorKwargs
 from .configuration_cohere2_vision import Cohere2VisionConfig
