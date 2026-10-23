@@ -52,7 +52,7 @@ jobs:
   build:
     needs: check_links
     if: github.event_name == 'pull_request'
-    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@9fc8a41d7729c424fdb2192f2f85ff63102ec9a3  # main
+    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@e008c246aaa2eaa86b7b95a19a1944d59917990a  # main
     with:
       commit_sha: ${{ github.event.pull_request.head.sha }}
       pr_number: ${{ github.event.number }}
