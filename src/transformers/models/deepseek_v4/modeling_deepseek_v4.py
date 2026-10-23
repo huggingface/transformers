@@ -1225,7 +1225,7 @@ class DeepseekV4PreTrainedModel(PreTrainedModel):
         "hidden_states": DeepseekV4DecoderLayer,
         "attentions": DeepseekV4Attention,
     }
-    config_class = DeepseekV4Config
+    config: DeepseekV4Config
     _keep_in_fp32_modules_strict = [
         "attn_hc",
         "ffn_hc",

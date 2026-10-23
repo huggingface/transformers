@@ -493,7 +493,7 @@ class Sam3VideoPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = Sam3VideoConfig
+    config: Sam3VideoConfig
     base_model_prefix = "sam3_video"
     main_input_name = "pixel_values"
     input_modalities = ["video", "text"]

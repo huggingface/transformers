@@ -286,7 +286,7 @@ class MuseGlimmerAssistantPreTrainedModel(PreTrainedModel):
         "hidden_states": MuseGlimmerAssistantDecoderLayer,
         "attentions": MuseGlimmerAssistantAttention,
     }
-    config_class = MuseGlimmerAssistantConfig
+    config: MuseGlimmerAssistantConfig
     main_input_name = "noise_embeds"
 
 

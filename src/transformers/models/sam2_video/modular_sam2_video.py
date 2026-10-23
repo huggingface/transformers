@@ -910,7 +910,7 @@ class Sam2VideoSegmentationOutput(ModelOutput):
 
 @auto_docstring
 class Sam2VideoPreTrainedModel(PreTrainedModel):
-    config_class = Sam2VideoConfig
+    config: Sam2VideoConfig
     base_model_prefix = "sam2_video"
     main_input_name = "pixel_values"
     input_modalities = "video"
