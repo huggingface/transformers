@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from collections import UserDict
 from collections.abc import Iterable
 
 import torch
@@ -17,6 +18,22 @@ if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
 
 _is_torch_greater_or_equal_than_2_7 = is_torch_greater_or_equal("2.7", accept_dev=True)
+
+
+class KVSharingStorage(UserDict[str, tuple[torch.Tensor, ...]]):
+    """
+    A lightweight dict-like container used to share the KV cache between layers. Maps key -> tuple of cache tensors.
+    Inherits from UserDict so it won't trip isinstance(..., dict) and thus it won't be altered by torch's FSDP2 helpers,
+    which would be an issue. It also has a .to() method so that accelerate's `send_to_device` can move it from device to
+    device. Because the device map usually maps contiguous layers to the same device, the .to() method is in-place: this
+    means that once we enter a new layer group on a new device, the shared KV states don't need to be moved again.
+    """
+
+    def to(self, device: torch.device, non_blocking: bool = False) -> "KVSharingStorage":
+        keys = list(self.keys())
+        for key in keys:
+            self[key] = tuple(v.to(device, non_blocking=non_blocking) for v in self[key])
+        return self
 
 
 class CacheLayerMixin(ABC):
@@ -401,7 +418,7 @@ class DynamicIndexedLayer(DynamicLayer):
 
 class StaticLayer(CacheLayerMixin):
     """
-    A static cache layer that stores the key and value states as static tensors of shape `[batch_size, num_heads, max_cache_len), head_dim]`.
+    A static cache layer that stores the key and value states as static tensors of shape `[batch_size, num_heads, max_cache_len, head_dim]`.
     It lazily allocates its full backing tensors, and then mutates them in-place. Built for `torch.compile` support.
 
     Args:
@@ -411,6 +428,7 @@ class StaticLayer(CacheLayerMixin):
 
     is_compileable = True
     is_sliding = False
+    cumulative_length: torch.Tensor
 
     def __init__(self, max_cache_len: int, **kwargs):
         super().__init__()
