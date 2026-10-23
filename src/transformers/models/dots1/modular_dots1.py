@@ -24,9 +24,9 @@ from ...utils import auto_docstring, logging
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
     DeepseekV3ForCausalLM,
-    DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
-    DeepseekV3TopkRouter,
+    DeepseekV3SparseMoeBlock,
+    DeepseekV3TopKRouter,
 )
 from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
@@ -159,11 +159,11 @@ class Dots1MLP(Qwen2MoeMLP):
     pass
 
 
-class Dots1TopkRouter(DeepseekV3TopkRouter):
+class Dots1TopKRouter(DeepseekV3TopKRouter):
     pass
 
 
-class Dots1MoE(DeepseekV3MoE):
+class Dots1SparseMoeBlock(DeepseekV3SparseMoeBlock):
     pass
 
 

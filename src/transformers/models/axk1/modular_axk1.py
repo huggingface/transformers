@@ -38,9 +38,9 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
-    DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
-    DeepseekV3TopkRouter,
+    DeepseekV3SparseMoeBlock,
+    DeepseekV3TopKRouter,
     apply_rotary_pos_emb,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
@@ -143,7 +143,7 @@ class AXK1MLP(Qwen2MoeMLP):
     pass
 
 
-class AXK1TopkRouter(DeepseekV3TopkRouter):
+class AXK1TopKRouter(DeepseekV3TopKRouter):
     pass
 
 
@@ -151,7 +151,7 @@ class AXK1Experts(Qwen2MoeExperts):
     pass
 
 
-class AXK1MoE(DeepseekV3MoE):
+class AXK1SparseMoeBlock(DeepseekV3SparseMoeBlock):
     """DeepSeek-V3 MoE with an extra `post_mlp_layernorm` on the block output (A.X-K1's single delta).
 
     The released checkpoints store the norm at the decoder-layer level (`post_mlp_layernorm.*`); the
@@ -249,7 +249,7 @@ class AXK1PreTrainedModel(DeepseekV3PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, AXK1TopkRouter):
+        if isinstance(module, AXK1TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, AXK1Experts):

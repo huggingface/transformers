@@ -24,13 +24,13 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
 from ...utils.output_capturing import OutputRecorder
-from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopkRouter
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopKRouter
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3DecoderLayer,
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
-    DeepseekV3MoE,
+    DeepseekV3SparseMoeBlock,
     apply_rotary_pos_emb_interleave,
 )
 from ..llama.modeling_llama import (
@@ -59,7 +59,7 @@ class Mistral4MLP(Qwen2MoeMLP):
     pass
 
 
-class Mistral4TopkRouter(DeepseekV2TopkRouter):
+class Mistral4TopKRouter(DeepseekV2TopKRouter):
     def __init__(self, config):
         super().__init__(config)
         del self.topk_method
@@ -94,7 +94,7 @@ class Mistral4Experts(Qwen2MoeExperts):
     pass
 
 
-class Mistral4MoE(DeepseekV3MoE):
+class Mistral4SparseMoeBlock(DeepseekV3SparseMoeBlock):
     pass
 
 
@@ -183,7 +183,7 @@ class Mistral4PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Mistral4DecoderLayer,
         "attentions": Mistral4Attention,
-        "router_logits": OutputRecorder(Mistral4TopkRouter, index=0),
+        "router_logits": OutputRecorder(Mistral4TopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = []
     _keys_to_ignore_on_load_unexpected = []
@@ -191,7 +191,7 @@ class Mistral4PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Mistral4TopkRouter):
+        if isinstance(module, Mistral4TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Mistral4Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)

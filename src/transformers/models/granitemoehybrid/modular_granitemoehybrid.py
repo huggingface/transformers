@@ -34,7 +34,7 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedMLP,
     GraniteMoeSharedModel,
     GraniteMoeSharedPreTrainedModel,
-    GraniteMoeSharedMoE,
+    GraniteMoeSharedSparseMoeBlock,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -110,7 +110,7 @@ class GraniteMoeHybridRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class GraniteMoeHybridMoE(GraniteMoeSharedMoE):
+class GraniteMoeHybridSparseMoeBlock(GraniteMoeSharedSparseMoeBlock):
     pass
 
 
@@ -129,7 +129,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         self.block_type = config.layers_block_type[layer_idx]
 
         # Allow non-MoE (dense)
-        self.mlp = GraniteMoeHybridMoE(config) if config.num_local_experts > 0 else None
+        self.mlp = GraniteMoeHybridSparseMoeBlock(config) if config.num_local_experts > 0 else None
 
         # Accept 0 experts: skip MoE if num_local_experts == 0
         self.has_experts = getattr(config, "num_local_experts", 0) > 0

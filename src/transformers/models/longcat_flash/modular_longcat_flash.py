@@ -57,7 +57,7 @@ class LongcatFlashMLP(Qwen2MoeMLP):
     pass
 
 
-class LongcatFlashTopkRouter(MixtralTopKRouter):
+class LongcatFlashTopKRouter(MixtralTopKRouter):
     def __init__(self, config):
         super().__init__(config)
         del self.weight  # longcat routes through `classifier` (an nn.Linear) instead of a weight Parameter
@@ -133,7 +133,7 @@ class LongcatFlashExperts(nn.Module):
 
 
 # remap config key expert_ffn_hidden_size -> moe_intermediate_size
-class LongcatFlashMoE(nn.Module):
+class LongcatFlashSparseMoeBlock(nn.Module):
     """
     A mixed expert module containing zero compute (identity) experts.
     """
@@ -144,7 +144,7 @@ class LongcatFlashMoE(nn.Module):
         self.config = config
         self.experts = LongcatFlashExperts(config)
 
-        self.router = LongcatFlashTopkRouter(config)
+        self.router = LongcatFlashTopKRouter(config)
 
     def forward(self, hidden_states):
         orig_shape = hidden_states.shape
@@ -237,7 +237,7 @@ class LongcatFlashDecoderLayer(GradientCheckpointingLayer):
         self.layer_idx = layer_idx
         self.hidden_size = config.hidden_size
 
-        self.mlp = LongcatFlashMoE(config)
+        self.mlp = LongcatFlashSparseMoeBlock(config)
 
         self.self_attn = nn.ModuleList([LongcatFlashMLA(config=config, layer_idx=layer_idx * 2 + i) for i in [0, 1]])
         self.mlps = nn.ModuleList([LongcatFlashMLP(config) for _ in [0, 1]])
@@ -318,7 +318,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": LongcatFlashDecoderLayer,
         "attentions": LongcatFlashMLA,
-        "router_logits": OutputRecorder(LongcatFlashTopkRouter, index=0),
+        "router_logits": OutputRecorder(LongcatFlashTopKRouter, index=0),
     }
     _keys_to_ignore_on_load_unexpected = [r"model\.mtp.*"]
     _keep_in_fp32_modules = [
@@ -328,7 +328,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, LongcatFlashTopkRouter):
+        if isinstance(module, LongcatFlashTopKRouter):
             init.normal_(module.classifier.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         if isinstance(module, LongcatFlashExperts):

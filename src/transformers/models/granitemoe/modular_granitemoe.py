@@ -75,7 +75,7 @@ class GraniteMoeExperts(MixtralExperts):
     pass
 
 
-class GraniteMoeMoE(Qwen3MoeSparseMoeBlock):
+class GraniteMoeSparseMoeBlock(Qwen3MoeSparseMoeBlock):
     """Sparsely-gated mixture-of-experts block: router decides, experts compute."""
 
 
@@ -89,7 +89,7 @@ class GraniteMoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: GraniteMoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = GraniteMoeAttention(config=config, layer_idx=layer_idx)
-        self.mlp = GraniteMoeMoE(config)
+        self.mlp = GraniteMoeSparseMoeBlock(config)
         self.input_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.residual_multiplier = config.residual_multiplier  # Only diff with mixtral!

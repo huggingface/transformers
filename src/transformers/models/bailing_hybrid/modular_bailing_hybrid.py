@@ -33,9 +33,9 @@ from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
-    DeepseekV3MoE,
+    DeepseekV3SparseMoeBlock,
     DeepseekV3RotaryEmbedding,
-    DeepseekV3TopkRouter,
+    DeepseekV3TopKRouter,
     apply_rotary_pos_emb_interleave,
 )
 from ...models.glm5_next.modeling_glm5_next import (
@@ -393,11 +393,11 @@ class BailingHybridDeltaAttention(Glm5NextTextLinearAttention):
         return self.o_proj(output)
 
 
-class BailingHybridTopkRouter(DeepseekV3TopkRouter):
+class BailingHybridTopKRouter(DeepseekV3TopKRouter):
     pass
 
 
-class BailingHybridMoE(DeepseekV3MoE):
+class BailingHybridSparseMoeBlock(DeepseekV3SparseMoeBlock):
     pass
 
 
@@ -416,7 +416,7 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
         "A_log",
     ]
     _can_record_outputs = {
-        "router_logits": OutputRecorder(BailingHybridTopkRouter, index=0),
+        "router_logits": OutputRecorder(BailingHybridTopKRouter, index=0),
         "hidden_states": BailingHybridDecoderLayer,
         "attentions": BailingHybridAttention,
     }
@@ -432,7 +432,7 @@ class BailingHybridPreTrainedModel(Qwen3NextPreTrainedModel):
         elif isinstance(module, BailingHybridExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, BailingHybridTopkRouter):
+        elif isinstance(module, BailingHybridTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, BailingHybridRMSNormGated):

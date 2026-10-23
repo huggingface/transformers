@@ -35,7 +35,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..granite_swa.modeling_granite_swa import GraniteSWAAttention
-from ..granitemoe.modeling_granitemoe import GraniteMoeMoE, GraniteMoeTopKRouter
+from ..granitemoe.modeling_granitemoe import GraniteMoeSparseMoeBlock, GraniteMoeTopKRouter
 from ..granitemoeshared.configuration_granitemoeshared import GraniteMoeSharedConfig
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedDecoderLayer,
@@ -114,7 +114,7 @@ class GraniteMoeSWATopKRouter(GraniteMoeTopKRouter):
     pass
 
 
-class GraniteMoeSWAMoE(GraniteMoeMoE):
+class GraniteMoeSWASparseMoeBlock(GraniteMoeSparseMoeBlock):
     pass
 
 

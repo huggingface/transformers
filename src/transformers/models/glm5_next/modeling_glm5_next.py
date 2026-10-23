@@ -154,7 +154,7 @@ class Glm5NextTextExperts(nn.Module):
         return final_hidden_states
 
 
-class Glm5NextTextTopkRouter(nn.Module):
+class Glm5NextTextTopKRouter(nn.Module):
     def __init__(self, config: Glm5NextTextConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -195,7 +195,7 @@ class Glm5NextTextTopkRouter(nn.Module):
         return router_logits, top_k_weights, top_k_index
 
 
-class Glm5NextTextMoE(nn.Module):
+class Glm5NextTextSparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -204,7 +204,7 @@ class Glm5NextTextMoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = Glm5NextTextExperts(config)
-        self.gate = Glm5NextTextTopkRouter(config)
+        self.gate = Glm5NextTextTopKRouter(config)
         self.shared_experts = Glm5NextTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -1299,7 +1299,9 @@ class Glm5NextTextDecoderLayer(GradientCheckpointingLayer):
             else Glm5NextTextAttention(config, layer_idx)
         )
         self.mlp = (
-            Glm5NextTextMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else Glm5NextTextMLP(config)
+            Glm5NextTextSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else Glm5NextTextMLP(config)
         )
         self.input_layernorm = Glm5NextTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Glm5NextTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -1383,7 +1385,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "attentions": Glm5NextTextAttention,
         "hidden_states": Glm5NextTextDecoderLayer,
-        "router_logits": OutputRecorder(Glm5NextTextTopkRouter, index=0),
+        "router_logits": OutputRecorder(Glm5NextTextTopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias", "conv1d", "dt_bias", "A_log"]
     _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
@@ -1423,7 +1425,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Glm5NextTextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Glm5NextTextTopkRouter):
+        elif isinstance(module, Glm5NextTextTopKRouter):
             init.zeros_(module.e_score_correction_bias)
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Glm5NextTextIndexer):

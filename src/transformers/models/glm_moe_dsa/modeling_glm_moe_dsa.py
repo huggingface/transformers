@@ -466,7 +466,7 @@ class GlmMoeDsaMLP(nn.Module):
         return down_proj
 
 
-class GlmMoeDsaTopkRouter(nn.Module):
+class GlmMoeDsaTopKRouter(nn.Module):
     def __init__(self, config: GlmMoeDsaConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -552,7 +552,7 @@ class GlmMoeDsaExperts(nn.Module):
         return final_hidden_states
 
 
-class GlmMoeDsaMoE(nn.Module):
+class GlmMoeDsaSparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -561,7 +561,7 @@ class GlmMoeDsaMoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = GlmMoeDsaExperts(config)
-        self.gate = GlmMoeDsaTopkRouter(config)
+        self.gate = GlmMoeDsaTopKRouter(config)
         self.shared_experts = GlmMoeDsaMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -582,7 +582,9 @@ class GlmMoeDsaDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = GlmMoeDsaAttention(config=config, layer_idx=layer_idx)
-        self.mlp = GlmMoeDsaMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else GlmMoeDsaMLP(config)
+        self.mlp = (
+            GlmMoeDsaSparseMoeBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else GlmMoeDsaMLP(config)
+        )
         self.input_layernorm = GlmMoeDsaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GlmMoeDsaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -635,7 +637,7 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": GlmMoeDsaDecoderLayer,
         "attentions": GlmMoeDsaAttention,
-        "router_logits": OutputRecorder(GlmMoeDsaTopkRouter, index=0),
+        "router_logits": OutputRecorder(GlmMoeDsaTopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.78.*"]
@@ -644,7 +646,7 @@ class GlmMoeDsaPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, GlmMoeDsaTopkRouter):
+        if isinstance(module, GlmMoeDsaTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, GlmMoeDsaExperts):

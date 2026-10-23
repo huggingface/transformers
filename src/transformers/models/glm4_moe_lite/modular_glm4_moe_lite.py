@@ -22,9 +22,9 @@ from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeForCausalLM,
     Glm4MoeModel,
-    Glm4MoeMoE,
     Glm4MoePreTrainedModel,
-    Glm4MoeTopkRouter,
+    Glm4MoeSparseMoeBlock,
+    Glm4MoeTopKRouter,
 )
 from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRMSNorm
@@ -140,7 +140,7 @@ class Glm4MoeLiteMLP(Qwen2MoeMLP):
     pass
 
 
-class Glm4MoeLiteTopkRouter(Glm4MoeTopkRouter):
+class Glm4MoeLiteTopKRouter(Glm4MoeTopKRouter):
     pass
 
 
@@ -152,14 +152,18 @@ class Glm4MoeLiteExperts(Qwen2MoeExperts):
     pass
 
 
-class Glm4MoeLiteMoE(Glm4MoeMoE):
+class Glm4MoeLiteSparseMoeBlock(Glm4MoeSparseMoeBlock):
     pass
 
 
 class Glm4MoeLiteDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Glm4MoeLiteConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.mlp = Glm4MoeLiteMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else Glm4MoeLiteMLP(config)
+        self.mlp = (
+            Glm4MoeLiteSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else Glm4MoeLiteMLP(config)
+        )
 
 
 class Glm4MoeLitePreTrainedModel(Glm4MoePreTrainedModel):

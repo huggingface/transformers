@@ -46,7 +46,7 @@ class SolarOpenDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = SolarOpenAttention(config=config, layer_idx=layer_idx)
-        self.mlp = SolarOpenMoE(config)
+        self.mlp = SolarOpenSparseMoeBlock(config)
         self.input_layernorm = SolarOpenRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = SolarOpenRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -98,7 +98,7 @@ class SolarOpenMLP(nn.Module):
         return down_proj
 
 
-class SolarOpenTopkRouter(nn.Module):
+class SolarOpenTopKRouter(nn.Module):
     def __init__(self, config: SolarOpenConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -184,7 +184,7 @@ class SolarOpenExperts(nn.Module):
         return final_hidden_states
 
 
-class SolarOpenMoE(nn.Module):
+class SolarOpenSparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -193,7 +193,7 @@ class SolarOpenMoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = SolarOpenExperts(config)
-        self.gate = SolarOpenTopkRouter(config)
+        self.gate = SolarOpenTopKRouter(config)
         self.shared_experts = SolarOpenMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -381,7 +381,7 @@ class SolarOpenPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": SolarOpenDecoderLayer,
         "attentions": SolarOpenAttention,
-        "router_logits": OutputRecorder(SolarOpenTopkRouter, index=0),
+        "router_logits": OutputRecorder(SolarOpenTopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = None
@@ -389,7 +389,7 @@ class SolarOpenPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, SolarOpenTopkRouter):
+        if isinstance(module, SolarOpenTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, SolarOpenExperts):

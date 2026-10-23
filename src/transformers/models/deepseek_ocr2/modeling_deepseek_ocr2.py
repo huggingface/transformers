@@ -1164,7 +1164,7 @@ class DeepseekOcr2TextExperts(nn.Module):
         return final_hidden_states
 
 
-class DeepseekOcr2TextTopkRouter(nn.Module):
+class DeepseekOcr2TextTopKRouter(nn.Module):
     def __init__(self, config: DeepseekOcr2TextConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -1198,12 +1198,12 @@ class DeepseekOcr2TextTopkRouter(nn.Module):
         return router_logits, top_k_weights, top_k_index
 
 
-class DeepseekOcr2TextMoe(nn.Module):
+class DeepseekOcr2TextSparseMoeBlock(nn.Module):
     def __init__(self, config: DeepseekOcr2TextConfig):
         super().__init__()
         self.config = config
         self.experts = DeepseekOcr2TextExperts(config)
-        self.gate = DeepseekOcr2TextTopkRouter(config)
+        self.gate = DeepseekOcr2TextTopKRouter(config)
         self.shared_experts = DeepseekOcr2TextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -1246,7 +1246,7 @@ class DeepseekOcr2TextDecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = DeepseekOcr2TextAttention(config=config, layer_idx=layer_idx)
         self.mlp = (
-            DeepseekOcr2TextMoe(config)
+            DeepseekOcr2TextSparseMoeBlock(config)
             if config.mlp_layer_types[layer_idx] == "sparse"
             else DeepseekOcr2TextMLP(config)
         )
@@ -1301,13 +1301,13 @@ class DeepseekOcr2TextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": DeepseekOcr2TextDecoderLayer,
         "attentions": DeepseekOcr2TextAttention,
-        "router_logits": OutputRecorder(DeepseekOcr2TextTopkRouter, index=0),
+        "router_logits": OutputRecorder(DeepseekOcr2TextTopKRouter, index=0),
     }
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, DeepseekOcr2TextTopkRouter):
+        if isinstance(module, DeepseekOcr2TextTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, DeepseekOcr2TextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)

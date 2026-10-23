@@ -370,7 +370,7 @@ class Glm4MoeLiteMLP(nn.Module):
         return down_proj
 
 
-class Glm4MoeLiteTopkRouter(nn.Module):
+class Glm4MoeLiteTopKRouter(nn.Module):
     def __init__(self, config: Glm4MoeLiteConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -477,7 +477,7 @@ class Glm4MoeLiteExperts(nn.Module):
         return final_hidden_states
 
 
-class Glm4MoeLiteMoE(nn.Module):
+class Glm4MoeLiteSparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -486,7 +486,7 @@ class Glm4MoeLiteMoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = Glm4MoeLiteExperts(config)
-        self.gate = Glm4MoeLiteTopkRouter(config)
+        self.gate = Glm4MoeLiteTopKRouter(config)
         self.shared_experts = Glm4MoeLiteMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -507,7 +507,11 @@ class Glm4MoeLiteDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Glm4MoeLiteAttention(config=config, layer_idx=layer_idx)
-        self.mlp = Glm4MoeLiteMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else Glm4MoeLiteMLP(config)
+        self.mlp = (
+            Glm4MoeLiteSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else Glm4MoeLiteMLP(config)
+        )
         self.input_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -559,7 +563,7 @@ class Glm4MoeLitePreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Glm4MoeLiteDecoderLayer,
         "attentions": Glm4MoeLiteAttention,
-        "router_logits": OutputRecorder(Glm4MoeLiteTopkRouter, index=0),
+        "router_logits": OutputRecorder(Glm4MoeLiteTopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.47.*"]
@@ -567,7 +571,7 @@ class Glm4MoeLitePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Glm4MoeLiteTopkRouter):
+        if isinstance(module, Glm4MoeLiteTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, Glm4MoeLiteExperts):

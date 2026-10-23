@@ -493,7 +493,7 @@ class DeepseekV32MLP(nn.Module):
         return down_proj
 
 
-class DeepseekV32TopkRouter(nn.Module):
+class DeepseekV32TopKRouter(nn.Module):
     def __init__(self, config: DeepseekV32Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -579,7 +579,7 @@ class DeepseekV32Experts(nn.Module):
         return final_hidden_states
 
 
-class DeepseekV32MoE(nn.Module):
+class DeepseekV32SparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -588,7 +588,7 @@ class DeepseekV32MoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = DeepseekV32Experts(config)
-        self.gate = DeepseekV32TopkRouter(config)
+        self.gate = DeepseekV32TopKRouter(config)
         self.shared_experts = DeepseekV32MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -609,7 +609,11 @@ class DeepseekV32DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = DeepseekV32Attention(config=config, layer_idx=layer_idx)
-        self.mlp = DeepseekV32MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else DeepseekV32MLP(config)
+        self.mlp = (
+            DeepseekV32SparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else DeepseekV32MLP(config)
+        )
         self.input_layernorm = DeepseekV32RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV32RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -661,7 +665,7 @@ class DeepseekV32PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": DeepseekV32DecoderLayer,
         "attentions": DeepseekV32Attention,
-        "router_logits": OutputRecorder(DeepseekV32TopkRouter, index=0),
+        "router_logits": OutputRecorder(DeepseekV32TopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
@@ -670,7 +674,7 @@ class DeepseekV32PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, DeepseekV32TopkRouter):
+        if isinstance(module, DeepseekV32TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, DeepseekV32Experts):

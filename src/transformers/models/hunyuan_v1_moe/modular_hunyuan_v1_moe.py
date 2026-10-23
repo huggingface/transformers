@@ -21,7 +21,7 @@ from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
 from ...utils.output_capturing import OutputRecorder
-from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM, DeepseekV2Model, DeepseekV2Moe
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM, DeepseekV2Model, DeepseekV2SparseMoeBlock
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import HunYuanDenseV1Attention, HunYuanDenseV1RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -49,7 +49,7 @@ class HunYuanMoEV1Attention(HunYuanDenseV1Attention):
     pass
 
 
-class HunYuanMoEV1Gate(nn.Module):
+class HunYuanMoEV1TopKRouter(nn.Module):
     def __init__(self, config: HunYuanMoEV1Config, layer_idx: int | None = None):
         super().__init__()
         self.config = config
@@ -73,10 +73,10 @@ class HunYuanMoEV1Experts(MixtralExperts):
     pass
 
 
-class HunYuanMoEV1Moe(DeepseekV2Moe):
+class HunYuanMoEV1SparseMoeBlock(DeepseekV2SparseMoeBlock):
     def __init__(self, config: HunYuanMoEV1Config, layer_idx: int | None = None):
         super().__init__(config)
-        self.gate = HunYuanMoEV1Gate(config, layer_idx=layer_idx)
+        self.gate = HunYuanMoEV1TopKRouter(config, layer_idx=layer_idx)
         self.shared_experts = HunYuanMoEV1MLP(config)
 
 
@@ -85,7 +85,7 @@ class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.hidden_size = config.hidden_size
         self.self_attn = HunYuanMoEV1Attention(config=config, layer_idx=layer_idx)
-        self.mlp = HunYuanMoEV1Moe(config, layer_idx=layer_idx)
+        self.mlp = HunYuanMoEV1SparseMoeBlock(config, layer_idx=layer_idx)
         self.input_layernorm = HunYuanMoEV1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = HunYuanMoEV1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_idx = layer_idx
@@ -95,7 +95,7 @@ class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": HunYuanMoEV1DecoderLayer,
         "attentions": HunYuanMoEV1Attention,
-        "router_logits": OutputRecorder(HunYuanMoEV1Gate, index=0),
+        "router_logits": OutputRecorder(HunYuanMoEV1TopKRouter, index=0),
     }
 
     @torch.no_grad()
@@ -104,7 +104,7 @@ class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
         if isinstance(module, HunYuanMoEV1Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, HunYuanMoEV1Gate):
+        elif isinstance(module, HunYuanMoEV1TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 

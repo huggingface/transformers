@@ -100,7 +100,7 @@ class JetMoeParallelExperts(nn.Module):
         return results
 
 
-class JetMoeTopKGating(nn.Module):
+class JetMoeTopKRouter(nn.Module):
     def __init__(self, input_size: int, num_experts: int, top_k: int):
         """
         Initialize the top-k gating mechanism.
@@ -149,7 +149,7 @@ class JetMoeTopKGating(nn.Module):
         return index_sorted_experts, batch_index, batch_gates, expert_size, logits
 
 
-class JetMoeMoE(nn.Module):
+class JetMoeSparseMoeBlock(nn.Module):
     """
     A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
 
@@ -168,7 +168,7 @@ class JetMoeMoE(nn.Module):
         self.input_linear = JetMoeParallelExperts(config.num_local_experts, self.input_size, self.hidden_size * 2)
         self.output_linear = JetMoeParallelExperts(config.num_local_experts, self.hidden_size, self.input_size)
 
-        self.router = JetMoeTopKGating(
+        self.router = JetMoeTopKRouter(
             input_size=self.input_size,
             num_experts=config.num_local_experts,
             top_k=config.num_experts_per_tok,
@@ -228,7 +228,7 @@ class JetMoeMoA(nn.Module):
         self.input_linear = JetMoeParallelExperts(self.num_experts, self.input_size, self.hidden_size)
         self.output_linear = JetMoeParallelExperts(self.num_experts, self.hidden_size, self.input_size)
 
-        self.router = JetMoeTopKGating(
+        self.router = JetMoeTopKRouter(
             input_size=self.input_size,
             num_experts=self.num_experts,
             top_k=self.top_k,
@@ -377,7 +377,7 @@ class JetMoeDecoderLayer(LlamaDecoderLayer):
         self.input_layernorm = JetMoeRMSNorm(config.hidden_size)
         self.self_attention = JetMoeAttention(config, layer_idx)
         self.post_attention_layernorm = JetMoeRMSNorm(config.hidden_size)
-        self.mlp = JetMoeMoE(config)
+        self.mlp = JetMoeSparseMoeBlock(config)
         del self.self_attn
 
     def forward(
@@ -415,7 +415,7 @@ class JetMoeDecoderLayer(LlamaDecoderLayer):
 @auto_docstring
 class JetMoePreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
-        "router_logits": [OutputRecorder(JetMoeAttention, index=2), OutputRecorder(JetMoeTopKGating, index=4)],
+        "router_logits": [OutputRecorder(JetMoeAttention, index=2), OutputRecorder(JetMoeTopKRouter, index=4)],
         "hidden_states": JetMoeDecoderLayer,
         "attentions": OutputRecorder(JetMoeAttention, index=1),
     }
@@ -434,7 +434,7 @@ class JetMoePreTrainedModel(MixtralPreTrainedModel):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, JetMoeParallelExperts):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, JetMoeMoA | JetMoeMoE):
+        elif isinstance(module, JetMoeMoA | JetMoeSparseMoeBlock):
             init.zeros_(module.bias)
 
 

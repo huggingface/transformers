@@ -117,7 +117,7 @@ class DeepseekV3MLP(nn.Module):
         return down_proj
 
 
-class DeepseekV3TopkRouter(nn.Module):
+class DeepseekV3TopKRouter(nn.Module):
     def __init__(self, config: DeepseekV3Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -203,7 +203,7 @@ class DeepseekV3Experts(nn.Module):
         return final_hidden_states
 
 
-class DeepseekV3MoE(nn.Module):
+class DeepseekV3SparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -212,7 +212,7 @@ class DeepseekV3MoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = DeepseekV3Experts(config)
-        self.gate = DeepseekV3TopkRouter(config)
+        self.gate = DeepseekV3TopKRouter(config)
         self.shared_experts = DeepseekV3MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -493,7 +493,9 @@ class DeepseekV3DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = DeepseekV3Attention(config=config, layer_idx=layer_idx)
-        self.mlp = DeepseekV3MoE(config) if layer_idx >= config.first_k_dense_replace else DeepseekV3MLP(config)
+        self.mlp = (
+            DeepseekV3SparseMoeBlock(config) if layer_idx >= config.first_k_dense_replace else DeepseekV3MLP(config)
+        )
         self.input_layernorm = DeepseekV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -545,7 +547,7 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": DeepseekV3DecoderLayer,
         "attentions": DeepseekV3Attention,
-        "router_logits": OutputRecorder(DeepseekV3TopkRouter, index=0),
+        "router_logits": OutputRecorder(DeepseekV3TopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
@@ -553,7 +555,7 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, DeepseekV3TopkRouter):
+        if isinstance(module, DeepseekV3TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, DeepseekV3Experts):

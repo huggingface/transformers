@@ -25,8 +25,8 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
-    DeepseekV3MoE,
-    DeepseekV3TopkRouter,
+    DeepseekV3SparseMoeBlock,
+    DeepseekV3TopKRouter,
 )
 from ..dots1.modeling_dots1 import Dots1Model
 from ..exaone4.configuration_exaone4 import Exaone4Config
@@ -146,7 +146,7 @@ class ExaoneMoeMLP(Qwen2MoeMLP):
     pass
 
 
-class ExaoneMoeTopkRouter(DeepseekV3TopkRouter):
+class ExaoneMoeTopKRouter(DeepseekV3TopKRouter):
     pass
 
 
@@ -154,7 +154,7 @@ class ExaoneMoeExperts(Qwen2MoeExperts):
     pass
 
 
-class ExaoneMoeSparseMoEBlock(DeepseekV3MoE):
+class ExaoneMoeSparseMoeBlock(DeepseekV3SparseMoeBlock):
     def __init__(self, config):
         super().__init__()
         self.experts = ExaoneMoeExperts(config)
@@ -167,7 +167,7 @@ class ExaoneMoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: ExaoneMoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.mlp = (
-            ExaoneMoeSparseMoEBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else ExaoneMoeMLP(config)
+            ExaoneMoeSparseMoeBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else ExaoneMoeMLP(config)
         )
 
 
@@ -177,7 +177,7 @@ class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": ExaoneMoeDecoderLayer,
         "attentions": ExaoneMoeAttention,
-        "router_logits": OutputRecorder(ExaoneMoeTopkRouter, index=0),
+        "router_logits": OutputRecorder(ExaoneMoeTopKRouter, index=0),
     }
 
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
@@ -186,7 +186,7 @@ class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, ExaoneMoeTopkRouter):
+        if isinstance(module, ExaoneMoeTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, ExaoneMoeExperts):

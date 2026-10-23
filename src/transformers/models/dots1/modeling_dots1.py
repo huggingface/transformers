@@ -268,7 +268,7 @@ class Dots1MLP(nn.Module):
         return down_proj
 
 
-class Dots1TopkRouter(nn.Module):
+class Dots1TopKRouter(nn.Module):
     def __init__(self, config: Dots1Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -354,7 +354,7 @@ class Dots1Experts(nn.Module):
         return final_hidden_states
 
 
-class Dots1MoE(nn.Module):
+class Dots1SparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -363,7 +363,7 @@ class Dots1MoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = Dots1Experts(config)
-        self.gate = Dots1TopkRouter(config)
+        self.gate = Dots1TopKRouter(config)
         self.shared_experts = Dots1MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -384,7 +384,7 @@ class Dots1DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Dots1Attention(config=config, layer_idx=layer_idx)
-        self.mlp = Dots1MoE(config) if layer_idx >= config.first_k_dense_replace else Dots1MLP(config)
+        self.mlp = Dots1SparseMoeBlock(config) if layer_idx >= config.first_k_dense_replace else Dots1MLP(config)
         self.input_layernorm = Dots1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Dots1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -436,7 +436,7 @@ class Dots1PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Dots1DecoderLayer,
         "attentions": Dots1Attention,
-        "router_logits": OutputRecorder(Dots1TopkRouter, index=0),
+        "router_logits": OutputRecorder(Dots1TopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = None
@@ -444,7 +444,7 @@ class Dots1PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Dots1TopkRouter):
+        if isinstance(module, Dots1TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, Dots1Experts):

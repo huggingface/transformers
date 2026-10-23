@@ -340,7 +340,7 @@ class HYV3Experts(nn.Module):
         return final_hidden_states
 
 
-class HYV3MoE(nn.Module):
+class HYV3SparseMoeBlock(nn.Module):
     def __init__(self, config: HYV3Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -374,7 +374,7 @@ class HYV3DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = HYV3Attention(config=config, layer_idx=layer_idx)
-        self.mlp = HYV3MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV3MLP(config)
+        self.mlp = HYV3SparseMoeBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV3MLP(config)
         self.input_layernorm = HYV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = HYV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

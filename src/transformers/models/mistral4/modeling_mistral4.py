@@ -130,7 +130,7 @@ class Mistral4MLP(nn.Module):
         return down_proj
 
 
-class Mistral4TopkRouter(nn.Module):
+class Mistral4TopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -212,7 +212,7 @@ class Mistral4Experts(nn.Module):
         return final_hidden_states
 
 
-class Mistral4MoE(nn.Module):
+class Mistral4SparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -221,7 +221,7 @@ class Mistral4MoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = Mistral4Experts(config)
-        self.gate = Mistral4TopkRouter(config)
+        self.gate = Mistral4TopKRouter(config)
         self.shared_experts = Mistral4MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -513,7 +513,7 @@ class Mistral4DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Mistral4Attention(config=config, layer_idx=layer_idx)
-        self.mlp = Mistral4MoE(config) if layer_idx >= config.first_k_dense_replace else Mistral4MLP(config)
+        self.mlp = Mistral4SparseMoeBlock(config) if layer_idx >= config.first_k_dense_replace else Mistral4MLP(config)
         self.input_layernorm = Mistral4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Mistral4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -564,7 +564,7 @@ class Mistral4PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Mistral4DecoderLayer,
         "attentions": Mistral4Attention,
-        "router_logits": OutputRecorder(Mistral4TopkRouter, index=0),
+        "router_logits": OutputRecorder(Mistral4TopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = []
     _keys_to_ignore_on_load_unexpected = []
@@ -572,7 +572,7 @@ class Mistral4PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Mistral4TopkRouter):
+        if isinstance(module, Mistral4TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Mistral4Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)

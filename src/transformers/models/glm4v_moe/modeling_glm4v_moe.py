@@ -236,7 +236,7 @@ class Glm4vMoeTextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Glm4vMoeTextTopkRouter(nn.Module):
+class Glm4vMoeTextTopKRouter(nn.Module):
     def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -322,7 +322,7 @@ class Glm4vMoeTextExperts(nn.Module):
         return final_hidden_states
 
 
-class Glm4vMoeTextMoE(nn.Module):
+class Glm4vMoeTextSparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -331,7 +331,7 @@ class Glm4vMoeTextMoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = Glm4vMoeTextExperts(config)
-        self.gate = Glm4vMoeTextTopkRouter(config)
+        self.gate = Glm4vMoeTextTopKRouter(config)
         self.shared_experts = Glm4vMoeTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -389,7 +389,11 @@ class Glm4vMoeTextDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Glm4vMoeTextAttention(config=config, layer_idx=layer_idx)
-        self.mlp = Glm4vMoeTextMoE(config) if layer_idx >= config.first_k_dense_replace else Glm4vMoeTextMLP(config)
+        self.mlp = (
+            Glm4vMoeTextSparseMoeBlock(config)
+            if layer_idx >= config.first_k_dense_replace
+            else Glm4vMoeTextMLP(config)
+        )
         self.input_layernorm = Glm4vMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Glm4vMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -446,7 +450,7 @@ class Glm4vMoePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Glm4vMoeTextTopkRouter):
+        if isinstance(module, Glm4vMoeTextTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, Glm4vMoeTextExperts):
@@ -896,7 +900,7 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Glm4vMoeTextDecoderLayer,
         "attentions": Glm4vMoeTextAttention,
-        "router_logits": OutputRecorder(Glm4vMoeTextTopkRouter, index=0),
+        "router_logits": OutputRecorder(Glm4vMoeTextTopKRouter, index=0),
     }
 
     def __init__(self, config: Glm4vMoeTextConfig):

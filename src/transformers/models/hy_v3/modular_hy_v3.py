@@ -185,7 +185,7 @@ class HYV3Experts(Qwen2MoeExperts):
     pass
 
 
-class HYV3MoE(MiniMaxM2SparseMoeBlock):
+class HYV3SparseMoeBlock(MiniMaxM2SparseMoeBlock):
     def __init__(self, config: HYV3Config):
         super().__init__(config)
         del self.jitter_noise

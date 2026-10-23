@@ -495,7 +495,7 @@ class HYV4MLP(nn.Module):
         return down_proj
 
 
-class HYV4TopkRouter(nn.Module):
+class HYV4TopKRouter(nn.Module):
     def __init__(self, config: HYV4Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -587,7 +587,7 @@ class HYV4Experts(nn.Module):
         return final_hidden_states
 
 
-class HYV4MoE(nn.Module):
+class HYV4SparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -596,7 +596,7 @@ class HYV4MoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = HYV4Experts(config)
-        self.gate = HYV4TopkRouter(config)
+        self.gate = HYV4TopKRouter(config)
         self.shared_experts = HYV4MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -682,7 +682,7 @@ class HYV4DecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.layer_idx = layer_idx
         self.self_attn = HYV4Attention(config, layer_idx)
-        self.mlp = HYV4MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4MLP(config)
+        self.mlp = HYV4SparseMoeBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4MLP(config)
         self.input_layernorm = HYV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = HYV4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.attn_hc = HYV4HyperConnection(config)
@@ -745,7 +745,7 @@ class HYV4PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": HYV4DecoderLayer,
         "attentions": HYV4Attention,
-        "router_logits": OutputRecorder(HYV4TopkRouter, index=0),
+        "router_logits": OutputRecorder(HYV4TopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
@@ -764,7 +764,7 @@ class HYV4PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, HYV4TopkRouter):
+        if isinstance(module, HYV4TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, HYV4Experts):

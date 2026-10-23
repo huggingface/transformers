@@ -124,7 +124,7 @@ class AfmoeMLP(nn.Module):
         return down_proj
 
 
-class AfmoeTokenChoiceRouter(nn.Module):
+class AfmoeTopKRouter(nn.Module):
     """
     Token-choice top-K router for MoE routing.
 
@@ -210,7 +210,7 @@ class AfmoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.router = AfmoeTokenChoiceRouter(config)
+        self.router = AfmoeTopKRouter(config)
         self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
         self.experts = AfmoeExperts(config)
         self.expert_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
@@ -467,7 +467,7 @@ class AfmoePreTrainedModel(PreTrainedModel):
     _no_split_modules = ["AfmoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {
-        "router_logits": OutputRecorder(AfmoeTokenChoiceRouter, index=0),
+        "router_logits": OutputRecorder(AfmoeTopKRouter, index=0),
         "hidden_states": AfmoeDecoderLayer,
         "attentions": AfmoeAttention,
     }
@@ -495,7 +495,7 @@ class AfmoePreTrainedModel(PreTrainedModel):
         if isinstance(module, AfmoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, AfmoeTokenChoiceRouter):
+        elif isinstance(module, AfmoeTopKRouter):
             init.zeros_(module.gate.weight)
         elif isinstance(module, AfmoeSparseMoeBlock):
             init.zeros_(module.expert_bias)

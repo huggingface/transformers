@@ -64,7 +64,7 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from ..axk1.modeling_axk1 import AXK1Attention
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3SparseMoeBlock, DeepseekV3TopKRouter
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4HyperConnection
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
@@ -339,15 +339,15 @@ class Glm5NextTextExperts(DeepseekV4Experts):
         self.act_fn = F.silu  # Simple swiglu instead of alpha
 
 
-class Glm5NextTextTopkRouter(DeepseekV3TopkRouter):
+class Glm5NextTextTopKRouter(DeepseekV3TopKRouter):
     pass
 
 
-class Glm5NextTextMoE(DeepseekV3MoE):
+class Glm5NextTextSparseMoeBlock(DeepseekV3SparseMoeBlock):
     def __init__(self, config: Glm5NextConfig):
         super().__init__(config)
         self.experts = Glm5NextTextExperts(config)
-        self.gate = Glm5NextTextTopkRouter(config)
+        self.gate = Glm5NextTextTopKRouter(config)
         self.shared_experts = Glm5NextTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -1230,7 +1230,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "attentions": Glm5NextTextAttention,
         "hidden_states": Glm5NextTextDecoderLayer,
-        "router_logits": OutputRecorder(Glm5NextTextTopkRouter, index=0),
+        "router_logits": OutputRecorder(Glm5NextTextTopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias", "conv1d", "dt_bias", "A_log"]
     _keys_to_ignore_on_load_unexpected = [r"layers\.45\.", r"layers\.\d+\.shared_head\."]
@@ -1270,7 +1270,7 @@ class Glm5NextPreTrainedModel(PreTrainedModel):
         elif isinstance(module, Glm5NextTextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Glm5NextTextTopkRouter):
+        elif isinstance(module, Glm5NextTextTopKRouter):
             init.zeros_(module.e_score_correction_bias)
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Glm5NextTextIndexer):

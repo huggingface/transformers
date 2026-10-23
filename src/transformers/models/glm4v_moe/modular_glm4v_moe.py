@@ -28,9 +28,9 @@ from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3DecoderLayer
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
-    Glm4MoeMoE,
     Glm4MoePreTrainedModel,
-    Glm4MoeTopkRouter,
+    Glm4MoeSparseMoeBlock,
+    Glm4MoeTopKRouter,
 )
 from ..glm4v.configuration_glm4v import Glm4vConfig
 from ..glm4v.modeling_glm4v import (
@@ -147,7 +147,7 @@ class Glm4vMoeTextAttention(LlamaAttention):
         self.rope_parameters = config.rope_parameters
 
 
-class Glm4vMoeTextTopkRouter(Glm4MoeTopkRouter, nn.Module):
+class Glm4vMoeTextTopKRouter(Glm4MoeTopKRouter, nn.Module):
     pass
 
 
@@ -155,12 +155,12 @@ class Glm4vMoeTextExperts(Qwen2MoeExperts):
     pass
 
 
-class Glm4vMoeTextMoE(Glm4MoeMoE):
+class Glm4vMoeTextSparseMoeBlock(Glm4MoeSparseMoeBlock):
     def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)
         self.config = config
         self.experts = Glm4vMoeTextExperts(config)
-        self.gate = Glm4vMoeTextTopkRouter(config)
+        self.gate = Glm4vMoeTextTopKRouter(config)
         self.shared_experts = Glm4vMoeTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -201,7 +201,7 @@ class Glm4vMoeTextModel(Glm4vTextModel):
     _can_record_outputs = {
         "hidden_states": Glm4vMoeTextDecoderLayer,
         "attentions": Glm4vMoeTextAttention,
-        "router_logits": OutputRecorder(Glm4vMoeTextTopkRouter, index=0),
+        "router_logits": OutputRecorder(Glm4vMoeTextTopKRouter, index=0),
     }
 
     def forward(

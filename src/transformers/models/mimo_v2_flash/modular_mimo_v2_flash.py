@@ -28,9 +28,9 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import no_inherit_decorator
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
-    DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
-    DeepseekV3TopkRouter,
+    DeepseekV3SparseMoeBlock,
+    DeepseekV3TopKRouter,
 )
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
@@ -171,7 +171,7 @@ class MiMoV2FlashRotaryEmbedding(Gemma3RotaryEmbedding):
         return inv_freq, attention_factor
 
 
-class MiMoV2FlashTopkRouter(DeepseekV3TopkRouter):
+class MiMoV2FlashTopKRouter(DeepseekV3TopKRouter):
     pass
 
 
@@ -179,9 +179,9 @@ class MiMoV2FlashExperts(Qwen2MoeExperts):
     pass
 
 
-class MiMoV2FlashMoE(DeepseekV3MoE):
+class MiMoV2FlashSparseMoeBlock(DeepseekV3SparseMoeBlock):
     """
-    Only difference from `DeepseekV3MoE` is that we have no shared experts.
+    Only difference from `DeepseekV3SparseMoeBlock` is that we have no shared experts.
     So we drop it and override the forward to skip the shared expert (residual like) add.
     """
 

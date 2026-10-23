@@ -223,7 +223,7 @@ class ExaoneMoeMLP(nn.Module):
         return down_proj
 
 
-class ExaoneMoeTopkRouter(nn.Module):
+class ExaoneMoeTopKRouter(nn.Module):
     def __init__(self, config: ExaoneMoeConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -309,7 +309,7 @@ class ExaoneMoeExperts(nn.Module):
         return final_hidden_states
 
 
-class ExaoneMoeSparseMoEBlock(nn.Module):
+class ExaoneMoeSparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -318,7 +318,7 @@ class ExaoneMoeSparseMoEBlock(nn.Module):
         super().__init__()
         self.config = config
         self.experts = ExaoneMoeExperts(config)
-        self.gate = ExaoneMoeTopkRouter(config)
+        self.gate = ExaoneMoeTopKRouter(config)
         self.shared_experts = ExaoneMoeMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts
         )
@@ -340,7 +340,7 @@ class ExaoneMoeDecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = ExaoneMoeAttention(config=config, layer_idx=layer_idx)
         self.mlp = (
-            ExaoneMoeSparseMoEBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else ExaoneMoeMLP(config)
+            ExaoneMoeSparseMoeBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else ExaoneMoeMLP(config)
         )
         self.input_layernorm = ExaoneMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = ExaoneMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -394,7 +394,7 @@ class ExaoneMoePreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": ExaoneMoeDecoderLayer,
         "attentions": ExaoneMoeAttention,
-        "router_logits": OutputRecorder(ExaoneMoeTopkRouter, index=0),
+        "router_logits": OutputRecorder(ExaoneMoeTopKRouter, index=0),
     }
     config_class = ExaoneMoeConfig
 
@@ -404,7 +404,7 @@ class ExaoneMoePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, ExaoneMoeTopkRouter):
+        if isinstance(module, ExaoneMoeTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, ExaoneMoeExperts):

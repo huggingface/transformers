@@ -503,7 +503,7 @@ class InklingExperts(Qwen2MoeExperts):
     pass
 
 
-class InklingTopkRouter(nn.Module):
+class InklingTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.n_routed_experts
@@ -568,13 +568,13 @@ class InklingSharedExperts(nn.Module):
         return out.view(input_shape)
 
 
-class InklingMoE(nn.Module):
+class InklingSparseMoeBlock(nn.Module):
     """Gate -> routed experts (+ shared experts), TML flavour."""
 
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.gate = InklingTopkRouter(config)
+        self.gate = InklingTopKRouter(config)
         self.experts = InklingExperts(config)
         self.shared_experts = InklingSharedExperts(config)
 
@@ -658,7 +658,7 @@ class InklingDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = InklingAttention(config, layer_idx)
 
         if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = InklingMoE(config)
+            self.mlp = InklingSparseMoeBlock(config)
         else:
             self.mlp = InklingMLP(config)
 
@@ -728,7 +728,7 @@ class InklingPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": InklingDecoderLayer,
         "attentions": InklingAttention,
-        "router_logits": OutputRecorder(InklingTopkRouter, index=0),
+        "router_logits": OutputRecorder(InklingTopKRouter, index=0),
     }
 
     @torch.no_grad()
@@ -742,7 +742,7 @@ class InklingPreTrainedModel(PreTrainedModel):
         elif isinstance(module, InklingExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, InklingTopkRouter):
+        elif isinstance(module, InklingTopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
             init.ones_(module.global_scale)
             init.zeros_(module.e_score_correction_bias)

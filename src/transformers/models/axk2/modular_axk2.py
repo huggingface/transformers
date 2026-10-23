@@ -39,11 +39,11 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32ForCausalLM,
     DeepseekV32Indexer,
     DeepseekV32Model,
-    DeepseekV32MoE,
     DeepseekV32PreTrainedModel,
+    DeepseekV32SparseMoeBlock,
     yarn_apply_mscale,
 )
-from ..glm4_moe.modeling_glm4_moe import Glm4MoeTopkRouter
+from ..glm4_moe.modeling_glm4_moe import Glm4MoeTopKRouter
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
@@ -216,7 +216,7 @@ class AXK2Indexer(DeepseekV32Indexer):
     pass
 
 
-class AXK2TopkRouter(Glm4MoeTopkRouter):
+class AXK2TopKRouter(Glm4MoeTopKRouter):
     def apply_group_scoring(self, scores_for_choice):
         """Apply DeepSeek style grouped scoring"""
         group_scores = (
@@ -259,7 +259,7 @@ class AXK2Experts(Qwen2MoeExperts):
     pass
 
 
-class AXK2MoE(DeepseekV32MoE):
+class AXK2SparseMoeBlock(DeepseekV32SparseMoeBlock):
     pass
 
 
@@ -419,7 +419,7 @@ class AXK2PreTrainedModel(DeepseekV32PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, AXK2TopkRouter):
+        if isinstance(module, AXK2TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, AXK2Experts):

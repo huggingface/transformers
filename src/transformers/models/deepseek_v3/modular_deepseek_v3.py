@@ -16,8 +16,8 @@ from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2Attention,
     DeepseekV2ForCausalLM,
     DeepseekV2Model,
-    DeepseekV2Moe,
-    DeepseekV2TopkRouter,
+    DeepseekV2SparseMoeBlock,
+    DeepseekV2TopKRouter,
 )
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -85,7 +85,7 @@ def apply_rotary_pos_emb_interleave(q, k, cos, sin, position_ids=None, unsqueeze
     return q_embed, k_embed
 
 
-class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
+class DeepseekV3TopKRouter(DeepseekV2TopKRouter):
     def __init__(self, config: DeepseekV3Config):
         super().__init__(config)
         del self.topk_method
@@ -124,7 +124,7 @@ class DeepseekV3Experts(Qwen2MoeExperts):
     pass
 
 
-class DeepseekV3MoE(DeepseekV2Moe):
+class DeepseekV3SparseMoeBlock(DeepseekV2SparseMoeBlock):
     """
     A mixed expert module containing shared experts.
     """
@@ -195,14 +195,16 @@ class DeepseekV3Attention(DeepseekV2Attention):
 class DeepseekV3DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: DeepseekV3Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.mlp = DeepseekV3MoE(config) if layer_idx >= config.first_k_dense_replace else DeepseekV3MLP(config)
+        self.mlp = (
+            DeepseekV3SparseMoeBlock(config) if layer_idx >= config.first_k_dense_replace else DeepseekV3MLP(config)
+        )
 
 
 class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": DeepseekV3DecoderLayer,
         "attentions": DeepseekV3Attention,
-        "router_logits": OutputRecorder(DeepseekV3TopkRouter, index=0),
+        "router_logits": OutputRecorder(DeepseekV3TopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.61.*"]
@@ -210,7 +212,7 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, DeepseekV3TopkRouter):
+        if isinstance(module, DeepseekV3TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, DeepseekV3Experts):

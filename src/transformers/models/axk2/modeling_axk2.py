@@ -277,7 +277,7 @@ class AXK2Indexer(nn.Module):
         return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
 
 
-class AXK2TopkRouter(nn.Module):
+class AXK2TopKRouter(nn.Module):
     def __init__(self, config: AXK2Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -389,7 +389,7 @@ class AXK2MLP(nn.Module):
         return down_proj
 
 
-class AXK2MoE(nn.Module):
+class AXK2SparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -398,7 +398,7 @@ class AXK2MoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = AXK2Experts(config)
-        self.gate = AXK2TopkRouter(config)
+        self.gate = AXK2TopKRouter(config)
         self.shared_experts = AXK2MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -668,7 +668,7 @@ class AXK2DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = AXK2Attention(config=config, layer_idx=layer_idx)
-        self.mlp = AXK2MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else AXK2MLP(config)
+        self.mlp = AXK2SparseMoeBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else AXK2MLP(config)
         self.input_layernorm = AXK2GatedRMSNorm(config)
         self.post_attention_layernorm = (
             AXK2GatedRMSNorm(config)
@@ -724,7 +724,7 @@ class AXK2PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": AXK2DecoderLayer,
         "attentions": AXK2Attention,
-        "router_logits": OutputRecorder(AXK2TopkRouter, index=0),
+        "router_logits": OutputRecorder(AXK2TopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = ["inv_freq"]
@@ -733,7 +733,7 @@ class AXK2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, AXK2TopkRouter):
+        if isinstance(module, AXK2TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, AXK2Experts):

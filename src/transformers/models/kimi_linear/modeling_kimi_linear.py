@@ -720,7 +720,7 @@ class KimiLinearDeltaAttention(nn.Module):
         return output
 
 
-class KimiLinearTopkRouter(nn.Module):
+class KimiLinearTopKRouter(nn.Module):
     def __init__(self, config: KimiLinearConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -761,7 +761,7 @@ class KimiLinearTopkRouter(nn.Module):
         return router_logits, top_k_weights, top_k_index
 
 
-class KimiLinearMoE(nn.Module):
+class KimiLinearSparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -770,7 +770,7 @@ class KimiLinearMoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = KimiLinearExperts(config)
-        self.gate = KimiLinearTopkRouter(config)
+        self.gate = KimiLinearTopKRouter(config)
         self.shared_experts = KimiLinearMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -795,7 +795,11 @@ class KimiLinearDecoderLayer(GradientCheckpointingLayer):
             if config.layer_types[layer_idx] == "full_attention"
             else KimiLinearDeltaAttention(config, layer_idx)
         )
-        self.mlp = KimiLinearMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else KimiLinearMLP(config)
+        self.mlp = (
+            KimiLinearSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else KimiLinearMLP(config)
+        )
         self.input_layernorm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = KimiLinearRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.block_type = config.layer_types[layer_idx]
@@ -849,7 +853,7 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _keys_to_ignore_on_load_unexpected = None
     _can_record_outputs = {
-        "router_logits": OutputRecorder(KimiLinearTopkRouter, index=0),
+        "router_logits": OutputRecorder(KimiLinearTopKRouter, index=0),
         "hidden_states": KimiLinearDecoderLayer,
         "attentions": KimiLinearAttention,
     }
@@ -869,7 +873,7 @@ class KimiLinearPreTrainedModel(PreTrainedModel):
         elif isinstance(module, KimiLinearExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, KimiLinearTopkRouter):
+        elif isinstance(module, KimiLinearTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, KimiLinearRMSNormGated):

@@ -26,7 +26,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
     DeepseekV3PreTrainedModel,
-    DeepseekV3TopkRouter,
+    DeepseekV3TopKRouter,
 )
 from ..gpt_neox.modeling_gpt_neox import (
     GPTNeoXRotaryEmbedding,
@@ -175,7 +175,7 @@ class Glm4MoeMLP(Qwen2MoeMLP):
     pass
 
 
-class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
+class Glm4MoeTopKRouter(DeepseekV3TopKRouter):
     def __init__(self, config: Glm4MoeConfig):
         super().__init__(config)
         self.e_score_correction_bias = nn.Buffer(torch.zeros((self.num_experts), dtype=torch.float32))

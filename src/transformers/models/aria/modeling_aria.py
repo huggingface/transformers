@@ -314,7 +314,7 @@ class AriaExperts(nn.Module):
         return final_hidden_states
 
 
-class AriaTextMoELayer(nn.Module):
+class AriaTextSparseMoeBlock(nn.Module):
     """Sparsely-gated mixture-of-experts block: router decides, experts compute, shared experts always run."""
 
     def __init__(self, config: AriaTextConfig):
@@ -488,7 +488,7 @@ class AriaTextDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = AriaTextAttention(config=config, layer_idx=layer_idx)
-        self.mlp = AriaTextMoELayer(config)
+        self.mlp = AriaTextSparseMoeBlock(config)
         self.input_layernorm = AriaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = AriaTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

@@ -1138,7 +1138,7 @@ class UnlimitedOcrTextExperts(nn.Module):
         return final_hidden_states
 
 
-class UnlimitedOcrTextTopkRouter(nn.Module):
+class UnlimitedOcrTextTopKRouter(nn.Module):
     def __init__(self, config: UnlimitedOcrTextConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -1172,12 +1172,12 @@ class UnlimitedOcrTextTopkRouter(nn.Module):
         return router_logits, top_k_weights, top_k_index
 
 
-class UnlimitedOcrTextMoe(nn.Module):
+class UnlimitedOcrTextSparseMoeBlock(nn.Module):
     def __init__(self, config: UnlimitedOcrTextConfig):
         super().__init__()
         self.config = config
         self.experts = UnlimitedOcrTextExperts(config)
-        self.gate = UnlimitedOcrTextTopkRouter(config)
+        self.gate = UnlimitedOcrTextTopKRouter(config)
         self.shared_experts = UnlimitedOcrTextMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -1220,7 +1220,7 @@ class UnlimitedOcrTextDecoderLayer(GradientCheckpointingLayer):
 
         self.self_attn = UnlimitedOcrTextAttention(config=config, layer_idx=layer_idx)
         self.mlp = (
-            UnlimitedOcrTextMoe(config)
+            UnlimitedOcrTextSparseMoeBlock(config)
             if config.mlp_layer_types[layer_idx] == "sparse"
             else UnlimitedOcrTextMLP(config)
         )
@@ -1275,13 +1275,13 @@ class UnlimitedOcrTextPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": UnlimitedOcrTextDecoderLayer,
         "attentions": UnlimitedOcrTextAttention,
-        "router_logits": OutputRecorder(UnlimitedOcrTextTopkRouter, index=0),
+        "router_logits": OutputRecorder(UnlimitedOcrTextTopKRouter, index=0),
     }
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, UnlimitedOcrTextTopkRouter):
+        if isinstance(module, UnlimitedOcrTextTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, UnlimitedOcrTextExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)

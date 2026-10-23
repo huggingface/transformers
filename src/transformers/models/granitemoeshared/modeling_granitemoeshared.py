@@ -184,7 +184,7 @@ class GraniteMoeSharedExperts(nn.Module):
         return final_hidden_states
 
 
-class GraniteMoeSharedMoE(nn.Module):
+class GraniteMoeSharedSparseMoeBlock(nn.Module):
     """Sparsely-gated mixture-of-experts block: router decides, experts compute."""
 
     def __init__(self, config: GraniteMoeSharedConfig):
@@ -343,7 +343,7 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = GraniteMoeSharedAttention(config=config, layer_idx=layer_idx)
-        self.mlp = GraniteMoeSharedMoE(config)
+        self.mlp = GraniteMoeSharedSparseMoeBlock(config)
         self.input_layernorm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.residual_multiplier = config.residual_multiplier  # Only diff with mixtral!

@@ -62,7 +62,7 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4TextDecoderLayer,
     Gemma4TextRotaryEmbedding,
     Gemma4TextScaledWordEmbedding,
-    Gemma4TextRouter,
+    Gemma4TextTopKRouter,
     apply_rotary_pos_emb,
     eager_attention_forward,
     get_block_sequence_ids_for_mask,
@@ -445,7 +445,7 @@ class DiffusionGemmaText4MLP(MistralMLP):
     pass
 
 
-class DiffusionGemmaTextRouter(Gemma4TextRouter):
+class DiffusionGemmaTextTopKRouter(Gemma4TextTopKRouter):
     pass
 
 
@@ -476,7 +476,7 @@ class DiffusionGemmaEncoderTextLayer(nn.Module):
         self.post_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.layer_scalar = nn.Buffer(torch.ones(1))
 
-        self.router = DiffusionGemmaTextRouter(config)
+        self.router = DiffusionGemmaTextTopKRouter(config)
         self.experts = DiffusionGemmaTextExperts(config)
         self.post_feedforward_layernorm_1 = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm_2 = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -554,7 +554,7 @@ class DiffusionGemmaDecoderTextLayer(Gemma4TextDecoderLayer):
         self.post_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.layer_scalar = nn.Buffer(torch.ones(1))
 
-        self.router = DiffusionGemmaTextRouter(config)
+        self.router = DiffusionGemmaTextTopKRouter(config)
         self.experts = DiffusionGemmaTextExperts(config)
         self.post_feedforward_layernorm_1 = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm_2 = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -678,7 +678,7 @@ class DiffusionGemmaPreTrainedModel(T5Gemma2PreTrainedModel):
 
         elif isinstance(module, DiffusionGemmaTextScaledWordEmbedding):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
-        elif isinstance(module, DiffusionGemmaTextRouter):
+        elif isinstance(module, DiffusionGemmaTextTopKRouter):
             init.ones_(module.scale)
             init.ones_(module.per_expert_scale)
         elif isinstance(module, DiffusionGemmaTextExperts):
@@ -719,7 +719,7 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
     config: DiffusionGemmaTextConfig
     input_modalities = ("text",)
     _can_record_outputs = {
-        "router_logits": OutputRecorder(DiffusionGemmaTextRouter, index=0),
+        "router_logits": OutputRecorder(DiffusionGemmaTextTopKRouter, index=0),
         "hidden_states": DiffusionGemmaEncoderTextLayer,
         "attentions": DiffusionGemmaEncoderTextAttention,
     }
@@ -819,7 +819,7 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
 )
 class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel, Gemma4Model):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(DiffusionGemmaTextRouter, index=0),
+        "router_logits": OutputRecorder(DiffusionGemmaTextTopKRouter, index=0),
         "hidden_states": DiffusionGemmaEncoderTextLayer,
         "attentions": DiffusionGemmaEncoderTextAttention,
     }
@@ -1001,7 +1001,7 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
 
     input_modalities = ("text",)
     _can_record_outputs = {
-        "router_logits": OutputRecorder(DiffusionGemmaTextRouter, index=0),
+        "router_logits": OutputRecorder(DiffusionGemmaTextTopKRouter, index=0),
         "hidden_states": DiffusionGemmaDecoderTextLayer,
         "attentions": DiffusionGemmaDecoderTextAttention,
     }

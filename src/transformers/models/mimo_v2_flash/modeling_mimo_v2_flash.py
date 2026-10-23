@@ -126,7 +126,7 @@ class MiMoV2FlashRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class MiMoV2FlashTopkRouter(nn.Module):
+class MiMoV2FlashTopKRouter(nn.Module):
     def __init__(self, config: MiMoV2FlashConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -212,9 +212,9 @@ class MiMoV2FlashExperts(nn.Module):
         return final_hidden_states
 
 
-class MiMoV2FlashMoE(nn.Module):
+class MiMoV2FlashSparseMoeBlock(nn.Module):
     """
-    Only difference from `DeepseekV3MoE` is that we have no shared experts.
+    Only difference from `DeepseekV3SparseMoeBlock` is that we have no shared experts.
     So we drop it and override the forward to skip the shared expert (residual like) add.
     """
 
@@ -222,7 +222,7 @@ class MiMoV2FlashMoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = MiMoV2FlashExperts(config)
-        self.gate = MiMoV2FlashTopkRouter(config)
+        self.gate = MiMoV2FlashTopKRouter(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         orig_shape = hidden_states.shape
@@ -416,7 +416,11 @@ class MiMoV2FlashDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = MiMoV2FlashAttention(config=config, layer_idx=layer_idx)
-        self.mlp = MiMoV2FlashMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else MiMoV2FlashMLP(config)
+        self.mlp = (
+            MiMoV2FlashSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else MiMoV2FlashMLP(config)
+        )
         self.input_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -468,7 +472,7 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": MiMoV2FlashDecoderLayer,
         "attentions": MiMoV2FlashAttention,
-        "router_logits": OutputRecorder(MiMoV2FlashTopkRouter, index=0),
+        "router_logits": OutputRecorder(MiMoV2FlashTopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
@@ -477,7 +481,7 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, MiMoV2FlashTopkRouter):
+        if isinstance(module, MiMoV2FlashTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MiMoV2FlashExperts):

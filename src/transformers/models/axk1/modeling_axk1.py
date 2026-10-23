@@ -131,7 +131,7 @@ class AXK1MLP(nn.Module):
         return down_proj
 
 
-class AXK1TopkRouter(nn.Module):
+class AXK1TopKRouter(nn.Module):
     def __init__(self, config: AXK1Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -217,7 +217,7 @@ class AXK1Experts(nn.Module):
         return final_hidden_states
 
 
-class AXK1MoE(nn.Module):
+class AXK1SparseMoeBlock(nn.Module):
     """DeepSeek-V3 MoE with an extra `post_mlp_layernorm` on the block output (A.X-K1's single delta).
 
     The released checkpoints store the norm at the decoder-layer level (`post_mlp_layernorm.*`); the
@@ -228,7 +228,7 @@ class AXK1MoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = AXK1Experts(config)
-        self.gate = AXK1TopkRouter(config)
+        self.gate = AXK1TopKRouter(config)
         self.shared_experts = AXK1MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -494,7 +494,7 @@ class AXK1DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = AXK1Attention(config=config, layer_idx=layer_idx)
-        self.mlp = AXK1MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else AXK1MLP(config)
+        self.mlp = AXK1SparseMoeBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else AXK1MLP(config)
         self.input_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -546,7 +546,7 @@ class AXK1PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": AXK1DecoderLayer,
         "attentions": AXK1Attention,
-        "router_logits": OutputRecorder(AXK1TopkRouter, index=0),
+        "router_logits": OutputRecorder(AXK1TopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = ["inv_freq"]
@@ -554,7 +554,7 @@ class AXK1PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, AXK1TopkRouter):
+        if isinstance(module, AXK1TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, AXK1Experts):

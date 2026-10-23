@@ -266,7 +266,7 @@ class Glm4MoeMLP(nn.Module):
         return down_proj
 
 
-class Glm4MoeTopkRouter(nn.Module):
+class Glm4MoeTopKRouter(nn.Module):
     def __init__(self, config: Glm4MoeConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -373,7 +373,7 @@ class Glm4MoeExperts(nn.Module):
         return final_hidden_states
 
 
-class Glm4MoeMoE(nn.Module):
+class Glm4MoeSparseMoeBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
     """
@@ -382,7 +382,7 @@ class Glm4MoeMoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = Glm4MoeExperts(config)
-        self.gate = Glm4MoeTopkRouter(config)
+        self.gate = Glm4MoeTopKRouter(config)
         self.shared_experts = Glm4MoeMLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -403,7 +403,7 @@ class Glm4MoeDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = Glm4MoeAttention(config=config, layer_idx=layer_idx)
-        self.mlp = Glm4MoeMoE(config) if layer_idx >= config.first_k_dense_replace else Glm4MoeMLP(config)
+        self.mlp = Glm4MoeSparseMoeBlock(config) if layer_idx >= config.first_k_dense_replace else Glm4MoeMLP(config)
         self.input_layernorm = Glm4MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Glm4MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -455,7 +455,7 @@ class Glm4MoePreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Glm4MoeDecoderLayer,
         "attentions": Glm4MoeAttention,
-        "router_logits": OutputRecorder(Glm4MoeTopkRouter, index=0),
+        "router_logits": OutputRecorder(Glm4MoeTopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"model\.layers\.92.*", r"model\.layers\.46.*"]
@@ -463,7 +463,7 @@ class Glm4MoePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Glm4MoeTopkRouter):
+        if isinstance(module, Glm4MoeTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, Glm4MoeExperts):

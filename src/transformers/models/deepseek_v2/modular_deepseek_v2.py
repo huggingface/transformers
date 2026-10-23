@@ -162,7 +162,7 @@ class DeepseekV2Experts(Qwen2MoeExperts):
     pass
 
 
-class DeepseekV2TopkRouter(MixtralTopKRouter):
+class DeepseekV2TopKRouter(MixtralTopKRouter):
     def __init__(self, config: DeepseekV2Config):
         super().__init__(config)
         self.routed_scaling_factor = config.routed_scaling_factor
@@ -192,12 +192,12 @@ class DeepseekV2TopkRouter(MixtralTopKRouter):
         return router_logits, top_k_weights, top_k_index
 
 
-class DeepseekV2Moe(nn.Module):
+class DeepseekV2SparseMoeBlock(nn.Module):
     def __init__(self, config: DeepseekV2Config):
         super().__init__()
         self.config = config
         self.experts = DeepseekV2Experts(config)
-        self.gate = DeepseekV2TopkRouter(config)
+        self.gate = DeepseekV2TopKRouter(config)
         self.shared_experts = DeepseekV2MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -384,20 +384,22 @@ class DeepseekV2DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: DeepseekV2Config, layer_idx: int):
         super().__init__(config, layer_idx)
 
-        self.mlp = DeepseekV2Moe(config) if layer_idx >= config.first_k_dense_replace else DeepseekV2MLP(config)
+        self.mlp = (
+            DeepseekV2SparseMoeBlock(config) if layer_idx >= config.first_k_dense_replace else DeepseekV2MLP(config)
+        )
 
 
 class DeepseekV2PreTrainedModel(LlamaPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": DeepseekV2DecoderLayer,
         "attentions": DeepseekV2Attention,
-        "router_logits": OutputRecorder(DeepseekV2TopkRouter, index=0),
+        "router_logits": OutputRecorder(DeepseekV2TopKRouter, index=0),
     }
 
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, DeepseekV2TopkRouter):
+        if isinstance(module, DeepseekV2TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, DeepseekV2Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)

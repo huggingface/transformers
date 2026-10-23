@@ -39,12 +39,12 @@ from ..deepseek_v4.modeling_deepseek_v4 import (
     DeepseekV4UnweightedRMSNorm,
 )
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
-from ..glm4_moe.modeling_glm4_moe import Glm4MoeTopkRouter
+from ..glm4_moe.modeling_glm4_moe import Glm4MoeTopKRouter
 from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     Glm4MoeLiteForCausalLM,
     Glm4MoeLiteModel,
-    Glm4MoeLiteMoE,
     Glm4MoeLitePreTrainedModel,
+    Glm4MoeLiteSparseMoeBlock,
     apply_rotary_pos_emb,
 )
 from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts
@@ -60,7 +60,7 @@ class HYV4Config(PreTrainedConfig):
     n_group (`int`, *optional*, defaults to 1):
         Number of expert groups for routing. HYV4 selects experts globally, so this is 1 (one group holding every expert).
     topk_group (`int`, *optional*, defaults to 1):
-        Number of expert groups kept during routing. With `n_group=1` this reuses `Glm4MoeLiteTopkRouter` as a plain global top-k.
+        Number of expert groups kept during routing. With `n_group=1` this reuses `Glm4MoeLiteTopKRouter` as a plain global top-k.
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP type, either `"dense"` or `"sparse"`. Defaults to one dense layer followed by
         sparse MoE layers.
@@ -368,7 +368,7 @@ class HYV4MLP(Qwen2MoeMLP):
     pass
 
 
-class HYV4TopkRouter(Glm4MoeTopkRouter):
+class HYV4TopKRouter(Glm4MoeTopKRouter):
     pass
 
 
@@ -376,7 +376,7 @@ class HYV4Experts(Glm5NextTextExperts):
     pass
 
 
-class HYV4MoE(Glm4MoeLiteMoE):
+class HYV4SparseMoeBlock(Glm4MoeLiteSparseMoeBlock):
     pass
 
 
@@ -434,7 +434,7 @@ class HYV4DecoderLayer(DeepseekV4DecoderLayer):
 
     def __init__(self, config: HYV4Config, layer_idx: int):
         super().__init__(self, config, layer_idx)
-        self.mlp = HYV4MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4MLP(config)
+        self.mlp = HYV4SparseMoeBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV4MLP(config)
 
     def forward(
         self,
@@ -498,7 +498,7 @@ class HYV4PreTrainedModel(Glm4MoeLitePreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, HYV4TopkRouter):
+        if isinstance(module, HYV4TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, HYV4Experts):

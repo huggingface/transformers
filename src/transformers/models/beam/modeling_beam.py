@@ -379,11 +379,11 @@ class BeamTopKRouter(nn.Module):
         topk_weights = scores.gather(1, topk_indices)
         if self.norm_topk_prob:
             topk_weights /= topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-        # `routed_scaling_factor` is applied after expert aggregation in `BeamMoE`.
+        # `routed_scaling_factor` is applied after expert aggregation in `BeamSparseMoeBlock`.
         return router_logits, topk_weights, topk_indices
 
 
-class BeamMoE(nn.Module):
+class BeamSparseMoeBlock(nn.Module):
     def __init__(self, config: BeamConfig):
         super().__init__()
         self.experts = BeamExperts(config)
@@ -415,7 +415,7 @@ class BeamDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = BeamAttention(config=config, layer_idx=layer_idx)
-        self.mlp = BeamMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else BeamMLP(config)
+        self.mlp = BeamSparseMoeBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else BeamMLP(config)
         self.input_layernorm = BeamRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = BeamRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = BeamRMSNorm(config.hidden_size, config.rms_norm_eps)

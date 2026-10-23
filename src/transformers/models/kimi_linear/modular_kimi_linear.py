@@ -31,8 +31,8 @@ from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3ForCausalLM,
-    DeepseekV3MoE,
-    DeepseekV3TopkRouter,
+    DeepseekV3SparseMoeBlock,
+    DeepseekV3TopKRouter,
 )
 from ...models.glm5_next.modeling_glm5_next import (
     Glm5NextTextForgetGate,
@@ -244,18 +244,22 @@ class KimiLinearDeltaAttention(Glm5NextTextLinearAttention):
         self.o_norm = KimiLinearRMSNormGated(self.head_dim, eps=self.layer_norm_epsilon)
 
 
-class KimiLinearTopkRouter(DeepseekV3TopkRouter):
+class KimiLinearTopKRouter(DeepseekV3TopKRouter):
     pass
 
 
-class KimiLinearMoE(DeepseekV3MoE):
+class KimiLinearSparseMoeBlock(DeepseekV3SparseMoeBlock):
     pass
 
 
 class KimiLinearDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: KimiLinearConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.mlp = KimiLinearMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else KimiLinearMLP(config)
+        self.mlp = (
+            KimiLinearSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else KimiLinearMLP(config)
+        )
         self.block_type = config.layer_types[layer_idx]
         self.self_attn = (
             # CODEPATH: TODO: remove this once the mlinter rule is relaxed
@@ -305,7 +309,7 @@ class KimiLinearDecoderLayer(LlamaDecoderLayer):
 @auto_docstring
 class KimiLinearPreTrainedModel(Qwen3NextPreTrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(KimiLinearTopkRouter, index=0),
+        "router_logits": OutputRecorder(KimiLinearTopKRouter, index=0),
         "hidden_states": KimiLinearDecoderLayer,
         "attentions": KimiLinearAttention,
     }
@@ -324,7 +328,7 @@ class KimiLinearPreTrainedModel(Qwen3NextPreTrainedModel):
         elif isinstance(module, KimiLinearExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, KimiLinearTopkRouter):
+        elif isinstance(module, KimiLinearTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, KimiLinearRMSNormGated):

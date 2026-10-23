@@ -47,8 +47,8 @@ from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2MLP,
     DeepseekV2Model,
-    DeepseekV2Moe,
     DeepseekV2PreTrainedModel,
+    DeepseekV2SparseMoeBlock,
 )
 from ..got_ocr2.image_processing_got_ocr2 import (
     GotOcr2ImageProcessor,
@@ -892,7 +892,7 @@ class DeepseekOcr2TextMLP(DeepseekV2MLP):
     pass
 
 
-class DeepseekOcr2TextMoe(DeepseekV2Moe):
+class DeepseekOcr2TextSparseMoeBlock(DeepseekV2SparseMoeBlock):
     pass
 
 
@@ -900,7 +900,7 @@ class DeepseekOcr2TextDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.mlp = (
-            DeepseekOcr2TextMoe(config)
+            DeepseekOcr2TextSparseMoeBlock(config)
             if config.mlp_layer_types[layer_idx] == "sparse"
             else DeepseekOcr2TextMLP(config)
         )

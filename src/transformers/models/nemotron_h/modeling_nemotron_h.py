@@ -710,7 +710,7 @@ class NemotronHExperts(nn.Module):
         return final_hidden_states.to(hidden_states.dtype)
 
 
-class NemotronHMoE(nn.Module):
+class NemotronHSparseMoeBlock(nn.Module):
     """
     Mixture-of-Experts (MoE) module for NemotronH.
 
@@ -725,7 +725,7 @@ class NemotronHMoE(nn.Module):
 
         # Replace with NemotronH-specific experts (non-gated MLP architecture)
         self.experts = NemotronHExperts(config)
-        self.gate = NemotronHTopkRouter(config)
+        self.gate = NemotronHTopKRouter(config)
 
         # Override shared_experts to use NemotronHMLP with correct intermediate size
         self.shared_experts = NemotronHMLP(config=config, intermediate_size=config.moe_shared_expert_intermediate_size)
@@ -754,7 +754,7 @@ class NemotronHMoE(nn.Module):
         return hidden_states
 
 
-class NemotronHTopkRouter(nn.Module):
+class NemotronHTopKRouter(nn.Module):
     def __init__(self, config: NemotronHConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
@@ -923,7 +923,7 @@ class NemotronHAttention(nn.Module):
 MIXER_TYPES = {
     "linear_attention": NemotronHMamba2Mixer,
     "full_attention": NemotronHAttention,
-    "moe": NemotronHMoE,
+    "moe": NemotronHSparseMoeBlock,
     "mlp": NemotronHMLP,
 }
 
@@ -1004,7 +1004,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": NemotronHBlock,
         "attentions": NemotronHAttention,
-        "router_logits": OutputRecorder(NemotronHTopkRouter, index=0),
+        "router_logits": OutputRecorder(NemotronHTopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
@@ -1037,7 +1037,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
                 inv_dt = dt + torch.log(-torch.expm1(-dt))
                 with torch.no_grad():
                     init.copy_(module.dt_bias, inv_dt)
-        elif isinstance(module, NemotronHTopkRouter):
+        elif isinstance(module, NemotronHTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, NemotronHExperts):
