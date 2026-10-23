@@ -447,6 +447,26 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertNotIn(tokenizer.eos_token_id, sanitized)
         self.assertEqual(tokenizer.decode(sanitized), "Hi</s>there<s>")
 
+    def test_apply_chat_template_sanitize_control_tokens_in_context(self):
+        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        eos = tokenizer.eos_token_id
+        template = "{% for message in messages %}{{ message['content'] }}<|endoftext|>{% endfor %}"
+
+        # What a model generates when it writes the token as text, inside quotes
+        content = 'x = "<|endoftext|>"'
+        generated = tokenizer.encode(content, split_special_tokens=True)
+        self.assertNotIn(eos, generated)
+        # Encoding the token on its own would split it from the quote before it
+        alone = tokenizer.encode('x = "') + tokenizer.encode("<|endoftext|>", split_special_tokens=True)
+        self.assertNotEqual(generated[: len(alone)], alone)
+
+        # Sent back in the next turn, the model's output encodes to the same ids
+        chat = [{"role": "user", "content": "Hi"}, {"role": "assistant", "content": content}]
+        sanitized = tokenizer.apply_chat_template(
+            chat, chat_template=template, return_dict=False, sanitize_control_tokens=True
+        )
+        self.assertEqual(sanitized, tokenizer.encode("Hi") + [eos] + generated + [eos])
+
     def test_apply_chat_template_sanitize_added_tokens(self):
         template = "{% for message in messages %}<think>{{ message['content'] }}ipython\n\n{% endfor %}"
         chat = [{"role": "user", "content": "a<think>b<tool>c ipython\n\nd"}]
