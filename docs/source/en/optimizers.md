@@ -305,10 +305,27 @@ optimizer.zero_grad()
 ```
 
 `rank_fraction` controls the fraction of principal singular directions protected
-in each selected matrix. The basis is fixed at initialization; it is not refreshed
-after training steps. Without `target_modules`, SST selects the inner optimizer's
+in each selected matrix. By default, the basis stays fixed at initialization.
+Without `target_modules`, SST selects the inner optimizer's
 trainable matrices with both dimensions at least two. Use `"all-linear"` to select
 linear-layer weights, or pass module suffixes or full-match regular expressions.
+
+Set `refresh_every` to a positive integer to re-anchor the protected singular
+triples to the current weights after that many successful, projected optimizer
+updates. For example:
+
+```py
+optimizer = SST(inner_optimizer, model=model, rank_fraction=0.99, refresh_every=100)
+# Alternatively, refresh explicitly at a chosen boundary:
+optimizer.refresh()
+```
+
+A refresh does not change parameters, gradients, or inner optimizer state.
+It takes effect for subsequent updates and restarts the interval. Accumulation
+and AMP-overflow skips do not advance the clock. Refresh protects the latest
+anchor rather than retaining a guarantee against the original initialization,
+and adds SVD and communication costs. `initialize()` only adds new targets;
+it does not refresh an existing basis.
 
 With [`Trainer`], pass the wrapper class and its arguments as `optimizer_wrapper`.
 Keep `TrainingArguments.optim` or `optimizer_cls_and_kwargs` set to the inner
@@ -323,7 +340,11 @@ trainer = Trainer(
     train_dataset=train_dataset,
     optimizer_wrapper=(
         SST,
-        {"rank_fraction": 0.99, "target_modules": [r".*self_attn.*", r".*mlp.*"]},
+        {
+            "rank_fraction": 0.99,
+            "target_modules": [r".*self_attn.*", r".*mlp.*"],
+            "refresh_every": 100,
+        },
     ),
 )
 trainer.train()
@@ -359,10 +380,14 @@ one-dimensional flat parameters. Transformers' [`Adafactor`] is supported with
 DDP, but its factored buffers and RMS checkpoint metadata are not
 FSDP-compatible; use the FSDP-compatible `torch.optim.Adafactor` instead.
 
-Projection is collective: all participating ranks must call the wrapper's
-`step()`. FSDP1 gathers one wrapping unit at a time; FSDP2 and ZeRO gather one
-selected matrix at a time. These gathers, the initial SVDs, and the CPU-resident
-fixed bases add communication, compute, and memory costs. SST does not support
+Projection and refresh are collective: all participating ranks must call
+`step()` and any manual `refresh()` in the same order with the same schedule.
+Initialization and refresh compute a basis on one source and synchronize it
+within the parameter's owning process groups, including hybrid mesh axes.
+Independent submeshes do not share their bases. FSDP1 gathers one wrapping
+unit at a time; FSDP2 and ZeRO gather one selected matrix at a time. These
+gathers, SVDs, and CPU-resident bases add communication, compute, and memory
+costs. SST does not support
 XLA, SageMaker model parallelism, or differentiable optimizer steps.
 
 For FSDP2 CPU offload, use a process group that also supports CPU collectives,
@@ -371,9 +396,9 @@ group cannot reduce CPU DTensor gradients during the inner optimizer's gradient
 clipping. SST itself moves offloaded matrices to the mesh device for projection
 and writes them back to their original CPU shards.
 
-Trainer checkpoints preserve both the inner optimizer and the original fixed
-basis. Resume normally; SST restores the basis without recomputing an SVD from
-already-trained weights:
+Trainer checkpoints preserve the inner optimizer, active basis, update count,
+and refresh schedule. Resume normally; SST restores the basis without an
+extra SVD, then continues refreshing at the saved boundaries:
 
 ```py
 trainer.train(resume_from_checkpoint=checkpoint_dir)
@@ -385,7 +410,9 @@ checkpoint because their checkpoint converters only retain engine-owned state.
 Targets owned by a subgroup or submesh use `sst_state_rank_<rank>.pt` instead.
 These checkpoints require the same distributed rank and mesh topology on resume,
 so independent submeshes cannot accidentally share a fixed basis. Resuming
-without the original basis raises an error.
+without the saved basis raises an error. The checkpoint's rank and refresh
+schedule take precedence over constructor arguments. Version-1 SST checkpoints
+remain loadable as fixed-basis checkpoints with a fresh refresh clock.
 
 > [!WARNING]
 > Exact projection requires fp32 model parameters or fp32 optimizer master

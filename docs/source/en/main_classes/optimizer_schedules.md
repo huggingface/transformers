@@ -35,6 +35,7 @@ changing its gradient or optimizer-state calculation. See the
 [[autodoc]] SST
     - step
     - initialize
+    - refresh
     - project
     - sst_state_dict
     - load_sst_state_dict

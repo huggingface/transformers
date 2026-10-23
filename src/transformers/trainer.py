@@ -1840,12 +1840,12 @@ class Trainer:
                     )
                     if not os.path.isfile(path):
                         raise FileNotFoundError(
-                            f"SST's original fixed basis is missing at {path}. Resume requires a full SST checkpoint."
+                            f"SST's active basis is missing at {path}. Resume requires a full SST checkpoint."
                         )
                     self.optimizer.load_sst_state_dict(torch.load(path, map_location="cpu", weights_only=True))
                 if not self.optimizer.is_initialized:
                     raise ValueError(
-                        "This checkpoint has no SST optimizer state; the original basis cannot be restored."
+                        "This checkpoint has no SST optimizer state; the active basis cannot be restored."
                     )
             self._load_scaler(resume_from_checkpoint)
 

@@ -57,7 +57,7 @@ if is_torch_available():
 
 @require_torch
 class TrainerSSTTest(unittest.TestCase):
-    def trainer(self, output_dir, optim="adamw_torch", **kwargs):
+    def trainer(self, output_dir, optim="adamw_torch", refresh_every=None, **kwargs):
         torch.manual_seed(42)
         args = TrainingArguments(
             output_dir=output_dir,
@@ -78,7 +78,10 @@ class TrainerSSTTest(unittest.TestCase):
             args=args,
             train_dataset=_Dataset(),
             eval_dataset=_Dataset(),
-            optimizer_wrapper=(SST, {"rank_fraction": 0.5, "target_modules": ["q_proj"]}),
+            optimizer_wrapper=(
+                SST,
+                {"rank_fraction": 0.5, "target_modules": ["q_proj"], "refresh_every": refresh_every},
+            ),
             **kwargs,
         )
 
@@ -146,6 +149,33 @@ class TrainerSSTTest(unittest.TestCase):
                 torch.testing.assert_close(value, resumed.model.state_dict()[name], rtol=0, atol=0)
             for first, second in zip(
                 original_basis["protected_weights"], resumed.optimizer.sst_state_dict()["protected_weights"]
+            ):
+                for key in ("left", "singular_values", "right"):
+                    torch.testing.assert_close(first[key], second[key], rtol=0, atol=0)
+            self.assert_protected(resumed)
+
+    @parameterized.expand([1, 3])
+    def test_periodic_refresh_and_resume_crossing_a_refresh_boundary(self, refresh_every):
+        with tempfile.TemporaryDirectory() as directory:
+            trainer = self.trainer(directory, refresh_every=refresh_every)
+            trainer.train()
+            final_weights = copy.deepcopy(trainer.model.state_dict())
+            final_state = copy.deepcopy(trainer.optimizer.sst_state_dict())
+            self.assertEqual(trainer.optimizer.num_updates, 4)
+            self.assertEqual(trainer.optimizer.num_refreshes, 4 // refresh_every)
+            self.assert_protected(trainer)
+            resumed = self.trainer(str(Path(directory) / "resumed"), refresh_every=10)
+            with patch.object(
+                SST, "initialize", side_effect=AssertionError("Resume must load, not initialize, a basis")
+            ):
+                resumed.train(resume_from_checkpoint=str(Path(directory) / "checkpoint-2"))
+            self.assertEqual(resumed.optimizer.refresh_every, refresh_every)
+            for name, value in final_weights.items():
+                torch.testing.assert_close(value, resumed.model.state_dict()[name], rtol=0, atol=0)
+            for key in ("num_updates", "num_refreshes", "last_refresh_step", "refresh_every"):
+                self.assertEqual(final_state[key], resumed.optimizer.sst_state_dict()[key])
+            for first, second in zip(
+                final_state["protected_weights"], resumed.optimizer.sst_state_dict()["protected_weights"]
             ):
                 for key in ("left", "singular_values", "right"):
                     torch.testing.assert_close(first[key], second[key], rtol=0, atol=0)

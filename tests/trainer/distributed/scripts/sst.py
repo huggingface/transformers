@@ -70,7 +70,9 @@ def optimizer_state(optimizer):
 
 
 class ObservedSST(SST):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, manual_refresh=False, **kwargs):
+        self.manual_refresh = manual_refresh
+        self.observed_refreshes = 0
         self.projections = 0
         self.maximum_leakage = 0.0
         self.maximum_replica_difference = 0.0
@@ -81,6 +83,34 @@ class ObservedSST(SST):
             for name, parameter in self._parameters():
                 if name in self._basis:
                     self.initial_weights[name] = self._read_matrix(parameter).detach().cpu().clone()
+
+    def load_sst_state_dict(self, state_dict):
+        with patch("torch.linalg.svd", side_effect=AssertionError("Loading a checkpoint must not refresh its basis")):
+            return super().load_sst_state_dict(state_dict)
+
+    def refresh(self):
+        base = inner_optimizer(self.optimizer)
+        before_state = optimizer_state(base)
+        before_weights = {
+            name: self._read_matrix(parameter).detach().cpu().clone()
+            for name, parameter in self._parameters()
+            if name in self._basis
+        }
+        super().refresh()
+        assert_same_state(before_state, optimizer_state(base))
+        for name, parameter in self._parameters():
+            if name in before_weights:
+                torch.testing.assert_close(
+                    before_weights[name], self._read_matrix(parameter).detach().cpu(), rtol=0, atol=0
+                )
+        self.observed_refreshes += 1
+
+    def step(self, closure=None, **kwargs):
+        updates = self.num_updates
+        result = super().step(closure=closure, **kwargs)
+        if self.manual_refresh and updates == 0 and self.num_updates == 1:
+            self.refresh()
+        return result
 
     def project(self):
         base = inner_optimizer(self.optimizer)
@@ -210,7 +240,12 @@ def make_trainer(options, output_dir):
         eval_dataset=Tokens(),
         optimizer_wrapper=(
             ObservedSST,
-            {"rank_fraction": 0.99, "target_modules": [r".*self_attn.*", r".*mlp.*"]},
+            {
+                "rank_fraction": 0.99,
+                "target_modules": [r".*self_attn.*", r".*mlp.*"],
+                "refresh_every": options.refresh_every,
+                "manual_refresh": options.manual_refresh,
+            },
         ),
         **custom,
     )
@@ -237,6 +272,8 @@ def main():
     parser.add_argument("--flat_parameters", action="store_true")
     parser.add_argument("--offload", action="store_true")
     parser.add_argument("--dp_replicate_size", type=int, default=1)
+    parser.add_argument("--refresh_every", type=int)
+    parser.add_argument("--manual_refresh", action="store_true")
     options = parser.parse_args()
     torch.set_num_threads(1)
     if torch.cuda.is_available():
@@ -247,6 +284,14 @@ def main():
     assert isinstance(trainer.optimizer, SST)
     assert len(trainer.optimizer.sst_state_dict()["protected_weights"]) == 14
     assert trainer.optimizer.projections == 4
+    assert trainer.optimizer.num_updates == 4
+    assert trainer.optimizer.num_refreshes == trainer.optimizer.observed_refreshes
+    expected_refreshes = (
+        (1 + 1 // options.refresh_every + 3 // options.refresh_every if options.refresh_every else 1)
+        if options.manual_refresh
+        else (4 // options.refresh_every if options.refresh_every else 0)
+    )
+    assert trainer.optimizer.num_refreshes == expected_refreshes
     assert trainer.optimizer.maximum_leakage < 2e-6, trainer.optimizer.maximum_leakage
     assert trainer.optimizer.maximum_replica_difference == 0.0
     assert trainer.optimizer.maximum_movement > 0.0
@@ -260,6 +305,11 @@ def main():
         "flat_parameters": options.flat_parameters,
         "offload": options.offload,
         "dp_replicate_size": options.dp_replicate_size,
+        "refresh_every": options.refresh_every,
+        "manual_refresh": options.manual_refresh,
+        "num_updates": trainer.optimizer.num_updates,
+        "num_refreshes": trainer.optimizer.num_refreshes,
+        "last_refresh_step": trainer.optimizer.last_refresh_step,
         "world_size": trainer.args.world_size,
         "torch": torch.__version__,
         "maximum_protected_leakage": trainer.optimizer.maximum_leakage,
@@ -275,7 +325,9 @@ def main():
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     resumed = make_trainer(options, options.output_dir / "resumed")
-    with patch("torch.linalg.svd", side_effect=AssertionError("SST resume must restore, not refresh, its basis")):
+    with patch.object(
+        SST, "initialize", side_effect=AssertionError("SST resume must restore, not initialize, its basis")
+    ):
         resumed.train(resume_from_checkpoint=str(checkpoint))
     assert resumed.state.global_step == 4
     assert resumed.optimizer.projections == 2
@@ -289,7 +341,8 @@ def main():
     difference = max(differences.values(), default=0.0)
     assert difference < 3e-6, sorted(differences.items(), key=lambda item: item[1], reverse=True)[:5]
     result["maximum_resume_difference"] = difference
-    result["fixed_basis_restored_without_svd"] = True
+    result["active_basis_and_refresh_clock_restored_without_extra_svd"] = True
+    result["refresh_does_not_modify_weights_or_inner_optimizer_state"] = True
     final_dir = options.output_dir / "final-model"
     if resumed.is_fsdp_enabled:
         resumed.accelerator.state.fsdp_plugin.set_state_dict_type("FULL_STATE_DICT")

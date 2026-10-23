@@ -15,7 +15,7 @@
 import os
 import sys
 
-from parameterized import parameterized
+from parameterized import parameterized, parameterized_class
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
@@ -33,6 +33,7 @@ if is_torch_available():
     import torch
 
 
+@parameterized_class(("refresh_every",), [(None,), (3,)])
 @slow
 @require_torch_gpu
 @require_torch_multi_accelerator
@@ -56,7 +57,18 @@ class TrainerSSTDistributedTest(TestCasePlus):
             self.get_auto_remove_tmp_dir(),
             *extra_args,
         ]
+        if self.refresh_every is not None:
+            command.extend(["--refresh_every", str(self.refresh_every)])
         execute_subprocess_async(command, env=self.get_env())
+
+    @parameterized.expand(["ddp", "fsdp1", "fsdp2"])
+    def test_manual_refresh(self, backend):
+        self.run_backend(backend, "adamw", extra_args=("--manual_refresh",))
+
+    @parameterized.expand(["zero1", "zero2", "zero3"])
+    @require_deepspeed
+    def test_manual_refresh_with_master_parameters(self, backend):
+        self.run_backend(backend, "adamw", precision="bf16", extra_args=("--manual_refresh",))
 
     @parameterized.expand(
         [(backend, optim) for backend in ("ddp", "fsdp1", "fsdp2") for optim in ("sgd", "adamw", "torch_adafactor")]
@@ -80,6 +92,11 @@ class TrainerSSTDistributedTest(TestCasePlus):
         if torch.cuda.device_count() < 4:
             self.skipTest("A two-by-two hybrid mesh requires four CUDA devices.")
         self.run_backend("fsdp2", "adamw", processes=4, extra_args=("--dp_replicate_size", "2"))
+
+    def test_fsdp1_hybrid_mesh(self):
+        if torch.cuda.device_count() < 4:
+            self.skipTest("A two-by-two hybrid mesh requires four CUDA devices.")
+        self.run_backend("fsdp1", "sgd", processes=4, script_name="sst_fsdp1_hybrid.py")
 
     @parameterized.expand(["fsdp1", "fsdp2"])
     def test_bf16_compute_with_fp32_optimizer_weights(self, backend):

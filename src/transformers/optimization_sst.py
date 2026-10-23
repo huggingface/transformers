@@ -81,12 +81,12 @@ def _unit_parameters(module: nn.Module, prefix: str = "", root: bool = True) -> 
 
 class SST(Optimizer):
     r"""
-    Wrap an optimizer and project its applied updates outside fixed principal weight subspaces.
+    Wrap an optimizer and project its applied updates outside principal weight subspaces.
 
     The inner optimizer receives the original gradients and retains its own momentum, variance, weight decay, and
     parameter groups. After its step, SST restores each selected matrix to
-    `U diag(s) Vᴴ + (I - UUᴴ) W (I - VVᴴ)`. Here `(U, s, V)` are the protected singular triples of the initial weight.
-    This is the affine projection equivalent to projecting the optimizer's update and adding it to the original weight.
+    `U diag(s) Vᴴ + (I - UUᴴ) W (I - VVᴴ)`. Here `(U, s, V)` are the protected singular triples of the initial weight,
+    or of the current weight at the latest explicit or scheduled refresh. The basis is fixed between refreshes.
 
     Args:
         optimizer (`torch.optim.Optimizer`):
@@ -102,8 +102,12 @@ class SST(Optimizer):
             By default, all trainable matrices owned by the inner optimizer with both dimensions at least two are
             selected. Biases and vectors are not projected.
         initialize (`bool`, *optional*, defaults to `True`):
-            Build the fixed basis immediately. Set to `False` when restoring a checkpoint, then call `load_state_dict`
+            Build the initial basis immediately. Set to `False` when restoring a checkpoint, then call `load_state_dict`
             or `load_sst_state_dict` before stepping. A missing basis is never silently rebuilt from trained weights.
+        refresh_every (`int`, *optional*):
+            Recompute the basis after this many successful, projected optimizer updates. `None` keeps the initial
+            basis fixed. Accumulation and AMP-overflow skips do not advance the refresh clock. A manual `refresh()`
+            restarts the interval. Checkpoints restore the saved schedule, update count, and active basis.
 
     Example:
 
@@ -120,7 +124,9 @@ class SST(Optimizer):
 
     FSDP1 gathers and writes back one wrapping unit at a time. FSDP2/DTensor and DeepSpeed assemble one selected matrix
     at a time and write its projected value back to the original shards/master parameters. These operations are
-    collective: every participating rank must call `step`. Exact projection needs fp32/fp64 optimizer parameters;
+    collective: every participating rank must call `step` and any manual `refresh` in the same order, with the same
+    refresh schedule. Refreshed bases are synchronized within the parameter's owning process groups, not across
+    independent submeshes. Exact projection needs fp32/fp64 optimizer parameters;
     writing directly to bf16/fp16 parameters introduces rounding error.
     """
 
@@ -134,6 +140,7 @@ class SST(Optimizer):
         rank_fraction: float = 0.99,
         target_modules: str | Sequence[str] | None = None,
         initialize: bool = True,
+        refresh_every: int | None = None,
     ):
         if not isinstance(optimizer, Optimizer):
             raise TypeError("SST requires a torch.optim.Optimizer or a prepared Accelerate optimizer.")
@@ -141,6 +148,7 @@ class SST(Optimizer):
             raise ValueError("This optimizer is already wrapped by SST.")
         if not math.isfinite(rank_fraction) or not 0.0 < rank_fraction < 1.0:
             raise ValueError("rank_fraction must be finite and strictly between 0 and 1.")
+        self._validate_refresh_every(refresh_every)
         defaults = _optimizer_defaults(optimizer)
         if defaults.get("differentiable", False) or any(
             group.get("differentiable", False) for group in optimizer.param_groups
@@ -160,6 +168,10 @@ class SST(Optimizer):
         self.model = model
         self.rank_fraction = float(rank_fraction)
         self.target_modules = target_modules
+        self.refresh_every = refresh_every
+        self.num_updates = 0
+        self.last_refresh_step = 0
+        self.num_refreshes = 0
         self._basis: dict[str, _SSTBasis] = {}
         self._warned_low_precision: set[str] = set()
         self._initializing = True
@@ -182,6 +194,10 @@ class SST(Optimizer):
             "model": self.model,
             "rank_fraction": self.rank_fraction,
             "target_modules": self.target_modules,
+            "refresh_every": self.refresh_every,
+            "num_updates": self.num_updates,
+            "last_refresh_step": self.last_refresh_step,
+            "num_refreshes": self.num_refreshes,
             "_basis": self._basis,
             "_warned_low_precision": self._warned_low_precision,
             "_initializing": False,
@@ -198,8 +214,13 @@ class SST(Optimizer):
 
     @property
     def is_initialized(self) -> bool:
-        """Whether the original fixed basis has been initialized or restored."""
+        """Whether the active basis has been initialized or restored."""
         return bool(self._basis)
+
+    @staticmethod
+    def _validate_refresh_every(value) -> None:
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 1):
+            raise ValueError("refresh_every must be a positive integer or None.")
 
     def _checkpoint_topology(self, target_names=None):
         if not torch.distributed.is_available():
@@ -245,7 +266,7 @@ class SST(Optimizer):
 
     @property
     def requires_per_rank_state(self) -> bool:
-        """Whether submesh-owned targets require rank-specific fixed-basis checkpoints."""
+        """Whether submesh-owned targets require rank-specific active-basis checkpoints."""
         return self._checkpoint_topology() is not None
 
     def _parameters(self, *, writeback: bool = False) -> Iterator[tuple[str, nn.Parameter]]:
@@ -360,31 +381,147 @@ class SST(Optimizer):
         else:
             parameter.copy_(matrix.to(device=parameter.device, dtype=parameter.dtype))
 
+    def _basis_groups(self, name: str, parameter: nn.Parameter) -> list[Any]:
+        if not torch.distributed.is_available():
+            return []
+        from torch.distributed import get_world_size, is_initialized
+        from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+        from torch.distributed.tensor import DTensor
+
+        if not is_initialized():
+            return []
+        if isinstance(parameter, DTensor):
+            groups = [parameter.device_mesh.get_group(dim) for dim in range(parameter.device_mesh.ndim)]
+        else:
+            group = getattr(parameter, "ds_process_group", None) or getattr(parameter, "_dp_group", None)
+            groups = [group] if group is not None else []
+            model = self.model
+            while isinstance(model, (nn.parallel.DistributedDataParallel, nn.DataParallel)):
+                if not groups and isinstance(model, nn.parallel.DistributedDataParallel):
+                    groups = [model.process_group]
+                model = model.module
+            if not groups and model is not None:
+                units = [
+                    (_canonical_name(prefix), unit)
+                    for prefix, unit in model.named_modules()
+                    if isinstance(unit, FSDP)
+                    and (not _canonical_name(prefix) or name.startswith(_canonical_name(prefix) + "."))
+                ]
+                if units:
+                    _, unit = max(units, key=lambda item: len(item[0]))
+                    groups = [unit.process_group]
+                    replica_group = getattr(unit, "_inter_node_pg", None)
+                    if replica_group is not None:
+                        groups.append(replica_group)
+        seen = set()
+        unique = []
+        for group in groups:
+            if get_world_size(group) > 1 and id(group) not in seen:
+                unique.append(group)
+                seen.add(id(group))
+        return unique
+
+    @staticmethod
+    def _reduce_basis_tensor(tensor: torch.Tensor, group, operation: str) -> None:
+        from torch.distributed import ReduceOp, all_reduce, get_backend
+
+        device = tensor.device
+        backend = get_backend(group)
+        if backend == "nccl" and device.type != "cuda":
+            device = torch.device("cuda", torch.cuda.current_device())
+        elif backend == "gloo":
+            device = torch.device("cpu")
+        value = tensor.to(device).resolve_conj().contiguous()
+        all_reduce(
+            torch.view_as_real(value) if value.is_complex() else value,
+            op=getattr(ReduceOp, operation),
+            group=group,
+        )
+        if value is not tensor:
+            tensor.copy_(value.to(tensor.device))
+
+    def _make_basis(self, name: str, parameter: nn.Parameter) -> _SSTBasis:
+        matrix = self._read_matrix(parameter)
+        if matrix.is_meta:
+            raise ValueError("SST cannot initialize a basis from a meta parameter. Materialize the model first.")
+        matrix = matrix.to(dtype=_work_dtype(matrix.dtype))
+        rank = min(max(1, math.floor(min(matrix.shape) * self.rank_fraction)), min(matrix.shape) - 1)
+        groups = self._basis_groups(name, parameter)
+        if groups:
+            from torch.distributed import get_rank
+
+            source = torch.tensor(get_rank(), dtype=torch.int64, device=matrix.device)
+            for group in groups:
+                self._reduce_basis_tensor(source, group, "MIN")
+            compute = get_rank() == source.item()
+        else:
+            compute = True
+        left = values = right = None
+        error = None
+        try:
+            if compute:
+                left, values, vh = torch.linalg.svd(matrix, full_matrices=False)
+                left = left[:, :rank].contiguous()
+                values = values[:rank].contiguous()
+                right = vh[:rank].mH.resolve_conj().contiguous()
+                if not all(torch.isfinite(tensor).all() for tensor in (left, values, right)):
+                    raise ValueError("SVD returned a nonfinite basis.")
+            else:
+                left = matrix.new_zeros((matrix.shape[0], rank))
+                values = matrix.real.new_zeros(rank)
+                right = matrix.new_zeros((matrix.shape[1], rank))
+        except Exception as exception:
+            error = exception
+        failed = torch.tensor(int(error is not None), dtype=torch.int64, device=matrix.device)
+        for group in groups:
+            self._reduce_basis_tensor(failed, group, "MAX")
+        if failed.item():
+            raise RuntimeError(
+                f"Could not compute SST basis for {name!r}; the active basis was not replaced."
+            ) from error
+        assert left is not None and values is not None and right is not None
+        # Only the source contributes; successive mesh dimensions distribute its basis to every owner.
+        for group in groups:
+            for tensor in (left, values, right):
+                self._reduce_basis_tensor(tensor, group, "SUM")
+        return _SSTBasis(left.cpu(), values.cpu(), right.cpu())
+
+    def _build_bases(self, *, refresh: bool) -> dict[str, _SSTBasis]:
+        bases = {} if refresh else self._basis.copy()
+        for name, parameter in self._parameters():
+            if refresh:
+                if name not in self._basis:
+                    continue
+                if _matrix_shape(parameter) != self._basis[name].shape:
+                    raise ValueError(f"SST target {name!r} changed shape after initialization.")
+            elif name in bases or not self._selected(name, parameter, self.target_modules):
+                continue
+            bases[name] = self._make_basis(name, parameter)
+        if not bases:
+            raise ValueError("No trainable SST target matrices matched the optimizer and target_modules.")
+        if refresh and set(bases) != set(self._basis):
+            raise ValueError(f"SST optimizer lost target parameters: {sorted(set(self._basis) - set(bases))}.")
+        return bases
+
     @torch.no_grad()
     def initialize(self) -> None:
-        """Initialize only new targets; never refresh existing fixed bases."""
-        for name, parameter in self._parameters():
-            if name in self._basis or not self._selected(name, parameter, self.target_modules):
-                continue
-            matrix = self._read_matrix(parameter)
-            if matrix.is_meta:
-                raise ValueError("SST cannot initialize a basis from a meta parameter. Materialize the model first.")
-            matrix = matrix.to(dtype=_work_dtype(matrix.dtype))
-            rank = min(max(1, math.floor(min(matrix.shape) * self.rank_fraction)), min(matrix.shape) - 1)
-            left, singular_values, vh = torch.linalg.svd(matrix, full_matrices=False)
-            self._basis[name] = _SSTBasis(
-                left[:, :rank].contiguous().cpu(),
-                singular_values[:rank].contiguous().cpu(),
-                vh[:rank].mH.contiguous().cpu(),
-            )
+        """Initialize only new targets; do not refresh existing bases."""
+        self._basis = self._build_bases(refresh=False)
+
+    @torch.no_grad()
+    def refresh(self) -> None:
+        """Re-anchor to current weights without changing parameters or inner state; all owning ranks must call."""
         if not self._basis:
-            raise ValueError("No trainable SST target matrices matched the optimizer and target_modules.")
+            raise RuntimeError("Initialize or restore SST's basis before refreshing.")
+        self._basis = self._build_bases(refresh=True)
+        self.last_refresh_step = self.num_updates
+        self.num_refreshes += 1
 
     @torch.no_grad()
     def project(self) -> None:
         """Project the applied update without modifying gradients or inner optimizer state."""
         if not self._basis:
-            raise RuntimeError("SST's fixed basis is not initialized. Restore its checkpoint or call initialize().")
+            raise RuntimeError("SST's active basis is not initialized. Restore its checkpoint or call initialize().")
         visited = set()
         for name, parameter in self._parameters(writeback=True):
             if name not in self._basis:
@@ -415,13 +552,16 @@ class SST(Optimizer):
     def step(self, closure=None, **kwargs):
         """Run the inner optimizer, then project unless its mixed-precision step was skipped."""
         if not self._basis:
-            raise RuntimeError("Restore SST's fixed basis or call initialize() before stepping.")
+            raise RuntimeError("Restore SST's active basis or call initialize() before stepping.")
         result = self.optimizer.step(**kwargs) if closure is None else self.optimizer.step(closure=closure, **kwargs)
         self._sync_optimizer_state()
         gradient_state = getattr(self.optimizer, "gradient_state", None)
         accumulating = gradient_state is not None and not gradient_state.sync_gradients
         if not accumulating and not getattr(self.optimizer, "step_was_skipped", False):
             self.project()
+            self.num_updates += 1
+            if self.refresh_every is not None and self.num_updates - self.last_refresh_step >= self.refresh_every:
+                self.refresh()
         return result
 
     def zero_grad(self, set_to_none: bool = True) -> None:
@@ -435,14 +575,18 @@ class SST(Optimizer):
         self.initialize()
 
     def sst_state_dict(self) -> dict[str, Any]:
-        """Return the fixed basis separately for engines that transform optimizer state dictionaries."""
+        """Return the active basis and refresh clock separately for engines that transform optimizer state."""
         if not self._basis:
-            raise RuntimeError("SST's fixed basis has not been initialized or restored.")
+            raise RuntimeError("SST's active basis has not been initialized or restored.")
         return {
-            "version": 1,
+            "version": 2,
             "topology": self._checkpoint_topology(),
             "rank_fraction": self.rank_fraction,
             "target_modules": self.target_modules,
+            "refresh_every": self.refresh_every,
+            "num_updates": self.num_updates,
+            "last_refresh_step": self.last_refresh_step,
+            "num_refreshes": self.num_refreshes,
             "protected_weights": [
                 {"name": name, "left": basis.left, "singular_values": basis.singular_values, "right": basis.right}
                 for name, basis in self._basis.items()
@@ -450,9 +594,24 @@ class SST(Optimizer):
         }
 
     def load_sst_state_dict(self, state_dict: dict[str, Any]) -> None:
-        """Restore and validate original bases without an SVD or parameter/state projection."""
-        if state_dict.get("version", 1) != 1:
+        """Restore the saved basis and refresh clock without an SVD or parameter/state projection."""
+        version = state_dict.get("version", 1)
+        if version not in (1, 2):
             raise ValueError("Unsupported SST checkpoint version.")
+        if version == 2 and "refresh_every" not in state_dict:
+            raise ValueError("SST checkpoint refresh_every is missing.")
+        refresh_every = state_dict.get("refresh_every") if version == 2 else None
+        self._validate_refresh_every(refresh_every)
+        counters = {
+            key: state_dict.get(key) if version == 2 else 0
+            for key in ("num_updates", "last_refresh_step", "num_refreshes")
+        }
+        if any(isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in counters.values()):
+            raise ValueError("SST checkpoint refresh counters must be nonnegative integers.")
+        if counters["last_refresh_step"] > counters["num_updates"] or (
+            counters["num_refreshes"] == 0 and counters["last_refresh_step"] != 0
+        ):
+            raise ValueError("Inconsistent SST checkpoint refresh counters.")
         fraction = float(state_dict["rank_fraction"])
         if not math.isfinite(fraction) or not 0.0 < fraction < 1.0:
             raise ValueError("Invalid SST checkpoint rank_fraction.")
@@ -498,6 +657,10 @@ class SST(Optimizer):
             )
         self.rank_fraction = fraction
         self.target_modules = targets
+        self.refresh_every = refresh_every
+        self.num_updates = counters["num_updates"]
+        self.last_refresh_step = counters["last_refresh_step"]
+        self.num_refreshes = counters["num_refreshes"]
         self._basis = bases
         self._sync_optimizer_state()
 
@@ -521,7 +684,7 @@ class SST(Optimizer):
             if result is not None:
                 state = result
         if "sst" not in state:
-            raise ValueError("SST's fixed basis is missing from this optimizer checkpoint.")
+            raise ValueError("SST's active basis is missing from this optimizer checkpoint.")
         self.load_sst_state_dict(state.pop("sst"))
         self.optimizer.load_state_dict(state)
         self._sync_optimizer_state()

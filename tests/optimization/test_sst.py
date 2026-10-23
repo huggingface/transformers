@@ -70,23 +70,27 @@ class SSTTest(unittest.TestCase):
 
     @parameterized.expand(
         [
-            "SGD",
-            "Adam",
-            "AdamW",
-            "RMSprop",
-            "Adagrad",
-            "Adadelta",
-            "Adamax",
-            "ASGD",
-            "Rprop",
-            "NAdam",
-            "RAdam",
-            "Adafactor",
-            "TorchAdafactor",
-            "Muon",
+            (name, refresh_every)
+            for name in (
+                "SGD",
+                "Adam",
+                "AdamW",
+                "RMSprop",
+                "Adagrad",
+                "Adadelta",
+                "Adamax",
+                "ASGD",
+                "Rprop",
+                "NAdam",
+                "RAdam",
+                "Adafactor",
+                "TorchAdafactor",
+                "Muon",
+            )
+            for refresh_every in (None, 2)
         ]
     )
-    def test_wraps_optimizer_without_changing_its_state(self, name):
+    def test_wraps_optimizer_without_changing_its_state(self, name, refresh_every):
         if name == "Adafactor":
             inner = Adafactor(self.model.parameters(), lr=0.05, relative_step=False, scale_parameter=False)
         elif name == "TorchAdafactor":
@@ -99,7 +103,9 @@ class SSTTest(unittest.TestCase):
             inner = torch.optim.Muon([self.model.q_proj.weight], lr=0.05)
         else:
             inner = getattr(torch.optim, name)(self.model.parameters(), lr=0.05)
-        optimizer = SST(inner, model=self.model, rank_fraction=0.5, target_modules=["q_proj"])
+        optimizer = SST(
+            inner, model=self.model, rank_fraction=0.5, target_modules=["q_proj"], refresh_every=refresh_every
+        )
         raw_states, raw_weights = [], []
 
         def after_inner_step(*_):
@@ -122,6 +128,8 @@ class SSTTest(unittest.TestCase):
             self.assertIs(optimizer.param_groups, inner.param_groups)
             self.assertIs(optimizer.state, inner.state)
         handle.remove()
+        self.assertEqual(optimizer.num_updates, 3)
+        self.assertEqual(optimizer.num_refreshes, 0 if refresh_every is None else 1)
         self.assertFalse(torch.equal(self.model.q_proj.weight, raw_weights[-1]["q_proj.weight"]))
 
     def test_projection_matches_projected_applied_update(self):
@@ -160,10 +168,14 @@ class SSTTest(unittest.TestCase):
         optimizer = SST(inner, model=self.model, initialize=False)
         self.assertEqual([name for name, _ in optimizer._parameters()], ["q_proj.weight"])
 
-    def test_sparse_optimizer_and_gradient_are_preserved(self):
+    @parameterized.expand([(None,), (1,)])
+    def test_sparse_optimizer_and_gradient_are_preserved(self, refresh_every):
         self.model = nn.Sequential(nn.Embedding(12, 8, sparse=True)).to(torch_device)
+        # Match the linear fixtures' scale for the same absolute fp32 projection tolerance.
+        with torch.no_grad():
+            self.model[0].weight.mul_(0.1)
         inner = torch.optim.SparseAdam(self.model.parameters(), lr=0.05)
-        optimizer = SST(inner, model=self.model, rank_fraction=0.5)
+        optimizer = SST(inner, model=self.model, rank_fraction=0.5, refresh_every=refresh_every)
         self.model(torch.tensor([1, 3, 5], device=torch_device)).sum().backward()
         gradient = self.model[0].weight.grad.clone()
         before_state = []
@@ -215,9 +227,10 @@ class SSTTest(unittest.TestCase):
         optimizer.step()
         self.assert_protected(optimizer)
 
-    def test_closure_and_return_value(self):
+    @parameterized.expand([(None,), (1,)])
+    def test_closure_and_return_value(self, refresh_every):
         inner = torch.optim.LBFGS([self.model.q_proj.weight], lr=0.05, max_iter=3)
-        optimizer = SST(inner, model=self.model, rank_fraction=0.5)
+        optimizer = SST(inner, model=self.model, rank_fraction=0.5, refresh_every=refresh_every)
         calls = []
 
         def closure():
@@ -229,7 +242,156 @@ class SSTTest(unittest.TestCase):
 
         result = optimizer.step(closure)
         self.assertIs(result, calls[0])
+        self.assertEqual(optimizer.num_updates, 1)
+        self.assertEqual(optimizer.num_refreshes, 0 if refresh_every is None else 1)
         self.assert_protected(optimizer)
+
+    def test_manual_refresh_reanchors_without_modifying_weights_gradients_or_inner_state(self):
+        inner = torch.optim.AdamW(self.model.parameters(), lr=0.1)
+        optimizer = SST(inner, model=self.model, rank_fraction=0.5)
+        for parameter in self.model.parameters():
+            parameter.grad = torch.randn_like(parameter)
+        optimizer.step()
+        with torch.no_grad():
+            self.model.q_proj.weight.add_(0.1 * torch.randn_like(self.model.q_proj.weight))
+        before_weights = copy.deepcopy(self.model.state_dict())
+        before_gradients = [parameter.grad.clone() for parameter in self.model.parameters()]
+        before_inner = copy.deepcopy(inner.state_dict())
+        previous = copy.deepcopy(optimizer.sst_state_dict())
+        optimizer.refresh()
+        self.assert_state_equal(before_weights, self.model.state_dict())
+        self.assert_state_equal(before_inner, inner.state_dict())
+        for gradient, parameter in zip(before_gradients, self.model.parameters()):
+            torch.testing.assert_close(gradient, parameter.grad, rtol=0, atol=0)
+        self.assertEqual(optimizer.num_updates, 1)
+        self.assertEqual(optimizer.last_refresh_step, 1)
+        self.assertEqual(optimizer.num_refreshes, 1)
+        self.assertFalse(torch.equal(previous["protected_weights"][0]["left"], optimizer._basis["q_proj.weight"].left))
+        self.assert_protected(optimizer)
+        with patch("torch.linalg.svd", side_effect=AssertionError("initialize must not refresh existing targets")):
+            optimizer.initialize()
+        self.assertEqual(optimizer.num_refreshes, 1)
+        optimizer.step()
+        self.assert_protected(optimizer)
+
+    def test_manual_refresh_restarts_the_periodic_interval(self):
+        optimizer = SST(
+            torch.optim.SGD(self.model.parameters(), lr=0.1),
+            model=self.model,
+            rank_fraction=0.5,
+            refresh_every=3,
+        )
+        self.model.q_proj.weight.grad = torch.randn_like(self.model.q_proj.weight)
+        optimizer.step()
+        optimizer.refresh()
+        for step in (2, 3, 4):
+            optimizer.step()
+            self.assertEqual(optimizer.num_updates, step)
+            self.assertEqual(optimizer.num_refreshes, 2 if step == 4 else 1)
+        self.assertEqual(optimizer.last_refresh_step, 4)
+
+    def test_refresh_failure_keeps_every_active_basis_and_counter(self):
+        optimizer = SST(torch.optim.AdamW(self.model.parameters()), model=self.model, rank_fraction=0.5)
+        original = copy.deepcopy(optimizer.sst_state_dict())
+        svd = torch.linalg.svd
+        calls = []
+
+        def fail_second_target(*args, **kwargs):
+            calls.append(1)
+            if len(calls) == 2:
+                raise RuntimeError("Injected SVD failure")
+            return svd(*args, **kwargs)
+
+        with (
+            patch("torch.linalg.svd", side_effect=fail_second_target),
+            self.assertRaisesRegex(RuntimeError, "active basis was not replaced"),
+        ):
+            optimizer.refresh()
+        self.assert_state_equal(original, optimizer.sst_state_dict())
+
+    def test_uninitialized_refresh_requires_an_explicit_initial_basis(self):
+        optimizer = SST(torch.optim.SGD(self.model.parameters(), lr=0.1), model=self.model, initialize=False)
+        with self.assertRaisesRegex(RuntimeError, "Initialize or restore"):
+            optimizer.refresh()
+        self.assertFalse(optimizer.is_initialized)
+        self.assertEqual(optimizer.num_refreshes, 0)
+
+    @parameterized.expand([0, -1, True, False, 1.5, "2", float("nan")])
+    def test_invalid_refresh_schedule_is_rejected(self, value):
+        with self.assertRaisesRegex(ValueError, "refresh_every"):
+            SST(torch.optim.SGD(self.model.parameters()), model=self.model, refresh_every=value)
+
+    def test_refresh_checkpoint_preserves_the_clock_and_exact_training_trajectory(self):
+        optimizer = SST(
+            torch.optim.AdamW(self.model.parameters(), lr=0.05),
+            model=self.model,
+            rank_fraction=0.5,
+            refresh_every=2,
+        )
+        gradients = [
+            {name: torch.randn_like(parameter) for name, parameter in self.model.named_parameters()} for _ in range(6)
+        ]
+        for step, gradient in enumerate(gradients):
+            for name, parameter in self.model.named_parameters():
+                parameter.grad = gradient[name].clone()
+            optimizer.step()
+            if step == 2:
+                checkpoint = copy.deepcopy(optimizer.state_dict())
+                replacement_model = copy.deepcopy(self.model)
+        with patch("torch.linalg.svd", side_effect=AssertionError("Loading must not recompute the active basis")):
+            restored = SST(
+                torch.optim.AdamW(replacement_model.parameters(), lr=1.0),
+                model=replacement_model,
+                initialize=False,
+                refresh_every=1,
+            )
+            restored.load_state_dict(checkpoint)
+        self.assertEqual((restored.refresh_every, restored.num_updates, restored.last_refresh_step), (2, 3, 2))
+        for gradient in gradients[3:]:
+            for name, parameter in replacement_model.named_parameters():
+                parameter.grad = gradient[name].clone()
+            restored.step()
+        self.assert_state_equal(self.model.state_dict(), replacement_model.state_dict())
+        self.assert_state_equal(optimizer.sst_state_dict(), restored.sst_state_dict())
+        self.assert_state_equal(optimizer.optimizer.state_dict(), restored.optimizer.state_dict())
+        self.assertEqual((restored.num_updates, restored.last_refresh_step, restored.num_refreshes), (6, 6, 3))
+
+    def test_legacy_checkpoint_keeps_fixed_basis_semantics(self):
+        optimizer = SST(torch.optim.SGD(self.model.parameters()), model=self.model, rank_fraction=0.5)
+        legacy = copy.deepcopy(optimizer.sst_state_dict())
+        legacy["version"] = 1
+        for name in ("refresh_every", "num_updates", "last_refresh_step", "num_refreshes"):
+            legacy.pop(name)
+        restored = SST(torch.optim.SGD(self.model.parameters()), model=self.model, initialize=False, refresh_every=2)
+        with patch("torch.linalg.svd", side_effect=AssertionError("Legacy restore must not run an SVD")):
+            restored.load_sst_state_dict(legacy)
+        self.assertIsNone(restored.refresh_every)
+        self.assertEqual((restored.num_updates, restored.last_refresh_step, restored.num_refreshes), (0, 0, 0))
+        self.assert_state_equal(legacy["protected_weights"], restored.sst_state_dict()["protected_weights"])
+
+    def test_invalid_refresh_checkpoint_is_rejected_without_mutating_active_state(self):
+        optimizer = SST(torch.optim.SGD(self.model.parameters()), model=self.model, rank_fraction=0.5)
+        original = copy.deepcopy(optimizer.sst_state_dict())
+        for field, value in (
+            ("refresh_every", 0),
+            ("refresh_every", True),
+            ("num_updates", -1),
+            ("num_updates", 1.5),
+            ("num_refreshes", True),
+            ("last_refresh_step", 1),
+        ):
+            with self.subTest(field=field, value=value):
+                state = {**original, field: value}
+                with self.assertRaisesRegex(ValueError, "refresh"):
+                    optimizer.load_sst_state_dict(state)
+                self.assert_state_equal(original, optimizer.sst_state_dict())
+        for field in ("refresh_every", "num_updates", "last_refresh_step", "num_refreshes"):
+            with self.subTest(missing=field):
+                state = original.copy()
+                state.pop(field)
+                with self.assertRaisesRegex(ValueError, "refresh"):
+                    optimizer.load_sst_state_dict(state)
+                self.assert_state_equal(original, optimizer.sst_state_dict())
 
     def test_checkpoint_restores_basis_and_optimizer_without_svd(self):
         inner = torch.optim.AdamW(self.model.parameters(), lr=0.03)
@@ -277,8 +439,14 @@ class SSTTest(unittest.TestCase):
         self.assertEqual(calls, ["save_pre", "save_post", "load_pre", "load_post"])
         self.assertEqual(inner.loaded_metadata, "preserved")
 
-    def test_deepcopy_preserves_wrapper_and_fixed_basis(self):
-        optimizer = SST(torch.optim.AdamW(self.model.parameters()), model=self.model, rank_fraction=0.5)
+    @parameterized.expand([(None,), (2,)])
+    def test_deepcopy_preserves_wrapper_basis_and_refresh_clock(self, refresh_every):
+        optimizer = SST(
+            torch.optim.AdamW(self.model.parameters()),
+            model=self.model,
+            rank_fraction=0.5,
+            refresh_every=refresh_every,
+        )
         for parameter in self.model.parameters():
             parameter.grad = torch.randn_like(parameter)
         optimizer.step()
@@ -288,9 +456,14 @@ class SSTTest(unittest.TestCase):
         self.assertIs(copied.param_groups, copied.optimizer.param_groups)
         self.assertIs(copied.state, copied.optimizer.state)
         self.assertIsNot(copied.model, self.model)
+        self.assert_state_equal(optimizer.sst_state_dict(), copied.sst_state_dict())
         for parameter in copied.model.parameters():
             parameter.grad = torch.randn_like(parameter)
         copied.step()
+        self.assertEqual(copied.num_updates, 2)
+        self.assertEqual(copied.num_refreshes, 0 if refresh_every is None else 1)
+        self.assertEqual(optimizer.num_updates, 1)
+        self.assertEqual(optimizer.num_refreshes, 0)
         torch.testing.assert_close(self.model.q_proj.weight, original, rtol=0, atol=0)
         self.model = copied.model
         self.assert_protected(copied)
@@ -307,10 +480,15 @@ class SSTTest(unittest.TestCase):
     def test_skipped_prepared_step_does_not_project(self):
         inner = torch.optim.SGD(self.model.parameters(), lr=0.1)
         inner.step_was_skipped = True
-        optimizer = SST(inner, model=self.model, rank_fraction=0.5)
-        with patch.object(optimizer, "project", new=Mock()) as project:
+        optimizer = SST(inner, model=self.model, rank_fraction=0.5, refresh_every=1)
+        with (
+            patch.object(optimizer, "project", new=Mock()) as project,
+            patch.object(optimizer, "refresh", new=Mock()) as refresh,
+        ):
             optimizer.step()
         project.assert_not_called()
+        refresh.assert_not_called()
+        self.assertEqual(optimizer.num_updates, 0)
 
     def test_prepared_optimizer_accumulation_does_not_project(self):
         class AccumulatingOptimizer(torch.optim.SGD):
@@ -321,16 +499,18 @@ class SSTTest(unittest.TestCase):
                     return super().step(closure)
 
         inner = AccumulatingOptimizer(self.model.parameters(), lr=0.1)
-        optimizer = SST(inner, model=self.model, rank_fraction=0.5)
+        optimizer = SST(inner, model=self.model, rank_fraction=0.5, refresh_every=1)
         self.model.q_proj.weight.grad = torch.randn_like(self.model.q_proj.weight)
         before = self.model.q_proj.weight.detach().clone()
         with patch.object(optimizer, "project", wraps=optimizer.project) as project:
             optimizer.step()
             project.assert_not_called()
+            self.assertEqual((optimizer.num_updates, optimizer.num_refreshes), (0, 0))
             torch.testing.assert_close(self.model.q_proj.weight, before, rtol=0, atol=0)
             inner.gradient_state.sync_gradients = True
             optimizer.step()
             project.assert_called_once()
+            self.assertEqual((optimizer.num_updates, optimizer.num_refreshes), (1, 1))
         self.assert_protected(optimizer)
 
     def test_differentiable_optimizer_is_rejected(self):
@@ -371,7 +551,7 @@ class SSTTest(unittest.TestCase):
 
     def test_grad_scaler_overflow_does_not_step_or_project(self):
         inner = torch.optim.AdamW(self.model.parameters(), lr=0.1)
-        optimizer = SST(inner, model=self.model, rank_fraction=0.5)
+        optimizer = SST(inner, model=self.model, rank_fraction=0.5, refresh_every=1)
         scaler = torch.amp.GradScaler(torch.device(torch_device).type)
         loss = self.model.q_proj.weight.square().sum()
         scaler.scale(loss).backward()
@@ -383,11 +563,17 @@ class SSTTest(unittest.TestCase):
         project.assert_not_called()
         torch.testing.assert_close(self.model.q_proj.weight, before, rtol=0, atol=0)
         self.assertEqual(len(inner.state), 0)
+        self.assertEqual((optimizer.num_updates, optimizer.num_refreshes), (0, 0))
 
     @parameterized.expand(["float64", "complex64", "complex128"])
     def test_higher_precision_and_complex_parameters(self, dtype):
         self.model = _Model(dtype=getattr(torch, dtype)).to(torch_device)
-        optimizer = SST(torch.optim.SGD(self.model.parameters(), lr=0.1), model=self.model, rank_fraction=0.5)
+        optimizer = SST(
+            torch.optim.SGD(self.model.parameters(), lr=0.1),
+            model=self.model,
+            rank_fraction=0.5,
+            refresh_every=1,
+        )
         for parameter in self.model.parameters():
             parameter.grad = torch.randn_like(parameter)
         optimizer.step()
@@ -424,9 +610,9 @@ class SSTTest(unittest.TestCase):
 
     def test_deferred_initialization_cannot_silently_reanchor(self):
         optimizer = SST(torch.optim.SGD(self.model.parameters(), lr=0.1), model=self.model, initialize=False)
-        with self.assertRaisesRegex(RuntimeError, "fixed basis"):
+        with self.assertRaisesRegex(RuntimeError, "active basis"):
             optimizer.step()
-        with self.assertRaisesRegex(ValueError, "fixed basis"):
+        with self.assertRaisesRegex(ValueError, "active basis"):
             optimizer.load_state_dict(optimizer.optimizer.state_dict())
         optimizer.initialize()
         self.assertTrue(optimizer.is_initialized)
