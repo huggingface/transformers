@@ -82,14 +82,15 @@ class PocketTTSConfig(PreTrainedConfig):
         Dimension of the audio latents the backbone takes as input (`audio_prompt_latents`, `audio_latents`); equals the
         flow head's and the audio tokenizer's `latent_dim`.
     audio_prompt_token_id (`int`, *optional*, defaults to 4000):
-        Placeholder token id of the voice-prompt frames in `input_ids`.
-    audio_latent_token_id (`int`, *optional*, defaults to 4001):
-        Placeholder token id of the audio latent positions in `input_ids`.
-    audio_prompt_bos_token_id (`int`, *optional*, defaults to 4002):
-        Token id placed before the voice prompt; its embedding is the learnt vector the original prepends to the voice.
-    audio_bos_token_id (`int`, *optional*, defaults to 4003):
-        Token id of the first audio position, closing the prompt: it holds the learnt BOS latent, from which the first
-        frame is generated.
+        Placeholder token id of the voice-prompt frames in `input_ids` (the original's padding row, never read).
+    audio_latent_token_id (`int`, *optional*, defaults to 1):
+        Placeholder token id of the audio latent positions in `input_ids` (the original's unused `<s>` row).
+    audio_prompt_bos_token_id (`int`, *optional*, defaults to 4001):
+        Token id placed before the voice prompt; its embedding (the last row of the table) is the learnt vector the
+        original prepends to the voice.
+    audio_bos_token_id (`int`, *optional*, defaults to 2):
+        Token id of the first audio position, closing the prompt (the original's unused `</s>` row): it holds the learnt
+        BOS latent, from which the first frame is generated.
     frame_rate (`float`, *optional*, defaults to 12.5):
         Number of audio latents per second of audio: `generate` derives its default frame budget from it.
     eos_loss_weight (`float`, *optional*, defaults to 0.1):
@@ -116,7 +117,7 @@ class PocketTTSConfig(PreTrainedConfig):
     sub_configs = {"flow_head_config": PocketTTSFlowHeadConfig}
 
     flow_head_config: dict | PreTrainedConfig | None = None
-    vocab_size: int = positive_int_field(default=4004)
+    vocab_size: int = positive_int_field(default=4002)
     hidden_size: int = positive_int_field(default=1024)
     num_hidden_layers: int = positive_int_field(default=6)
     num_attention_heads: int = positive_int_field(default=16)
@@ -134,9 +135,9 @@ class PocketTTSConfig(PreTrainedConfig):
     bos_token_id: int | None = None
     eos_token_id: int | None = None
     audio_prompt_token_id: int = 4000
-    audio_latent_token_id: int = 4001
-    audio_prompt_bos_token_id: int = 4002
-    audio_bos_token_id: int = 4003
+    audio_latent_token_id: int = 1
+    audio_prompt_bos_token_id: int = 4001
+    audio_bos_token_id: int = 2
     frame_rate: float = interval(min=0.0)(default=12.5)
     initializer_range: float = interval(min=0.0, max=1.0)(default=0.02)
     use_cache: bool = True
