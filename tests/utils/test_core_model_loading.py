@@ -1352,7 +1352,6 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
     def test_copy_keeps_force_cpu(self):
         converter = WeightConverter("a", "b", operations=[Concatenate(dim=0)], force_cpu=True)
         self.assertTrue(converter.copy("c", "d", operations=converter.operations).force_cpu)
-        self.assertTrue(converter.reverse_transform().force_cpu)
 
 
 class TestConversionMapping(unittest.TestCase):

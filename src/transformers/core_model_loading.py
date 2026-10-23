@@ -1208,7 +1208,7 @@ class WeightConverter(WeightTransform):
             raise ValueError("WeightConverter requires at least one operation.")
 
     def copy(self, source_patterns, target_patterns, **kwargs) -> WeightConverter:
-        # `reverse_transform` goes through `copy`, keep `force_cpu` on the save path.
+        # a quantizer copies a converter for its scales, which must convert on cpu too
         kwargs.setdefault("force_cpu", self.force_cpu)
         return super().copy(source_patterns, target_patterns, **kwargs)
 
