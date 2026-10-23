@@ -23,7 +23,7 @@ from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -195,8 +195,8 @@ class Glm4vConfig(PreTrainedConfig):
 
     model_type = "glm4v"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Glm4vVisionConfig),
-        "text_config": SubConfigSpec(config_class=Glm4vTextConfig),
+        "vision_config": Glm4vVisionConfig,
+        "text_config": Glm4vTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 

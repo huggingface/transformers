@@ -28,7 +28,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...audio_utils import AudioInput
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
@@ -485,8 +485,8 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     ```"""
 
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerTextConfig),
-        "code_predictor_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerCodePredictorConfig),
+        "text_config": Qwen3OmniMoeTalkerTextConfig,
+        "code_predictor_config": Qwen3OmniMoeTalkerCodePredictorConfig,
     }
 
     code_predictor_config: dict | PreTrainedConfig | None = None
@@ -619,9 +619,9 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
 
     model_type = "qwen3_omni_moe"
     sub_configs_defaults = {
-        "thinker_config": SubConfigSpec(config_class=Qwen3OmniMoeThinkerConfig),
-        "talker_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerConfig),
-        "code2wav_config": SubConfigSpec(config_class=Qwen3OmniMoeCode2WavConfig),
+        "thinker_config": Qwen3OmniMoeThinkerConfig,
+        "talker_config": Qwen3OmniMoeTalkerConfig,
+        "code2wav_config": Qwen3OmniMoeCode2WavConfig,
     }
 
     thinker_config: dict | PreTrainedConfig | None = None

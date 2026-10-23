@@ -32,6 +32,13 @@ from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.deprecation import deprecate_attr
+from ...utils import (
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+)
 from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
 from ..gemma4.configuration_gemma4 import Gemma4Config, Gemma4TextConfig
 from ..gemma4.image_processing_gemma4 import (
@@ -338,6 +345,7 @@ class DeprecatedGemma4UnifiedProcessorKwargs(DeprecatedGemma4ProcessorKwargs):
     pass
 
 
+@auto_docstring
 class Gemma4UnifiedProcessor(Gemma4Processor):
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         """Replace the audio placeholder with the correct number of audio tokens.

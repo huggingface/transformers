@@ -199,7 +199,7 @@ class Gemma3Config(PreTrainedConfig):
         "eoi_token_id": "eoi_token_index",
     }
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Gemma3TextConfig),
+        "text_config": Gemma3TextConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
     }
 

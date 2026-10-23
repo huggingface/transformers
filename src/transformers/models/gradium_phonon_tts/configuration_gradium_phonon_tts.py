@@ -28,7 +28,7 @@ from ...utils import auto_docstring
 from ...utils.type_validators import activation_fn_key, interval, positive_int_field
 
 
-@auto_docstring(checkpoint="eustlb/gradium-phonon-tts")
+@auto_docstring(checkpoint="gradium/phonon-31m-en")
 @strict
 class GradiumPhononTTSFlowHeadConfig(PreTrainedConfig):
     r"""
@@ -77,7 +77,7 @@ class GradiumPhononTTSFlowHeadConfig(PreTrainedConfig):
         return 2 if self.flow_type == "lsd" else 0
 
 
-@auto_docstring(checkpoint="eustlb/gradium-phonon-tts")
+@auto_docstring(checkpoint="gradium/phonon-31m-en")
 @strict
 class GradiumPhononTTSConfig(PreTrainedConfig):
     r"""

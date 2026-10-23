@@ -28,7 +28,7 @@ from torch.nn import Parameter
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
@@ -369,9 +369,9 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
         "audio_token_id": "audio_token_index",
     }
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Qwen2_5OmniTextConfig),
-        "vision_config": SubConfigSpec(config_class=Qwen2_5OmniVisionEncoderConfig),
-        "audio_config": SubConfigSpec(config_class=Qwen2_5OmniAudioEncoderConfig),
+        "text_config": Qwen2_5OmniTextConfig,
+        "vision_config": Qwen2_5OmniVisionEncoderConfig,
+        "audio_config": Qwen2_5OmniAudioEncoderConfig,
     }
 
     audio_config: dict | PreTrainedConfig | None = None
@@ -636,8 +636,8 @@ class Qwen2_5OmniToken2WavConfig(PreTrainedConfig):
 
     model_type = "qwen2_5_omni_token2wav"
     sub_configs_defaults = {
-        "dit_config": SubConfigSpec(config_class=Qwen2_5OmniDiTConfig),
-        "bigvgan_config": SubConfigSpec(config_class=Qwen2_5OmniBigVGANConfig),
+        "dit_config": Qwen2_5OmniDiTConfig,
+        "bigvgan_config": Qwen2_5OmniBigVGANConfig,
     }
 
     dit_config: dict | PreTrainedConfig | None = None
@@ -689,9 +689,9 @@ class Qwen2_5OmniConfig(PreTrainedConfig):
 
     model_type = "qwen2_5_omni"
     sub_configs_defaults = {
-        "thinker_config": SubConfigSpec(config_class=Qwen2_5OmniThinkerConfig),
-        "talker_config": SubConfigSpec(config_class=Qwen2_5OmniTalkerConfig),
-        "token2wav_config": SubConfigSpec(config_class=Qwen2_5OmniToken2WavConfig),
+        "thinker_config": Qwen2_5OmniThinkerConfig,
+        "talker_config": Qwen2_5OmniTalkerConfig,
+        "token2wav_config": Qwen2_5OmniToken2WavConfig,
     }
 
     thinker_config: dict | PreTrainedConfig | None = None

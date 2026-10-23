@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationConfig, GenerationMixin, GenerationMode
 from ...masking_utils import (
     create_bidirectional_mask,
@@ -109,8 +109,8 @@ class T5GemmaConfig(PreTrainedConfig):
     model_type = "t5gemma"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
-        "encoder": SubConfigSpec(config_class=T5GemmaModuleConfig),
-        "decoder": SubConfigSpec(config_class=T5GemmaModuleConfig),
+        "encoder": T5GemmaModuleConfig,
+        "decoder": T5GemmaModuleConfig,
     }
 
     encoder: T5GemmaModuleConfig | dict[Any, Any] | None = None

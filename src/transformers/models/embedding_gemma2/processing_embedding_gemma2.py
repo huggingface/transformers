@@ -89,7 +89,6 @@ def get_aspect_ratio_preserving_size(
 
 
 @auto_docstring
-@requires(backends=("vision",))
 class EmbeddingGemma2Processor(ProcessorMixin):
     text_kwargs = {
         "padding": True,
