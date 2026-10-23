@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Testing suite for the IBM Granite Speech Plus model."""
+
 import math
 import unittest
 

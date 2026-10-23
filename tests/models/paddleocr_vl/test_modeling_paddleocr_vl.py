@@ -204,7 +204,7 @@ class PaddleOCRVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
     def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=True):
         super().test_reverse_loading_mapping(check_keys_were_modified, skip_base_model=True)
-    
+
     def test_mismatching_num_image_tokens(self):
         """
         Tests that an explicit error is thrown when the number of image tokens

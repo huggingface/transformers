@@ -313,7 +313,6 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
-            
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     @unittest.skip(reason="HiggsAudio doesn't return last hidden states")
     def test_model_rope_scaling_from_config(self, scaling_type):
