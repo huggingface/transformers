@@ -16,6 +16,7 @@
 from copy import deepcopy
 
 import numpy as np
+import PIL
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
@@ -330,7 +331,8 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         )
 
         # PIL RGBA images are converted to RGB
-        if do_convert_rgb:
+        # TODO: use proper PilBackend class to support proper RGB conversion in arrays
+        if do_convert_rgb and isinstance(image, PIL.Image.Image):
             image = convert_to_rgb(image)
 
         # All transformations expect numpy arrays.
