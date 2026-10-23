@@ -2138,11 +2138,15 @@ def _build_checkpoint_conversion_mapping():
     mapping["MtpModel"] = [
         PrefixChange(prefix_to_remove="model"),
         PrefixChange(prefix_to_remove="mtp"),
+        # Step3.5/3.7 checkpoint layout: per-depth head and its norm under `layers.{k}.transformer.shared_head.`
+        WeightRenaming(source_patterns=".mtp_block.transformer.", target_patterns=".mtp_block."),
+        WeightRenaming(source_patterns=".mtp_block.shared_head.output.", target_patterns=".head."),
         WeightRenaming(source_patterns=".shared_head.norm.", target_patterns=".post_norm."),
         WeightRenaming(source_patterns=".mtp_block.enorm.", target_patterns=".enorm."),
         WeightRenaming(source_patterns=".mtp_block.hnorm.", target_patterns=".hnorm."),
         WeightRenaming(source_patterns=".mtp_block.eh_proj.", target_patterns=".eh_proj."),
         WeightRenaming(source_patterns=".mtp_block.post_norm.", target_patterns=".post_norm."),
+        WeightRenaming(source_patterns=".mtp_block.head.", target_patterns=".head."),
         # Inkling checkpoint layout: per-depth extras sit at `layers.{k}.` while the decoder block
         # is nested under `layers.{k}.transformer_block.`; the main-model conversions (applied after)
         # rename the block internals
@@ -2153,7 +2157,7 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"layers\.(\d+)\.transformer_block\.", target_patterns=r"layers.\1.mtp_block."),
         # Mellum checkpoint layout: single MTP layer with `fc`, `pre_fc_norm_*` and `norm` stored one level up.
         WeightRenaming(
-            source_patterns=r"^layers\.(\d+)\.(?!(?:mtp_block|enorm|hnorm|eh_proj|post_norm)\.)",
+            source_patterns=r"^layers\.(\d+)\.(?!(?:mtp_block|enorm|hnorm|eh_proj|post_norm|head)\.)",
             target_patterns=r"layers.\1.mtp_block.",
         ),
         WeightRenaming(source_patterns=r"^fc\.", target_patterns="layers.0.eh_proj."),

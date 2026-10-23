@@ -105,6 +105,12 @@ class Step3p7TextConfig(PreTrainedConfig):
         discarded, so `Step3p7Config.get_mtp_config()` can build the MTP layers for `generate(use_mtp=True)`.
     mtp_mlp_layer_types (`list[str]`, *optional*):
         Per-MTP-layer MLP type, analogous to `mtp_layer_types` for `mlp_layer_types`.
+    mtp_per_layer_config (`dict[int, dict]`, *optional*):
+        Per-layer overrides for the MTP layers, indexed from 0 like `mtp_layer_types`. Defaults to the
+        `num_sliding_attention_heads` override on the `"sliding_attention"` MTP layers.
+    mtp_has_own_lm_head (`bool`, *optional*, defaults to `True`):
+        Whether every MTP layer projects to the vocabulary with its own head (`shared_head.output` in the
+        checkpoints) instead of the main model's `lm_head`.
     """
 
     model_type = "step3p5"
@@ -181,6 +187,8 @@ class Step3p7TextConfig(PreTrainedConfig):
     swiglu_limits_shared: list[float | int | None] | None = None
     mtp_layer_types: list[str] | None = None
     mtp_mlp_layer_types: list[str] | None = None
+    mtp_per_layer_config: dict | None = None
+    mtp_has_own_lm_head: bool = True
 
     def __post_init__(self, **kwargs):
         # Legacy hub configs pad these per-layer lists with `num_nextn_predict_layers` trailing MTP
@@ -247,6 +255,12 @@ class Step3p7TextConfig(PreTrainedConfig):
                 if layer_type == "sliding_attention"
             },
         )
+        if self.mtp_per_layer_config is None and self.mtp_layer_types is not None:
+            self.mtp_per_layer_config = {
+                layer_idx: {"num_attention_heads": self.num_sliding_attention_heads}
+                for layer_idx, layer_type in enumerate(self.mtp_layer_types)
+                if layer_type == "sliding_attention"
+            }
 
         if self.query_pre_attn_scalar is None:
             self.query_pre_attn_scalar = self.head_dim
@@ -325,7 +339,6 @@ class Step3p7Config(PreTrainedConfig):
     image_token_id: int = 151679
 
     def __post_init__(self, **kwargs):
-        # Force default model-type - hub has a remote-code format config
         if isinstance(self.vision_config, dict):
             self.vision_config.pop("model_type", None)
         if isinstance(self.text_config, dict):

@@ -327,6 +327,12 @@ class MtpLayer(nn.Module):
         self.eh_proj = nn.Linear(config.hidden_size * 2, config.hidden_size, bias=False)
         self.mtp_block = decoder_layer_cls(config, layer_idx)
         self.post_norm = norm_cls(config.hidden_size, eps=config.rms_norm_eps) if use_post_norm else None
+        # Some checkpoints have a separate output head per mtp layer instead of sharing the main model's one
+        self.head = (
+            nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+            if getattr(config, "mtp_has_own_lm_head", False)
+            else None
+        )
 
     def forward(
         self,
@@ -422,12 +428,16 @@ class MtpModel(PreTrainedModel):
         base_model = main_model.get_decoder()
         self.rotary_emb = getattr(base_model, "rotary_emb", None)
 
-    def _project_to_logits(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Apply the shared head the same way the main model does (muP scaling, unpadded vocab slice)."""
+    def _project_to_logits(self, hidden_states: torch.Tensor, layer_idx: int) -> torch.Tensor:
+        """
+        Apply the head of mtp layer `layer_idx` (the main model's one if it has none) the same way the main model does
+        (muP scaling, unpadded vocab slice).
+        """
         multiplier = getattr(self.config, "logits_mup_width_multiplier", None)
         if multiplier is not None:
             hidden_states = hidden_states / multiplier
-        logits = self.shared_head(hidden_states)
+        head = self.layers[layer_idx].head
+        logits = (head if head is not None else self.shared_head)(hidden_states)
         unpadded_vocab_size = getattr(self.config, "unpadded_vocab_size", None)
         if unpadded_vocab_size is not None and unpadded_vocab_size < logits.shape[-1]:
             logits = logits[..., :unpadded_vocab_size]
@@ -516,7 +526,7 @@ class MtpModel(PreTrainedModel):
 
             # If we are not computing the loss, only compute logits for the next drafted token to save memory
             slice_indices = slice(-1, None) if labels is None else slice(None, None)
-            logits = self._project_to_logits(last_hidden_states[:, slice_indices, :])
+            logits = self._project_to_logits(last_hidden_states[:, slice_indices, :], i)
 
             # Compute loss for current mtp layer if needed
             if labels is not None:
