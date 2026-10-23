@@ -108,6 +108,8 @@ class Step3p7VisionConfig(SiglipVisionConfig):
     rope_parameters: dict | None = None
     max_position_embeddings: int = 2704  # (image_size // patch_size)^2 = (728//14)^2
 
+    vision_use_head = AttributeError()
+
     def __post_init__(self, **kwargs):
         self.hidden_size = kwargs.pop("width", self.hidden_size)
         self.num_hidden_layers = kwargs.pop("layers", self.num_hidden_layers)

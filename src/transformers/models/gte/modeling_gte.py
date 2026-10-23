@@ -316,7 +316,7 @@ class GtePooler(nn.Module):
 
 @auto_docstring
 class GtePreTrainedModel(PreTrainedModel):
-    config_class = GteConfig
+    config: GteConfig
     base_model_prefix = "gte"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -327,6 +327,7 @@ class GtePreTrainedModel(PreTrainedModel):
         "hidden_states": GteLayer,
         "attentions": GteAttention,
     }
+    config_class = GteConfig
 
     # Are kept as non-persistent buffers to avoid being saved in the state dict
     # and causing mismatch when loading from a checkpoint that doesn't have them

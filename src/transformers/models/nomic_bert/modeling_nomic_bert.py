@@ -314,7 +314,7 @@ class NomicBertLMPredictionHead(nn.Module):
 
 @auto_docstring
 class NomicBertPreTrainedModel(PreTrainedModel):
-    config_class = NomicBertConfig
+    config: NomicBertConfig
     base_model_prefix = "nomic_bert"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -325,6 +325,7 @@ class NomicBertPreTrainedModel(PreTrainedModel):
         "hidden_states": NomicBertLayer,
         "attentions": NomicBertAttention,
     }
+    config_class = NomicBertConfig
 
     # Are kept as non-persistent buffers to avoid being saved in the state dict
     # and causing mismatch when loading from a checkpoint that doesn't have them

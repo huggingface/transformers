@@ -20,10 +20,8 @@ from transformers import (
     GlmAsrConfig,
     GlmAsrForConditionalGeneration,
     GlmAsrModel,
-    LlamaConfig,
     is_torch_available,
 )
-from transformers.models.glmasr.configuration_glmasr import GlmAsrEncoderConfig
 from transformers.testing_utils import (
     cleanup,
     require_torch,
@@ -43,8 +41,7 @@ class GlmAsrModelTester(ALMModelTester):
     config_class = GlmAsrConfig
     base_model_class = GlmAsrModel
     conditional_generation_class = GlmAsrForConditionalGeneration
-    text_config_class = LlamaConfig
-    audio_config_class = GlmAsrEncoderConfig
+
     audio_mask_key = "input_features_mask"
 
     def __init__(self, parent, **kwargs):

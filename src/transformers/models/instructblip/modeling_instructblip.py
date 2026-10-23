@@ -767,6 +767,7 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
+    config: InstructBlipQFormerConfig
 
     _can_record_outputs = {
         "hidden_states": InstructBlipQFormerLayer,

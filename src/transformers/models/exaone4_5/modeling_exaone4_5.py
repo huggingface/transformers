@@ -530,7 +530,6 @@ class Exaone4_5_VisionModel(Exaone4_5_PreTrainedModel):
         "hidden_states": Exaone4_5_VisionBlock,
         "attentions": Exaone4_5_VisionAttention,
     }
-    config_class = Exaone4_5_VisionConfig
 
     def __init__(self, config: Exaone4_5_VisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)

@@ -283,6 +283,7 @@ class PaddleOCRVisionConfig(SiglipVisionConfig):
     patch_size: int = 14
     spatial_merge_size: int = 2
     rope_parameters: dict | None = None
+    vision_use_head = AttributeError()
 
 
 @auto_docstring(checkpoint="PaddlePaddle/PaddleOCR-VL")
@@ -418,6 +419,8 @@ class PaddleOCRVLPreTrainedModel(PreTrainedModel):
 
 
 class PaddleOCRTextModel(PaddleOCRVLPreTrainedModel, Ernie4_5Model):
+    config: PaddleOCRTextConfig
+
     def __init__(self, config: PaddleOCRTextConfig):
         super().__init__(config)
 

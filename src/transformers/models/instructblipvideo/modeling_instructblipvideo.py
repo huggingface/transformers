@@ -716,6 +716,7 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
+    config: InstructBlipVideoQFormerConfig
 
     _can_record_outputs = {
         "hidden_states": InstructBlipVideoQFormerLayer,

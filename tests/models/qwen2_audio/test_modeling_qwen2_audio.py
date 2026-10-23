@@ -22,10 +22,8 @@ import librosa
 from transformers import (
     AutoProcessor,
     Qwen2AudioConfig,
-    Qwen2AudioEncoderConfig,
     Qwen2AudioForConditionalGeneration,
     Qwen2AudioModel,
-    Qwen2Config,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -46,8 +44,7 @@ class Qwen2AudioModelTester(ALMModelTester):
     config_class = Qwen2AudioConfig
     base_model_class = Qwen2AudioModel
     conditional_generation_class = Qwen2AudioForConditionalGeneration
-    text_config_class = Qwen2Config
-    audio_config_class = Qwen2AudioEncoderConfig
+
     audio_mask_key = "feature_attention_mask"
 
     def __init__(self, parent, **kwargs):

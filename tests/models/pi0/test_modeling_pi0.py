@@ -62,7 +62,7 @@ class PI0ModelTester:
         self.max_state_dim = 8
         self.max_action_dim = 8
         self.num_inference_steps = 3
-        self.image_token_index = 127
+        self.image_token_id = 127
         self.pad_token_id = 0
         self.num_image_tokens = (self.image_size // self.patch_size) ** 2 * self.num_cameras
         self.encoder_seq_length = 5
@@ -109,7 +109,7 @@ class PI0ModelTester:
             vlm_config={
                 "vision_config": self.vision_config,
                 "text_config": self.text_config,
-                "image_token_index": self.image_token_index,
+                "image_token_id": self.image_token_id,
                 "projection_dim": self.hidden_size,
             },
             chunk_size=self.chunk_size,

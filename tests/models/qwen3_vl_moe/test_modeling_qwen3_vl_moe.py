@@ -24,7 +24,6 @@ from transformers import (
     Qwen3VLMoeModel,
     is_torch_available,
 )
-from transformers.models.qwen3_vl_moe.configuration_qwen3_vl_moe import Qwen3VLMoeTextConfig, Qwen3VLMoeVisionConfig
 from transformers.testing_utils import (
     Expectations,
     require_flash_attn,
@@ -47,8 +46,7 @@ if is_torch_available():
 class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
     base_model_class = Qwen3VLMoeModel
     config_class = Qwen3VLMoeConfig
-    text_config_class = Qwen3VLMoeTextConfig
-    vision_config_class = Qwen3VLMoeVisionConfig
+
     conditional_generation_class = Qwen3VLMoeForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
@@ -117,19 +115,6 @@ class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
             "image_grid_thw": torch.tensor([[1, 1, 1]] * batch_size, device=torch_device),
             "mm_token_type_ids": mm_token_type_ids,
         }
-
-    def get_config(self):
-        # Qwen3VLMoeConfig expects text_config and vision_config as dicts, not config objects
-        return self.config_class(
-            text_config=self.get_text_config().to_dict(),
-            vision_config=self.get_vision_config().to_dict(),
-            image_token_id=self.image_token_id,
-            video_token_id=self.video_token_id,
-            vision_start_token_id=self.vision_start_token_id,
-            vision_end_token_id=self.vision_end_token_id,
-            tie_word_embeddings=self.tie_word_embeddings,
-            pad_token_id=self.pad_token_id,
-        )
 
 
 @require_torch

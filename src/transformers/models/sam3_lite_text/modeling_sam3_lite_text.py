@@ -341,7 +341,7 @@ class Sam3LiteTextTextEmbeddings(nn.Module):
 
 @auto_docstring
 class Sam3LiteTextPreTrainedModel(PreTrainedModel):
-    config_class = Sam3LiteTextConfig
+    config: Sam3LiteTextConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
@@ -349,6 +349,7 @@ class Sam3LiteTextPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    config_class = Sam3LiteTextConfig
     supports_gradient_checkpointing = True
 
     @torch.no_grad()

@@ -284,7 +284,7 @@ class EsmcLayer(GradientCheckpointingLayer):
 
 @auto_docstring
 class EsmcPreTrainedModel(PreTrainedModel):
-    config_class = EsmcConfig
+    config: EsmcConfig
     base_model_prefix = "esmc"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -295,6 +295,7 @@ class EsmcPreTrainedModel(PreTrainedModel):
         "hidden_states": EsmcLayer,
         "attentions": EsmcAttention,
     }
+    config_class = EsmcConfig
 
     # Are kept as non-persistent buffers to avoid being saved in the state dict
     # and causing mismatch when loading from a checkpoint that doesn't have them

@@ -15,7 +15,7 @@
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...test_image_processing_common import (
     ImageProcessingTester,
@@ -28,9 +28,6 @@ if is_torch_available():
     import torch
 
     from transformers.models.sam3.modeling_sam3 import Sam3ImageSegmentationOutput
-
-if is_vision_available():
-    pass
 
 
 class Sam3ImageProcessingTester(ImageProcessingTester):

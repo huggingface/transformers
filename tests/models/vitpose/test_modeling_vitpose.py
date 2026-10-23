@@ -34,10 +34,6 @@ if is_torch_available():
     from transformers import VitPoseForPoseEstimation
 
 
-if is_vision_available():
-    pass
-
-
 if is_torchvision_available():
     from transformers import VitPoseImageProcessor
 
