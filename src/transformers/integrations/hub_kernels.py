@@ -186,6 +186,18 @@ if is_kernels_available():
                         revision="pr-1141",
                     ),
                 },
+                "rocm": {
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
+                        layer_name="chunk_gated_delta_rule",
+                        revision="pr-1141",
+                    ),
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
+                        layer_name="chunk_gated_delta_rule",
+                        revision="pr-1141",
+                    ),
+                },
                 "xpu": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
@@ -209,6 +221,13 @@ if is_kernels_available():
                         revision="pr-1141",
                     ),
                 },
+                "rocm": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
+                        layer_name="recurrent_gated_delta_rule",
+                        revision="pr-1141",
+                    ),
+                },
                 "xpu": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
@@ -219,6 +238,18 @@ if is_kernels_available():
             },
             "chunk_kda": {
                 "cuda": {
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        revision="pr-1141",
+                    ),
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
+                        layer_name="chunk_kimi_delta_attention",
+                        revision="pr-1141",
+                    ),
+                },
+                "rocm": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="chunk_kimi_delta_attention",
@@ -250,6 +281,13 @@ if is_kernels_available():
                         revision="pr-1141",
                     ),
                 },
+                "rocm": {
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
+                        layer_name="recurrent_kimi_delta_attention",
+                        revision="pr-1141",
+                    ),
+                },
                 "xpu": {
                     Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
@@ -260,6 +298,18 @@ if is_kernels_available():
             },
             "RMSNormGated": {
                 "cuda": {
+                    Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
+                        layer_name="FusedRMSNormGated",
+                        revision="pr-1141",
+                    ),
+                    Mode.INFERENCE | Mode.TORCH_COMPILE: LayerRepository(
+                        repo_id="kernels-staging/fla",
+                        layer_name="FusedRMSNormGated",
+                        revision="pr-1141",
+                    ),
+                },
+                "rocm": {
                     Mode.TRAINING | Mode.TORCH_COMPILE: LayerRepository(
                         repo_id="kernels-staging/fla",
                         layer_name="FusedRMSNormGated",
