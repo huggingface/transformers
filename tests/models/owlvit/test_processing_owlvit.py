@@ -127,3 +127,17 @@ class OwlViTProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
             processor()
+
+    def test_processor_images_kwargs_query_images(self):
+        """Test for BC. Can be removed once DeprecatedOwlViTImagesKwargs is removed."""
+        processor = self.get_processor()
+
+        image_input = self.prepare_images_inputs()
+        query_input = self.prepare_images_inputs()
+
+        inputs = processor(images=image_input, images_kwargs={"query_images": query_input})
+        expected = processor(images=image_input, query_images=query_input)
+
+        self.assertListEqual(list(inputs.keys()), ["query_pixel_values", "pixel_values"])
+        for key in expected:
+            self.assertTrue((inputs[key] == expected[key]).all())

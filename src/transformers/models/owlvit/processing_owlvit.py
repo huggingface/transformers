@@ -91,18 +91,20 @@ class OwlViTProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **query_pixel_values** -- Pixel values of the query images to be fed to a model. Returned when `query_images` is not `None`.
         """
-        output_kwargs = self._merge_kwargs(
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-        if "query_images" in output_kwargs["images_kwargs"]:
+        images_kwargs = kwargs.get("images_kwargs", {}).copy()
+        if "query_images" in images_kwargs:
             logger.warning_once(
                 "Passing `query_images` in `images_kwargs` is deprecated "
                 "and will be removed in v5.29.0. Pass it directly to the processor instead."
             )
+            # "images_kwargs" has priority for backwards compatibility
+            query_images = images_kwargs.pop("query_images")
+            kwargs["images_kwargs"] = images_kwargs
 
-        # "images_kwargs" has priority for backwards compatibility
-        query_images = output_kwargs["images_kwargs"].pop("query_images", query_images)
+        output_kwargs = self._merge_kwargs(
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
         return_tensors = output_kwargs["text_kwargs"]["return_tensors"]
 
         if text is None and query_images is None and images is None:
