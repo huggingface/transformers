@@ -215,10 +215,12 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
+        transcription: str | list[str] | None = None,
         **kwargs: Unpack[MossTranscribeDiarizeProcessorKwargs],
     ) -> BatchFeature:
         """
-        Prepare inputs for transcription / diarization without manually writing the chat template.
+        Prepare inputs for transcription / diarization without manually writing the chat template, either for
+        inference or, when `transcription` is given, for training.
 
         Args:
             audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
@@ -231,8 +233,14 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                 Hotwords/domain terms (e.g. proper nouns) to bias transcription toward the correct spelling. A
                 string or flat list of strings is shared across the batch; a nested list supplies separate
                 keywords per audio sample.
+            transcription (`str` or `list[str]`, *optional*):
+                Target transcript(s) for training, one per audio, in the model's output format (e.g.
+                `"[0.00][S01] Hello world.[1.20]"`). When given, each transcript is written as the assistant turn and
+                `labels` are returned (see `output_labels` in [`~MossTranscribeDiarizeProcessor.__call__`]).
             **kwargs:
                 Additional keyword arguments forwarded to [`~MossTranscribeDiarizeProcessor.apply_chat_template`].
+                Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
+                `processor_kwargs={...}`.
         """
         audio_items: list[str | np.ndarray] = list(make_list_of_audio_chat_template(audio))
         audio_items = [el.detach().cpu().numpy() if isinstance(el, torch.Tensor) else el for el in audio_items]
@@ -244,19 +252,31 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
         keyword_batches = prepare_keyword_inputs(keywords, batch_size)
 
+        is_training = transcription is not None
+        if isinstance(transcription, str):
+            transcription = [transcription]
+        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription")
+        if is_training:
+            kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
+
         conversations = []
-        for audio_item, prompt_text, keyword_list in zip(audio_items, prompts, keyword_batches):
+        for audio_item, prompt_text, keyword_list, transcript in zip(
+            audio_items, prompts, keyword_batches, transcriptions
+        ):
             content = [make_audio_chat_template_content(audio_item)]
             if prompt_text is not None:
                 content.append({"type": "text", "text": prompt_text})
             if keyword_list:
                 content.append({"type": "keywords", "keywords": keyword_list})
-            conversations.append([{"role": "user", "content": content}])
+            conversation = [{"role": "user", "content": content}]
+            if transcript is not None:
+                conversation.append({"role": "assistant", "content": [{"type": "text", "text": transcript}]})
+            conversations.append(conversation)
 
         return self.apply_chat_template(
             conversations,
             tokenize=True,
-            add_generation_prompt=True,
+            add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,
         )
