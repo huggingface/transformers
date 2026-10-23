@@ -1906,7 +1906,7 @@ class Cache:
     @property
     def is_initialized(self) -> bool:
         """Return whether the cache data is initialized"""
-        layers = [layer for layer in self.layers if layer.supports_early_init]
+        layers = [layer for layer in self.layers if layer.supports_early_init]  # excludes dummy layers
         return len(layers) > 0 and all(layer.is_initialized for layer in layers)
 
     @property
