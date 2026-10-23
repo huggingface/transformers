@@ -428,6 +428,21 @@ class GenerationConfigSerializationTest(unittest.TestCase):
         bias_logits_processor = SequenceBiasLogitsProcessor(new_config.sequence_bias)
         self.assertDictEqual(bias_logits_processor.sequence_bias, expected_sequence_bias)
 
+    def test_save_round_trips_a_loaded_config_with_top_p(self):
+        # A file can ship top_p without do_sample. Saving that config again must not raise.
+        config = GenerationConfig.from_dict({"top_p": 0.95})
+        config._original_object_hash = hash(config)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            loaded = GenerationConfig.from_pretrained(tmp_dir)
+        self.assertEqual(loaded.top_p, 0.95)
+
+    def test_save_still_rejects_a_user_set_top_p_without_sampling(self):
+        config = GenerationConfig(top_p=0.95)
+        with self.assertRaises(ValueError):
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                config.save_pretrained(tmp_dir)
+
     def test_serialize_generation_min_length_eos_token(self):
         """Tests that GenerationConfig is serialized and MinLengthLogitsProcessor is initialized with min_length and eos_token_id"""
         eos_token_id = 0

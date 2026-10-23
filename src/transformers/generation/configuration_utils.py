@@ -915,8 +915,13 @@ class GenerationConfig(PushToHubMixin):
         # At save time, validate the instance enforcing strictness -- if any warning/exception would be thrown, we
         # refuse to save the instance.
         # This strictness is enforced to prevent bad configurations from being saved and re-used.
+        # A config loaded from a file and not edited since is a round-trip: sampling flags that shipped in that
+        # file (top_p set, do_sample left unset) must not block the save. Editing the config brings the strict check back.
+        unchanged_loaded_file = (
+            getattr(self, "_original_object_hash", None) is not None and hash(self) == self._original_object_hash
+        )
         try:
-            self.validate(strict=True)
+            self.validate(strict=not unchanged_loaded_file)
         except ValueError as exc:
             raise ValueError(str(exc) + "\n\nFix these issues to save the configuration.")
 
