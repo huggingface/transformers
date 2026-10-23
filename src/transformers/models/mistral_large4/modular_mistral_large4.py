@@ -207,7 +207,7 @@ class MistralLarge4Config(Mistral3Config):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-class MistralLarge4TextRMSNorm(LlamaRMSNorm):
+class MistralLarge4RMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -231,6 +231,10 @@ class MistralLarge4TextRotaryEmbedding(LlamaRotaryEmbedding):
         sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    @staticmethod
+    def compute_default_rope_parameters(config: MistralLarge4TextConfig, **kwargs) -> tuple[torch.Tensor, float]:
+        return LlamaRotaryEmbedding.compute_default_rope_parameters(config, **kwargs)
 
 
 def apply_rotary_pos_emb_interleave(
@@ -398,9 +402,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
             else None
         )
         self.kv_a_layernorm = (
-            MistralLarge4TextRMSNorm(config.kv_lora_rank, eps=config.rms_norm_eps)
-            if not self.is_kv_shared_layer
-            else None
+            MistralLarge4RMSNorm(config.kv_lora_rank, eps=config.rms_norm_eps) if not self.is_kv_shared_layer else None
         )
 
     def forward(
@@ -544,6 +546,11 @@ class MistralLarge4TextMoE(Mistral4MoE):
 
 
 class MistralLarge4TextDecoderLayer(GlmMoeDsaDecoderLayer):
+    def __init__(self, config: MistralLarge4TextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.input_layernorm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -605,6 +612,10 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
 
 
 class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
+    def __init__(self, config: MistralLarge4TextConfig):
+        super().__init__(config)
+        self.norm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring

@@ -53,10 +53,10 @@ from .configuration_mistral_large4 import MistralLarge4Config, MistralLarge4Text
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class MistralLarge4TextRMSNorm(nn.Module):
+class MistralLarge4RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
-        MistralLarge4TextRMSNorm is equivalent to T5LayerNorm
+        MistralLarge4RMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -104,13 +104,7 @@ class MistralLarge4TextRotaryEmbedding(nn.Module):
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq, attention_factor
+        return LlamaRotaryEmbedding.compute_default_rope_parameters(config, **kwargs)
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -357,9 +351,7 @@ class MistralLarge4TextAttention(nn.Module):
             else None
         )
         self.kv_a_layernorm = (
-            MistralLarge4TextRMSNorm(config.kv_lora_rank, eps=config.rms_norm_eps)
-            if not self.is_kv_shared_layer
-            else None
+            MistralLarge4RMSNorm(config.kv_lora_rank, eps=config.rms_norm_eps) if not self.is_kv_shared_layer else None
         )
         self.kv_b_proj = nn.Linear(
             config.kv_lora_rank,
@@ -633,9 +625,8 @@ class MistralLarge4TextDecoderLayer(GradientCheckpointingLayer):
             if config.mlp_layer_types[layer_idx] == "sparse"
             else MistralLarge4TextMLP(config)
         )
-
-        self.input_layernorm = MistralLarge4TextRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = MistralLarge4TextRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.input_layernorm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -722,7 +713,7 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel):
         self.layers = nn.ModuleList(
             [MistralLarge4TextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = MistralLarge4TextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = MistralLarge4TextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
 
@@ -795,27 +786,6 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class MistralLarge4RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        MistralLarge4RMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class MistralLarge4PatchMerger(nn.Module):
