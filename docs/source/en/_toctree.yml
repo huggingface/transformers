@@ -1605,6 +1605,8 @@
         title: VoxtralRealtime
       - local: model_doc/xclip
         title: X-CLIP
+      - local: model_doc/xiaomi_lens0
+        title: Xiaomi-Lens-0
       title: Multimodal models
     - sections:
       - local: model_doc/decision_transformer

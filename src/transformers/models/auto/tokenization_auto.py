@@ -365,6 +365,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("whisper", "WhisperTokenizer" if is_tokenizers_available() else None),
         ("xclip", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("xglm", "XGLMTokenizer" if is_tokenizers_available() else None),
+        ("xiaomi_lens0", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("xlm", "XLMTokenizer"),
         ("xlm-roberta", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("xlm-roberta-xl", "TokenizersBackend" if is_tokenizers_available() else None),

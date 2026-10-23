@@ -172,6 +172,7 @@ else:
             ("vit_msn", {"torchvision": "ViTImageProcessor", "pil": "ViTImageProcessorPil"}),
             ("vivit", {"torchvision": "VivitImageProcessor"}),
             ("xclip", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
+            ("xiaomi_lens0", {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"}),
         ]
     )
 
