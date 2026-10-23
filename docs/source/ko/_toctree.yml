@@ -62,8 +62,8 @@
       title: 대규모 언어 모델로 생성하기
     - local: generation_strategies
       title: 텍스트 생성 전략 사용자 정의
-    - local: in_translation
-      title: (번역중) Generation features
+    - local: generation_features
+      title: 생성 기능
     - local: tasks/prompting
       title: 대규모 언어 모델 프롬프팅 가이드
     - local: llm_optims
