@@ -196,8 +196,7 @@ class FP8Linear(nn.Module):
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         output = load_finegrained_kernels().matmul_2d(
-            # generate passes the last position of a batch, a strided view the kernels' TMA loads cannot read
-            A=input.reshape(-1, input.shape[-1]).contiguous(),
+            A=input.reshape(-1, input.shape[-1]),
             B=self.weight,
             As=self.input_global_scale,
             Bs=self.weight_scale_inv,
