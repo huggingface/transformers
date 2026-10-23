@@ -237,9 +237,12 @@ outputs = model.generate_batch(
 
 ### KV cache page size
 
-`page_size` (default is `256`) sets how many tokens of KV each page holds for one layer. It must be at least `4`, or initialization raises a `ValueError`. Prefer `page_size` over the older `block_size` name, which is still accepted for compatibility but emits a warning and aliases to `page_size`.
+`page_size` sets how many tokens of KV a full attention page holds for one layer. It must be at least `4`, or initialization raises a `ValueError`. The default `256` works for most workloads.
 
-Larger pages cut bookkeeping but waste space when a sequence does not fill its last page. Smaller pages raise that waste less often, but the two reserved chunks used only for padding reads and writes take a larger share of the pool. Keep `page_size` well above the minimum for an efficient cache. See [Memory management](./continuous_batching_architecture#memory-management) for how pages, blocks, and chunks fit together.
+> [!NOTE]
+> The `block_size` parameter is deprecated and replaced by `page_size`.
+
+A larger page size cuts bookkeeping but wastes space when a sequence stops mid-page. Smaller pages waste less space but need more bookkeeping. You usually don't need to tune `page_size`. If your workload has many short requests, try a smaller value. If it has a few very long ones, try a larger value. See [Memory management](./continuous_batching_architecture#memory-management) for how pages, blocks, and chunks fit together.
 
 ```py
 cb_config = ContinuousBatchingConfig(page_size=128)
@@ -459,8 +462,6 @@ The tensor parallel size must divide the model's `num_key_value_heads` (check th
 ## Sliding window attention
 
 Models with sliding window attention (Mistral, Gemma 2) work with continuous batching. Sliding layers use `SlidingAttentionCacheAllocator`, which keeps only a fixed window of recent tokens by recycling a small set of pages. Attention type comes from the model's `layer_types` or `sliding_window`, not from [`ContinuousBatchingConfig`].
-
-To manually configure a sliding window for fine-tuning or custom experiments, set it in the model config before loading.
 
 ```py
 from transformers import AutoConfig, AutoModelForCausalLM

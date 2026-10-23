@@ -106,11 +106,11 @@ Continuous batching supports two attention types only: `full_attention` (`FullAt
 
 Sliding layers keep only a fixed window of recent tokens by recycling a small set of pages. They do not support kernel block tables or block sharing.
 
-The cache reserves two chunks ahead of the data chunks for padding reads and writes that requests never use. Those chunks are never allocated to requests. `page_size` must be at least `4`, or initialization raises a `ValueError`.
+The cache reserves two chunks ahead of the data chunks for padding reads and writes that requests never use. Those chunks are never allocated to requests.
 
 ### Cache sizing
 
-The manager infers how many chunks fit at startup from free GPU memory. It accounts for KV tensors, attention masks, activations, and bookkeeping indices, then sizes the pool to fit inside `max_memory_percent` of the available memory. When unset, that resolves to `0.9`, or `0.8` if logit processors are active. `num_blocks` expresses capacity as whole model blocks of `page_size` tokens when you set it explicitly.
+The manager infers how many chunks fit at startup from free GPU memory. It accounts for KV tensors, attention masks, activations, and bookkeeping indices, then sizes the pool to fit inside `max_memory_percent` of the available memory. When unset, it defaults to a value according to the hardware and continuous batching parameters. MPS reserve less space for the cache, where the CPU and GPU share memory, to avoid swapping. `num_blocks` expresses capacity as whole model blocks of `page_size` tokens when you set it explicitly.
 
 You can pin the values in [`ContinuousBatchingConfig`].
 
