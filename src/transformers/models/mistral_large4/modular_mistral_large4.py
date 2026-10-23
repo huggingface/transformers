@@ -24,7 +24,6 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -142,6 +141,7 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
     no_rope_layer_interval: int = 4
     kv_source_layers: list[int] | None = None
     q_lora_rank = AttributeError()
+    mlp_bias = AttributeError()
 
     def __post_init__(self, **kwargs):
         # YaRN over a 512-token pretraining window, no magnitude scaling (attention_factor = 1.0) + LeRoPE
@@ -411,11 +411,12 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
         shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
-        position_ids: torch.Tensor,
         past_key_values: Cache | None = None,
         prev_topk_indices: torch.Tensor | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+        # `position_ids` stays in `kwargs` so the attention interface also receives it (padding-free flash-attention)
+        position_ids = kwargs["position_ids"]
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 

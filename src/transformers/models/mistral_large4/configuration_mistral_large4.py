@@ -137,7 +137,6 @@ class MistralLarge4TextConfig(PreTrainedConfig):
     index_topk: int = 2048
     index_head_dim: int = 128
     index_n_heads: int = 32
-    mlp_bias: bool = False
     head_dim: int = 64
     first_k_dense_replace: int = 1
     layer_types: list[str] | None = None
