@@ -755,7 +755,8 @@ def gather_state_dict_for_save(
     return gathered
 
 
-# Keeps the old import paths of the names moved to `expert_parallel.py` working until v5.23.
+# BC: these moved to expert_parallel.py in v5.21, keep the old import path with a warning until v5.23.
+# Lazy import because expert_parallel.py imports from this file (circular import otherwise).
 _MOVED_TO_EXPERT_PARALLEL = (
     "MoEParamShard",
     "EpRouterParallel",

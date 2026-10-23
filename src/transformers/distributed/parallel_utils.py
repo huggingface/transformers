@@ -14,11 +14,13 @@
 import contextlib
 
 from ..utils.generic import GeneralInterface
-from ..utils.import_utils import is_torch_distributed_available
+from ..utils.import_utils import is_torch_available, is_torch_distributed_available
 
+
+if is_torch_available():
+    import torch
 
 if is_torch_distributed_available():
-    import torch
     import torch.distributed as dist
     from torch.distributed._functional_collectives import wait_tensor
     from torch.distributed.tensor import DTensor
