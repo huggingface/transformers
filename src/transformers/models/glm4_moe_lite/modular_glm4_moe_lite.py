@@ -20,7 +20,6 @@ from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..glm4_moe.modeling_glm4_moe import (
-    Glm4MoeExperts,
     Glm4MoeForCausalLM,
     Glm4MoeModel,
     Glm4MoeMoE,
@@ -29,7 +28,7 @@ from ..glm4_moe.modeling_glm4_moe import (
 )
 from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRMSNorm
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="zai-org/GLM-4.5")
@@ -149,7 +148,7 @@ class Glm4MoeLiteRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Glm4MoeLiteExperts(Glm4MoeExperts):
+class Glm4MoeLiteExperts(Qwen2MoeExperts):
     pass
 
 

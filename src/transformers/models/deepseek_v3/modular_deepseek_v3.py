@@ -122,9 +122,7 @@ class DeepseekV3TopkRouter(DeepseekV2TopkRouter):
 
 
 class DeepseekV3Experts(Qwen2MoeExperts):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_experts = config.num_local_experts
+    pass
 
 
 class DeepseekV3MoE(DeepseekV2Moe):

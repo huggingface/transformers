@@ -95,6 +95,7 @@ class DeepseekV2Config(LlamaConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_experts": "n_routed_experts",
+        "num_local_experts": "n_routed_experts",
     }
 
     vocab_size: int = 102400

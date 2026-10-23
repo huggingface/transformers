@@ -53,6 +53,7 @@ class AfmoeConfig(PreTrainedConfig):
     """
 
     model_type = "afmoe"
+    attribute_map = {"num_local_experts": "num_experts"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default pipeline parallel plan for base model

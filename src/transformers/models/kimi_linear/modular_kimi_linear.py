@@ -30,7 +30,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MoE,
     DeepseekV3TopkRouter,
@@ -49,7 +48,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import LlamaDecoderLayer
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="moonshotai/Kimi-Linear-48B-A3B-Instruct")
@@ -147,7 +146,7 @@ class KimiLinearRMSNormGated(Glm5NextTextRMSNormGated):
     pass
 
 
-class KimiLinearExperts(DeepseekV3Experts):
+class KimiLinearExperts(Qwen2MoeExperts):
     pass
 
 

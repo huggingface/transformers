@@ -27,7 +27,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import no_inherit_decorator
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MoE,
     DeepseekV3PreTrainedModel,
@@ -40,7 +39,7 @@ from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..laguna.modeling_laguna import LagunaModel
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2.modeling_qwen2 import Qwen2Attention
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="XiaomiMiMo/MiMo-V2-Flash")
@@ -176,7 +175,7 @@ class MiMoV2FlashTopkRouter(DeepseekV3TopkRouter):
     pass
 
 
-class MiMoV2FlashExperts(DeepseekV3Experts):
+class MiMoV2FlashExperts(Qwen2MoeExperts):
     pass
 
 

@@ -132,6 +132,7 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
     shared_expert_intermediate_size = AttributeError()
     num_experts_per_tok = AttributeError()
     num_experts = AttributeError()
+    attribute_map = AttributeError()
     output_router_logits = AttributeError()
     router_aux_loss_coef = AttributeError()
 

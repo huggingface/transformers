@@ -34,12 +34,11 @@ from ..ernie4_5.modeling_ernie4_5 import (  # noqa: F401
 )
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
-    MixtralExperts,
     MixtralForCausalLM,
     MixtralPreTrainedModel,
 )
 from ..olmo.modeling_olmo import OlmoRotaryEmbedding
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 from .configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 
 
@@ -95,11 +94,8 @@ class Ernie4_5_MoeStatics(nn.Module):
         return hidden_states + self.e_score_correction_bias.squeeze()
 
 
-class Ernie4_5_MoeExperts(MixtralExperts):
-    def __init__(self, config):
-        super().__init__()
-        self.num_experts = config.num_experts
-        self.intermediate_dim = config.moe_intermediate_size
+class Ernie4_5_MoeExperts(Qwen2MoeExperts):
+    pass
 
 
 class Ernie4_5_MoeTopKRouter(nn.Module):

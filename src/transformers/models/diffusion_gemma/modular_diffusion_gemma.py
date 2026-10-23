@@ -60,7 +60,6 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4Model,
     Gemma4MultimodalEmbedder,
     Gemma4TextDecoderLayer,
-    Gemma4TextExperts,
     Gemma4TextRotaryEmbedding,
     Gemma4TextRouter,
     Gemma4TextScaledWordEmbedding,
@@ -69,6 +68,7 @@ from ..gemma4.modeling_gemma4 import (
     get_block_sequence_ids_for_mask,
 )
 from ..mistral.modeling_mistral import MistralMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from ..t5gemma2.modeling_t5gemma2 import T5Gemma2Model, T5Gemma2PreTrainedModel
 from .generation_diffusion_gemma import DiffusionGemmaGenerationConfig, DiffusionGemmaGenerationMixin
 
@@ -449,7 +449,7 @@ class DiffusionGemmaTextRouter(Gemma4TextRouter):
     pass
 
 
-class DiffusionGemmaTextExperts(Gemma4TextExperts):
+class DiffusionGemmaTextExperts(Qwen2MoeExperts):
     pass
 
 

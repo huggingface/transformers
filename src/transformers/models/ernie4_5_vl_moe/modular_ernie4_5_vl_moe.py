@@ -49,7 +49,6 @@ from ..clip.modeling_clip import CLIPMLP
 from ..ernie4_5.modeling_ernie4_5 import Ernie4_5Attention
 from ..ernie4_5_moe.configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 from ..ernie4_5_moe.modeling_ernie4_5_moe import (
-    Ernie4_5_MoeExperts,
     Ernie4_5_MoeMLP,
     Ernie4_5_MoeModel,
     Ernie4_5_MoeStatics,
@@ -65,6 +64,7 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionRotaryEmbedding,
 )
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
@@ -349,7 +349,7 @@ class Ernie4_5_VLMoeMoeTopKRouter(Ernie4_5_MoeTopKRouter):
         self.moe_statics = Ernie4_5_VLMoeMoeStatics(config)
 
 
-class Ernie4_5_VLMoeMoeExperts(Ernie4_5_MoeExperts):
+class Ernie4_5_VLMoeMoeExperts(Qwen2MoeExperts):
     def __init__(self, config, intermediate_size=None):
         super().__init__(config)
         self.intermediate_dim = config.moe_intermediate_size if intermediate_size is None else intermediate_size

@@ -42,8 +42,8 @@ from ..llama.modeling_llama import (
 )
 from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2Model, MiniMaxM2SparseMoeBlock
 from ..mixtral.modeling_mixtral import MixtralTopKRouter
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from ..qwen3.modeling_qwen3 import Qwen3Attention
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeExperts
 
 
 logger = logging.get_logger(__name__)
@@ -186,7 +186,7 @@ class HYV3TopKRouter(MixtralTopKRouter):
         return router_logits, top_k_weights, top_k_index
 
 
-class HYV3Experts(Qwen3MoeExperts):
+class HYV3Experts(Qwen2MoeExperts):
     pass
 
 

@@ -81,7 +81,6 @@ class Qwen2MoeAttention(LlamaAttention):
 class Qwen2MoeExperts(MixtralExperts):
     def __init__(self, config):
         super().__init__(config)
-        self.num_experts = config.num_experts
         self.intermediate_dim = config.moe_intermediate_size
 
 

@@ -29,11 +29,11 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionAttention, Qwen2_5_VLVisionRotaryEmbedding
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
-    Qwen3MoeExperts,
     Qwen3MoePreTrainedModel,
     Qwen3MoeSparseMoeBlock,
     load_balancing_loss_func,
@@ -162,7 +162,7 @@ class Qwen3VLMoeTextRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Qwen3VLMoeTextExperts(Qwen3MoeExperts):
+class Qwen3VLMoeTextExperts(Qwen2MoeExperts):
     pass
 
 

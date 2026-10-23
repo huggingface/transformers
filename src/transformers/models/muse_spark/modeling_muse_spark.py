@@ -214,6 +214,10 @@ class MuseSparkExperts(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
         self.post_expert_norm = MuseSparkTextInputScaledRMSNorm(self.hidden_dim, eps=config.post_norm_eps)
 
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
+
     def forward(
         self,
         hidden_states: torch.Tensor,

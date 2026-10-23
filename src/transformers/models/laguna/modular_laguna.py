@@ -36,9 +36,9 @@ from ..afmoe.modeling_afmoe import AfmoeAttention
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, LlamaRMSNorm, eager_attention_forward
 from ..qwen2_moe.configuration_qwen2_moe import Qwen2MoeConfig
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeForCausalLM, Qwen2MoeMLP, Qwen2MoePreTrainedModel
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeForCausalLM, Qwen2MoeMLP, Qwen2MoePreTrainedModel
 from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeTopKRouter, apply_rotary_pos_emb
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeExperts, Qwen3MoeSparseMoeBlock
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 
 
 logger = logging.get_logger(__name__)
@@ -245,7 +245,7 @@ class LagunaTopKRouter(Qwen3_5MoeTopKRouter):
         return router_logits, routing_weights, selected_experts
 
 
-class LagunaExperts(Qwen3MoeExperts):
+class LagunaExperts(Qwen2MoeExperts):
     pass
 
 

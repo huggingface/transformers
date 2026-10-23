@@ -40,11 +40,11 @@ from ..afmoe.modeling_afmoe import AfmoeForCausalLM
 from ..laguna.configuration_laguna import LagunaConfig
 from ..laguna.modeling_laguna import LagunaModel, LagunaRotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaPreTrainedModel, LlamaRMSNorm, repeat_kv
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from ..qwen3_5_moe.modeling_qwen3_5_moe import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeExperts
 
 
 @auto_docstring(checkpoint="Zyphra/ZAYA1-8B")
@@ -497,7 +497,7 @@ class ZayaRouter(nn.Module):
         )
 
 
-class ZayaExperts(Qwen3MoeExperts):
+class ZayaExperts(Qwen2MoeExperts):
     pass
 
 

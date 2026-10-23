@@ -25,7 +25,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3DecoderLayer, DeepseekV3Experts
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3DecoderLayer
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeMoE,
@@ -42,7 +42,7 @@ from ..glm4v.modeling_glm4v import (
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa: F401
 from ..llama.modeling_llama import LlamaAttention
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeCausalLMOutputWithPast,
     Qwen3VLMoeModelOutputWithPast,
@@ -151,7 +151,7 @@ class Glm4vMoeTextTopkRouter(Glm4MoeTopkRouter, nn.Module):
     pass
 
 
-class Glm4vMoeTextExperts(DeepseekV3Experts):
+class Glm4vMoeTextExperts(Qwen2MoeExperts):
     pass
 
 

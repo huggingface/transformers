@@ -32,7 +32,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
     Qwen3_5RMSNorm,
@@ -60,7 +60,6 @@ from ..qwen3_5_moe.modeling_qwen3_5_moe import (
 )
 from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextAttention,
-    Qwen3NextExperts,
     Qwen3NextRMSNormGated,
     Qwen3NextSparseMoeBlock,
     Qwen3NextTopKRouter,
@@ -517,7 +516,7 @@ class Qwen4ExpTextMLP(Qwen2MoeMLP):
     pass
 
 
-class Qwen4ExpTextExperts(Qwen3NextExperts):
+class Qwen4ExpTextExperts(Qwen2MoeExperts):
     pass
 
 

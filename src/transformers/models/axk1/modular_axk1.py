@@ -36,7 +36,6 @@ from ...utils import auto_docstring, logging
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
     DeepseekV3MoE,
@@ -48,7 +47,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 
 
 logger = logging.get_logger(__name__)
@@ -148,7 +147,7 @@ class AXK1TopkRouter(DeepseekV3TopkRouter):
     pass
 
 
-class AXK1Experts(DeepseekV3Experts):
+class AXK1Experts(Qwen2MoeExperts):
     pass
 
 

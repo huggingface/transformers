@@ -36,7 +36,6 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 )
 from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 from ..deepseek_v32.modeling_deepseek_v32 import (
-    DeepseekV32Experts,
     DeepseekV32ForCausalLM,
     DeepseekV32Indexer,
     DeepseekV32Model,
@@ -47,6 +46,7 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
 )
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 
 
 logger = logging.get_logger(__name__)
@@ -255,7 +255,7 @@ class AXK2TopkRouter(DeepseekV32TopkRouter):
         return router_logits, topk_weights, topk_indices
 
 
-class AXK2Experts(DeepseekV32Experts):
+class AXK2Experts(Qwen2MoeExperts):
     pass
 
 

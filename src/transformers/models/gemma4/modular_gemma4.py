@@ -72,9 +72,9 @@ from ..gemma3n.modeling_gemma3n import (
 )
 from ..llama.modeling_llama import LlamaMLP
 from ..mistral.modeling_mistral import MistralMLP
-from ..mixtral.modeling_mixtral import MixtralExperts
 from ..moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
 
 
@@ -1112,12 +1112,8 @@ class Gemma4TextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Gemma4TextExperts(MixtralExperts):
-    def __init__(self, config: Gemma4TextConfig):
-        super().__init__()
-        self.num_experts = config.num_experts
-        self.intermediate_dim = config.moe_intermediate_size
-        self.act_fn = ACT2FN[config.hidden_act]
+class Gemma4TextExperts(Qwen2MoeExperts):
+    pass
 
 
 class Gemma4TextRouter(nn.Module):

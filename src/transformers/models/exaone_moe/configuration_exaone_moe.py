@@ -105,6 +105,7 @@ class ExaoneMoeConfig(PreTrainedConfig):
     sliding_window: int = 4096
     sliding_window_pattern: str | int | None = 4
     layer_types: list[str] | None = None
+    attribute_map = {"num_local_experts": "num_experts"}
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",

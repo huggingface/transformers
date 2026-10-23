@@ -340,14 +340,13 @@ class MiniMaxM3VLExperts(DeepseekV4Experts):
     def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__(config)
         self.swiglu_alpha = config.swiglu_alpha
-        self.swiglu_limit = config.swiglu_limit
         del self.act_fn
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # same as GPT OSS, but the weights are not interleaved
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = gate.clamp(max=self.swiglu_limit)
-        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        gate = gate.clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
         glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
         return (up + 1.0) * glu
 

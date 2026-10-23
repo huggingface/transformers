@@ -76,7 +76,7 @@ from ..qwen2_5_omni.processing_qwen2_5_omni import (
     SinusoidsPositionEmbedding,
 )
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionAttention
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP, Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP, Qwen2MoeSparseMoeBlock, Qwen2MoeTopKRouter
 from ..qwen3.configuration_qwen3 import Qwen3Config
 from ..qwen3.modeling_qwen3 import (
     Qwen3Attention,
@@ -89,7 +89,6 @@ from ..qwen3.modeling_qwen3 import (
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
-    Qwen3MoeExperts,
     Qwen3MoeForCausalLM,
     Qwen3MoePreTrainedModel,
     Qwen3MoeSparseMoeBlock,
@@ -281,6 +280,7 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
 
     model_type = "qwen3_omni_moe_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"num_local_experts": "num_experts"}
     default_theta = 1000000.0
 
     # Default tensor parallel plan for base model `Qwen3OmniMoeText`
@@ -1099,7 +1099,7 @@ class Qwen3OmniMoeThinkerTextRotaryEmbedding(Qwen3VLMoeTextRotaryEmbedding):
     pass
 
 
-class Qwen3OmniMoeThinkerTextExperts(Qwen3MoeExperts):
+class Qwen3OmniMoeThinkerTextExperts(Qwen2MoeExperts):
     """
     ModuleList of experts.
     """

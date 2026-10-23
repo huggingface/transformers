@@ -80,7 +80,11 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
 
     model_type = "ernie4_5_vl_moe_text"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_experts": "moe_num_experts", "num_experts_per_tok": "moe_k"}
+    attribute_map = {
+        "num_experts": "moe_num_experts",
+        "num_experts_per_tok": "moe_k",
+        "num_local_experts": "moe_num_experts",
+    }
     default_theta = 500000.0
 
     base_model_tp_plan = {

@@ -24,7 +24,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.output_capturing import OutputRecorder
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MoE,
     DeepseekV3TopkRouter,
@@ -36,7 +35,7 @@ from ..exaone4.modeling_exaone4 import (
     Exaone4PreTrainedModel,
 )
 from ..llama.modeling_llama import LlamaDecoderLayer
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 
 
 @auto_docstring(checkpoint="LGAI-EXAONE/K-EXAONE-236B-A23B")
@@ -91,6 +90,7 @@ class ExaoneMoeConfig(Exaone4Config):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    attribute_map = {"num_local_experts": "num_experts"}
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
@@ -152,10 +152,8 @@ class ExaoneMoeTopkRouter(DeepseekV3TopkRouter):
         self.num_experts = config.num_experts
 
 
-class ExaoneMoeExperts(DeepseekV3Experts):
-    def __init__(self, config):
-        super().__init__(self, config)
-        self.num_experts = config.num_experts
+class ExaoneMoeExperts(Qwen2MoeExperts):
+    pass
 
 
 class ExaoneMoeSparseMoEBlock(DeepseekV3MoE):

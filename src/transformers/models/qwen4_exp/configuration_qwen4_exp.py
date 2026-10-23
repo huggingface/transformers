@@ -77,6 +77,7 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
     """
 
     model_type = "qwen4_exp_text"
+    attribute_map = {"num_local_experts": "num_experts"}
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",

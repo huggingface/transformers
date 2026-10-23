@@ -57,9 +57,7 @@ class Cohere2MoeMLP(Qwen2MoeMLP):
 
 
 class Cohere2MoeExperts(MixtralExperts):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_experts = config.num_experts
+    pass
 
 
 class Cohere2MoeTopKRouter(nn.Module):

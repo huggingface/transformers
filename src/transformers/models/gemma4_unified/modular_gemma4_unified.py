@@ -462,6 +462,7 @@ class Gemma4UnifiedTextConfig(Gemma4TextConfig):
         "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_ep_plan = None  # No MoE
+    attribute_map = {"hidden_activation": "hidden_act"}
 
     sliding_window: int = 1024
     use_bidirectional_attention: Literal["all", "vision"] | None = "vision"

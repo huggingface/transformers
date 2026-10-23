@@ -28,7 +28,6 @@ from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopkRouter
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3DecoderLayer,
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
     DeepseekV3MoE,
@@ -41,7 +40,7 @@ from ..llama.modeling_llama import (
     eager_attention_forward,
 )
 from ..ministral3.modeling_ministral3 import get_llama_4_attn_scale
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 from .configuration_mistral4 import Mistral4Config
 
 
@@ -92,7 +91,7 @@ class Mistral4TopkRouter(DeepseekV2TopkRouter):
         return router_logits, topk_weights, topk_indices
 
 
-class Mistral4Experts(DeepseekV3Experts):
+class Mistral4Experts(Qwen2MoeExperts):
     pass
 
 
