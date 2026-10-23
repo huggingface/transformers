@@ -220,9 +220,12 @@ class Gemma3nTextConfig(PreTrainedConfig):
             # After the boundary, all layers read cache computed by another layer. This other layer is the producer.
             else:
                 kv_sharing_modes.append("reuse")
-                producer_index = last_non_consumer_index[layer_type]
-                if producer_index is not None:
-                    kv_sharing_modes[producer_index] = "store"
+
+        # The last non-consumer layer of each type stores its KV states, even if no layer reuses them: assistant
+        # models (e.g. Gemma4Assistant) read them from the `shared_kv_states` returned by the target model
+        for producer_index in last_non_consumer_index.values():
+            if producer_index is not None:
+                kv_sharing_modes[producer_index] = "store"
         return kv_sharing_modes
 
 

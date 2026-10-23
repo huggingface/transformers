@@ -201,16 +201,19 @@ class Gemma4UnifiedTextConfig(PreTrainedConfig):
 
         for index, layer_type in enumerate(self.layer_types):
             # Before the layer sharing boundary, all layers compute their cache. The layer mode is `None` (does not
-            # participate in KV sharing) but it can later be upgraded to "store" (other layers reuse the cache)
+            # participate in KV sharing) but it can later be upgraded to "store" (see below)
             if index < layer_sharing_boundary:
                 kv_sharing_modes.append(None)
                 last_non_consumer_index[layer_type] = index
-            # After the boundary, all layers read cache computed by another layer. This other layer is the producer.
+            # After the boundary, all layers reuse the cache of the last non-consumer layer of the same type
             else:
                 kv_sharing_modes.append("reuse")
-                producer_index = last_non_consumer_index[layer_type]
-                if producer_index is not None:
-                    kv_sharing_modes[producer_index] = "store"
+
+        # The last non-consumer layer of each type stores its KV states, even if no layer reuses them: assistant
+        # models (e.g. Gemma4UnifiedAssistant) read them from the `shared_kv_states` returned by the target model
+        for producer_index in last_non_consumer_index.values():
+            if producer_index is not None:
+                kv_sharing_modes[producer_index] = "store"
         return kv_sharing_modes
 
     def to_dict(self) -> dict[str, Any]:
