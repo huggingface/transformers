@@ -31,6 +31,7 @@ from transformers.core_model_loading import (
     Conv3dToLinear,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
+    Interleave,
     LinearToConv3d,
     MergeModulelist,
     PermuteForRope,
@@ -247,6 +248,73 @@ class DummyRoot(PreTrainedModel):
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
+    def test_fused_weight_shape_round_trip(self):
+        """Shape metadata follows the described weight, including fused gate/up saves."""
+        for dim, dtype in ((0, torch.int64), (1, torch.int32)):
+            with self.subTest(dim=dim, dtype=dtype):
+                conversion = WeightConverter(
+                    "mlp.fused",
+                    ["mlp.gate", "mlp.up"],
+                    operations=[Interleave(dim=dim), Chunk(dim=dim)],
+                )
+                model = SimpleNamespace(_weight_conversions=[conversion], config=PreTrainedConfig())
+                original = {
+                    f"mlp.{name}.{suffix}": tensor.clone() if suffix == "weight_shape" else tensor + offset
+                    for name, offset in (("gate", 0), ("up", 100))
+                    for suffix, tensor in (
+                        ("weight", torch.arange(64).reshape(4, 16)),
+                        ("weight_packed", torch.arange(8, dtype=torch.int32).reshape(4, 2)),
+                        ("weight_scale", torch.arange(8, dtype=torch.float32).reshape(4, 2)),
+                        ("weight_shape", torch.tensor([4, 16], dtype=dtype)),
+                    )
+                }
+                saved = revert_weight_conversion(model, original)
+                self.assertEqual(saved["mlp.fused.weight_shape"].tolist(), list(saved["mlp.fused.weight"].shape))
+                self.assertEqual(saved["mlp.fused.weight_shape"].dtype, dtype)
+                self.assertEqual(saved["mlp.fused.weight_shape"].device, original["mlp.gate.weight_shape"].device)
+                for suffix in ("weight", "weight_packed", "weight_scale"):
+                    expected = torch.stack(
+                        [original[f"mlp.gate.{suffix}"], original[f"mlp.up.{suffix}"]], dim=dim + 1
+                    ).flatten(dim, dim + 1)
+                    torch.testing.assert_close(saved[f"mlp.fused.{suffix}"], expected)
+                model._weight_conversions = [conversion.reverse_transform()]
+                restored = revert_weight_conversion(model, saved)
+                self.assertTrue(compare_state_dicts(restored, original))
+
+    def test_inkling_weight_shape_round_trip(self):
+        """Use the real checkpoint mapping without allocating mini or full-size weights."""
+        for shape in ([512, 128], [24576, 6144]):
+            with self.subTest(shape=shape):
+                conversion = next(
+                    entry
+                    for entry in get_checkpoint_conversion_mapping("inkling_mm_model")
+                    if entry.source_patterns == ["mlp.w13_dn.weight"]
+                )
+                # Quantized companion tensors have explicit conversion rules, like HfQuantizer creates on load.
+                conversion = conversion.copy(
+                    [name + "_shape" for name in conversion.source_patterns],
+                    [name + "_shape" for name in conversion.target_patterns],
+                    operations=conversion.operations,
+                )
+                model = SimpleNamespace(_weight_conversions=[conversion], config=PreTrainedConfig())
+                original = {
+                    f"model.layers.0.mlp.{name}.weight_shape": torch.tensor(shape) for name in ("gate_proj", "up_proj")
+                }
+                saved = revert_weight_conversion(model, original)
+                self.assertEqual(list(saved), ["model.layers.0.mlp.w13_dn.weight_shape"])
+                self.assertEqual(next(iter(saved.values())).tolist(), [2 * shape[0], shape[1]])
+                model._weight_conversions = [conversion.reverse_transform()]
+                self.assertTrue(compare_state_dicts(revert_weight_conversion(model, saved), original))
+
+    def test_concatenate_incompatible_weight_shapes(self):
+        with self.assertRaises(RuntimeError):
+            Concatenate(dim=0).convert(
+                {"gate.weight": torch.tensor([4, 6]), "up.weight": torch.tensor([4, 8])},
+                ["gate.weight", "up.weight"],
+                ["fused.weight"],
+                full_layer_name="mlp.fused.weight_shape",
+            )
+
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
         """Integration test: FSDP-sharded expert loading + WeightConverter.
 
