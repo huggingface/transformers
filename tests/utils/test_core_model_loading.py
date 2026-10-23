@@ -267,6 +267,18 @@ class DummyRoot(PreTrainedModel):
         self.post_init()
 
 
+class DummyRootMerged(PreTrainedModel):
+    base_model_prefix = "model"
+    config: PreTrainedConfig
+
+    def __init__(self, config, add_extra_moe=False, with_mlp=True):
+        super().__init__(config)
+        self.model = DummyTopModelMerged(add_extra_moe)
+        if with_mlp:
+            self.mlp = DummyMLP()
+        self.post_init()
+
+
 class TestConvertAndLoadStateDict(unittest.TestCase):
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
         """Integration test: FSDP-sharded expert loading + WeightConverter.
@@ -1295,7 +1307,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
     def test_reverse_renames_the_converter_outputs(self):
         # The renaming writes the name the converter reads, so the save must convert before it renames back
-        model = DummyTopModel(PreTrainedConfig())
+        model = DummyRoot(PreTrainedConfig(), with_mlp=False)
 
         # Mapping with both Renaming and Converter applied to the same subkey, i.e. part of the Converter patterns use the
         # result of the Renaming
@@ -1325,7 +1337,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
     def test_reverse_renames_the_converter_outputs_bis(self):
         # The renaming writes the name the converter reads, so the save must convert before it renames back
-        model = DummyTopModelMerged(PreTrainedConfig())
+        model = DummyRootMerged(PreTrainedConfig(), with_mlp=False)
 
         # Mapping with both Renaming and Converter applied to the same subkey, i.e. part of the Converter patterns use the
         # result of the Renaming
