@@ -17,6 +17,8 @@ if is_hqq_available():
     from hqq.core.quantize import Quantizer as HQQQuantizer
 
 _is_torch_greater_or_equal_than_2_7 = is_torch_greater_or_equal("2.7", accept_dev=True)
+# The optimized update needs the shift/copy fusion fix in Torch 2.10 (pytorch/pytorch#162316).
+_is_torch_greater_or_equal_than_2_10 = is_torch_greater_or_equal("2.10", accept_dev=True)
 
 
 class CacheLayerMixin(ABC):
@@ -506,130 +508,78 @@ class StaticLayer(CacheLayerMixin):
 
 
 class StaticSlidingWindowLayer(StaticLayer):
-    """
-    A static cache layer that stores the key and value states as static tensors of shape
-    `[batch_size, num_heads, min(max_cache_len, sliding_window), head_dim]`. It lazily allocates its full backing
-    tensors, and then mutates them in-place. Built for `torch.compile` support.
+    """A fixed-size, chronological sliding window for compilation and export.
+
+    States are right-aligned: an update shifts retained states left and appends new
+    states at the right. Empty slots precede the first token and are masked out.
+    A tensor counter keeps single-token decoding on the same graph before and after
+    the window fills. A fresh cache returns the incoming prefill states directly.
+    Later multi-token calls return the previous window followed by the incoming
+    states, so earlier queries retain context that later queries evict.
 
     Args:
         max_cache_len (`int`):
-            Maximum number of tokens that can be stored, used for tensor preallocation.
+            Maximum number of tokens to preallocate.
         sliding_window (`int`):
-            The size of the sliding window.
+            Maximum number of tokens retained by the layer.
     """
 
     is_sliding = True
 
     def __init__(self, max_cache_len: int, sliding_window: int, **kwargs):
-        effective_max_cache_len = min(sliding_window, max_cache_len)
-        super().__init__(max_cache_len=effective_max_cache_len)
-        # Here, to avoid data-dependent control flows, we also need to use a python int to keep track of the cumulative length
-        self.cumulative_length_int = 0
+        super().__init__(max_cache_len=min(sliding_window, max_cache_len))
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Update the key and value caches in-place, and return the necessary keys and value states.
-
-        Args:
-            key_states (`torch.Tensor`): The new key states to cache.
-            value_states (`torch.Tensor`): The new value states to cache.
-
-        Returns:
-            tuple[`torch.Tensor`, `torch.Tensor`]: The key and value states.
-        """
-        # Lazy initialization
+        is_first_update = not self.is_initialized
         if not self.is_initialized:
             self.lazy_initialization(key_states, value_states)
 
-        kv_length = key_states.shape[-2]
-        current_length = self.cumulative_length_int
-        is_full = current_length >= self.max_cache_len
-        # Update it now that we saved the value above
-        self.cumulative_length_int += kv_length
-
-        if is_full:
-            # In general, we should use a much simpler `cat` here as well, independently of the states size. However,
-            # dynamo is currently bugged when doing it - see https://github.com/pytorch/pytorch/issues/159855 for more details
-            if key_states.shape[-2] == 1:
-                # Roll all values to the left by 1 position
-                new_keys = self.keys.roll(-1, dims=-2)
-                new_values = self.values.roll(-1, dims=-2)
-                # Overwrite the last position with new states
-                # (note: very important to use a tensor to index here, see https://github.com/pytorch/pytorch/issues/159855)
-                index = torch.tensor([-1], dtype=int, device=self.device)
-                new_keys[:, :, index] = key_states
-                new_values[:, :, index] = value_states
-
-                # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
-                self.keys.copy_(new_keys)
-                self.values.copy_(new_values)
-
-                # Very important to return the `self` tensors here, as they have the static dynamo address
-                return self.keys, self.values
-            # Already full but using more than 1 new token (e.g. prefill caching, chat continuation, etc...)
-            else:
-                full_key_states = torch.cat((self.keys[:, :, 1:, :], key_states), dim=-2)
-                full_value_states = torch.cat((self.values[:, :, 1:, :], value_states), dim=-2)
-        # Not yet full, but becoming full on this update
-        elif current_length + kv_length > self.max_cache_len:
-            # Fast prefill path, no need to cat() in this case, as the cache is currently empty
-            if current_length == 0:
-                full_key_states = key_states
-                full_value_states = value_states
-            else:
-                full_key_states = torch.cat((self.keys[:, :, :current_length, :], key_states), dim=-2)
-                full_value_states = torch.cat((self.values[:, :, :current_length, :], value_states), dim=-2)
-        else:
-            # Note: very important to use the tensor version of the cumulative length here, as otherwise cudagraphs
-            # (triggered by mode="reduced_overhead") will lead to random crashes, as the int would be overwritten
-            cache_position = torch.arange(kv_length, device=self.device) + self.cumulative_length
-            try:
-                self.keys.index_copy_(2, cache_position, key_states)
-                self.values.index_copy_(2, cache_position, value_states)
-            except NotImplementedError:
-                self.keys[:, :, cache_position] = key_states
-                self.values[:, :, cache_position] = value_states
-
-            # Update the tensor version of the length in-place (we don't need to update it if we are already outside
-            # of this branch, as we don't need the tensor anymore)
-            self.cumulative_length.add_(kv_length)
-
-            # Very important to return the `self` tensors here, as they have the static dynamo address
+        length = key_states.shape[-2]
+        if length == 0:
             return self.keys, self.values
+        if is_first_update and length > 1:
+            cached_length = min(length, self.max_cache_len)
+            self.keys[..., -cached_length:, :].copy_(key_states[..., -cached_length:, :])
+            self.values[..., -cached_length:, :].copy_(value_states[..., -cached_length:, :])
+            self.cumulative_length.add_(length)
+            return key_states, value_states
+        if length > 1:
+            full_keys = torch.cat((self.keys, key_states), dim=-2)
+            full_values = torch.cat((self.values, value_states), dim=-2)
 
-        # We only cache the last `sliding_window` tokens
-        self.keys.copy_(full_key_states[:, :, -self.max_cache_len :, :])
-        self.values.copy_(full_value_states[:, :, -self.max_cache_len :, :])
-        # we should return the whole states instead of `self.keys/values` here, as otherwise we lose some context
-        return full_key_states, full_value_states
-
-    def get_mask_sizes(self, query_length: int) -> tuple[int, int]:
-        """Return the length and offset of the cache, used to generate the attention mask"""
-        sliding_window = self.max_cache_len
-        is_full = self.cumulative_length_int >= self.max_cache_len
-
-        kv_offset = max(self.cumulative_length_int - sliding_window + 1, 0)
-        # The cache is already full
-        if is_full:
-            kv_length = sliding_window + query_length - 1
-        # Not yet full, but becoming full on this update
-        elif self.cumulative_length_int + query_length > sliding_window:
-            kv_length = self.cumulative_length_int + query_length
-        # Here the Cache is still smaller than the local size, but we return the local size as it's static
+        if length >= self.max_cache_len:
+            updated = [key_states[..., -self.max_cache_len :, :], value_states[..., -self.max_cache_len :, :]]
+        elif length == 1 and _is_torch_greater_or_equal_than_2_10 and self.k_head_dim == self.v_head_dim:
+            # Stack temporary K/V tensors to process them together; keep separate backing buffers.
+            retained = torch.stack((self.keys[..., 1:, :], self.values[..., 1:, :]))
+            updated = torch.cat((retained, torch.stack((key_states, value_states))), dim=-2).unbind(0)
+        elif length == 1:
+            updated = [self.keys.roll(-1, dims=-2), self.values.roll(-1, dims=-2)]
+            # Keep tensor indexing: Inductor can otherwise fuse the shift and
+            # copy-back unsafely (pytorch/pytorch#159855), including with foreach.
+            index = torch.tensor([-1], dtype=torch.long, device=self.device)
+            updated[0][..., index, :] = key_states
+            updated[1][..., index, :] = value_states
         else:
-            kv_length = sliding_window
+            updated = [
+                torch.cat((cache[..., length:, :], states), dim=-2)
+                for cache, states in ((self.keys, key_states), (self.values, value_states))
+            ]
 
-        return kv_length, kv_offset
+        self.keys.copy_(updated[0])
+        self.values.copy_(updated[1])
+        self.cumulative_length.add_(length)
+        return (full_keys, full_values) if length > 1 else (self.keys, self.values)
 
-    def get_seq_length(self) -> int:
-        """Returns the sequence length of the cached states."""
-        return self.cumulative_length_int
-
-    def reset(self):
-        super().reset()
-        self.cumulative_length_int = 0
+    def get_mask_sizes(self, query_length: int) -> tuple[int, int | torch.Tensor]:
+        if query_length > 1 and not self.is_initialized:
+            return query_length, 0
+        # Leading empty slots represent negative positions until the window fills.
+        if query_length == 1:
+            return self.max_cache_len, self.cumulative_length - (self.max_cache_len - 1)
+        return self.max_cache_len + query_length, self.cumulative_length - self.max_cache_len
 
 
 class StaticIndexedLayer(StaticLayer):

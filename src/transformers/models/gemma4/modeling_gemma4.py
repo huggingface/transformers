@@ -2664,7 +2664,8 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
         text_config = config.get_text_config()
         use_bidir = getattr(text_config, "use_bidirectional_attention", None) == "vision"
 
-        if use_bidir and mm_token_type_ids is not None:
+        # Image tokens attend each other bidirectionally only when they are input, i.e. on the first iteration
+        if use_bidir and mm_token_type_ids is not None and is_first_iteration:
             block_sequence_ids = get_block_sequence_ids_for_mask(mm_token_type_ids, device=inputs_embeds.device)
             return create_masks_for_vision_model(
                 block_sequence_ids=block_sequence_ids,

@@ -420,8 +420,9 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         is_first_iteration: bool | None = False,
         **kwargs,
     ) -> dict:
-        group_ids = torch.full([*inputs_embeds.size()[:-1]], -1, device=inputs_embeds.device)
-        if token_type_ids is not None:
+        # The prefix attends to itself bidirectionally only when it is input, i.e. on the first iteration
+        group_ids = None
+        if token_type_ids is not None and is_first_iteration:
             # First find where a new image block starts: 1 if image and previous not image
             # The images cannot attend to future images, but can attend to all prev images and to itself bidirectionally
             group_ids = torch.where(token_type_ids == 0, 0, -1)
