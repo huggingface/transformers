@@ -841,8 +841,6 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
 
 
 class EmbeddingGemma2ProcessorKwargs(Gemma4ProcessorKwargs):
-    images_kwargs = AttributeError()
-
     _defaults = {
         "text_kwargs": {
             "padding": True,
