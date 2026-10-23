@@ -410,6 +410,12 @@ class NemotronHOmniAudio2TextModelTest(NemotronHOmniModelTestMixin, ALMModelTest
     def test_generate_from_multimodal_encoder_outputs_and_raw_data(self):
         pass
 
+    @unittest.skip(
+        reason="The Parakeet audio encoder always builds an attention mask, which the SDPA flash backend rejects"
+    )
+    def test_sdpa_can_dispatch_on_flash(self):
+        pass
+
 
 @slow
 @require_torch_gpu

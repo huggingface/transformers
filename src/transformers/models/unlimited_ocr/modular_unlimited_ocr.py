@@ -41,6 +41,7 @@ from ...masking_utils import (
     or_masks,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MoeModelOutputWithPast
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import (
@@ -1179,7 +1180,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             per_image_local = [None] * batch_size
 
         hidden_size = global_features.shape[-1]
-        newline = self.image_newline[None, None, :]
+        newline = self.image_newline[None, None, :].to(global_features.device)
         num_queries_global = int(global_features.shape[1] ** 0.5)
 
         # Different from DeepseekOcr2: each row of image patches gets a newline token appended.
@@ -1416,8 +1417,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         )
 
         hidden_states = outputs[0]
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        hidden_states = hidden_states[:, slice_indices, :]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
 
         loss = None

@@ -90,6 +90,10 @@ def sdpa_attention_forward(
     cache: PagedAttentionCache | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
+    if kwargs.get("softcap") is not None:
+        raise ValueError(
+            "`sdpa` attention does not support `softcap`. Try using `eager`, `flex_attention`, or the few FA kernels supporting it"
+        )
     if kwargs.get("output_attentions", False):
         logger.warning_once(
             "`sdpa` attention does not support `output_attentions=True`."

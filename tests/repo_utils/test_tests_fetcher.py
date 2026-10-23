@@ -693,6 +693,84 @@ src/transformers/configuration_utils.py
         assert expected_tests_for_qwen2.issubset(set(reverse_map[f"{models_dir}/qwen2/modeling_qwen2.py"]))
         assert expected_tests_for_qwen2.isdisjoint(set(reverse_map[f"{models_dir}/qwen2/tokenization_qwen2.py"]))
 
+    def test_preprocessor_files_trigger_their_tests_and_test_processing(self):
+        """
+        Preprocessor source files (image/video processors, feature extractors, tokenizers) are not
+        statically imported by their test files — class resolution is dynamic (e.g. via
+        IMAGE_PROCESSOR_MAPPING_NAMES, TOKENIZER_MAPPING) and processing_<model>.py often has no
+        static import of these classes (e.g. CLIP's processing_clip.py only imports ProcessorMixin).
+        This test ensures create_reverse_dependency_map explicitly wires all preprocessor source
+        files to both their type-specific test file and test_processing_<model>.py by naming
+        convention.
+        """
+        reverse_map = create_reverse_dependency_map()
+        models_dir = "src/transformers/models"
+
+        # --- image processors ---
+        # CLIP: processing_clip.py has zero deps (only imports ProcessorMixin), so
+        # test_processing_clip.py has no static path to image_processing_clip.py — both
+        # test files must be wired explicitly.
+        for img_proc_file in [
+            f"{models_dir}/clip/image_processing_clip.py",
+            f"{models_dir}/clip/image_processing_pil_clip.py",
+        ]:
+            triggered = set(reverse_map[img_proc_file])
+            assert "tests/models/clip/test_image_processing_clip.py" in triggered, (
+                f"{img_proc_file} must trigger test_image_processing_clip.py"
+            )
+            assert "tests/models/clip/test_processing_clip.py" in triggered, (
+                f"{img_proc_file} must trigger test_processing_clip.py"
+            )
+
+        # Fuyu: second model to avoid false positives
+        for img_proc_file in [
+            f"{models_dir}/fuyu/image_processing_fuyu.py",
+            f"{models_dir}/fuyu/image_processing_pil_fuyu.py",
+        ]:
+            triggered = set(reverse_map[img_proc_file])
+            assert "tests/models/fuyu/test_image_processing_fuyu.py" in triggered, (
+                f"{img_proc_file} must trigger test_image_processing_fuyu.py"
+            )
+            assert "tests/models/fuyu/test_processing_fuyu.py" in triggered, (
+                f"{img_proc_file} must trigger test_processing_fuyu.py"
+            )
+
+        # --- video processors ---
+        # qwen2_vl: processing_qwen2_vl.py only imports ProcessorMixin; no static path to
+        # video_processing_qwen2_vl.py from the test side.
+        video_proc_file = f"{models_dir}/qwen2_vl/video_processing_qwen2_vl.py"
+        triggered = set(reverse_map[video_proc_file])
+        assert "tests/models/qwen2_vl/test_video_processing_qwen2_vl.py" in triggered, (
+            f"{video_proc_file} must trigger test_video_processing_qwen2_vl.py"
+        )
+        assert "tests/models/qwen2_vl/test_processing_qwen2_vl.py" in triggered, (
+            f"{video_proc_file} must trigger test_processing_qwen2_vl.py"
+        )
+
+        # --- feature extractors ---
+        # whisper: processing_whisper.py only imports ProcessorMixin; feature_extraction_whisper.py
+        # is not statically reachable from test_processing_whisper.py.
+        feat_ext_file = f"{models_dir}/whisper/feature_extraction_whisper.py"
+        triggered = set(reverse_map[feat_ext_file])
+        assert "tests/models/whisper/test_feature_extraction_whisper.py" in triggered, (
+            f"{feat_ext_file} must trigger test_feature_extraction_whisper.py"
+        )
+        assert "tests/models/whisper/test_processing_whisper.py" in triggered, (
+            f"{feat_ext_file} must trigger test_processing_whisper.py"
+        )
+
+        # --- tokenizers ---
+        # CLIP: processing_clip.py has no static import of CLIPTokenizer, so
+        # tokenization_clip.py is not reachable from test_processing_clip.py.
+        tok_file = f"{models_dir}/clip/tokenization_clip.py"
+        triggered = set(reverse_map[tok_file])
+        assert "tests/models/clip/test_tokenization_clip.py" in triggered, (
+            f"{tok_file} must trigger test_tokenization_clip.py"
+        )
+        assert "tests/models/clip/test_processing_clip.py" in triggered, (
+            f"{tok_file} must trigger test_processing_clip.py"
+        )
+
     @unittest.skip("Broken for now TODO @ArthurZucker")
     def test_infer_tests_to_run(self):
         with tempfile.TemporaryDirectory() as tmp_folder:

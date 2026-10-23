@@ -626,6 +626,7 @@ class FP8Experts(nn.Module):
         scale_fmt: str = "float",
         has_bias: bool = False,
         has_gate: bool = True,
+        expert_dtype: str = "fp8",
     ):
         super().__init__()
 
@@ -647,10 +648,10 @@ class FP8Experts(nn.Module):
         self.limit = getattr(config, "swiglu_limit", None)
 
         # Expert weight precision is FP8 by default; DeepSeek V4-style models declare
-        # `config.expert_dtype = "fp4"` for FP4-packed expert weights. FP4 storage:
+        # `expert_dtype = "fp4"` for FP4-packed expert weights. FP4 storage:
         #   - weight is `int8`, K dim halved (2 e2m1 values per byte).
         #   - per-row SF at gran_k=32 (no block-wise SF; `block_size` ignored).
-        is_fp4 = getattr(config, "expert_dtype", "fp8") == "fp4"
+        is_fp4 = expert_dtype == "fp4"
         sf_dtype = _get_ue8m0_dtype() if scale_fmt == "ue8m0" else torch.float32
         if is_fp4:
             alloc_kwargs = {
@@ -867,6 +868,7 @@ def replace_with_fp8_linear(
                     scale_fmt=quantization_config.scale_fmt,
                     has_bias=has_bias,
                     has_gate=has_gate,
+                    expert_dtype=quantization_config.expert_dtype,
                 )
             elif type(module) is nn.Linear:
                 # Vanilla `nn.Linear` → standard FP8Linear swap.

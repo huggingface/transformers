@@ -35,7 +35,6 @@ from .backbone_utils import consolidate_backbone_kwargs_to_config
 from .dynamic_module_utils import custom_object_save
 from .generation.configuration_utils import GenerationConfig
 from .integrations.heterogeneity import HeterogeneousConfigMixin
-from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .modeling_rope_utils import RotaryEmbeddingConfigMixin
 from .utils import (
     CONFIG_NAME,
@@ -1006,6 +1005,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                 if metadata["general.architecture"] in GGUF_CONFIG_ARCHS:
                     config_dict = get_gguf_config(metadata, tensor_names)
                 else:
+                    from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
                     config_dict = load_gguf_checkpoint(resolved_config_file, return_tensors=False)["config"]
             else:
                 # Load config dict
