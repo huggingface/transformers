@@ -69,6 +69,24 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs["input_ids"].shape, (1, 1872))
         self.assertEqual(inputs["pixel_values"].shape, (7, 3, 384, 384))
 
+    def test_box_annotation_numpy_matches_pil(self):
+        import numpy as np
+        from PIL import Image
+
+        processor = self.get_processor()
+
+        pil_image = Image.new("RGB", (320, 120))
+        numpy_image = np.asarray(pil_image)
+        box = [32, 12, 160, 60]
+
+        pil_inputs = processor(pil_image, box=box.copy(), return_tensors="pt")
+        numpy_inputs = processor(numpy_image, box=box.copy(), return_tensors="pt")
+
+        torch.testing.assert_close(
+            pil_inputs["input_ids"],
+            numpy_inputs["input_ids"],
+        )
+
     def test_processor_text_has_no_visual(self):
         # Overwritten: requires `multi_page` kwarg to process nested vision inputs
         processor = self.get_processor()
