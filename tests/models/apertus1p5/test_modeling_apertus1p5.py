@@ -329,9 +329,7 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
 
     def _load_model(self, model_class=None):
         model_class = model_class or Apertus1p5ForConditionalGeneration
-        return model_class.from_pretrained(
-            self.checkpoint, revision=self.revision, dtype=torch.bfloat16, device_map=torch_device
-        )
+        return model_class.from_pretrained(self.checkpoint, revision=self.revision, device_map=torch_device)
 
     def _generate(self, model, conversations):
         inputs = self.processor.apply_chat_template(
@@ -343,7 +341,7 @@ class Apertus1p5IntegrationTest(unittest.TestCase):
             processor_kwargs={"padding": True},
         ).to(torch_device)
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        return self.processor.batch_decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+        return self.processor.decode(output[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
 
     def test_text_generation(self):
         model = self._load_model()
