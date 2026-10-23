@@ -11,9 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Deprecated: `NVFP4Config` loads through the fine-grained integration. This module goes in v5.25."""
+
 from __future__ import annotations
 
 import functools
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -26,6 +29,13 @@ from ..utils.import_utils import (
     is_kernels_available,
 )
 from .hub_kernels import lazy_load_kernel
+
+
+warnings.warn(
+    "`transformers.integrations.nvfp4` is deprecated and will be removed in v5.25. "
+    "`NVFP4Config` loads through the fine-grained integration.",
+    FutureWarning,
+)
 
 
 if is_torch_available():

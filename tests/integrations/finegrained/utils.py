@@ -87,6 +87,11 @@ def _replace(model, config, modules_to_not_convert=None):
     return _quantizer_for(config).replace_modules(model, modules_to_not_convert=modules_to_not_convert)
 
 
+def _targets(conv):
+    t = conv.target_patterns
+    return t if isinstance(t, (list, tuple)) else [t]
+
+
 @dataclass
 class _Call:
     args: tuple

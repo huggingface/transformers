@@ -22,6 +22,7 @@ from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, torch_device
+from transformers.utils.quantization_config import NVFP4Config
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 from ...test_modeling_common import floats_tensor
@@ -47,6 +48,8 @@ if is_torch_available():
     from transformers.distributed.fsdp import verify_fsdp_plan
     from transformers.integrations.finegrained import FineGrainedEmbedding
     from transformers.quantizers.auto import AutoHfQuantizer, AutoQuantizationConfig
+    from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
+    from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config
 
 
 class Qwen4ExpTextModelTester(CausalLMModelTester):
@@ -335,6 +338,27 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
         self.assertIsInstance(table, FineGrainedEmbedding)
         self.assertEqual(table.weight.dtype, torch.float8_e4m3fn)
         self.assertEqual(table.weight_scale.shape, torch.Size([1]))
+
+    def test_a_table_beside_another_format_is_held_in_fp8(self):
+        """Check that a plan entry keeps an embedding table in FP8 next to NVFP4 linears.
+
+        Embedding tables only exist in per-tensor FP8, so the table stays FP8 under an NVFP4 plan.
+        """
+        config = self.model_tester.get_config()
+        with torch.device("meta"):
+            model = Qwen4ExpForCausalLM(config)
+
+        quantizer = FineGrainedHfQuantizer(
+            FineGrainedConfig(
+                dtype_plan={
+                    "ple.ple_embedding.ngram_embedding$": Fp8Config(weight_block_size=None),
+                    ".*": NVFP4Config(),
+                },
+            )
+        )
+        quantizer.pre_quantized = True
+        quantizer.preprocess_model(model)
+        self.assertEqual(model.model.layers[0].ple.ple_embedding.ngram_embedding.weight.dtype, torch.float8_e4m3fn)
 
 
 class Qwen4ExpVisionText2TextModelTester(VLMModelTester):

@@ -308,6 +308,10 @@ class AutoHfQuantizer:
         ):
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
+                if attr == "activation_format" and not quantization_config.dequantize:
+                    # A dequantized model runs no activation format.
+                    # `dequantize` comes first in the loading attributes, so this reads the passed value.
+                    quantization_config._check_activation_format(val)
                 setattr(quantization_config, attr, val)
             if isinstance(quantization_config, BlockScaledConfig):
                 # Check that the passed attributes are consistent with the checkpoint's
