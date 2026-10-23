@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import json
 import tempfile
 import unittest
@@ -19,6 +20,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
+from huggingface_hub import hf_hub_download, hf_hub_url
 from parameterized import parameterized
 from tokenizers import Tokenizer, models, normalizers, pre_tokenizers, processors
 
@@ -33,7 +35,14 @@ from transformers import (
     MiMoV2VideoProcessor,
     PreTrainedTokenizerFast,
 )
-from transformers.testing_utils import require_torch, require_torchaudio, require_torchvision, require_vision
+from transformers.testing_utils import (
+    require_torch,
+    require_torchaudio,
+    require_torchcodec,
+    require_torchvision,
+    require_vision,
+    slow,
+)
 from transformers.utils import is_torch_available
 from transformers.video_utils import VideoMetadata
 
@@ -53,6 +62,27 @@ SPECIAL_TOKENS = [
     "<|mimo_video_start|>",
     "<|mimo_video_end|>",
 ]
+
+
+MEDIA_FIXTURES = {
+    "image": ("huggingface/documentation-images", "pipeline-cat-chonk.jpeg"),
+    "audio": ("hf-internal-testing/transformers-synthetic-assets", "audio/voice_sample.wav"),
+    "video": ("hf-internal-testing/test-videos", "sample_demo_1_320x240.mp4"),
+}
+
+
+def media_url(modality):
+    repo_id, filename = MEDIA_FIXTURES[modality]
+    return hf_hub_url(repo_id, filename, repo_type="dataset")
+
+
+MULTIMODAL_CHAT_TEMPLATE = (
+    "{% for message in messages %}{% for item in message['content'] %}"
+    "{% if item['type'] == 'image' %}<|vision_start|><|image_pad|><|vision_end|>"
+    "{% elif item['type'] == 'audio' %}<|mimo_audio_start|><|audio_pad|><|mimo_audio_end|>"
+    "{% elif item['type'] == 'video' %}<|vision_start|><|video_pad|><|vision_end|>"
+    "{% else %}{{ item['text'] }}{% endif %}{% endfor %}{% endfor %}"
+)
 
 
 def make_processor(**kwargs):
@@ -691,3 +721,160 @@ class MiMoV2ProcessorTest(unittest.TestCase):
         expected = processor(text=token, **{media_key: value.copy()}, **kwargs)
         for key in actual:
             torch.testing.assert_close(actual[key], expected[key], rtol=0, atol=0)
+
+    @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
+    def test_url_messages_load_all_modalities_without_mutation(self, batched, nested_url):
+        """Verify normalization and loader arguments without making network requests."""
+        processor = make_processor(chat_template=MULTIMODAL_CHAT_TEMPLATE)
+        image_url, audio_url, video_url = (media_url(modality) for modality in ("image", "audio", "video"))
+
+        def content_block(modality, url):
+            return {"type": f"{modality}_url", f"{modality}_url": {"url": url} if nested_url else url}
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "before"},
+                    *[content_block("image", image_url) for _ in range(3)],
+                    content_block("audio", audio_url),
+                    content_block("video", video_url),
+                ],
+            }
+        ]
+        if batched:
+            messages = [messages]
+        original = copy.deepcopy(messages)
+        with (
+            patch.object(processor.image_processor, "fetch_images", return_value=[self.image] * 3) as fetch_images,
+            patch.object(
+                processor.video_processor,
+                "fetch_videos",
+                return_value=([self.video], [self.video_kwargs()["video_metadata"]]),
+            ) as fetch_videos,
+            patch("transformers.processing_utils.load_audio", return_value=np.zeros(24000, dtype=np.float32)) as load,
+        ):
+            output = processor.apply_chat_template(
+                messages,
+                tokenize=True,
+                return_dict=True,
+                return_tensors="pt",
+                processor_kwargs={"videos_kwargs": {"do_sample_frames": False, "input_data_format": "channels_last"}},
+            )
+        self.assertEqual(messages, original)
+        self.assertEqual(output.image_grid_thw.shape[0], 3)
+        self.assertEqual(output.video_grid_thw.shape[0], 1)
+        self.assertEqual(output.input_features.shape[0], 1)
+        self.assertEqual(fetch_images.call_args_list[0].args, ([[image_url] * 3],))
+        self.assertEqual(fetch_videos.call_count, 1)
+        self.assertEqual(fetch_videos.call_args.args[0], [video_url])
+        load.assert_called_once_with(
+            audio_url, sampling_rate=processor.feature_extractor.sampling_rate, backend="auto"
+        )
+
+    def test_chat_template_merges_processor_kwargs(self):
+        p = make_processor(chat_template="{% for message in messages %}{{ message['content'] }}{% endfor %}")
+        options = {"text_kwargs": {"padding": "max_length", "max_length": 12}}
+        original = copy.deepcopy(options)
+        output = p.apply_chat_template(
+            [{"role": "user", "content": "text"}],
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs=options,
+            sampling_rate=24000,
+        )
+        self.assertEqual(output.input_ids.shape, (1, 12))
+        self.assertEqual(options, original)
+
+    def test_assistant_mask_after_image_expansion(self):
+        p = self.processor
+        template = (
+            "{% for message in messages %}{% if message['role'] == 'assistant' %}"
+            "{% generation %}{{ message['content'] }}{% endgeneration %}"
+            "{% else %}<|vision_start|><|image_pad|><|vision_end|> {% endif %}{% endfor %}"
+        )
+        messages = [
+            {"role": "user", "content": [{"type": "image", "image": self.image}]},
+            {"role": "assistant", "content": "after"},
+        ]
+        output = p.apply_chat_template(
+            messages,
+            chat_template=template,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            return_assistant_tokens_mask=True,
+        )
+        selected = output.input_ids[output.assistant_masks.bool()].tolist()
+        self.assertEqual(selected, p.tokenizer.encode("after", add_special_tokens=False))
+
+
+@slow
+@require_torch
+@require_torchvision
+@require_vision
+@require_torchcodec
+class MiMoV2ProcessorIntegrationTest(unittest.TestCase):
+    """Decode public Hub fixtures with the real processor; no model weights are downloaded."""
+
+    model_id = "XiaomiMiMo/MiMo-V2.6-Flash-RL"
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.processor = AutoProcessor.from_pretrained(cls.model_id, trust_remote_code=False)
+        cls.media_paths = {
+            modality: hf_hub_download(repo_id=repo_id, filename=filename, repo_type="dataset")
+            for modality, (repo_id, filename) in MEDIA_FIXTURES.items()
+        }
+
+    @parameterized.expand([(False,), (True,)])
+    def test_mixed_media_files_match_aliases_and_saved_processor(self, batched):
+        self.assertIsInstance(self.processor, MiMoV2Processor)
+        alias_messages = [
+            {
+                "role": "user",
+                "content": [
+                    *[
+                        {"type": f"{modality}_url", f"{modality}_url": {"url": path}}
+                        for modality, path in self.media_paths.items()
+                    ],
+                    {"type": "text", "text": "Describe what you can see and hear."},
+                ],
+            }
+        ]
+        path_messages = [
+            {
+                "role": "user",
+                "content": [
+                    *[{"type": modality, "path": path} for modality, path in self.media_paths.items()],
+                    {"type": "text", "text": "Describe what you can see and hear."},
+                ],
+            }
+        ]
+        if batched:
+            alias_messages, path_messages = [alias_messages], [path_messages]
+        original = copy.deepcopy(alias_messages)
+        kwargs = {"tokenize": True, "return_dict": True, "return_tensors": "pt", "add_generation_prompt": True}
+        actual = self.processor.apply_chat_template(alias_messages, **kwargs)
+        expected = self.processor.apply_chat_template(path_messages, **kwargs)
+        self.assertEqual(alias_messages, original)
+        self.assertEqual(set(actual), set(expected))
+        for key in expected:
+            torch.testing.assert_close(actual[key], expected[key], rtol=0, atol=0)
+        self.assertEqual(actual.image_grid_thw.shape[0], 1)
+        self.assertEqual(actual.video_grid_thw.shape[0], 1)
+        self.assertEqual(actual.input_features.shape[0], 1)
+        self.assertTrue(torch.isfinite(actual.pixel_values).all())
+        self.assertTrue(torch.isfinite(actual.pixel_values_videos).all())
+        self.assertTrue(torch.isfinite(actual.input_features).all())
+        self.assertEqual(actual.input_ids.eq(self.processor.audio_token_id).sum(), actual.audio_feature_lens.sum())
+
+        with tempfile.TemporaryDirectory() as directory:
+            self.processor.save_pretrained(directory)
+            restored = AutoProcessor.from_pretrained(directory, local_files_only=True)
+            self.assertIsInstance(restored, MiMoV2Processor)
+            reloaded = restored.apply_chat_template(path_messages, **kwargs)
+            for key in expected:
+                torch.testing.assert_close(reloaded[key], expected[key], rtol=0, atol=0)

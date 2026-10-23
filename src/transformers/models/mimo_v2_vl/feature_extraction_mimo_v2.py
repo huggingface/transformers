@@ -100,6 +100,9 @@ class MiMoV2FeatureExtractor(SequenceFeatureExtractor):
             Number of codec channels retained per frame. Loaded from the checkpoint when using the processor.
         audio_input_id_per_second (`float`, *optional*, defaults to 25):
             Number of codec frames per second before grouping.
+        audio_segment_size (`int`, *optional*, defaults to 6000):
+            Maximum mel frames per learned audio-tokenizer segment. Convolution and pooling lengths are computed
+            per segment before the resulting codec frames are grouped.
     """
 
     model_input_names = ["input_features", "attention_mask", "audio_feature_lens"]
@@ -120,6 +123,7 @@ class MiMoV2FeatureExtractor(SequenceFeatureExtractor):
         audio_group_size=4,
         audio_channels=8,
         audio_input_id_per_second=25,
+        audio_segment_size=6000,
         **kwargs,
     ):
         kwargs.pop("return_attention_mask", None)
@@ -143,6 +147,7 @@ class MiMoV2FeatureExtractor(SequenceFeatureExtractor):
                 audio_group_size,
                 audio_channels,
                 audio_input_id_per_second,
+                audio_segment_size,
             )
             <= 0
         ):
@@ -160,6 +165,7 @@ class MiMoV2FeatureExtractor(SequenceFeatureExtractor):
         self.audio_group_size = audio_group_size
         self.audio_channels = audio_channels
         self.audio_input_id_per_second = audio_input_id_per_second
+        self.audio_segment_size = audio_segment_size
 
     @property
     def audio_tokens_per_second(self) -> float:
@@ -167,9 +173,16 @@ class MiMoV2FeatureExtractor(SequenceFeatureExtractor):
 
     def _get_audio_token_length(self, mel_length: int) -> int:
         """Compute the token count after audio convolutions, pooling, and codec grouping."""
-        output_length = mel_length + 3 - self.audio_kernel_size
-        output_length = (output_length + 2 - self.audio_kernel_size) // self.audio_stride_size + 1
-        output_length = math.ceil(output_length / self.audio_avg_pooler)
+
+        def codec_length(length):
+            output_length = length + 3 - self.audio_kernel_size
+            output_length = (output_length + 2 - self.audio_kernel_size) // self.audio_stride_size + 1
+            return math.ceil(output_length / self.audio_avg_pooler)
+
+        full_segments, remainder = divmod(mel_length, self.audio_segment_size)
+        output_length = full_segments * codec_length(self.audio_segment_size)
+        if remainder:
+            output_length += codec_length(remainder)
         return math.ceil(output_length / self.audio_group_size)
 
     def _torch_extract_fbank_features(self, waveform: np.ndarray, device: str) -> np.ndarray:

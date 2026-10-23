@@ -8,157 +8,207 @@ http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
+
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
 -->
 
 # MiMo V2 VL
 
-MiMo V2 VL is the multimodal model family for text generation from text, images, videos, and audio.
-The family includes the following checkpoints, which share the multimodal architecture:
+## Overview
+
+MiMo V2 VL generates text from text, images, audio, and video. It combines a mixture-of-experts language decoder
+with a visual encoder, audio codec embeddings, and a learned audio tokenizer. The language decoder alternates global
+and sliding-window attention with partial RoPE and attention sinks. The visual encoder processes spatial/temporal
+patches with row- and column-ordered attention windows.
+
+The following checkpoints share this implementation and provide their own model and preprocessing configurations:
 
 - [XiaomiMiMo/MiMo-V2.5](https://huggingface.co/XiaomiMiMo/MiMo-V2.5)
 - [XiaomiMiMo/MiMo-V2.6-Flash-RL](https://huggingface.co/XiaomiMiMo/MiMo-V2.6-Flash-RL)
 - [XiaomiMiMo/MiMo-V2.6-Pro-RL](https://huggingface.co/XiaomiMiMo/MiMo-V2.6-Pro-RL)
 
-The same implementation reads each checkpoint's dimensions, layer patterns, normalization, router dtype, and
-preprocessing settings. The examples below use MiMo-V2.6-Flash-RL; replace the checkpoint ID to use another family member.
+For the text-only MiMo-V2-Flash and MiMo-V2.5-Pro checkpoints, see [MiMo-V2-Flash](mimo_v2_flash).
 
-| Checkpoint | Language hidden size | Language layers | Language norm epsilon | Router compute dtype |
-| --- | --- | --- | --- | --- |
-| MiMo-V2.5 | 4096 | 48 | `1e-5` | float32 |
-| MiMo-V2.6-Flash-RL | 4096 | 48 | `1e-6` | bfloat16 |
-| MiMo-V2.6-Pro-RL | 6144 | 70 | `1e-5` | bfloat16 |
+## Usage
 
-The architecture includes:
+Use a Transformers installation that provides [`MiMoV2VLForConditionalGeneration`], together with PyTorch,
+torchvision, Accelerate, and Pillow. The audio/video examples also require a compatible TorchCodec installation
+and FFmpeg. The examples download public media fixtures from the Hub and require network access on the first run.
 
-- A MoE language decoder with global/sliding-window attention, partial RoPE, attention sinks, and different key/value dimensions.
-- A visual encoder with grouped-query attention, alternating row/column sliding windows, two-dimensional RoPE, and a spatial patch merger.
-- Per-channel audio codec embeddings, a local audio transformer, and a projection into the language hidden space.
-- The learned mel-to-codec encoder and residual vector quantizer distributed with the checkpoint.
+The walkthrough below first preprocesses a message, then optionally loads the model to generate a response, and
+finally saves and reloads both objects. Run the sections in order; the generation and saving sections reuse the
+variables created in preprocessing.
 
-The model encodes media and replaces the corresponding placeholder embeddings before the language decoder runs.
-During cached generation it encodes media only during prefill. Beam expansion preserves the association between
-each prompt and its flattened visual/audio features.
+### Preprocess images, audio, and video
 
-## Automatic model selection
-
-The original text and multimodal checkpoints can both declare `model_type="mimo_v2"` and
-`architectures=["MiMoV2ForCausalLM"]`. [`AutoConfig`] resolves this legacy model type from the encoder settings:
-
-| Configuration | Selected model family |
-| --- | --- |
-| No nonempty `vision_config` or `audio_config` | `mimo_v2_flash`, including MiMo-V2.5-Pro |
-| A nonempty `vision_config` or `audio_config` | `mimo_v2_vl`, including MiMo-V2.5, MiMo-V2.6-Flash-RL, and MiMo-V2.6-Pro-RL |
-
-Native `mimo_v2_flash` and `mimo_v2_vl` model types remain explicit choices. Repository names and the shared
-`architectures` string are not used to distinguish these families. Sliding-attention dimensions, layer patterns,
-normalization and RoPE settings are read from each checkpoint.
-
-Use the same Auto entry point for either family:
+This example loads only the processor and media, so it can run on a CPU without loading the model weights.
+It uses the same public sample repositories as other Transformers multimodal examples and tests.
 
 ```python
-import torch
-from transformers import AutoConfig, AutoModelForCausalLM, AutoProcessor
+from huggingface_hub import hf_hub_download
+from transformers import AutoProcessor
 
-checkpoint = "XiaomiMiMo/MiMo-V2.6-Flash-RL"
-config = AutoConfig.from_pretrained(checkpoint, trust_remote_code=False)
-model = AutoModelForCausalLM.from_pretrained(
-    checkpoint, device_map="auto", dtype=torch.bfloat16, trust_remote_code=False
+model_id = "XiaomiMiMo/MiMo-V2.6-Flash-RL"
+processor = AutoProcessor.from_pretrained(model_id, trust_remote_code=False)
+
+image_path = hf_hub_download(
+    repo_id="huggingface/documentation-images",
+    filename="pipeline-cat-chonk.jpeg",
+    repo_type="dataset",
 )
-processor = AutoProcessor.from_pretrained(checkpoint, trust_remote_code=False)
+audio_path = hf_hub_download(
+    repo_id="hf-internal-testing/transformers-synthetic-assets",
+    filename="audio/voice_sample.wav",
+    repo_type="dataset",
+)
+video_path = hf_hub_download(
+    repo_id="hf-internal-testing/test-videos",
+    filename="sample_demo_1_320x240.mp4",
+    repo_type="dataset",
+)
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "image", "path": image_path},
+            {"type": "audio", "path": audio_path},
+            {"type": "video", "path": video_path},
+            {
+                "type": "text",
+                "text": "Describe the image, summarize the audio, and then describe the video.",
+            },
+        ],
+    }
+]
+
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+)
+print({name: tuple(value.shape) for name, value in inputs.items()})
 ```
 
-For legacy MiMo V2 VL repositories, [`AutoProcessor`] corrects the Qwen processor declaration in
-`preprocessor_config.json`. An explicit `processor_config.json` takes precedence. Text-only checkpoints use their
-tokenizer rather than requiring a multimodal processor.
+For a single modality, keep its content block and the text question. `hf_hub_download` returns real local files
+and reuses the Hub cache on subsequent runs. For HTTP(S) resources, use `url` in place of `path`.
+The processor also supports `image_url`, `audio_url`, and `video_url` content types: the corresponding field accepts
+either a URL string or an object containing a `url` field. Normalizing these blocks does not modify the original messages.
 
-## Loading original weights
+The returned inputs include:
 
-Released checkpoints use TP-interleaved QKV weights with checkpoint-specific FP8 or packed MXFP4 storage.
-The Auto loading path detects the original format and streams dequantized weights to the selected devices.
-You can also use the explicit multimodal class:
+- `input_ids` and `attention_mask` for the expanded prompt.
+- `pixel_values` and `image_grid_thw` for images.
+- `pixel_values_videos` and `video_grid_thw` for video frames.
+- `input_features`, `feature_attention_mask`, and `audio_feature_lens` for audio.
+- `audio_segment_offsets` to align audio features with their prompt positions.
+
+The processor loads waveform files at the configured sampling rate. When supplying waveform arrays directly,
+resample them to that rate first. `audio_feature_lens` counts grouped audio tokens, not mel frames.
+
+### Generate a response
+
+Continue with `model_id`, `processor`, and `inputs` from the previous example:
 
 ```python
 import torch
-from transformers import MiMoV2Processor, MiMoV2VLForConditionalGeneration
+from transformers import AutoModelForImageTextToText
 
-checkpoint = "XiaomiMiMo/MiMo-V2.6-Flash-RL"
-processor = MiMoV2Processor.from_pretrained(checkpoint)
-model = MiMoV2VLForConditionalGeneration.from_original_checkpoint(
-    checkpoint,
+model = AutoModelForImageTextToText.from_pretrained(
+    model_id,
     device_map="auto",
     dtype=torch.bfloat16,
+    trust_remote_code=False,
 )
+inputs = inputs.to(model.get_input_embeddings().weight.device)
+
+generated_ids = model.generate(**inputs, max_new_tokens=256, do_sample=False)
+response = processor.batch_decode(
+    generated_ids[:, inputs.input_ids.shape[1]:],
+    skip_special_tokens=True,
+)[0]
+print(response)
 ```
 
-The loader includes the audio tokenizer weights from the checkpoint's `audio_tokenizer` subdirectory and verifies
-that all required model tensors were loaded. MTP/speculative-decoding weights are not used for ordinary generation.
-Loading requires Accelerate and enough aggregate CPU/GPU memory for the dequantized model. It does not create a
-second checkpoint on disk. This implementation executes the dequantized model, rather than SGLang's quantized kernels.
+The original checkpoints contain TP-interleaved QKV and FP8/MXFP4 weights. The loading path converts them to
+the requested floating-point dtype in memory and includes the learned audio tokenizer. Loading MiMo-V2.6-Flash-RL
+in BF16 requires approximately 620 GB for weights, plus activation and cache memory, across the available devices.
+This is a dequantized implementation; it does not use a serving framework's quantized inference kernels.
+MTP/speculative-decoding weights are not required for this ordinary generation path.
 
-Native saved checkpoints use `model_type="mimo_v2_vl"` and also work with the image/text Auto class:
+Pass processor outputs directly to [`MiMoV2VLForConditionalGeneration.forward`] or `generate`.
+The model converts mel features to codec IDs, encodes all supplied modalities, and replaces the corresponding
+placeholder embeddings. During cached generation, media are encoded only during prefill.
+
+### Save and reload
+
+After running the generation example, save the model and processor to the same directory. The code releases the
+original model before loading the saved copy to avoid keeping two full models in memory.
 
 ```python
+import gc
+import torch
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
-model.save_pretrained("./mimo-v2-vl", max_shard_size="5GB")
-processor.save_pretrained("./mimo-v2-vl")
+output_dir = "./mimo-v2-vl-native"
+model.save_pretrained(output_dir, max_shard_size="5GB")
+processor.save_pretrained(output_dir)
 
-processor = AutoProcessor.from_pretrained("./mimo-v2-vl")
-model = AutoModelForImageTextToText.from_pretrained("./mimo-v2-vl", device_map="auto", dtype="auto")
-```
+del model
+gc.collect()
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
 
-For offline conversion:
-
-```bash
-python -m transformers.models.mimo_v2_vl.convert_mimo_v2_vl_weights_to_hf \
-  --checkpoint /path/to/MiMo-V2.6-Flash-RL \
-  --output /path/to/native-mimo-v2-vl --device cpu
-```
-
-## Image understanding
-
-```python
-from transformers.image_utils import load_image
-
-image = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
-messages = [{"role": "user", "content": [
-    {"type": "image", "image": image},
-    {"type": "text", "text": "Describe this image."},
-]}]
-inputs = processor.apply_chat_template(
-    messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-).to(model.get_input_embeddings().weight.device)
-generated_ids = model.generate(**inputs, max_new_tokens=64, do_sample=False)
-print(processor.batch_decode(generated_ids[:, inputs.input_ids.shape[1]:], skip_special_tokens=True))
-```
-
-## Audio and video
-
-Pass mono audio at the configured sampling rate (24 kHz for the checkpoints listed above). The processor computes mel
-features; the model runs the learned audio tokenizer, embeds its codec IDs, and inserts the projected audio features.
-
-```python
-import numpy as np
-
-waveform = np.zeros(24000, dtype=np.float32)  # Replace with a decoded 24 kHz mono waveform.
-prompt = processor.apply_chat_template(
-    [{"role": "user", "content": processor.audio_token + " Describe the audio."}],
-    tokenize=False, add_generation_prompt=True,
+processor = AutoProcessor.from_pretrained(output_dir, local_files_only=True)
+model = AutoModelForImageTextToText.from_pretrained(
+    output_dir,
+    device_map="auto",
+    dtype="auto",
+    local_files_only=True,
 )
-inputs = processor(text=prompt, audio=waveform, sampling_rate=24000, return_tensors="pt")
-inputs = inputs.to(model.get_input_embeddings().weight.device)
-generated_ids = model.generate(**inputs, max_new_tokens=64)
+inputs = processor.apply_chat_template(
+    messages,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt",
+).to(model.get_input_embeddings().weight.device)
+
+generated_ids = model.generate(**inputs, max_new_tokens=256, do_sample=False)
+print(processor.batch_decode(generated_ids[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)[0])
 ```
 
-Pre-tokenized audio is supported with `is_tokenized=True`; each sequence has shape `(time, codec_channels)`.
-The native model directly accepts `input_audio_codes`, `audio_feature_lens`, and `audio_segment_offsets` from the
-processor. `prepare_model_inputs` is optional: its legacy `audio_codes` and `video_pixel_values` names are also accepted.
+Native saves use `model_type="mimo_v2_vl"` and include the audio tokenizer. Audio codebooks and router correction
+biases retain FP32 precision when loading BF16/FP16 weights. RoPE initialization uses consistent arithmetic across
+initial loading and reloading. Exact generated text can still depend on the device, kernels, and numerical settings.
 
-Decoded video frames require `video_metadata` with the original frame rate and frame indices. Use
-`do_sample_frames=False` when frames are already sampled. To include a video's audio track, provide it in `audio`
-and set `use_audio_in_video=True`, or pass one flag per video. Audio sequences follow placeholder order across the
-text batch. `video_audio_interleave_length` selects per-grid (`0`), video-then-audio (`-1`), or positive-duration
-time-window grouping. The model consumes the processor's offsets to insert the matching audio segments.
+To save only the processor, call `processor.save_pretrained()` without loading a model. Such a directory can be
+reloaded with [`AutoProcessor`], but it does not contain model weights.
+
+## Configuration and input notes
+
+- Legacy text and multimodal checkpoints may both declare `model_type="mimo_v2"`. [`AutoConfig`] selects
+  `mimo_v2_vl` when a nonempty vision/audio encoder configuration is present, and `mimo_v2_flash` otherwise.
+- [`AutoProcessor`] recognizes legacy MiMo V2 VL checkpoints whose `preprocessor_config.json` still declares a
+  Qwen processor. An explicit `processor_config.json` takes precedence.
+- Native `layer_types` and `sliding_window` are supported. If `layer_types` and `hybrid_layer_pattern` are both
+  supplied, they must agree. `rope_parameters` currently supports default RoPE; other scaling types are rejected.
+- The original `generation_config.json` supplies EOS IDs and generation defaults. Inactive sampling settings
+  that conflict with disabled sampling are cleared for native serialization. When enabling sampling, pass the
+  desired options explicitly, such as `do_sample=True, temperature=1.0, top_p=0.95`.
+- Pre-tokenized audio uses `is_tokenized=True` with `(time, codec_channels)` integer arrays. The native model accepts
+  the resulting `input_audio_codes` directly. `prepare_model_inputs()` is an optional adapter for legacy input names.
+- Decoded video arrays require `video_metadata` containing the source frame rate and frame indices. Use
+  `do_sample_frames=False` for already-sampled frames.
+- Video blocks process frames by default. To interleave a video's soundtrack, provide the decoded track through
+  `audio` in a direct processor call and set `use_audio_in_video=True`. Audio inputs follow placeholder order.
+  `video_audio_interleave_length` selects per-grid (`0`), video-then-audio (`-1`), or positive-duration grouping.
+- `audio_feature_lens` accounts for the learned tokenizer's `audio_segment_size`. Padding frames are excluded before
+  audio segmentation. For training templates with Jinja `generation` blocks, `return_assistant_tokens_mask=True`
+  uses replacement offsets to keep assistant spans aligned after multimodal placeholder expansion.
 
 ## MiMoV2VLConfig
 
@@ -191,7 +241,6 @@ time-window grouping. The model consumes the processor's offsets to insert the m
 ## MiMoV2VLTextModel
 
 [[autodoc]] MiMoV2VLTextModel
-    - forward
 
 ## MiMoV2VLForConditionalGeneration
 

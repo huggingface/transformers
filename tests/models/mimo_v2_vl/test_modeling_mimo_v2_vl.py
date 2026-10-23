@@ -273,6 +273,173 @@ class MiMoV2VLModelTest(unittest.TestCase):
         expected = torch.tensor([2 / 3, 1 / 2]).reshape(1, 2, 1, 1).expand_as(actual)
         torch.testing.assert_close(actual, expected)
 
+    @parameterized.expand([("eager", None), ("sdpa", None), ("eager", (3, 0)), ("sdpa", (2, 2))])
+    def test_chunked_attention_matches_dense(self, implementation, window):
+        query = torch.randn(2, 4, 11, 8, requires_grad=True)
+        key = torch.randn(2, 2, 14, 8, requires_grad=True)
+        value = torch.randn(2, 2, 14, 4, requires_grad=True)
+        sinks = torch.randn(4, requires_grad=True)
+        mask = torch.zeros(2, 1, 11, 14)
+        mask[0, :, :, :2] = -torch.inf
+        expected_mask = mask.clone()
+        if window is not None:
+            queries = torch.arange(11) + 3
+            keys = torch.arange(14)
+            allowed = (keys[None] >= queries[:, None] - window[0]) & (keys[None] <= queries[:, None] + window[1])
+            expected_mask = expected_mask.masked_fill(~allowed, -torch.inf)
+        expected = attention_forward(
+            query, key, value, expected_mask, sinks, implementation="eager", query_chunk_size=32
+        )
+        actual = attention_forward(
+            query, key, value, mask, sinks, implementation=implementation, window_size=window, query_chunk_size=3
+        )
+        torch.testing.assert_close(actual, expected, atol=1e-6, rtol=1e-5)
+        actual_grads = torch.autograd.grad(actual.sum(), (query, key, value, sinks), retain_graph=True)
+        expected_grads = torch.autograd.grad(expected.sum(), (query, key, value, sinks))
+        for actual_gradient, expected_gradient in zip(actual_grads, expected_grads):
+            torch.testing.assert_close(actual_gradient, expected_gradient, atol=2e-6, rtol=1e-5)
+
+    def test_segmented_audio_token_count_and_left_padding(self):
+        from transformers import MiMoV2FeatureExtractor
+
+        model = self.model.model
+        model.config.audio_config.audio_segment_size = 9
+        extractor = MiMoV2FeatureExtractor(audio_segment_size=9, audio_group_size=2)
+        length = extractor._get_audio_token_length(27)
+        self.assertEqual(length, 5)
+        features = torch.randn(1, 27, 4)
+        mask = torch.ones(1, 27, dtype=torch.long)
+        with torch.no_grad():
+            expected = model.get_audio_features(
+                input_features=features, feature_attention_mask=mask, audio_feature_lens=[length]
+            )
+            padded = torch.nn.functional.pad(features, (0, 0, 5, 0))
+            padded_mask = torch.nn.functional.pad(mask, (5, 0))
+            actual = model.get_audio_features(
+                input_features=padded, feature_attention_mask=padded_mask, audio_feature_lens=[length]
+            )
+        torch.testing.assert_close(actual, expected)
+
+    def test_bfloat16_save_load_preserves_codebook_precision(self):
+        model = self.model
+        for name, parameter in model.named_parameters():
+            if not name.endswith("e_score_correction_bias"):
+                parameter.data = parameter.data.to(torch.bfloat16)
+        for layer in model.model.audio_tokenizer.encoder.quantizer.layers:
+            layer._codebook.embed.copy_(torch.randn_like(layer._codebook.embed))
+        with tempfile.TemporaryDirectory() as directory:
+            model.save_pretrained(directory)
+            restored = AutoModelForImageTextToText.from_pretrained(directory, dtype="auto")
+            for original, loaded in zip(
+                model.model.audio_tokenizer.encoder.quantizer.layers,
+                restored.model.audio_tokenizer.encoder.quantizer.layers,
+            ):
+                self.assertEqual(loaded._codebook.embed.dtype, torch.float32)
+                torch.testing.assert_close(original._codebook.embed, loaded._codebook.embed, atol=0, rtol=0)
+            buffers = dict(restored.named_buffers())
+            for name, buffer in model.named_buffers():
+                if name.endswith("inv_freq"):
+                    torch.testing.assert_close(buffer, buffers[name], atol=0, rtol=0)
+
+    def test_prepare_generation_without_cache_preserves_media(self):
+        inputs = self.image_inputs()
+        prepared = self.model.prepare_inputs_for_generation(**inputs, use_cache=True)
+        self.assertIn("pixel_values", prepared)
+        with torch.no_grad():
+            cache = self.model(**inputs, use_cache=True).past_key_values
+        prepared = self.model.prepare_inputs_for_generation(**inputs, past_key_values=cache, use_cache=True)
+        self.assertNotIn("pixel_values", prepared)
+
+    def test_native_text_config_fields(self):
+        config = MiMoV2VLTextConfig(
+            num_hidden_layers=2,
+            layer_types=["sliding_attention", "full_attention"],
+            sliding_window=17,
+            rope_parameters={"rope_type": "default", "rope_theta": 20000, "partial_rotary_factor": 0.5},
+        )
+        self.assertEqual(config.hybrid_layer_pattern, [1, 0])
+        self.assertEqual(config.sliding_window, 17)
+        self.assertEqual(config.sliding_window_size, 16)
+        self.assertEqual(config.rope_theta, 20000)
+        self.assertEqual(config.partial_rotary_factor, 0.5)
+        restored = MiMoV2VLTextConfig.from_dict(config.to_dict())
+        self.assertEqual(restored.to_dict(), config.to_dict())
+        with self.assertRaisesRegex(ValueError, "same attention"):
+            MiMoV2VLTextConfig(num_hidden_layers=2, layer_types=["full_attention"] * 2, hybrid_layer_pattern=[0, 1])
+        with self.assertRaisesRegex(ValueError, "default RoPE"):
+            MiMoV2VLTextConfig(rope_parameters={"rope_type": "linear", "factor": 2})
+
+    @require_torch_gpu
+    def test_router_fallback_without_mm_output_dtype(self):
+        router = self.model.model.language_model.layers[1].mlp.gate.cuda()
+        router.config.moe_router_dtype = "bfloat16"
+        hidden_states = torch.randn(4, router.config.hidden_size, dtype=torch.bfloat16, device="cuda")
+        with torch.no_grad():
+            expected = router(hidden_states)
+            with patch(
+                "transformers.models.mimo_v2_vl.modeling_mimo_v2_vl.is_torch_greater_or_equal", return_value=False
+            ):
+                actual = router(hidden_states)
+        for value, reference in zip(actual, expected):
+            torch.testing.assert_close(value, reference)
+
+    @require_torch_gpu
+    def test_rotary_reinitialization_matches_cpu_construction(self):
+        from transformers.models.mimo_v2_vl.modeling_mimo_v2_vl import MiMoV2VLRotaryEmbedding
+
+        for theta in (10000.0, 10000000.0, 640000.0):
+            rotary = MiMoV2VLRotaryEmbedding(64, theta)
+            expected = rotary.inv_freq.clone()
+            rotary.cuda()
+            self.model._init_weights(rotary)
+            torch.testing.assert_close(rotary.inv_freq.cpu(), expected, rtol=0, atol=0)
+
+    @require_torch_gpu
+    def test_bfloat16_gpu_round_trip_at_long_positions(self):
+        config = get_config()
+        config.text_config.head_dim = config.text_config.swa_head_dim = 192
+        config.text_config.partial_rotary_factor = 0.334
+        model = MiMoV2VLForConditionalGeneration(config).eval()
+        for name, parameter in model.named_parameters():
+            if not name.endswith("e_score_correction_bias"):
+                parameter.data = parameter.data.to(torch.bfloat16)
+        model.cuda()
+        inputs = {
+            "input_ids": torch.tensor([[2, 7, 8, 9]], device="cuda"),
+            "position_ids": torch.arange(49000, 49004, device="cuda")[None],
+        }
+        with torch.no_grad(), tempfile.TemporaryDirectory() as directory:
+            expected = model(**inputs, use_cache=False).logits
+            model.save_pretrained(directory)
+            restored = AutoModelForImageTextToText.from_pretrained(directory, dtype="auto", device_map="cuda")
+            actual = restored(**inputs, use_cache=False).logits
+            torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+    def test_legacy_generation_defaults_can_be_saved(self):
+        from transformers import GenerationConfig
+        from transformers.modeling_mimo_v2_utils import _load_generation_config
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = {
+                "do_sample": False,
+                "top_p": 0.95,
+                "temperature": 0.7,
+                "eos_token_id": [3, 7],
+                "max_new_tokens": 2048,
+            }
+            (root / "generation_config.json").write_text(json.dumps(source), encoding="utf-8")
+            config = _load_generation_config(root)
+            self.assertFalse(config.do_sample)
+            self.assertIsNone(config.top_p)
+            self.assertIsNone(config.temperature)
+            self.assertEqual(config.eos_token_id, [3, 7])
+            self.assertEqual(config.max_new_tokens, 2048)
+            config.save_pretrained(root / "native")
+            restored = GenerationConfig.from_pretrained(root / "native")
+            self.assertEqual(restored.eos_token_id, [3, 7])
+            self.assertEqual(json.loads((root / "generation_config.json").read_text(encoding="utf-8")), source)
+
     def test_mxfp4_unpacking_and_scaling(self):
         packed = torch.tensor([[0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE]], dtype=torch.uint8)
         scales = torch.tensor([[127, 128]], dtype=torch.uint8)
@@ -317,7 +484,7 @@ class MiMoV2VLModelTest(unittest.TestCase):
     def test_original_checkpoint_loading_round_trip(self, multimodal, split_scales):
         from safetensors.torch import save_file
 
-        from transformers import AutoModelForCausalLM, MiMoV2FlashForCausalLM
+        from transformers import AutoModelForCausalLM, GenerationConfig, MiMoV2FlashForCausalLM
 
         model = self.model
         weights = {}
@@ -372,6 +539,10 @@ class MiMoV2VLModelTest(unittest.TestCase):
             root = Path(directory)
             (root / "audio_tokenizer").mkdir()
             (root / "config.json").write_text(json.dumps(config_dict), encoding="utf-8")
+            (root / "generation_config.json").write_text(
+                json.dumps({"eos_token_id": [3, 7], "max_new_tokens": 13, "do_sample": True, "temperature": 0.7}),
+                encoding="utf-8",
+            )
             (root / "audio_tokenizer/config.json").write_text(
                 model.config.audio_tokenizer_config.to_json_string(), encoding="utf-8"
             )
@@ -391,6 +562,20 @@ class MiMoV2VLModelTest(unittest.TestCase):
                 root, device_map="cpu", dtype=torch.float32, trust_remote_code=False, local_files_only=True
             )
             self.assertIsInstance(restored, MiMoV2VLForConditionalGeneration if multimodal else MiMoV2FlashForCausalLM)
+            self.assertEqual(restored.generation_config.eos_token_id, [3, 7])
+            self.assertEqual(restored.generation_config.max_new_tokens, 13)
+            self.assertEqual(restored.generation_config.temperature, 0.7)
+            if multimodal and not split_scales:
+                overridden = AutoModelForCausalLM.from_pretrained(
+                    root,
+                    device_map="cpu",
+                    dtype=torch.float32,
+                    trust_remote_code=False,
+                    local_files_only=True,
+                    generation_config=GenerationConfig(do_sample=False, max_new_tokens=7, eos_token_id=2),
+                )
+                self.assertEqual(overridden.generation_config.max_new_tokens, 7)
+                self.assertEqual(overridden.generation_config.eos_token_id, 2)
             if multimodal:
                 for name, expected in model.state_dict().items():
                     torch.testing.assert_close(restored.state_dict()[name], expected, rtol=0, atol=0)

@@ -35,6 +35,33 @@ from .utils import logging
 logger = logging.get_logger(__name__)
 
 
+def _load_generation_config(path):
+    """Preserve legacy generation defaults while removing inactive sampling options that prevent native saves."""
+    from .generation.configuration_utils import GenerationConfig
+
+    config = GenerationConfig.from_pretrained(path, local_files_only=True)
+    if config.do_sample is not True:
+        defaults = {
+            "temperature": 1.0,
+            "top_p": 1.0,
+            "top_k": 50,
+            "typical_p": 1.0,
+            "min_p": None,
+            "top_h": None,
+            "epsilon_cutoff": 0.0,
+            "eta_cutoff": 0.0,
+        }
+        removed = []
+        for name, default in defaults.items():
+            value = getattr(config, name)
+            if value is not None and value != default:
+                setattr(config, name, None)
+                removed.append(name)
+        if removed:
+            logger.info("Removed inactive sampling options from the legacy greedy generation config: %s", removed)
+    return config
+
+
 def dequantize_mxfp4(weight: torch.Tensor, scales: torch.Tensor, block_size: int = 32) -> torch.Tensor:
     """Unpack low/high E2M1 nibbles and apply per-block E8M0 scales."""
     if weight.dtype != torch.uint8 or scales.dtype != torch.uint8:
@@ -146,6 +173,7 @@ def load_original_checkpoint(
     config=None,
     attn_implementation=None,
     checkpoint_tp_size=None,
+    generation_config=None,
 ):
     """Stream a released checkpoint into the native model, verifying that every required tensor was loaded.
 
@@ -164,6 +192,9 @@ def load_original_checkpoint(
             Hub access token.
         revision (`str`, *optional*):
             Hub checkpoint revision.
+        generation_config ([`GenerationConfig`], *optional*):
+            Explicit generation defaults. When unset, load the original checkpoint's generation configuration and
+            normalize inactive sampling options so the native checkpoint can be saved.
     """
     from accelerate import dispatch_model, infer_auto_device_map, init_empty_weights
     from accelerate.utils import get_max_memory, set_module_tensor_to_device
@@ -369,6 +400,10 @@ def load_original_checkpoint(
     if missing:
         raise ValueError(f"Original checkpoint is missing required tensors: {sorted(missing)}")
     model = dispatch_model(model, device_map=device_map, skip_keys=["past_key_values"])
+    if generation_config is not None:
+        model.generation_config = generation_config
+    elif (path / "generation_config.json").is_file():
+        model.generation_config = _load_generation_config(path)
     model.eval()
     model.hf_device_map = device_map
     return model
@@ -413,6 +448,7 @@ def load_original_checkpoint_if_needed(model_class, pretrained_model_name_or_pat
         config=kwargs.get("config"),
         attn_implementation=kwargs.get("attn_implementation"),
         checkpoint_tp_size=kwargs.get("checkpoint_tp_size"),
+        generation_config=kwargs.get("generation_config"),
         **hub_kwargs,
     )
     if not isinstance(model, model_class):

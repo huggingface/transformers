@@ -239,6 +239,7 @@ class MiMoV2Processor(ProcessorMixin):
             "audio_n_mels": "feature_size",
             "audio_channels": "audio_channels",
             "audio_group_size": "audio_group_size",
+            "audio_segment_size": "audio_segment_size",
             "audio_kernel_size": "audio_kernel_size",
             "audio_stride_size": "audio_stride_size",
             "audio_avg_pooler": "audio_avg_pooler",
@@ -247,6 +248,7 @@ class MiMoV2Processor(ProcessorMixin):
         processor_dict["feature_extractor"] = {
             "audio_channels": audio_config.get("audio_channels", 8),
             "audio_group_size": audio_config.get("group_size", 4),
+            "audio_segment_size": audio_config.get("audio_segment_size", 6000),
             **{
                 target: processor_config[source]
                 for source, target in audio_config_mapping.items()
@@ -380,7 +382,8 @@ class MiMoV2Processor(ProcessorMixin):
         text_inputs = {}
         audio_segment_offsets = []
         if text is not None:
-            text, audio_segment_offsets = self._expand_multimodal_tokens(
+            return_replacement_offsets = text_kwargs.pop("return_text_replacement_offsets", False)
+            text, audio_segment_offsets, replacement_offsets = self._expand_multimodal_tokens(
                 text,
                 image_inputs=image_inputs,
                 video_inputs=video_inputs,
@@ -390,19 +393,22 @@ class MiMoV2Processor(ProcessorMixin):
                 use_audio_in_video=use_audio_in_video,
                 interleave_length=interleave_length,
                 use_per_grid_t_timestamps=use_per_grid_t_timestamps,
+                return_replacement_offsets=return_replacement_offsets,
             )
             return_token_types = text_kwargs.pop("return_mm_token_type_ids", False)
             text_inputs = self.tokenizer(text, **text_kwargs)
             self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video", "audio"])
             if return_token_types:
                 text_inputs["mm_token_type_ids"] = self.create_mm_token_type_ids(text_inputs["input_ids"])
+            if return_replacement_offsets:
+                text_inputs["text_replacement_offsets"] = replacement_offsets
         data = {**text_inputs, **image_inputs, **video_inputs, **audio_inputs}
         if audio_segment_offsets:
             data["audio_segment_offsets"] = audio_segment_offsets
         if not kwargs.get("return_metadata", kwargs.get("videos_kwargs", {}).get("return_metadata", False)):
             data.pop("video_metadata", None)
         return BatchFeature(
-            data, tensor_type=text_kwargs.get("return_tensors"), skip_tensor_conversion=["video_metadata"]
+            data, tensor_type=text_kwargs.get("return_tensors"), skip_tensor_conversion=self.skip_tensor_conversion
         )
 
     def _expand_multimodal_tokens(
@@ -416,7 +422,8 @@ class MiMoV2Processor(ProcessorMixin):
         use_audio_in_video: list[bool],
         interleave_length: float,
         use_per_grid_t_timestamps: bool,
-    ) -> tuple[list[str], list[tuple[int, int, int]]]:
+        return_replacement_offsets: bool = False,
+    ) -> tuple[list[str], list[tuple[int, int, int]], list[list[dict]]]:
         """Expand placeholders in prompt order and collect the corresponding audio segments."""
         image_grid_thw = image_inputs.get("image_grid_thw", [])
         video_grid_thw = video_inputs.get("video_grid_thw", [])
@@ -482,10 +489,36 @@ class MiMoV2Processor(ProcessorMixin):
             return self.audio_start_token + self.audio_token * audio_length + self.audio_end_token
 
         pattern = self._get_multimodal_token_pattern()
-        expanded_text = [pattern.sub(replace_placeholder, sample) for sample in text]
+        expanded_text, batch_replacement_offsets = [], []
+        for sample in text:
+            if not return_replacement_offsets:
+                expanded_text.append(pattern.sub(replace_placeholder, sample))
+                batch_replacement_offsets.append([])
+                continue
+            offset = 0
+            replacement_offsets = []
+
+            def replace_with_offsets(match):
+                nonlocal offset
+                replacement = replace_placeholder(match)
+                start, end = match.span()
+                replacement_offsets.append(
+                    {
+                        "type": match.lastgroup,
+                        "span": (start, end),
+                        "new_span": (start + offset, start + offset + len(replacement)),
+                        "text": match.group(),
+                        "replacement": replacement,
+                    }
+                )
+                offset += len(replacement) - (end - start)
+                return replacement
+
+            expanded_text.append(pattern.sub(replace_with_offsets, sample))
+            batch_replacement_offsets.append(replacement_offsets)
         if counts != expected_counts:
             raise ValueError("Every image, video and audio input must have a matching placeholder.")
-        return expanded_text, audio_segment_offsets
+        return expanded_text, audio_segment_offsets, batch_replacement_offsets
 
     @staticmethod
     def _format_timestamp(timestamp: float) -> str:

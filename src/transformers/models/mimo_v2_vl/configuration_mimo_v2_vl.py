@@ -52,7 +52,8 @@ class MiMoV2VLTextConfig(PreTrainedConfig):
     add_swa_attention_sink_bias (`bool`, *optional*):
         Whether sliding-attention layers include learned softmax sinks.
     sliding_window_size (`int`, *optional*):
-        Number of preceding tokens visible to sliding attention.
+        Number of preceding tokens visible to sliding attention. When unset, derive it from `sliding_window`,
+        or use 128 preceding tokens if neither window field is supplied.
     hybrid_layer_pattern (`list[int]`, *optional*):
         One value per layer: 0 for global attention and 1 for sliding attention.
     moe_layer_freq (`list[int]` or `int`, *optional*):
@@ -91,7 +92,7 @@ class MiMoV2VLTextConfig(PreTrainedConfig):
     attention_value_scale: float | None = 0.707
     add_full_attention_sink_bias: bool = False
     add_swa_attention_sink_bias: bool = True
-    sliding_window_size: int = 128
+    sliding_window_size: int | None = None
     sliding_window: int | None = None
     hybrid_layer_pattern: list[int] | None = None
     layer_types: list[str] | None = None
@@ -112,7 +113,21 @@ class MiMoV2VLTextConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if "layernorm_epsilon" in kwargs:
             self.rms_norm_eps = kwargs.pop("layernorm_epsilon")
+        if self.sliding_window_size is None:
+            self.sliding_window_size = 128 if self.sliding_window is None else self.sliding_window - 1
+        if self.sliding_window_size < 0:
+            raise ValueError("sliding_window must include at least the current token.")
         self.sliding_window = self.sliding_window_size + 1
+        if self.layer_types is not None:
+            if len(self.layer_types) != self.num_hidden_layers or not set(self.layer_types) <= {
+                "full_attention",
+                "sliding_attention",
+            }:
+                raise ValueError("layer_types must contain a supported attention type for every layer.")
+            pattern = [int(kind == "sliding_attention") for kind in self.layer_types]
+            if self.hybrid_layer_pattern is not None and self.hybrid_layer_pattern != pattern:
+                raise ValueError("layer_types and hybrid_layer_pattern must describe the same attention layers.")
+            self.hybrid_layer_pattern = pattern
         if self.hybrid_layer_pattern is None:
             self.hybrid_layer_pattern = [int(i != 0 and (i + 1) % 6 != 0) for i in range(self.num_hidden_layers)]
         if self.moe_layer_freq is None:
@@ -128,6 +143,17 @@ class MiMoV2VLTextConfig(PreTrainedConfig):
         self.layer_types = ["sliding_attention" if kind else "full_attention" for kind in self.hybrid_layer_pattern]
         if self.routed_scaling_factor is None:
             self.routed_scaling_factor = 1.0
+        if self.rope_parameters is not None:
+            global_rope = self.rope_parameters.get("full_attention", self.rope_parameters)
+            sliding_rope = self.rope_parameters.get("sliding_attention", {})
+            for parameters in (global_rope, sliding_rope):
+                if parameters.get("rope_type", parameters.get("type", "default")) != "default":
+                    raise ValueError("MiMo V2 VL currently supports only default RoPE parameters.")
+            self.rope_theta = global_rope.get("rope_theta", self.rope_theta)
+            self.swa_rope_theta = sliding_rope.get("rope_theta", self.swa_rope_theta)
+            self.partial_rotary_factor = global_rope.get("partial_rotary_factor", self.partial_rotary_factor)
+            if sliding_rope.get("partial_rotary_factor", self.partial_rotary_factor) != self.partial_rotary_factor:
+                raise ValueError("MiMo V2 VL requires the same partial_rotary_factor for both attention types.")
         for num_heads, num_kv_heads, head_dim in (
             (self.num_attention_heads, self.num_key_value_heads, self.head_dim),
             (self.swa_num_attention_heads, self.swa_num_key_value_heads, self.swa_head_dim),

@@ -2037,7 +2037,7 @@ class ProcessorMixin(PushToHubMixin):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
         """
-        processor_kwargs = processor_kwargs or {}
+        processor_kwargs = dict(processor_kwargs or {})
 
         if chat_template is None:
             if isinstance(self.chat_template, dict) and "default" in self.chat_template:
@@ -2070,7 +2070,7 @@ class ProcessorMixin(PushToHubMixin):
             logger.warning(
                 "Kwargs passed to `processor.__call__` have to be in `processor_kwargs` dict, not in `**kwargs`"
             )
-            processor_kwargs = processor_kwargs_from_kwargs
+            processor_kwargs = {**processor_kwargs, **processor_kwargs_from_kwargs}
 
         # Check if tokenizer is fast - use backend attribute if available, otherwise fall back to class name
         is_tokenizers_fast = False
@@ -2124,27 +2124,36 @@ class ProcessorMixin(PushToHubMixin):
             isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
         ):
             is_batched = True
-            conversations = conversation
+            conversations = list(conversation)
         else:
             is_batched = False
             conversations = [conversation]
 
-        # Normalize OpenAI-style "image_url" content blocks to HuggingFace-style "image" blocks
-        # OpenAI format: {"type": "image_url", "image_url": {"url": "..."}}
-        # HuggingFace format: {"type": "image", "url": "..."}
+        # Normalize URL content blocks before both rendering and media collection. Copy
+        # message containers so URL normalization and audio extraction do not mutate the caller's conversation.
         for conversation_idx, conversation in enumerate(conversations):
+            normalized_conversation = []
             for message in conversation:
+                message = dict(message)
+                normalized_conversation.append(message)
                 if not isinstance(message.get("content"), list):
                     continue
                 new_content = []
                 for content in message["content"]:
-                    if isinstance(content, dict) and content.get("type") == "image_url" and "image_url" in content:
-                        image_url_info = content["image_url"]
-                        url = image_url_info.get("url", "") if isinstance(image_url_info, dict) else image_url_info
-                        new_content.append({"type": "image", "url": url})
+                    if isinstance(content, dict) and content.get("type") in ("image_url", "audio_url", "video_url"):
+                        url_key = content["type"]
+                        if url_key in content:
+                            url_info = content[url_key]
+                            url = url_info.get("url", "") if isinstance(url_info, dict) else url_info
+                            normalized = {key: value for key, value in content.items() if key != url_key}
+                            normalized.update(type=url_key.removesuffix("_url"), url=url)
+                            new_content.append(normalized)
+                        else:
+                            new_content.append(content)
                     else:
                         new_content.append(content)
                 message["content"] = new_content
+            conversations[conversation_idx] = normalized_conversation
 
         if tokenize:
             batch_images, batch_videos = [], []

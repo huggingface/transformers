@@ -29,7 +29,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_mimo_v2_utils import load_original_checkpoint_if_needed
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, can_return_tuple
+from ...utils import auto_docstring, can_return_tuple, is_torch_greater_or_equal
 from ...utils.output_capturing import capture_outputs
 from .configuration_mimo_v2_vl import MiMoV2VLConfig, MiMoV2VLTextConfig
 
@@ -54,8 +54,14 @@ class MiMoV2VLRotaryEmbedding(nn.Module):
         super().__init__()
         self.dim = dim
         self.theta = theta
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float32) / dim))
+        inv_freq = self.compute_inverse_frequencies().to(torch.empty(0).device)
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+
+    def compute_inverse_frequencies(self):
+        # Use the same CPU arithmetic during construction and meta-device reload. Small
+        # CPU/CUDA pow differences otherwise change phases at long positions and can change MoE routing.
+        with torch.autocast(device_type="cpu", enabled=False):
+            return 1.0 / (self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float32, device="cpu") / self.dim))
 
     @torch.no_grad()
     def forward(self, position_ids):
@@ -80,13 +86,14 @@ def apply_rotary_pos_emb(query, key, cos, sin):
     return torch.cat((query_rotary, query[..., rotary_dim:]), -1), torch.cat((key_rotary, key[..., rotary_dim:]), -1)
 
 
-def attention_forward(query, key, value, attention_mask=None, sinks=None, dropout=0.0, implementation="sdpa"):
+def _attention_forward(query, key, value, attention_mask=None, sinks=None, dropout=0.0, implementation="sdpa"):
     """Grouped-query attention with an optional zero-valued sink in the softmax denominator."""
     if attention_mask is not None and attention_mask.dtype == torch.bool:
         attention_mask = torch.zeros_like(attention_mask, dtype=query.dtype).masked_fill(~attention_mask, -torch.inf)
     groups = query.shape[1] // key.shape[1]
-    key = key.repeat_interleave(groups, dim=1)
-    value = value.repeat_interleave(groups, dim=1)
+    if groups != 1:
+        key = key.repeat_interleave(groups, dim=1)
+        value = value.repeat_interleave(groups, dim=1)
     if sinks is not None:
         batch_size, num_heads, query_length, _ = query.shape
         if attention_mask is None:
@@ -103,6 +110,62 @@ def attention_forward(query, key, value, attention_mask=None, sinks=None, dropou
         weights = weights.float().softmax(dim=-1).to(query.dtype)
         return F.dropout(weights, p=dropout, training=dropout > 0) @ value
     return F.scaled_dot_product_attention(query, key, value, attn_mask=attention_mask, dropout_p=dropout)
+
+
+def attention_forward(
+    query,
+    key,
+    value,
+    attention_mask=None,
+    sinks=None,
+    dropout=0.0,
+    implementation="sdpa",
+    window_size=None,
+    query_chunk_size=512,
+):
+    """Bound temporary attention tensors and restrict local attention to its actual key window."""
+    query_length, key_length = query.shape[-2], key.shape[-2]
+    if window_size is None and query_length <= query_chunk_size:
+        return _attention_forward(query, key, value, attention_mask, sinks, dropout, implementation)
+    outputs = []
+    for start in range(0, query_length, query_chunk_size):
+        end = min(start + query_chunk_size, query_length)
+        key_start, key_end = 0, key_length
+        if window_size is not None:
+            left, right = window_size
+            key_start = max(0, key_length - query_length + start - left) if left >= 0 else 0
+            key_end = min(key_length, key_length - query_length + end + right) if right >= 0 else key_length
+        mask = attention_mask
+        if mask is not None:
+            if mask.shape[-2] != 1:
+                mask = mask[..., start:end, :]
+            mask = mask[..., key_start:key_end]
+        if window_size is not None:
+            queries = torch.arange(start, end, device=query.device) + key_length - query_length
+            keys = torch.arange(key_start, key_end, device=query.device)
+            allowed = torch.ones((end - start, key_end - key_start), dtype=torch.bool, device=query.device)
+            if left >= 0:
+                allowed = allowed & (keys[None] >= queries[:, None] - left)
+            if right >= 0:
+                allowed = allowed & (keys[None] <= queries[:, None] + right)
+            if mask is None:
+                mask = allowed
+            elif mask.dtype == torch.bool:
+                mask = mask & allowed
+            else:
+                mask = mask.masked_fill(~allowed, -torch.inf)
+        outputs.append(
+            _attention_forward(
+                query[..., start:end, :],
+                key[..., key_start:key_end, :],
+                value[..., key_start:key_end, :],
+                mask,
+                sinks,
+                dropout,
+                implementation,
+            )
+        )
+    return torch.cat(outputs, dim=-2)
 
 
 class MiMoV2VLMLP(nn.Module):
@@ -127,7 +190,12 @@ class MiMoV2VLTopkRouter(nn.Module):
     def forward(self, hidden_states):
         router_dtype = getattr(torch, self.config.moe_router_dtype)
         if hidden_states.is_cuda and router_dtype == torch.bfloat16:
-            logits = torch.mm(hidden_states.to(router_dtype), self.weight.to(router_dtype).T, out_dtype=torch.float32)
+            router_input, router_weight = hidden_states.to(router_dtype), self.weight.to(router_dtype)
+            if is_torch_greater_or_equal("2.9"):
+                logits = torch.mm(router_input, router_weight.T, out_dtype=torch.float32)
+            else:
+                # Preserve BF16 operands with FP32 accumulation on releases without out_dtype.
+                logits = F.linear(router_input.float(), router_weight.float())
         else:
             logits = F.linear(hidden_states.float(), self.weight.float())
         scores = logits.sigmoid()
@@ -185,6 +253,7 @@ class MiMoV2VLTextAttention(nn.Module):
         self.num_key_value_heads = config.swa_num_key_value_heads if is_sliding else config.num_key_value_heads
         self.head_dim = config.swa_head_dim if is_sliding else config.head_dim
         self.v_head_dim = config.swa_v_head_dim if is_sliding else config.v_head_dim
+        self.window_size = (config.sliding_window - 1, 0) if is_sliding else None
         self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(
             config.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias
@@ -230,6 +299,7 @@ class MiMoV2VLTextAttention(nn.Module):
             self.attention_sink_bias,
             dropout=self.config.attention_dropout if self.training else 0.0,
             implementation=self.config._attn_implementation,
+            window_size=self.window_size,
         )
         return self.o_proj(output.transpose(1, 2).reshape(batch_size, sequence_length, -1))
 
@@ -267,7 +337,7 @@ class MiMoV2VLPreTrainedModel(PreTrainedModel):
         "MiMoV2VLAudioTokenizerLayer",
     ]
     _skip_keys_device_placement = ["past_key_values"]
-    _keep_in_fp32_modules = ["quantizer", "e_score_correction_bias"]
+    _keep_in_fp32_modules_strict = ["quantizer", "e_score_correction_bias"]
     _can_record_outputs = {"hidden_states": MiMoV2VLDecoderLayer}
 
     @classmethod
@@ -296,11 +366,7 @@ class MiMoV2VLPreTrainedModel(PreTrainedModel):
             init.normal_(module.weight, mean=0.0, std=std)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MiMoV2VLRotaryEmbedding):
-            frequencies = 1.0 / (
-                module.theta
-                ** (torch.arange(0, module.dim, 2, dtype=torch.float32, device=module.inv_freq.device) / module.dim)
-            )
-            init.copy_(module.inv_freq, frequencies)
+            init.copy_(module.inv_freq, module.compute_inverse_frequencies())
         for name in ("sinks", "attention_sink_bias"):
             if getattr(module, name, None) is not None:
                 init.zeros_(getattr(module, name))
@@ -420,13 +486,14 @@ class MiMoV2VLVisionAttention(nn.Module):
         for query_chunk, key_chunk, value_chunk in zip(
             query.split(sequence_lengths, 2), key.split(sequence_lengths, 2), value.split(sequence_lengths, 2)
         ):
-            mask = None
-            if not self.full_attention and config.visual_token_window_size > 0:
-                positions = torch.arange(query_chunk.shape[2], device=query.device)
-                mask = query.new_zeros(positions.numel(), positions.numel()).masked_fill(
-                    (positions[:, None] - positions[None, :]).abs() > config.visual_token_window_size, -torch.inf
-                )
-            outputs.append(attention_forward(query_chunk, key_chunk, value_chunk, mask, self.sinks))
+            window_size = (
+                (config.visual_token_window_size,) * 2
+                if not self.full_attention and config.visual_token_window_size > 0
+                else None
+            )
+            outputs.append(
+                attention_forward(query_chunk, key_chunk, value_chunk, sinks=self.sinks, window_size=window_size)
+            )
         output = torch.cat(outputs, dim=2).transpose(1, 2).reshape(hidden_states.shape[0], -1)
         return self.proj(output)
 
@@ -774,9 +841,11 @@ class MiMoV2VLAudioTokenizer(nn.Module):
             lengths = feature_attention_mask.sum(-1).tolist()
         sequences = []
         segment_counts = []
-        for features, length in zip(input_features, lengths):
+        for index, (features, length) in enumerate(zip(input_features, lengths)):
             if length <= 0:
                 raise ValueError("Each audio input must contain at least one valid mel frame.")
+            if feature_attention_mask is not None:
+                features = features[feature_attention_mask[index].to(device=features.device, dtype=torch.bool)]
             segments = list(features[:length].split(segment_size, dim=0))
             sequences.extend(segments)
             segment_counts.append(len(segments))
@@ -1137,10 +1206,18 @@ class MiMoV2VLForConditionalGeneration(MiMoV2VLPreTrainedModel, GenerationMixin)
         )
 
     def prepare_inputs_for_generation(self, input_ids, is_first_iteration=False, **kwargs):
+        cache = kwargs.get("past_key_values")
+        if kwargs.get("use_cache", True) and (cache is None or cache.get_seq_length() == 0):
+            is_first_iteration = True
         model_inputs = super().prepare_inputs_for_generation(
             input_ids, is_first_iteration=is_first_iteration, **kwargs
         )
-        if not is_first_iteration and kwargs.get("use_cache", True):
+        if (
+            not is_first_iteration
+            and kwargs.get("use_cache", True)
+            and cache is not None
+            and cache.get_seq_length() > 0
+        ):
             for name in self._multimodal_input_names:
                 model_inputs.pop(name, None)
         return model_inputs
