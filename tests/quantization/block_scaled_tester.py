@@ -29,7 +29,7 @@ import torch
 from transformers import AutoModelForCausalLM
 from transformers.core_model_loading import WeightConverter, WeightRenaming, rename_source_key
 from transformers.integrations.finegrained import FineGrainedExperts, FineGrainedLinear
-from transformers.quantizers.auto import AutoHfQuantizer
+from transformers.quantizers.auto import AutoHfQuantizer, AutoQuantizationConfig
 from transformers.quantizers.quantizer_finegrained import FineGrainedHfQuantizer
 from transformers.quantizers.quantizer_fp8 import Fp8HfQuantizer
 from transformers.quantizers.quantizer_mxfp4 import Mxfp4HfQuantizer
@@ -150,7 +150,8 @@ NVFP4 = FormatSpec(
     config_cls=NVFP4Config,
     quantizer_cls=NVFP4HfQuantizer,
     activation_formats=(None, "nvfp4", "bf16"),
-    checkpoint_config=lambda: NVFP4Config(activation_format="nvfp4"),
+    # A modelopt export reads as this config
+    checkpoint_config=lambda: AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4"}),
     weight_bits=4,
     two_level=True,
     quantize_kwargs={},

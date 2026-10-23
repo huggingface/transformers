@@ -23,8 +23,10 @@ quantized to FP8 too. With `activation_scheme="dynamic"`, they are quantized per
 
 FP8 is the format of [DeepSeek-V3](https://hf.co/papers/2412.19437), DeepSeek-R1, Qwen3-FP8 and the static FP8
 checkpoints of Mistral. [`Fp8Config`] loads these checkpoints as they ship. It also quantizes full-precision
-checkpoints on the fly. Checkpoints declare the format as `quant_method="fp8"`. See [Fine-grained](./finegrained)
-for the requirements, loading options and parallelism shared by every block-scaled format.
+checkpoints on the fly. Checkpoints declare the format as `quant_method="fp8"`. Block and per-tensor FP8 exports of
+[compressed-tensors](./compressed_tensors) (`format="float-quantized"`) also load as [`Fp8Config`]. See
+[Fine-grained](./finegrained) for the requirements, loading options and parallelism shared by every block-scaled
+format.
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/b7b3b34bf826a6423ea82ffc57ecac80c46c3c76/transformers/quantization/quantization_deepseek.png">
