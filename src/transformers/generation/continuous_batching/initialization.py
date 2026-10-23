@@ -14,6 +14,7 @@
 """Resolves a `ContinuousBatchingConfig` into a fully-specified config ready for cache and runner creation. Each
 helper mutates the config in place; `resolve_continuous_batching_config` orchestrates them in the required order."""
 
+import warnings
 from copy import deepcopy
 from math import ceil
 
@@ -45,8 +46,16 @@ def resolve_continuous_batching_config(
     cb_config: ContinuousBatchingConfig,
     workload_hints: WorkloadHints | None,
     has_logit_processors: bool,
+    device: torch.device | None = None,
 ) -> ContinuousBatchingConfig:
     """Returns a deep-copied and fully-resolved `ContinuousBatchingConfig`. The original `cb_config` is not mutated."""
+    if device is None:
+        warnings.warn(
+            "Using resolve_continuous_batching_config without a device is deprecated and will be removed in v5.24.",
+            FutureWarning,
+            stacklevel=2,
+        )
+
     cb_config = deepcopy(cb_config)
 
     # Look at whether the user explicitly asked for the decode fast path before we assign a default value
@@ -81,7 +90,7 @@ def resolve_continuous_batching_config(
     decide_use_async_batching(cb_config=cb_config, is_attn_mask_needed=is_attn_mask_needed)
 
     # Resolve the max memory percent. This can happen anytime before cache creation.
-    resolve_max_memory_percent(cb_config=cb_config, has_logit_processors=has_logit_processors)
+    resolve_max_memory_percent(cb_config=cb_config, has_logit_processors=has_logit_processors, device=device)
     # Check bounds on some of the config values
     check_cb_values_bounds(cb_config)
     return cb_config
@@ -287,13 +296,24 @@ def decide_use_async_batching(cb_config: ContinuousBatchingConfig, is_attn_mask_
         )
 
 
-def resolve_max_memory_percent(cb_config: ContinuousBatchingConfig, has_logit_processors: bool) -> None:
+def resolve_max_memory_percent(
+    cb_config: ContinuousBatchingConfig, has_logit_processors: bool, device: torch.device | None = None
+) -> None:
     """Fallback function if the max memory percent is not set. Since logit processors use a lot of memory, we default to
     0.8 if there are logit processors, and 0.9 otherwise, to keep a reasonnable margin for temporary tensors."""
-    if cb_config.max_memory_percent is None:
-        # For MPS devices, since RAM and VRAM are the same, we use less memory to avoid using swap memory
+    if device is None:
+        warnings.warn(
+            "Using resolve_max_memory_percent without a device is deprecated and will be removed in v5.24.",
+            FutureWarning,
+            stacklevel=2,
+        )
         device_type = torch.get_device_module().__name__.split(".")[-1]
-        if device_type == "mps":
+    else:
+        device_type = device.type
+
+    if cb_config.max_memory_percent is None:
+        # For CPU or MPS, since RAM and VRAM are the same, we use less memory to avoid using swap memory
+        if device_type == "mps" or device_type == "cpu":
             cb_config.max_memory_percent = 0.6
         # Since logit processors use a lot of memory, keep a bit more memory for temporary tensors when they are used
         elif has_logit_processors:
