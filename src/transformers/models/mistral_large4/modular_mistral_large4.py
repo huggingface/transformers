@@ -234,7 +234,7 @@ class MistralLarge4TextRotaryEmbedding(LlamaRotaryEmbedding):
 
     @staticmethod
     def compute_default_rope_parameters(config: MistralLarge4TextConfig, **kwargs) -> tuple[torch.Tensor, float]:
-        return LlamaRotaryEmbedding.compute_default_rope_parameters(config, **kwargs)
+        return super().compute_default_rope_parameters(config, **kwargs)
 
 
 def apply_rotary_pos_emb_interleave(
