@@ -270,6 +270,157 @@ Layerwise mode is experimental. It only runs on a [single GPU](https://github.co
 </hfoption>
 </hfoptions>
 
+## Optimizer update transforms
+
+Some training methods transform the update proposed by an optimizer instead of
+replacing the optimizer itself. These methods can compose with the optimizer
+selected by [`TrainingArguments`].
+
+### Subspace Tuning (SST)
+
+[Subspace Tuning (SST)](https://github.com/Arnav0400/SST) projects each applied
+optimizer update outside the principal left and right singular subspaces of
+selected weight matrices. [`SST`] is an optimizer wrapper: it takes an existing
+optimizer, calls its `step()`, and projects the resulting parameter update.
+The inner optimizer receives the original gradients and keeps its own parameter
+groups, momentum, variance, and weight decay. SST is not a separate AdamW variant
+and does not require an external package.
+
+Wrap any compatible PyTorch optimizer in a custom training loop:
+
+```py
+import torch
+from transformers import SST
+
+inner_optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5)
+optimizer = SST(
+    inner_optimizer,
+    model=model,
+    rank_fraction=0.99,
+    target_modules=[r".*self_attn.*", r".*mlp.*"],
+)
+loss.backward()
+optimizer.step()
+optimizer.zero_grad()
+```
+
+`rank_fraction` controls the fraction of principal singular directions protected
+in each selected matrix. By default, the basis stays fixed at initialization.
+Without `target_modules`, SST selects the inner optimizer's
+trainable matrices with both dimensions at least two. Use `"all-linear"` to select
+linear-layer weights, or pass module suffixes or full-match regular expressions.
+
+Set `refresh_every` to a positive integer to re-anchor the protected singular
+triples to the current weights after that many successful, projected optimizer
+updates. For example:
+
+```py
+optimizer = SST(inner_optimizer, model=model, rank_fraction=0.99, refresh_every=100)
+# Alternatively, refresh explicitly at a chosen boundary:
+optimizer.refresh()
+```
+
+A refresh does not change parameters, gradients, or inner optimizer state.
+It takes effect for subsequent updates and restarts the interval. Accumulation
+and AMP-overflow skips do not advance the clock. Refresh protects the latest
+anchor rather than retaining a guarantee against the original initialization,
+and adds SVD and communication costs. `initialize()` only adds new targets;
+it does not refresh an existing basis.
+
+With [`Trainer`], pass the wrapper class and its arguments as `optimizer_wrapper`.
+Keep `TrainingArguments.optim` or `optimizer_cls_and_kwargs` set to the inner
+optimizer you want to use.
+
+```py
+from transformers import SST, Trainer, TrainingArguments
+
+trainer = Trainer(
+    model=model,
+    args=TrainingArguments(output_dir="sst-output", optim="adamw_torch"),
+    train_dataset=train_dataset,
+    optimizer_wrapper=(
+        SST,
+        {
+            "rank_fraction": 0.99,
+            "target_modules": [r".*self_attn.*", r".*mlp.*"],
+            "refresh_every": 100,
+        },
+    ),
+)
+trainer.train()
+```
+
+To use a custom inner optimizer without subclassing [`Trainer`], combine the
+class-plus-keyword-arguments entry points:
+
+```py
+import torch
+from transformers import SST, Trainer, TrainingArguments
+
+trainer = Trainer(
+    model=model,
+    args=TrainingArguments(output_dir="sst-output"),
+    train_dataset=train_dataset,
+    optimizer_cls_and_kwargs=(torch.optim.RMSprop, {"lr": 2e-5, "momentum": 0.9}),
+    optimizer_wrapper=(SST, {"rank_fraction": 0.99}),
+)
+trainer.train()
+```
+
+Trainer attaches SST after distributed preparation and before scheduler
+construction. This lets the wrapper bind to the actual optimizer parameters
+after FSDP flattening or sharding and run after DeepSpeed's engine update. Do not
+construct a prebuilt SST wrapper before these backends prepare the model.
+
+SST supports ordinary parameters, DDP, FSDP1 (original or flat parameters),
+FSDP2/DTensor, and DeepSpeed ZeRO stages 1–3. The inner optimizer must itself
+support the selected backend and parameter layout. For example, an optimizer
+that only accepts two-dimensional parameters cannot operate on FSDP1's
+one-dimensional flat parameters. Transformers' [`Adafactor`] is supported with
+DDP, but its factored buffers and RMS checkpoint metadata are not
+FSDP-compatible; use the FSDP-compatible `torch.optim.Adafactor` instead.
+
+Projection and refresh are collective: all participating ranks must call
+`step()` and any manual `refresh()` in the same order with the same schedule.
+Initialization and refresh compute a basis on one source and synchronize it
+within the parameter's owning process groups, including hybrid mesh axes.
+Independent submeshes do not share their bases. FSDP1 gathers one wrapping
+unit at a time; FSDP2 and ZeRO gather one selected matrix at a time. These
+gathers, SVDs, and CPU-resident bases add communication, compute, and memory
+costs. SST does not support
+XLA, SageMaker model parallelism, or differentiable optimizer steps.
+
+For FSDP2 CPU offload, use a process group that also supports CPU collectives,
+such as `TrainingArguments(ddp_backend="cpu:gloo,cuda:nccl", ...)`. An NCCL-only
+group cannot reduce CPU DTensor gradients during the inner optimizer's gradient
+clipping. SST itself moves offloaded matrices to the mesh device for projection
+and writes them back to their original CPU shards.
+
+Trainer checkpoints preserve the inner optimizer, active basis, update count,
+and refresh schedule. Resume normally; SST restores the basis without an
+extra SVD, then continues refreshing at the saved boundaries:
+
+```py
+trainer.train(resume_from_checkpoint=checkpoint_dir)
+```
+
+Ordinary optimizer checkpoints include the basis under the `"sst"` key. FSDP
+and DeepSpeed additionally save `sst_state.pt` beside their native optimizer
+checkpoint because their checkpoint converters only retain engine-owned state.
+Targets owned by a subgroup or submesh use `sst_state_rank_<rank>.pt` instead.
+These checkpoints require the same distributed rank and mesh topology on resume,
+so independent submeshes cannot accidentally share a fixed basis. Resuming
+without the saved basis raises an error. The checkpoint's rank and refresh
+schedule take precedence over constructor arguments. Version-1 SST checkpoints
+remain loadable as fixed-basis checkpoints with a fresh refresh clock.
+
+> [!WARNING]
+> Exact projection requires fp32 model parameters or fp32 optimizer master
+> weights. bf16/fp16 autocast with fp32 optimizer parameters is supported.
+> Direct projection of bf16/fp16 optimizer parameters introduces rounding error.
+> DeepSpeed projects its fp32 master parameters and writes the rounded result
+> back to the low-precision model shards.
+
 ## Customizing optimizer and scheduler
 
 Create a custom optimizer and scheduler to use an optimizer not yet integrated, adjust per-layer learning rates, or apply custom logic.
