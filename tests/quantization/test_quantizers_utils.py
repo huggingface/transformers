@@ -13,7 +13,13 @@
 # limitations under the License.
 import unittest
 
+from transformers import is_torch_available
 from transformers.quantizers.quantizers_utils import should_convert_module
+from transformers.testing_utils import require_torch
+
+
+if is_torch_available():
+    import torch
 
 
 class SkipListTest(unittest.TestCase):
@@ -40,3 +46,40 @@ class SkipListTest(unittest.TestCase):
 
         # A name still covers the names ending in it, as Hub skip-lists rely on
         self.assertFalse(should_convert_module("model.layers.0.mlp.shared_expert_gate", ["gate"]))
+
+    @require_torch
+    def test_a_checkpoints_skip_list_covers_the_modules_it_names_once_renamed(self):
+        """Check that a skip-list of checkpoint names covers the modules Llava renames under `model.` on load."""
+        from transformers import CLIPVisionConfig, LlamaConfig, LlavaConfig, LlavaForConditionalGeneration
+        from transformers.quantizers.base import HfQuantizer
+
+        text_config = LlamaConfig(
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            vocab_size=64,
+        )
+        vision_config = CLIPVisionConfig(
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            image_size=8,
+            patch_size=4,
+        )
+        config = LlavaConfig(text_config=text_config, vision_config=vision_config)
+        with torch.device("meta"):
+            model = LlavaForConditionalGeneration(config)
+        modules_to_not_convert = HfQuantizer.get_modules_to_not_convert(
+            model, ["vision_tower", "language_model.model.layers.1"]
+        )
+        for name in (
+            "model.vision_tower.vision_model.encoder.layers.0.mlp.fc1",
+            "model.language_model.layers.1.self_attn.q_proj",
+        ):
+            self.assertFalse(should_convert_module(name, modules_to_not_convert), name)
+        self.assertTrue(
+            should_convert_module("model.language_model.layers.0.self_attn.q_proj", modules_to_not_convert)
+        )
