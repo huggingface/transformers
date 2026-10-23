@@ -339,7 +339,7 @@ class Phi4MultimodalIntegrationTest(unittest.TestCase):
             {
                 ("cuda", 7): 'The image shows a vibrant scene at a traditional Chinese-style street entrance, known as a "gate"',
                 ("cuda", 8): 'The image shows a vibrant scene at a street intersection in a city with a Chinese-influenced architectural',
-                ("xpu", 5): 'The image shows a vibrant street scene in a bustling city, likely in a region with a rich cultural',
+                ("xpu", 5): 'The image shows a vibrant scene at a street intersection in a city with a Chinese-influenced architectural',
             }
         )  # fmt: skip
         EXPECTED_RESPONSE = EXPECTED_RESPONSES.get_expectation()

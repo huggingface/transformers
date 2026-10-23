@@ -689,6 +689,10 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     'What breed is the dog?The dog in the image is a black Labrador Retriever.',
                     'What is shown in this image?A dirt path stretches into the distance, flanked by grassy areas on either side. The path appears to be well-trodden and leads towards a wooded area with tall trees. The sky is clear and blue, suggesting a bright and sunny day'
                 ],
+                ("xpu", 5): [
+                    "What breed is the dog?The dog in the image is a black Labrador Retriever.",
+                    "What is shown in this image?A narrow dirt path is surrounded by grass and trees. The path leads to a distant point, and the sky is clear and blue."
+                ],
             }
         )  # fmt: skip
 

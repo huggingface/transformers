@@ -303,6 +303,10 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene lake and mountain area, it's essential to be mindful of the following:\n\n",
                     "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a kitten, resting on a pink surface.",
                 ],
+                ("xpu", 5): [
+                    "user\n\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nassistant\n\nWhen visiting this serene lake and mountain area, it's essential to be mindful of the following:\n\n",
+                    "user\n\nWhat is this?\nassistant\n\nThe image depicts two cats, one of which is a tabby, lying on a pink surface",
+                ],
             }
         )
 
