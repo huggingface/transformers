@@ -18,9 +18,12 @@ from collections import defaultdict
 from copy import deepcopy
 from typing import TYPE_CHECKING
 
+import torch
+
 from .core_model_loading import (
     Chunk,
     Concatenate,
+    ConversionOps,
     ErnieFuseAndSplitTextVisionExperts,
     GroupWeightRename,
     Interleave,
@@ -149,6 +152,41 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "Dinov2Backbone": "Dinov2Model",
     "Dinov2WithRegistersBackbone": "Dinov2WithRegistersModel",
 }
+
+
+class AppendRow(ConversionOps):
+    """Appends a vector, stored with any leading size-1 dims (`[1, 1, dim]`), to a `[num_rows, dim]` table as its last row."""
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        table, row = (input_dict[pattern] for pattern in source_patterns)
+        table, row = (tensor[0] if isinstance(tensor, list) else tensor for tensor in (table, row))
+        return {target_patterns[0]: torch.cat([table, row.reshape(1, -1)])}
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return SplitLastRow()
+
+
+class SplitLastRow(ConversionOps):
+    """Splits the last row off a table, back to the `[1, 1, dim]` vector it was appended from (the reverse of `AppendRow`)."""
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        table = next(iter(input_dict.values()))
+        table = table[0] if isinstance(table, list) else table
+        return {
+            target_patterns[0]: table[:-1].contiguous(),
+            target_patterns[1]: table[-1:].reshape(1, 1, -1).contiguous(),
+        }
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return AppendRow()
 
 
 def _build_checkpoint_conversion_mapping():
@@ -2236,6 +2274,52 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(flow_net + r"final_layer\.adaLN_modulation\.1\.", "flow_head.final_layer.adaln_proj."),
         # The fused projection, its q/k rows permuted from interleaved RoPE pairs to the rotate-half layout (it also
         # splits the codec's, left unexpected)
+        WeightConverter(
+            source_patterns=r"self_attn\.in_proj\.weight",
+            target_patterns=["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+            operations=[Chunk(dim=0), PermuteForRope(permute_layer_names=["q_proj", "k_proj"])],
+        ),
+    ]
+
+    # Kyutai's checkpoint (`languages/<name>/model.safetensors`, next to the runtime's files). Its codec (`mimi.`) is left
+    # unexpected: it is the processor's audio tokenizer. The text table gets the learnt vector that precedes the voice
+    # prompt as its last row (`<|audio_prompt_bos|>`); the other placeholders reuse rows the original never reads.
+    flow_layers = r"^flow_lm\.transformer\.layers\.(\d+)\."
+    flow_net = r"^flow_lm\.flow_net\."
+    mapping["pocket_tts"] = [
+        WeightConverter(
+            source_patterns=[r"^flow_lm\.conditioner\.embed\.weight", r"^flow_lm\.bos_before_voice"],
+            target_patterns="model.embed_tokens.weight",
+            operations=[AppendRow()],
+        ),
+        WeightRenaming(r"^flow_lm\.speaker_proj_weight", "model.audio_prompt_proj.weight"),
+        WeightRenaming(r"^flow_lm\.input_linear\.", "model.audio_latent_proj."),
+        WeightRenaming(r"^flow_lm\.bos_emb", "model.bos_latent"),
+        WeightRenaming(r"^flow_lm\.emb_mean", "latent_mean"),
+        WeightRenaming(r"^flow_lm\.emb_std", "latent_std"),
+        WeightRenaming(r"^flow_lm\.out_norm\.", "model.norm."),
+        WeightRenaming(r"^flow_lm\.out_eos\.", "eos_head."),
+        WeightRenaming(flow_layers + r"self_attn\.in_proj\.", r"model.layers.\1.self_attn.in_proj."),
+        WeightRenaming(flow_layers + r"self_attn\.out_proj\.", r"model.layers.\1.self_attn.o_proj."),
+        WeightRenaming(flow_layers + r"linear1\.", r"model.layers.\1.mlp.fc1."),
+        WeightRenaming(flow_layers + r"linear2\.", r"model.layers.\1.mlp.fc2."),
+        WeightRenaming(flow_layers + r"norm1\.", r"model.layers.\1.input_layernorm."),
+        WeightRenaming(flow_layers + r"norm2\.", r"model.layers.\1.post_attention_layernorm."),
+        WeightRenaming(flow_net + r"time_embed\.(\d+)\.freqs", r"flow_head.timestep_embeddings.\1.freqs"),
+        WeightRenaming(flow_net + r"time_embed\.(\d+)\.mlp\.0\.", r"flow_head.timestep_embeddings.\1.fc1."),
+        WeightRenaming(flow_net + r"time_embed\.(\d+)\.mlp\.2\.", r"flow_head.timestep_embeddings.\1.fc2."),
+        WeightRenaming(
+            flow_net + r"time_embed\.(\d+)\.mlp\.3\.alpha", r"flow_head.timestep_embeddings.\1.norm.weight"
+        ),
+        WeightRenaming(flow_net + r"cond_embed\.", "flow_head.cond_proj."),
+        WeightRenaming(flow_net + r"input_proj\.", "flow_head.input_proj."),
+        WeightRenaming(flow_net + r"res_blocks\.(\d+)\.in_ln\.", r"flow_head.layers.\1.norm."),
+        WeightRenaming(flow_net + r"res_blocks\.(\d+)\.mlp\.0\.", r"flow_head.layers.\1.fc1."),
+        WeightRenaming(flow_net + r"res_blocks\.(\d+)\.mlp\.2\.", r"flow_head.layers.\1.fc2."),
+        WeightRenaming(flow_net + r"res_blocks\.(\d+)\.adaLN_modulation\.1\.", r"flow_head.layers.\1.adaln_proj."),
+        WeightRenaming(flow_net + r"final_layer\.linear\.", "flow_head.final_layer.proj."),
+        WeightRenaming(flow_net + r"final_layer\.adaLN_modulation\.1\.", "flow_head.final_layer.adaln_proj."),
+        # the fused projection, its q/k rows permuted from interleaved RoPE pairs to the rotate-half layout
         WeightConverter(
             source_patterns=r"self_attn\.in_proj\.weight",
             target_patterns=["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],

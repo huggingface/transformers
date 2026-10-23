@@ -235,6 +235,10 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
                     reason="Pocket TTS generates continuous latents; token-based generation tests do not apply."
                 )
 
+    def test_reverse_loading_mapping(self):
+        # the mapping targets the full model's keys (the backbone's under `model.`)
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
