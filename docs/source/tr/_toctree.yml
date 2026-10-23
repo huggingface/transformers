@@ -6,3 +6,7 @@
   - local: quicktour
     title: Hızlı Başlangıç
   title: Başlarken
+- sections:
+  - local: run_scripts
+    title: Eğitim Betikleri
+  title: Kaynaklar
