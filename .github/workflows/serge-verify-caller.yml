@@ -81,7 +81,7 @@ permissions:
 jobs:
   verify:
     if: github.repository == 'huggingface/transformers'
-    uses: huggingface/transformers-ci/.github/workflows/serge-verify-slow.yml@main # main
+    uses: huggingface/transformers-ci/.github/workflows/serge-verify-slow.yml@754b90f30a8f3ea80456cb98f370bb1d4114f543  # main
     with:
       mode: ${{ inputs.mode }}
       base_sha: ${{ inputs.base_sha }}
