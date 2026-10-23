@@ -245,9 +245,9 @@ class PocketTTSModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
         config.flow_head_config.condition_dim = config.hidden_size
         return config
 
-    def test_reverse_loading_mapping(self):
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True, skip_base_model=True):
         # the mapping targets the full model's keys (the backbone's under `model.`)
-        super().test_reverse_loading_mapping(skip_base_model=True)
+        super().test_reverse_loading_mapping(check_keys_were_modified, skip_base_model=True)
 
     def test_config(self):
         self.config_tester.run_common_tests()
