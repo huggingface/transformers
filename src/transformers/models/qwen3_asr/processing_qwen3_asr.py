@@ -442,8 +442,9 @@ class Qwen3ASRProcessor(ProcessorMixin):
         audio: AudioInput | list[AudioInput],
         language: str | list[str] | None = None,
         prompt: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[Qwen3ASRProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for automatic speech recognition without manually writing the chat template.
 
@@ -462,12 +463,16 @@ class Qwen3ASRProcessor(ProcessorMixin):
                 Context/hotwords to include as the system prompt, e.g. domain-specific words or
                 phrases to bias the transcription towards. A list must be the same length as the
                 audio batch. When `None`, the system prompt is left empty.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to process the formatted prompts. When `False`, the formatted prompts are returned as
+                text so that they can be processed later together with the audio.
             **kwargs:
                 Additional keyword arguments forwarded to [`~Qwen3ASRProcessor.apply_chat_template`]
                 and the underlying processor call (for example `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
+            [`BatchFeature`] or `list[str]`: The formatted prompts when `tokenize=False`, otherwise processor
+            outputs ready to be passed to
             [`Qwen3ASRForConditionalGeneration.generate`].
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
@@ -494,7 +499,7 @@ class Qwen3ASRProcessor(ProcessorMixin):
             messages.append({"role": "assistant", "content": [{"type": "text", "text": prefill}]})
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             return_dict=True,
             continue_final_message=True,
             **kwargs,

@@ -215,8 +215,9 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[MossTranscribeDiarizeProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for transcription / diarization without manually writing the chat template.
 
@@ -231,6 +232,9 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
                 Hotwords/domain terms (e.g. proper nouns) to bias transcription toward the correct spelling. A
                 string or flat list of strings is shared across the batch; a nested list supplies separate
                 keywords per audio sample.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to process the formatted prompts. When `False`, the formatted prompts are returned as
+                text so that they can be processed later together with the audio.
             **kwargs:
                 Additional keyword arguments forwarded to [`~MossTranscribeDiarizeProcessor.apply_chat_template`].
         """
@@ -255,7 +259,7 @@ class MossTranscribeDiarizeProcessor(ProcessorMixin):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=True,
             return_dict=True,
             **kwargs,

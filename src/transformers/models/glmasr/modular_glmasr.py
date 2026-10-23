@@ -93,8 +93,9 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
         self,
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[GlmAsrProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for automatic speech recognition without manually writing the default transcription prompt.
 
@@ -105,12 +106,16 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
             prompt (`str` or `list[str]`, *optional*):
                 Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
                 each sample uses `"Transcribe the input speech."`.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to process the formatted prompts. When `False`, the formatted prompts are returned as
+                text so that they can be processed later together with the audio.
             **kwargs:
                 Additional keyword arguments forwarded to [`~GlmAsrProcessor.apply_chat_template`] (for example
                 `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to [`GlmAsrForConditionalGeneration.generate`].
+            [`BatchFeature`] or `list[str]`: The formatted prompts when `tokenize=False`, otherwise processor
+            outputs ready to be passed to [`GlmAsrForConditionalGeneration.generate`].
 
         """
 
@@ -156,7 +161,7 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=True,
             return_dict=True,
             **kwargs,
