@@ -118,8 +118,9 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
         language: str | list[str] | None = None,
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[FunAsrNanoProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """Prepare inputs for ASR using the checkpoint's structured transcription chat template.
 
         Args:
@@ -134,12 +135,16 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
             keywords (`str`, `list[str]`, or `list[list[str]]`, *optional*):
                 Hotwords to bias recognition. A string or flat list is shared across the batch; a nested list
                 supplies separate hotwords for each audio sample.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to process the formatted prompts. When `False`, the formatted prompts are returned as
+                text so that they can be processed later together with the audio.
             **kwargs:
                 Additional keyword arguments forwarded to [`~FunAsrNanoProcessor.apply_chat_template`]
                 and the underlying processor call (for example `text_kwargs`, `audio_kwargs`, ...).
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
+            [`BatchFeature`] or `list[str]`: The formatted prompts when `tokenize=False`, otherwise processor
+            outputs ready to be passed to
             [`FunAsrNanoForConditionalGeneration.generate`].
         """
         audio_items = list(make_list_of_audio_chat_template(audio))
@@ -167,7 +172,7 @@ class FunAsrNanoProcessor(AudioFlamingo3Processor):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=True,
             return_dict=True,
             **kwargs,

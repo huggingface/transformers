@@ -114,8 +114,9 @@ class CanaryProcessor(ProcessorMixin):
         source_language: str | list[str] = "en",
         target_language: str | list[str] | None = None,
         punctuation: bool = True,
+        tokenize: bool = True,
         **kwargs: Unpack[CanaryProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         r"""
         Prepare inputs for transcription or translation without manually writing the chat template.
 
@@ -130,11 +131,15 @@ class CanaryProcessor(ProcessorMixin):
                 (transcription); set it to a different language for speech-to-text translation.
             punctuation (`bool`, *optional*, defaults to `True`):
                 Whether to request punctuation and capitalization in the output.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to process the formatted prompts. When `False`, the formatted prompts are returned as
+                text so that they can be processed later together with the audio.
             **kwargs:
                 Additional keyword arguments forwarded to [`~CanaryProcessor.apply_chat_template`].
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
+            [`BatchFeature`] or `list[str]`: The formatted prompts when `tokenize=False`, otherwise processor
+            outputs ready to be passed to
             [`CanaryForConditionalGeneration.generate`].
         """
         audio_items = make_list_of_audio_chat_template(audio)
@@ -163,7 +168,7 @@ class CanaryProcessor(ProcessorMixin):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=True,
             return_dict=True,
             **kwargs,
