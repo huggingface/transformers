@@ -592,7 +592,23 @@ class PackedRowwiseParallel(TensorParallelLayer):
         )
 
 
-class MoEParamShard(TensorParallelLayer):
+class ParamShard(TensorParallelLayer):
+    """Param-only style that shards a parameter on one placement, e.g. a weight's scales."""
+
+    def __init__(self, placement):
+        self.placement = placement
+
+    def shard_param(self, module, param, mesh):
+        meta = module._parameters.get(param)
+        if meta is None:
+            return
+        module._parameters[param] = torch.nn.Parameter(
+            distribute_tensor(meta, mesh, [self.placement], src_data_rank=None),
+            requires_grad=meta.requires_grad,
+        )
+
+
+class MoEParamShard(ParamShard):
     """Param-only EP style for MoE expert weights (``grouped_gemm``).
 
     Shards dim 0 and updates module.num_experts to the per-rank local count so the
@@ -600,7 +616,7 @@ class MoEParamShard(TensorParallelLayer):
     """
 
     def __init__(self, placement, *, shards_expert_dim: bool = False):
-        self.placement = placement
+        super().__init__(placement)
         self.shards_expert_dim = shards_expert_dim
 
     def shard_param(self, module, param, mesh):
@@ -618,10 +634,7 @@ class MoEParamShard(TensorParallelLayer):
             module.num_experts = global_num_experts // expert_parallel_size
             # The experts forward masks sentinel rows only when its experts are actually split.
             module._is_expert_parallel = True
-        module._parameters[param] = torch.nn.Parameter(
-            distribute_tensor(meta, mesh, [self.placement], src_data_rank=None),
-            requires_grad=meta.requires_grad,
-        )
+        super().shard_param(module, param, mesh)
 
 
 if is_torch_distributed_available():
@@ -1029,6 +1042,9 @@ class ParallelInterface(GeneralInterface):
             "all_reduce": AllReduceParallel(),
             # Every rank keeps the full param, e.g. a per-tensor quantization scale
             "replicate": TensorParallelLayer(),
+            # block scales shipped as `[N / block, 1, K / block, 1]`, e.g. by ModelOpt, of a colwise or rowwise linear
+            "colwise_block_scales": ParamShard(Shard(0)),
+            "rowwise_block_scales": ParamShard(Shard(2)),
         }
         if is_torch_distributed_available()
         else {}

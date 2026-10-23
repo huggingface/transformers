@@ -2078,9 +2078,10 @@ class NVFP4Config(QuantizationConfigMixin):
         modules_to_not_convert (`list[str]`, *optional*):
             Module-name patterns that should remain in their original precision.
         quantized_layers (`dict[str, str | None]`, *optional*):
-            How checkpoint modules load: `"nvfp4"`, `"nvfp4_weight_only"`, `"dequantize"`, or `None` to stay
-            unquantized. A key is a module name, or else a pattern. Exact names win, then the first pattern that
-            matches. Unlisted modules stay unquantized. `None` makes every eligible module NVFP4.
+            How checkpoint modules load: `"nvfp4"`, `"nvfp4_weight_only"`, `"fp8"` (one scale per tensor),
+            `"fp8_per_block"` (one per 128x128 block), `"mxfp8"` (one per 32 values), or `None` to stay unquantized. A
+            key is a module name, or else a pattern. Exact names win, then the first pattern that matches, and the
+            catch-all `.*` last. Unlisted modules stay unquantized. `None` makes every eligible module NVFP4.
         activation_format (`str`, *optional*):
             `None` quantizes the activations to NVFP4 too. `"bf16"` keeps them in the model dtype (weight-only).
         dequantize (`bool`, *optional*, defaults to `False`):
@@ -2125,7 +2126,7 @@ class NVFP4Config(QuantizationConfigMixin):
 
 
 def read_modelopt(config_dict: dict) -> NVFP4Config:
-    """Read a ModelOpt export with NVFP4 layers. Its FP8, block FP8 or MXFP8 layers load dequantized."""
+    """Read a ModelOpt export with NVFP4 layers. Its FP8, block FP8 or MXFP8 layers load as they ship."""
     config_dict = {**config_dict, **config_dict.get("quantization", {})}
     if config_dict.get("group_size", 16) != 16:
         raise ValueError(f"NVFP4 uses a group size of 16; got {config_dict['group_size']}.")
@@ -2139,19 +2140,14 @@ def read_modelopt(config_dict: dict) -> NVFP4Config:
     loads = {
         "NVFP4": "nvfp4",
         "W4A16_NVFP4": "nvfp4_weight_only",
-        "FP8": "dequantize",
-        "FP8_PB_WO": "dequantize",
-        "MXFP8": "dequantize",
+        "FP8": "fp8",
+        "FP8_PB_WO": "fp8_per_block",
+        "MXFP8": "mxfp8",
     }
     if not used & {"NVFP4", "W4A16_NVFP4"}:
         raise ValueError(f"This ModelOpt export has no NVFP4 layer; its formats are {sorted(used)}.")
     if unsupported := used - loads.keys():
         raise ValueError(f"ModelOpt formats {sorted(unsupported)} are not supported next to NVFP4.")
-    if fp8_formats := {algo for algo in used if loads[algo] == "dequantize"}:
-        logger.warning_once(
-            f"This checkpoint has FP8 layers ({', '.join(sorted(fp8_formats))}) next to its NVFP4 layers. The FP8 "
-            "layers load dequantized to the model dtype."
-        )
     skip = config_dict.get("modules_to_not_convert") or []
     # some exports write the list as its string
     if isinstance(skip, str):
@@ -2172,8 +2168,7 @@ def read_modelopt(config_dict: dict) -> NVFP4Config:
 def read_mxfp8(config_dict: dict) -> NVFP4Config | None:
     """Read an MXFP8 checkpoint whose MoE experts are NVFP4. Return `None` for a plain MXFP8 one.
 
-    The experts load NVFP4. The checkpoint's other MXFP8 layers load dequantized, and its ignored layers stay as they
-    ship.
+    The experts load NVFP4 and the other layers MXFP8. The ignored layers stay as they ship.
     """
     if config_dict.get("moe_quant_algo") != "NVFP4":
         return None
@@ -2181,12 +2176,9 @@ def read_mxfp8(config_dict: dict) -> NVFP4Config | None:
         raise ValueError(f"NVFP4 uses a group size of 16; got {config_dict['group_size']}.")
     if (checkpoint_format := config_dict.get("moe_quant_format")) != "nvfp4-pack-quantized":
         raise ValueError(f"NVFP4 experts load from the 'nvfp4-pack-quantized' format; got {checkpoint_format!r}.")
-    logger.warning_once(
-        "This checkpoint's MXFP8 layers load dequantized to the model dtype, next to its NVFP4 experts."
-    )
     # an ignored module stays as it ships, with its children
     quantized_layers = {re.escape(name) + r"(\..*)?": None for name in config_dict.get("ignored_layers") or []}
-    quantized_layers.update({r".*\.experts": "nvfp4", r".*": "dequantize"})
+    quantized_layers.update({r".*\.experts": "nvfp4", r".*": "mxfp8"})
     return NVFP4Config(
         modules_to_not_convert=[], quantized_layers=quantized_layers, checkpoint_format=checkpoint_format
     )

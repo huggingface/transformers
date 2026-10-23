@@ -133,6 +133,8 @@ def _modelopt_checkpoint(path):
                 quantized = (linear.weight.data.float() / scale).to(torch.float8_e4m3fn)
                 dequantized = quantized.float() * scale
                 state[f"{key}.weight"], state[f"{key}.weight_scale"] = quantized, scale.reshape(())
+                # ModelOpt's FP8 quantizes activations with a calibrated static scale
+                state[f"{key}.input_scale"] = torch.tensor(8 / 448)
             elif algo == "FP8_PB_WO":
                 quantized, scales, dequantized = _fp8_block(linear.weight.data)
                 state[f"{key}.weight"], state[f"{key}.weight_scale"] = quantized, scales
@@ -231,13 +233,12 @@ class NVFP4ConfigTest(unittest.TestCase):
             # some exports write the list as its string
             "modules_to_not_convert": "['model.layers.0.mlp.gate']",
         }
-        logging.warning_once.cache_clear()
-        with self.assertLogs("transformers", level="WARNING") as logs:
-            config = AutoQuantizationConfig.from_dict(shipped)
-        self.assertIn("FP8_PB_WO", logs.output[0])
+        config = AutoQuantizationConfig.from_dict(shipped)
         self.assertIsInstance(config, NVFP4Config)
         self.assertEqual(config.quant_method, QuantizationMethod.NVFP4)
-        self.assertEqual(config.quantized_layers, {"layers.0.experts": "nvfp4", "layers.0.attention.wq": "dequantize"})
+        self.assertEqual(
+            config.quantized_layers, {"layers.0.experts": "nvfp4", "layers.0.attention.wq": "fp8_per_block"}
+        )
         self.assertEqual(config.modules_to_not_convert, ["model.layers.0.mlp.gate", r".*lm_head"])
         self.assertIsNone(
             AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4"}).quantized_layers
@@ -259,9 +260,7 @@ class NVFP4ConfigTest(unittest.TestCase):
         config = AutoQuantizationConfig.from_dict(shipped)
         self.assertIsInstance(config, NVFP4Config)
         self.assertEqual(config.checkpoint_format, "nvfp4-pack-quantized")
-        self.assertEqual(
-            config.quantized_layers, {r"lm_head(\..*)?": None, r".*\.experts": "nvfp4", r".*": "dequantize"}
-        )
+        self.assertEqual(config.quantized_layers, {r"lm_head(\..*)?": None, r".*\.experts": "nvfp4", r".*": "mxfp8"})
         with self.assertRaises(ValueError):
             AutoQuantizationConfig.from_dict({**shipped, "moe_quant_format": "unknown"})
 
@@ -296,17 +295,18 @@ class NVFP4ModulesTest(unittest.TestCase):
             "model.layers.0.mlp.experts": "nvfp4",
             "model.layers.0.self_attn.q_proj": "nvfp4",
             "model.layers.0.self_attn.k_proj": "nvfp4_weight_only",
-            "model.layers.0.self_attn.o_proj": "dequantize",
+            "model.layers.0.self_attn.o_proj": "fp8_per_block",
+            "model.layers.0.self_attn.v_proj": "fp8",
         }
         replace_with_nvfp4(model, formats=formats, pre_quantized=True)
         attention = model.model.layers[0].self_attn
         self.assertEqual(attention.q_proj.weight.dtype, torch.int8)
         self.assertIsNotNone(attention.q_proj.input_global_scale)
         self.assertEqual((attention.k_proj.activation_format, attention.k_proj.input_global_scale), ("bf16", None))
-        # an FP8 layer keeps the model's own module, with a slot for its scale until it dequantizes
-        self.assertIs(type(attention.o_proj), torch.nn.Linear)
-        self.assertIn("weight_scale_inv", attention.o_proj._parameters)
-        self.assertIs(type(attention.v_proj), torch.nn.Linear)
+        # an FP8 layer holds its weight and scales as they ship
+        self.assertEqual(attention.o_proj.weight.dtype, torch.float8_e4m3fn)
+        self.assertEqual(attention.o_proj.weight_scale_inv.shape, (2, 1, 2, 1))
+        self.assertEqual(attention.v_proj.weight_scale_inv.shape, ())
 
     def test_expert_parallelism_is_masked_and_tensor_parallelism_splits_inside_experts(self):
         model = self._model()
@@ -416,17 +416,19 @@ class NVFP4LoadingOpsTest(unittest.TestCase):
         self.assertIn("swizzled layout", logs.output[0])
 
     def test_a_dense_down_proj_does_not_load_as_an_expert_stack(self):
-        """An expert stack ships its packed values under its own name, e.g. `experts.down_proj`. A converter pattern
-        only ends at a name boundary, so a bare `down_proj` would also claim a dense MLP's `mlp.down_proj.weight`.
+        """An expert stack ships its packed values under its own name, e.g. `experts.down_proj`. A bare `down_proj`
+        would also claim a dense MLP's `mlp.down_proj.weight`, and `experts.down_proj` a shared expert's
+        `shared_experts.down_proj.weight`, since a converter pattern only ends at a name boundary.
         """
         quantizer = NVFP4HfQuantizer(NVFP4Config(), pre_quantized=True)
         for key, target in (
             ("model.layers.0.mlp.down_proj.weight", "weight"),
+            ("model.layers.0.mlp.shared_experts.down_proj.weight", "weight"),
             ("model.layers.0.mlp.experts.down_proj", "experts.down_proj"),
             ("model.layers.0.mlp.experts.down_proj_scale_inv", "experts.down_proj"),
         ):
             converter = next(c for c in quantizer.get_weight_conversions() if c.rename_source_key(key)[1])
-            self.assertEqual(converter._original_target_patterns, [target], key)
+            self.assertEqual(converter.target_patterns, [target], key)
 
 
 def _requires_fp8_triton(test):
@@ -465,7 +467,7 @@ class NVFP4LoadTest(unittest.TestCase):
         model, info = self._load(self.directory.name, experts_implementation=implementation, output_loading_info=True)
         self.assertFalse(any(info.values()), info)
         self.assertIsInstance(model.model.layers[0].mlp.experts, NVFP4Experts)
-        self.assertIs(type(model.model.layers[0].self_attn.o_proj), torch.nn.Linear)
+        self.assertEqual(model.model.layers[0].self_attn.o_proj.weight_format, "fp8_per_block")
         self.assertIsInstance(model.lm_head, NVFP4Linear)
         self.assertGreater(_cosine(self._logits(model), self.expected), 0.995)
 
@@ -498,9 +500,21 @@ class NVFP4LoadTest(unittest.TestCase):
             reloaded = self._load(saved)
         self.assertFalse(any(info.values()), info)
         self.assertIsInstance(model.model.layers[0].mlp.experts, NVFP4Experts)
-        self.assertIs(type(model.model.layers[0].self_attn.q_proj), torch.nn.Linear)
+        self.assertEqual(model.model.layers[0].self_attn.q_proj.weight_format, "mxfp8")
         self.assertGreater(_cosine(self._logits(model), expected), 0.995)
         torch.testing.assert_close(self._logits(reloaded), self._logits(model))
+
+    def test_a_per_tensor_fp8_layer_without_its_activation_scale_raises(self):
+        from safetensors.torch import load_file, save_file
+
+        with tempfile.TemporaryDirectory() as path:
+            _modelopt_checkpoint(path)
+            state = load_file(f"{path}/model.safetensors")
+            save_file(
+                {k: v for k, v in state.items() if not k.endswith("v_proj.input_scale")}, f"{path}/model.safetensors"
+            )
+            with self.assertRaisesRegex(ValueError, "static activation scale"):
+                self._load(path)
 
     @parameterized.expand(["modelopt", "on_the_fly"])
     def test_a_saved_model_reloads_with_the_same_outputs(self, source):

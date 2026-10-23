@@ -33,8 +33,6 @@ from .moe import ExpertsInterface, use_experts_implementation
 if is_torch_available():
     import torch
     import torch.nn as nn
-    from torch.distributed.tensor import DTensor
-    from torch.distributed.tensor._utils import compute_local_shape_and_global_offset
 
     from .finegrained_fp8 import Fp8Dequantize
 
@@ -77,9 +75,19 @@ def _fits_swizzled_layout(rows: int, scale_cols: int) -> bool:
     kernels also read at least two blocks across, so the scales need 8 columns or more.
 
     The scales of a whole weight usually fit. Tensor parallelism gives each rank a smaller piece, which may not fit.
-    So the check runs on each rank's piece.
+    So the check runs on each rank's piece. Callers only ask for layers that read swizzled scales, so a miss on
+    Blackwell warns once.
     """
-    return _is_blackwell() and rows % 128 == 0 and scale_cols % 4 == 0 and scale_cols >= 8
+    if not _is_blackwell():
+        return False
+    fits = rows % 128 == 0 and scale_cols % 4 == 0 and scale_cols >= 8
+    if not fits:
+        logger.warning_once(
+            "Some quantized scales don't fit the swizzled layout Blackwell GPUs read fastest, so those layers run "
+            "slower. Tensor parallelism makes this more likely, since each GPU holds a smaller piece of each "
+            "weight's scales. A smaller `tp_size`, or expert parallelism for MoE experts, can avoid it."
+        )
+    return fits
 
 
 @functools.cache
@@ -130,6 +138,7 @@ class NVFP4Linear(nn.Module):
 
         Under tensor parallelism, the shape is this rank's piece of the scales.
         """
+        # finegrained-kernels' weight-only kernels read row-major scales
         return self.activation_format != "bf16" and _fits_swizzled_layout(rows, scale_cols)
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
@@ -148,6 +157,56 @@ class NVFP4Linear(nn.Module):
 
     def extra_repr(self) -> str:
         return f"in_features={self.in_features}, out_features={self.out_features}, nvfp4"
+
+
+class FP8Linear(nn.Module):
+    """Linear layer with the FP8 weights a checkpoint ships next to its NVFP4 layers.
+
+    The weight and its scales load as they ship. `weight_format` is `"fp8"` (one scale per tensor), `"fp8_per_block"`
+    (one per 128x128 block) or `"mxfp8"` (one per 32 values).
+
+    Per-tensor FP8 quantizes its activations with the checkpoint's static `input_global_scale`. The other formats
+    quantize them on the fly. That includes ModelOpt's block FP8, `FP8_PB_WO`, as vLLM does too.
+
+    ModelOpt ships block scales as `[N / 128, 1, K / 128, 1]`, and this layer declares them so too. Tensor parallelism
+    then splits them like the checkpoint. They load as `(N / 128, K / 128)`, see `NVFP4FlattenBlockScales`.
+    """
+
+    def __init__(self, in_features: int, out_features: int, bias: bool = False, weight_format: str = "fp8"):
+        super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight_format = weight_format
+        self.weight = _parameter(torch.empty(out_features, in_features, dtype=torch.float8_e4m3fn))
+        scale_shapes = {
+            "fp8": (),
+            "fp8_per_block": (-(-out_features // 128), 1, -(-in_features // 128), 1),
+            "mxfp8": (out_features, in_features // 32),
+        }
+        # the kernels read UE8M0 scales fastest, which checkpoints ship as uint8 bytes, see `NVFP4ViewBytes`
+        scale_dtype = torch.float8_e8m0fnu if weight_format == "mxfp8" else torch.float32
+        self.weight_scale_inv = _parameter(torch.empty(scale_shapes[weight_format], dtype=scale_dtype))
+        static = weight_format == "fp8"
+        self.input_global_scale = _parameter(torch.ones((), dtype=torch.float32)) if static else None
+        self.bias = _parameter(torch.empty(out_features)) if bias else None
+
+    def swizzles_scales(self, slot: str, rows: int, scale_cols: int) -> bool:
+        """Return whether scales of this shape should be swizzled. Only scales per 32 values have that layout."""
+        return self.weight_format == "mxfp8" and _fits_swizzled_layout(rows, scale_cols)
+
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        output = load_finegrained_kernels().matmul_2d(
+            A=input.reshape(-1, input.shape[-1]),
+            B=self.weight,
+            As=self.input_global_scale,
+            Bs=self.weight_scale_inv,
+            bias=self.bias,
+            output_dtype=input.dtype,
+        )
+        return output.reshape(*input.shape[:-1], output.shape[-1])
+
+    def extra_repr(self) -> str:
+        return f"in_features={self.in_features}, out_features={self.out_features}, {self.weight_format}"
 
 
 class NVFP4Experts(nn.Module):
@@ -194,6 +253,7 @@ class NVFP4Experts(nn.Module):
         layout, which only a swizzled down reads. So gate_up also needs the down scales to fit, and its rows give the
         size down has on this rank. Under tensor parallelism, the shape is this rank's piece of the scales.
         """
+        # finegrained-kernels' weight-only kernels read row-major scales
         if self.activation_format == "bf16" or not _fits_swizzled_layout(rows, scale_cols):
             return False
         if slot == "down_proj_scale_inv":
@@ -318,9 +378,8 @@ def replace_with_nvfp4(
 ) -> bool:
     """Replace the linears and fused experts in an NVFP4 format. Return whether any module was replaced.
 
-    `formats` maps module names to how they load: `"nvfp4"`, `"nvfp4_weight_only"` or `"dequantize"`. Without it, every
-    eligible module is NVFP4. A pre-quantized linear that dequantizes gets a slot for its scale, see
-    `dequantize_fp8_linears`.
+    `formats` maps module names to how they load: `"nvfp4"`, `"nvfp4_weight_only"`, or an FP8 format of `FP8Linear`.
+    Without it, every eligible module is NVFP4.
     """
     # routers stay in full precision unless the checkpoint quantizes them
     parents = [name.removesuffix(".experts") for name, _ in model.named_modules() if name.endswith(".experts")]
@@ -330,22 +389,25 @@ def replace_with_nvfp4(
         if not should_convert_module(name, modules_to_not_convert):
             continue
         is_experts = name.endswith(".experts")
-        if not is_experts and (
-            type(module) is not nn.Linear or module.in_features % GROUP_SIZE or module.out_features % GROUP_SIZE
-        ):
+        if not is_experts and type(module) is not nn.Linear:
             continue
         if formats is None and name in routers:
             continue
         loads = "nvfp4" if formats is None else formats.get(name)
-        if loads == "dequantize" and pre_quantized:
-            # an FP8 layer loads its scale into a slot of its own, see `dequantize_fp8_linears`
-            module.register_parameter("weight_scale_inv", _parameter(torch.empty((), device="meta")))
+        if loads is None:
             continue
-        if loads not in ("nvfp4", "nvfp4_weight_only"):
+        fp8 = loads in ("fp8", "fp8_per_block", "mxfp8")
+        if fp8 and (is_experts or not pre_quantized):
+            raise ValueError(f"{name!r} is {loads}, which loads only for linears of a pre-quantized checkpoint.")
+        if not fp8 and loads not in ("nvfp4", "nvfp4_weight_only"):
+            raise ValueError(f"{name!r} has an unknown format {loads!r}.")
+        if not fp8 and not is_experts and (module.in_features % GROUP_SIZE or module.out_features % GROUP_SIZE):
             continue
         options = {"pre_quantized": pre_quantized, "weight_only": weight_only or loads == "nvfp4_weight_only"}
         with torch.device("meta"):
-            if is_experts:
+            if fp8:
+                new_module = FP8Linear(module.in_features, module.out_features, module.bias is not None, loads)
+            elif is_experts:
                 has_gate = getattr(module, "has_gate", True)
                 has_bias = getattr(module, "has_bias", False)
                 experts_class = use_experts_implementation(
@@ -382,9 +444,13 @@ def update_nvfp4_parallel_plan(model: nn.Module, plan: dict[str, str]):
         if isinstance(module, NVFP4Linear) and plan.get(glob) is not None:
             for slot in ("weight_global_scale", "input_global_scale"):
                 plan[f"{glob}.{slot}"] = "replicate"
-        # an FP8 layer's scale grid is small, so each rank holds it whole and slices its shard when it dequantizes
-        if type(module) is nn.Linear and "weight_scale_inv" in module._parameters and plan.get(glob) is not None:
-            plan[f"{glob}.weight_scale_inv"] = "replicate"
+        # a per-tensor scale has nothing to split. Block scales ship as `[N / 128, 1, K / 128, 1]`.
+        if isinstance(module, FP8Linear) and (style := plan.get(glob)) is not None:
+            if module.weight_format == "fp8":
+                plan[f"{glob}.weight_scale_inv"] = plan[f"{glob}.input_global_scale"] = "replicate"
+            elif module.weight_format == "fp8_per_block":
+                block_style = "rowwise_block_scales" if style.startswith("rowwise") else "colwise_block_scales"
+                plan[f"{glob}.weight_scale_inv"] = block_style
         if not isinstance(module, NVFP4Experts):
             continue
         if plan.get(glob) == "ep_dispatch_experts":
@@ -432,7 +498,7 @@ def _nvfp4_module(model, name: str, renames: list | None = None):
             module = model.get_submodule(name)
         except AttributeError:
             continue
-        return (name, module) if isinstance(module, (NVFP4Linear, NVFP4Experts)) else (None, None)
+        return (name, module) if isinstance(module, (NVFP4Linear, FP8Linear, NVFP4Experts)) else (None, None)
     return None, None
 
 
@@ -460,15 +526,22 @@ class NVFP4Reciprocal(_NVFP4Op):
         return {key: 1 / _single(value) for key, value in input_dict.items()}
 
 
-class NVFP4ViewPackedInt8(_NVFP4Op):
-    """View packed E2M1 uint8 bytes as the int8 the modules hold. A copy would convert the values instead."""
+class NVFP4ViewBytes(_NVFP4Op):
+    """View a checkpoint's uint8 bytes as the dtype the module holds: int8 for packed FP4, UE8M0 for MXFP8 scales.
 
-    def convert(self, input_dict, **kwargs):
-        held, want = (torch.int8, torch.uint8) if self.inverse else (torch.uint8, torch.int8)
+    A copy would convert the values instead. A save writes the uint8 bytes back.
+    """
+
+    def convert(self, input_dict, model=None, full_layer_name=None, **kwargs):
+        module_name, _, slot = full_layer_name.rpartition(".")
+        held = getattr(model.get_submodule(module_name), slot).dtype
         out = {}
         for key, value in input_dict.items():
             value = _single(value)
-            out[key] = value.view(want) if value.dtype == held else value
+            if self.inverse:
+                out[key] = value.view(torch.uint8) if value.dtype == held else value
+            else:
+                out[key] = value.view(held) if value.dtype == torch.uint8 else value
         return out
 
 
@@ -481,6 +554,22 @@ class NVFP4InterleaveGateUp(_NVFP4Op):
         return {key: interleave.convert({key: _single(value)}, [key], [key])[key] for key, value in input_dict.items()}
 
 
+class NVFP4FlattenBlockScales(_NVFP4Op):
+    """Load ModelOpt's block FP8 scales, shipped as `[N / 128, 1, K / 128, 1]`, as the `(N / 128, K / 128)` the
+    kernels read. A save writes them back as ModelOpt ships them.
+    """
+
+    def convert(self, input_dict, **kwargs):
+        out = {}
+        for key, value in input_dict.items():
+            value = _single(value)
+            if self.inverse:
+                out[key] = value.reshape(value.shape[0], 1, value.shape[1], 1) if value.ndim == 2 else value
+            else:
+                out[key] = value.reshape(value.shape[0], value.shape[2]) if value.ndim == 4 else value
+        return out
+
+
 class NVFP4SwizzleScales(_NVFP4Op):
     """Swizzle scales into the 5-D layout Blackwell GPUs read, when their module says so.
 
@@ -491,7 +580,7 @@ class NVFP4SwizzleScales(_NVFP4Op):
     def convert(self, input_dict, model=None, full_layer_name=None, **kwargs):
         module_name, _, slot = full_layer_name.rpartition(".")
         module = model.get_submodule(module_name)
-        dense = isinstance(module, NVFP4Linear)
+        dense = not isinstance(module, NVFP4Experts)
         kernel = load_finegrained_kernels()
         out = {}
         for key, value in input_dict.items():
@@ -500,15 +589,9 @@ class NVFP4SwizzleScales(_NVFP4Op):
                 matrices, row_blocks, column_groups = value.shape[:3]
                 plain = kernel.unswizzle_mx_scales(value, row_blocks * 128, column_groups * 4, num_experts=matrices)
                 value = plain[0] if dense else plain
-            elif not self.inverse and module.swizzles_scales(slot, *value.shape[-2:]):
+            elif not self.inverse and value.ndim >= 2 and module.swizzles_scales(slot, *value.shape[-2:]):
                 # the kernels swizzle a stack of scales, so a linear's scales are a stack of one
                 value = kernel.swizzle_mx_scales(value.unsqueeze(0) if dense else value)
-            elif not self.inverse and module.activation_format != "bf16" and _is_blackwell():
-                logger.warning_once(
-                    "Some NVFP4 scales don't fit the swizzled layout Blackwell GPUs read fastest, so those layers run "
-                    "slower. Tensor parallelism makes this more likely, since each GPU holds a smaller piece of each "
-                    "weight's scales. A smaller `tp_size`, or expert parallelism for MoE experts, can avoid it."
-                )
             out[key] = value
         return out
 
@@ -621,48 +704,10 @@ class NVFP4Dequantize(Fp8Dequantize):
         return _IdentityOp()
 
 
-def dequantize_fp8_linears(model: nn.Module):
-    """Dequantize the FP8 layers that loaded with their scale, and drop the scale.
-
-    The scale is per tensor or a block grid, whose block size follows from its shape. Under tensor parallelism each rank
-    holds the whole grid and dequantizes its shard of the weight.
-    """
-    for module in model.modules():
-        scale = module._parameters.get("weight_scale_inv") if type(module) is nn.Linear else None
-        if scale is None:
-            continue
-        # an unquantized layer that matched a catch-all pattern loads no scale
-        if scale.is_meta:
-            del module.weight_scale_inv
-            continue
-        weight, grid = module.weight.data, scale.data
-        offsets = [0, 0]
-        if isinstance(weight, DTensor):
-            _, offsets = compute_local_shape_and_global_offset(weight.shape, weight.device_mesh, weight.placements)
-            grid = grid.to_local() if isinstance(grid, DTensor) else grid
-        local = weight.to_local() if isinstance(weight, DTensor) else weight
-        if grid.numel() > 1:
-            # ModelOpt ships a block grid as `[N / 128, 1, K / 128, 1]`
-            grid = grid.reshape(grid.shape[0], grid.shape[2]) if grid.ndim == 4 else grid
-            if weight.shape[0] % grid.shape[0] or weight.shape[1] % grid.shape[1]:
-                raise ValueError(
-                    f"A {tuple(weight.shape)} weight does not split into a {tuple(grid.shape)} scale grid."
-                )
-            block = (weight.shape[0] // grid.shape[0], weight.shape[1] // grid.shape[1])
-            rows, cols = (
-                slice(start // size, -(-(start + length) // size))
-                for start, length, size in zip(offsets, local.shape, block)
-            )
-            grid = grid[rows, cols]
-        local.copy_(NVFP4Dequantize(None)._dequantize_one(local, grid, output_dtype=local.dtype))
-        del module.weight_scale_inv
-
-
 class NVFP4Deserialize(_NVFP4Op):
     """Load a module's checkpoint tensors after a converter merges them, and write them back on save.
 
-    An NVFP4 module's tensors run its layout ops, in reverse on save. Other quantized layers, such as FP8 attention,
-    load dequantized.
+    A module's tensors run its layout ops, in reverse on save. Other modules' tensors pass through.
     """
 
     def convert(self, input_dict, model=None, full_layer_name=None, **kwargs):
@@ -671,15 +716,12 @@ class NVFP4Deserialize(_NVFP4Op):
         if module is None:
             if self.inverse:
                 return input_dict
-            holder_name, _, slot = full_layer_name.rpartition(".")
-            holder = model.get_submodule(holder_name)
-            if "weight_scale_inv" in holder._parameters:
-                # an FP8 layer loads as it ships, its weight in the model dtype, see `dequantize_fp8_linears`
-                value = _single(next(iter(input_dict.values())))
-                return {full_layer_name: value if slot == "weight_scale_inv" else value.to(holder.weight.dtype)}
-            return NVFP4Dequantize(self.hf_quantizer).convert(
-                input_dict, full_layer_name=full_layer_name, model=model, **kwargs
-            )
+            # every quantized layer has a quantized module, so a scale here means its module was not replaced
+            if any(key.endswith(("_scale_inv", "_global_scale")) for key in input_dict):
+                raise ValueError(f"{full_layer_name!r} ships quantized, but no `quantized_layers` entry covers it.")
+            if list(input_dict) == ["weight"]:
+                return {full_layer_name: _single(input_dict["weight"])}
+            return {key: _single(value) for key, value in input_dict.items()}
         out = {}
         for key, value in input_dict.items():
             full_name = f"{module_name}.{key.rpartition('.')[2]}"

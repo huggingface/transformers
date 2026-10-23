@@ -118,6 +118,8 @@ class ParallelInterface(GeneralInterface):
         "packed_rowwise": PackedRowwiseParallel(),
         "sequence_parallel": SequenceParallel(use_local_output=True),
         "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
+        "colwise_block_scales": ParamShard(Shard(0)),
+        "rowwise_block_scales": ParamShard(Shard(2)),
         "ep_router": EpRouterParallel(),
         "megamoe_router": RouterParallelMegaMoe(),
         "moe_tp_experts": MoeExpertsParallel(),
@@ -144,6 +146,7 @@ The table below describes each strategy.
 | `ReplicatedWithGradAllReduce` | Replicates a parameter but all-reduces its gradient. Needed for norms that sit between a column-wise and a row-wise layer and normalize along a sharded axis, where each rank only sees its own heads. |
 | `AllReduceParallel` | All-reduces a module's `Partial()` forward output to `Replicate()`. Use it as a sync point for a module whose compute ends in a partial sum. |
 | `MlaKvAProjParallel` | Splits the `kv_a_proj_with_mqa` output of DeepSeek-V2 style MLA attention and all-reduces the gradient of the RoPE half, which bypasses `kv_b_proj` and would otherwise keep a partial gradient. Requires `qk_rope_head_dim` in the model config. |
+| `ParamShard` | Shards one parameter on a given placement. Backs `colwise_block_scales` and `rowwise_block_scales`, for block scales shipped as `[N / block, 1, K / block, 1]` (e.g. by ModelOpt) of a column-wise or row-wise linear. |
 | `MoEParamShard` | Shards MoE expert weights on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` also rewrites `module.num_experts` to the per-rank expert count. |
 | `EpRouterParallel` | Masks router scores for non-local experts and remaps global expert IDs to local ones, so each rank runs only the experts it owns. Requires `num_experts` to be divisible by the mesh size. |
 | `RouterParallelMegaMoe` | Router variant for DeepGEMM Mega MoE, which dispatches experts inside the kernel which wants the router output untouched. |

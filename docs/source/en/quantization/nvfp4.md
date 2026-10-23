@@ -50,10 +50,10 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 A `MIXED_PRECISION` export may quantize some layers to FP8, block FP8 or MXFP8, for example its attention. Those layers
-load dequantized to the model dtype, and a warning says so.
+load as they ship and run on the same kernels, with their activations quantized per token.
 
 An MXFP8 checkpoint with `"moe_quant_algo": "NVFP4"` also loads with NVFP4. Its experts load in NVFP4, in the
-`nvfp4-pack-quantized` format. Its other MXFP8 layers load dequantized.
+`nvfp4-pack-quantized` format, and its other layers in MXFP8.
 
 ## Quantize while loading
 
