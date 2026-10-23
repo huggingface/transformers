@@ -27,7 +27,7 @@ from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode, LogitsProcessorList
 from ...generation.utils import GenerateDecoderOnlyOutput
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -820,6 +820,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     output_modalities = ("image", "text")
     _can_compile_fullgraph = True
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)
@@ -863,9 +864,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

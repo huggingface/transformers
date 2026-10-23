@@ -42,7 +42,7 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -511,7 +511,12 @@ class JambaMambaMixer(nn.Module):
     ):
         seq_len = hidden_states.shape[1]
         dtype = hidden_states.dtype
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        if cache_params is not None:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -523,12 +528,8 @@ class JambaMambaMixer(nn.Module):
 
         hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
-
         # 2. Convolution sequence transformation
-        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,
@@ -577,7 +578,7 @@ class JambaMambaMixer(nn.Module):
         time_proj_bias = self.dt_proj.bias.float() if self.dt_proj.bias is not None else None
 
         # Recurrent form
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             scan_output = mamba_selective_state_update(
                 recurrent_state,
                 hidden_states_B_C.transpose(1, 2)[..., 0],
@@ -676,6 +677,24 @@ class JambaExperts(nn.Module):
         return final_hidden_states
 
 
+class JambaTopKRouter(nn.Module):
+    """Top-k of the softmax over the router logits, the selected weights left unnormalized. Returns
+    `(router_logits, top_k_weights, top_k_index)`."""
+
+    def __init__(self, config: JambaConfig):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        router_logits = F.linear(hidden_states, self.weight)  # (num_tokens, num_experts)
+        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1, dtype=torch.float)
+        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
+        return router_logits, top_k_weights.to(hidden_states.dtype), top_k_index
+
+
 class JambaSparseMoeBlock(nn.Module):
     """
     This implementation is
@@ -695,19 +714,13 @@ class JambaSparseMoeBlock(nn.Module):
         self.num_experts = config.num_experts
         self.top_k = config.num_experts_per_tok
 
-        self.router = nn.Linear(self.hidden_dim, self.num_experts, bias=False)
+        self.router = JambaTopKRouter(config)
         self.experts = JambaExperts(config)
-
-    def route_tokens_to_experts(self, hidden_states, router_logits):
-        routing_weights = torch.nn.functional.softmax(router_logits, dim=-1, dtype=torch.float)
-        top_k_weights, top_k_index = torch.topk(routing_weights, self.top_k, dim=-1)
-        return top_k_index, top_k_weights.to(hidden_states.dtype)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
-        router_logits = self.router(hidden_states)
-        top_k_index, top_k_weights = self.route_tokens_to_experts(hidden_states, router_logits)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
@@ -797,7 +810,7 @@ class JambaPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": [JambaAttentionDecoderLayer, JambaMambaDecoderLayer],
         "attentions": JambaAttention,
-        "router_logits": OutputRecorder(nn.Linear, layer_name="router"),
+        "router_logits": OutputRecorder(JambaTopKRouter, index=0),
     }
 
     @torch.no_grad()
@@ -811,6 +824,8 @@ class JambaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, JambaExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, JambaTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 ALL_DECODER_LAYER_TYPES = {"attention": JambaAttentionDecoderLayer, "mamba": JambaMambaDecoderLayer}
@@ -1034,9 +1049,8 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

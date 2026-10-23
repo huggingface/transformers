@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..cohere2.configuration_cohere2 import Cohere2Config
@@ -180,7 +180,7 @@ class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
                 continue
 
             self.rope_type[layer_type] = rope_params["rope_type"]
-            self.mrope_section[layer_type] = rope_params.get("mrope_section", [22, 22, 20])
+            self.mrope_section[layer_type] = rope_params.get("mrope_section", [24, 20, 20])
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
@@ -212,18 +212,7 @@ class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
 
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-
-        # Special to cohere-compass, we prerotate on the hw dim
-        mrope_section = config.rope_parameters[layer_type].get("mrope_section", [22, 22, 20])
-        hw_dim = mrope_section[0] + mrope_section[1]
-        t_dim = mrope_section[2]
-
-        inv_freq_3d = torch.empty_like(inv_freq)
-        # (Pre-)Rotate to avoid another rotation during the forward
-        inv_freq_3d[:hw_dim] = torch.cat([inv_freq[:-t_dim][0::2], inv_freq[:-t_dim][1::2]])
-        inv_freq_3d[-t_dim:] = inv_freq[-t_dim:]
-
-        return inv_freq_3d.to(device), attention_factor
+        return inv_freq.to(device), attention_factor
 
     def forward(self, x, position_ids, layer_type=None):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
@@ -244,12 +233,13 @@ class CohereCompassRotaryEmbedding(Gemma3RotaryEmbedding):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_h, freq_w, freq_t = (
-            m[(i + 1) % 3] for i, m in enumerate(freq.split([*self.mrope_section[layer_type]], dim=-1))
-        )
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        freq_hwt = torch.cat([freq_hw, freq_t], dim=-1)
-        return torch.cat([freq_hwt, freq_hwt], dim=-1)
+        mrope_section = self.mrope_section[layer_type]
+        freqs_thw = freq[0]  # just overwrite the first dimension T
+        for dim, offset in enumerate((1, 2), start=1):  # H, W
+            length = mrope_section[dim] * 3
+            idx = slice(offset, length, 3)
+            freqs_thw[..., idx] = freq[dim, ..., idx]
+        return torch.cat((freqs_thw, freqs_thw), dim=-1)
 
 
 class CohereCompassMLP(Cohere2MLP):
@@ -554,8 +544,8 @@ class CohereCompassForConditionalGeneration(Qwen3VLForConditionalGeneration, Coh
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if self.logit_scale is not None:
             logits = logits * self.logit_scale
 

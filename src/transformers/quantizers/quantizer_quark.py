@@ -70,9 +70,6 @@ class QuarkHfQuantizer(HfQuantizer):
 
         return model
 
-    def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        return True
-
     def is_serializable(self):
         return False
 
@@ -81,24 +78,7 @@ class QuarkHfQuantizer(HfQuantizer):
         return False
 
     def get_weight_conversions(self):
-        from ..core_model_loading import WeightConverter
-        from ..integrations.quark import QuarkDeserialize
+        from ..core_model_loading import WeightRenaming
 
-        # In Quark, quantization is managed through a QParamsLinear module, which holds
-        # separate quantizers for the weights, inputs, and biases (e.g. weight_quantizer
-        # input_quantizer, bias_quantizer, etc.).
-        #
-        # The checkpoint stores keys like `weight_scale`, `input_scale`, etc.
-        # but the model's state_dict() exposes `weight_quantizer.scale`, `input_quantizer.scale`, etc.
-        # We rename from checkpoint format to model format, and the QuarkDeserialize operation
-        # handles assigning values into the corresponding quantizer attributes.
-        converters = []
-        for source_key, target_key in CHECKPOINT_KEYS.items():
-            converters.append(
-                WeightConverter(
-                    source_patterns=[source_key],
-                    target_patterns=target_key,
-                    operations=[QuarkDeserialize(self)],
-                )
-            )
-        return converters
+        # The checkpoint stores `weight_scale`, ... while `QParamsLinear` holds them in its quantizers (`weight_quantizer.scale`)
+        return [WeightRenaming(source, target) for source, target in CHECKPOINT_KEYS.items()]
