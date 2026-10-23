@@ -317,7 +317,8 @@ def build_normalizer(
 def convert_tokenizer(checkpoint: dict, output_dir: Path):
     repo_id, filename, revision = checkpoint["tokenizer"]
     tokenizer = Tokenizer.from_file(hf_hub_download(repo_id, filename, revision=revision))
-    # the text preparation, then the original's normalizer (the word-start marker)
+    # the text preparation, then the original's normalizer (the word-start marker): the last step, which the processor
+    # keeps alone for training transcripts, as the original's training tokenizes them as they are
     letters = "".join(sorted(c for c in {c for piece in tokenizer.get_vocab() for c in piece} if c.upper() != c))
     tokenizer.normalizer = normalizers.Sequence(
         [*build_normalizer(letters, **checkpoint["text"]), tokenizer.normalizer]
