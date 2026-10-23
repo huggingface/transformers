@@ -47,6 +47,7 @@ if is_torch_available():
     )
     from transformers.distributed.fsdp import verify_fsdp_plan
     from transformers.integrations import FP8Embedding
+    from transformers.models.qwen4_exp.modeling_qwen4_exp import Qwen4ExpTextQSAIndexer
     from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
 
@@ -235,6 +236,31 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 
         for actual in outputs:
             torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-5)
+
+    def test_qsa_indexer_selects_every_visible_key_below_the_budget(self):
+        # A query seeing fewer than `indexer_budget + indexer_compress_ratio` keys has at most `block_topk` complete
+        # blocks, so it keeps them all and the indexer may return the visible keys without scoring them
+        torch.manual_seed(0)
+        config = self.model_tester.get_config()
+        model = Qwen4ExpTextModel(config).to(torch_device).eval()
+        indexer = next(module for module in model.modules() if isinstance(module, Qwen4ExpTextQSAIndexer))
+        captured = []
+        indexer.register_forward_pre_hook(lambda module, args: captured.append(args))
+        bound = config.indexer_budget + config.indexer_compress_ratio
+        for seq_length in (bound - 1, bound + 4):
+            captured.clear()
+            input_ids = torch.randint(0, config.vocab_size, (2, seq_length), device=torch_device)
+            with torch.no_grad():
+                model(input_ids, use_cache=False)
+                hidden_states, position_embeddings, attention_mask, _ = captured[0]
+                selected = indexer(hidden_states, position_embeddings, attention_mask, None)
+                q, raw_keys = indexer.project(hidden_states, position_embeddings)
+                visible = attention_mask if attention_mask.dtype == torch.bool else attention_mask == 0
+                scored = indexer.select_token_mask(q, raw_keys, visible, position_embeddings)
+            if selected.is_floating_point():
+                selected = selected == 0
+            self.assertTrue(torch.equal(selected, scored))
+            self.assertEqual(torch.equal(scored, visible), seq_length < bound)
 
     def test_all_layer_types_cached_forward_match_full_forward(self):
         torch.manual_seed(0)
