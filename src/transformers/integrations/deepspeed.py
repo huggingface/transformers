@@ -292,10 +292,6 @@ def deepspeed_config():
         return None
 
 
-def is_deepspeed_available():
-    return _hf_deepspeed_config_weak_ref is not None
-
-
 def initialize_weights_zero3(model):
     """
     DeepSpeed ZeRO-3 variant of `PreTrainedModel.initialize_weights`. Mirrors the `smart_apply`
@@ -748,4 +744,3 @@ def deepspeed_sp_compute_loss(accelerator, model, inputs, return_outputs, pc):
     loss = total_loss / total_good_tokens.clamp(min=1)
 
     return (loss, outputs) if return_outputs else loss
-
