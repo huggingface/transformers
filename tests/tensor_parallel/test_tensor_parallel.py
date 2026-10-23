@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
@@ -384,6 +385,26 @@ class TestTensorParallelLayer(TestCasePlus):
         """The all-to-all's pending result (`AsyncCollectiveTensor`) holds a null pointer until a torch op waits on
         it, and experts that launch kernels on raw pointers would read it: the dispatch waits before any experts run."""
         _init_distributed(tp=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
+
+    def test_a_module_declares_its_forward_runs_on_local_tensors(self):
+        """Check that the linear and embedding styles read `_hf_quantized_needs_local_tp`, in grad mode too."""
+        styles = (ColwiseParallel(), RowwiseParallel(), ALL_PARALLEL_STYLES["embedding_rowwise"])
+        for marked in (True, False):
+            module = torch.nn.Embedding(4, 4)
+            module._hf_quantized_needs_local_tp = marked
+            for style in styles:
+                with self.subTest(marked=marked, style=type(style).__name__), torch.enable_grad():
+                    self.assertIs(style.should_use_local_tensors(module), marked)
+
+    def test_a_quantizer_replicates_the_scalars_its_plan_covers(self):
+        from transformers.quantizers.base import HfQuantizer
+
+        model = torch.nn.Module()
+        model.q_proj = torch.nn.Linear(4, 4)
+        model.q_proj.scale = torch.nn.Parameter(torch.tensor(1.0))
+        plan = {"q_proj": "colwise"}
+        HfQuantizer.update_parallel_plan(SimpleNamespace(serialized_names={}), model, plan)
+        self.assertEqual(plan, {"q_proj": "colwise", "q_proj.scale": "replicate"})
 
 
 class _DummyExperts(torch.nn.Module):

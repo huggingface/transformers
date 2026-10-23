@@ -515,6 +515,9 @@ class ExpertsInterface(GeneralInterface):
         "sonicmoe": sonicmoe_experts_forward,
     }
 
+    # Their weights take a layout the others cannot read, so they are chosen at load time only.
+    _load_time_only: set[str] = {"deepgemm_megamoe"}
+
     def get_interface(self, experts_implementation: str, default: Callable) -> Callable:
         """Return the requested `experts_implementation`. Also strictly check its validity, and raise if invalid."""
         if experts_implementation is None:
@@ -559,6 +562,9 @@ def use_experts_implementation(
 ) -> type[torch.nn.Module]:
     """Decorator to modify experts class to support different experts implementations.
 
+    The layout flags become class attributes. A flag set by the class body or the instance wins over the decorator.
+    This lets one wrapper class, e.g. `FineGrainedExperts` (#49776), set the flags per instance.
+
     Args:
         experts_class (`type[torch.nn.Module]`, *optional*):
             The experts class to modify. If not provided, returns a decorator that can be applied to the class.
@@ -581,19 +587,26 @@ def use_experts_implementation(
         `type[torch.nn.Module]`: The modified experts class.
     """
 
+    flags = {
+        "has_gate": has_gate,
+        "has_bias": has_bias,
+        "has_post_expert_norm": has_post_expert_norm,
+        "is_transposed": is_transposed,
+        "is_concatenated": is_concatenated,
+    }
+
     def wrapper(experts_class: type[torch.nn.Module]) -> type[torch.nn.Module]:
         original_init = experts_class.__init__
         original_forward = experts_class.forward
+
+        for name, value in flags.items():
+            if name not in vars(experts_class):
+                setattr(experts_class, name, value)
 
         @wraps(original_init)
         def __init__(self, config, *args, **kwargs):
             original_init(self, config, *args, **kwargs)
             self.config = config
-            self.has_gate = has_gate
-            self.has_bias = has_bias
-            self.has_post_expert_norm = has_post_expert_norm
-            self.is_transposed = is_transposed
-            self.is_concatenated = is_concatenated
             self._is_expert_parallel = False
 
         @wraps(original_forward)
