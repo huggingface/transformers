@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -140,8 +140,8 @@ class Aimv2Config(PreTrainedConfig):
 
     model_type = "aimv2"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Aimv2VisionConfig),
-        "text_config": SubConfigSpec(config_class=Aimv2TextConfig),
+        "vision_config": Aimv2VisionConfig,
+        "text_config": Aimv2TextConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None
