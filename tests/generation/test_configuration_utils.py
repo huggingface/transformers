@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import json
 import logging
 import os
 import tempfile
@@ -387,6 +388,51 @@ class GenerationConfigTest(unittest.TestCase):
             self.assertEqual(len(captured_warnings), 0)
             self.assertEqual(len(captured_logs.out), 0)
             self.assertEqual(len(os.listdir(tmp_dir)), 1)
+
+    def test_save_loaded_config_with_issues(self):
+        """Tests that issues that come unchanged from a loaded file don't prevent saving, but new ones still do."""
+        with tempfile.TemporaryDirectory() as load_dir:
+            # A Hub file may set `top_p` without `do_sample=True`, which `save_pretrained` would normally refuse
+            with open(os.path.join(load_dir, "generation_config.json"), "w", encoding="utf-8") as f:
+                json.dump({"top_p": 0.95}, f)
+
+            # Untouched, or with unrelated edits -> saved
+            config = GenerationConfig.from_pretrained(load_dir)
+            config.max_new_tokens = 10
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                config.save_pretrained(tmp_dir)
+                self.assertEqual(GenerationConfig.from_pretrained(tmp_dir).top_p, 0.95)
+
+            # The loaded issue is edited -> refused
+            config = GenerationConfig.from_pretrained(load_dir)
+            config.top_p = 0.9
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                with self.assertRaises(ValueError) as exc:
+                    config.save_pretrained(tmp_dir)
+                self.assertTrue("`top_p` is set to `0.9`" in str(exc.exception))
+                self.assertEqual(len(os.listdir(tmp_dir)), 0)
+
+            # A new issue is added -> refused
+            config = GenerationConfig.from_pretrained(load_dir)
+            config.temperature = 0.5
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                with self.assertRaises(ValueError) as exc:
+                    config.save_pretrained(tmp_dir)
+                self.assertTrue("`temperature` is set to `0.5`" in str(exc.exception))
+                self.assertFalse("`top_p`" in str(exc.exception))
+                self.assertEqual(len(os.listdir(tmp_dir)), 0)
+
+    def test_save_load_subclass_with_own_validate(self):
+        """Tests that subclasses replacing `validate` are checked with it on save and load, not with the base checks."""
+
+        class OwnValidateGenerationConfig(GenerationConfig):
+            def validate(self, **kwargs):
+                pass
+
+        config = OwnValidateGenerationConfig(temperature=0.5)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            self.assertEqual(OwnValidateGenerationConfig.from_pretrained(tmp_dir).temperature, 0.5)
 
     def test_generation_mode(self):
         """Tests that the `get_generation_mode` method is working as expected."""
