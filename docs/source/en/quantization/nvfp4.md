@@ -83,8 +83,7 @@ Pick the experts' kernels with `experts_implementation`: `"grouped_mm"` or `"bat
 
 - With `ep_size` equal to `tp_size`, each rank holds whole experts, with masked expert parallelism. Each rank runs its own
   experts on every token, so there is no all-to-all dispatch.
-- With `tp_size` alone, each rank holds a slice of every expert. These slices keep their scales row-major, so they don't
-  get the Blackwell swizzle. Prefer expert parallelism for MoE models.
+- With `tp_size` alone, each rank holds a slice of every expert.
 
 ```py
 from transformers.distributed import DistributedConfig

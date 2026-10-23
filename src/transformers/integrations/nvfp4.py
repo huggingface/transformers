@@ -65,10 +65,21 @@ def _parameter(tensor: torch.Tensor) -> nn.Parameter:
     return nn.Parameter(tensor, requires_grad=False)
 
 
-def _tiles_swizzled(rows: int, scale_cols: int) -> bool:
-    """Check whether the kernels read a `(rows, scale_cols)` scale grid swizzled: whole 128-row blocks, two bands."""
-    sm100 = torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 10
-    return sm100 and rows % 128 == 0 and scale_cols % 4 == 0 and scale_cols >= 8
+def _is_blackwell() -> bool:
+    return torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 10
+
+
+def _fits_swizzled_layout(rows: int, scale_cols: int) -> bool:
+    """Check whether `(rows, scale_cols)` scales can be swizzled. Only Blackwell GPUs read that layout.
+
+    A weight has one scale per 16 values, so its scales form a `(rows, cols / 16)` table. The layout cuts that table
+    into blocks of 128 rows by 4 columns. So the rows must be a multiple of 128 and the columns a multiple of 4. The
+    kernels also read at least two blocks across, so the scales need 8 columns or more.
+
+    The scales of a whole weight usually fit. Tensor parallelism gives each rank a smaller piece, which may not fit.
+    So the check runs on each rank's piece.
+    """
+    return _is_blackwell() and rows % 128 == 0 and scale_cols % 4 == 0 and scale_cols >= 8
 
 
 @functools.cache
@@ -114,6 +125,13 @@ class NVFP4Linear(nn.Module):
         self.input_global_scale = None if weight_only else _parameter(torch.ones((), dtype=torch.float32))
         self.bias = _parameter(torch.empty(out_features)) if bias else None
 
+    def swizzles_scales(self, slot: str, rows: int, scale_cols: int) -> bool:
+        """Return whether scales of this shape should be swizzled. A linear only needs its own scales to fit.
+
+        Under tensor parallelism, the shape is this rank's piece of the scales.
+        """
+        return self.activation_format != "bf16" and _fits_swizzled_layout(rows, scale_cols)
+
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         # under tensor parallelism the shapes come from the shards
         output = load_finegrained_kernels().matmul_2d(
@@ -135,8 +153,8 @@ class NVFP4Linear(nn.Module):
 class NVFP4Experts(nn.Module):
     """MoE experts with NVFP4 weights and one weight and input global per expert.
 
-    gate|up rows are interleaved, so the kernels fuse the gated activation. Scales are swizzled on SM100, the expert
-    axis first, so expert parallelism shards them by expert.
+    gate|up rows are interleaved, so the kernels fuse the gated activation. On Blackwell GPUs the scales may be
+    swizzled, see `swizzles_scales`.
     """
 
     def __init__(
@@ -166,12 +184,22 @@ class NVFP4Experts(nn.Module):
         self.post_expert_norm = post_expert_norm
         self.gate_up_name = "gate_up_proj" if has_gate else "up_proj"
         up_rows = (2 if has_gate else 1) * self.intermediate_dim
-        projections = ((up_rows, self.hidden_dim), (self.hidden_dim, self.intermediate_dim))
-        # Whether the scales load swizzled. The weight-only arm reads row-major scales, and the fused kernels read both
-        # grids in one layout. Expert parallelism only splits the expert axis, so it doesn't change this.
-        self.swizzled_scales = not weight_only and all(_tiles_swizzled(r, c // GROUP_SIZE) for r, c in projections)
         self._register_projection(self.gate_up_name, up_rows, self.hidden_dim, pre_quantized, weight_only)
         self._register_projection("down_proj", self.hidden_dim, self.intermediate_dim, pre_quantized, weight_only)
+
+    def swizzles_scales(self, slot: str, rows: int, scale_cols: int) -> bool:
+        """Return whether scales of this shape should be swizzled.
+
+        Down only needs its own scales to fit. A swizzled gate_up writes the activations for down in the swizzled
+        layout, which only a swizzled down reads. So gate_up also needs the down scales to fit, and its rows give the
+        size down has on this rank. Under tensor parallelism, the shape is this rank's piece of the scales.
+        """
+        if self.activation_format == "bf16" or not _fits_swizzled_layout(rows, scale_cols):
+            return False
+        if slot == "down_proj_scale_inv":
+            return True
+        intermediate = rows // (2 if self.has_gate else 1)
+        return _fits_swizzled_layout(self.hidden_dim, intermediate // GROUP_SIZE)
 
     def _register_projection(self, proj: str, rows: int, cols: int, pre_quantized: bool, weight_only: bool):
         scale_shape = (self.num_experts, rows, cols // GROUP_SIZE)
@@ -372,7 +400,7 @@ def update_nvfp4_parallel_plan(model: nn.Module, plan: dict[str, str]):
                 for slot in ("_scale_inv", "_weight_global_scale", "_input_global_scale"):
                     plan[f"{glob}.{proj}{slot}"] = "grouped_gemm"
         elif styles:
-            # intra-expert TP gives each rank a slice of every expert's matrices, and of its scale grid alike
+            # intra-expert TP gives each rank a slice of every expert's weights, and of their scales alike
             # the globals are one float per expert, so no plan entry
             for proj in (module.gate_up_name, "down_proj"):
                 if (style := plan.get(f"{glob}.{proj}")) is not None:
@@ -464,17 +492,16 @@ class NVFP4InterleaveGateUp(_NVFP4Op):
 
 
 class NVFP4SwizzleScales(_NVFP4Op):
-    """Swizzle a scale grid into the 5-D `SWIZZLE_32_4_4` layout SM100's scaled MMA reads, when it tiles.
+    """Swizzle scales into the 5-D layout Blackwell GPUs read, when their module says so.
 
-    The kernels read the layout from the shape. Under tensor or expert parallelism the op swizzles the local shard. The
-    reverse unswizzles any 5-D grid back to row-major.
+    Under tensor or expert parallelism, the op works on this rank's piece. The kernels read the layout from the shape.
+    The reverse turns any 5-D scales back into plain ones.
     """
 
     def convert(self, input_dict, model=None, full_layer_name=None, **kwargs):
         module_name, _, slot = full_layer_name.rpartition(".")
         module = model.get_submodule(module_name)
         dense = isinstance(module, NVFP4Linear)
-        declared = getattr(module, slot)
         kernel = load_finegrained_kernels()
         out = {}
         for key, value in input_dict.items():
@@ -483,11 +510,15 @@ class NVFP4SwizzleScales(_NVFP4Op):
                 matrices, row_blocks, column_groups = value.shape[:3]
                 plain = kernel.unswizzle_mx_scales(value, row_blocks * 128, column_groups * 4, num_experts=matrices)
                 value = plain[0] if dense else plain
-            elif not self.inverse and dense and module.activation_format != "bf16" and _tiles_swizzled(*value.shape):
-                value = kernel.swizzle_mx_scales(value.unsqueeze(0))
-            elif not self.inverse and not dense and module.swizzled_scales and value.shape[1:] == declared.shape[1:]:
-                # intra-expert TP splits both grids, which then stay row-major together
-                value = kernel.swizzle_mx_scales(value)
+            elif not self.inverse and module.swizzles_scales(slot, *value.shape[-2:]):
+                # the kernels swizzle a stack of scales, so a linear's scales are a stack of one
+                value = kernel.swizzle_mx_scales(value.unsqueeze(0) if dense else value)
+            elif not self.inverse and module.activation_format != "bf16" and _is_blackwell():
+                logger.warning_once(
+                    "Some NVFP4 scales don't fit the swizzled layout Blackwell GPUs read fastest, so those layers run "
+                    "slower. Tensor parallelism makes this more likely, since each GPU holds a smaller piece of each "
+                    "weight's scales. A smaller `tp_size`, or expert parallelism for MoE experts, can avoid it."
+                )
             out[key] = value
         return out
 

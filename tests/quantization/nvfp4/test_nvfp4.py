@@ -36,6 +36,7 @@ if is_torch_available():
         NVFP4ExpertGlobals,
         NVFP4Experts,
         NVFP4Linear,
+        NVFP4SwizzleScales,
         replace_with_nvfp4,
         update_nvfp4_parallel_plan,
     )
@@ -320,7 +321,7 @@ class NVFP4ModulesTest(unittest.TestCase):
         self.assertEqual(plan["model.layers.*.mlp.experts"], "moe_tp_experts")
         self.assertEqual(plan["model.layers.*.mlp.gate"], "ep_router")
         self.assertEqual(plan["model.layers.*.mlp.experts.down_proj_weight_global_scale"], "grouped_gemm")
-        # tensor parallelism alone splits each scale grid like its weight
+        # tensor parallelism alone splits each weight's scales like the weight
         plan = {
             "model.layers.*.mlp.experts": "moe_tp_experts",
             "model.layers.*.mlp.experts.gate_up_proj": "packed_colwise",
@@ -331,6 +332,29 @@ class NVFP4ModulesTest(unittest.TestCase):
         self.assertEqual(plan["model.layers.*.mlp.experts.gate_up_proj_scale_inv"], "packed_colwise")
         self.assertEqual(plan["model.layers.*.mlp.experts.down_proj_scale_inv"], "rowwise")
         self.assertNotIn("model.layers.*.mlp.experts.down_proj_weight_global_scale", plan)
+
+    def test_experts_swizzle_gate_up_only_if_down_swizzles(self):
+        # a swizzled gate_up writes swizzled activations for down, which only a swizzled down reads
+        config = _mixtral_config(hidden_size=256, intermediate_size=512)
+        sm100 = (
+            unittest.mock.patch("torch.cuda.is_available", return_value=True),
+            unittest.mock.patch("torch.cuda.get_device_capability", return_value=(10, 0)),
+        )
+        with torch.device("meta"), sm100[0], sm100[1]:
+            experts = NVFP4Experts(config, pre_quantized=True)
+            # tensor parallelism shrinks the intermediate size on each rank
+            for split, swizzled in ((1, True), (2, True), (8, False)):
+                intermediate = 512 // split
+                with self.subTest(split=split):
+                    self.assertEqual(experts.swizzles_scales("gate_up_proj_scale_inv", 2 * intermediate, 16), swizzled)
+                    self.assertEqual(experts.swizzles_scales("down_proj_scale_inv", 256, intermediate // 16), swizzled)
+            # without a gate, 192 up rows don't fit, but down still swizzles on its own
+            experts = NVFP4Experts(_mixtral_config(hidden_size=256, intermediate_size=192), has_gate=False)
+            self.assertFalse(experts.swizzles_scales("up_proj_scale_inv", 192, 16))
+            self.assertTrue(experts.swizzles_scales("down_proj_scale_inv", 256, 12))
+            # weight-only experts never swizzle
+            experts = NVFP4Experts(config, pre_quantized=True, weight_only=True)
+            self.assertFalse(experts.swizzles_scales("gate_up_proj_scale_inv", 1024, 16))
 
 
 @require_torch
@@ -369,6 +393,25 @@ class NVFP4LoadingOpsTest(unittest.TestCase):
         ids = torch.randint(0, 512, (2, 12))
         with torch.no_grad():
             self.assertGreater(_cosine(model(ids).logits, reference(ids).logits), 0.999)
+
+    def test_scales_that_cannot_be_swizzled_warn_on_blackwell(self):
+        model = torch.nn.Module()
+        with torch.device("meta"):
+            model.linear = NVFP4Linear(64, 64, pre_quantized=True)
+        # 4 scale columns are fewer than the 8 the swizzled layout needs
+        scales = torch.zeros(64, 4, dtype=torch.float8_e4m3fn)
+        logging.warning_once.cache_clear()
+        with (
+            unittest.mock.patch("torch.cuda.is_available", return_value=True),
+            unittest.mock.patch("torch.cuda.get_device_capability", return_value=(10, 0)),
+            unittest.mock.patch("transformers.integrations.nvfp4.load_finegrained_kernels"),
+            self.assertLogs("transformers", level="WARNING") as logs,
+        ):
+            out = NVFP4SwizzleScales(None).convert(
+                {"linear.weight_scale_inv": scales}, model=model, full_layer_name="linear.weight_scale_inv"
+            )
+        self.assertIs(out["linear.weight_scale_inv"], scales)
+        self.assertIn("swizzled layout", logs.output[0])
 
 
 def _requires_fp8_triton(test):

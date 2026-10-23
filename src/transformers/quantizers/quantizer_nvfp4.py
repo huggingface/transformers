@@ -159,7 +159,10 @@ class NVFP4HfQuantizer(HfQuantizer):
         # Save the modules' own names, which load as they are. A save cannot reverse the ModelOpt renames, as on save
         # the renames run before the converters.
         shipped = {tuple(rename._original_source_patterns) for rename in checkpoint_renames()}
-        model._weight_conversions = [c for c in conversions if tuple(c._original_source_patterns) not in shipped]
+        # a plain attribute, not the tensor or module `nn.Module.__setattr__` is typed for
+        setattr(
+            model, "_weight_conversions", [c for c in conversions if tuple(c._original_source_patterns) not in shipped]
+        )
         return model
 
     def get_quantize_ops(self):
