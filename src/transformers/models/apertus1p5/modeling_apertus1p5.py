@@ -322,8 +322,7 @@ class Apertus1p5VisionTokenizerModel(Apertus1p5VisionTokenizerPreTrainedModel):
         Returns:
             `Apertus1p5VisionTokenizerEncoderOutput`: Discrete image-code grids in `image_tokens`.
         """
-        # Apertus keeps the tokenizer in fp32 (see Apertus1p5Model); cast the input to the encoder's dtype so
-        # callers can pass fp16/bf16 pixel values
+        # match the encoder dtype (fp32 inside Apertus 1.5, the requested dtype when used standalone)
         pixel_values = pixel_values.to(self.encoder.conv_in.weight.dtype)
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
@@ -788,8 +787,8 @@ class Apertus1p5TextForCausalLM(Apertus1p5TextPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class Apertus1p5Model(Apertus1p5PreTrainedModel):
-    # code assignment is an argmax over codebook logits: half precision flips ~10% of image codes (bf16, 131k codebook),
-    # so both tokenizers are kept in fp32 even when the model is loaded in fp16/bf16
+    # code assignment is an argmax over codebook logits: half precision flips ~10% of image codes (bf16, 131k
+    # codebook), so both tokenizers are kept in fp32 even when the model is loaded in fp16/bf16
     _keep_in_fp32_modules_strict = ["vision_tokenizer", "audio_tokenizer"]
 
     def __init__(self, config: Apertus1p5Config):
@@ -1014,7 +1013,7 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
             if audio_features is not None:
                 inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
 
-        outputs = self.language_model(
+        return self.language_model(
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
@@ -1022,8 +1021,6 @@ class Apertus1p5Model(Apertus1p5PreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-
-        return outputs
 
 
 @auto_docstring
@@ -1036,9 +1033,9 @@ class Apertus1p5ForConditionalGeneration(Apertus1p5PreTrainedModel, GenerationMi
         super().__init__(config)
         self.model = Apertus1p5Model(config)
         # the LM head may be pruned to the text-only prefix of the vocabulary (see Apertus1p5TextConfig)
-        output_vocab_size = getattr(config.text_config, "output_vocab_size", None)
+        text_config = config.text_config
         self.lm_head = nn.Linear(
-            config.text_config.hidden_size, output_vocab_size or config.text_config.vocab_size, bias=False
+            text_config.hidden_size, text_config.output_vocab_size or text_config.vocab_size, bias=False
         )
 
         self.post_init()
