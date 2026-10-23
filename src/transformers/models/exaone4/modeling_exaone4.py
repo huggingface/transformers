@@ -331,7 +331,6 @@ class Exaone4PreTrainedModel(PreTrainedModel):
         "hidden_states": Exaone4DecoderLayer,
         "attentions": Exaone4Attention,
     }
-    config: Exaone4Config
 
 
 @auto_docstring

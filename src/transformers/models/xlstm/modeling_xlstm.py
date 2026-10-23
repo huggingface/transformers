@@ -737,8 +737,6 @@ else:
         This module wraps the xLSTM kernels and provides a high-level interface for training and inference.
         """
 
-        config_class = xLSTMConfig
-
         def __init__(self, config: xLSTMConfig):
             super().__init__()
             self.config = config

@@ -617,7 +617,6 @@ class Cosmos3EdgePreTrainedModel(PreTrainedModel):
     # Packed, variable-length visual inputs use Python-level per-grid reshaping and cannot be compiled fullgraph.
     _can_compile_fullgraph = False
     _supports_attention_backend = True
-    config: Cosmos3EdgeConfig
     _can_record_outputs = {
         "hidden_states": [Cosmos3EdgeTextDecoderLayer, Cosmos3EdgeVisionEncoderLayer],
         "attentions": Cosmos3EdgeTextAttention,

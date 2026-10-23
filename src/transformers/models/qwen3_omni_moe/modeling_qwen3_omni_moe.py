@@ -1576,7 +1576,6 @@ class Qwen3OmniMoeThinkerTextPreTrainedModel(PreTrainedModel):
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
     }
-    config: Qwen3OmniMoeTextConfig
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1619,7 +1618,6 @@ class Qwen3OmniMoeTextRMSNorm(nn.Module):
 class Qwen3OmniMoeThinkerTextModel(Qwen3OmniMoePreTrainedModel):
     config: Qwen3OmniMoeTextConfig
     input_modalities = ("text",)
-    config: Qwen3OmniMoeTextConfig
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
@@ -2969,9 +2967,8 @@ class Qwen3OmniMoeTalkerDecoderLayer(GradientCheckpointingLayer):
     )
 )
 class Qwen3OmniMoeTalkerModel(Qwen3OmniMoePreTrainedModel):
-    config: Qwen3OmniMoeTextConfig
-    input_modalities = ("audio",)
     config: Qwen3OmniMoeTalkerTextConfig
+    input_modalities = ("audio",)
     base_model_prefix = "talker.model"
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeTalkerDecoderLayer,
