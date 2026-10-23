@@ -93,8 +93,8 @@ class WavTokenizerFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
         self.assertEqual(int(processed.padding_mask.sum()), hop + 3)
 
     def test_batch_padded_to_longest(self):
-        """Batches pad to the longest sample by default, or truncate to `max_length` first, with `padding_mask`
-        marking the valid samples and `input_values` shaped `(batch_size, 1, num_samples)`."""
+        """Batches pad to the longest sample by default, to `max_length` on request, or truncate to `max_length`
+        first, with `padding_mask` marking the valid samples and `input_values` of shape `(batch, 1, num_samples)`."""
         feat_extract = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         lengths = [1200, 800, 1234]
         batch = [np.arange(length, dtype=np.float32) for length in lengths]
@@ -104,6 +104,12 @@ class WavTokenizerFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
         self.assertEqual(processed.padding_mask.sum(-1).tolist(), lengths)
         np.testing.assert_array_equal(processed.input_values[1, 0, : lengths[1]], batch[1])
         np.testing.assert_array_equal(processed.input_values[1, 0, lengths[1] :], 0.0)
+
+        processed = feat_extract(
+            batch, padding="max_length", max_length=1500, sampling_rate=feat_extract.sampling_rate, return_tensors="np"
+        )
+        self.assertEqual(processed.input_values.shape, (len(batch), 1, 1500))
+        self.assertEqual(processed.padding_mask.sum(-1).tolist(), lengths)
 
         max_length = 1000
         processed = feat_extract(
