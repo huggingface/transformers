@@ -402,7 +402,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def setUp(self):
         self.model_tester = WhisperModelTester(self)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
-        self.maxDiff = 3000
 
     def prepare_config_and_inputs_for_generate(self, batch_size=2):
         config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
@@ -3203,7 +3202,6 @@ class WhisperEncoderModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = WhisperEncoderModelTester(self)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
-        self.maxDiff = 3000
 
     def test_config(self):
         self.config_tester.run_common_tests()
