@@ -96,8 +96,10 @@ def build_audio_mae_2d_sinusoidal_position_embedding(grid_size: tuple[int, int],
     """2D sinusoidal position embeddings for a `(time, frequency)` patch grid, laid out as in the original Audio-MAE.
 
     The original implementation differs from the library helper in two ways. It builds the table for the transposed
-    grid, and it keeps ViT-MAE's `[sin_w|cos_w|sin_h|cos_h]` layout. The pretrained weights expect that table, so
-    this function swaps the grid and rotates the two halves to reproduce it.
+    grid, and it keeps ViT-MAE's `[sin_w|cos_w|sin_h|cos_h]` layout. The transposed grid is a bug in the original
+    implementation (its `patch_hw` is `(8, 64)` while the patches are flattened time-major) that the released weights
+    were trained with. The pretrained weights expect that table, so this function swaps the grid and rotates the two
+    halves to reproduce it.
 
     Returns:
         Tensor of shape ``(1, num_patches + 1, embed_dim)``, with a zero row for the `[CLS]` token.

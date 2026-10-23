@@ -13,6 +13,13 @@ from ..vit_mae.modeling_vit_mae import ViTMAEEmbeddings, build_2d_sinusoidal_pos
 @strict
 class AudioMAEConfig(ViTMAEConfig):
     r"""
+    decoder_num_hidden_layers (`int`, *optional*, defaults to 16):
+        Number of hidden layers in the decoder.
+    mask_ratio (`float`, *optional*, defaults to 0.8):
+        The ratio of the number of masked tokens in the input sequence. Set it to `0.0` to disable masking, e.g. to
+        extract embeddings or fine-tune for classification.
+    norm_pix_loss (`bool`, *optional*, defaults to `True`):
+        Whether or not to train with per-patch normalized spectrogram values as reconstruction targets.
     max_length (`int`, *optional*, defaults to 1024):
         Temporal dimension (number of frames) of the input spectrograms. Must be a multiple of `patch_size`.
     num_mel_bins (`int`, *optional*, defaults to 128):
@@ -21,18 +28,11 @@ class AudioMAEConfig(ViTMAEConfig):
         Whether to mean-pool the patch tokens (followed by a layer norm) rather than using the final hidden state of
         the `[CLS]` token to compute the pooled output. The self-supervised AudioSet-2M checkpoint uses the `[CLS]`
         token, while the checkpoints fine-tuned for classification use mean pooling.
-    decoder_num_hidden_layers (`int`, *optional*, defaults to 16):
-        Number of hidden layers in the decoder.
     decoder_window_size (`int`, *optional*, defaults to 4):
         Size (in patches, along both time and frequency) of the local attention windows used by the decoder. Every
         other decoder layer shifts the windows by half a window along the time axis.
     decoder_position_bias_hidden_size (`int`, *optional*, defaults to 384):
         Hidden size of the small MLP that produces the continuous relative position bias of the decoder attention.
-    mask_ratio (`float`, *optional*, defaults to 0.8):
-        The ratio of the number of masked tokens in the input sequence. Set it to `0.0` to disable masking, e.g. to
-        extract embeddings or fine-tune for classification.
-    norm_pix_loss (`bool`, *optional*, defaults to `True`):
-        Whether or not to train with per-patch normalized spectrogram values as reconstruction targets.
 
     Example:
 
@@ -68,6 +68,15 @@ class AudioMAEConfig(ViTMAEConfig):
             raise ValueError(
                 f"`max_length` ({self.max_length}) and `num_mel_bins` ({self.num_mel_bins}) must both be multiples of "
                 f"`patch_size` ({self.patch_size})."
+            )
+        num_time_patches, num_frequency_patches = (
+            self.max_length // self.patch_size,
+            self.num_mel_bins // self.patch_size,
+        )
+        if num_time_patches % self.decoder_window_size != 0 or num_frequency_patches % self.decoder_window_size != 0:
+            raise ValueError(
+                f"The patch grid ({num_time_patches}x{num_frequency_patches}) must be divisible by "
+                f"`decoder_window_size` ({self.decoder_window_size})."
             )
         PreTrainedConfig.__post_init__(self, **kwargs)
 
@@ -107,8 +116,10 @@ def build_audio_mae_2d_sinusoidal_position_embedding(grid_size: tuple[int, int],
     """2D sinusoidal position embeddings for a `(time, frequency)` patch grid, laid out as in the original Audio-MAE.
 
     The original implementation differs from the library helper in two ways. It builds the table for the transposed
-    grid, and it keeps ViT-MAE's `[sin_w|cos_w|sin_h|cos_h]` layout. The pretrained weights expect that table, so
-    this function swaps the grid and rotates the two halves to reproduce it.
+    grid, and it keeps ViT-MAE's `[sin_w|cos_w|sin_h|cos_h]` layout. The transposed grid is a bug in the original
+    implementation (its `patch_hw` is `(8, 64)` while the patches are flattened time-major) that the released weights
+    were trained with. The pretrained weights expect that table, so this function swaps the grid and rotates the two
+    halves to reproduce it.
 
     Returns:
         Tensor of shape ``(1, num_patches + 1, embed_dim)``, with a zero row for the `[CLS]` token.
