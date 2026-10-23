@@ -20,9 +20,11 @@ from itertools import chain
 from typing import TYPE_CHECKING
 
 from ..utils import logging
-from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
-from .parallel_utils import _use_local_dtensor_params
+from .parallel_utils import (
+    ALL_PARALLEL_STYLES,
+    _use_local_dtensor_params,
+)
 from .utils import _get_torch_distributed_rank
 
 
@@ -41,7 +43,7 @@ if is_torch_distributed_available():
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
-    from .parallel_utils import _AllReduceBackward
+    from .parallel_utils import _AllReduceBackward, _AllReduceForward
 
 
 def replace_layer_number_by_wildcard(name: str) -> str:
@@ -561,34 +563,99 @@ class PackedRowwiseParallel(TensorParallelLayer):
         )
 
 
-class ParallelInterface(GeneralInterface):
-    """Registry of named TP styles for the DTensor backend; `expert_parallel.py` registers the MoE and EP styles into it."""
+class MoeExpertsParallel(TensorParallelLayer):
+    def should_use_local_tensors(self, module):
+        return True
 
-    _global_mapping = (
-        {
-            "embedding_rowwise": EmbeddingParallel(shard_dim=0),
-            "embedding_colwise": EmbeddingParallel(shard_dim=1),
-            "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
-            "colwise_rep": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
-            "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
-            "rowwise": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
-            "rowwise_split_input": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
-            "rowwise_rep": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
-            "packed_colwise": PackedColwiseParallel(),
-            "packed_rowwise": PackedRowwiseParallel(),
-            "sequence_parallel": SequenceParallel(use_local_output=True),
-            "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
-            "mla_kv_a_proj": MlaKvAProjParallel(),
-            "all_reduce": AllReduceParallel(),
-            # Every rank keeps the full param, e.g. a per-tensor quantization scale
-            "replicate": TensorParallelLayer(),
-        }
-        if is_torch_distributed_available()
-        else {}
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
+        hidden_states, *routing_args = args
+        tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+        if isinstance(hidden_states, DTensor):
+            hidden_states = hidden_states.to_local()
+        hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
+
+        if len(routing_args) >= 2:
+            top_k_index, top_k_weights, *extra_args = routing_args
+            if isinstance(top_k_weights, DTensor):
+                top_k_weights = top_k_weights.to_local()
+            if not is_expert_parallel:
+                top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
+            routing_args = [top_k_index, top_k_weights, *extra_args]
+
+        return (hidden_states, *routing_args), kwargs
+
+    def install_forward(self, module, mesh, *, is_expert_parallel=False):
+        """Install the transforms but pass `is_expert_parallel` in the forward call."""
+        original_forward = module.forward
+        output_source = (
+            Partial()
+            if any(
+                isinstance(param, DTensor) and any(not placement.is_replicate() for placement in param.placements)
+                for param in module.parameters()
+            )
+            else Replicate()
+        )
+
+        def tp_forward(*args, **kwargs):
+            args, kwargs = self.transform_inputs_pre_forward(
+                module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
+            )
+            with self.context_around_forward(module, mesh):
+                output = original_forward(*args, **kwargs)
+            return self.transform_output_post_forward(module, output, mesh, source=output_source)
+
+        module.forward = tp_forward
+        return module
+
+    def transform_output_post_forward(self, module, output, mesh, source=None):
+        if output is None:
+            return None
+
+        has_sharded_parameters = any(
+            isinstance(param, DTensor) and any(not placement.is_replicate() for placement in param.placements)
+            for param in module.parameters()
+        )
+        if not has_sharded_parameters:
+            return output
+
+        process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+        return _AllReduceForward.apply(output, process_group)
+
+
+class MoeIdentityParallel(TensorParallelLayer):
+    """
+    Used in longcat_flash zero_experts (nn.Identity) which return the same value on every GPU, but the
+    moe_tp_experts will sums across GPUs. Therefore we pre-divide the identity input by tp_size to cancel the extra scaling.
+    """
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+        input_tensor = args[0]
+        return (input_tensor / mesh.size(), *args[1:]), kwargs
+
+
+if is_torch_distributed_available():
+    ALL_PARALLEL_STYLES.register("embedding_rowwise", EmbeddingParallel(shard_dim=0))
+    ALL_PARALLEL_STYLES.register("embedding_colwise", EmbeddingParallel(shard_dim=1))
+    ALL_PARALLEL_STYLES.register(
+        "colwise_gather_output", ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate())
     )
-
-
-ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
+    ALL_PARALLEL_STYLES.register("colwise_rep", ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()))
+    ALL_PARALLEL_STYLES.register("colwise", ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)))
+    ALL_PARALLEL_STYLES.register("rowwise", RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()))
+    ALL_PARALLEL_STYLES.register(
+        "rowwise_split_input", RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate())
+    )
+    ALL_PARALLEL_STYLES.register("rowwise_rep", RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()))
+    ALL_PARALLEL_STYLES.register("packed_colwise", PackedColwiseParallel())
+    ALL_PARALLEL_STYLES.register("packed_rowwise", PackedRowwiseParallel())
+    ALL_PARALLEL_STYLES.register("sequence_parallel", SequenceParallel(use_local_output=True))
+    ALL_PARALLEL_STYLES.register("replicated_with_grad_allreduce", ReplicatedWithGradAllReduce())
+    ALL_PARALLEL_STYLES.register("mla_kv_a_proj", MlaKvAProjParallel())
+    ALL_PARALLEL_STYLES.register("all_reduce", AllReduceParallel())
+    ALL_PARALLEL_STYLES.register("moe_tp_experts", MoeExpertsParallel())
+    ALL_PARALLEL_STYLES.register("moe_identity_expert", MoeIdentityParallel())
+    # Every rank keeps the full param, e.g. a per-tensor quantization scale
+    ALL_PARALLEL_STYLES.register("replicate", TensorParallelLayer())
 
 
 def _validate_parallel_plan_styles(plan: dict[str, str] | None) -> None:
@@ -688,10 +755,8 @@ def gather_state_dict_for_save(
     return gathered
 
 
-# Public names that moved to `expert_parallel.py` after v5.20.
+# Keeps the old import paths of the names moved to `expert_parallel.py` working until v5.23.
 _MOVED_TO_EXPERT_PARALLEL = (
-    "MoeExpertsParallel",
-    "MoeIdentityParallel",
     "MoEParamShard",
     "EpRouterParallel",
     "RouterParallelMegaMoe",
@@ -703,6 +768,8 @@ _MOVED_TO_EXPERT_PARALLEL = (
 
 def __getattr__(name: str):
     if name in _MOVED_TO_EXPERT_PARALLEL:
+        from . import expert_parallel
+
         if _get_torch_distributed_rank() == 0:
             warnings.warn(
                 f"`transformers.distributed.tensor_parallel.{name}` is deprecated and will be removed in v5.23: "
@@ -712,7 +779,3 @@ def __getattr__(name: str):
             )
         return getattr(expert_parallel, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-# Imported last, since `expert_parallel` needs `ALL_PARALLEL_STYLES`: registers the EP styles in it.
-from . import expert_parallel  # noqa: E402

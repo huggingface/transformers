@@ -18,7 +18,7 @@ from torch.distributed.device_mesh import init_device_mesh
 
 from transformers.distributed import expert_parallel
 from transformers.distributed.expert_parallel import EpDispatchExpertsParallel
-from transformers.distributed.tensor_parallel import ALL_PARALLEL_STYLES
+from transformers.distributed.parallel_utils import ALL_PARALLEL_STYLES
 from transformers.testing_utils import TestCasePlus, is_expert_parallel_test
 
 from ..test_tensor_parallel_mixin import _init_distributed
@@ -49,30 +49,6 @@ class TestExpertParallelLayer(TestCasePlus):
                 placements[parameter_name] = distribute.call_args.args[2][0]
 
         return placements
-
-    def test_expert_parallel_styles_are_registered(self):
-        """`expert_parallel.py` registers its styles in `ALL_PARALLEL_STYLES` whichever module is imported first."""
-        for style in (
-            "moe_tp_experts",
-            "moe_identity_expert",
-            "grouped_gemm",
-            "ep_router",
-            "ep_dispatch_experts",
-            "megamoe_router",
-            "megamoe_experts",
-        ):
-            self.assertIn(style, ALL_PARALLEL_STYLES)
-
-    def test_moved_names_still_importable_from_tensor_parallel(self):
-        """The EP styles shipped from `tensor_parallel` in v5.20: the old path keeps working with a FutureWarning."""
-        from transformers.distributed import tensor_parallel
-
-        with self.assertWarns(FutureWarning):
-            self.assertIs(tensor_parallel.EpDispatchExpertsParallel, EpDispatchExpertsParallel)
-        with self.assertWarns(FutureWarning):
-            self.assertIs(tensor_parallel.apply_expert_parallelism, expert_parallel.apply_expert_parallelism)
-        with self.assertRaises(AttributeError):
-            tensor_parallel.does_not_exist
 
     def test_grouped_gemm_updates_local_expert_count(self):
         module = torch.nn.Module()

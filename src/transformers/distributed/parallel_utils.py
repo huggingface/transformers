@@ -13,6 +13,7 @@
 # limitations under the License.
 import contextlib
 
+from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_distributed_available
 
 
@@ -21,6 +22,15 @@ if is_torch_distributed_available():
     import torch.distributed as dist
     from torch.distributed._functional_collectives import wait_tensor
     from torch.distributed.tensor import DTensor
+
+
+class ParallelInterface(GeneralInterface):
+    """Registry of the named parallel styles: `tensor_parallel.py` registers the TP styles, `expert_parallel.py` the EP ones."""
+
+    _global_mapping = {}
+
+
+ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 
 
 @contextlib.contextmanager

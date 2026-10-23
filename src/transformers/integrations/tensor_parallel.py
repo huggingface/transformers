@@ -23,8 +23,6 @@ import warnings
 
 from ..distributed.expert_parallel import (
     EpRouterParallel,
-    MoeExpertsParallel,
-    MoeIdentityParallel,
     MoEParamShard,
     MoeTensorParalellMegaMoeExperts,
     RouterParallelMegaMoe,
@@ -34,6 +32,8 @@ from ..distributed.tensor_parallel import (
     AllReduceParallel,
     ColwiseParallel,
     MlaKvAProjParallel,
+    MoeExpertsParallel,
+    MoeIdentityParallel,
     PackedColwiseParallel,
     PackedRowwiseParallel,
     ParallelInterface,

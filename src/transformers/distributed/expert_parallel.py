@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Expert parallelism (EP) for MoE models: the MoE and EP styles and the plan application, split out of `tensor_parallel.py`."""
+"""Expert parallelism (EP) for MoE models: the EP styles and the plan application."""
 
 from __future__ import annotations
 
@@ -21,8 +21,8 @@ from typing import TYPE_CHECKING
 
 from ..utils import logging
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
-from .parallel_utils import _use_local_dtensor_params
-from .tensor_parallel import ALL_PARALLEL_STYLES, _get_parameter_plan
+from .parallel_utils import ALL_PARALLEL_STYLES, _use_local_dtensor_params
+from .tensor_parallel import _get_parameter_plan
 
 
 if TYPE_CHECKING:
@@ -37,9 +37,9 @@ if is_torch_available():
 
 if is_torch_distributed_available():
     from torch.distributed._functional_collectives import all_to_all_single_autograd
-    from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
+    from torch.distributed.tensor import DTensor, Replicate, Shard, distribute_tensor
 
-    from .parallel_utils import _AllReduceBackward, _AllReduceForward, _WaitTensor
+    from .parallel_utils import _AllReduceBackward, _WaitTensor
 
 
 class ExpertParallelLayer:
@@ -80,76 +80,6 @@ class ExpertParallelLayer:
 
         module.forward = ep_forward
         return module
-
-
-class MoeExpertsParallel(ExpertParallelLayer):
-    def should_use_local_tensors(self, module):
-        return True
-
-    def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
-        hidden_states, *routing_args = args
-        tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-        if isinstance(hidden_states, DTensor):
-            hidden_states = hidden_states.to_local()
-        hidden_states = _AllReduceBackward.apply(hidden_states, tp_group)
-
-        if len(routing_args) >= 2:
-            top_k_index, top_k_weights, *extra_args = routing_args
-            if isinstance(top_k_weights, DTensor):
-                top_k_weights = top_k_weights.to_local()
-            if not is_expert_parallel:
-                top_k_weights = _AllReduceBackward.apply(top_k_weights, tp_group)
-            routing_args = [top_k_index, top_k_weights, *extra_args]
-
-        return (hidden_states, *routing_args), kwargs
-
-    def install_forward(self, module, mesh, *, is_expert_parallel=False):
-        """Install the transforms but pass `is_expert_parallel` in the forward call."""
-        original_forward = module.forward
-        output_source = (
-            Partial()
-            if any(
-                isinstance(param, DTensor) and any(not placement.is_replicate() for placement in param.placements)
-                for param in module.parameters()
-            )
-            else Replicate()
-        )
-
-        def tp_forward(*args, **kwargs):
-            args, kwargs = self.transform_inputs_pre_forward(
-                module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
-            )
-            with self.context_around_forward(module, mesh):
-                output = original_forward(*args, **kwargs)
-            return self.transform_output_post_forward(module, output, mesh, source=output_source)
-
-        module.forward = tp_forward
-        return module
-
-    def transform_output_post_forward(self, module, output, mesh, source=None):
-        if output is None:
-            return None
-
-        has_sharded_parameters = any(
-            isinstance(param, DTensor) and any(not placement.is_replicate() for placement in param.placements)
-            for param in module.parameters()
-        )
-        if not has_sharded_parameters:
-            return output
-
-        process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-        return _AllReduceForward.apply(output, process_group)
-
-
-class MoeIdentityParallel(ExpertParallelLayer):
-    """
-    Used in longcat_flash zero_experts (nn.Identity) which return the same value on every GPU, but the
-    moe_tp_experts will sums across GPUs. Therefore we pre-divide the identity input by tp_size to cancel the extra scaling.
-    """
-
-    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
-        input_tensor = args[0]
-        return (input_tensor / mesh.size(), *args[1:]), kwargs
 
 
 class MoEParamShard(ExpertParallelLayer):
@@ -447,8 +377,6 @@ class MoeTensorParalellMegaMoeExperts(ExpertParallelLayer):
 
 
 if is_torch_distributed_available():
-    ALL_PARALLEL_STYLES.register("moe_tp_experts", MoeExpertsParallel())
-    ALL_PARALLEL_STYLES.register("moe_identity_expert", MoeIdentityParallel())
     ALL_PARALLEL_STYLES.register("grouped_gemm", MoEParamShard(Shard(0), shards_expert_dim=True))
     ALL_PARALLEL_STYLES.register("ep_router", EpRouterParallel())
     ALL_PARALLEL_STYLES.register("ep_dispatch_experts", EpDispatchExpertsParallel())
