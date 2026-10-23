@@ -181,7 +181,7 @@ class EsmFold2StructureHeadConfig(PreTrainedConfig):
         high-sigma tail above it is truncated and the cap re-prepended, so sampling starts from the cap.
     """
 
-    sub_configs_defaults = {"diffusion_module": SubConfigSpec(config_class=EsmFold2DiffusionModuleConfig)}
+    sub_configs_defaults = {"diffusion_module": EsmFold2DiffusionModuleConfig}
 
     diffusion_module: dict | EsmFold2DiffusionModuleConfig | None = None
     num_distogram_bins: int | None = 128
@@ -341,11 +341,11 @@ class EsmFold2Config(PreTrainedConfig):
     model_type = "esmfold2"
     sub_configs_defaults = {
         "esmc_config": SubConfigSpec(config_class=AutoConfig, model_type="esmc"),
-        "atom_encoder": SubConfigSpec(config_class=EsmFold2AtomEncoderConfig),
-        "structure_head": SubConfigSpec(config_class=EsmFold2StructureHeadConfig),
-        "confidence_head": SubConfigSpec(config_class=EsmFold2ConfidenceHeadConfig),
-        "msa_encoder": SubConfigSpec(config_class=EsmFold2MsaEncoderConfig),
-        "lm_encoder": SubConfigSpec(config_class=EsmFold2LmEncoderConfig),
+        "atom_encoder": EsmFold2AtomEncoderConfig,
+        "structure_head": EsmFold2StructureHeadConfig,
+        "confidence_head": EsmFold2ConfidenceHeadConfig,
+        "msa_encoder": EsmFold2MsaEncoderConfig,
+        "lm_encoder": EsmFold2LmEncoderConfig,
     }
 
     hidden_size: int | None = 384
