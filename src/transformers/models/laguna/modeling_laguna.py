@@ -148,9 +148,9 @@ class LagunaTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.e_score_correction_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
         self.router_logit_softcapping = config.moe_router_logit_softcapping
 

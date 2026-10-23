@@ -55,10 +55,10 @@ from ..laguna.modeling_laguna import (
     eager_attention_forward,
 )
 from ..llama.modeling_llama import LlamaDecoderLayer
+from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2TopKRouter
 from ..minimax_m3_vl.configuration_minimax_m3_vl import MiniMaxM3VLTextConfig
 from ..minimax_m3_vl.modeling_minimax_m3_vl import (
     MiniMaxM3VLSparseMoeBlock,
-    MiniMaxM3VLTopKRouter,
     MiniMaxM3VLVisionAttention,
 )
 
@@ -800,7 +800,7 @@ class Step3p7Experts(DeepseekV4Experts):
         return gate * up
 
 
-class Step3p7TopKRouter(MiniMaxM3VLTopKRouter):
+class Step3p7TopKRouter(MiniMaxM2TopKRouter):
     pass
 
 

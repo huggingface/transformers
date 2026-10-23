@@ -39,8 +39,9 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     eager_attention_forward,
 )
+from ..mixtral.modeling_mixtral import MixtralTopKRouter
 from ..olmoe.modeling_olmoe import OlmoeModel
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeTopKRouter
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 
 
 logger = logging.get_logger(__name__)
@@ -161,10 +162,9 @@ class DeepseekV2Experts(Qwen2MoeExperts):
     pass
 
 
-class DeepseekV2TopkRouter(Qwen2MoeTopKRouter):
+class DeepseekV2TopkRouter(MixtralTopKRouter):
     def __init__(self, config: DeepseekV2Config):
         super().__init__(config)
-        del self.norm_topk_prob
         self.routed_scaling_factor = config.routed_scaling_factor
         self.topk_method = config.topk_method
         self.num_group = config.n_group

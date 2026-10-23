@@ -92,7 +92,6 @@ from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeForCausalLM,
     Qwen3MoePreTrainedModel,
     Qwen3MoeSparseMoeBlock,
-    Qwen3MoeTopKRouter,
     load_balancing_loss_func,
 )
 from ..qwen3_vl_moe.configuration_qwen3_vl_moe import Qwen3VLMoeVisionConfig
@@ -1108,7 +1107,7 @@ class Qwen3OmniMoeThinkerTextExperts(Qwen2MoeExperts):
         super().__init__(config)
 
 
-class Qwen3OmniMoeThinkerTextTopKRouter(Qwen3MoeTopKRouter):
+class Qwen3OmniMoeThinkerTextTopKRouter(Qwen2MoeTopKRouter):
     pass
 
 

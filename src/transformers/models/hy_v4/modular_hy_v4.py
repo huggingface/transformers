@@ -39,12 +39,12 @@ from ..deepseek_v4.modeling_deepseek_v4 import (
     DeepseekV4UnweightedRMSNorm,
 )
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer
+from ..glm4_moe.modeling_glm4_moe import Glm4MoeTopkRouter
 from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     Glm4MoeLiteForCausalLM,
     Glm4MoeLiteModel,
     Glm4MoeLiteMoE,
     Glm4MoeLitePreTrainedModel,
-    Glm4MoeLiteTopkRouter,
     apply_rotary_pos_emb,
 )
 from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts
@@ -368,7 +368,7 @@ class HYV4MLP(Qwen2MoeMLP):
     pass
 
 
-class HYV4TopkRouter(Glm4MoeLiteTopkRouter):
+class HYV4TopkRouter(Glm4MoeTopkRouter):
     pass
 
 

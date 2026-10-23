@@ -816,13 +816,17 @@ class GraniteMoeHybridTopKRouter(nn.Module):
     here (via ``expert_size.tolist()``, which broke fullgraph compile) and now happens inside the
     experts forward via ``use_experts_implementation`` so the default ``grouped_mm`` / ``batched_mm``
     paths can compile cleanly.
+
+    Taking the top-k logits and then a softmax over them picks the same experts as Mixtral's
+    router (softmax over all experts, top-k, renormalize), only float rounding differs.
     """
 
-    def __init__(self, config: GraniteMoeHybridConfig):
+    def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_local_experts
         self.top_k = config.num_experts_per_tok
-        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
@@ -881,16 +885,15 @@ class GraniteMoeHybridMoE(nn.Module):
 
     def __init__(self, config: GraniteMoeHybridConfig):
         super().__init__()
-        self.input_size = config.hidden_size
-        self.router = GraniteMoeHybridTopKRouter(config)
         self.experts = GraniteMoeHybridExperts(config)
+        self.gate = GraniteMoeHybridTopKRouter(config)
 
-    def forward(self, layer_input: torch.Tensor) -> torch.Tensor:
-        bsz, length, emb_size = layer_input.size()
-        hidden_states = layer_input.reshape(-1, emb_size)
-        _, top_k_weights, top_k_index = self.router(hidden_states)
-        layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
-        return layer_output.view(bsz, length, self.input_size)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
+        final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
+        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
 class GraniteFlashAttentionKwargs(TypedDict, total=False):
@@ -944,11 +947,11 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         # Either attention or mamba will be initialized, depending on the layer type.
         self.self_attn = None
-        self.input_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         # Allow non-MoE (dense)
-        self.block_sparse_moe = GraniteMoeHybridMoE(config) if config.num_local_experts > 0 else None
+        self.mlp = GraniteMoeHybridMoE(config) if config.num_local_experts > 0 else None
+        self.input_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = GraniteMoeHybridRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.residual_multiplier = config.residual_multiplier  # Only diff with mixtral!
         self.shared_mlp = GraniteMoeHybridMLP(config)
         self.mamba = None
@@ -997,7 +1000,7 @@ class GraniteMoeHybridDecoderLayer(GradientCheckpointingLayer):
         hidden_states = self.post_attention_layernorm(hidden_states)
 
         if self.has_experts:
-            moe_hidden_states = self.block_sparse_moe(hidden_states)
+            moe_hidden_states = self.mlp(hidden_states)
             hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
         else:
             hidden_states = self.shared_mlp(hidden_states)

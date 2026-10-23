@@ -38,6 +38,7 @@ from ..cohere2.modeling_cohere2 import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..granitemoe.modeling_granitemoe import GraniteMoeTopKRouter
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
@@ -60,14 +61,11 @@ class Cohere2MoeExperts(MixtralExperts):
     pass
 
 
-class Cohere2MoeTopKRouter(nn.Module):
+class Cohere2MoeTopKRouter(GraniteMoeTopKRouter):
     def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        super().__init__(config)
         self.expert_selection_fn = config.expert_selection_fn
         self.norm_topk_prob = config.norm_topk_prob
-        self.weight = nn.Parameter(torch.empty(config.num_experts, config.hidden_size))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         router_logits = F.linear(hidden_states, self.weight)

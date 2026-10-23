@@ -33,8 +33,8 @@ from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RMSNorm
 from ..olmoe.modeling_olmoe import (
     OlmoeForCausalLM,
     OlmoeSparseMoeBlock,
-    OlmoeTopKRouter,
 )
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeTopKRouter
 
 
 @auto_docstring(checkpoint="allenai/FlexOlmo-7x7B-1T")
@@ -131,7 +131,7 @@ class FlexOlmoAttention(Olmo2Attention):
     pass
 
 
-class FlexOlmoTopKRouter(OlmoeTopKRouter):
+class FlexOlmoTopKRouter(Qwen2MoeTopKRouter):
     pass
 
 

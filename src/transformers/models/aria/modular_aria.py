@@ -48,6 +48,7 @@ from ..auto import AutoConfig, AutoTokenizer
 from ..auto import AutoConfig, AutoTokenizer
 from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
+from ..granitemoe.modeling_granitemoe import GraniteMoeTopKRouter
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -609,7 +610,7 @@ class AriaSharedExpertsMLP(LlamaMLP):
         self.intermediate_size = config.intermediate_size * config.moe_num_shared_experts
 
 
-class AriaTextTopKRouter(nn.Module):
+class AriaTextTopKRouter(GraniteMoeTopKRouter):
     """Top-k router for the Aria MoE block.
 
     Experts are selected on the raw logits and the routing weights are the softmax over the selected
@@ -617,11 +618,10 @@ class AriaTextTopKRouter(nn.Module):
     `(router_logits, top_k_weights, top_k_index)`.
     """
 
-    def __init__(self, config: AriaTextConfig):
-        super().__init__()
+    def __init__(self, config):
+        super().__init__(config)
         self.num_experts = config.moe_num_experts
         self.top_k = config.moe_topk
-        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         router_logits = nn.functional.linear(hidden_states, self.weight)  # (num_tokens, num_experts)

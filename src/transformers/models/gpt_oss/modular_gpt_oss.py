@@ -46,6 +46,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralForSequenceClassification,
     MixtralForTokenClassification,
     MixtralModel,
+    MixtralTopKRouter,
 )
 from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
 from .configuration_gpt_oss import GptOssConfig
@@ -107,13 +108,9 @@ class GptOssExperts(nn.Module):
         return next_states
 
 
-class GptOssTopKRouter(nn.Module):
+class GptOssTopKRouter(MixtralTopKRouter):
     def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        super().__init__(config)
         self.bias = nn.Parameter(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):

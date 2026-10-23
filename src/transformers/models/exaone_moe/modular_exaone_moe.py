@@ -147,9 +147,7 @@ class ExaoneMoeMLP(Qwen2MoeMLP):
 
 
 class ExaoneMoeTopkRouter(DeepseekV3TopkRouter):
-    def __init__(self, config):
-        super().__init__(self, config)
-        self.num_experts = config.num_experts
+    pass
 
 
 class ExaoneMoeExperts(Qwen2MoeExperts):

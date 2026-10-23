@@ -107,7 +107,7 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        moe_hidden_states = self.block_sparse_moe(hidden_states)
+        moe_hidden_states = self.mlp(hidden_states)
 
         if self.shared_mlp is None:
             hidden_states = moe_hidden_states

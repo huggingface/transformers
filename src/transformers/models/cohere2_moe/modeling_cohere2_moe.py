@@ -143,13 +143,25 @@ class Cohere2MoeExperts(nn.Module):
 
 
 class Cohere2MoeTopKRouter(nn.Module):
+    """Top-k gating that returns the routing decisions without grouping tokens by expert.
+
+    Returns ``(router_logits, top_k_weights, top_k_index)``; the grouping/scattering used to live
+    here (via ``expert_size.tolist()``, which broke fullgraph compile) and now happens inside the
+    experts forward via ``use_experts_implementation`` so the default ``grouped_mm`` / ``batched_mm``
+    paths can compile cleanly.
+
+    Taking the top-k logits and then a softmax over them picks the same experts as Mixtral's
+    router (softmax over all experts, top-k, renormalize), only float rounding differs.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.expert_selection_fn = config.expert_selection_fn
         self.norm_topk_prob = config.norm_topk_prob
-        self.weight = nn.Parameter(torch.empty(config.num_experts, config.hidden_size))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         router_logits = F.linear(hidden_states, self.weight)

@@ -352,20 +352,8 @@ class MiniMaxM3VLExperts(DeepseekV4Experts):
 
 
 class MiniMaxM3VLTopKRouter(MiniMaxM2TopKRouter):
-    def __init__(self, config: MiniMaxM3VLTextConfig):
-        super().__init__(config)
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)
-        # Sigmoid scoring (not softmax), as in M2.
-        routing_weights = F.sigmoid(router_logits.float())
-        scores_for_choice = routing_weights + self.e_score_correction_bias
-        _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
-        top_k_weights = routing_weights.gather(1, top_k_index)
-        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        return router_logits, top_k_weights, top_k_index
+    # Sigmoid scoring (not softmax), as in M2.
+    pass
 
 
 class MiniMaxM3VLSparseMoeBlock(LagunaSparseMoeBlock):

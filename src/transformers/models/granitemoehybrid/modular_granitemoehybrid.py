@@ -33,8 +33,8 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedForCausalLM,
     GraniteMoeSharedMLP,
     GraniteMoeSharedModel,
-    GraniteMoeSharedMoE,
     GraniteMoeSharedPreTrainedModel,
+    GraniteMoeSharedMoE,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -129,7 +129,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         self.block_type = config.layers_block_type[layer_idx]
 
         # Allow non-MoE (dense)
-        self.block_sparse_moe = GraniteMoeHybridMoE(config) if config.num_local_experts > 0 else None
+        self.mlp = GraniteMoeHybridMoE(config) if config.num_local_experts > 0 else None
 
         # Accept 0 experts: skip MoE if num_local_experts == 0
         self.has_experts = getattr(config, "num_local_experts", 0) > 0
@@ -169,7 +169,7 @@ class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):
         hidden_states = self.post_attention_layernorm(hidden_states)
 
         if self.has_experts:
-            moe_hidden_states = self.block_sparse_moe(hidden_states)
+            moe_hidden_states = self.mlp(hidden_states)
             hidden_states = moe_hidden_states + self.shared_mlp(hidden_states)
         else:
             hidden_states = self.shared_mlp(hidden_states)

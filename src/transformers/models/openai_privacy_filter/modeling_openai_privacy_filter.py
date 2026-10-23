@@ -305,7 +305,7 @@ class OpenAIPrivacyFilterTopKRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.bias = nn.Parameter(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):

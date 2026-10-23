@@ -42,6 +42,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
     MixtralModel,
     MixtralPreTrainedModel,
+    MixtralTopKRouter,
 )
 from .configuration_qwen2_moe import Qwen2MoeConfig
 
@@ -84,14 +85,10 @@ class Qwen2MoeExperts(MixtralExperts):
         self.intermediate_dim = config.moe_intermediate_size
 
 
-class Qwen2MoeTopKRouter(nn.Module):
+class Qwen2MoeTopKRouter(MixtralTopKRouter):
     def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        super().__init__(config)
         self.norm_topk_prob = config.norm_topk_prob
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)

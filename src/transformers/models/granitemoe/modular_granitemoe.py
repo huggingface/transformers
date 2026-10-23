@@ -37,8 +37,10 @@ from ..mixtral.modeling_mixtral import (
     MixtralExperts,
     MixtralForCausalLM,
     MixtralModel,
+    MixtralTopKRouter,
     load_balancing_loss_func,
 )
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from .configuration_granitemoe import GraniteMoeConfig
 
 
@@ -50,20 +52,17 @@ class GraniteMoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class GraniteMoeTopKRouter(nn.Module):
+class GraniteMoeTopKRouter(MixtralTopKRouter):
     """Top-k gating that returns the routing decisions without grouping tokens by expert.
 
     Returns ``(router_logits, top_k_weights, top_k_index)``; the grouping/scattering used to live
     here (via ``expert_size.tolist()``, which broke fullgraph compile) and now happens inside the
     experts forward via ``use_experts_implementation`` so the default ``grouped_mm`` / ``batched_mm``
     paths can compile cleanly.
-    """
 
-    def __init__(self, config: GraniteMoeConfig):
-        super().__init__()
-        self.num_experts = config.num_local_experts
-        self.top_k = config.num_experts_per_tok
-        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
+    Taking the top-k logits and then a softmax over them picks the same experts as Mixtral's
+    router (softmax over all experts, top-k, renormalize), only float rounding differs.
+    """
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
@@ -76,21 +75,8 @@ class GraniteMoeExperts(MixtralExperts):
     pass
 
 
-class GraniteMoeMoE(nn.Module):
+class GraniteMoeMoE(Qwen3MoeSparseMoeBlock):
     """Sparsely-gated mixture-of-experts block: router decides, experts compute."""
-
-    def __init__(self, config: GraniteMoeConfig):
-        super().__init__()
-        self.input_size = config.hidden_size
-        self.router = GraniteMoeTopKRouter(config)
-        self.experts = GraniteMoeExperts(config)
-
-    def forward(self, layer_input: torch.Tensor) -> torch.Tensor:
-        bsz, length, emb_size = layer_input.size()
-        hidden_states = layer_input.reshape(-1, emb_size)
-        _, top_k_weights, top_k_index = self.router(hidden_states)
-        layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
-        return layer_output.view(bsz, length, self.input_size)
 
 
 class GraniteMoeAttention(LlamaAttention):
@@ -103,10 +89,9 @@ class GraniteMoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: GraniteMoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = GraniteMoeAttention(config=config, layer_idx=layer_idx)
-        self.block_sparse_moe = GraniteMoeMoE(config)
+        self.mlp = GraniteMoeMoE(config)
         self.input_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        del self.mlp
         self.residual_multiplier = config.residual_multiplier  # Only diff with mixtral!
 
     def forward(
@@ -129,7 +114,7 @@ class GraniteMoeDecoderLayer(LlamaDecoderLayer):
         hidden_states = residual + hidden_states * self.residual_multiplier  # diff
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.block_sparse_moe(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states * self.residual_multiplier  # diff
         return hidden_states
 

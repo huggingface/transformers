@@ -40,8 +40,7 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
 )
-from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2Model, MiniMaxM2SparseMoeBlock
-from ..mixtral.modeling_mixtral import MixtralTopKRouter
+from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2Model, MiniMaxM2SparseMoeBlock, MiniMaxM2TopKRouter
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 
@@ -161,21 +160,17 @@ class HYV3Attention(Qwen3Attention):
         self.sliding_window = None
 
 
-class HYV3TopKRouter(MixtralTopKRouter):
+class HYV3TopKRouter(MiniMaxM2TopKRouter):
     def __init__(self, config: HYV3Config):
         super().__init__(config)
         self.router_scaling_factor = config.router_scaling_factor
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        e_score_correction_bias: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.float(), self.weight.float())
         routing_weights = torch.sigmoid(router_logits)
 
-        scores_for_choice = routing_weights + e_score_correction_bias
+        scores_for_choice = routing_weights + self.e_score_correction_bias
         _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
         top_k_weights = routing_weights.gather(1, top_k_index)
 
@@ -204,7 +199,7 @@ class HYV3MoE(MiniMaxM2SparseMoeBlock):
         batch_size, seq_len, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
-        _, top_k_weights, top_k_index = self.gate(hidden_states, self.e_score_correction_bias)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         routed_output = self.experts(hidden_states, top_k_index, top_k_weights)
 
         # Key difference: optional float casting on combing shared experts
@@ -238,11 +233,10 @@ class HYV3PreTrainedModel(LlamaPreTrainedModel):
         std = self.config.initializer_range
         if isinstance(module, HYV3TopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
+            init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, HYV3Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, HYV3MoE):
-            init.zeros_(module.e_score_correction_bias)
 
 
 class HYV3Model(MiniMaxM2Model):

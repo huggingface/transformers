@@ -14,8 +14,6 @@
 """PyTorch Qwen3-VL-MOE model."""
 
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
@@ -29,7 +27,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionAttention, Qwen2_5_VLVisionRotaryEmbedding
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeTopKRouter
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
@@ -166,23 +164,10 @@ class Qwen3VLMoeTextExperts(Qwen2MoeExperts):
     pass
 
 
-class Qwen3VLMoeTextTopKRouter(nn.Module):
+class Qwen3VLMoeTextTopKRouter(Qwen2MoeTopKRouter):
     def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
-
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
-        router_probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
-        router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
-        router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
-        router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = router_top_value
-        return router_logits, router_scores, router_indices
+        super().__init__(config)
+        self.norm_topk_prob = True
 
 
 class Qwen3VLMoeTextSparseMoeBlock(Qwen3MoeSparseMoeBlock):

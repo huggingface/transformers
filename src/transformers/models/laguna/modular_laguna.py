@@ -221,6 +221,7 @@ class LagunaMLP(Qwen2MoeMLP):
 class LagunaTopKRouter(Qwen3_5MoeTopKRouter):
     def __init__(self, config):
         super().__init__()
+        del self.norm_topk_prob
         self.e_score_correction_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
         self.router_logit_softcapping = config.moe_router_logit_softcapping
 

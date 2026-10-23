@@ -328,10 +328,11 @@ class Ernie4_5_VLMoeMoeStatics(nn.Module):
 class Ernie4_5_VLMoeMoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.weight = nn.Parameter(torch.zeros(config.num_experts, config.hidden_size, dtype=torch.float32))
-        self.moe_statics = Ernie4_5_VLMoeMoeStatics(config)
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
+        self.moe_statics = Ernie4_5_VLMoeMoeStatics(config)
         self.norm_min = config.moe_norm_min
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

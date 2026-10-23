@@ -36,6 +36,7 @@ from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
     MixtralPreTrainedModel,
+    MixtralTopKRouter,
 )
 from ..olmo.modeling_olmo import OlmoRotaryEmbedding
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
@@ -98,13 +99,11 @@ class Ernie4_5_MoeExperts(Qwen2MoeExperts):
     pass
 
 
-class Ernie4_5_MoeTopKRouter(nn.Module):
+class Ernie4_5_MoeTopKRouter(MixtralTopKRouter):
     def __init__(self, config):
-        super().__init__()
-        self.weight = nn.Parameter(torch.zeros(config.num_experts, config.hidden_size, dtype=torch.float32))
+        super().__init__(config)
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.moe_statics = Ernie4_5_MoeStatics(config)
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
         self.norm_min = config.moe_norm_min
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

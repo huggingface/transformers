@@ -87,9 +87,9 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.sinks": "colwise",
-        "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
-        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
 
     sliding_window: int | None = 128

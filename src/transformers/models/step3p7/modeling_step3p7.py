@@ -587,7 +587,7 @@ class Step3p7Experts(nn.Module):
 
 
 class Step3p7TopKRouter(nn.Module):
-    def __init__(self, config: Step3p7TextConfig):
+    def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
@@ -597,8 +597,8 @@ class Step3p7TopKRouter(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)
-        # Sigmoid scoring (not softmax), as in M2.
+        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)  # (seq_len, num_experts)
+        # Main difference to other Moe, using Sigmoid activation instead of Softmax
         routing_weights = F.sigmoid(router_logits.float())
         scores_for_choice = routing_weights + self.e_score_correction_bias
         _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
