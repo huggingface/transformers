@@ -22,6 +22,7 @@ from ..utils.quantization_config import (
     AwqConfig,
     BitNetQuantConfig,
     BitsAndBytesConfig,
+    BlockScaledConfig,
     CompressedTensorsConfig,
     EetqConfig,
     FbgemmFp8Config,
@@ -150,6 +151,7 @@ LOADING_ATTRIBUTES_CONFIG_TYPES = (
     Mxfp4Config,
     MetalConfig,
     FineGrainedConfig,
+    BlockScaledConfig,
     FineGrainedFP8Config,
 )
 
@@ -276,6 +278,9 @@ class AutoHfQuantizer:
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 setattr(quantization_config, attr, val)
+            if isinstance(quantization_config, BlockScaledConfig):
+                # Check that the passed attributes are consistent with the checkpoint's
+                quantization_config.post_init()
 
             if loading_attr_dict:
                 warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."

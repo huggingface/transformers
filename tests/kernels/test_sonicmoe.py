@@ -32,11 +32,12 @@ from unittest import mock
 
 import torch
 from parameterized import parameterized
-from test_utils import make_experts
 
 import transformers.integrations.sonicmoe as sm
 from transformers.integrations.sonicmoe import sonicmoe_experts_forward
 from transformers.testing_utils import require_torch, torch_device
+
+from .test_utils import make_experts
 
 
 class _FakeActivationType:
