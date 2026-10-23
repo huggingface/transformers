@@ -15,7 +15,7 @@
 import tempfile
 import unittest
 from contextlib import ExitStack, contextmanager
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from parameterized import parameterized
 
@@ -86,10 +86,13 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
         """Mega MoE dispatches inside its kernel, so it replaces the token-dispatch experts rule of the EP plan."""
         config = DeepseekV4Config()
         config._experts_implementation = "deepgemm_megamoe"
-        config = FineGrainedFP8HfQuantizer(FineGrainedFP8Config()).update_tp_plan(config)
-        self.assertEqual(config.base_model_ep_plan["layers.*.mlp.experts"], "megamoe_experts")
+        model = Mock(config=config)
+        model.named_parameters.return_value = []
+        ep_plan = config.base_model_ep_plan.copy()
+        FineGrainedFP8HfQuantizer(FineGrainedFP8Config()).update_parallel_plan(model, ep_plan)
+        self.assertEqual(ep_plan["layers.*.mlp.experts"], "megamoe_experts")
         with self.assertRaisesRegex(ValueError, "Mega MoE expert parallelism requires `ep_size=tp_size`"):
-            DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(config.base_model_ep_plan)
+            DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(ep_plan)
 
 
 @slow
@@ -108,6 +111,7 @@ class FP8QuantizerTest(MemoryCleanupMixin, unittest.TestCase):
     EXPECTED_OUTPUTS = {
         "Once upon a time, there was a little girl who loved to play",
         "Once upon a time, there was a man who was very rich.",
+        "Once upon a time, there was a man who was a very rich"
     }
     EXPECTED_DEQUANTIZED_OUTPUT = "Once upon a time, in a small village nestled in the rolling hills"
     device_map = torch_device

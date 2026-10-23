@@ -3317,8 +3317,9 @@ class PreTrainedModel(
         )
 
         if hf_quantizer is not None and not _hf_peft_config_loaded and not quantization_serializable:
+            quant_method = hf_quantizer.quantization_config.quant_method
             raise ValueError(
-                f"The model is quantized with {hf_quantizer.quantization_config.quant_method} and is not serializable - check out the warnings from"
+                f"The model is quantized with {getattr(quant_method, 'value', quant_method)} and is not serializable - check out the warnings from"
                 " the logger on the traceback to understand the reason why the quantized model is not serializable."
             )
 
