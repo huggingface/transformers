@@ -20,10 +20,6 @@ if is_hqq_available():
 _is_torch_greater_or_equal_than_2_7 = is_torch_greater_or_equal("2.7", accept_dev=True)
 
 
-<<<<<<< HEAD
-logger = logging.get_logger(__name__)
-
-
 class KVCacheSharingStorage(UserDict):
     """
     A lightweight dict-like container used to share the KV cache between layers. Maps key -> tuple of cache tensors.
@@ -40,8 +36,6 @@ class KVCacheSharingStorage(UserDict):
         return self
 
 
-=======
->>>>>>> main
 class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
 
