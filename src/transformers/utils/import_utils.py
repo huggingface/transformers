@@ -1926,9 +1926,11 @@ def is_ipython_available() -> bool:
 @lru_cache
 def is_in_notebook() -> bool:
     try:
-        # Check if we are running inside Marimo
+        # Check if we are running inside Marimo. Marimo itself does not depend on IPython, and the
+        # notebook callbacks import `IPython.display` unconditionally, so only treat it as a notebook
+        # environment when IPython is actually installed.
         if "marimo" in sys.modules:
-            return True
+            return is_ipython_available()
         # Test adapted from tqdm.autonotebook: https://github.com/tqdm/tqdm/blob/master/tqdm/autonotebook.py
         get_ipython = sys.modules["IPython"].get_ipython
         if "IPKernelApp" not in get_ipython().config:
