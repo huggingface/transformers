@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 
 class NVFP4HfQuantizer(HfQuantizer):
-    """NVFP4 linears and MoE experts, from a ModelOpt export or quantized on the fly. FP8 layers load dequantized."""
+    """NVFP4 linears and MoE experts, from a checkpoint or quantized on the fly, and the FP8 linears next to them."""
 
     requires_calibration = False
     quantization_config: NVFP4Config
@@ -104,14 +104,17 @@ class NVFP4HfQuantizer(HfQuantizer):
         """Return how each module of `model` loads, from `quantized_layers`, or `None` when every eligible module is NVFP4.
 
         A module matches by its model or checkpoint name. Exact names win, and fused experts also match their per-expert
-        entries, such as `experts.3.w1`. Otherwise the first pattern that matches applies.
+        entries, such as `experts.3.w1`. Otherwise the first pattern that matches applies, and the catch-all `.*` last.
+        A save sorts the entries, so their order cannot set the precedence.
         """
         layers = self.quantization_config.quantized_layers
         if layers is None:
             return None
         # the model's renames, reversed, give a module's checkpoint name
         reverse = [rule.reverse_transform() for rule in self.model_renames[::-1]]
-        patterns = [(re.compile(layer), loads) for layer, loads in layers.items()]
+        patterns = [
+            (re.compile(layer), loads) for layer, loads in sorted(layers.items(), key=lambda item: item[0] == ".*")
+        ]
         formats = {}
         for name, _ in model.named_modules():
             key = f"{name}.weight"
@@ -144,30 +147,35 @@ class NVFP4HfQuantizer(HfQuantizer):
         # the model's renames map its names to the checkpoint's and back
         mapping = get_model_conversion_mapping(model, add_legacy=False)
         self.model_renames = [rule for rule in mapping if isinstance(rule, WeightRenaming)]
-        # no slot for calibrated `input_scale`s or FP8 KV-cache scales
-        model._keys_to_ignore_on_load_unexpected = {
-            *(model._keys_to_ignore_on_load_unexpected or ()),
-            r"[._]input(_global)?_scale$",
-            r"\.[kv]_scale$",
-        }
+        weight_only = self.quantization_config.activation_format == "bf16"
+        # FP8 KV-cache scales have no slot
+        ignored = {r"\.[kv]_scale$"}
+        # Activation scales load into the layers that quantize their activations with them. A layer that loads
+        # dequantized or weight-only does not.
+        if self.quantization_config.dequantize or weight_only:
+            ignored.add(r"[._]input(_global)?_scale$")
+        model._keys_to_ignore_on_load_unexpected = {*(model._keys_to_ignore_on_load_unexpected or ()), *ignored}
         if self.quantization_config.dequantize:
             return
         formats = self._module_formats(model)
-        weight_only = self.quantization_config.activation_format == "bf16"
         if not replace_with_nvfp4(model, self.modules_to_not_convert, formats, self.pre_quantized, weight_only):
             raise ValueError("NVFP4 found no linear or experts module to quantize in this model.")
 
     def _process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs):
-        from ..integrations.nvfp4 import checkpoint_renames, dequantize_fp8_linears
+        from ..integrations.nvfp4 import FP8Linear, checkpoint_renames
 
-        dequantize_fp8_linears(model)
-        # the dequantized layers are now in the model dtype, so a save lists them no more
-        if self.quantization_config.quantized_layers is not None:
-            self.quantization_config.quantized_layers = {
-                layer: loads
-                for layer, loads in self.quantization_config.quantized_layers.items()
-                if loads != "dequantize"
-            }
+        # per-tensor FP8 quantizes its activations with the checkpoint's static scale, so it must ship one
+        unscaled = [
+            name
+            for name, module in model.named_modules()
+            if isinstance(module, FP8Linear)
+            and module.input_global_scale is not None
+            and not getattr(module.input_global_scale, "_is_hf_initialized", False)
+        ]
+        if unscaled:
+            raise ValueError(
+                f"The per-tensor FP8 layers {unscaled[:3]} ship no static activation scale (`input_scale`)."
+            )
 
         conversions = getattr(model, "_weight_conversions", None) or []
         if not self.pre_quantized:
@@ -197,25 +205,31 @@ class NVFP4HfQuantizer(HfQuantizer):
         """
         from ..integrations.nvfp4 import (
             EXPERT_PROJECTIONS,
+            FP8Linear,
             NVFP4Experts,
+            NVFP4FlattenBlockScales,
             NVFP4InterleaveGateUp,
             NVFP4Linear,
             NVFP4Reciprocal,
             NVFP4SwizzleScales,
-            NVFP4ViewPackedInt8,
+            NVFP4ViewBytes,
             _reciprocal_globals,
         )
 
         module, name = get_module_from_name(model, param_name)
-        if not isinstance(module, (NVFP4Linear, NVFP4Experts)):
+        if not isinstance(module, (NVFP4Linear, FP8Linear, NVFP4Experts)):
             return []
         if name.endswith("global_scale"):
             return [NVFP4Reciprocal(self)] if _reciprocal_globals(self) else []
         ops = []
-        if name in ("weight", *EXPERT_PROJECTIONS):
-            ops.append(NVFP4ViewPackedInt8(self))
+        packed = name in ("weight", *EXPERT_PROJECTIONS) and not isinstance(module, FP8Linear)
+        mx_scales = isinstance(module, FP8Linear) and module.weight_format == "mxfp8" and name == "weight_scale_inv"
+        if packed or mx_scales:
+            ops.append(NVFP4ViewBytes(self))
         if isinstance(module, NVFP4Experts) and module.has_gate and name in ("gate_up_proj", "gate_up_proj_scale_inv"):
             ops.append(NVFP4InterleaveGateUp(self))
+        if isinstance(module, FP8Linear) and module.weight_format == "fp8_per_block" and name == "weight_scale_inv":
+            ops.append(NVFP4FlattenBlockScales(self))
         if name.endswith("scale_inv"):
             ops.append(NVFP4SwizzleScales(self))
         return ops
@@ -237,17 +251,10 @@ class NVFP4HfQuantizer(HfQuantizer):
         # first matching converter wins. On save, skip the params a model converter writes back, as they would match
         # first there.
         reverse = [c.reverse_transform() for c in conversions if isinstance(c, WeightConverter)] if for_save else []
-        # An FP8 layer's weight and scale load into their own slots too, so the scale shards by its own plan.
-        fp8_linears = {
-            name
-            for name, module in model.named_modules()
-            if type(module) is torch.nn.Linear and "weight_scale_inv" in module._parameters
-        }
         per_param = [
             WeightConverter(re.escape(name), name, [NVFP4Deserialize(self)])
             for name, _ in model.named_parameters()
-            if (self.get_param_ops(model, name) or name.rpartition(".")[0] in fp8_linears)
-            and not any(c.rename_source_key(name)[1] for c in reverse)
+            if self.get_param_ops(model, name) and not any(c.rename_source_key(name)[1] for c in reverse)
         ]
         renames = [c for c in conversions if not isinstance(c, WeightConverter)]
         return renames + per_param + [c for c in conversions if isinstance(c, WeightConverter)]
