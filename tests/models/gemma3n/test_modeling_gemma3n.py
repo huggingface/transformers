@@ -488,7 +488,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
             max_length = max_new_tokens + inputs_embeds.shape[1] - 1
             cache_shape = [batch_size, num_key_value_heads, max_length, head_dim]
             self.assertIsInstance(outputs.past_key_values, StaticCache)
-            self.assertEqual(len(outputs.past_key_values), num_hidden_layers - text_config.num_kv_shared_layers)
+            self.assertEqual(len(outputs.past_key_values), num_hidden_layers)
             self.assertListEqual(list(outputs.past_key_values.layers[0].keys.shape), cache_shape)
 
     @pytest.mark.generate
@@ -550,10 +550,7 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
                 num_hidden_layers = text_config.num_hidden_layers
                 cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
                 self.assertTrue(isinstance(static_cache_generation.past_key_values, StaticCache))
-                self.assertTrue(
-                    len(static_cache_generation.past_key_values)
-                    == num_hidden_layers - text_config.num_kv_shared_layers
-                )
+                self.assertTrue(len(static_cache_generation.past_key_values) == num_hidden_layers)
                 self.assertTrue(static_cache_generation.past_key_values.layers[0].keys.shape == cache_shape)
 
                 # Check 2: The outputs must be similar to the case with dynamic cache
