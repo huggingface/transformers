@@ -180,7 +180,7 @@ class TestWeightGlobMatching(unittest.TestCase):
         renaming = WeightRenaming(source_patterns=r"\.moe\.(experts\.|gate\.)", target_patterns=r"\.mlp\.\1")
         reverse = renaming.reverse_transform()
         self.assertEqual(reverse.rename_source_key("model.mlp.experts.0.w")[0], "model.moe.experts.0.w")
-        # an unescaped `.` would match any character, so `gateX` would be renamed as well
+        # the group keeps its escapes: `gate\.` matches `gate.` only, so `gateX` stays as is
         self.assertEqual(reverse.rename_source_key("model.mlp.gateX.w")[0], "model.mlp.gateX.w")
 
 
