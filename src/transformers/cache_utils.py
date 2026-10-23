@@ -1960,10 +1960,10 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
 
     # Some models implement KV cache sharing between layers (e.g. Gemma4): for layers that consume other layers' KV
     # cache, we replace their layer type with a "dummy" layer that will never store any cache
-    kv_sharing_roles = getattr(config, "kv_sharing_roles", None)
-    if kv_sharing_roles is not None:
-        for i, role in enumerate(kv_sharing_roles):
-            if role == "consumer":
+    kv_sharing_modes = getattr(config, "kv_sharing_modes", None)
+    if kv_sharing_modes is not None:
+        for i, mode in enumerate(kv_sharing_modes):
+            if mode == "reuse":
                 layer_types[i] = "dummy"
 
     # Prepare additional kwargs that may be needed to __init__ each cache layer

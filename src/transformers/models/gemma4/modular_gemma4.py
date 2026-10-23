@@ -964,8 +964,8 @@ class Gemma4VisionEncoder(nn.Module):
 
 class Gemma4TextMLP(Gemma3MLP):
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
-        kv_sharing_role = config.kv_sharing_roles[layer_idx] if hasattr(config, "kv_sharing_roles") else "independent"
-        is_kv_shared_layer = kv_sharing_role == "consumer"
+        kv_sharing_mode = config.kv_sharing_modes[layer_idx] if hasattr(config, "kv_sharing_modes") else None
+        is_kv_shared_layer = kv_sharing_mode == "reuse"
         use_double_wide_mlp = config.use_double_wide_mlp and is_kv_shared_layer
         super().__init__()
         self.intermediate_size = config.intermediate_size * (2 if use_double_wide_mlp else 1)
@@ -1024,9 +1024,9 @@ class Gemma4TextAttention(nn.Module):
         self.is_causal = config.use_bidirectional_attention != "all"
 
         # Shared kv cache
-        kv_sharing_role = config.kv_sharing_roles[layer_idx] if hasattr(config, "kv_sharing_roles") else "independent"
-        self.is_kv_shared_layer = kv_sharing_role == "consumer"
-        self.store_full_length_kv = kv_sharing_role == "producer"
+        kv_sharing_mode = config.kv_sharing_modes[layer_idx] if hasattr(config, "kv_sharing_modes") else None
+        self.is_kv_shared_layer = kv_sharing_mode == "reuse"
+        self.store_full_length_kv = kv_sharing_mode == "store"
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias

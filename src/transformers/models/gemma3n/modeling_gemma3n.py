@@ -1173,8 +1173,8 @@ class Gemma3nTextAttention(nn.Module):
         self.attention_dropout = self.config.attention_dropout
         self.is_causal = True
 
-        self.is_kv_shared_layer = config.kv_sharing_roles[layer_idx] == "consumer"
-        self.store_full_length_kv = config.kv_sharing_roles[layer_idx] == "producer"
+        self.is_kv_shared_layer = config.kv_sharing_modes[layer_idx] == "reuse"
+        self.store_full_length_kv = config.kv_sharing_modes[layer_idx] == "store"
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias

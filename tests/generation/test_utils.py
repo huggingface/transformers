@@ -2974,10 +2974,10 @@ class GenerationTesterMixin(ExportGenerateTesterMixin):
             # Dummy layer type
             elif type(layer) is DummyLayer:
                 # Either the dummy layer is there because there is cache sharing
-                kv_sharing_roles = getattr(config, "kv_sharing_roles", None)
-                if kv_sharing_roles is not None:
-                    kv_sharing_role = kv_sharing_roles[layer_idx]
-                    self.assertTrue(kv_sharing_role == "consumer")
+                kv_sharing_modes = getattr(config, "kv_sharing_modes", None)
+                if kv_sharing_modes is not None:
+                    kv_sharing_mode = kv_sharing_modes[layer_idx]
+                    self.assertTrue(kv_sharing_mode == "reuse")
                 # Otherwise it's because there is no attention
                 else:
                     layer_type = config.layer_types[layer_idx]
