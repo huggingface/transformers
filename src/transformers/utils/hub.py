@@ -22,7 +22,7 @@ import re
 import sys
 import tempfile
 from concurrent import futures
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TypedDict
 from uuid import uuid4
 
@@ -966,6 +966,21 @@ def get_checkpoint_shard_files(
         index = json.loads(f.read())
 
     shard_filenames = sorted(set(index["weight_map"].values()))
+    # The index file is supplied by the model repo and cannot be trusted:
+    # shard names must stay inside the model folder. Reject `..` segments and
+    # absolute paths (Windows drive letters included) instead of letting
+    # os.path.join escape the model directory.
+    for shard_filename in shard_filenames:
+        normalized = shard_filename.replace("\\", "/")
+        if (
+            os.path.isabs(shard_filename)
+            or re.match(r"^[A-Za-z]:", normalized)
+            or ".." in PurePosixPath(normalized).parts
+        ):
+            raise ValueError(
+                f"Invalid shard filename {shard_filename!r} in the weight map of {index_filename}."
+                " Shard files must be relative paths located inside the model folder."
+            )
     sharded_metadata = index["metadata"]
     sharded_metadata["all_checkpoint_keys"] = list(index["weight_map"].keys())
     sharded_metadata["weight_map"] = index["weight_map"].copy()
