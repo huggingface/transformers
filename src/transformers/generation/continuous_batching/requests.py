@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import re
 import time
 from copy import deepcopy
 from dataclasses import dataclass, field
@@ -40,6 +41,53 @@ if logger.propagate:
     logger.propagate = False
 
 
+# NUMA policy as shown in /proc/<pid>/numa_maps: "<mode>[=<flags>]:<nodes>", e.g. "bind:0-1,3" or "bind=static:0"
+_NUMA_BIND_POLICY_PATTERN = re.compile(r"bind(=[a-z|]+)?:(?P<nodes>\d+(-\d+)?(,\d+(-\d+)?)*)")
+# First line of /sys/devices/system/node/node<N>/meminfo
+_NUMA_NODE_MEMTOTAL_PATTERN = re.compile(r"Node \d+ MemTotal:\s+(?P<size_kb>\d+) kB")
+
+
+def _get_numa_bound_memory() -> int | None:
+    """
+    Total memory of the NUMA nodes the process is bound to (e.g. with `numactl --membind`), or `None` if the process is
+    not bound or the binding cannot be read. `psutil.virtual_memory().total` reports the whole machine, but a bound
+    process is OOM-killed once its nodes are full. Only the "bind" mode is a hard limit: "interleave" and "prefer" can
+    fall back to any node.
+    """
+    try:
+        with open("/proc/self/numa_maps", encoding="utf-8") as f:
+            first_mapping = f.readline()
+    except OSError:  # not Linux, or a kernel without NUMA support
+        return None
+
+    # Each line is "<address> <policy> ...". The first mapping has no policy of its own, so it shows the process policy.
+    fields = first_mapping.split()
+    policy = fields[1] if len(fields) > 1 else ""
+    policy_match = _NUMA_BIND_POLICY_PATTERN.fullmatch(policy)
+    if policy_match is None:
+        return None
+
+    bound_nodes = []
+    for node_range in policy_match["nodes"].split(","):
+        first_node, _, last_node = node_range.partition("-")
+        last_node = last_node or first_node
+        bound_nodes.extend(range(int(first_node), int(last_node) + 1))
+
+    total_memory = 0
+    for node in bound_nodes:
+        try:
+            with open(f"/sys/devices/system/node/node{node}/meminfo", encoding="utf-8") as f:
+                node_meminfo_header = f.readline()
+        except OSError:
+            node_meminfo_header = ""
+        memtotal_match = _NUMA_NODE_MEMTOTAL_PATTERN.match(node_meminfo_header)
+        if memtotal_match is None:
+            logger.warning(f"Cannot read the size of NUMA node {node}, ignoring the NUMA binding ({policy}).")
+            return None
+        total_memory += int(memtotal_match["size_kb"]) * 1024
+    return total_memory
+
+
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -66,6 +114,9 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         device = torch.device("cpu")
         if is_psutil_available():
             total_memory = psutil.virtual_memory().total
+            numa_bound_memory = _get_numa_bound_memory()
+            if numa_bound_memory is not None:
+                total_memory = min(total_memory, numa_bound_memory)
             allocated_memory = psutil.Process().memory_info().rss
             reserved_memory = allocated_memory
         else:
