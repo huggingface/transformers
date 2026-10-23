@@ -34,10 +34,11 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import auto_docstring, logging
+from ...utils.generic import is_flash_attention_requested
 from .configuration_gptj import GPTJConfig
 
 
-if is_flash_attn_available():
+if is_flash_attn_available(kernels_fallback_ok=True):
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
@@ -384,7 +385,10 @@ class GPTJBlock(GradientCheckpointingLayer):
         super().__init__()
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
         self.ln_1 = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
-        self.attn = GPTJ_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+        attn_implementation = (
+            "flash_attention_2" if is_flash_attention_requested(config) else config._attn_implementation
+        )
+        self.attn = GPTJ_ATTENTION_CLASSES[attn_implementation](config, layer_idx)
         self.mlp = GPTJMLP(inner_dim, config)
 
     def forward(
