@@ -316,7 +316,7 @@ class GtePooler(nn.Module):
 
 @auto_docstring
 class GtePreTrainedModel(PreTrainedModel):
-    config_class = GteConfig
+    config: GteConfig
     base_model_prefix = "gte"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
