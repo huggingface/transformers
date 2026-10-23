@@ -61,23 +61,23 @@ def dynamic_rope_update(rope_forward):
                 "original_max_position_embeddings"
             ]
 
-        if seq_len > original_max_position_embeddings:
-            if not hasattr(self, f"{layer_type}_long_inv_freq"):
-                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-                long_inv_freq, _ = rope_init_fn(
-                    self.config,
-                    device,
-                    seq_len=original_max_position_embeddings + 1,
-                    layer_type=layer_type,
-                )
-            self.register_buffer(f"{prefix}inv_freq", long_inv_freq, persistent=False)
-            setattr(self, f"{prefix}long_inv_freq", long_inv_freq)
-        else:
-            # This .to() is needed if the model has been moved to a device after being initialized (because
-            # the buffer is automatically moved, but not the original copy)
-            original_inv_freq = original_inv_freq.to(device)
-            self.register_buffer(f"{prefix}inv_freq", original_inv_freq, persistent=False)
-            setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
+        long_inv_freq = getattr(self, f"{prefix}long_inv_freq", None)
+        if long_inv_freq is None:
+            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+            long_inv_freq, _ = rope_init_fn(
+                self.config,
+                device,
+                seq_len=original_max_position_embeddings + 1,
+                layer_type=layer_type,
+            )
+        # `long_inv_freq` is a plain attribute and does not follow `model.to(...)`, so move it here
+        long_inv_freq = long_inv_freq.to(device)
+        original_inv_freq = original_inv_freq.to(device)
+        setattr(self, f"{prefix}long_inv_freq", long_inv_freq)
+
+        # `seq_len` is a scalar, so this picks the long or short set for all positions, like an if/else but traceable
+        inv_freq = torch.where(seq_len > original_max_position_embeddings, long_inv_freq, original_inv_freq)
+        self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
 
     def dynamic_frequency_update(self, position_ids, device, layer_type=None):
         """
@@ -760,7 +760,7 @@ class RotaryEmbeddingConfigMixin:
         # 3. Values in the config's attributes (i.e. it's in MyConfig.__init__'s args)
         # 4. Default values (i.e. not present at all but other RoPE parameters are present)
         rope_theta = kwargs.pop("rope_theta", getattr(self, "rope_theta", self.default_theta))
-        partial_rotary_factor = kwargs.get("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
+        partial_rotary_factor = kwargs.pop("partial_rotary_factor", getattr(self, "partial_rotary_factor", None))
 
         # When `rope_parameters` is nested, the defaults belong in each nested dict rather than next to them
         nested_keys = self.nested_rope_parameter_keys(self.rope_parameters)
@@ -858,7 +858,10 @@ class RotaryEmbeddingConfigMixin:
         else:
             rope_parameters_dict = {"full_attention": rope_parameters_dict}
 
-        for rope_parameters in rope_parameters_dict.values():
+        # Heterogeneous configs can't read `head_dim` globally, so the even-dim check is skipped for them
+        head_dim = None if self.is_heterogeneous else getattr(self, "head_dim", None)
+
+        for layer_type, rope_parameters in rope_parameters_dict.items():
             # skip when set to `None`, possibly a NoPE layer
             if rope_parameters is None:
                 continue
@@ -871,6 +874,20 @@ class RotaryEmbeddingConfigMixin:
             else:
                 logger.warning(
                     f"Missing validation function in 'RotaryEmbeddingConfigMixin' for 'rope_type'='{rope_type}'"
+                )
+
+            # An odd partial rotary dim is rounded up and still fits in the head, but a fully-rotated odd head doesn't
+            # Synthetic test fixtures and Hub test checkpoints (e.g. tiny-llama) use head_dim <= 4 and are allowed
+            partial_rotary_factor = rope_parameters.get("partial_rotary_factor", 1.0)
+            if (
+                head_dim is not None
+                and head_dim > 4
+                and head_dim % 2
+                and int(head_dim * partial_rotary_factor) == head_dim
+            ):
+                raise ValueError(
+                    f"RoPE requires an even rotary dimension, but got `head_dim`={head_dim} with "
+                    f"`partial_rotary_factor`={partial_rotary_factor} for `{layer_type}`."
                 )
 
     def _validate_axial_rope_parameters(self, rope_parameters: dict, ignore_keys: set | None = None):

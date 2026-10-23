@@ -94,7 +94,7 @@ def get_gguf_kernel() -> "GgufKernel | bool":
     try:
         from ..hub_kernels import get_kernel
 
-        module = get_kernel("transformers-community/ggml-quantization", version=1)
+        module = get_kernel("ggml-org/ggml-quantization", version=1)
         _gguf_kernel = GgufKernel(module)
     except Exception as error:  # noqa: BLE001
         logger.info(
@@ -122,7 +122,7 @@ def get_ggml_layer_mapping() -> dict:
         "RMSNormZeroCentered": {
             "mps": {
                 Mode.INFERENCE: LayerRepository(
-                    repo_id="transformers-community/ggml-norm",
+                    repo_id="ggml-org/ggml-norm",
                     layer_name="RMSNormZeroCentered",
                     version=1,
                 )
@@ -131,7 +131,7 @@ def get_ggml_layer_mapping() -> dict:
         "Qwen3_5GatedDeltaNet": {
             "mps": {
                 Mode.INFERENCE: LayerRepository(
-                    repo_id="transformers-community/ggml-gated-delta-net",
+                    repo_id="ggml-org/ggml-gated-delta-net",
                     layer_name="Qwen3_5GatedDeltaNet",
                     version=1,
                 )

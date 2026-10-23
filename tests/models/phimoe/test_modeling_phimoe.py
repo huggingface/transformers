@@ -93,7 +93,6 @@ class PhimoeModelTester(CausalLMModelTester):
 
 @require_torch
 class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
-    test_all_params_have_gradient = False
     model_tester_class = PhimoeModelTester
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79292/workflows/fa2ba644-8953-44a6-8f67-ccd69ca6a476/jobs/1012905
@@ -115,8 +114,13 @@ class PhimoeModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 @require_torch
 class PhimoeIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    model = None
-    offload_dir = None
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Assigned here rather than in the class body: `MemoryCleanupMixin` snapshots the class body and
+        # protects it from teardown, so a checkpoint parked on a class-body `model` is never released.
+        cls.model = None
+        cls.offload_dir = None
 
     @classmethod
     def get_model(cls):

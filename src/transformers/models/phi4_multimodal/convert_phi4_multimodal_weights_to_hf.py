@@ -136,7 +136,7 @@ def convert_config(original_config: dict):
 
 
 def read_json(path):
-    with open(path, "r") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -193,24 +193,24 @@ def convert_and_save_processor(input_dir: str, output_dir: str):
 
     # we need to rename a few tokens but tokenizers doesn't allow doing that programmatically
     # To avoid consufion and manual renaming, the below part load and re-saved each json file
-    vocab = json.load(open(f"{output_dir}/vocab.json", "r"))
+    vocab = json.load(open(f"{output_dir}/vocab.json", "r", encoding="utf-8"))
     vocab["<|endoftext11|>"] = "<|audio|>"
     vocab["<|endoftext10|>"] = "<|image|>"
-    json.dump(vocab, open(f"{output_dir}/vocab.json", "w"))
+    json.dump(vocab, open(f"{output_dir}/vocab.json", "w", encoding="utf-8"))
 
-    tokenizer = json.load(open(f"{output_dir}/tokenizer.json", "r"))
+    tokenizer = json.load(open(f"{output_dir}/tokenizer.json", "r", encoding="utf-8"))
     tokenizer["added_tokens"][1]["content"] = "<|image|>"
     tokenizer["added_tokens"][2]["content"] = "<|audio|>"
     tokenizer["model"]["vocab"]["<|audio|>"] = tokenizer["model"]["vocab"]["<|endoftext11|>"]
     tokenizer["model"]["vocab"]["<|image|>"] = tokenizer["model"]["vocab"]["<|endoftext10|>"]
     del tokenizer["model"]["vocab"]["<|endoftext11|>"]
     del tokenizer["model"]["vocab"]["<|endoftext10|>"]
-    json.dump(tokenizer, open(f"{output_dir}/tokenizer.json", "w"))
+    json.dump(tokenizer, open(f"{output_dir}/tokenizer.json", "w", encoding="utf-8"))
 
-    tokenizer_config = json.load(open(f"{output_dir}/tokenizer_config.json", "r"))
+    tokenizer_config = json.load(open(f"{output_dir}/tokenizer_config.json", "r", encoding="utf-8"))
     tokenizer_config["added_tokens_decoder"]["200010"]["content"] = "<|image|>"
     tokenizer_config["added_tokens_decoder"]["200011"]["content"] = "<|audio|>"
-    json.dump(tokenizer_config, open(f"{output_dir}/tokenizer_config.json", "w"))
+    json.dump(tokenizer_config, open(f"{output_dir}/tokenizer_config.json", "w", encoding="utf-8"))
 
 
 def extract_adapters_data(input_dir: str, output_dir: str):

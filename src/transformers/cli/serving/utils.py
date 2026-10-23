@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING
 
 from transformers.utils import logging
 from transformers.utils.chat_parsing import ResponseParser
+from transformers.utils.chat_template_utils import _REASONING_FIELDS
 
 
 if TYPE_CHECKING:
@@ -126,7 +127,7 @@ _RESPONSE_TEMPLATE_FALLBACKS = {
         "defaults": {"role": "assistant"},
         "start_anchor": "<|im_start|>assistant\n",
         "fields": {
-            "thinking": {
+            "reasoning_content": {
                 "open": "<think>",
                 "close": "</think>",
                 "content": "text",
@@ -158,7 +159,7 @@ _RESPONSE_TEMPLATE_FALLBACKS = {
         "defaults": {"role": "assistant"},
         "start_anchor": "<|im_start|>assistant\n",
         "fields": {
-            "thinking": {
+            "reasoning_content": {
                 "open": "<think>",
                 "close": "</think>",
                 "content": "text",
@@ -188,7 +189,7 @@ _RESPONSE_TEMPLATE_FALLBACKS = {
         "defaults": {"role": "assistant"},
         "start_anchor": ["<|turn>model\n", "<tool_response|>"],
         "fields": {
-            "thinking": {
+            "reasoning_content": {
                 "open": "<|channel>thought\n",
                 "close": "<channel|>",
                 "content": "text",
@@ -317,7 +318,8 @@ def parse_assistant_message(
     # Absent ``content`` key means the model emitted only tool calls / thinking;
     # surface that as an empty string rather than swapping in the raw decode.
     content = parsed.get("content", "")
-    reasoning = parsed.get("thinking")
+    # Response templates should name the field `reasoning_content`, but some on the Hub still use `thinking`
+    reasoning = next((parsed[field] for field in _REASONING_FIELDS if parsed.get(field) is not None), None)
     raw = parsed.get("tool_calls") or []
     tool_calls = [_normalize_tool_call(v) for v in raw] or None
     return content, reasoning, tool_calls
@@ -347,7 +349,7 @@ def response_events_to_chunks(events: list[dict]) -> list:
             text = ev.get("text") or ""
             if not text:
                 continue
-            if field == "thinking":
+            if field in _REASONING_FIELDS:
                 out.append(ReasoningText(text))
             elif field == "content":
                 out.append(text)

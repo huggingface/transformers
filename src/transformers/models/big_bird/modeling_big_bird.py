@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -344,7 +344,9 @@ class BigBirdBlockSparseAttention(nn.Module):
         attn_mask_penalty = -10000.0
 
         # generate random attention and corresponding masks
-        np.random.seed(seed)
+        # Only seed while training: in eval the helpers below return a constant all-zero list.
+        if self.training:
+            np.random.seed(seed)
         if from_seq_len in [1024, 3072, 4096]:  # old plans used in paper
             rand_attn = [
                 self._bigbird_block_rand_mask(
@@ -2029,9 +2031,8 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.cls(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.cls(hidden_states)
 
         loss = None
         if labels is not None:
@@ -2481,8 +2482,7 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
     @staticmethod
     def prepare_question_mask(q_lengths: torch.Tensor, maxlen: int):
         # q_lengths -> (bz, 1)
-        mask = torch.arange(0, maxlen).to(q_lengths.device)
-        mask.unsqueeze_(0)  # -> (1, maxlen)
+        mask = torch.arange(0, maxlen, device=q_lengths.device).unsqueeze(0)  # -> (1, maxlen)
         mask = torch.where(mask < q_lengths, 1, 0)
         return mask
 

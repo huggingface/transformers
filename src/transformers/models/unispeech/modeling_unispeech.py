@@ -1056,11 +1056,13 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         quantized_features = self.project_q(quantized_features.to(self.project_q.weight.dtype))
         quantized_features = self.project_hid(quantized_features)
 
-        prob_replace_matrix = torch.empty(transformer_features.size(0), transformer_features.size(1)).fill_(
-            self.config.replace_prob
+        prob_replace_matrix = torch.full(
+            (transformer_features.size(0), transformer_features.size(1)),
+            self.config.replace_prob,
+            device=transformer_features.device,
         )
         prob_replace_matrix = prob_replace_matrix.transpose(0, 1)
-        sampled_replace_matrix = torch.bernoulli(prob_replace_matrix).bool().to(transformer_features.device)
+        sampled_replace_matrix = torch.bernoulli(prob_replace_matrix).bool()
         sampled_replace_matrix = sampled_replace_matrix.transpose(0, 1)
         sampled_replace_matrix = sampled_replace_matrix.unsqueeze(-1)
         logits = transformer_features.masked_fill(sampled_replace_matrix, 0.0) + (
@@ -1195,26 +1197,15 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
                 attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
             )
             input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
-
-            # assuming that padded tokens are filled with -100
-            # when not being attended to
-            labels_mask = labels >= 0
-            target_lengths = labels_mask.sum(-1)
-            flattened_targets = labels.masked_select(labels_mask)
-
-            # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
-
-            with torch.backends.cudnn.flags(enabled=False):
-                loss = nn.functional.ctc_loss(
-                    log_probs,
-                    flattened_targets,
-                    input_lengths,
-                    target_lengths,
-                    blank=self.config.pad_token_id,
-                    reduction=self.config.ctc_loss_reduction,
-                    zero_infinity=self.config.ctc_zero_infinity,
-                )
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                logit_lengths=input_lengths,
+                blank_token_id=self.config.pad_token_id,
+                reduction=self.config.ctc_loss_reduction,
+                zero_infinity=self.config.ctc_zero_infinity,
+                **kwargs,
+            )
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions

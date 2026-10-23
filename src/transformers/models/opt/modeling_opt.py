@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     QuestionAnsweringModelOutput,
     SequenceClassifierOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -342,14 +342,17 @@ class OPTDecoder(OPTPreTrainedModel):
 
         past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
 
-        if attention_mask is None:
+        # The dense mask is only required to infer `position_ids`, while `attention_mask` must stay `None` when
+        # unpadded, as `create_causal_mask` would otherwise never skip it in favor of sdpa's `is_causal` argument
+        position_attention_mask = attention_mask
+        if position_attention_mask is None:
             seq_length = past_seen_tokens + inputs_embeds.shape[1]
-            attention_mask = torch.ones(inputs_embeds.shape[0], seq_length, device=inputs_embeds.device)
+            position_attention_mask = torch.ones(inputs_embeds.shape[0], seq_length, device=inputs_embeds.device)
 
         # embed positions
         if position_ids is None:
-            position_ids = torch.cumsum(attention_mask, dim=1)
-            position_ids = (position_ids * attention_mask - 1).long()
+            position_ids = torch.cumsum(position_attention_mask, dim=1)
+            position_ids = (position_ids * position_attention_mask - 1).long()
             # cut positions if `past_seen_tokens` is > 0
             position_ids = position_ids[:, past_seen_tokens:]
 
@@ -360,7 +363,7 @@ class OPTDecoder(OPTPreTrainedModel):
             past_key_values=past_key_values,
         )
 
-        pos_embeds = self.embed_positions(attention_mask, past_seen_tokens, position_ids=position_ids)
+        pos_embeds = self.embed_positions(position_attention_mask, past_seen_tokens, position_ids=position_ids)
 
         if self.project_in is not None:
             inputs_embeds = self.project_in(inputs_embeds)
@@ -502,9 +505,8 @@ class OPTForCausalLM(OPTPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :]).contiguous()
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states).contiguous()
 
         loss = None
         if labels is not None:

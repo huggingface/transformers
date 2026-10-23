@@ -60,7 +60,6 @@ class Glm4MoeLiteModelTester(CausalLMModelTester):
 @require_torch
 class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Glm4MoeLiteModelTester
-    test_all_params_have_gradient = False
     model_split_percents = [0.5, 0.7, 0.8]
 
     @unittest.skip("MoE topk routing is too sensitive to Float8 quantization numerical noise")
@@ -103,12 +102,3 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile
-        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)

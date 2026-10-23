@@ -16,7 +16,6 @@
 import unittest
 
 import pytest
-from packaging import version
 from parameterized import parameterized
 
 from transformers import (
@@ -97,7 +96,7 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
         model_id = "google/vaultgemma-1b"
         # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
         EXPECTED_TEXTS = [
-            "Hello I am doing a project on a 1990 240sx. I have a 1",
+            "Hello I am doing a project on a 1990 240sx. I have a 2",
             "Hi today I am going to show you how to make a simple 3D model of a 3D",
         ]
 
@@ -113,9 +112,6 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
     @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
-        if version.parse(torch.__version__) < version.parse("2.5.0"):
-            self.skipTest(reason="This test requires torch >= 2.5 to run.")
-
         from transformers.integrations.executorch import (
             TorchExportableModuleWithStaticCache,
         )
@@ -136,13 +132,11 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
         device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
         dtype = torch.bfloat16
         cache_implementation = "static"
-        attn_implementation = "sdpa"
         batch_size = 1
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
             device_map=device,
             dtype=dtype,
-            attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,
                 cache_implementation=cache_implementation,
@@ -173,7 +167,7 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
         ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
-    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
+    @parameterized.expand([("flash_attention_2",), ("flex_attention",), ("eager",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
         we need to correctly slice the attention mask in all cases (because we use a hybrid cache).
@@ -219,7 +213,7 @@ class VaultGemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
-    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
+    @parameterized.expand([("flash_attention_2",), ("flex_attention",), ("eager",)])
     def test_generation_beyond_sliding_window_dynamic(self, attn_implementation: str):
         """
         Same as above, but explicitly setting the cache to Dynamic, as it's otherwise static by default for

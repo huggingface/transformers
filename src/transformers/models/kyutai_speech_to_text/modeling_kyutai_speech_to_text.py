@@ -33,16 +33,35 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_kyutai_speech_to_text import KyutaiSpeechToTextConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+class KyutaiSpeechToTextRMSNorm(nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))  # Ignore copy
+
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
+    # Ignore copy
+    def forward(self, x):
+        output = self._norm(x.float())
+        output = output * self.weight.float()
+        return output.type_as(x)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
 class KyutaiSpeechToTextFlexibleLinear(nn.Module):
@@ -84,170 +103,6 @@ class KyutaiSpeechToTextFlexibleLinear(nn.Module):
         return x.squeeze(2)
 
 
-@auto_docstring
-class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
-    config: KyutaiSpeechToTextConfig
-    base_model_prefix = "model"
-    input_modalities = ("audio", "text")
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["KyutaiSpeechToTextDecoderLayer"]
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    main_input_name = "input_ids"
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, KyutaiSpeechToTextFlexibleLinear):
-            init.normal_(module.weight)
-        if isinstance(module, KyutaiSpeechToTextEmbeddings):
-            audio_tokens_offsets = torch.arange(module.config.num_codebooks) * module.config.codebook_vocab_size
-            audio_tokens_offsets += module.config.vocab_size
-            audio_tokens_offsets = nn.functional.pad(audio_tokens_offsets, (1, 0))
-            init.copy_(module.audio_tokens_offsets, audio_tokens_offsets)
-
-
-class KyutaiSpeechToTextConv1dPaddingCache:
-    """
-    Padding cache for KyutaiSpeechToTextConv1d causal convolutions in order to support streaming via cache padding.
-    See: https://huggingface.co/papers/2005.06720 & https://huggingface.co/papers/2204.07064
-
-    A padding cache is a list of cached partial hidden states for each convolution layer.
-    Hidden states are cached from the previous call to the KyutaiSpeechToTextConv1d forward pass, given the padding size.
-    """
-
-    def __init__(
-        self,
-        num_layers: int,
-        per_layer_padding: list[int],
-        per_layer_padding_mode: list[str],
-        per_layer_in_channels: list[int],
-    ):
-        # ensure correct number of layers for each arg
-        from_args_num_layers = {len(per_layer_padding), len(per_layer_padding_mode), len(per_layer_in_channels)}
-
-        if len(from_args_num_layers) != 1 or from_args_num_layers.pop() != num_layers:
-            raise ValueError(
-                f"Expected `num_layers` ({num_layers}) values in `per_layer_padding`, `per_layer_padding_mode` and `per_layer_in_channels`"
-            )
-
-        self.per_layer_padding = per_layer_padding
-        self.per_layer_padding_mode = per_layer_padding_mode
-        self.per_layer_in_channels = per_layer_in_channels
-
-        self.padding_cache = [None] * num_layers
-
-    def _cache_init(self, hidden_states: torch.Tensor, layer_idx: int):
-        """
-        Initialize the cache for a specific layer.
-
-        Parameters:
-            hidden_states (`torch.Tensor`):
-                The hidden states to initialize the cache with.
-            layer_idx (`int`):
-                The index of the layer to initialize the cache for.
-        Returns:
-            `torch.Tensor`, the initialized cache.
-        """
-        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
-        padding, padding_mode, in_channels = (
-            self.per_layer_padding[layer_idx],
-            self.per_layer_padding_mode[layer_idx],
-            self.per_layer_in_channels[layer_idx],
-        )
-
-        if padding_mode == "constant":
-            current_cache = torch.zeros(batch_size, in_channels, padding, device=device, dtype=dtype)
-        elif padding_mode == "replicate":
-            current_cache = (
-                torch.ones(batch_size, in_channels, padding, device=device, dtype=dtype) * hidden_states[..., :1]
-            )
-        else:
-            raise NotImplementedError(f"Padding mode {padding_mode} not supported")
-
-        return current_cache
-
-    def update(self, hidden_states: torch.Tensor, layer_idx: int):
-        """
-        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
-
-        Parameters:
-            hidden_states (`torch.Tensor`):
-                The hidden states to be partially cached.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-        Returns:
-            `torch.Tensor` or `None`, the current padding cache.
-        """
-        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
-        padding, in_channels = self.per_layer_padding[layer_idx], self.per_layer_in_channels[layer_idx]
-
-        if self.padding_cache[layer_idx] is None:
-            current_cache = self._cache_init(hidden_states, layer_idx)
-        else:
-            current_cache = self.padding_cache[layer_idx]
-
-        # update the cache
-        if padding > 0:
-            shortfall = max(0, padding - hidden_states.shape[-1])
-            if shortfall > 0:
-                padding_states = torch.cat([current_cache[:, :, -shortfall:], hidden_states], dim=-1)
-            else:
-                padding_states = hidden_states[:, :, -padding:]
-        else:
-            padding_states = torch.empty(batch_size, in_channels, 0, dtype=dtype, device=device)
-
-        self.padding_cache[layer_idx] = padding_states
-        return current_cache
-
-
-class KyutaiSpeechToTextEmbeddings(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.embed_tokens = nn.Embedding(
-            config.vocab_size + (config.num_codebooks * config.codebook_vocab_size) + 1,
-            config.hidden_size,
-            padding_idx=config.audio_pad_token_id,
-        )
-        audio_tokens_offsets = torch.arange(config.num_codebooks) * config.codebook_vocab_size
-        audio_tokens_offsets += config.vocab_size
-        audio_tokens_offsets = nn.functional.pad(
-            audio_tokens_offsets, (1, 0)
-        )  # pad one 0 to the left for the text token
-        self.audio_tokens_offsets = nn.Buffer(audio_tokens_offsets, persistent=False)
-
-    def forward(self, input_ids):
-        input_ids = torch.where(
-            input_ids == self.embed_tokens.padding_idx, input_ids, input_ids + self.audio_tokens_offsets
-        )
-        inputs_embeds = self.embed_tokens(input_ids)
-        inputs_embeds = inputs_embeds.sum(dim=2)
-        return inputs_embeds
-
-
-class KyutaiSpeechToTextRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))  # Ignore copy
-
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    # Ignore copy
-    def forward(self, x):
-        output = self._norm(x.float())
-        output = output * self.weight.float()
-        return output.type_as(x)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
-
-
 class KyutaiSpeechToTextLinear(nn.Module):
     def __init__(self, input_dim, output_dim, num_codebooks, use_flexible_linear=False):
         super().__init__()
@@ -267,8 +122,7 @@ class KyutaiSpeechToTextLinear(nn.Module):
 
 
 class KyutaiSpeechToTextRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: KyutaiSpeechToTextConfig, device=None):
+    def __init__(self, config: KyutaiSpeechToTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -279,16 +133,13 @@ class KyutaiSpeechToTextRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: KyutaiSpeechToTextConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: KyutaiSpeechToTextConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -304,23 +155,15 @@ class KyutaiSpeechToTextRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -530,23 +373,19 @@ class KyutaiSpeechToTextDecoderLayer(GradientCheckpointingLayer):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        output_attentions: bool | None = False,
-        use_cache: bool | None = False,
         codebook_idx: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
             codebook_idx=codebook_idx,
             **kwargs,
         )
@@ -559,13 +398,156 @@ class KyutaiSpeechToTextDecoderLayer(GradientCheckpointingLayer):
             self.mlp(hidden_states) if not self.use_flexible_linear else self.mlp(hidden_states, codebook_idx)
         )
         hidden_states = residual + hidden_states
+        return hidden_states
 
-        outputs = (hidden_states,)
 
-        if output_attentions:
-            outputs += (self_attn_weights,)
+@auto_docstring
+class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
+    config: KyutaiSpeechToTextConfig
+    base_model_prefix = "model"
+    input_modalities = ("audio", "text")
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["KyutaiSpeechToTextDecoderLayer"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": KyutaiSpeechToTextDecoderLayer,
+        "attentions": KyutaiSpeechToTextAttention,
+    }
 
-        return outputs
+    main_input_name = "input_ids"
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, KyutaiSpeechToTextFlexibleLinear):
+            init.normal_(module.weight)
+        if isinstance(module, KyutaiSpeechToTextEmbeddings):
+            audio_tokens_offsets = torch.arange(module.config.num_codebooks) * module.config.codebook_vocab_size
+            audio_tokens_offsets += module.config.vocab_size
+            audio_tokens_offsets = nn.functional.pad(audio_tokens_offsets, (1, 0))
+            init.copy_(module.audio_tokens_offsets, audio_tokens_offsets)
+
+
+class KyutaiSpeechToTextConv1dPaddingCache:
+    """
+    Padding cache for KyutaiSpeechToTextConv1d causal convolutions in order to support streaming via cache padding.
+    See: https://huggingface.co/papers/2005.06720 & https://huggingface.co/papers/2204.07064
+
+    A padding cache is a list of cached partial hidden states for each convolution layer.
+    Hidden states are cached from the previous call to the KyutaiSpeechToTextConv1d forward pass, given the padding size.
+    """
+
+    def __init__(
+        self,
+        num_layers: int,
+        per_layer_padding: list[int],
+        per_layer_padding_mode: list[str],
+        per_layer_in_channels: list[int],
+    ):
+        # ensure correct number of layers for each arg
+        from_args_num_layers = {len(per_layer_padding), len(per_layer_padding_mode), len(per_layer_in_channels)}
+
+        if len(from_args_num_layers) != 1 or from_args_num_layers.pop() != num_layers:
+            raise ValueError(
+                f"Expected `num_layers` ({num_layers}) values in `per_layer_padding`, `per_layer_padding_mode` and `per_layer_in_channels`"
+            )
+
+        self.per_layer_padding = per_layer_padding
+        self.per_layer_padding_mode = per_layer_padding_mode
+        self.per_layer_in_channels = per_layer_in_channels
+
+        self.padding_cache = [None] * num_layers
+
+    def _cache_init(self, hidden_states: torch.Tensor, layer_idx: int):
+        """
+        Initialize the cache for a specific layer.
+
+        Parameters:
+            hidden_states (`torch.Tensor`):
+                The hidden states to initialize the cache with.
+            layer_idx (`int`):
+                The index of the layer to initialize the cache for.
+        Returns:
+            `torch.Tensor`, the initialized cache.
+        """
+        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
+        padding, padding_mode, in_channels = (
+            self.per_layer_padding[layer_idx],
+            self.per_layer_padding_mode[layer_idx],
+            self.per_layer_in_channels[layer_idx],
+        )
+
+        if padding_mode == "constant":
+            current_cache = torch.zeros(batch_size, in_channels, padding, device=device, dtype=dtype)
+        elif padding_mode == "replicate":
+            current_cache = (
+                torch.ones(batch_size, in_channels, padding, device=device, dtype=dtype) * hidden_states[..., :1]
+            )
+        else:
+            raise NotImplementedError(f"Padding mode {padding_mode} not supported")
+
+        return current_cache
+
+    def update(self, hidden_states: torch.Tensor, layer_idx: int):
+        """
+        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
+
+        Parameters:
+            hidden_states (`torch.Tensor`):
+                The hidden states to be partially cached.
+            layer_idx (`int`):
+                The index of the layer to cache the states for.
+        Returns:
+            `torch.Tensor` or `None`, the current padding cache.
+        """
+        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
+        padding, in_channels = self.per_layer_padding[layer_idx], self.per_layer_in_channels[layer_idx]
+
+        if self.padding_cache[layer_idx] is None:
+            current_cache = self._cache_init(hidden_states, layer_idx)
+        else:
+            current_cache = self.padding_cache[layer_idx]
+
+        # update the cache
+        if padding > 0:
+            shortfall = max(0, padding - hidden_states.shape[-1])
+            if shortfall > 0:
+                padding_states = torch.cat([current_cache[:, :, -shortfall:], hidden_states], dim=-1)
+            else:
+                padding_states = hidden_states[:, :, -padding:]
+        else:
+            padding_states = torch.empty(batch_size, in_channels, 0, dtype=dtype, device=device)
+
+        self.padding_cache[layer_idx] = padding_states
+        return current_cache
+
+
+class KyutaiSpeechToTextEmbeddings(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.embed_tokens = nn.Embedding(
+            config.vocab_size + (config.num_codebooks * config.codebook_vocab_size) + 1,
+            config.hidden_size,
+            padding_idx=config.audio_pad_token_id,
+        )
+        audio_tokens_offsets = torch.arange(config.num_codebooks) * config.codebook_vocab_size
+        audio_tokens_offsets += config.vocab_size
+        audio_tokens_offsets = nn.functional.pad(
+            audio_tokens_offsets, (1, 0)
+        )  # pad one 0 to the left for the text token
+        self.audio_tokens_offsets = nn.Buffer(audio_tokens_offsets, persistent=False)
+
+    def forward(self, input_ids):
+        input_ids = torch.where(
+            input_ids == self.embed_tokens.padding_idx, input_ids, input_ids + self.audio_tokens_offsets
+        )
+        inputs_embeds = self.embed_tokens(input_ids)
+        inputs_embeds = inputs_embeds.sum(dim=2)
+        return inputs_embeds
 
 
 @auto_docstring
@@ -587,6 +569,8 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -596,24 +580,8 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
@@ -622,15 +590,13 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = None
-        if attention_mask is not None:
-            causal_mask = create_causal_mask(
-                config=self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-                position_ids=position_ids,
-            )
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
 
         # embed positions
         hidden_states = inputs_embeds
@@ -638,44 +604,17 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-
         for decoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
+                **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attns] if v is not None
-            )
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-        )
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
 @auto_docstring
@@ -754,9 +693,8 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -838,18 +776,18 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
 
         # initialize the padding cache for the codec model
         per_layer_padding, per_layer_padding_mode, per_layer_in_channels = [], [], []
-        for layer_name in self.codec_model.encoder._mimiconv1d_layer_names:
-            per_layer_padding.append(self.codec_model.encoder.get_submodule(layer_name).padding_total)
-            per_layer_padding_mode.append(self.codec_model.encoder.get_submodule(layer_name).pad_mode)
-            per_layer_in_channels.append(self.codec_model.encoder.get_submodule(layer_name).in_channels)
+        for layer_name in self.codec_model.encoder.encoder_seanet._conv1d_layer_names:
+            per_layer_padding.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).padding_total)
+            per_layer_padding_mode.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).pad_mode)
+            per_layer_in_channels.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).in_channels)
 
         # downsample layer
-        per_layer_padding.append(self.codec_model.downsample.padding_total)
-        per_layer_padding_mode.append(self.codec_model.downsample.pad_mode)
-        per_layer_in_channels.append(self.codec_model.downsample.in_channels)
+        per_layer_padding.append(self.codec_model.encoder.downsample.padding_total)
+        per_layer_padding_mode.append(self.codec_model.encoder.downsample.pad_mode)
+        per_layer_in_channels.append(self.codec_model.encoder.downsample.in_channels)
 
         model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache(
-            num_layers=len(self.codec_model.encoder._mimiconv1d_layer_names) + 1,
+            num_layers=len(self.codec_model.encoder.encoder_seanet._conv1d_layer_names) + 1,
             per_layer_padding=per_layer_padding,
             per_layer_padding_mode=per_layer_padding_mode,
             per_layer_in_channels=per_layer_in_channels,

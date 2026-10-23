@@ -85,6 +85,8 @@ print(tokenizer.decode(generated_ids[0], skip_special_tokens=True))
 
   Decode is roughly flat because the single-token DeltaNet recurrence is memory-bandwidth-bound; the win is on the chunked-prefill core and grows with prompt length. Loading the mapped kernel currently requires `trust_remote_code=True` until `Atlas-Inference` is added to the trusted-kernels allowlist.
 
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## Qwen3_5MoeConfig
 
 [[autodoc]] Qwen3_5MoeConfig

@@ -315,6 +315,4 @@ PyTorchから[`AdamW`](https://pytorch.org/docs/stable/generated/torch.optim.Ada
 
 さらなるファインチューニングの例については、以下を参照してください：
 
-- [🤗 Transformers Examples](https://github.com/huggingface/transformers/tree/main/examples) には、PyTorchとTensorFlowで一般的なNLPタスクをトレーニングするスクリプトが含まれています。
-
 - [🤗 Transformers Notebooks](notebooks) には、特定のタスクにモデルをファインチューニングする方法に関するさまざまなノートブックが含まれています。
