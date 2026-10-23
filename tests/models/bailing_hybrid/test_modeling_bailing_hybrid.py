@@ -11,14 +11,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch Ling 3.0 / Bailing MoE V3 model."""
+"""Testing suite for the PyTorch Ling 3 / Bailing MoE V3 model."""
 
+import re
 import tempfile
 import unittest
 from unittest import mock
 
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
+from transformers.testing_utils import (
+    cleanup,
+    require_kernels,
+    require_torch,
+    require_torch_accelerator_memory,
+    slow,
+    torch_device,
+)
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -26,9 +34,13 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
     from safetensors.torch import load_file
+    from torch import nn
 
-    from transformers import BailingHybridForCausalLM, BailingHybridModel
+    from transformers import BailingHybridConfig, BailingHybridForCausalLM, BailingHybridModel, FineGrainedFP8Config
+    from transformers.conversion_mapping import get_model_conversion_mapping
     from transformers.generation.utils import ALL_CACHE_NAMES
+    from transformers.integrations.finegrained_fp8 import FP8Linear
+    from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
 
 class BailingHybridModelTester(CausalLMModelTester):
@@ -45,6 +57,7 @@ class BailingHybridModelTester(CausalLMModelTester):
         # Keep the KDA head size distinct from the MLA RoPE size to cover config save/load semantics.
         self.head_dim = 24
         self.kv_lora_rank = 16
+        self.q_lora_rank = None
         self.qk_nope_head_dim = 32
         self.qk_rope_head_dim = 16
         self.v_head_dim = 32
@@ -107,33 +120,146 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_reverse_loading_mapping(self):
         """Exercise the two-stage Ling key mapping as an end-to-end exact round trip."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        model = BailingHybridForCausalLM(config)
+        for q_lora_rank in (None, 12):
+            with self.subTest(q_lora_rank=q_lora_rank):
+                config = self.model_tester.get_config()
+                config.q_lora_rank = q_lora_rank
+                model = BailingHybridForCausalLM(config)
 
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-            saved_keys = set(load_file(f"{tmpdirname}/model.safetensors"))
-            reloaded = BailingHybridForCausalLM.from_pretrained(tmpdirname)
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    model.save_pretrained(tmpdirname)
+                    saved_keys = set(load_file(f"{tmpdirname}/model.safetensors"))
+                    reloaded = BailingHybridForCausalLM.from_pretrained(tmpdirname)
 
-        expected_keys = {
-            "model.word_embeddings.weight",
-            "model.layers.0.attention.f_proj.weight",
-            "model.layers.0.attention.q_conv1d.weight",
-            "model.layers.0.attention.k_conv1d.weight",
-            "model.layers.0.attention.v_conv1d.weight",
-            "model.layers.1.attention.dense.weight",
-            "model.layers.1.mlp.gate.expert_bias",
+                expected_keys = {
+                    "model.word_embeddings.weight",
+                    "model.layers.0.attention.f_proj.weight",
+                    "model.layers.0.attention.q_conv1d.weight",
+                    "model.layers.0.attention.k_conv1d.weight",
+                    "model.layers.0.attention.v_conv1d.weight",
+                    "model.layers.1.attention.dense.weight",
+                    "model.layers.1.mlp.gate.expert_bias",
+                }
+                query_projections = ("q_proj",) if q_lora_rank is None else ("q_a_layernorm", "q_a_proj", "q_b_proj")
+                expected_keys.update(f"model.layers.1.attention.{name}.weight" for name in query_projections)
+                self.assertEqual("model.layers.1.attention.q_proj.weight" in saved_keys, q_lora_rank is None)
+                self.assertTrue(expected_keys.issubset(saved_keys))
+                self.assertNotIn("model.layers.0.self_attn.conv1d.weight", saved_keys)
+                state_dict = model.state_dict()
+                reloaded_state_dict = reloaded.state_dict()
+                self.assertNotEqual(config.linear_head_dim, config.qk_rope_head_dim)
+                self.assertEqual(reloaded.config.linear_head_dim, config.linear_head_dim)
+                self.assertEqual(reloaded.config.qk_rope_head_dim, config.qk_rope_head_dim)
+                self.assertEqual(reloaded.config.q_lora_rank, config.q_lora_rank)
+                self.assertEqual(state_dict.keys(), reloaded_state_dict.keys())
+                for key, value in state_dict.items():
+                    torch.testing.assert_close(value, reloaded_state_dict[key], rtol=0, atol=0)
+
+    def test_mla_query_projection_variants(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        full_attention_idx = config.layer_types.index("full_attention")
+
+        direct_model = BailingHybridForCausalLM(config)
+        direct_attention = direct_model.model.layers[full_attention_idx].self_attn
+        self.assertIsNotNone(direct_attention.q_proj)
+        self.assertIsNone(direct_attention.q_a_proj)
+        self.assertIsNone(direct_attention.q_a_layernorm)
+        self.assertIsNone(direct_attention.q_b_proj)
+
+        config = BailingHybridConfig.from_dict({**config.to_dict(), "q_lora_rank": 12})
+        lora_model = BailingHybridForCausalLM(config)
+        lora_attention = lora_model.model.layers[full_attention_idx].self_attn
+        self.assertIsNone(lora_attention.q_proj)
+        self.assertEqual(lora_attention.q_a_proj.weight.shape, (config.q_lora_rank, config.hidden_size))
+        self.assertEqual(lora_attention.q_a_layernorm.weight.shape, (config.q_lora_rank,))
+        self.assertEqual(
+            lora_attention.q_b_proj.weight.shape,
+            (config.num_attention_heads * (config.qk_nope_head_dim + config.qk_rope_head_dim), config.q_lora_rank),
+        )
+        lora_model = lora_model.to(torch_device).eval()
+        with torch.no_grad():
+            outputs = lora_model(**self._prepare_for_class(inputs_dict, BailingHybridForCausalLM))
+        self.assertEqual(outputs.logits.shape[:2], inputs_dict["input_ids"].shape)
+
+    def test_attention_name_mapping_round_trip(self):
+        with torch.device("meta"):
+            model = BailingHybridForCausalLM(self.model_tester.get_config())
+        conversions = get_model_conversion_mapping(model)
+        reverse_conversions = [conversion.reverse_transform() for conversion in reversed(conversions)]
+        names = {
+            "attention.b_proj": "self_attn.b_proj",
+            "attention.q_b_proj": "self_attn.q_b_proj",
+            "model.layers.0.attention.b_proj.weight": "model.layers.0.self_attn.b_proj.weight",
+            "model.layers.1.attention.q_b_proj.weight": "model.layers.1.self_attn.q_b_proj.weight",
+            "model.layers.1.attention.kv_b_proj.weight": "model.layers.1.self_attn.kv_b_proj.weight",
+            "cross_attention.b_proj": "cross_attention.b_proj",
+            "model.layers.0.cross_attention.b_proj": "model.layers.0.cross_attention.b_proj",
         }
-        self.assertTrue(expected_keys.issubset(saved_keys))
-        self.assertNotIn("model.layers.0.self_attn.conv1d.weight", saved_keys)
-        state_dict = model.state_dict()
-        reloaded_state_dict = reloaded.state_dict()
-        self.assertNotEqual(config.linear_head_dim, config.qk_rope_head_dim)
-        self.assertEqual(reloaded.config.linear_head_dim, config.linear_head_dim)
-        self.assertEqual(reloaded.config.qk_rope_head_dim, config.qk_rope_head_dim)
-        self.assertEqual(state_dict.keys(), reloaded_state_dict.keys())
-        for key, value in state_dict.items():
-            torch.testing.assert_close(value, reloaded_state_dict[key], rtol=0, atol=0)
+        for original, native in names.items():
+            with self.subTest(name=original):
+                converted = original
+                for conversion in conversions:
+                    converted, _ = conversion.rename_source_key(converted)
+                self.assertEqual(converted, native)
+                for conversion in conversions:
+                    converted, _ = conversion.rename_source_key(converted)
+                self.assertEqual(converted, native)
+                for conversion in reverse_conversions:
+                    converted, _ = conversion.rename_source_key(converted)
+                self.assertEqual(converted, original)
+
+    def test_fp8_mixed_precision_modules(self):
+        config = self.model_tester.get_config()
+        config.q_lora_rank = 12
+        checkpoint_quantization_config = {
+            "quant_method": "fp8",
+            "modules_to_not_convert": [
+                "lm_head",
+                "model.word_embeddings",
+                "attention.b_proj",
+                "model.layers.1.attention.g_proj",
+                f"model.layers.{config.num_hidden_layers}.eh_proj",
+            ],
+            "weight_block_size": [128, 128],
+        }
+        fp8_config = BailingHybridConfig.from_dict(
+            {**config.to_dict(), "quantization_config": checkpoint_quantization_config}
+        )
+        with torch.device("meta"):
+            model = BailingHybridForCausalLM(fp8_config)
+        quantizer = FineGrainedFP8HfQuantizer(FineGrainedFP8Config.from_dict(fp8_config.quantization_config))
+        quantizer._process_model_before_weight_loading(model)
+
+        linear_attention = model.model.layers[0].self_attn
+        full_attention = model.model.layers[1].self_attn
+        self.assertIs(type(linear_attention.b_proj), nn.Linear)
+        self.assertIsInstance(linear_attention.q_proj, FP8Linear)
+        self.assertIsInstance(linear_attention.forget_gate.f_proj, FP8Linear)
+        self.assertIsInstance(linear_attention.g_proj, FP8Linear)
+        self.assertIs(type(full_attention.g_proj), nn.Linear)
+        self.assertIsInstance(full_attention.q_a_proj, FP8Linear)
+        self.assertIsInstance(full_attention.q_b_proj, FP8Linear)
+        self.assertIsInstance(full_attention.kv_b_proj, FP8Linear)
+        self.assertIsInstance(model.model.layers[0].mlp.gate_proj, FP8Linear)
+        self.assertIs(type(model.lm_head), nn.Linear)
+        self.assertIsInstance(model.model.embed_tokens, nn.Embedding)
+        self.assertEqual(fp8_config.quantization_config, checkpoint_quantization_config)
+
+    def test_mtp_ignored_keys_follow_configured_layer_count(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_mtp_layers = 2
+        model = BailingHybridForCausalLM(config)
+        patterns = model._keys_to_ignore_on_load_unexpected
+
+        for layer_idx in range(config.num_hidden_layers, config.num_hidden_layers + config.num_mtp_layers):
+            key = f"model.layers.{layer_idx}.attention.q_a_proj.weight"
+            self.assertTrue(any(re.search(pattern, key) for pattern in patterns))
+
+        last_main_layer = f"model.layers.{config.num_hidden_layers - 1}.attention.q_a_proj.weight"
+        self.assertFalse(any(re.search(pattern, last_main_layer) for pattern in patterns))
+
+        config.num_mtp_layers = 0
+        self.assertFalse(BailingHybridForCausalLM(config)._keys_to_ignore_on_load_unexpected)
 
     def test_recurrent_layers_mask_padding_on_continued_forward(self):
         # Ling's MoE and KDA chunk boundaries amplify harmless split-vs-full accumulation differences to roughly
@@ -191,3 +317,38 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("MLA uses different query/key and value head dimensions, so Flash SDPA cannot dispatch.")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
+
+
+@slow
+@require_kernels
+@require_torch_accelerator_memory(memory=600)
+class BailingHybridIntegrationTest(unittest.TestCase):
+    model_id = "inclusionAI/Ling-3.1-flash"
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def test_ling_3_1_flash_generation(self):
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        model = AutoModelForCausalLM.from_pretrained(
+            self.model_id, device_map="auto", dtype="auto", attn_implementation="eager", trust_remote_code=False
+        ).eval()
+        linear_attention = model.model.layers[model.config.layer_types.index("linear_attention")].self_attn
+        full_attention = model.model.layers[model.config.layer_types.index("full_attention")].self_attn
+        for module in (full_attention.q_b_proj, full_attention.kv_b_proj, model.model.layers[0].mlp.gate_proj):
+            self.assertIsInstance(module, FP8Linear)
+            self.assertEqual(module.weight.dtype, torch.float8_e4m3fn)
+        for module in (linear_attention.b_proj, full_attention.g_proj, model.lm_head):
+            self.assertIs(type(module), nn.Linear)
+            self.assertEqual(module.weight.dtype, torch.bfloat16)
+        inputs = tokenizer.apply_chat_template(
+            [{"role": "user", "content": "Please answer with one short sentence: What is the capital of France?"}],
+            add_generation_prompt=True,
+            return_tensors="pt",
+            return_dict=True,
+        ).to(model.device)
+
+        with torch.inference_mode():
+            output = model.generate(**inputs, max_new_tokens=2, do_sample=False)
+
+        self.assertEqual(output[0, inputs.input_ids.shape[1] :].tolist(), [678, 2838])
