@@ -554,6 +554,12 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             )
         return inputs_dict
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+        config.depth_decoder_config.input_size = config.hidden_size
+        return config
+
     def _get_input_ids_and_config(self, batch_size=2):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common(batch_size)
         input_ids = inputs_dict.pop("input_ids").to(torch_device)
@@ -819,6 +825,31 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Moshi has no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass
+
+    def flash_attn_from_config(self, attn_implementation, test_fwd_in_train=True):
+        """Overriden for additional input that is needed"""
+        for model_class in self.all_generative_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config = self._prepare_config_headdim(config, 16)
+
+            model = model_class._from_config(
+                config,
+                attn_implementation=attn_implementation,
+                dtype=torch.bfloat16,
+            ).to(torch_device)
+
+            model.train(test_fwd_in_train)
+
+            # Moshi requires audio codes
+            model(**inputs_dict)
+
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir)
+                reloaded = model_class.from_pretrained(tmp_dir)
+                self.assertNotEqual(
+                    reloaded.config._attn_implementation,
+                    attn_implementation,
+                )
 
 
 def place_dict_on_device(dict_to_place, device):
