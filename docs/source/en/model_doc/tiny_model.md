@@ -17,56 +17,81 @@ rendered properly in your Markdown viewer.
 
 # TinyModel
 
-[TinyModel](https://github.com/noanabeshima/tinymodel/tree/ae0c9031c467d05e12914bd7be19aaa6262dc7bf) is a compact decoder-only language model trained on TinyStories.
+[TinyModel](https://huggingface.co/noanabeshima/tiny_model) is a compact decoder-only language model trained on TinyStories.
 It uses learned absolute positions, bias-free query/key/value projections, a biased attention output projection, ReLU
 feed-forward layers, and two residual connections per decoder block. It does not use normalization, dropout, tied
 embeddings, or key/value caching.
 
-The original checkpoints are distributed as PyTorch `.pt` state dictionaries. The converter supports all three files
-from the pinned [checkpoint revision](https://huggingface.co/noanabeshima/tiny_model/tree/502a1f2453f61260c937f7807a1270a167faba07):
+This model was contributed by [sushmanthreddy](https://github.com/sushmanthreddy).
+The original code can be found in [noanabeshima/tinymodel](https://github.com/noanabeshima/tinymodel/tree/ae0c9031c467d05e12914bd7be19aaa6262dc7bf).
 
-| Checkpoint | Layers | SHA-256 |
-|---|---:|---|
-| `tiny_model.pt` | 4 | `dec406b1ad94cb345b2606d7f8cffa7c1114fcb60850e949eb17274cec30a8c3` |
-| `tiny_model_2L_1E.pt` | 2 | `04e8df0cd677a7060558e5c9eb3aaa30dbfe84e4ecc92bf17ef0e405dcf33baf` |
-| `tiny_model_2L_3E.pt` | 2 | `26dfc06da85d0e5d4de51a2e90108f9d585a81677bf4bac0ac079e780fda31f4` |
+## Checkpoints
 
-Convert one to a standard Transformers checkpoint before loading it:
+The weights are available in the [noanabeshima/tiny_model Hub repository](https://huggingface.co/noanabeshima/tiny_model).
+The converter supports all three files from revision `502a1f2453f61260c937f7807a1270a167faba07`:
 
-```bash
-python -m transformers.models.tiny_model.convert_tiny_model_weights_to_hf \
-    --checkpoint_path /path/to/tiny_model.pt \
-    --output_dir /path/to/tiny-model-hf \
-    --expected_num_hidden_layers 4
-```
+| Checkpoint | Layers |
+|---|---:|
+| [tiny_model.pt](https://huggingface.co/noanabeshima/tiny_model/blob/502a1f2453f61260c937f7807a1270a167faba07/tiny_model.pt) | 4 |
+| [tiny_model_2L_1E.pt](https://huggingface.co/noanabeshima/tiny_model/blob/502a1f2453f61260c937f7807a1270a167faba07/tiny_model_2L_1E.pt) | 2 |
+| [tiny_model_2L_3E.pt](https://huggingface.co/noanabeshima/tiny_model/blob/502a1f2453f61260c937f7807a1270a167faba07/tiny_model_2L_3E.pt) | 2 |
 
-The two-layer checkpoints use `--expected_num_hidden_layers 2`. The converter performs strict source and target key
-validation, preserves the published bfloat16 tensors, and writes `config.json` and `model.safetensors`.
+These are raw PyTorch state dictionaries, rather than Transformers checkpoints with a `config.json`.
+Convert a file locally before loading it with [`~PreTrainedModel.from_pretrained`], as shown below.
+
+## Usage
+
+> [!NOTE]
+> The original text pipeline uses custom normalization and token-ID remapping assets that are not included with the
+> published checkpoints. The example therefore uses token IDs directly. A GPT-2 tokenizer alone does not produce
+> compatible IDs, so do not substitute one to encode or decode text.
+
+The following example downloads the four-layer checkpoint, converts it into `./tiny-model-hf`, and loads that
+directory for FP16 inference. If your installed Transformers version does not include TinyModel,
+[install Transformers from source](../installation#source-install).
 
 ```python
 import torch
+from huggingface_hub import hf_hub_download
 
 from transformers import TinyModelForCausalLM
+from transformers.models.tiny_model.convert_tiny_model_weights_to_hf import convert_tiny_model_checkpoint
 
 
-model = TinyModelForCausalLM.from_pretrained("/path/to/tiny-model-hf", dtype=torch.bfloat16)
-input_ids = torch.tensor([[9996, 51, 56, 4, 36]])
+checkpoint_path = hf_hub_download(
+    repo_id="noanabeshima/tiny_model",
+    filename="tiny_model.pt",
+    revision="502a1f2453f61260c937f7807a1270a167faba07",
+)
+output_dir = "./tiny-model-hf"
+convert_tiny_model_checkpoint(checkpoint_path, output_dir, expected_num_hidden_layers=4)
+
+model = TinyModelForCausalLM.from_pretrained(output_dir, dtype=torch.float16).eval()
+input_ids = torch.tensor([[9996, 51, 56, 4, 36]], device=model.device)
 
 with torch.no_grad():
     logits = model(input_ids).logits
-    generated_ids = model.generate(input_ids, max_new_tokens=8, do_sample=False)
+    generated_ids = model.generate(input_ids, max_new_tokens=10, do_sample=False, use_cache=False)
+
+print(generated_ids.tolist())
+# [[9996, 51, 56, 4, 36, 1, 38, 6, 4, 31, 66, 39, 49, 0, 21]]
 ```
 
-The original implementation returns log-probabilities. [`TinyModelForCausalLM`] follows the Transformers convention
-and returns raw logits. For a numerical comparison, load the native model with `dtype=torch.float32` and
-`attn_implementation="sdpa"`, then apply `torch.nn.functional.log_softmax(logits, dim=-1)`. Exact source-equation
-parity applies to contiguous, unmasked token sequences with the default positions. The native `attention_mask` and
-explicit `position_ids` arguments are standard Transformers API extensions.
+To use a two-layer checkpoint, change `filename` to `tiny_model_2L_1E.pt` or `tiny_model_2L_3E.pt` and set
+`expected_num_hidden_layers=2`. Use a separate output directory for each converted checkpoint.
 
-> [!NOTE]
-> The original text pipeline applies custom normalization and two token-ID remapping tables after a TinyStories GPT-2
-> tokenizer. Those tokenizer assets are not present in the checkpoint repository, so this model integration accepts
-> token IDs directly and does not substitute a tokenizer with incompatible IDs.
+The converter preserves the released bfloat16 weights and writes `config.json` and `model.safetensors`.
+Passing `dtype=torch.float16` to `from_pretrained` casts those weights for inference.
+
+## Usage notes
+
+- The released checkpoints support sequences of up to 256 tokens, including the prompt and generated tokens.
+- Generation recomputes the full sequence at each step. Keep `use_cache=False`; `use_cache=True` and
+  `past_key_values` are unsupported.
+- [`TinyModelForCausalLM`] returns raw logits, while the original implementation returns log-probabilities.
+  Apply `torch.nn.functional.log_softmax(logits, dim=-1)` when comparing outputs with the original model.
+- `attention_mask` and explicit `position_ids` are supported. For comparisons with the original implementation,
+  use contiguous, unmasked token sequences with the default positions.
 
 ## TinyModelConfig
 
