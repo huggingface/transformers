@@ -80,8 +80,8 @@ class Gemma4UnifiedTextModelOutputWithPast(BaseModelOutputWithPast):
     BaseModelOutputWithPast extended with shared_kv_states for KV sharing.
 
     Args:
-        shared_kv_states (`KVSharingDict`, *optional*):
-            A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
+        shared_kv_states (`dict`, *optional*):
+            Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
             Used to pass shared KV states between layers during KV sharing.
     """
 
@@ -111,8 +111,8 @@ class Gemma4UnifiedCausalLMOutputWithPast(ModelOutput):
     audio_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    shared_kv_states (`KVSharingDict`, *optional*):
-        A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
+    shared_kv_states (`dict`, *optional*):
+        Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
     """
 
@@ -147,8 +147,8 @@ class Gemma4UnifiedModelOutputWithPast(BaseModelOutputWithPast):
     audio_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size `(batch_size, num_images, sequence_length, hidden_size)`.
         audio_hidden_states of the model produced by the audio encoder and after projecting the last hidden state.
-    shared_kv_states (`KVSharingDict`, *optional*):
-        A dict-like container mapping layer type strings to tuples of (key_states, value_states) tensors.
+    shared_kv_states (`dict`, *optional*):
+        Dictionary mapping layer type strings to tuples of (key_states, value_states) tensors.
         Used to pass shared KV states between layers during KV sharing.
     """
 
@@ -400,6 +400,7 @@ class Gemma4UnifiedTextAttention(nn.Module):
         # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
         if self.is_kv_shared_layer:
             key_states, value_states = shared_kv_states[self.layer_type]
+
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
             value_states = self.v_proj(hidden_states).view(hidden_shape) if self.v_proj is not None else key_states
@@ -411,8 +412,9 @@ class Gemma4UnifiedTextAttention(nn.Module):
             value_states = self.v_norm(value_states)
             value_states = value_states.transpose(1, 2)
 
-        if past_key_values is not None and not self.is_kv_shared_layer:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            if past_key_values is not None:
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
         if self.store_full_length_kv:
             shared_kv_states[self.layer_type] = key_states, value_states
 

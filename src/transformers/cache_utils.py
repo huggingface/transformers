@@ -213,6 +213,7 @@ class DummyLayer:
     """
     A dummy cache layer that does not store any cache. Used for layers that consume cache producer by other layers.
     """
+
     supports_early_init = False  # added so that DummyLayer are properly skipped during `early_initialization`
 
     def __init__(self, **kwargs):
@@ -235,6 +236,7 @@ class DummyLayer:
 
     def get_max_length(self):
         raise NotImplementedError("Dummy layer don't store cache: they cannot have a maximum length.")
+
 
 class DynamicSlidingWindowLayer(DynamicLayer):
     """
@@ -1431,8 +1433,6 @@ DYNAMIC_LAYER_TYPE_MAPPING = {
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndSlidingWindowAttentionLayer,
-    # More exotic implementations
-    "deepseek_sparse_attention": DynamicIndexedLayer,
     # Dummy layer type for KV sharing layers
     "dummy": DummyLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from
@@ -1455,8 +1455,6 @@ STATIC_LAYER_TYPE_MAPPING = {
     # Hybrid layers carry both a linear-attention state and a dynamic-attention state.
     "hybrid": LinearAttentionAndStaticFullAttentionLayer,
     "hybrid_sliding": LinearAttentionAndStaticSlidingWindowAttentionLayer,
-    # More exotic implementations
-    "deepseek_sparse_attention": StaticIndexedLayer,
     # Dummy layer type for KV sharing layers
     "dummy": DummyLayer,
     # Note: we want `moe` and `mlp` layers to be LinearAttentionLayer, so that we can correctly grab sequence length etc from

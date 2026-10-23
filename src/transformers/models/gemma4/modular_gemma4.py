@@ -211,6 +211,7 @@ class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
     router_logits: tuple[torch.FloatTensor] | None = None
 
 
+@auto_docstring
 @dataclass
 class Gemma4AudioModelOutput(BaseModelOutputWithPooling):
     r"""

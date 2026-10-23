@@ -143,6 +143,7 @@ class Gemma4CausalLMOutputWithPast(ModelOutput):
     shared_kv_states: KVSharingDict | None = None
     router_logits: tuple[torch.FloatTensor] | None = None
 
+
 @dataclass
 class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
     """
@@ -158,6 +159,7 @@ class Gemma4TextModelOutputWithPast(BaseModelOutputWithPast):
 
     shared_kv_states: KVSharingDict | None = None
     router_logits: tuple[torch.FloatTensor] | None = None
+
 
 @auto_docstring
 @dataclass
@@ -1218,6 +1220,7 @@ class Gemma4TextAttention(nn.Module):
         # once we are past the sliding window - so we always use `shared_kv_states` instead, even when past_key_values is not None
         if self.is_kv_shared_layer:
             key_states, value_states = shared_kv_states[self.layer_type]
+
         else:
             key_states = self.k_proj(hidden_states).view(hidden_shape)
             value_states = self.v_proj(hidden_states).view(hidden_shape) if self.v_proj is not None else key_states
@@ -1229,8 +1232,9 @@ class Gemma4TextAttention(nn.Module):
             value_states = self.v_norm(value_states)
             value_states = value_states.transpose(1, 2)
 
-        if past_key_values is not None and not self.is_kv_shared_layer:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+            if past_key_values is not None:
+                key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
         if self.store_full_length_kv:
             shared_kv_states[self.layer_type] = key_states, value_states
 
