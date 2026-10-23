@@ -12,11 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from abc import ABC, abstractmethod
+from copy import deepcopy
 
 import torch
 
+from ..configuration_utils import GenerationConfig
 from ..logits_process import (
     LogitsProcessorList,
+    MinLengthLogitsProcessor,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
@@ -94,6 +97,21 @@ class ContinuousBatchingLogitsProcessorList:
 
     def __repr__(self) -> str:
         return f"ContinuousBatchingLogitsProcessorList(logits_processor={self.logits_processor}, tensors_required={self.tensors_required})"
+
+    @classmethod
+    def from_generation_config(
+        cls,
+        model,
+        generation_config: GenerationConfig,
+        per_request_processors: bool = False,
+        drop_unsupported_processors: bool = True,
+    ) -> "ContinuousBatchingLogitsProcessorList":
+        processor_config = deepcopy(generation_config)
+        # Processors read tensorized special tokens; prepare them without changing the caller's config.
+        model._prepare_special_tokens(processor_config, device=model.device)
+        # There is no shared prompt length at initialization; processor support is checked by the constructor.
+        processors = model._get_logits_processor(processor_config, input_ids_seq_length=0)
+        return cls(processors, per_request_processors, drop_unsupported_processors)
 
     def clear(self) -> None:
         self.logits_processor = LogitsProcessorList()
@@ -214,6 +232,37 @@ class ContinuousBatchingLogitsProcessorList:
 
 
 # Here are all the continuous batching logits processors that are supported
+class ContinuousBatchingMinLengthLogitsProcessor(ContinuousBatchingLogitsProcessor):
+    supported_kwargs: dict[str, type] = {"min_length": int}
+    ignored_kwargs: tuple[str, ...] = ()
+
+    def __init__(self, processor: MinLengthLogitsProcessor) -> None:
+        self.min_length = processor.min_length
+        self.eos_token_ids = processor.eos_token_id.reshape(-1).tolist()
+
+    def fill_defaults(self, int32_tensor: torch.Tensor) -> None:
+        int32_tensor.zero_()
+
+    def prepare_tensor_args(self, requests_with_new_token: list[FutureRequestState]) -> torch.Tensor:
+        # Input preparation has already counted this batch's tokens in position_offset.
+        # Unlike generated_tokens, this count is up to date during asynchronous batching.
+        return torch.tensor(
+            [
+                request.state.position_offset < request.state.logit_processor_kwargs.get("min_length", self.min_length)
+                for request in requests_with_new_token
+            ],
+            dtype=torch.int32,
+            device="cpu",
+        )
+
+    def __call__(self, scores: torch.FloatTensor, tensor_arg: torch.Tensor) -> torch.FloatTensor:
+        suppress_eos = tensor_arg[: scores.size(0)] != 0
+        for eos_token_id in self.eos_token_ids:
+            if 0 <= eos_token_id < scores.size(-1):
+                scores[:, eos_token_id].masked_fill_(suppress_eos, -float("inf"))
+        return scores
+
+
 class ContinuousBatchingTemperatureLogitsWarper(ContinuousBatchingLogitsProcessor):
     supported_kwargs: dict[str, type] = {"temperature": float}
     ignored_kwargs: tuple[str, ...] = ()
@@ -322,6 +371,7 @@ class ContinuousBatchingTopPLogitsWarper(ContinuousBatchingLogitsProcessor):
 # TODO: add non-per-request CB variants so the memory-efficient warpers work when `per_request_processors=False`.
 # TODO: fuse temperature + top-k + top-p into a single pass to reuse the softmax/sort and cut activation peak.
 CLASSIC_TO_CB_PROCESSORS_MAP = {
+    MinLengthLogitsProcessor: ContinuousBatchingMinLengthLogitsProcessor,
     TemperatureLogitsWarper: ContinuousBatchingTemperatureLogitsWarper,
     TopKLogitsWarper: ContinuousBatchingTopKLogitsWarper,
     TopPLogitsWarper: ContinuousBatchingTopPLogitsWarper,

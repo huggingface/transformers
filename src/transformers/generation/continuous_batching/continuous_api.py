@@ -717,8 +717,9 @@ class ContinuousBatchingManager:
             self.distributed_helper.maybe_warn_nccl_graph_mixing()
 
         # Turn the classic logits processors into a CB-friendly version
-        self.logit_processor = ContinuousBatchingLogitsProcessorList(
-            logits_processor=self.model._get_logits_processor(generation_config),
+        self.logit_processor = ContinuousBatchingLogitsProcessorList.from_generation_config(
+            self.model,
+            generation_config,
             per_request_processors=continuous_batching_config.per_request_processors,
             drop_unsupported_processors=continuous_batching_config.drop_unsupported_processors,
         )

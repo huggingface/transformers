@@ -50,6 +50,7 @@ from transformers.generation.continuous_batching.cache_allocators import (
     FullAttentionCacheAllocator,
     SlidingAttentionCacheAllocator,
 )
+from transformers.generation.continuous_batching.cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from transformers.generation.continuous_batching.continuous_api import (
     BackgroundThreadStatus,
     ContinuousBatchingManager,
@@ -59,12 +60,18 @@ from transformers.generation.continuous_batching.distributed import DistributedH
 from transformers.generation.continuous_batching.input_outputs import build_attention_mask
 from transformers.generation.continuous_batching.offloading_manager import OffloadingManager
 from transformers.generation.continuous_batching.requests import (
+    FutureRequestState,
     GenerationOutput,
     RequestState,
     RequestStatus,
     get_device_and_memory_breakdown,
 )
 from transformers.generation.continuous_batching.utils import DEVICE_TYPE_TO_GRAPH_NAME
+from transformers.generation.logits_process import (
+    LogitsProcessorList,
+    MinLengthLogitsProcessor,
+    TemperatureLogitsWarper,
+)
 from transformers.integrations.eager_paged import eager_paged_attention_forward
 from transformers.testing_utils import (
     Expectations,
@@ -290,6 +297,83 @@ def _make_allocator(
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.
 class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
+    @parameterized.expand(list(itertools.product([None, 0, [0, 9]], [False, True], [False, True])))
+    def test_min_length_processor_initialization(self, eos_token_id, per_request, drop_unsupported):
+        model = AutoModelForCausalLM.from_config(
+            AutoConfig.for_model(
+                "llama", hidden_size=16, intermediate_size=32, num_hidden_layers=1, num_attention_heads=2
+            )
+        )
+        config = GenerationConfig(min_length=4, min_new_tokens=2, eos_token_id=eos_token_id)
+        original_config = copy.deepcopy(config.to_dict())
+        processors = ContinuousBatchingLogitsProcessorList.from_generation_config(
+            model, config, per_request_processors=per_request, drop_unsupported_processors=drop_unsupported
+        )
+
+        names = [type(processor).__name__ for processor in processors.logits_processor]
+        expected = []
+        if eos_token_id is not None:
+            if per_request:
+                expected.append("ContinuousBatchingMinLengthLogitsProcessor")
+            elif not drop_unsupported:
+                expected.append("MinLengthLogitsProcessor")
+            if not drop_unsupported:
+                expected.append("MinNewTokensLengthLogitsProcessor")
+        self.assertEqual(names, expected)
+        self.assertEqual(config.to_dict(), original_config)
+        self.assertFalse(hasattr(config, "_eos_token_tensor"))
+        if per_request and eos_token_id is not None:
+            with self.assertRaisesRegex(TypeError, "min_length"):
+                processors.check_kwargs({"min_length": 1.5})
+
+    @parameterized.expand(
+        [
+            (min_length, eos_token_id, dtype)
+            for min_length, eos_token_id in [(0, 0), (4, 0), (4, torch.tensor(0)), (4, [0, 9]), (4, [-1, 0, 9, 10])]
+            for dtype in [torch.float32, torch.float16, torch.bfloat16]
+        ]
+    )
+    def test_min_length_processor_matches_individual_requests(self, min_length, eos_token_id, dtype):
+        processors = ContinuousBatchingLogitsProcessorList(
+            LogitsProcessorList([MinLengthLogitsProcessor(min_length, eos_token_id), TemperatureLogitsWarper(2.0)]),
+            per_request_processors=True,
+        )
+        requests = []
+        for i, (length, has_new_token, kwargs) in enumerate(
+            [
+                (3, True, {}),
+                (2, False, {}),
+                (4, True, {}),
+                (4, True, {"min_length": 6}),
+                (5, True, {"min_length": 0}),
+                (5, True, {"min_length": -1}),
+            ]
+        ):
+            processors.check_kwargs(kwargs)
+            state = RequestState(request_id=str(i), initial_tokens=[1, 2], logit_processor_kwargs=kwargs)
+            # Async scheduling advances position_offset before generated_tokens is updated.
+            state.position_offset = length
+            requests.append(FutureRequestState(state, has_new_token, complete_blocks={}, query_length=1))
+        args = torch.empty((processors.tensors_required, 6), dtype=torch.int32)
+        processors.fill_defaults(args)
+        processors.prepare_tensor_args(requests, args)
+        scores = torch.arange(60, dtype=dtype).view(6, 10)
+        scores[0, 0] = float("inf")
+        original_scores = scores.clone()
+        actual = processors(torch.ones(6, dtype=torch.long), scores, args)
+        expected = []
+        for length, limit, row in zip([3, 4, 4, 5, 5], [min_length, min_length, 6, 0, 0], original_scores):
+            reference = LogitsProcessorList(
+                [MinLengthLogitsProcessor(limit, eos_token_id), TemperatureLogitsWarper(2.0)]
+            )
+            # CB temperature scaling uses a float32 tensor for the per-request temperatures.
+            expected.append(reference(torch.ones((1, length), dtype=torch.long), row[None].float()))
+        expected = torch.cat(expected)
+        torch.testing.assert_close(actual[:5], expected)
+        torch.testing.assert_close(actual[5], original_scores[5].float() / 2)  # padded row uses processor defaults
+        torch.testing.assert_close(scores[:5], (expected * 2).to(dtype))  # EOS masking updates the input in place
+        torch.testing.assert_close(scores[5], original_scores[5])
+
     @parameterized.expand([("paged|eager", eager_paged_attention_forward)])
     def test_paged_forward_without_cache_raises(self, attn_implementation, attention_forward):
         # A standard forward on a model switched to a paged implementation reaches these with no cache. They are
@@ -2220,6 +2304,68 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             text_varlen = tokenizer.decode(out_varlen.generated_tokens, skip_special_tokens=True)
             text_fast = tokenizer.decode(out_fast.generated_tokens, skip_special_tokens=True)
             self.assertEqual(text_varlen, text_fast, f"Mismatch:\nvarlen: {text_varlen}\nfast: {text_fast}")
+
+    @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
+    @slow
+    @with_flush_memory
+    def test_min_length_stopping_parity(self, use_cuda_graph: bool, use_async_batching: bool) -> None:
+        tokenizer, model = get_tokenizer_and_model("Qwen/Qwen2.5-0.5B-Instruct", "eager", torch_device, torch.float32)
+        eos_token_id = model.generation_config.eos_token_id
+        eos_token_id = eos_token_id[0] if isinstance(eos_token_id, list) else eos_token_id
+
+        # Always prefer EOS so this tests the stopping boundary independently of model rounding differences.
+        def prefer_eos(module, inputs, scores):
+            scores.zero_()
+            scores[..., 0] = 1.0
+            scores[..., eos_token_id] = 2.0
+            return scores
+
+        hook = model.lm_head.register_forward_hook(prefer_eos)
+        self.addCleanup(hook.remove)
+        generation_config = GenerationConfig(
+            min_length=100,
+            max_new_tokens=120,
+            do_sample=False,
+            eos_token_id=model.generation_config.eos_token_id,
+            pad_token_id=model.generation_config.pad_token_id,
+        )
+        min_lengths = [generation_config.min_length, 0, 120]
+        input_ids = get_generation_inputs(_DEFAULT_USER_MESSAGES, tokenizer, for_continuous_batching=True)
+        self.assertEqual(len(input_ids), len(min_lengths))
+        max_batch_tokens = 32
+        self.assertTrue(any(len(prompt) > max_batch_tokens for prompt in input_ids))
+        # Generate each reference separately: left padding would count toward min_length.
+        expected = []
+        for message, min_length in zip(_DEFAULT_USER_MESSAGES, min_lengths):
+            config = copy.deepcopy(generation_config)
+            config.min_length = min_length
+            expected.append(regular_generate(model, tokenizer, [message], generation_config=config)[0][0])
+        with model.continuous_batching_context_manager(
+            generation_config=generation_config,
+            continuous_batching_config=ContinuousBatchingConfig(
+                page_size=32,
+                num_blocks=64,
+                max_batch_tokens=max_batch_tokens,
+                max_requests_per_batch=4,
+                per_request_processors=True,
+                use_cuda_graph=use_cuda_graph,
+                use_async_batching=use_async_batching,
+                default_compile_level=0,
+                auto_switch_to_flash=False,
+            ),
+        ) as manager:
+            for i, (prompt, min_length) in enumerate(zip(input_ids, min_lengths)):
+                kwargs = {} if i == 0 else {"min_length": min_length}
+                manager.add_request(
+                    prompt, request_id=f"req_{i}", max_new_tokens=generation_config.max_new_tokens, **kwargs
+                )
+            outputs = self._collect_finished(manager, len(input_ids))
+        self.assertEqual(len(outputs), len(input_ids))
+        for i, prompt in enumerate(input_ids):
+            self.assertEqual(outputs[f"req_{i}"].status, RequestStatus.FINISHED)
+            actual = outputs[f"req_{i}"].generated_tokens
+            self.assertEqual(actual, expected[i])
+            self.assertEqual(len(prompt) + len(actual), max(len(prompt), min_lengths[i]) + 1)
 
     @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
     @slow
