@@ -16,38 +16,32 @@ rendered properly in your Markdown viewer.
 
 # NVFP4
 
-NVFP4 quantization packs full-precision linear weights into NVIDIA's 4-bit floating-point format while a model is
-loaded. [`NVFP4Config`] replaces eligible bias-free `torch.nn.Linear` modules, whose `in_features` and `out_features` are both divisible by 16, with an NVFP4 linear implementation from
-the [NVFP4 Hub kernel](https://huggingface.co/kernels-community/nvfp4-gemm). The model's attention and MLP interfaces are
-not replaced.
+NVFP4 is NVIDIA's 4-bit floating-point format. Weights are E2M1 values with an E4M3 scale per 16 values and an fp32
+global per tensor. Transformers runs NVFP4 linears and MoE experts on the
+[finegrained-kernels](https://huggingface.co/kernels-community/finegrained-kernels) Hub kernel.
 
 > [!TIP]
-> NVFP4 requires a Blackwell GPU with compute capability 10.0 or newer, a compatible CUDA-enabled PyTorch build, and
-> the [kernels](https://github.com/huggingface/kernels) package.
-
-Install Accelerate and a compatible version of `kernels`.
+> NVFP4 needs the [kernels](https://github.com/huggingface/kernels) package and a GPU with FP8 support: an NVIDIA GPU
+> with compute capability 8.9 or newer, an AMD GPU or an Intel XPU. Without one, a pre-quantized checkpoint loads
+> dequantized to the model dtype.
 
 ```bash
 pip install --upgrade accelerate kernels
 ```
 
-Pass [`NVFP4Config`] to [`~PreTrainedModel.from_pretrained`] with a single CUDA device. Weights are quantized as they
-are loaded, so the source checkpoint should contain floating-point weights.
+## Load a pre-quantized checkpoint
+
+NVIDIA ModelOpt exports load without a quantization config. NVFP4 layers keep the checkpoint's activation scales, so
+their activations quantize to NVFP4 too. Layers exported as `W4A16_NVFP4` keep their activations in the model dtype.
 
 ```py
 import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, NVFP4Config
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-model_id = "meta-llama/Llama-3.2-1B"
-quantization_config = NVFP4Config()
-model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-    dtype=torch.bfloat16,
-    device_map="cuda",
-    quantization_config=quantization_config,
-)
+model_id = "nvidia/Qwen3-30B-A3B-NVFP4"
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map="cuda")
 
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 inputs = tokenizer("NVFP4 is", return_tensors="pt").to(model.device)
@@ -55,19 +49,58 @@ output = model.generate(**inputs, max_new_tokens=20)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
-Use `modules_to_not_convert` to keep selected modules in their original precision.
+A `MIXED_PRECISION` export may quantize some layers to FP8, block FP8 or MXFP8, for example its attention. Those layers
+load dequantized to the model dtype, and a warning says so.
+
+An MXFP8 checkpoint with `"moe_quant_algo": "NVFP4"` also loads with NVFP4. Its experts load in NVFP4, in the
+`nvfp4-pack-quantized` format. Its other MXFP8 layers load dequantized.
+
+## Quantize while loading
+
+Pass [`NVFP4Config`] to quantize a full-precision checkpoint as it loads. The linears and MoE experts are quantized.
+MoE routers stay in the model dtype. Use `modules_to_not_convert` to keep other modules in their original precision.
 
 ```py
-quantization_config = NVFP4Config(modules_to_not_convert=["vision", "lm_head"])
+import torch
+
+from transformers import AutoModelForCausalLM, NVFP4Config
+
+
+model = AutoModelForCausalLM.from_pretrained(
+    "Qwen/Qwen3-30B-A3B",
+    dtype=torch.bfloat16,
+    device_map="cuda",
+    quantization_config=NVFP4Config(modules_to_not_convert=["lm_head"]),
+)
 ```
 
-NVFP4 linear modules support `torch.compile`. The first compiled invocation includes graph compilation time, so warm up
-the model before measuring generation throughput.
+## MoE experts
+
+Pick the experts' kernels with `experts_implementation`: `"grouped_mm"` or `"batched_mm"` run the fused MoE chain, and
+`"eager"` runs one call per expert. On Blackwell GPUs, scales load swizzled into the layout the scaled MMA reads.
+
+[`DistributedConfig`] shards the experts in one of two ways:
+
+- With `ep_size` equal to `tp_size`, each rank holds whole experts, with masked expert parallelism. Each rank runs its own
+  experts on every token, so there is no all-to-all dispatch.
+- With `tp_size` alone, each rank holds a slice of every expert.
+
+```py
+from transformers.distributed import DistributedConfig
+
+distributed_config = DistributedConfig(tp_size=8, ep_size=8)
+```
+
+## Saving
+
+[`~PreTrainedModel.save_pretrained`] writes the NVFP4 tensors in the checkpoint layout, under the modules' own names.
+A model quantized on the fly saves quantized, so it reloads without quantizing again.
+
+```py
+model.save_pretrained("Qwen3-30B-A3B-NVFP4-local")
+```
 
 ## Current limitations
 
-- Only one CUDA device is supported. Tensor parallelism and multi-device `device_map` configurations are rejected until
-  the sharding behavior of the NVFP4 scale metadata is defined.
 - CPU and disk offload are not supported.
-- Pre-quantized NVFP4 checkpoints are not supported.
-- NVFP4 models cannot currently be serialized with [`~PreTrainedModel.save_pretrained`] or trained.
+- NVFP4 models cannot be trained.
