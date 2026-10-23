@@ -755,7 +755,7 @@ class Qwen4ExpTextQSAIndexer(nn.Module):
                 selected_tokens = torch.cat([selected_tokens, tail]).to(torch.int32)
                 selected_token_indices[batch_idx, query_idx, : selected_tokens.numel()] = selected_tokens
 
-        # Create the additive mask to be added to the main causal mask
+        # Create the selection mask to combine with the main causal mask
         kv_length = attention_mask.shape[-1]
         selected_token_mask = torch.zeros(
             (*selected_token_indices.shape[:-1], kv_length + 1), device=attention_mask.device, dtype=torch.bool
@@ -847,7 +847,10 @@ class Qwen4ExpTextAttention(nn.Module):
         selected_token_mask = self.indexer(hidden_states, position_embeddings, attention_mask, past_key_values)
         # Combine both masks (they are never None, and are always 4D with either bool for sdpa, or float for eager)
         if attention_mask.is_floating_point():
-            attention_mask = attention_mask + selected_token_mask
+            # Adding minimum-finite values overflows to -inf and yields NaNs for fully masked queries.
+            attention_mask = attention_mask.masked_fill(
+                selected_token_mask != 0, torch.finfo(attention_mask.dtype).min
+            )
         else:
             attention_mask = attention_mask & selected_token_mask
 
