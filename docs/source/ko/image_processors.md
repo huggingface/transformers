@@ -47,7 +47,7 @@ inputs = image_processor(image, return_tensors="pt")
 이미지 프로세서들은 [`~BaseImageProcessor.center_crop`], [`~BaseImageProcessor.normalize`], [`~BaseImageProcessor.rescale`] 함수를 제공하는 [`BaseImageProcessor`] 클래스를 상속받습니다. 이미지 프로세서에는 두 가지 종류가 있습니다.
 
 - [`BaseImageProcessor`]는 파이썬 기반 구현체입니다.
-- [`BaseImageProcessorPil`]는 더 빠른 [torchvision-backed](https://pytorch.org/vision/stable/index.html) 버전입니다. [torch.Tensor](https://pytorch.org/docs/stable/tensors.html)입력의 배치 처리 시 최대 33배 더 빠를 수 있습니다. [`BaseImageProcessorPil`]는 현재 모든 비전 모델에서 사용할 수 있는 것은 아니기 때문에 모델의 API 문서를 참조하여 지원 여부를 확인해 주세요.
+- [`TorchVisionBackend`]는 더 빠른 [torchvision-backed](https://pytorch.org/vision/stable/index.html) 버전입니다. [torch.Tensor](https://pytorch.org/docs/stable/tensors.html)입력의 배치 처리 시 최대 33배 더 빠를 수 있습니다. [`TorchVisionBackend`]는 현재 모든 비전 모델에서 사용할 수 있는 것은 아니기 때문에 모델의 API 문서를 참조하여 지원 여부를 확인해 주세요.
 
 각 이미지 프로세서는 이미지 프로세서를 불러오고 저장하기 위한 [`~ImageProcessingMixin.from_pretrained`]와 [`~ImageProcessingMixin.save_pretrained`] 메소드를 제공하는 [`ImageProcessingMixin`] 클래스를 상속받아 기능을 확장시킵니다.
 
@@ -92,7 +92,7 @@ image_processor = ViTImageProcessorPil.from_pretrained("google/vit-base-patch16-
 
 ## 빠른 이미지 프로세서(Fast image processors) [[fast-image-processors]]
 
-[`BaseImageProcessorPil`]는 [torchvision](https://pytorch.org/vision/stable/index.html)을 기반으로 하며, 특히 GPU에서 처리할 때 속도가 훨씬 빠릅니다. 이 클래스는 기존 [`BaseImageProcessor`]와 완전히 동일하게 설계되었기 때문에, 모델이 지원한다면 별도 수정 없이 바로 교체해서 사용할 수 있습니다. [torchvision](https://pytorch.org/get-started/locally/#mac-installation)을 설치한 뒤 `use_fast` 파라미터를 `True`로 지정해주시면 됩니다.
+[`TorchVisionBackend`]는 [torchvision](https://pytorch.org/vision/stable/index.html)을 기반으로 하며, 특히 GPU에서 처리할 때 속도가 훨씬 빠릅니다. 이 클래스는 기존 [`TorchVisionBackend`]와 완전히 동일하게 설계되었기 때문에, 모델이 지원한다면 별도 수정 없이 바로 교체해서 사용할 수 있습니다. [torchvision](https://pytorch.org/get-started/locally/#mac-installation)을 설치한 뒤 `use_fast` 파라미터를 `True`로 지정해주시면 됩니다.
 
 
 ```py
