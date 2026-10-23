@@ -428,6 +428,21 @@ def test_availability_helpers_are_compile_safe(helper_name: str, args: tuple):
     run(torch.zeros(3))  # a graph break inside the helper would raise here
 
 
+def test_is_in_notebook_requires_ipython(monkeypatch):
+    """Marimo is not a notebook environment on its own: it does not depend on IPython."""
+    from transformers.utils import import_utils
+
+    monkeypatch.setitem(sys.modules, "marimo", ModuleType("marimo"))
+    monkeypatch.setattr(import_utils, "is_ipython_available", lambda: False)
+    import_utils.is_in_notebook.cache_clear()
+    assert import_utils.is_in_notebook() is False
+
+    monkeypatch.setattr(import_utils, "is_ipython_available", lambda: True)
+    import_utils.is_in_notebook.cache_clear()
+    assert import_utils.is_in_notebook() is True
+    import_utils.is_in_notebook.cache_clear()
+
+
 @run_test_using_subprocess
 def test_legacy_module_aliases_are_served_on_demand():
     """
