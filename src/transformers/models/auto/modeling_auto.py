@@ -357,7 +357,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mistral3", "Mistral3Model"),
         ("mistral4", "Mistral4Model"),
         ("mistral_large4", "MistralLarge4Model"),
-        ("mistral_large4_text", "MistralLarge4TextModel"),  # TODO: needed? or also add vision?
+        ("mistral_large4_text", "MistralLarge4TextModel"),
         ("mixtral", "MixtralModel"),
         ("mlcd", "MLCDVisionModel"),  # Keep this to make some original hub repositories (from `DeepGlint-AI`) works
         ("mlcd_vision_model", "MLCDVisionModel"),

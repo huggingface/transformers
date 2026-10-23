@@ -424,7 +424,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mistral3", "Mistral3Config"),
         ("mistral4", "Mistral4Config"),
         ("mistral_large4", "MistralLarge4Config"),
-        ("mistral_large4_text", "MistralLarge4TextConfig"),  # TODO: needed? or also add vision?
+        ("mistral_large4_text", "MistralLarge4TextConfig"),
         ("mixtral", "MixtralConfig"),
         ("mlcd_vision_model", "MLCDVisionConfig"),
         ("mllama", "MllamaConfig"),
@@ -950,7 +950,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("minicpmv4_7_vision", "minicpmv4_7"),
         ("minimax_m3_vl_text", "minimax_m3_vl"),
         ("minimax_m3_vl_vision", "minimax_m3_vl"),
-        ("mistral_large4_text", "mistral_large4"),  # TODO: needed? or also add vision?
+        ("mistral_large4_text", "mistral_large4"),
         ("mlcd_vision_model", "mlcd"),
         ("mllama_text_model", "mllama"),
         ("mllama_vision_model", "mllama"),
