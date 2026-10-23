@@ -20,11 +20,29 @@ from pathlib import Path
 
 import torch
 
-from .configuration_tiny_model import TinyModelConfig
-from .modeling_tiny_model import TinyModelForCausalLM
+from transformers import TinyModelConfig, TinyModelForCausalLM
 
 
 _NUM_ATTENTION_HEADS = 16
+
+_BASE_KEY_MAPPING = {
+    "embed.weight": "model.embed_tokens.weight",
+    "pos_embed": "model.embed_positions.weight",
+    "lm_head.weight": "lm_head.weight",
+    "lm_head.bias": "lm_head.bias",
+}
+
+_LAYER_KEY_MAPPING = {
+    "attn.Q.weight": "self_attn.q_proj.weight",
+    "attn.K.weight": "self_attn.k_proj.weight",
+    "attn.V.weight": "self_attn.v_proj.weight",
+    "attn.O.weight": "self_attn.o_proj.weight",
+    "attn.O.bias": "self_attn.o_proj.bias",
+    "mlp.read_in.weight": "mlp.fc1.weight",
+    "mlp.read_in.bias": "mlp.fc1.bias",
+    "mlp.write_out.weight": "mlp.fc2.weight",
+    "mlp.write_out.bias": "mlp.fc2.bias",
+}
 
 
 def _convert_state_dict(
@@ -63,22 +81,16 @@ def _convert_state_dict(
             f"Expected {expected_num_hidden_layers} decoder layers, but the checkpoint contains {num_hidden_layers}."
         )
 
-    expected_source_keys = {"embed.weight", "pos_embed", "lm_head.weight", "lm_head.bias"}
+    key_mapping = _BASE_KEY_MAPPING.copy()
     for layer_idx in range(num_hidden_layers):
-        expected_source_keys.update(
+        key_mapping.update(
             {
-                f"torso.{layer_idx}.attn.Q.weight",
-                f"torso.{layer_idx}.attn.K.weight",
-                f"torso.{layer_idx}.attn.V.weight",
-                f"torso.{layer_idx}.attn.O.weight",
-                f"torso.{layer_idx}.attn.O.bias",
-                f"torso.{layer_idx}.mlp.read_in.weight",
-                f"torso.{layer_idx}.mlp.read_in.bias",
-                f"torso.{layer_idx}.mlp.write_out.weight",
-                f"torso.{layer_idx}.mlp.write_out.bias",
+                f"torso.{layer_idx}.{source_key}": f"model.layers.{layer_idx}.{target_key}"
+                for source_key, target_key in _LAYER_KEY_MAPPING.items()
             }
         )
 
+    expected_source_keys = set(key_mapping)
     actual_source_keys = set(state_dict)
     missing_source_keys = sorted(expected_source_keys - actual_source_keys)
     unexpected_source_keys = sorted(actual_source_keys - expected_source_keys)
@@ -162,28 +174,10 @@ def _convert_state_dict(
         dtype=torch.bfloat16,
     )
 
-    converted_state_dict = {
-        "model.embed_tokens.weight": state_dict["embed.weight"],
-        "model.embed_positions.weight": state_dict["pos_embed"].squeeze(0).contiguous(),
-        "lm_head.weight": state_dict["lm_head.weight"],
-        "lm_head.bias": state_dict["lm_head.bias"],
-    }
-    for layer_idx in range(num_hidden_layers):
-        source_prefix = f"torso.{layer_idx}"
-        target_prefix = f"model.layers.{layer_idx}"
-        converted_state_dict.update(
-            {
-                f"{target_prefix}.self_attn.q_proj.weight": state_dict[f"{source_prefix}.attn.Q.weight"],
-                f"{target_prefix}.self_attn.k_proj.weight": state_dict[f"{source_prefix}.attn.K.weight"],
-                f"{target_prefix}.self_attn.v_proj.weight": state_dict[f"{source_prefix}.attn.V.weight"],
-                f"{target_prefix}.self_attn.o_proj.weight": state_dict[f"{source_prefix}.attn.O.weight"],
-                f"{target_prefix}.self_attn.o_proj.bias": state_dict[f"{source_prefix}.attn.O.bias"],
-                f"{target_prefix}.mlp.fc1.weight": state_dict[f"{source_prefix}.mlp.read_in.weight"],
-                f"{target_prefix}.mlp.fc1.bias": state_dict[f"{source_prefix}.mlp.read_in.bias"],
-                f"{target_prefix}.mlp.fc2.weight": state_dict[f"{source_prefix}.mlp.write_out.weight"],
-                f"{target_prefix}.mlp.fc2.bias": state_dict[f"{source_prefix}.mlp.write_out.bias"],
-            }
-        )
+    converted_state_dict = {target_key: state_dict[source_key] for source_key, target_key in key_mapping.items()}
+    # Both implementations use nn.Linear weights in the same layout, so no transpose is needed.
+    # Only the original positional parameter has an extra batch dimension compared with nn.Embedding.
+    converted_state_dict["model.embed_positions.weight"] = state_dict["pos_embed"].squeeze(0).contiguous()
 
     if len(converted_state_dict) != len(state_dict):
         raise ValueError(
