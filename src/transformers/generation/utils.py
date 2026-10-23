@@ -1441,11 +1441,16 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.sequence_bias is not None:
             processors.append(SequenceBiasLogitsProcessor(sequence_bias=generation_config.sequence_bias))
 
+        # We need the value check as it can be a dummy filled with -100
+        has_encoder_input_ids = (
+            encoder_input_ids is not None and encoder_input_ids.dim() == 2 and not (encoder_input_ids < 0).any()
+        )
+
         if (
             generation_config.encoder_repetition_penalty is not None
             and generation_config.encoder_repetition_penalty != 1.0
         ):
-            if encoder_input_ids is not None and len(encoder_input_ids.shape) == 2:
+            if has_encoder_input_ids:
                 processors.append(
                     EncoderRepetitionPenaltyLogitsProcessor(
                         penalty=generation_config.encoder_repetition_penalty,
@@ -1474,11 +1479,12 @@ class GenerationMixin(ContinuousMixin):
                     "apply n-gram constraints only to newly generated tokens, not to the prompt.",
                     UserWarning,
                 )
+
         if (
             generation_config.encoder_no_repeat_ngram_size is not None
             and generation_config.encoder_no_repeat_ngram_size > 0
         ):
-            if encoder_input_ids is not None and len(encoder_input_ids.shape) == 2:
+            if has_encoder_input_ids:
                 processors.append(
                     EncoderNoRepeatNGramLogitsProcessor(
                         generation_config.encoder_no_repeat_ngram_size,
@@ -1594,7 +1600,7 @@ class GenerationMixin(ContinuousMixin):
                 min_tokens_to_keep = 1
 
             # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
-            # all samplers can be found in `generation_utils_samplers.py`
+            # All logits processors are defined in `generation/logits_process.py`
             if generation_config.temperature is not None and generation_config.temperature != 1.0:
                 processors.append(TemperatureLogitsWarper(generation_config.temperature))
             if generation_config.top_h is not None:

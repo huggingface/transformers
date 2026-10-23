@@ -590,6 +590,7 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         EXPECTED_TEXT = Expectations(
             {
                 ("cuda", (8, 0)): "So, let me analyze the image. The animal has thick fur, is in a snowy environment, and looks like a wild cat. Wait, the",
+                ("xpu", 5): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
             }
         ).get_expectation()
         # fmt: on
@@ -625,6 +626,7 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 0)): "So, let me analyze the image. The video shows a tennis match or practice on an indoor tennis court. There's a player in the foreground,",
+                ("xpu", 5): "The video shows an indoor tennis court where a male player, wearing a white t-shirt, black shorts, and white socks, is preparing to hit a",
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
@@ -670,6 +672,10 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 ("cuda", (8, 0)): [
                     'So, let me analyze the image. The animal has thick fur, is in a snowy environment, and looks like a wild cat. Wait, the'
                 ] * 2,
+                ("xpu", 5): [
+                    'This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a',
+                    'This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal',
+                ],
             }
         )  # fmt: skip
         EXPECTED_TEXT = expected_texts.get_expectation()
@@ -715,6 +721,10 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 ("cuda", (8, 0)): [
                     "So, let me analyze the image. The animal has thick fur, is in a snowy environment, and looks like a wild cat. Wait, the",
                     "Hmm, the user is asking about my identity. I should clearly state I'm from the MiniCPM series, developed by ModelBest and OpenB",
+                ],
+                ("xpu", 5): [
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
                 ],
             }
         )
