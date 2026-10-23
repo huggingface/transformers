@@ -307,7 +307,7 @@ class NVFP4ModulesTest(unittest.TestCase):
         self.assertIn("weight_scale_inv", attention.o_proj._parameters)
         self.assertIs(type(attention.v_proj), torch.nn.Linear)
 
-    def test_expert_parallelism_is_masked_and_shards_the_globals(self):
+    def test_expert_parallelism_is_masked_and_tensor_parallelism_splits_inside_experts(self):
         model = self._model()
         replace_with_nvfp4(model)
         model.config.distributed_config = SimpleNamespace()
@@ -320,10 +320,17 @@ class NVFP4ModulesTest(unittest.TestCase):
         self.assertEqual(plan["model.layers.*.mlp.experts"], "moe_tp_experts")
         self.assertEqual(plan["model.layers.*.mlp.gate"], "ep_router")
         self.assertEqual(plan["model.layers.*.mlp.experts.down_proj_weight_global_scale"], "grouped_gemm")
-        # tensor parallelism replicates the experts, since it would cut their scale groups
-        plan = {"model.layers.*.mlp.experts": "moe_tp_experts", "model.layers.*.mlp.experts.down_proj": "rowwise"}
+        # tensor parallelism alone splits each scale grid like its weight
+        plan = {
+            "model.layers.*.mlp.experts": "moe_tp_experts",
+            "model.layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+            "model.layers.*.mlp.experts.down_proj": "rowwise",
+        }
         update_nvfp4_parallel_plan(model, plan)
-        self.assertEqual(plan, {})
+        self.assertEqual(plan["model.layers.*.mlp.experts"], "moe_tp_experts")
+        self.assertEqual(plan["model.layers.*.mlp.experts.gate_up_proj_scale_inv"], "packed_colwise")
+        self.assertEqual(plan["model.layers.*.mlp.experts.down_proj_scale_inv"], "rowwise")
+        self.assertNotIn("model.layers.*.mlp.experts.down_proj_weight_global_scale", plan)
 
 
 @require_torch

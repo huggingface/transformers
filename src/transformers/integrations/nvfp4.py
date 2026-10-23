@@ -339,9 +339,10 @@ def replace_with_nvfp4(
 
 
 def update_nvfp4_parallel_plan(model: nn.Module, plan: dict[str, str]):
-    """Shard NVFP4 experts by expert with masked expert parallelism, and replicate the dense globals.
+    """Shard NVFP4 experts and replicate the dense globals.
 
-    Each rank runs its own experts on every token, and an all-reduce sums the outputs, so there is no all-to-all.
+    Expert parallelism is masked: each rank runs its own experts on every token, and an all-reduce sums the outputs.
+    Tensor parallelism alone splits inside each expert.
     """
     from ..distributed.tensor_parallel import replace_layer_number_by_wildcard
 
@@ -371,9 +372,11 @@ def update_nvfp4_parallel_plan(model: nn.Module, plan: dict[str, str]):
                 for slot in ("_scale_inv", "_weight_global_scale", "_input_global_scale"):
                     plan[f"{glob}.{proj}{slot}"] = "grouped_gemm"
         elif styles:
-            # splitting inside an expert cuts its scale groups, so only expert parallelism shards them
-            for key in [key for key in plan if key == glob or key.startswith(f"{glob}.")]:
-                plan.pop(key)
+            # intra-expert TP gives each rank a slice of every expert's matrices, and of its scale grid alike
+            # the globals are one float per expert, so no plan entry
+            for proj in (module.gate_up_name, "down_proj"):
+                if (style := plan.get(f"{glob}.{proj}")) is not None:
+                    plan[f"{glob}.{proj}_scale_inv"] = style
 
 
 class _NVFP4Op(ConversionOps):
@@ -468,8 +471,10 @@ class NVFP4SwizzleScales(_NVFP4Op):
     """
 
     def convert(self, input_dict, model=None, full_layer_name=None, **kwargs):
-        module = model.get_submodule(full_layer_name.rpartition(".")[0])
+        module_name, _, slot = full_layer_name.rpartition(".")
+        module = model.get_submodule(module_name)
         dense = isinstance(module, NVFP4Linear)
+        declared = getattr(module, slot)
         kernel = load_finegrained_kernels()
         out = {}
         for key, value in input_dict.items():
@@ -480,7 +485,8 @@ class NVFP4SwizzleScales(_NVFP4Op):
                 value = plain[0] if dense else plain
             elif not self.inverse and dense and module.activation_format != "bf16" and _tiles_swizzled(*value.shape):
                 value = kernel.swizzle_mx_scales(value.unsqueeze(0))
-            elif not self.inverse and not dense and module.swizzled_scales:
+            elif not self.inverse and not dense and module.swizzled_scales and value.shape[1:] == declared.shape[1:]:
+                # intra-expert TP splits both grids, which then stay row-major together
                 value = kernel.swizzle_mx_scales(value)
             out[key] = value
         return out

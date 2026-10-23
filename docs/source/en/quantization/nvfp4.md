@@ -79,8 +79,12 @@ model = AutoModelForCausalLM.from_pretrained(
 Pick the experts' kernels with `experts_implementation`: `"grouped_mm"` or `"batched_mm"` run the fused MoE chain, and
 `"eager"` runs one call per expert. On Blackwell GPUs, scales load swizzled into the layout the scaled MMA reads.
 
-[`DistributedConfig`] shards the experts by expert, with masked expert parallelism. Each rank runs its own experts on
-every token, so there is no all-to-all dispatch. Set `ep_size` equal to `tp_size`.
+[`DistributedConfig`] shards the experts in one of two ways:
+
+- With `ep_size` equal to `tp_size`, each rank holds whole experts, with masked expert parallelism. Each rank runs its own
+  experts on every token, so there is no all-to-all dispatch.
+- With `tp_size` alone, each rank holds a slice of every expert. These slices keep their scales row-major, so they don't
+  get the Blackwell swizzle. Prefer expert parallelism for MoE models.
 
 ```py
 from transformers.distributed import DistributedConfig
