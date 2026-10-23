@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -1586,7 +1585,7 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
 
         audio_codes_mask = None
         if padding_mask is not None:
-            frame_size = self.config.encoder_config.frame_size
+            frame_size = self.encoder.config.frame_size
             codes_length = (padding_mask.sum(dim=-1, keepdim=True) + frame_size - 1) // frame_size
             frame_index = torch.arange(audio_codes.shape[1], device=padding_mask.device).view(1, -1)
             audio_codes_mask = (frame_index < codes_length).to(padding_mask.dtype)

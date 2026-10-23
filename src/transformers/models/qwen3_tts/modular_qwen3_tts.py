@@ -316,7 +316,7 @@ class Qwen3TTSConfig(PreTrainedConfig):
         kwargs.pop("tokenizer_type", None)
         if isinstance(self.audio_config, dict):
             model_type = self.audio_config.get("model_type", "qwen3_tts_tokenizer_12hz")
-            self.audio_config = CONFIG_MAPPING[model_type](**self.audio_config)
+            self.audio_config = CONFIG_MAPPING[model_type].from_dict(self.audio_config)
         elif self.audio_config is None:
             self.audio_config = CONFIG_MAPPING["qwen3_tts_tokenizer_12hz"]()
 
