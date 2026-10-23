@@ -256,7 +256,6 @@ if __name__ == "__main__":
     print(f"config.json -> {output_dir}")
 
     if not args.config_only:
-
         # Tokenizer, chat template, image processor
         processor = convert_and_write_processor(input_dir, output_dir, tokenizer, params)
         print(f"processor + tokenizer -> {output_dir}")

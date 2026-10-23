@@ -2328,10 +2328,20 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(source_patterns=r"^norm\.", target_patterns="model.language_model.norm."),
         # And the rest to the multi-modal projector
         WeightRenaming(source_patterns=r"^output\.", target_patterns="lm_head."),
-        WeightRenaming(source_patterns=r"^pre_mm_projector_norm\.", target_patterns="model.multi_modal_projector.norm."),
-        WeightRenaming(source_patterns=r"^patch_merger\.", target_patterns="model.multi_modal_projector.patch_merger."),
-        WeightRenaming(source_patterns=r"^vision_language_adapter\.w_in\.", target_patterns="model.multi_modal_projector.linear_1."),
-        WeightRenaming(source_patterns=r"^vision_language_adapter\.w_out\.", target_patterns="model.multi_modal_projector.linear_2."),
+        WeightRenaming(
+            source_patterns=r"^pre_mm_projector_norm\.", target_patterns="model.multi_modal_projector.norm."
+        ),
+        WeightRenaming(
+            source_patterns=r"^patch_merger\.", target_patterns="model.multi_modal_projector.patch_merger."
+        ),
+        WeightRenaming(
+            source_patterns=r"^vision_language_adapter\.w_in\.",
+            target_patterns="model.multi_modal_projector.linear_1.",
+        ),
+        WeightRenaming(
+            source_patterns=r"^vision_language_adapter\.w_out\.",
+            target_patterns="model.multi_modal_projector.linear_2.",
+        ),
         # Rename the attention projections shared by both towers: value and output
         WeightRenaming(source_patterns=r"\.wv\.", target_patterns=".v_proj."),
         WeightRenaming(source_patterns=r"\.wo\.", target_patterns=".o_proj."),
