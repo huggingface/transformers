@@ -523,9 +523,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             cls.sub_configs_defaults = {k: resolve_spec(v) for k, v in sub_configs_defaults.items()}
 
         cls_has_custom_init = "__init__" in cls.__dict__
-        cls = dataclass(cls, repr=False, kw_only=True)
-
-        cls_has_custom_init = "__init__" in cls.__dict__
         # kw_only=True ensures fields without defaults in subclasses can follow
         # parent fields that have defaults (Python dataclass ordering rule).
         # Config fields are always passed as keyword arguments, so this is safe.
