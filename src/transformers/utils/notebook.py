@@ -137,7 +137,7 @@ class NotebookProgressBar:
             value (`int`):
                 The value to use. Must be between 0 and `total`.
             force_update (`bool`, *optional*, defaults to `False`):
-                Whether or not to force and update of the internal state and display (by default, the bar will wait for
+                Whether or not to force an update of the internal state and display (by default, the bar will wait for
                 `value` to reach the value it predicted corresponds to a time of more than the `update_every` attribute
                 since the last update to avoid adding boilerplate).
             comment (`str`, *optional*):
