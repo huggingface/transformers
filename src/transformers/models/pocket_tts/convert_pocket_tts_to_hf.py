@@ -22,9 +22,11 @@ import json
 import re
 import shutil
 import tempfile
+import urllib.request
 from pathlib import Path
 
 import torch
+import yaml
 from huggingface_hub import HfApi, hf_hub_download
 from safetensors.torch import load_file
 from tokenizers import AddedToken, Regex, Tokenizer, normalizers
@@ -43,35 +45,68 @@ from transformers import (
 )
 
 
-ORIGINAL_REPO = "kyutai/pocket-tts"
-# where the original configs read the tokenizers from
-TOKENIZER_REPO = "kyutai/pocket-tts-without-voice-cloning"
-TOKENIZER_REVISION = "00eac05ed3d16bdc3f6b5d598874019c34a89214"
+# The checkpoints are described by the original's `pocket_tts/config/<checkpoint>.yaml`, at this commit: the files they
+# point to (`hf://<repo>/<path>@<revision>`), the architecture and the settings of the language.
+RUNTIME_CONFIGS = (
+    "https://raw.githubusercontent.com/kyutai-labs/pocket-tts/{revision}/pocket_tts/config/{checkpoint}.yaml"
+)
+RUNTIME_REVISION = "44cb63eaa4144f32ff80863968515165a5554353"
 AUDIO_PROMPT_TOKEN = "<|audio_prompt|>"
 AUDIO_LATENT_TOKEN = "<|audio_latent|>"
 AUDIO_PROMPT_BOS_TOKEN = "<|audio_prompt_bos|>"
 AUDIO_BOS_TOKEN = "<|audio_bos|>"
-
-# The values of the original's `pocket_tts/config/<checkpoint>.yaml` that differ between checkpoints (the codec and the
-# flow head width are shared). `weights_revision` / `tokenizer` pin the files the original config points to, and `text`
-# holds the text settings of the language (`replace_characters`, `remove_semicolons`), which the normalizer applies.
-CHECKPOINTS = {
-    "english": {
-        "weights_revision": "7f364c05d1be3faf2b234cdbe4cbb68a026d4218",
-        "tokenizer": (TOKENIZER_REPO, "languages/english/tokenizer.json", TOKENIZER_REVISION),
-        "num_hidden_layers": 6,
-        "flow_type": "lsd",
-        "text": {},
-    },
-    "english_drifting_26-09": {
-        "weights_revision": "75cfe24e3142233bb81887fed3482e9652bb4a6e",
-        # the drifting checkpoint reuses the tokenizer of english_2026-09
-        "tokenizer": (TOKENIZER_REPO, "languages/english_2026-09/tokenizer.json", TOKENIZER_REVISION),
-        "num_hidden_layers": 6,
-        "flow_type": "drifting",
-        "text": {},
-    },
+# The architecture every supported checkpoint shares (6 or 24 layers): the original's `flow_lm` section, without the
+# options of the small models (latent size, attention width, grouped KV heads, low-rank text table).
+FLOW_LM = {
+    "transformer": {"d_model": 1024, "hidden_scale": 4, "max_period": 10000, "num_heads": 16},
+    "flow": {"depth": 6, "dim": 512},
+    "lookup_table": {"dim": 1024, "n_bins": 4000, "tokenizer": "tokenizers"},
 }
+# The original's options the transformers format does not implement, at the value it supports.
+UNSUPPORTED = {
+    "pad_with_spaces_for_short_inputs": False,
+    "capitalize_first_letter": True,
+    "append_terminal_punctuation": True,
+    "model_recommended_frames_after_eos": None,
+}
+
+
+def parse_hf_path(path: str) -> tuple[str, str, str]:
+    """`hf://<namespace>/<repo>/<path>@<revision>` -> (repo id, path, revision)."""
+    path, revision = path.removeprefix("hf://").rsplit("@", 1)
+    namespace, repo, filename = path.split("/", 2)
+    return f"{namespace}/{repo}", filename, revision
+
+
+def load_checkpoint(name: str, revision: str = RUNTIME_REVISION) -> dict:
+    """The original's config of the checkpoint, as the values the conversion needs."""
+    with urllib.request.urlopen(RUNTIME_CONFIGS.format(revision=revision, checkpoint=name)) as response:
+        original = yaml.safe_load(response.read().decode("utf-8"))
+    flow_lm = original["flow_lm"]
+    for section, expected in FLOW_LM.items():
+        values = flow_lm[section]
+        extra = set(values) - set(expected) - {"num_layers", "type", "tokenizer_path"}
+        if extra or any(values.get(key) != value for key, value in expected.items()):
+            raise NotImplementedError(f"{name}: unsupported `flow_lm.{section}`: {values}")
+    for option, supported in UNSUPPORTED.items():
+        if original.get(option, supported) != supported:
+            raise NotImplementedError(f"{name}: unsupported `{option}: {original[option]}`")
+    if not flow_lm.get("insert_bos_before_voice", False):
+        raise NotImplementedError(f"{name}: the voice prompt has no BOS")
+    return {
+        "weights": parse_hf_path(original["weights_path"]),
+        "tokenizer": parse_hf_path(flow_lm["lookup_table"]["tokenizer_path"]),
+        "num_hidden_layers": flow_lm["transformer"]["num_layers"],
+        "flow_type": flow_lm["flow"].get("type", "lsd"),
+        "text": {
+            "replace_characters": original.get("replace_characters") or None,
+            "remove_semicolons": original.get("remove_semicolons", False),
+        },
+        "temperature": original.get("default_temperature", 0.3),
+        "eos_threshold": original.get("default_eos_threshold", -4.0),
+    }
+
+
 # The codec's tensors (regex) -> the audio tokenizer's names. Applied in order, first match wins. Fused `in_proj` weights are
 # split into q/k/v with the q/k rows permuted for rotate-half RoPE (the original rotates interleaved pairs), below.
 CODEC_MAPPING = [
@@ -329,7 +364,8 @@ def load_voice(path: Path, config: PocketTTSConfig) -> DynamicCache:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint", choices=sorted(CHECKPOINTS), default="english")
+    parser.add_argument("--checkpoint", default="english", help="Name of the original's config (`--language`)")
+    parser.add_argument("--runtime_revision", default=RUNTIME_REVISION, help="Commit of kyutai-labs/pocket-tts")
     parser.add_argument(
         "--output_dir", type=Path, required=True, help="Gets the checkpoint's weights and the transformers files"
     )
@@ -349,11 +385,12 @@ def main():
     parser.add_argument("--create_pr", action="store_true", help="Open a pull request instead of committing")
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint = CHECKPOINTS[args.checkpoint]
-    folder = f"languages/{args.checkpoint}"
+    checkpoint = load_checkpoint(args.checkpoint, args.runtime_revision)
+    repo_id, weights_path, revision = checkpoint["weights"]
+    folder = str(Path(weights_path).parent)
 
     # The weights stay in the runtime's layout (copied for the loading check below, not uploaded).
-    weights = hf_hub_download(ORIGINAL_REPO, f"{folder}/model.safetensors", revision=checkpoint["weights_revision"])
+    weights = hf_hub_download(repo_id, weights_path, revision=revision)
     shutil.copy(weights, args.output_dir / "model.safetensors")
     config = build_config(checkpoint)
     config.save_pretrained(args.output_dir)
@@ -390,16 +427,16 @@ def main():
         processor.save_pretrained(processor_dir)
         for name in ("processor_config.json", "chat_template.jinja"):
             shutil.copy(Path(processor_dir) / name, args.output_dir / name)
-    # The original's defaults: sampling with temperature 0.3 (the noise variance of the flow sampler), one LSD step, and
-    # an end-of-speech logit threshold of -4 ignored on the first 6 frames. `generate` returns the padded latents with
+    # The original's defaults: sampling with the config's temperature (the noise variance of the flow sampler), one LSD
+    # step, and its end-of-speech logit threshold, ignored on the first 6 frames. `generate` returns the padded latents with
     # their mask, which `processor.decode` takes as they are.
     GenerationConfig(
         return_dict_in_generate=True,
         do_sample=True,
-        temperature=0.3,
+        temperature=checkpoint["temperature"],
         pad_token_id=config.pad_token_id,
         num_flow_steps=1,
-        eos_threshold=-4.0,
+        eos_threshold=checkpoint["eos_threshold"],
         min_frames_before_eos=6,
     ).save_pretrained(args.output_dir)
 
@@ -416,9 +453,7 @@ def main():
         audio_tokenizer=audio_tokenizer,
         chat_template=CHAT_TEMPLATE.strip() + "\n",
     )
-    voice_file = hf_hub_download(
-        ORIGINAL_REPO, f"{folder}/embeddings/alba.safetensors", revision=checkpoint["weights_revision"]
-    )
+    voice_file = hf_hub_download(repo_id, f"{folder}/embeddings/alba.safetensors", revision=revision)
     voice = load_voice(Path(voice_file), model.config)
     text = "Hello world. I am Kyutai's Pocket TTS. I'm fast enough to run on small CPUs."
     conversation = [{"role": "user", "content": [{"type": "text", "text": text}]}]
@@ -426,7 +461,7 @@ def main():
     with torch.no_grad():
         output = model.generate(**inputs, past_key_values=voice, do_sample=False)
     num_frames = output.audio_latents_mask.sum().item()
-    print(f"Sanity: {num_frames} frames generated (the original, english: 68 frames).")
+    print(f"Sanity: {num_frames} frames generated.")
 
     if args.push_to_hub:
         HfApi().upload_folder(
