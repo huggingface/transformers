@@ -378,6 +378,10 @@ class GenerationConfig(PushToHubMixin):
     # Hash to detect whether the instance was modified after loading
     _original_object_hash: int | None
 
+    # Minor issues present in the loaded file, as `{attribute_name: issue_description}`. Saving doesn't reject them
+    # while they are unchanged, so that a config can always be saved back as it was published.
+    _loaded_minor_issues: dict[str, str] | None
+
     # Set at runtime to correctly slice inputs in `_prefill` in case we restart from an existing non-empty Cache, and the mask would
     # otherwise be dropped due to containing only 1s. This allows to differentiate between restarting with full or sliced input_ids
     _mask_length: int | None
@@ -661,6 +665,14 @@ class GenerationConfig(PushToHubMixin):
                 when the value was inherited from a model's default `generation_config.json`. When `None`, all set
                 attributes are considered user-set (backward-compatible behavior for direct `validate()` calls).
         """
+        minor_issues = self._get_minor_issues(user_set_attributes)
+        self._report_minor_issues(minor_issues, strict)
+
+    def _get_minor_issues(self, user_set_attributes: set[str] | None = None) -> dict[str, str]:
+        """
+        Raises an exception for invalid attributes and returns the minor issues found, as
+        `{attribute_name: issue_description}`. See [`~GenerationConfig.validate`] for the arguments.
+        """
         minor_issues = {}  # format: {attribute_name: issue_description}
 
         # 1. Validation of individual attributes
@@ -864,7 +876,12 @@ class GenerationConfig(PushToHubMixin):
                     "`generate()` (or a pipeline) directly."
                 )
 
-        # Finally, handle caught minor issues. With default parameterization, we will throw a minimal warning.
+        return minor_issues
+
+    @staticmethod
+    def _report_minor_issues(minor_issues: dict[str, str], strict: bool):
+        """Raises (`strict=True`) or warns about the minor issues found by `_get_minor_issues`."""
+        # With default parameterization, we will throw a minimal warning.
         if len(minor_issues) > 0:
             # Full list of issues with potential fixes
             info_message = []
@@ -914,11 +931,20 @@ class GenerationConfig(PushToHubMixin):
 
         # At save time, validate the instance enforcing strictness -- if any warning/exception would be thrown, we
         # refuse to save the instance.
-        # This strictness is enforced to prevent bad configurations from being saved and re-used.
+        # This strictness is enforced to prevent bad configurations from being saved and re-used. Issues that came
+        # unchanged from the loaded file are only warned about: the user didn't introduce them, and refusing to save
+        # them would make configs published with them impossible to save back.
         try:
-            self.validate(strict=True)
+            minor_issues = self._get_minor_issues()
+            loaded_minor_issues = getattr(self, "_loaded_minor_issues", None) or {}
+            inherited_issues = {
+                name: issue for name, issue in minor_issues.items() if loaded_minor_issues.get(name) == issue
+            }
+            new_issues = {name: issue for name, issue in minor_issues.items() if name not in inherited_issues}
+            self._report_minor_issues(new_issues, strict=True)
         except ValueError as exc:
             raise ValueError(str(exc) + "\n\nFix these issues to save the configuration.")
+        self._report_minor_issues(inherited_issues, strict=False)
 
         config_file_name = config_file_name if config_file_name is not None else GENERATION_CONFIG_NAME
 
@@ -1112,10 +1138,12 @@ class GenerationConfig(PushToHubMixin):
         elif kwargs.get("return_unused_kwargs") is True:
             config, unused_kwargs = cls.from_dict(config_dict, **kwargs)
             config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
+            config._loaded_minor_issues = config._get_minor_issues()
             return config, unused_kwargs
         else:
             config = cls.from_dict(config_dict, **kwargs)
             config._original_object_hash = hash(config)  # Hash to detect whether the instance was modified
+            config._loaded_minor_issues = config._get_minor_issues()
             return config
 
     @classmethod
@@ -1204,6 +1232,8 @@ class GenerationConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_original_object_hash" in output:
             del output["_original_object_hash"]
+        if "_loaded_minor_issues" in output:
+            del output["_loaded_minor_issues"]
         if "_mask_length" in output:
             del output["_mask_length"]
 
@@ -1333,6 +1363,7 @@ class GenerationConfig(PushToHubMixin):
 
         # Hash to detect whether the instance was modified
         generation_config._original_object_hash = hash(generation_config)
+        generation_config._loaded_minor_issues = generation_config._get_minor_issues()
         return generation_config
 
     def update(self, defaults_only=False, allow_custom_entries=False, **kwargs):
