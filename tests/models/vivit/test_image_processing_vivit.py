@@ -183,4 +183,3 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     @unittest.skip("VivitImageProcessor has not been refactored to use the new image processing backend architecture")
     def test_override_instance_attributes_does_not_affect_other_instances(self):
         pass
-
