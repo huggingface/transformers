@@ -191,9 +191,9 @@ class MiMoV2FlashMoE(DeepseekV3MoE):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        return self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        return self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
 
 
 class MiMoV2FlashMLP(Qwen2MoeMLP):

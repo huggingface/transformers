@@ -282,11 +282,11 @@ class HYV3TopKRouter(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.float(), self.weight.float())
-        routing_weights = torch.sigmoid(router_logits)
+        router_probs = torch.sigmoid(router_logits)
 
-        scores_for_choice = routing_weights + self.e_score_correction_bias
+        scores_for_choice = router_probs + self.e_score_correction_bias
         _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
-        top_k_weights = routing_weights.gather(1, top_k_index)
+        top_k_weights = router_probs.gather(1, top_k_index)
 
         top_k_weights = top_k_weights / (top_k_weights.sum(dim=-1, keepdim=True) + 1e-20)
         # Key difference: extra scaling factor

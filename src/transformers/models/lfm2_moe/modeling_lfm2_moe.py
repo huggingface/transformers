@@ -191,13 +191,13 @@ class Lfm2MoeTopKRouter(nn.Module):
 
     def forward(self, hidden_states):
         router_logits = F.linear(hidden_states, self.weight)
-        routing_weights = router_logits.sigmoid()
+        router_probs = router_logits.sigmoid()
         if self.use_expert_bias:
-            scores_for_routing = routing_weights + self.e_score_correction_bias
-            _, top_k_index = torch.topk(scores_for_routing, k=self.top_k, dim=-1)
-            top_k_weights = torch.gather(routing_weights, dim=1, index=top_k_index).type_as(router_logits)
+            scores_for_choice = router_probs + self.e_score_correction_bias
+            _, top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1)
+            top_k_weights = torch.gather(router_probs, dim=1, index=top_k_index).type_as(router_logits)
         else:
-            top_k_weights, top_k_index = torch.topk(routing_weights, k=self.top_k, dim=-1)
+            top_k_weights, top_k_index = torch.topk(router_probs, k=self.top_k, dim=-1)
 
         if self.norm_topk_prob:
             top_k_weights = top_k_weights / (top_k_weights.sum(dim=-1, keepdim=True) + 1e-6)
@@ -214,8 +214,8 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
-        final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
+        _, top_k_weights, top_k_index = self.gate(hidden_states_reshaped)
+        final_hidden_states = self.experts(hidden_states_reshaped, top_k_index, top_k_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 

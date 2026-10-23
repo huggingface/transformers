@@ -173,11 +173,11 @@ class DeepseekV2TopkRouter(MixtralTopKRouter):
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        scores = router_logits.softmax(dim=-1, dtype=torch.float32)
+        router_probs = router_logits.softmax(dim=-1, dtype=torch.float32)
         if self.topk_method == "greedy":
-            topk_weights, topk_indices = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
+            top_k_weights, top_k_index = torch.topk(router_probs, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
-            group_scores = scores.view(-1, self.num_group, self.num_experts // self.num_group).max(dim=-1).values
+            group_scores = router_probs.view(-1, self.num_group, self.num_experts // self.num_group).max(dim=-1).values
             group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
             group_mask = torch.zeros_like(group_scores)
             group_mask.scatter_(1, group_idx, 1)
@@ -186,10 +186,10 @@ class DeepseekV2TopkRouter(MixtralTopKRouter):
                 .expand(-1, self.num_group, self.num_experts // self.num_group)
                 .reshape(-1, self.num_experts)
             )
-            scores = scores.masked_fill(~score_mask.bool(), 0.0)
-            topk_weights, topk_indices = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights, topk_indices
+            router_probs = router_probs.masked_fill(~score_mask.bool(), 0.0)
+            top_k_weights, top_k_index = torch.topk(router_probs, k=self.top_k, dim=-1, sorted=False)
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
 class DeepseekV2Moe(nn.Module):
@@ -205,9 +205,9 @@ class DeepseekV2Moe(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 

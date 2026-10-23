@@ -275,10 +275,10 @@ class PhimoeTopKRouter(nn.Linear):
                 1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
             )
         router_logits = super().forward(hidden_states)
-        routing_weights, selected_experts = sparsemixer(
+        top_k_weights, top_k_index = sparsemixer(
             router_logits, jitter_eps=self.router_jitter_noise, training=self.training, top_k=self.top_k
         )
-        return router_logits, routing_weights, selected_experts
+        return router_logits, top_k_weights, top_k_index
 
 
 class PhimoeSparseMoeBlock(nn.Module):
@@ -312,8 +312,8 @@ class PhimoeSparseMoeBlock(nn.Module):
 
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_dim)
-        _, routing_weights, selected_experts = self.router(hidden_states)
-        final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
+        final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 

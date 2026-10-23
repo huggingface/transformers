@@ -142,17 +142,17 @@ class LongcatFlashTopkRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.classifier.weight.type(torch.float32))
-        scores = router_logits.softmax(dim=-1)
-        topk_indices = self.get_topk_indices(scores)
-        topk_weights = scores.gather(1, topk_indices)
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights.to(router_logits.dtype), topk_indices
+        router_probs = router_logits.softmax(dim=-1)
+        top_k_index = self.get_topk_indices(router_probs)
+        top_k_weights = router_probs.gather(1, top_k_index)
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights.to(router_logits.dtype), top_k_index
 
     @torch.no_grad()
-    def get_topk_indices(self, scores):
-        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        return topk_indices
+    def get_topk_indices(self, router_probs):
+        scores_for_choice = router_probs.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        return top_k_index
 
 
 class LongcatFlashExperts(nn.Module):
@@ -220,9 +220,9 @@ class LongcatFlashMoE(nn.Module):
 
     def forward(self, hidden_states):
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.router(hidden_states)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         return hidden_states
 
 

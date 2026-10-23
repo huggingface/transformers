@@ -361,27 +361,27 @@ class InklingTopkRouter(nn.Module):
         self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        flat = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(flat, self.weight)
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states, self.weight)
 
         # same as `self.route_tokens_to_experts` from before, prob same as our MoE and can be copied
-        scores = router_logits.sigmoid()
-        routed_scores = scores[..., : -self.n_shared_experts]
+        router_probs = router_logits.sigmoid()
+        routed_scores = router_probs[..., : -self.n_shared_experts]
         scores_for_choice = routed_scores + self.e_score_correction_bias
-        topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
+        top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
 
         routed_logits = router_logits[..., : -self.n_shared_experts]
         shared_logits = router_logits[..., -self.n_shared_experts :]
-        topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
-        topk_log_probs = F.logsigmoid(topk_logits)
-        topk_weights = torch.exp(topk_log_probs - torch.logsumexp(topk_log_probs, dim=-1, keepdim=True))
+        top_k_logits = torch.cat([routed_logits.gather(-1, top_k_index), shared_logits], dim=-1)
+        top_k_log_probs = F.logsigmoid(top_k_logits)
+        top_k_weights = torch.exp(top_k_log_probs - torch.logsumexp(top_k_log_probs, dim=-1, keepdim=True))
 
-        topk_weights = topk_weights * self.route_scale * self.global_scale
+        top_k_weights = top_k_weights * self.route_scale * self.global_scale
 
-        shared_gammas = topk_weights[..., -self.n_shared_experts :].contiguous()
-        topk_weights = topk_weights[..., : self.top_k].contiguous()
+        shared_gammas = top_k_weights[..., -self.n_shared_experts :].contiguous()
+        top_k_weights = top_k_weights[..., : self.top_k].contiguous()
 
-        return routed_logits, topk_weights, topk_indices, shared_gammas
+        return routed_logits, top_k_weights, top_k_index, shared_gammas
 
 
 class InklingSharedExperts(nn.Module):
@@ -424,9 +424,9 @@ class InklingMoE(nn.Module):
     def forward(self, hidden_states) -> torch.Tensor:
         residuals = hidden_states
         input_shape = hidden_states.shape
-        _, topk_weights, topk_indices, shared_gammas = self.gate(hidden_states)
+        _, top_k_weights, top_k_index, shared_gammas = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*input_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*input_shape)
         hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
         return hidden_states
 

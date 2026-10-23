@@ -164,15 +164,15 @@ class LagunaTopKRouter(nn.Module):
         if self.router_logit_softcapping > 0.0:
             router_logits = torch.tanh(router_logits / self.router_logit_softcapping) * self.router_logit_softcapping
         # Sigmoid instead of softmax normalization
-        routing_scores = torch.sigmoid(router_logits)
+        router_probs = torch.sigmoid(router_logits)
 
-        scores_for_selection = routing_scores + self.e_score_correction_bias.to(routing_scores.dtype)
-        _, selected_experts = torch.topk(scores_for_selection, self.top_k, dim=-1)
-        routing_weights = routing_scores.gather(-1, selected_experts)
-        routing_weights = routing_weights / routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights.to(hidden_states.dtype)
+        scores_for_choice = router_probs + self.e_score_correction_bias.to(router_probs.dtype)
+        _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1)
+        top_k_weights = router_probs.gather(-1, top_k_index)
+        top_k_weights = top_k_weights / top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
 
-        return router_logits, routing_weights, selected_experts
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation
@@ -233,8 +233,8 @@ class LagunaSparseMoeBlock(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_dim)
         shared_output = self.shared_experts(hidden_states)
 
-        _, routing_weights, selected_experts = self.gate(hidden_states)
-        hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         # Additional scaling
         hidden_states = hidden_states * self.routed_scaling_factor
         hidden_states = hidden_states + shared_output

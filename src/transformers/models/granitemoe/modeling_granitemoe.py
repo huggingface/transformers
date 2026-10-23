@@ -192,8 +192,8 @@ class GraniteMoeMoE(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
-        final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
+        _, top_k_weights, top_k_index = self.gate(hidden_states_reshaped)
+        final_hidden_states = self.experts(hidden_states_reshaped, top_k_index, top_k_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 

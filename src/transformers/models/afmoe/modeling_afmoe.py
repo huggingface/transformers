@@ -144,14 +144,14 @@ class AfmoeTokenChoiceRouter(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_dim)
 
         router_logits = self.gate(hidden_states).to(torch.float32)
-        scores = torch.sigmoid(router_logits)
+        router_probs = torch.sigmoid(router_logits)
 
-        _, selected_experts = torch.topk(scores + expert_bias, k=self.top_k, dim=1)
-        top_scores = scores.gather(dim=1, index=selected_experts)
-        denominator = top_scores.sum(dim=-1, keepdim=True) + 1e-20
-        top_scores = top_scores / denominator
-        top_scores = top_scores * self.route_scale
-        return router_logits, top_scores, selected_experts
+        _, top_k_index = torch.topk(router_probs + expert_bias, k=self.top_k, dim=1)
+        top_k_weights = router_probs.gather(dim=1, index=top_k_index)
+        denominator = top_k_weights.sum(dim=-1, keepdim=True) + 1e-20
+        top_k_weights = top_k_weights / denominator
+        top_k_weights = top_k_weights * self.route_scale
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation
@@ -220,11 +220,11 @@ class AfmoeSparseMoeBlock(nn.Module):
         hidden_states_flat = hidden_states.view(-1, hidden_dim)
 
         # Get routing decisions (returns flattened top-k)
-        _, top_scores, selected_experts = self.router(hidden_states, self.expert_bias)
+        _, top_k_weights, top_k_index = self.router(hidden_states, self.expert_bias)
 
         # Process through shared experts
         shared_output = self.shared_experts(hidden_states_flat).view(batch_size, seq_len, hidden_dim)
-        routed_output = self.experts(hidden_states_flat, selected_experts, top_scores).view(
+        routed_output = self.experts(hidden_states_flat, top_k_index, top_k_weights).view(
             batch_size, seq_len, hidden_dim
         )
         return shared_output + routed_output

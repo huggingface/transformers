@@ -198,12 +198,12 @@ class NemotronHMoE(DeepseekV3MoE):
     def forward(self, hidden_states):
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
 
         # NemotronH-specific: latent projection
         hidden_states = self.fc1_latent_proj(hidden_states)
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = self.fc2_latent_proj(hidden_states)
 
         hidden_states = hidden_states.view(*orig_shape)

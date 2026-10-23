@@ -1133,13 +1133,13 @@ class Gemma4TextRouter(nn.Module):
         hidden_states = self.norm(hidden_states)
         hidden_states = hidden_states * self.scale * self.scalar_root_size
 
-        expert_scores = self.proj(hidden_states)  # [B*S, E]
+        router_logits = self.proj(hidden_states)  # [B*S, E]
         # fp32 for numerical stability
-        router_probabilities = nn.functional.softmax(expert_scores, dim=-1, dtype=torch.float32)
+        router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=torch.float32)
 
         # topk returns both values (probabilities) and indices directly
         top_k_weights, top_k_index = torch.topk(
-            router_probabilities,
+            router_probs,
             k=self.config.top_k_experts,
             dim=-1,
         )  # both [B*S, K]
@@ -1150,7 +1150,7 @@ class Gemma4TextRouter(nn.Module):
         # Apply per-expert scale directly to the weights
         top_k_weights = top_k_weights * self.per_expert_scale[top_k_index]
 
-        return router_probabilities, top_k_weights, top_k_index
+        return router_probs, top_k_weights, top_k_index
 
 
 class Gemma4TextDecoderLayer(Gemma3DecoderLayer):

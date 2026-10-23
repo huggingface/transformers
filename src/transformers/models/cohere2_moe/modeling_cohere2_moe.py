@@ -165,20 +165,20 @@ class Cohere2MoeTopKRouter(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         router_logits = F.linear(hidden_states, self.weight)
-        router_scores, selected_experts = torch.topk(router_logits, self.top_k, dim=-1)
+        top_k_weights, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)
         if self.expert_selection_fn == "softmax":
-            router_scores = F.softmax(router_scores, dim=1, dtype=torch.float)
+            top_k_weights = F.softmax(top_k_weights, dim=1, dtype=torch.float)
         elif self.expert_selection_fn == "sigmoid":
-            router_scores = F.sigmoid(router_scores)
+            top_k_weights = F.sigmoid(top_k_weights)
             if self.norm_topk_prob:
-                router_scores = router_scores / torch.sum(router_scores, dim=-1, keepdims=True)
+                top_k_weights = top_k_weights / torch.sum(top_k_weights, dim=-1, keepdims=True)
         else:
             raise ValueError("`expert_selection_fn` can only be `softmax` or `sigmoid`")
 
         # we cast back to the input dtype if it was upcasted in softmax
-        router_scores = router_scores.to(hidden_states.dtype)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
 
-        return router_logits, router_scores, selected_experts
+        return router_logits, top_k_weights, top_k_index
 
 
 class Cohere2MoeSparseMoeBlock(nn.Module):
@@ -198,8 +198,8 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_flat = hidden_states.view(-1, hidden_dim)
-        _, router_scores, selected_experts = self.gate(hidden_states_flat)
-        final_hidden_states = self.experts(hidden_states_flat, selected_experts, router_scores)
+        _, top_k_weights, top_k_index = self.gate(hidden_states_flat)
+        final_hidden_states = self.experts(hidden_states_flat, top_k_index, top_k_weights)
 
         if self.num_shared_experts > 0:
             shared_expert_output = self.shared_experts(hidden_states_flat)
