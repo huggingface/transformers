@@ -834,7 +834,7 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
     def test_continuous_batching_no_accelerators(self) -> None:
         """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
         environment by mocking all accelerator availability checks to return False"""
-        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         # Accelerator availability are cached, so we clear the cache before mocking to ensure the CPU-only
         cached_availability_checks = [is_torch_cuda_available, is_torch_mps_available, is_torch_xpu_available]
         for check in cached_availability_checks:
