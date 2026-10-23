@@ -57,41 +57,38 @@ if is_torch_available():
 
 def _build_tiny_audio_tokenizer(num_quantizers=4):
     """Build a tiny real codec for waveform encoding, decoding, and serialization tests."""
-    encoder_config = {
-        "hidden_size": 16,
-        "num_hidden_layers": 1,
-        "num_attention_heads": 2,
-        "num_key_value_heads": 2,
-        "intermediate_size": 32,
-        "num_filters": 8,
-        "kernel_size": 7,
-        "residual_kernel_size": 3,
-        "last_kernel_size": 3,
-        "num_residual_layers": 1,
-        "upsampling_ratios": [8, 6],
-        "codebook_size": 8,
-        "codebook_dim": 4,
-        "vector_quantization_hidden_dimension": 4,
-        "num_quantizers": num_quantizers,
-        "num_semantic_quantizers": 1,
-        "upsample_groups": 8,
-    }
-    decoder_config = {
-        "hidden_size": 16,
-        "num_hidden_layers": 1,
-        "num_attention_heads": 2,
-        "num_key_value_heads": 2,
-        "head_dim": 8,
-        "intermediate_size": 32,
-        "num_quantizers": num_quantizers,
-        "codebook_size": 8,
-        "codebook_dim": 16,
-        "latent_dim": 16,
-        "decoder_dim": 32,
-        "upsample_rates": [2, 2],
-        "upsampling_ratios": [2, 2],
-    }
-    config = Qwen3TTSTokenizerConfig(encoder_config=encoder_config, decoder_config=decoder_config)
+    config = Qwen3TTSTokenizerConfig(
+        encoder_hidden_size=16,
+        encoder_num_hidden_layers=1,
+        encoder_num_attention_heads=2,
+        encoder_num_key_value_heads=2,
+        encoder_intermediate_size=32,
+        encoder_num_filters=8,
+        encoder_kernel_size=7,
+        encoder_residual_kernel_size=3,
+        encoder_last_kernel_size=3,
+        encoder_num_residual_layers=1,
+        encoder_upsampling_ratios=[8, 6],
+        hidden_size=16,
+        num_hidden_layers=1,
+        num_attention_heads=2,
+        num_key_value_heads=2,
+        head_dim=8,
+        intermediate_size=32,
+        codebook_dim=16,
+        latent_dim=16,
+        decoder_dim=32,
+        upsample_rates=[2, 2],
+        upsampling_ratios=[2, 2],
+        quantizer_config={
+            "codebook_size": 8,
+            "codebook_dim": 8,
+            "n_codebooks": num_quantizers,
+            "vector_quantization_hidden_dimension": 8,
+            "hidden_size": 16,
+            "semantic_quantizer_config": {"n_codebooks": 1},
+        },
+    )
     return Qwen3TTSTokenizerModel(config).eval()
 
 
@@ -780,7 +777,6 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             feature_size=config.speaker_encoder_config.mel_dim, n_fft=64, hop_length=16, win_length=64
         )
         codec_config = _build_tiny_audio_tokenizer(num_quantizers=2).config
-        codec_config.codebook_size = 2048
         codec_config.quantizer_config.codebook_size = 2048
         codec_config.quantizer_config.semantic_quantizer_config.codebook_size = 2048
         processor.audio_tokenizer = Qwen3TTSTokenizerModel(codec_config).eval()
@@ -843,24 +839,85 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertIsInstance(audio, torch.Tensor)
 
-    def test_audio_config_roundtrip_preserves_codec_decode(self):
+    @parameterized.expand(["canonical", "checkpoint_nested", "checkpoint_nested_default_model_type"])
+    def test_audio_config_roundtrip_preserves_codec_outputs(self, schema):
         codec = _build_tiny_audio_tokenizer()
         codes = torch.arange(24).reshape(1, 6, 4) % 8
+        waveform = torch.sin(torch.arange(256, dtype=torch.float32) * 0.03).reshape(1, 1, -1) * 0.1
+        waveform[..., -48:] = 0
+        padding_mask = torch.ones((1, 256), dtype=torch.long)
+        padding_mask[:, -48:] = 0
         with torch.no_grad():
             for module in codec.quantizer.modules():
                 if hasattr(module, "embed_sum"):
                     module.embed_sum.normal_()
-            expected = codec.decode(codes).audio_values
+            expected_audio = codec.decode(codes).audio_values
+            expected_encoding = codec.encode(waveform, padding_mask=padding_mask)
 
-        config = Qwen3TTSConfig(audio_config=codec.config.to_dict())
+        audio_config = codec.config.to_dict()
+        if schema != "canonical":
+            # Published codec JSON nests the components and keeps quantizer settings in the decoder.
+            audio_config = {
+                "model_type": codec.config.model_type,
+                "input_sample_rate": codec.config.input_sampling_rate,
+                "output_sample_rate": codec.config.output_sampling_rate,
+                "encoder_valid_num_quantizers": 4,
+                "encoder_config": {
+                    **{
+                        key.removeprefix("encoder_"): value
+                        for key, value in audio_config.items()
+                        if key.startswith("encoder_")
+                    },
+                    "sampling_rate": codec.config.input_sampling_rate,
+                    "codebook_size": 8,
+                    "codebook_dim": 4,
+                    "vector_quantization_hidden_dimension": 4,
+                    "num_quantizers": 4,
+                    "num_semantic_quantizers": 1,
+                    "upsample_groups": 8,
+                },
+                "decoder_config": {
+                    **codec.config.decoder_config.to_dict(),
+                    "codebook_size": 8,
+                    "num_quantizers": 4,
+                    "num_semantic_quantizers": 1,
+                    "semantic_codebook_size": 8,
+                },
+            }
+            if schema == "checkpoint_nested_default_model_type":
+                audio_config.pop("model_type")
+        original_audio_config = copy.deepcopy(audio_config)
+        config = Qwen3TTSConfig(audio_config=audio_config)
+        self.assertEqual(audio_config, original_audio_config)
+
         with tempfile.TemporaryDirectory() as directory:
-            config.save_pretrained(directory)
+            # Load the original JSON as an embedded config, not only a previously normalized config.
+            with open(os.path.join(directory, "config.json"), "w", encoding="utf-8") as file:
+                json.dump({"model_type": "qwen3_tts", "audio_config": audio_config}, file)
+            loaded_config = AutoConfig.from_pretrained(directory)
+            loaded_config.save_pretrained(directory)
+            with open(os.path.join(directory, "config.json"), encoding="utf-8") as file:
+                saved_audio_config = json.load(file)["audio_config"]
+            self.assertNotIn("encoder_config", saved_audio_config)
+            self.assertNotIn("decoder_config", saved_audio_config)
+            self.assertNotIn("codebook_size", saved_audio_config)
+            self.assertIn("quantizer_config", saved_audio_config)
             restored_config = AutoConfig.from_pretrained(directory)
-            restored_codec = AutoModel.from_config(restored_config.audio_config).eval()
-            restored_codec.load_state_dict(codec.state_dict(), strict=True)
-            with torch.no_grad():
-                actual = restored_codec.decode(codes).audio_values
-            torch.testing.assert_close(actual, expected)
+
+        for origin, candidate in (
+            ("constructor", config),
+            ("checkpoint", loaded_config),
+            ("roundtrip", restored_config),
+        ):
+            with self.subTest(origin=origin):
+                restored_codec = AutoModel.from_config(candidate.audio_config).eval()
+                restored_codec.load_state_dict(codec.state_dict(), strict=True)
+                with torch.no_grad():
+                    actual_audio = restored_codec.decode(codes).audio_values
+                    actual_encoding = restored_codec.encode(waveform, padding_mask=padding_mask)
+                torch.testing.assert_close(actual_audio, expected_audio)
+                torch.testing.assert_close(actual_encoding.audio_codes, expected_encoding.audio_codes)
+                torch.testing.assert_close(actual_encoding.audio_codes_mask, expected_encoding.audio_codes_mask)
 
     def test_save_load_audio_tokenizer_reference(self):
         processor = self.get_processor()
