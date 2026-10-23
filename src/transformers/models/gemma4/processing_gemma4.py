@@ -20,10 +20,8 @@ from ...audio_utils import AudioInput
 from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_vision_available, logging
-from ...utils.deprecation import deprecate_attr
-from ...utils.import_utils import requires
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
 
 
@@ -84,9 +82,6 @@ def get_aspect_ratio_preserving_size(
 
     return target_height, target_width
 
-
-class DeprecatedGemma4ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Gemma4ImageProcessorKwargs
 
 @auto_docstring
 class Gemma4Processor(ProcessorMixin):
@@ -377,6 +372,6 @@ class Gemma4Processor(ProcessorMixin):
         return ["num_soft_tokens_per_image", "num_soft_tokens_per_video"]
 
 
-__getattr__ = deprecate_attr(__name__, remove={"Gemma4ProcessorKwargs": (DeprecatedGemma4ProcessorKwargs, "5.29.0")})
+__getattr__ = deprecate_attr(__name__, rename={"Gemma4ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Gemma4Processor"]

@@ -30,7 +30,6 @@ from ...utils import (
     auto_docstring,
 )
 from ...utils.deprecation import deprecate_attr
-from ...utils.import_utils import requires
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 
 
