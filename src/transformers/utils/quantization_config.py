@@ -67,6 +67,7 @@ class QuantizationMethod(str, Enum):
     FOUR_OVER_SIX = "fouroversix"
     SINQ = "sinq"
     GEMMA = "gemma"
+    ENTROPACK = "entropack"
 
 
 class AwqFormat(str, Enum):
@@ -2109,3 +2110,49 @@ class GgufConfig(QuantizationConfigMixin):
         self.quant_method = QuantizationMethod.GGUF
         self.gguf_file = gguf_file
         self.dequantize = dequantize
+
+
+@dataclass
+class EntroPackConfig(QuantizationConfigMixin):
+    """
+    Configuration for loading a model with EntroPack weight compression.
+
+    Args:
+        target_bpp (`float`, *optional*, defaults to 4.0):
+            Target number of bits per parameter for compressed linear weights.
+        linear_type (`str`, *optional*, defaults to `"default"`):
+            Linear implementation to use. Choose from `"default"`, `"fp8"`, and `"int8"`.
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision.
+        entropack_lossy_config (`dict`, *optional*):
+            Additional settings for the EntroPack lossy compression backend. `target_bpp` takes precedence over the
+            value in this dictionary.
+    """
+
+    def __init__(
+        self,
+        target_bpp: float = 4.0,
+        linear_type: str = "default",
+        modules_to_not_convert: list | None = None,
+        entropack_lossy_config: dict | None = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.ENTROPACK
+        self.target_bpp = float(target_bpp)
+        self.linear_type = linear_type
+        self.modules_to_not_convert = list(modules_to_not_convert) if modules_to_not_convert else None
+        self.entropack_lossy_config = entropack_lossy_config
+        self.post_init()
+
+    def post_init(self):
+        if self.linear_type not in ("default", "fp8", "int8"):
+            raise ValueError(f'linear_type must be "default", "fp8" or "int8", got {self.linear_type!r}')
+        if self.linear_type in ("fp8", "int8"):
+            valid_rate, rate_range = 0.001 <= self.target_bpp < 8.0, "[0.001, 8)"
+        else:
+            valid_rate, rate_range = 0.001 <= self.target_bpp <= 11.0, "[0.001, 11]"
+        if not valid_rate:
+            raise ValueError(
+                f"target_bpp must be within {rate_range} for linear_type={self.linear_type!r}, got {self.target_bpp}"
+            )
