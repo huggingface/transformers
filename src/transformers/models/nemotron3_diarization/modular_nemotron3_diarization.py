@@ -21,7 +21,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -176,9 +176,9 @@ class Nemotron3DiarizationConfig(PreTrainedConfig):
 
     model_type = "nemotron3_diarization"
     sub_configs_defaults = {
-        "audio_config": SubConfigSpec(config_class=Nemotron3DiarizationAudioConfig),
-        "head_config": SubConfigSpec(config_class=Nemotron3DiarizationHeadConfig),
-        "streaming_config": SubConfigSpec(config_class=Nemotron3DiarizationStreamingConfig),
+        "audio_config": Nemotron3DiarizationAudioConfig,
+        "head_config": Nemotron3DiarizationHeadConfig,
+        "streaming_config": Nemotron3DiarizationStreamingConfig,
     }
 
     audio_config: Nemotron3DiarizationAudioConfig | dict | None = None
