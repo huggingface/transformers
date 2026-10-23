@@ -277,3 +277,7 @@ class MossTranscribeDiarizeProcessorTest(ProcessorTesterMixin, unittest.TestCase
         self.assertEqual(outputs["input_ids"].shape[0], batch_size)
         self.assertEqual(outputs["input_features"].shape[0], batch_size)
         self.assertEqual(outputs["padding_mask"].shape[0], batch_size)
+
+    @unittest.skip(reason="Cannot change the default of output_labels in __call__ without breaking BC.")
+    def test_call_arguments_default_none(self):
+        pass

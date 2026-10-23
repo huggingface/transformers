@@ -24,23 +24,14 @@ from ...image_processing_utils import select_best_resolution
 from ...image_utils import SizeDict
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class Granite4VisionProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "do_pad": True,
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class Granite4VisionProcessor(ProcessorMixin):
-    valid_processor_kwargs = Granite4VisionProcessorKwargs
+    images_kwargs = {
+        "do_pad": True,
+    }
 
     def __init__(
         self,
@@ -149,8 +140,7 @@ class Granite4VisionProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = Granite4VisionProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             size = images_kwargs.get("size", None) or self.image_processor.size
             if isinstance(size, SizeDict):
@@ -181,5 +171,7 @@ class Granite4VisionProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Granite4VisionProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Granite4VisionProcessor"]

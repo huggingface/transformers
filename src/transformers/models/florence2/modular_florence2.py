@@ -31,13 +31,13 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
 from ..bart.modeling_bart import eager_attention_forward, shift_tokens_right
 from ..llama4.modeling_llama4 import Llama4VisionMLP
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
-from ..llava.processing_llava import LlavaProcessorKwargs
 from ..swin.modeling_swin import SwinDropPath
 
 
@@ -141,20 +141,11 @@ class Florence2Config(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
 
-class Florence2ProcessorKwargs(LlavaProcessorKwargs):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": False,
-            "padding": False,
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-    }
-
-
 @auto_docstring
 class Florence2Processor(ProcessorMixin):
-    valid_processor_kwargs = Florence2ProcessorKwargs
+    text_kwargs = {
+        "add_special_tokens": False,
+    }
 
     def __init__(
         self,
@@ -1602,6 +1593,8 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         model_kwargs.pop("inputs_embeds", None)
         return model_kwargs
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Florence2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Florence2Config",

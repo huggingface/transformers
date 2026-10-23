@@ -23,6 +23,7 @@ from ...processing_utils import (
     ProcessorMixin,
 )
 from ...utils import auto_docstring, is_vision_available, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -33,22 +34,15 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-class PixtralProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
-
-
 @auto_docstring
 @requires(backends=("torchvision", "torch"))
 class PixtralProcessor(ProcessorMixin):
-    valid_processor_kwargs = PixtralProcessorKwargs
+    text_kwargs = {
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -118,8 +112,7 @@ class PixtralProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = PixtralProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             size = images_kwargs.get("size", None) or self.image_processor.size
             patch_size = self.patch_size * self.spatial_merge_size
@@ -146,5 +139,7 @@ class PixtralProcessor(ProcessorMixin):
         image_processor_input_names = self.image_processor.model_input_names
         return tokenizer_input_names + image_processor_input_names + ["image_sizes"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"PixtralProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["PixtralProcessor"]

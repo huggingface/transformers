@@ -129,3 +129,7 @@ class Sam2VideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_flat_kwarg_applied_when_modality_dict_lacks_it(self):
         self.skipTest("Sam2Processor has a custom interface, not a standard VLM text+image interface")
+
+    @unittest.skip(reason="Cannot remove return_tensors argument from __call__ without breaking BC.")
+    def test_call_arguments_not_in_processor_kwargs(self):
+        pass

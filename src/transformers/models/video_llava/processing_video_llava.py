@@ -20,22 +20,20 @@ import numpy as np
 from ...image_utils import get_image_size, to_numpy_array
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class VideoLlavaProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class VideoLlavaProcessor(ProcessorMixin):
-    valid_processor_kwargs = VideoLlavaProcessorKwargs
+    text_kwargs = {
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
+    videos_kwargs = {
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -95,5 +93,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         num_image_tokens += self.num_additional_image_tokens
         return self.video_token * (num_image_tokens * num_frames)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"VideoLlavaProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["VideoLlavaProcessor"]

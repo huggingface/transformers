@@ -20,6 +20,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
@@ -31,9 +32,10 @@ DEFAULT_SYSTEM_PROMPT = (
 )
 
 
-class JanusTextKwargs(TextKwargs, total=False):
+class DeprecatedJanusTextKwargs(TextKwargs, total=False):
     """
     generation_mode (`str`, *optional*, defaults to `"text"`):
+        Deprecated, use [`JanusProcessorKwargs.generation_mode`] instead.
         The generation mode indicating which modality to generate. Can be one of `"text"` or `"image"`. When set
         to `"text"`, the processor prepares inputs for text generation. When set to `"image"`, it prepares inputs
         for image generation by appending image start tokens to the prompt.
@@ -43,16 +45,28 @@ class JanusTextKwargs(TextKwargs, total=False):
 
 
 class JanusProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: JanusTextKwargs
-    _defaults = {
-        "text_kwargs": {"padding": False, "padding_side": "left", "generation_mode": "text"},
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    """
+    generation_mode (`str`, *optional*, defaults to `"text"`):
+        The generation mode indicating which modality to generate. Can be one of `"text"` or `"image"`. When set
+        to `"text"`, the processor prepares inputs for text generation. When set to `"image"`, it prepares inputs
+        for image generation by appending image start tokens to the prompt.
+    """
+
+    text_kwargs: DeprecatedJanusTextKwargs
+
+    generation_mode: str
 
 
 @auto_docstring
 class JanusProcessor(ProcessorMixin):
     valid_processor_kwargs = JanusProcessorKwargs
+
+    text_kwargs = {
+        "padding_side": "left",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {"return_tensors": "pt"}
+    generation_mode: str = "text"
 
     def __init__(
         self,
@@ -95,17 +109,21 @@ class JanusProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
 
-        output_kwargs = self._merge_kwargs(
-            JanusProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
+        merged_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
 
-        generation_mode = output_kwargs["text_kwargs"].pop("generation_mode")
+        if "generation_mode" in merged_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `generation_mode` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+        # generation_mode in text_kwargs has priority for backwards compatibility
+        generation_mode = merged_kwargs["text_kwargs"].pop("generation_mode", merged_kwargs["generation_mode"])
         if self.use_default_system_prompt and generation_mode == "text":
             text = [f"{DEFAULT_SYSTEM_PROMPT}{sample}" for sample in text]
         elif generation_mode == "image":
             text = [f"{sample}{self.image_start_token}" for sample in text]
 
-        model_inputs = super().__call__(images=images, text=text, **output_kwargs)
+        model_inputs = super().__call__(images=images, text=text, **merged_kwargs)
         return model_inputs
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
@@ -156,4 +174,5 @@ class JanusProcessor(ProcessorMixin):
             )
 
 
+__getattr__ = deprecate_attr(__name__, remove={"JanusTextKwargs": (DeprecatedJanusTextKwargs, "5.29.0")})
 __all__ = ["JanusProcessor"]

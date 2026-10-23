@@ -20,12 +20,7 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-
-
-class Gemma3nProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {"padding": False},
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
@@ -74,13 +69,12 @@ class Gemma3nProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         audio: np.ndarray | list[float] | list[np.ndarray] | list[list[float]] | None = None,
-        **kwargs: Unpack[Gemma3nProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         if text is None and images is None and audio is None:
             raise ValueError("Provide at least one of `text`, `images`, or `audio`.")
 
         output_kwargs = self._merge_kwargs(
-            Gemma3nProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -141,5 +135,7 @@ class Gemma3nProcessor(ProcessorMixin):
         image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]
         return list(tokenizer_input_names + image_processor_input_names + audio_processor_input_names)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Gemma3nProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Gemma3nProcessor"]

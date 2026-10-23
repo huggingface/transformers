@@ -22,27 +22,10 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
-
-
-class VibeVoiceAsrProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "padding_side": "left",
-            "add_special_tokens": False,
-            "return_tensors": "pt",
-        },
-        "audio_kwargs": {
-            "sampling_rate": 24000,
-            "pad_to_multiple_of": 3200,  # tokenizer hop length
-        },
-        "common_kwargs": {
-            "return_attention_mask": True,
-        },
-    }
 
 
 class VibeVoiceAsrProcessor(ProcessorMixin):
@@ -70,7 +53,17 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             The audio duration token placeholder to use in the chat template.
     """
 
-    valid_processor_kwargs = VibeVoiceAsrProcessorKwargs
+    text_kwargs = {
+        "padding": True,
+        "padding_side": "left",
+        "add_special_tokens": False,
+        "return_tensors": "pt",
+        "return_attention_mask": True,
+    }
+    audio_kwargs = {
+        "sampling_rate": 24000,
+        "pad_to_multiple_of": 3200,  # tokenizer hop length
+    }
 
     def __init__(
         self,
@@ -97,7 +90,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
         text: TextInput | list[TextInput],
         audio: AudioInput | None = None,
         output_labels: bool | None = False,
-        **kwargs: Unpack[VibeVoiceAsrProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
@@ -107,7 +100,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
             audio features (`input_values`, `padding_mask`).
         """
-        output_kwargs = self._merge_kwargs(VibeVoiceAsrProcessorKwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(**kwargs)
         return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
 
         if return_tensors != "pt":
@@ -178,7 +171,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
         self,
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
-        **kwargs: Unpack[VibeVoiceAsrProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
         Prepare inputs for automatic speech recognition without manually writing the chat template.
@@ -349,5 +342,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
 
         return transcriptions[0] if is_single else transcriptions
 
+
+__getattr__ = deprecate_attr(__name__, rename={"VibeVoiceAsrProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["VibeVoiceAsrProcessor"]

@@ -223,6 +223,10 @@ class FuyuProcessingTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue("pixel_values" not in inputs)
         self.assertTrue("image_patches" in inputs)
 
+    @unittest.skip(reason="Cannot change the default of return_legacy_image_output in __call__ without breaking BC.")
+    def test_call_arguments_default_none(self):
+        pass
+
 
 @require_torch
 class TestProcessImagesForModelInput(unittest.TestCase):

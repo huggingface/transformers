@@ -32,6 +32,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import (
@@ -144,19 +145,13 @@ class Tipsv2ImageProcessor(TorchvisionBackend):
     do_convert_rgb = True
 
 
-class Tipsv2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "max_length",
-            "truncation": True,
-            "max_length": 64,
-        },
-    }
-
-
 @auto_docstring
 class Tipsv2Processor(ProcessorMixin):
-    valid_processor_kwargs = Tipsv2ProcessorKwargs
+    text_kwargs = {
+        "padding": "max_length",
+        "truncation": True,
+        "max_length": 64,
+    }
 
     def __init__(self, image_processor=None, tokenizer=None):
         super().__init__(image_processor, tokenizer)
@@ -852,6 +847,8 @@ class Tipsv2Model(Tipsv2PreTrainedModel):
             vision_model_output=vision_outputs,
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Tipsv2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Tipsv2ImageProcessor",

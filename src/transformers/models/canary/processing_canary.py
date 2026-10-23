@@ -22,6 +22,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 
 
@@ -58,21 +59,16 @@ LANGUAGE_CODE_TO_NAME = {
 }
 
 
-class CanaryProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
-    _defaults = {
-        "audio_kwargs": {
-            "sampling_rate": 16000,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
-
-
 @requires(backends=("torch",))
 @auto_docstring
 class CanaryProcessor(ProcessorMixin):
-    valid_processor_kwargs = CanaryProcessorKwargs
+    text_kwargs = {
+        "return_tensors": "pt",
+    }
+    audio_kwargs = {
+        "sampling_rate": 16000,
+        "return_tensors": "pt",
+    }
 
     def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
@@ -83,7 +79,7 @@ class CanaryProcessor(ProcessorMixin):
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         output_labels: bool = False,
-        **kwargs: Unpack[CanaryProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         text (`str`, `list[str]`, *optional*):
@@ -114,7 +110,7 @@ class CanaryProcessor(ProcessorMixin):
         source_language: str | list[str] = "en",
         target_language: str | list[str] | None = None,
         punctuation: bool = True,
-        **kwargs: Unpack[CanaryProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         Prepare inputs for transcription or translation without manually writing the chat template.
@@ -174,5 +170,7 @@ class CanaryProcessor(ProcessorMixin):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return feature_extractor_input_names + ["decoder_input_ids", "labels"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"CanaryProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["CanaryProcessor"]

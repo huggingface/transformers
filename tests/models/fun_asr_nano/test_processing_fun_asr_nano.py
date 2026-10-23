@@ -138,7 +138,7 @@ class FunAsrNanoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             ],
         ]
 
-        # No explicit `return_tensors`: `FunAsrNanoProcessorKwargs._defaults` makes it `"pt"`.
+        # No explicit `return_tensors`: `FunAsrNanoProcessor.text_kwargs` makes it `"pt"`.
         inputs = processor.apply_chat_template(
             conversation, tokenize=True, return_dict=True, processor_kwargs={"output_labels": True}
         )
@@ -158,3 +158,7 @@ class FunAsrNanoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 == torch.where(labels[~audio_positions] == -100, -100, input_ids[~audio_positions])
             ).all()
         )
+
+    @unittest.skip(reason="Cannot change the default of output_labels in __call__ without breaking BC.")
+    def test_call_arguments_default_none(self):
+        pass

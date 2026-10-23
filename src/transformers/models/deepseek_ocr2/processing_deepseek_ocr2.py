@@ -21,27 +21,19 @@ from ...image_utils import make_flat_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class DeepseekOcr2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-        },
-        "images_kwargs": {
-            "crop_to_patches": True,
-            "min_patches": 2,
-            "max_patches": 6,
-        },
-    }
-
-
 @auto_docstring
 class DeepseekOcr2Processor(ProcessorMixin):
-    valid_processor_kwargs = DeepseekOcr2ProcessorKwargs
+    images_kwargs = {
+        "crop_to_patches": True,
+        "min_patches": 2,
+        "max_patches": 6,
+    }
 
     def __init__(
         self,
@@ -98,5 +90,7 @@ class DeepseekOcr2Processor(ProcessorMixin):
         num_tokens = global_tokens + local_tokens * num_crops + 1
         return self.image_token * num_tokens
 
+
+__getattr__ = deprecate_attr(__name__, rename={"DeepseekOcr2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["DeepseekOcr2Processor"]
