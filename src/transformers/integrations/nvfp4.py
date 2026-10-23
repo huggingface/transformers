@@ -135,7 +135,7 @@ class NVFP4Linear(nn.Module):
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         # under tensor parallelism the shapes come from the shards
         output = load_finegrained_kernels().matmul_2d(
-            A=input.reshape(-1, input.shape[-1]),
+            A=input.reshape(-1, input.shape[-1]).contiguous(),
             B=self.weight,
             Bs=self.weight_scale_inv,
             bias=self.bias,
