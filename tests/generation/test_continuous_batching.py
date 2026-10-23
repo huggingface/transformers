@@ -15,6 +15,7 @@
 import copy
 import functools
 import gc
+import io
 import itertools
 import math
 import os
@@ -62,6 +63,7 @@ from transformers.generation.continuous_batching.requests import (
     GenerationOutput,
     RequestState,
     RequestStatus,
+    _get_numa_bound_memory,
     get_device_and_memory_breakdown,
 )
 from transformers.generation.continuous_batching.utils import DEVICE_TYPE_TO_GRAPH_NAME
@@ -286,6 +288,67 @@ def _make_allocator(
         layer_indices=layer_indices if layer_indices is not None else [0],
         allow_block_sharing=allow_block_sharing,
     )
+
+
+class NumaBoundMemoryTest(unittest.TestCase):
+    NODE_MEMINFO = {node: f"Node {node} MemTotal:       {node + 1}000 kB\n" for node in range(4)}
+
+    def _get_numa_bound_memory(self, numa_maps: str | None, node_meminfo: dict[int, str] | None = None) -> int | None:
+        files = {f"/sys/devices/system/node/node{node}/meminfo": text for node, text in (node_meminfo or {}).items()}
+        if numa_maps is not None:
+            files["/proc/self/numa_maps"] = numa_maps
+
+        def fake_open(path, *args, **kwargs):
+            if path not in files:
+                raise FileNotFoundError(path)
+            return io.StringIO(files[path])
+
+        with patch("transformers.generation.continuous_batching.requests.open", fake_open, create=True):
+            return _get_numa_bound_memory()
+
+    @parameterized.expand(
+        [
+            ("single_node", "bind:0", 1000),
+            ("list_and_range", "bind:0-1,3", 1000 + 2000 + 4000),
+            ("static_flag", "bind=static:0,2", 1000 + 3000),
+            ("relative_flag", "bind=relative:1", 2000),
+            ("combined_flags", "bind=static|balancing:2-3", 3000 + 4000),
+        ]
+    )
+    def test_bound(self, _, policy, expected_kb):
+        numa_maps = f"55d0c8a00000 {policy} file=/usr/bin/python3.12 mapped=1 N0=1 kernelpagesize_kB=4\n"
+        self.assertEqual(self._get_numa_bound_memory(numa_maps, self.NODE_MEMINFO), expected_kb * 1024)
+
+    @parameterized.expand(
+        [
+            ("default", "55d0c8a00000 default file=/usr/bin/python3.12\n"),
+            ("interleave", "55d0c8a00000 interleave:0-3 file=/usr/bin/python3.12\n"),
+            ("prefer", "55d0c8a00000 prefer:1 file=/usr/bin/python3.12\n"),
+            ("local", "55d0c8a00000 local file=/usr/bin/python3.12\n"),
+            ("empty_file", ""),
+            ("no_policy_field", "55d0c8a00000\n"),
+            ("empty_node_list", "55d0c8a00000 bind: file=/usr/bin/python3.12\n"),
+            ("invalid_node_list", "55d0c8a00000 bind:0-x file=/usr/bin/python3.12\n"),
+            ("unknown_mode", "55d0c8a00000 bindall:0 file=/usr/bin/python3.12\n"),
+        ]
+    )
+    def test_not_bound(self, _, numa_maps):
+        self.assertIsNone(self._get_numa_bound_memory(numa_maps, self.NODE_MEMINFO))
+
+    def test_no_numa_maps(self):
+        self.assertIsNone(self._get_numa_bound_memory(None, self.NODE_MEMINFO))
+
+    @parameterized.expand(
+        [
+            ("missing_meminfo", {0: "Node 0 MemTotal:       1000 kB\n"}),
+            ("malformed_meminfo", {0: "Node 0 MemTotal:       1000 kB\n", 1: "Node 1 MemFree: 5 kB\n"}),
+            ("empty_meminfo", {0: "Node 0 MemTotal:       1000 kB\n", 1: ""}),
+        ]
+    )
+    def test_unreadable_node_size(self, _, node_meminfo):
+        numa_maps = "55d0c8a00000 bind:0-1 file=/usr/bin/python3.12\n"
+        with self.assertLogs("ContinuousBatchingLogger", level="WARNING"):
+            self.assertIsNone(self._get_numa_bound_memory(numa_maps, node_meminfo))
 
 
 # Class for all continuous batching tests that do not require any accelerator. Usualy those test are faster to run.

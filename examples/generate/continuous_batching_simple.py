@@ -17,7 +17,7 @@ import time
 import datasets
 import torch
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, ContinuousBatchingConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers.generation import GenerationConfig
 from transformers.utils import is_torch_accelerator_available
 
@@ -63,10 +63,6 @@ if __name__ == "__main__":
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
         do_sample=False,
-    )
-
-    # Cache sizing is read from the continuous batching config, not the generation config
-    continuous_batching_config = ContinuousBatchingConfig(
         num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
     )
@@ -75,7 +71,6 @@ if __name__ == "__main__":
     _ = model.generate_batch(
         inputs=simple_batch_inputs[: min(5, args.samples)],
         generation_config=generation_config,
-        continuous_batching_config=continuous_batching_config,
     )
 
     # Actual batch generation
@@ -84,7 +79,6 @@ if __name__ == "__main__":
     batch_outputs = model.generate_batch(
         inputs=simple_batch_inputs,
         generation_config=generation_config,
-        continuous_batching_config=continuous_batching_config,
     )
     end_time = time.time()
     print("Done with batch generation.")
