@@ -27,7 +27,7 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
 
-    src_to_tests: dict[str, set[str]] = defaultdict(set)
+    test_to_srcs: dict[str, set[str]] = defaultdict(set)
 
     for report_dir in sorted(args.artifacts_dir.iterdir()):
         if not report_dir.is_dir():
@@ -39,13 +39,12 @@ def main():
         # deps_by_file.json: {test_file: [src_file, ...], ...}
         by_file: dict[str, list[str]] = json.loads(deps_file.read_text(encoding="utf-8"))
         for test_file, src_files in by_file.items():
-            for src_file in src_files:
-                src_to_tests[src_file].add(test_file)
+            test_to_srcs[test_file].update(src_files)
 
-    result = {k: sorted(v) for k, v in sorted(src_to_tests.items())}
+    result = {k: sorted(v) for k, v in sorted(test_to_srcs.items())}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
-    print(f"Written {len(result)} src->test edges to {args.output}")
+    print(f"Written {len(result)} test->src edges to {args.output}")
 
 
 if __name__ == "__main__":
