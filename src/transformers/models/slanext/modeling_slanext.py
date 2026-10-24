@@ -31,7 +31,7 @@ from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...backbone_utils import filter_output_hidden_states
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -87,7 +87,7 @@ class SLANeXtVisionAttention(nn.Module):
         max_rel_dist = int(2 * max(q_size, k_size) - 1)
         # Interpolate rel pos.
         rel_pos_resized = F.interpolate(
-            rel_pos.reshape(1, rel_pos.shape[0], -1).permute(0, 2, 1),
+            rel_pos.reshape(1, rel_pos.shape[0], -1).transpose(1, 2),
             size=max_rel_dist,
             mode="linear",
         )
@@ -266,6 +266,22 @@ class SLANeXtPreTrainedModel(PreTrainedModel):
                             init.uniform_(layer.bias, -std, std)
 
 
+@auto_docstring(
+    custom_intro="""
+    Base class for slanext vision model's outputs that also contains image embeddings obtained by applying the projection
+    layer to the pooler_output.
+    """
+)
+@dataclass
+class SLANeXtVisionEncoderOutput(BaseModelOutputWithPooling):
+    r"""
+    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
+        The image embeddings obtained by applying the projection layer to the pooler_output.
+    """
+
+    image_embeds: torch.FloatTensor | None = None
+
+
 class SLANeXtMLPBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -362,25 +378,6 @@ class SLANeXtVisionLayer(GradientCheckpointingLayer):
         layernorm_output = self.layer_norm2(hidden_states)
         hidden_states = hidden_states + self.mlp(layernorm_output)
         return hidden_states
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for slanext vision model's outputs that also contains image embeddings obtained by applying the projection
-    layer to the pooler_output.
-    """
-)
-class SLANeXtVisionEncoderOutput(ModelOutput):
-    r"""
-    image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
-        The image embeddings obtained by applying the projection layer to the pooler_output.
-    """
-
-    image_embeds: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class SLANeXtPatchEmbeddings(nn.Module):
@@ -597,8 +594,8 @@ class SLANeXtSLAHead(SLANeXtPreTrainedModel):
         return BaseModelOutput(last_hidden_state=structure_preds, hidden_states=structure_preds_list)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class SLANeXtForTableRecognitionOutput(BaseModelOutput):
     r"""
     head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):

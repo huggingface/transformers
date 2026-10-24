@@ -9,17 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-03-07 and added to Hugging Face Transformers on 2026-03-21.*
+*This model was contributed to Hugging Face Transformers on 2026-03-21.*
 
 # SLANeXt
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -39,16 +36,18 @@ The example below demonstrates how to detect text with PP-OCRV5_Mobile_Det using
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForTableRecognition
 
+
 model_path="PaddlePaddle/SLANeXt_wired_safetensors"
-model = AutoModelForTableRecognition.from_pretrained(model_path, dtype=torch.float32, device_map="auto")
+model = AutoModelForTableRecognition.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/table_recognition.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_table_recognition.jpg", stream=True).raw)
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
@@ -64,6 +63,10 @@ print(result['structure_score'])
 ## SLANeXtConfig
 
 [[autodoc]] SLANeXtConfig
+
+## SLANeXtVisionConfig
+
+[[autodoc]] SLANeXtVisionConfig
 
 ## SLANeXtForTableRecognition
 

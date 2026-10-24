@@ -18,6 +18,7 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.output_capturing import OutputRecorder
@@ -114,11 +115,6 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -153,9 +149,8 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

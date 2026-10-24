@@ -13,13 +13,17 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-04-16 and added to Hugging Face Transformers on 2024-10-04.*
+*This model was published in HF papers on 2024-05-26 and contributed to Hugging Face Transformers on 2024-10-04.*
+
+<div style="float: right;">
+    <div class="flex flex-wrap space-x-1">
+        <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
+        <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
+    </div>
+</div>
 
 # Zamba
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 [Zamba](https://huggingface.co/papers/2405.16712) ([blog post](https://www.zyphra.com/post/zamba)) is a large language model (LLM) trained by Zyphra, and made available under an Apache 2.0 license. Please see the [Zyphra Hugging Face](https://huggingface.co/collections/zyphra/) repository for model weights.
 
@@ -33,7 +37,7 @@ Zamba-7B-v1 is a hybrid between state-space models (Specifically [Mamba](https:/
 
 ## Quick start
 
-### Presequities
+### Prerequisites
 
 Zamba requires you use `transformers` version 4.46.0 or higher:
 
@@ -49,16 +53,17 @@ pip install mamba-ssm causal-conv1d>=1.2.0
 
 You also have to have the model on a CUDA device.
 
-You can run the model not using the optimized Mamba kernels, but it is **not** recommended as it will result in significantly lower latencies. In order to do that, you'll need to specify `use_mamba_kernels=False` when loading the model.
+If the optimized Mamba kernels are not available, the model falls back to the PyTorch implementation, but it is **not** recommended as it results in significantly higher latencies.
 
 ## Inference
 
 ```python
-from transformers import AutoTokenizer, AutoModelForCausalLM
-import torch
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("Zyphra/Zamba-7B-v1")
-model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba-7B-v1", device_map="auto", dtype=torch.bfloat16)
+model = AutoModelForCausalLM.from_pretrained("Zyphra/Zamba-7B-v1", device_map="auto")
 
 input_text = "A funny prompt would be "
 input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
@@ -66,6 +71,10 @@ input_ids = tokenizer(input_text, return_tensors="pt").to(model.device)
 outputs = model.generate(**input_ids, max_new_tokens=100)
 print(tokenizer.decode(outputs[0]))
 ```
+
+## Notes
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 
 ## Model card
 

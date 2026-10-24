@@ -27,8 +27,10 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     ModelOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
+from ...processing_utils import Unpack
 from ...utils import (
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
     logging,
@@ -54,6 +56,7 @@ from ..llama.modeling_llama import (
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
+    repeat_kv,
 )
 from .configuration_evolla import EvollaConfig, SaProtConfig
 
@@ -61,24 +64,54 @@ from .configuration_evolla import EvollaConfig, SaProtConfig
 logger = logging.get_logger(__name__)
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Repeat key/value heads to match the number of query heads for grouped-query attention
+    # (the text decoder uses GQA). For the SaProt encoder there is no `num_key_value_groups`,
+    # so `n_rep` defaults to 1 and this is a no-op.
+    n_rep = getattr(module, "num_key_value_groups", 1)
+    key = repeat_kv(key, n_rep)
+    value = repeat_kv(value, n_rep)
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class EvollaSaProtEmbeddings(EsmEmbeddings):
     def __init__(self, config):
         super().__init__(config)
         # remove the position_ids in EsmEmbeddings
-        self.position_ids = None
+        del self.position_ids
 
 
 class EvollaSaProtRotaryEmbedding(EsmRotaryEmbedding):
     def __init__(self, config: SaProtConfig, device=None):
-        super().__init__(config, device)
+        super().__init__(config)
 
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: SaProtConfig | None = None,
-        device: "torch.device | None" = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        return super().compute_default_rope_parameters(config, device, seq_len)
+    def compute_default_rope_parameters(config: SaProtConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+        return super().compute_default_rope_parameters(config)
 
 
 class EvollaSaProtSelfAttention(EsmSelfAttention):
@@ -304,9 +337,15 @@ class EvollaSequenceCompressorResampler(nn.Module):
         return self.norm(transformed_feature)
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class EvollaProteinEncoderModelOutput(ModelOutput):
+    r"""
+    sequence_compressor_output (`torch.FloatTensor` of shape `(batch_size, compressed_seq_len, hidden_size)`, *optional*):
+        Compressed sequence representation produced by the sequence compressor module. The sequence length is
+        reduced from the original input length to `compressed_seq_len` via learned compression.
+    """
+
     sequence_compressor_output: torch.FloatTensor | None = None
     last_hidden_state: torch.FloatTensor | None = None
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
@@ -728,9 +767,9 @@ class EvollaModel(EvollaPreTrainedModel):
         msa_feats (torch.FloatTensor):
             The input IDs for purely MSA-based features. Should be of shape `(batch_size, msa_seq_length, msa_feat_dim)` and type `torch.FloatTensor`. Dummy input for now.
         structure_batch_mask (torch.Tensor):
-            The batch mask to decide which protein sequences are purely structure-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `structure_feats`. Dummpy input for now.
+            The batch mask to decide which protein sequences are purely structure-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `structure_feats`. Dummy input for now.
         msa_batch_mask (torch.Tensor):
-            The batch mask to decide which protein sequences are purely MSA-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `msa_feats`. Dummpy input for now.
+            The batch mask to decide which protein sequences are purely MSA-based. Should be of shape `(batch_size)` and type `torch.Tensor`. Should be paired with `msa_feats`. Dummy input for now.
         """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -866,9 +905,8 @@ class EvollaForProteinText2Text(EvollaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

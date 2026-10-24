@@ -196,6 +196,23 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             with self.assertRaises(ValueError):
                 _ = model(input_ids=input_ids, image_patches=image_patches)
 
+    def test_nonlegacy_input_name(self):
+        """
+        Tests that we support legacy `image_patches` and the recommended `pixel_values` as input.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        nonlegacy_input_dict = input_dict.copy()
+        nonlegacy_input_dict["pixel_values"] = nonlegacy_input_dict["image_patches"]
+        del nonlegacy_input_dict["image_patches"]
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                out1 = model(**input_dict)
+                out2 = model(**nonlegacy_input_dict)
+
+            torch.testing.assert_close(out1[0], out2[0])
+
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
     @unittest.skip("Fuyu doesn't support assisted generation due to the need to crop/extend image patches indices")
@@ -263,9 +280,6 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     @unittest.skip("Skip get_image_features tests as Fuyu's image features originate from a simple Linear")
     def test_get_image_features_attentions(self):
         pass
-
-    def test_reverse_loading_mapping(self):
-        super().test_reverse_loading_mapping(skip_base_model=True)
 
 
 @slow

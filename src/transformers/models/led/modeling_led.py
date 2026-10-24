@@ -362,27 +362,7 @@ class LEDEncoderSelfAttention(nn.Module):
             chunk_stride[1] = chunk_stride[1] // 2
             return hidden_states.as_strided(size=chunk_size, stride=chunk_stride)
 
-        # When exporting to ONNX, use this separate logic
-        # have to use slow implementation since as_strided, unfold and 2d-tensor indexing aren't supported (yet) in ONNX export
-
-        # TODO replace this with
-        # > return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
-        # once `unfold` is supported
-        # the case hidden_states.size(1) == window_overlap * 2 can also simply return hidden_states.unsqueeze(1), but that's control flow
-
-        chunk_size = [
-            hidden_states.size(0),
-            torch.div(hidden_states.size(1), window_overlap, rounding_mode="trunc") - 1,
-            window_overlap * 2,
-            hidden_states.size(2),
-        ]
-
-        overlapping_chunks = torch.empty(chunk_size, device=hidden_states.device)
-        for chunk in range(chunk_size[1]):
-            overlapping_chunks[:, chunk, :, :] = hidden_states[
-                :, chunk * window_overlap : chunk * window_overlap + 2 * window_overlap, :
-            ]
-        return overlapping_chunks
+        return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
 
     @staticmethod
     def _mask_invalid_locations(input_tensor, affected_seq_len) -> torch.Tensor:
@@ -1073,12 +1053,12 @@ class LEDPreTrainedModel(PreTrainedModel):
             init.zeros_(module.final_logits_bias)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for LEDEncoder's outputs, with potential hidden states, local and global attentions.
     """
 )
+@dataclass
 # Copied from transformers.models.longformer.modeling_longformer.LongformerBaseModelOutput with Longformer->LEDEncoder
 class LEDEncoderBaseModelOutput(ModelOutput):
     r"""
@@ -1112,13 +1092,13 @@ class LEDEncoderBaseModelOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model encoder's outputs that also contains : pre-computed hidden states that can speed up sequential
     decoding.
     """
 )
+@dataclass
 class LEDSeq2SeqModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -1151,12 +1131,12 @@ class LEDSeq2SeqModelOutput(ModelOutput):
     encoder_global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for sequence-to-sequence language models outputs.
     """
 )
+@dataclass
 class LEDSeq2SeqLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -1189,12 +1169,12 @@ class LEDSeq2SeqLMOutput(ModelOutput):
     encoder_global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of sequence-to-sequence sentence classification models.
     """
 )
+@dataclass
 class LEDSeq2SeqSequenceClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `label` is provided):
@@ -1227,12 +1207,12 @@ class LEDSeq2SeqSequenceClassifierOutput(ModelOutput):
     encoder_global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of sequence-to-sequence question answering models.
     """
 )
+@dataclass
 class LEDSeq2SeqQuestionAnsweringModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -1888,7 +1868,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
     def __init__(self, config: LEDConfig):
         super().__init__(config)
         self.led = LEDModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.led.shared.num_embeddings)))
+        self.final_logits_bias = nn.Buffer(torch.zeros((1, self.led.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.led.shared.num_embeddings, bias=False)
 
         # Initialize weights and apply final processing
@@ -1908,7 +1888,7 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
         else:
             extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
-        self.register_buffer("final_logits_bias", new_bias)
+        self.final_logits_bias = nn.Buffer(new_bias)
 
     @auto_docstring
     def forward(
@@ -1957,10 +1937,6 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example Summarization:
 

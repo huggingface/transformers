@@ -95,7 +95,7 @@ class GroundingDinoModelTester:
     def __init__(
         self,
         parent,
-        batch_size=4,
+        batch_size=2,
         is_training=True,
         use_labels=True,
         hidden_size=32,
@@ -107,7 +107,7 @@ class GroundingDinoModelTester:
         attention_probs_dropout_prob=0.1,
         num_queries=2,
         num_channels=3,
-        image_size=98,
+        image_size=128,
         n_targets=8,
         num_labels=2,
         num_feature_levels=4,
@@ -317,10 +317,6 @@ class GroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
-    def test_load_save_without_tied_weights(self):
         pass
 
     def test_tie_weights_is_not_modified(self):

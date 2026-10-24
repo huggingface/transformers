@@ -14,8 +14,8 @@
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Union
 
-import httpx
 import numpy as np
+from huggingface_hub.utils import httpx
 
 from ..generation import GenerationConfig
 from ..tokenization_python import PreTrainedTokenizer
@@ -36,6 +36,40 @@ if is_torch_available():
     import torch
 
     from ..models.auto.modeling_auto import MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES
+
+
+def _to_mono(inputs):
+    """
+    Reduce a waveform to a single channel, or refuse when the layout is ambiguous.
+
+    The pipeline reads audio as `(channels, samples)`, which is what torchcodec returns
+    and what `datasets` returned before 4.0. Anything else is rejected rather than
+    guessed at: the shape alone cannot distinguish two-channel audio from a two-sample
+    recording, and averaging the wrong axis produces a silently wrong transcription
+    instead of an error.
+    """
+    if inputs.ndim == 1:
+        return inputs
+
+    if inputs.ndim != 2:
+        raise ValueError(
+            "AutomaticSpeechRecognitionPipeline expects mono audio shaped `(samples,)` or "
+            f"multi-channel audio shaped `(channels, samples)`, got {inputs.ndim} dimensions "
+            f"with shape {tuple(inputs.shape)}."
+        )
+
+    num_channels = inputs.shape[0]
+    if num_channels > 2:
+        raise ValueError(
+            "AutomaticSpeechRecognitionPipeline reads axis 0 as channels, and it has size "
+            f"{num_channels} in the input of shape {tuple(inputs.shape)}. If this array is "
+            "channels-last `(samples, channels)`, which is what `soundfile.read`, "
+            "`librosa.load(mono=False)` and `scipy.io.wavfile.read` return, transpose it "
+            "first. If it genuinely has more than 2 channels, downmix it to mono yourself "
+            "so the weighting is yours to choose."
+        )
+
+    return inputs.mean(axis=0)
 
 
 def rescale_stride(stride, ratio):
@@ -176,6 +210,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             self.type = "seq2seq_whisper"
         elif model.__class__.__name__ in MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES.values():
             self.type = "seq2seq"
+        elif model.config.model_type in ("parakeet_tdt", "parakeet_rnnt", "nemotron_asr_streaming", "nemotron3_5_asr"):
+            # All these transducers decode the same way (generate -> sequences); "tdt" is the transducer path.
+            self.type = "tdt"
         elif decoder is not None:
             self.decoder = decoder
             self.type = "ctc_with_lm"
@@ -183,6 +220,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             self.type = "ctc"
 
         super().__init__(model, tokenizer, feature_extractor, device=device, **kwargs)
+        if self.type == "tdt":
+            # The pipeline defaults (e.g. beam search) target seq2seq models, transducers decode with their own
+            # generation config
+            self._generation_defaults = {}
+        elif self.model.config.model_type == "kyutai_speech_to_text":
+            # Kyutai's `generate()` sets the generation length from the audio length
+            self._generation_defaults.pop("max_new_tokens", None)
 
     def __call__(self, inputs: np.ndarray | bytes | str | dict, **kwargs: Any) -> list[dict[str, Any]]:
         """
@@ -269,7 +313,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 if self.type == "seq2seq_whisper":
                     type_warning += (
                         " To use Whisper for long-form transcription, use rather the model's `generate` method directly "
-                        "as the model relies on it's own chunking mechanism (cf. Whisper original paper, section 3.8. "
+                        "as the model relies on its own chunking mechanism (cf. Whisper original paper, section 3.8. "
                         "Long-form Transcription)."
                     )
                 logger.warning(type_warning)
@@ -297,11 +341,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if self.type != "seq2seq_whisper":
                 raise ValueError("Only Whisper can return language for now.")
             postprocess_params["return_language"] = return_language
+            forward_params["return_language"] = return_language
 
         # Parameter used in more than one place
         # in some models like whisper, the generation config has a `return_timestamps` key
-        if hasattr(self, "generation_config") and hasattr(self.generation_config, "return_timestamps"):
-            return_timestamps = return_timestamps or self.generation_config.return_timestamps
+        generation_config = getattr(self.model, "generation_config", None)
+        if getattr(generation_config, "return_timestamps", False):
+            return_timestamps = return_timestamps or generation_config.return_timestamps
 
         if return_timestamps is not None:
             # Check whether we have a valid setting for return_timestamps and throw an error before we perform a forward pass
@@ -391,6 +437,11 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             in_sampling_rate = inputs.pop("sampling_rate")
             extra = inputs
             inputs = _inputs
+            # Downmix first: the stride arithmetic below reads `shape[0]` as the
+            # sample count, which it is not until this runs. `F.resample` batches
+            # over leading axes, so it is not the step that breaks here.
+            if isinstance(inputs, (np.ndarray, torch.Tensor)):
+                inputs = _to_mono(inputs)
             if in_sampling_rate != self.feature_extractor.sampling_rate:
                 if is_torchaudio_available():
                     from torchaudio import functional as F
@@ -419,11 +470,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 stride = (inputs.shape[0], int(round(stride[0] * ratio)), int(round(stride[1] * ratio)))
         if not isinstance(inputs, (np.ndarray, torch.Tensor)):
             raise TypeError(f"We expect a numpy ndarray or torch tensor as input, got `{type(inputs)}`")
-        if inputs.ndim != 1:
-            logger.warning(
-                f"We expect a single channel audio input for AutomaticSpeechRecognitionPipeline, got {inputs.ndim}. Taking the mean of the channels for mono conversion."
-            )
-            inputs = inputs.mean(axis=0)
+        inputs = _to_mono(inputs)
 
         if chunk_length_s:
             if stride_length_s is None:
@@ -476,7 +523,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 processed["stride"] = stride
             yield {"is_last": True, **processed, **extra}
 
-    def _forward(self, model_inputs, return_timestamps=False, **generate_kwargs):
+    def _forward(self, model_inputs, return_timestamps=False, return_language=None, **generate_kwargs):
         attention_mask = model_inputs.pop("attention_mask", None)
         stride = model_inputs.pop("stride", None)
         num_frames = model_inputs.pop("num_frames", None)
@@ -499,16 +546,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 )
 
             # custom processing for Whisper timestamps and word-level timestamps
-            return_timestamps = return_timestamps or getattr(self.generation_config, "return_timestamps", False)
+            return_timestamps = return_timestamps or getattr(self.model.generation_config, "return_timestamps", False)
             if return_timestamps and self.type == "seq2seq_whisper":
                 generate_kwargs["return_timestamps"] = bool(return_timestamps)
                 if return_timestamps == "word":
                     generate_kwargs["return_token_timestamps"] = True
                     generate_kwargs["return_segments"] = True
 
-            # User-defined `generation_config` passed to the pipeline call take precedence
-            if "generation_config" not in generate_kwargs:
-                generate_kwargs["generation_config"] = self.generation_config
+            generate_kwargs = self._prepare_generate_kwargs(generate_kwargs)
 
             main_input_name = self.model.main_input_name if hasattr(self.model, "main_input_name") else "inputs"
             generate_kwargs = {
@@ -516,6 +561,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 "attention_mask": attention_mask,
                 **generate_kwargs,
             }
+            # When return_language is requested, use return_segments to retrieve
+            # the full generated sequences (including init tokens with the language token)
+            # since generate() strips them from the main output.
+            if return_language and self.type == "seq2seq_whisper":
+                generate_kwargs["return_segments"] = True
+
             tokens = self.model.generate(**generate_kwargs)
 
             # whisper longform generation stores timestamps in "segments"
@@ -528,13 +579,30 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         for segment_list in tokens["segments"]
                     ]
                     out = {"tokens": tokens["sequences"], "token_timestamps": token_timestamps}
+            elif isinstance(tokens, dict) and "sequences" in tokens:
+                out = {"tokens": tokens["sequences"]}
             else:
                 out = {"tokens": tokens}
             if self.type == "seq2seq_whisper":
                 if stride is not None:
                     out["stride"] = stride
+                if return_language and isinstance(tokens, dict) and "segments" in tokens:
+                    # Extract the language token from the full unstripped sequence
+                    # stored in segments[batch][segment]["result"]. The result is either
+                    # a 1D tensor (full sequence) or a dict with a "sequences" key.
+                    segments = tokens["segments"]
+                    if segments and segments[0]:
+                        result = segments[0][0]["result"]
+                        full_seq = result["sequences"] if isinstance(result, dict) else result
+                        gen_config = generate_kwargs.get("generation_config", self.model.generation_config)
+                        if hasattr(gen_config, "lang_to_id"):
+                            lang_ids = set(gen_config.lang_to_id.values())
+                            for token_id in full_seq.tolist():
+                                if token_id in lang_ids:
+                                    out["lang_id"] = torch.tensor([token_id])
+                                    break
 
-        else:
+        elif self.type in {"ctc", "ctc_with_lm"}:
             inputs = {
                 self.model.main_input_name: model_inputs.pop(self.model.main_input_name),
                 "attention_mask": attention_mask,
@@ -555,6 +623,15 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     out["stride"] = rescale_stride([stride], ratio)[0]
                 else:
                     out["stride"] = rescale_stride(stride, ratio)
+        elif self.type == "tdt":
+            inputs = {self.model.main_input_name: model_inputs.pop(self.model.main_input_name)}
+            if attention_mask is not None:
+                inputs["attention_mask"] = attention_mask
+            outputs = self.model.generate(**inputs, **self._prepare_generate_kwargs(generate_kwargs))
+            out = {"tokens": outputs.sequences}
+        else:
+            raise ValueError(f"Unsupported model type {self.type}.")
+
         # Leftover
         extra = model_inputs
         return {"is_last": is_last, **out, **extra}
@@ -599,6 +676,18 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     stride_right /= sampling_rate
                     output["stride"] = chunk_len, stride_left, stride_right
 
+            # Since Whisper's generate() strips init tokens (including the language token)
+            # from the output, we need to re-prepend the detected language token so that
+            # _decode_asr can find it and populate the language field in chunks.
+            if return_language:
+                for output in model_outputs:
+                    if "lang_id" in output:
+                        lang_id = output["lang_id"]
+                        if lang_id.dim() == 0:
+                            lang_id = lang_id.unsqueeze(0)
+                        lang_token = lang_id.unsqueeze(0).to(dtype=output["tokens"].dtype)
+                        output["tokens"] = torch.cat([lang_token, output["tokens"]], dim=-1)
+
             text, optional = self.tokenizer._decode_asr(
                 model_outputs,
                 return_timestamps=return_timestamps,
@@ -623,10 +712,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     offsets.append({"word": word, "start_offset": start_offset, "end_offset": end_offset})
         elif self.type != "seq2seq_whisper":
             skip_special_tokens = self.type != "ctc"
-            text = self.tokenizer.decode(items, skip_special_tokens=skip_special_tokens)
+            # CTC collapses consecutive identical tokens (a token repeated across frames is one emission); the
+            # Parakeet transducers ("tdt") emit each token explicitly and must keep legitimate repeats.
+            decode_kwargs = {"group_tokens": False} if self.type == "tdt" else {}
+            text = self.tokenizer.decode(items, skip_special_tokens=skip_special_tokens, **decode_kwargs)
             if return_timestamps:
                 offsets = self.tokenizer.decode(
-                    items, skip_special_tokens=skip_special_tokens, output_char_offsets=True
+                    items, skip_special_tokens=skip_special_tokens, output_char_offsets=True, **decode_kwargs
                 )["char_offsets"]
                 if return_timestamps == "word":
                     offsets = self.tokenizer._get_word_offsets(offsets, self.tokenizer.replace_word_delimiter_char)
@@ -651,6 +743,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             output.pop("is_last", None)
             output.pop("stride", None)
             output.pop("token_timestamps", None)
+            output.pop("lang_id", None)
             for k, v in output.items():
                 extra[k].append(v)
         return {"text": text, **optional, **extra}

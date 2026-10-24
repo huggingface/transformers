@@ -22,18 +22,17 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoConfig
+from ..conditional_detr.modeling_conditional_detr import encode_sinusoidal_position_embedding
 from ..convnext.modeling_convnext import ConvNextLayerNorm
-from ..dab_detr.modeling_dab_detr import gen_sine_position_embeddings
 from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrDecoderOutput,
     DeformableDetrForObjectDetection,
@@ -43,7 +42,7 @@ from ..deformable_detr.modeling_deformable_detr import (
 )
 from ..llama.modeling_llama import eager_attention_forward
 from ..rt_detr.modeling_rt_detr import RTDetrConvNormLayer
-from ..vit.modeling_vit import ViTAttention, ViTSelfAttention
+from ..vit.modeling_vit import ViTAttention
 from ..vitdet.configuration_vitdet import VitDetConfig
 from ..vitdet.modeling_vitdet import (
     VitDetBackbone,
@@ -51,6 +50,9 @@ from ..vitdet.modeling_vitdet import (
     VitDetMlp,
     VitDetPreTrainedModel,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 @auto_docstring(checkpoint="AnnaZhang/lwdetr_small_60e_coco")
@@ -144,6 +146,8 @@ class LwDetrConfig(PreTrainedConfig):
     disable_custom_kernels (`bool`, *optional*, defaults to `True`):
         Disable the use of custom CUDA and CPU kernels. This option is necessary for the ONNX export, as custom
         kernels are not supported by PyTorch ONNX export.
+    class_loss_coefficient (`float`, *optional*, defaults to 1):
+        Relative weight of the classification loss in the Hungarian matching cost.
 
     Examples:
 
@@ -161,7 +165,19 @@ class LwDetrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "lw_detr"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="lw_detr_vit",
+            init_kwargs={
+                "image_size": 1024,
+                "hidden_size": 192,
+                "num_hidden_layers": 10,
+                "window_block_indices": [0, 1, 3, 6, 7, 9],
+                "out_indices": [2, 4, 5, 9],
+            },
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     projector_scale_factors: list[float] | tuple[float, ...] = ()
@@ -183,31 +199,25 @@ class LwDetrConfig(PreTrainedConfig):
     group_detr: int = 13
     init_std: float = 0.02
     disable_custom_kernels: bool = True
-    class_cost: int = 2
-    bbox_cost: int = 5
-    giou_cost: int = 2
-    mask_loss_coefficient: int = 1
-    dice_loss_coefficient: int = 1
-    bbox_loss_coefficient: int = 5
-    giou_loss_coefficient: int = 2
+    class_cost: int | float = 2
+    bbox_cost: int | float = 5
+    giou_cost: int | float = 2
+    class_loss_coefficient: int | float = 1
+    dice_loss_coefficient: int | float = 1
+    bbox_loss_coefficient: int | float = 5
+    giou_loss_coefficient: int | float = 2
     eos_coefficient: float = 0.1
     focal_alpha: float = 0.25
     auxiliary_loss: bool = True
     d_model: int = 256
 
     def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="lw_detr_vit",
-            default_config_kwargs={
-                "image_size": 1024,
-                "hidden_size": 192,
-                "num_hidden_layers": 10,
-                "window_block_indices": [0, 1, 3, 6, 7, 9],
-                "out_indices": [2, 4, 5, 9],
-            },
-            **kwargs,
-        )
+        if "mask_loss_coefficient" in kwargs:
+            logger.warning_once(
+                "The parameter `mask_loss_coefficient` was renamed to `class_loss_coefficient` in LW-DETR. "
+                "Please use `class_loss_coefficient` instead. `mask_loss_coefficient` will be removed in a future version."
+            )
+            self.class_loss_coefficient = kwargs.pop("mask_loss_coefficient")
 
         self.projector_in_channels = [self.d_model] * len(self.projector_scale_factors)
         self.projector_out_channels = self.d_model
@@ -221,67 +231,14 @@ class LwDetrConfig(PreTrainedConfig):
                 raise ValueError(f"Unsupported scale factor: {scale}")
 
 
-class LwDetrViTSelfAttention(ViTSelfAttention):
-    def __init__(self, config: LwDetrViTConfig):
-        super().__init__(config)
-        del self.key
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
-        self.num_key_value_groups = 1
-        self.dropout_prob = config.dropout_prob
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size = hidden_states.shape[0]
-        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
-
-        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
-        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        context_layer, attention_probs = attention_interface(
-            self,
-            query_layer,
-            key_layer,
-            value_layer,
-            None,
-            is_causal=self.is_causal,
-            scaling=self.scaling,
-            dropout=0.0 if not self.training else self.dropout_prob,
-            **kwargs,
-        )
-
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.reshape(new_context_layer_shape)
-
-        return context_layer, attention_probs
-
-
 class LwDetrViTAttention(ViTAttention):
-    def __init__(self, config: LwDetrViTConfig):
-        """
-        Args:
-            config (`LwDetrViTConfig`):
-                Model configuration.
-        """
-        super().__init__(config)
-        self.attention = LwDetrViTSelfAttention(config)
-        self.output = nn.Linear(config.hidden_size, config.hidden_size)
+    """LwDetr ViT attention with k_proj bias=False and dropout from config.dropout_prob."""
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, **kwargs)
-        output = self.output(self_attn_output)
-        return output
+    def __init__(self, config: LwDetrViTConfig):
+        super().__init__()
+        self.attention_dropout = config.dropout_prob
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.num_key_value_groups = 1
 
 
 class LwDetrViTMlp(VitDetMlp):
@@ -321,7 +278,7 @@ class LwDetrViTLayer(GradientCheckpointingLayer):
                 batch_size // self.num_windows, self.num_windows * seq_len, channels
             )
 
-        attention_output = self.attention(hidden_states_norm, **kwargs)
+        attention_output, _ = self.attention(hidden_states_norm, **kwargs)
         attention_output = attention_output * self.gamma_1
 
         if not self.window:
@@ -354,23 +311,21 @@ class LwDetrViTPreTrainedModel(VitDetPreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": LwDetrViTLayer,
-        "attentions": LwDetrViTSelfAttention,
+        "attentions": LwDetrViTAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module) -> None:
-        """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
         elif isinstance(module, LwDetrViTEmbeddings):
             init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
         if isinstance(module, LwDetrViTLayer):
-            nn.init.constant_(module.gamma_1, self.config.cae_init_values)
-            nn.init.constant_(module.gamma_2, self.config.cae_init_values)
+            init.constant_(module.gamma_1, self.config.cae_init_values)
+            init.constant_(module.gamma_2, self.config.cae_init_values)
 
 
 class LwDetrViTEncoder(LwDetrViTPreTrainedModel):
@@ -436,7 +391,6 @@ class LwDetrViTBackbone(VitDetBackbone):
             .reshape(batch_size * self.config.num_windows_side**2, window_height * window_width, channels)
         )
 
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         output = self.encoder(hidden_states, **kwargs)
 
         feature_maps = ()
@@ -522,6 +476,7 @@ class LwDetrC2FLayer(nn.Module):
         hidden_states = self.conv1(hidden_states)
         all_hidden_states = list(hidden_states.split(self.hidden_channels, 1))
         hidden_states = all_hidden_states[-1]
+        hidden_states = hidden_states.contiguous()
 
         for bottleneck in self.bottlenecks:
             hidden_states = bottleneck(hidden_states)
@@ -627,6 +582,8 @@ class LwDetrConvEncoder(nn.Module):
 
 
 class LwDetrAttention(nn.Module):
+    """LW-DETR self-attention with group-DETR training technique."""
+
     def __init__(self, config: LwDetrConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -700,31 +657,7 @@ class LwDetrAttention(nn.Module):
 
 
 class LwDetrMultiscaleDeformableAttention(DeformableDetrMultiscaleDeformableAttention):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        position_embeddings: torch.Tensor | None = None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        return super().forward(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            position_embeddings=position_embeddings,
-            reference_points=reference_points,
-            spatial_shapes=spatial_shapes,
-            spatial_shapes_list=spatial_shapes_list,
-            level_start_index=level_start_index,
-            **kwargs,
-        )
+    pass
 
 
 class LwDetrMLP(nn.Module):
@@ -816,6 +749,7 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     config: LwDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _no_split_modules = [
         r"LwDetrConvEncoder",
         r"LwDetrDecoderLayer",
@@ -825,8 +759,9 @@ class LwDetrPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_attention_backend = True
     _can_record_outputs = {
-        "attentions": [LwDetrAttention, LwDetrMultiscaleDeformableAttention],
-        "hidden_states": [LwDetrDecoderLayer],
+        "attentions": LwDetrAttention,
+        "cross_attentions": LwDetrMultiscaleDeformableAttention,
+        "hidden_states": LwDetrDecoderLayer,
     }
 
     @torch.no_grad()
@@ -873,7 +808,6 @@ def refine_bboxes(reference_points, deltas):
     return new_reference_points
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the LwDetrDecoder. This class adds two attributes to
@@ -882,6 +816,7 @@ def refine_bboxes(reference_points, deltas):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class LwDetrDecoderOutput(DeformableDetrDecoderOutput):
     pass
 
@@ -899,6 +834,12 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
     Args:
         config: LwDetrConfig
     """
+
+    _can_record_outputs = {
+        "hidden_states": LwDetrDecoderLayer,
+        "attentions": OutputRecorder(LwDetrAttention, layer_name="self_attn", index=1),
+        "cross_attentions": OutputRecorder(LwDetrMultiscaleDeformableAttention, layer_name="cross_attn", index=1),
+    }
 
     def __init__(self, config: LwDetrConfig):
         super().__init__(config)
@@ -920,7 +861,9 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         reference_points_inputs = obj_center[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
 
         # batch_size, num_queries, d_model * 2
-        query_sine_embed = gen_sine_position_embeddings(reference_points_inputs[:, :, 0, :], self.config.d_model)
+        query_sine_embed = encode_sinusoidal_position_embedding(
+            reference_points_inputs[:, :, 0, :], num_pos_feats=self.config.d_model // 2
+        )
 
         # batch_size, num_queries, d_model
         query_pos = self.ref_point_head(query_sine_embed)
@@ -974,12 +917,12 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the LwDetr backbone-decoder model.
     """
 )
+@dataclass
 class LwDetrModelOutput(ModelOutput):
     r"""
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
@@ -1015,7 +958,7 @@ class LwDetrModelOutput(ModelOutput):
 )
 class LwDetrModel(DeformableDetrModel):
     def __init__(self, config: LwDetrConfig):
-        LwDetrPreTrainedModel.__init__(config)
+        PreTrainedModel.__init__(self, config)
 
         # Create backbone + positional encoding
         self.backbone = LwDetrConvEncoder(config)
@@ -1092,7 +1035,6 @@ class LwDetrModel(DeformableDetrModel):
             _cur += height * width
         output_proposals = torch.cat(proposals, 1)
         output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
-        invalid_mask = padding_mask | ~output_proposals_valid.squeeze(-1)
         invalid_mask = padding_mask.unsqueeze(-1) | ~output_proposals_valid
         output_proposals = output_proposals.masked_fill(invalid_mask, float(0))
 
@@ -1115,7 +1057,7 @@ class LwDetrModel(DeformableDetrModel):
         ```python
         >>> from transformers import AutoImageProcessor, DeformableDetrModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1258,16 +1200,16 @@ class LwDetrMLPPredictionHead(DeformableDetrMLPPredictionHead):
     pass
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`LwDetrForObjectDetection`].
     """
 )
+@dataclass
 class LwDetrObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
@@ -1340,18 +1282,12 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
         **kwargs: Unpack[TransformersKwargs],
     ) -> LwDetrObjectDetectionOutput:
         r"""
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
-
         Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, LwDetrForObjectDetection
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

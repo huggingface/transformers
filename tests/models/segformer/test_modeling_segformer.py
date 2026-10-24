@@ -56,6 +56,7 @@ class SegformerModelTester:
         image_size=64,
         num_channels=3,
         num_encoder_blocks=4,
+        decoder_hidden_size=32,
         depths=[1, 1, 1, 1],
         sr_ratios=[8, 4, 2, 1],
         hidden_sizes=[8, 8, 16, 16],
@@ -75,6 +76,7 @@ class SegformerModelTester:
         self.image_size = image_size
         self.num_channels = num_channels
         self.num_encoder_blocks = num_encoder_blocks
+        self.decoder_hidden_size = decoder_hidden_size
         self.sr_ratios = sr_ratios
         self.depths = depths
         self.hidden_sizes = hidden_sizes
@@ -111,6 +113,7 @@ class SegformerModelTester:
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
+            decoder_hidden_size=self.decoder_hidden_size,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -201,6 +204,12 @@ class SegformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     @unittest.skip(reason="SegFormer does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @unittest.skip(
+        reason="SegFormer test config uses head_dim=8 which is below the minimum of 16 required by Flex attention"
+    )
+    def test_flex_attention_with_grads(self):
         pass
 
     @unittest.skip(reason="SegFormer does not have get_input_embeddings method and get_output_embeddings methods")

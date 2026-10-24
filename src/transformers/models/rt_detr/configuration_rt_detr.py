@@ -15,8 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
@@ -84,9 +83,9 @@ class RTDetrConfig(PreTrainedConfig):
     matcher_bbox_cost (`float`, *optional*, defaults to 5.0):
         The relative weight of the bounding box loss used by the Hungarian Matcher.
     matcher_giou_cost (`float`, *optional*, defaults to 2.0):
-        The relative weight of the giou loss of used by the Hungarian Matcher.
+        The relative weight of the giou loss used by the Hungarian Matcher.
     use_focal_loss (`bool`, *optional*, defaults to `True`):
-        Parameter informing if focal focal should be used.
+        Parameter informing if focal loss should be used.
     focal_loss_alpha (`float`, *optional*, defaults to 0.75):
         Parameter alpha used to compute the focal loss.
     focal_loss_gamma (`float`, *optional*, defaults to 2.0):
@@ -114,7 +113,11 @@ class RTDetrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "rt_detr"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="rt_detr_resnet", init_kwargs={"out_indices": [2, 3, 4]}
+        ),
+    }
     layer_types = ["basic", "bottleneck"]
     attribute_map = {
         "hidden_size": "d_model",
@@ -173,15 +176,6 @@ class RTDetrConfig(PreTrainedConfig):
     weight_loss_bbox: float = 5.0
     weight_loss_giou: float = 2.0
     eos_coefficient: float = 1e-4
-
-    def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="rt_detr_resnet",
-            default_config_kwargs={"out_indices": [2, 3, 4]},
-            **kwargs,
-        )
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["RTDetrConfig"]

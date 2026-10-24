@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2023-02-06 and added to Hugging Face Transformers on 2026-03-21.*
+*This model was contributed to Hugging Face Transformers on 2026-03-21.*
 
 # UVDoc
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -34,10 +31,12 @@ The example below demonstrates how to rectify a document image with UVDoc using 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModel
+
 
 model_path = "PaddlePaddle/UVDoc_safetensors"
 model = AutoModel.from_pretrained(
@@ -46,7 +45,7 @@ model = AutoModel.from_pretrained(
 )
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_doc_test.jpg", stream=True).raw)
 
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
@@ -77,7 +76,7 @@ model = AutoModel.from_pretrained(
 )
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/doc_test.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_doc_test.jpg", stream=True).raw)
 
 inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)

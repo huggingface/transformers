@@ -21,9 +21,9 @@ from transformers.utils import direct_transformers_import
 CHECKER_CONFIG = {
     "name": "config_docstrings",
     "label": "Config docstrings",
-    # Approximate: iterates CONFIG_MAPPING at runtime via inspect.getsource(), not file globs.
+    # Approximate: iterates CONFIG_MAPPING at runtime via inspect.getsource(), not cache globs.
     # Only configs registered in CONFIG_MAPPING are checked; deprecated models are skipped.
-    "file_globs": ["src/transformers/models/**/configuration_*.py"],
+    "cache_globs": ["src/transformers/models/**/configuration_*.py"],
     "check_args": [],
     "fix_args": None,
 }
@@ -58,12 +58,38 @@ CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
     "GraniteMoeHybridConfig",
     "Qwen3MoeConfig",
     "GraniteSpeechConfig",
+    "InklingConfig",
+    "InklingTextConfig",
+    "InklingAudioConfig",
+    "InklingVisionConfig",
+    "MimiEncoderConfig",
+    "MimiDecoderConfig",
+    "PocketTTSAudioTokenizerEncoderConfig",
+    "PocketTTSAudioTokenizerDecoderConfig",
 }
 
 
 def get_checkpoint_from_config_class(config_class):
     # source code of `config_class`
-    config_source = inspect.getsource(config_class)
+    source_lines, start_lineno = inspect.getsourcelines(config_class)
+    config_source = "".join(source_lines)
+
+    # Also scan lines immediately before the class definition, stopping at the first blank line.
+    # This is needed for config classes whose @auto_docstring decorator is temporarily commented
+    # out (e.g. `# @auto_docstring(checkpoint="thinkingmachines/Inkling")`) because undocumented
+    # fields block the decorator from being applied. `inspect.getsource` only returns lines from
+    # the first live decorator onward, so the checkpoint regex would miss those commented lines.
+    try:
+        all_lines = open(inspect.getfile(config_class), encoding="utf-8").readlines()
+        prefix = []
+        idx = start_lineno - 2  # start_lineno is 1-indexed; step back one line
+        while idx >= 0 and all_lines[idx].strip():
+            prefix.insert(0, all_lines[idx])
+            idx -= 1
+        config_source = "".join(prefix) + config_source
+    except (OSError, TypeError):
+        pass
+
     checkpoints = _re_checkpoint.findall(config_source)
     return checkpoints[0] if checkpoints else None
 

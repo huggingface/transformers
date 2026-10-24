@@ -37,7 +37,7 @@ from ...modeling_outputs import (
     Seq2SeqQuestionAnsweringModelOutput,
     Seq2SeqSequenceClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -421,7 +421,7 @@ class BartPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_unexpected = ["encoder.version", "decoder.version"]
     _no_split_modules = [r"BartEncoderLayer", r"BartDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
@@ -645,7 +645,7 @@ class BartDecoder(BartPreTrainedModel):
         )
 
         # embed positions
-        positions = self.embed_positions(input, past_key_values_length, position_ids=position_ids)
+        positions = self.embed_positions(input_ids, past_key_values_length, position_ids=position_ids)
         positions = positions.to(inputs_embeds.device)
 
         hidden_states = inputs_embeds + positions
@@ -808,7 +808,7 @@ class BartForConditionalGeneration(BartPreTrainedModel, GenerationMixin):
     def __init__(self, config: BartConfig):
         super().__init__(config)
         self.model = BartModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
+        self.final_logits_bias = nn.Buffer(torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
         # Initialize weights and apply final processing
@@ -828,7 +828,7 @@ class BartForConditionalGeneration(BartPreTrainedModel, GenerationMixin):
         else:
             extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
-        self.register_buffer("final_logits_bias", new_bias)
+        self.final_logits_bias = nn.Buffer(new_bias)
 
     @can_return_tuple
     @auto_docstring
@@ -868,10 +868,6 @@ class BartForConditionalGeneration(BartPreTrainedModel, GenerationMixin):
             If you want to change padding behavior, you should read [`modeling_bart._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example summarization:
 
@@ -1018,9 +1014,6 @@ class BartForSequenceClassification(BartPreTrainedModel):
             If you want to change padding behavior, you should read [`modeling_bart._prepare_decoder_attention_mask`]
             and modify to your needs. See diagram 1 in [the paper](https://huggingface.co/papers/1910.13461) for more
             information on the default strategy.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         if labels is not None:
             use_cache = False
@@ -1049,9 +1042,12 @@ class BartForSequenceClassification(BartPreTrainedModel):
             torch.unique_consecutive(eos_mask.sum(1)).numel() == 1,
             "All examples must have the same number of <eos> tokens.",
         )
-        sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
-            :, -1, :
-        ]
+        selected = hidden_states[eos_mask, :]
+        torch_compilable_check(
+            selected.shape[0] // hidden_states.shape[0] >= 1,
+            "Each example must contain at least one <eos> token.",
+        )
+        sentence_representation = selected.view(hidden_states.size(0), -1, hidden_states.size(-1))[:, -1, :]
         logits = self.classification_head(sentence_representation)
 
         loss = None
@@ -1255,11 +1251,6 @@ class BartForCausalLM(BartPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -1289,9 +1280,8 @@ class BartForCausalLM(BartPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

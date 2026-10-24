@@ -48,18 +48,18 @@ class LasrEncoderConfig(PreTrainedConfig):
         The momentum for the batch normalization layers
 
     Example:
-        ```python
-        >>> from transformers import LasrEncoderModel, LasrEncoderConfig
+    ```python
+    >>> from transformers import LasrEncoderModel, LasrEncoderConfig
 
-        >>> # Initializing a `LasrEncoder` configuration
-        >>> configuration = LasrEncoderConfig()
+    >>> # Initializing a `LasrEncoder` configuration
+    >>> configuration = LasrEncoderConfig()
 
-        >>> # Initializing a model from the configuration
-        >>> model = LasrEncoderModel(configuration)
+    >>> # Initializing a model from the configuration
+    >>> model = LasrEncoderModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
 
     This configuration class is based on the LasrEncoder architecture from Google Health AI. You can find more details
     and pre-trained models at [google/medasr](https://huggingface.co/google/medasr).
@@ -111,21 +111,23 @@ class LasrCTCConfig(PreTrainedConfig):
         of [`LasrForCTC`].
 
     Example:
-        ```python
-        >>> from transformers import LasrForCTC, LasrCTCConfig
-        >>> # Initializing a Lasr configuration
-        >>> configuration = LasrCTCConfig()
-        >>> # Initializing a model from the configuration
-        >>> model = LasrForCTC(configuration)
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
-        ```
+    ```python
+    >>> from transformers import LasrForCTC, LasrCTCConfig
+    >>> # Initializing a Lasr configuration
+    >>> configuration = LasrCTCConfig()
+    >>> # Initializing a model from the configuration
+    >>> model = LasrForCTC(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```
     This configuration class is based on the Lasr CTC architecture from Google Health AI. You can find more details
     and pre-trained models at [google/medasr](https://huggingface.co/google/medasr).
     """
 
     model_type = "lasr_ctc"
-    sub_configs = {"encoder_config": LasrEncoderConfig}
+    sub_configs_defaults = {
+        "encoder_config": LasrEncoderConfig,
+    }
 
     vocab_size: int = 512
     ctc_loss_reduction: str = "mean"
@@ -134,12 +136,8 @@ class LasrCTCConfig(PreTrainedConfig):
     pad_token_id: int = 0
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.encoder_config, dict):
-            self.encoder_config = LasrEncoderConfig(**self.encoder_config)
-        elif self.encoder_config is None:
-            self.encoder_config = LasrEncoderConfig()
-        self.initializer_range = self.encoder_config.initializer_range
         super().__post_init__(**kwargs)
+        self.initializer_range = self.encoder_config.initializer_range
 
     @property
     def inputs_to_logits_ratio(self):

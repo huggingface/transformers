@@ -25,7 +25,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
@@ -402,9 +402,7 @@ class BertGenerationEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(self, input_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0):
         if input_ids is not None:
@@ -687,9 +685,8 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

@@ -21,33 +21,47 @@
 import math
 import types
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn as nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig, GenerationMixin
 from ...masking_utils import create_causal_mask
-from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_kyutai_speech_to_text import KyutaiSpeechToTextConfig
 
 
-if is_flash_attn_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
-
-
 logger = logging.get_logger(__name__)
+
+
+class KyutaiSpeechToTextRMSNorm(nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))  # Ignore copy
+
+    def _norm(self, x):
+        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
+
+    # Ignore copy
+    def forward(self, x):
+        output = self._norm(x.float())
+        output = output * self.weight.float()
+        return output.type_as(x)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
 class KyutaiSpeechToTextFlexibleLinear(nn.Module):
@@ -89,15 +103,319 @@ class KyutaiSpeechToTextFlexibleLinear(nn.Module):
         return x.squeeze(2)
 
 
+class KyutaiSpeechToTextLinear(nn.Module):
+    def __init__(self, input_dim, output_dim, num_codebooks, use_flexible_linear=False):
+        super().__init__()
+
+        self.use_flexible_linear = use_flexible_linear
+
+        if not use_flexible_linear:
+            self.linear = nn.Linear(input_dim, output_dim, bias=False)
+        else:
+            self.linear = KyutaiSpeechToTextFlexibleLinear(input_dim, output_dim, num_layers=num_codebooks)
+
+    def forward(self, x, layer_idx=None):
+        if self.use_flexible_linear:
+            return self.linear(x, layer_idx)
+        else:
+            return self.linear(x)
+
+
+class KyutaiSpeechToTextRotaryEmbedding(nn.Module):
+    def __init__(self, config: KyutaiSpeechToTextConfig):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
+
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_default_rope_parameters(config: KyutaiSpeechToTextConfig, **kwargs) -> tuple[torch.Tensor, float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+class KyutaiSpeechToTextGatingMLP(nn.Module):
+    def __init__(self, config, use_flexible_linear=False):
+        super().__init__()
+
+        self.activation_fn = ACT2FN[config.hidden_act]
+        ffn_dim = config.ffn_dim
+        hidden_size = config.hidden_size
+        num_layers = config.num_codebooks if use_flexible_linear else 1
+        if num_layers == 1:
+            self.fc1 = nn.Linear(hidden_size, ffn_dim, bias=False)
+            self.fc2 = nn.Linear(ffn_dim // 2, hidden_size, bias=False)
+        else:
+            self.fc1 = KyutaiSpeechToTextFlexibleLinear(hidden_size, ffn_dim, num_layers)
+            self.fc2 = KyutaiSpeechToTextFlexibleLinear(ffn_dim // 2, hidden_size, num_layers)
+
+    def forward(self, hidden_states: torch.Tensor, layer_idx: int | None = None) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states) if layer_idx is None else self.fc1(hidden_states, layer_idx)
+
+        batch_size, sequence_length, _ = hidden_states.shape
+        hidden_states = hidden_states.view(batch_size, sequence_length, 2, -1)
+        hidden_states = self.activation_fn(hidden_states[..., 0, :]) * hidden_states[..., 1, :]
+        hidden_states = self.fc2(hidden_states) if layer_idx is None else self.fc2(hidden_states, layer_idx)
+        return hidden_states
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class KyutaiSpeechToTextAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(
+        self, config: KyutaiSpeechToTextConfig, layer_idx: int | None = None, use_flexible_linear=False, use_rope=True
+    ):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+
+        self.attention_dropout = config.attention_dropout
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = config.head_dim
+        self.num_key_value_heads = config.num_key_value_heads
+        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
+        self.is_causal = True
+        self.scaling = 1 / math.sqrt(self.head_dim)
+
+        if self.hidden_size % self.num_heads != 0:
+            raise ValueError(
+                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
+                f" and `num_heads`: {self.num_heads})."
+            )
+
+        self.q_proj = KyutaiSpeechToTextLinear(
+            self.hidden_size, self.num_heads * self.head_dim, config.num_codebooks, use_flexible_linear
+        )
+        self.k_proj = KyutaiSpeechToTextLinear(
+            self.hidden_size, self.num_key_value_heads * self.head_dim, config.num_codebooks, use_flexible_linear
+        )
+        self.v_proj = KyutaiSpeechToTextLinear(
+            self.hidden_size, self.num_key_value_heads * self.head_dim, config.num_codebooks, use_flexible_linear
+        )
+        self.o_proj = KyutaiSpeechToTextLinear(
+            self.num_heads * self.head_dim, self.hidden_size, config.num_codebooks, use_flexible_linear
+        )
+
+        # rotary embeddings are not used in the depth decoder
+        self.rotary_emb = None
+        if use_rope:
+            self.rotary_emb = KyutaiSpeechToTextRotaryEmbedding(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        codebook_idx: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states, codebook_idx).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states, codebook_idx).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states, codebook_idx).view(hidden_shape).transpose(1, 2)
+
+        if self.rotary_emb is not None:
+            cos, sin = self.rotary_emb(value_states, position_ids)
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
+        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
+            self.config._attn_implementation, eager_attention_forward
+        )
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output, codebook_idx)
+        return attn_output, attn_weights
+
+
+# NO LONGER EXIST Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->KyutaiSpeechToText
+# TODO cyril: modular
+class KyutaiSpeechToTextDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: KyutaiSpeechToTextConfig, layer_idx: int, use_flexible_linear: bool, use_rope=True):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.use_flexible_linear = use_flexible_linear
+
+        self.self_attn = KyutaiSpeechToTextAttention(
+            config=config, layer_idx=layer_idx, use_flexible_linear=use_flexible_linear, use_rope=use_rope
+        )
+
+        self.mlp = KyutaiSpeechToTextGatingMLP(config, use_flexible_linear)
+        self.input_layernorm = KyutaiSpeechToTextRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = KyutaiSpeechToTextRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.sliding_window = config.sliding_window
+
+        self._attn_implementation = config._attn_implementation
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        codebook_idx: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            codebook_idx=codebook_idx,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = (
+            self.mlp(hidden_states) if not self.use_flexible_linear else self.mlp(hidden_states, codebook_idx)
+        )
+        hidden_states = residual + hidden_states
+        return hidden_states
+
+
 @auto_docstring
 class KyutaiSpeechToTextPreTrainedModel(PreTrainedModel):
     config: KyutaiSpeechToTextConfig
     base_model_prefix = "model"
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["KyutaiSpeechToTextDecoderLayer", "MimiTransformerLayer"]
+    _no_split_modules = ["KyutaiSpeechToTextDecoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": KyutaiSpeechToTextDecoderLayer,
+        "attentions": KyutaiSpeechToTextAttention,
+    }
 
     main_input_name = "input_ids"
 
@@ -221,7 +539,7 @@ class KyutaiSpeechToTextEmbeddings(nn.Module):
         audio_tokens_offsets = nn.functional.pad(
             audio_tokens_offsets, (1, 0)
         )  # pad one 0 to the left for the text token
-        self.register_buffer("audio_tokens_offsets", audio_tokens_offsets, persistent=False)
+        self.audio_tokens_offsets = nn.Buffer(audio_tokens_offsets, persistent=False)
 
     def forward(self, input_ids):
         input_ids = torch.where(
@@ -230,535 +548,6 @@ class KyutaiSpeechToTextEmbeddings(nn.Module):
         inputs_embeds = self.embed_tokens(input_ids)
         inputs_embeds = inputs_embeds.sum(dim=2)
         return inputs_embeds
-
-
-class KyutaiSpeechToTextRMSNorm(nn.Module):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.ones(dim))  # Ignore copy
-
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    # Ignore copy
-    def forward(self, x):
-        output = self._norm(x.float())
-        output = output * self.weight.float()
-        return output.type_as(x)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
-
-
-class KyutaiSpeechToTextLinear(nn.Module):
-    def __init__(self, input_dim, output_dim, num_codebooks, use_flexible_linear=False):
-        super().__init__()
-
-        self.use_flexible_linear = use_flexible_linear
-
-        if not use_flexible_linear:
-            self.linear = nn.Linear(input_dim, output_dim, bias=False)
-        else:
-            self.linear = KyutaiSpeechToTextFlexibleLinear(input_dim, output_dim, num_layers=num_codebooks)
-
-    def forward(self, x, layer_idx=None):
-        if self.use_flexible_linear:
-            return self.linear(x, layer_idx)
-        else:
-            return self.linear(x)
-
-
-class KyutaiSpeechToTextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: KyutaiSpeechToTextConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
-
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: KyutaiSpeechToTextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-class KyutaiSpeechToTextGatingMLP(nn.Module):
-    def __init__(self, config, use_flexible_linear=False):
-        super().__init__()
-
-        self.activation_fn = ACT2FN[config.hidden_act]
-        ffn_dim = config.ffn_dim
-        hidden_size = config.hidden_size
-        num_layers = config.num_codebooks if use_flexible_linear else 1
-        if num_layers == 1:
-            self.fc1 = nn.Linear(hidden_size, ffn_dim, bias=False)
-            self.fc2 = nn.Linear(ffn_dim // 2, hidden_size, bias=False)
-        else:
-            self.fc1 = KyutaiSpeechToTextFlexibleLinear(hidden_size, ffn_dim, num_layers)
-            self.fc2 = KyutaiSpeechToTextFlexibleLinear(ffn_dim // 2, hidden_size, num_layers)
-
-    def forward(self, hidden_states: torch.Tensor, layer_idx: int | None = None) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states) if layer_idx is None else self.fc1(hidden_states, layer_idx)
-
-        batch_size, sequence_length, _ = hidden_states.shape
-        hidden_states = hidden_states.view(batch_size, sequence_length, 2, -1)
-        hidden_states = self.activation_fn(hidden_states[..., 0, :]) * hidden_states[..., 1, :]
-        hidden_states = self.fc2(hidden_states) if layer_idx is None else self.fc2(hidden_states, layer_idx)
-        return hidden_states
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-class KyutaiSpeechToTextAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(
-        self, config: KyutaiSpeechToTextConfig, layer_idx: int | None = None, use_flexible_linear=False, use_rope=True
-    ):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
-                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-
-        self.attention_dropout = config.attention_dropout
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = config.head_dim
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.max_position_embeddings = config.max_position_embeddings
-        self.is_causal = True
-        self.scaling = 1 / math.sqrt(self.head_dim)
-
-        if self.hidden_size % self.num_heads != 0:
-            raise ValueError(
-                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
-                f" and `num_heads`: {self.num_heads})."
-            )
-
-        self.q_proj = KyutaiSpeechToTextLinear(
-            self.hidden_size, self.num_heads * self.head_dim, config.num_codebooks, use_flexible_linear
-        )
-        self.k_proj = KyutaiSpeechToTextLinear(
-            self.hidden_size, self.num_key_value_heads * self.head_dim, config.num_codebooks, use_flexible_linear
-        )
-        self.v_proj = KyutaiSpeechToTextLinear(
-            self.hidden_size, self.num_key_value_heads * self.head_dim, config.num_codebooks, use_flexible_linear
-        )
-        self.o_proj = KyutaiSpeechToTextLinear(
-            self.num_heads * self.head_dim, self.hidden_size, config.num_codebooks, use_flexible_linear
-        )
-
-        # rotary embeddings are not used in the depth decoder
-        self.rotary_emb = None
-        if use_rope:
-            self.rotary_emb = KyutaiSpeechToTextRotaryEmbedding(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        codebook_idx: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states, codebook_idx)  # Ignore copy
-        key_states = self.k_proj(hidden_states, codebook_idx)  # Ignore copy
-        value_states = self.v_proj(hidden_states, codebook_idx)  # Ignore copy
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        if self.rotary_emb is not None:  # Ignore copy
-            cos, sin = self.rotary_emb(value_states, position_ids)  # Ignore copy
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)  # Ignore copy
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
-
-        if attention_mask is not None:
-            attn_weights = attn_weights + attention_mask
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-
-        attn_output = attn_output.view(bsz, q_len, -1)
-        attn_output = self.o_proj(attn_output, codebook_idx)  # Ignore copy
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights
-
-
-# NO LONGER EXIST Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->KyutaiSpeechToText
-# TODO cyril: modular
-class KyutaiSpeechToTextFlashAttention2(KyutaiSpeechToTextAttention):
-    """
-    KyutaiSpeechToText flash attention module. This module inherits from `KyutaiSpeechToTextAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignment, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = flash_attn_supports_top_left_mask()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.LongTensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        codebook_idx: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        if isinstance(past_key_values, StaticCache):
-            raise ValueError(
-                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
-                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
-            )
-
-        output_attentions = False
-
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states, codebook_idx)  # Ignore copy
-        key_states = self.k_proj(hidden_states, codebook_idx)  # Ignore copy
-        value_states = self.v_proj(hidden_states, codebook_idx)  # Ignore copy
-
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        if self.rotary_emb is not None:  # Ignore copy
-            cos, sin = self.rotary_emb(value_states, position_ids)  # Ignore copy
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)  # Ignore copy
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
-        # to be able to avoid many of these transpose/reshape/view.
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        dropout_rate = self.attention_dropout if self.training else 0.0
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in the correct dtype just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (KyutaiSpeechToTextRMSNorm handles it correctly)
-
-        input_dtype = query_states.dtype
-        device_type = query_states.device.type if query_states.device.type != "mps" else "cpu"
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled(device_type):
-                target_dtype = torch.get_autocast_dtype(device_type)
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_is_quantized"):
-                target_dtype = self.config.dtype
-            else:
-                target_dtype = self.q_proj.weight.dtype
-
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        attn_output = _flash_attention_forward(
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            q_len,
-            position_ids=position_ids,
-            dropout=dropout_rate,
-            sliding_window=getattr(self, "sliding_window", None),
-            is_causal=self.is_causal,
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
-        )
-
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-        attn_output = self.o_proj(attn_output, codebook_idx)  # Ignore copy
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights
-
-
-class KyutaiSpeechToTextSdpaAttention(KyutaiSpeechToTextAttention):
-    """
-    KyutaiSpeechToText attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `KyutaiSpeechToTextAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
-    SDPA API.
-    """
-
-    # Adapted from KyutaiSpeechToTextAttention.forward
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        codebook_idx: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        if output_attentions:
-            logger.warning_once(
-                f"{self.__class__.__name__} does not support `output_attentions=True`. The returned attention weights will "
-                "be `None`. If you want to get attention weights, please set `attn_implementation='eager'` when loading the model."
-            )
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states, codebook_idx)  # Ignore copy
-        key_states = self.k_proj(hidden_states, codebook_idx)  # Ignore copy
-        value_states = self.v_proj(hidden_states, codebook_idx)  # Ignore copy
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        if self.rotary_emb is not None:  # Ignore copy
-            cos, sin = self.rotary_emb(value_states, position_ids)  # Ignore copy
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)  # Ignore copy
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        causal_mask = attention_mask
-        if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
-
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = causal_mask is None and q_len > 1
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=causal_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=is_causal,
-        )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, -1)
-
-        attn_output = self.o_proj(attn_output, codebook_idx)  # Ignore copy
-
-        return attn_output, None
-
-
-KYUTAI_SPEECH_TO_TEXT_ATTENTION_CLASSES = {
-    "eager": KyutaiSpeechToTextAttention,
-    "flash_attention_2": KyutaiSpeechToTextFlashAttention2,
-    "sdpa": KyutaiSpeechToTextSdpaAttention,
-}
-
-
-class KyutaiSpeechToTextDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: KyutaiSpeechToTextConfig, layer_idx: int, use_flexible_linear: bool, use_rope=True):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.use_flexible_linear = use_flexible_linear
-
-        self.self_attn = KYUTAI_SPEECH_TO_TEXT_ATTENTION_CLASSES[config._attn_implementation](
-            config=config, layer_idx=layer_idx, use_flexible_linear=use_flexible_linear, use_rope=use_rope
-        )
-
-        self.mlp = KyutaiSpeechToTextGatingMLP(config, use_flexible_linear)
-        self.input_layernorm = KyutaiSpeechToTextRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = KyutaiSpeechToTextRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.sliding_window = config.sliding_window
-
-        self._attn_implementation = config._attn_implementation
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        output_attentions: bool | None = False,
-        use_cache: bool | None = False,
-        codebook_idx: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            codebook_idx=codebook_idx,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = (
-            self.mlp(hidden_states) if not self.use_flexible_linear else self.mlp(hidden_states, codebook_idx)
-        )
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
 
 
 @auto_docstring
@@ -780,6 +569,8 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @merge_with_config_defaults
+    @capture_outputs
     @auto_docstring
     def forward(
         self,
@@ -789,24 +580,8 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPast:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPast:
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
@@ -815,15 +590,13 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = None
-        if attention_mask is not None:
-            causal_mask = create_causal_mask(
-                config=self.config,
-                inputs_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                past_key_values=past_key_values,
-                position_ids=position_ids,
-            )
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
 
         # embed positions
         hidden_states = inputs_embeds
@@ -831,44 +604,17 @@ class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
 
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-
         for decoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
-
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
+                **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
 
         hidden_states = self.norm(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v for v in [hidden_states, past_key_values, all_hidden_states, all_self_attns] if v is not None
-            )
-        return BaseModelOutputWithPast(
-            last_hidden_state=hidden_states,
-            past_key_values=past_key_values,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-        )
+        return BaseModelOutputWithPast(last_hidden_state=hidden_states, past_key_values=past_key_values)
 
 
 @auto_docstring
@@ -876,6 +622,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     _keep_in_fp32_modules_strict = ["codec_model"]
     output_modalities = ("audio", "text")
 
@@ -909,11 +656,6 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -951,9 +693,8 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1035,18 +776,18 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
 
         # initialize the padding cache for the codec model
         per_layer_padding, per_layer_padding_mode, per_layer_in_channels = [], [], []
-        for layer_name in self.codec_model.encoder._mimiconv1d_layer_names:
-            per_layer_padding.append(self.codec_model.encoder.get_submodule(layer_name).padding_total)
-            per_layer_padding_mode.append(self.codec_model.encoder.get_submodule(layer_name).pad_mode)
-            per_layer_in_channels.append(self.codec_model.encoder.get_submodule(layer_name).in_channels)
+        for layer_name in self.codec_model.encoder.encoder_seanet._conv1d_layer_names:
+            per_layer_padding.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).padding_total)
+            per_layer_padding_mode.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).pad_mode)
+            per_layer_in_channels.append(self.codec_model.encoder.encoder_seanet.get_submodule(layer_name).in_channels)
 
         # downsample layer
-        per_layer_padding.append(self.codec_model.downsample.padding_total)
-        per_layer_padding_mode.append(self.codec_model.downsample.pad_mode)
-        per_layer_in_channels.append(self.codec_model.downsample.in_channels)
+        per_layer_padding.append(self.codec_model.encoder.downsample.padding_total)
+        per_layer_padding_mode.append(self.codec_model.encoder.downsample.pad_mode)
+        per_layer_in_channels.append(self.codec_model.encoder.downsample.in_channels)
 
         model_kwargs["padding_cache"] = KyutaiSpeechToTextConv1dPaddingCache(
-            num_layers=len(self.codec_model.encoder._mimiconv1d_layer_names) + 1,
+            num_layers=len(self.codec_model.encoder.encoder_seanet._conv1d_layer_names) + 1,
             per_layer_padding=per_layer_padding,
             per_layer_padding_mode=per_layer_padding_mode,
             per_layer_in_channels=per_layer_in_channels,
@@ -1089,7 +830,9 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
                     )
                     new_audio_tokens = codec_model_output.audio_codes.transpose(1, 2)
 
-                audio_tokens.copy_(new_audio_tokens)
+                # last window can be shorter than audio_window_size, copy only the overlap
+                n = min(audio_tokens.shape[1], new_audio_tokens.shape[1])
+                audio_tokens[:, :n].copy_(new_audio_tokens[:, :n])
 
                 start = end.clone()
                 end = end + audio_window_size

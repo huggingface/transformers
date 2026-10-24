@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2022-11-09 and added to Hugging Face Transformers on 2022-06-09.*
+*This model was published in HF papers on 2022-11-09 and contributed to Hugging Face Transformers on 2022-06-09.*
 
 # BLOOM
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -40,7 +37,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 
 <PipelineTag pipeline="text-generation"/>
 
-- [`BloomForCausalLM`] is supported by this [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#gpt-2gpt-and-causal-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
+- [`BloomForCausalLM`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
 
 See also:
 

@@ -84,6 +84,11 @@ class LongT5Config(PreTrainedConfig):
         if self.feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
+        # Same quirk as T5: `tie_word_embeddings=False` indicates the 1.1v (no decoder output scaling), but the
+        # checkpoints only store `shared.weight` so weights are always tied.
+        self.scale_decoder_outputs = self.tie_word_embeddings
+        self.tie_word_embeddings = True
+
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):

@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-01-29 and added to Hugging Face Transformers on 2026-01-29.*
+*This model was contributed to Hugging Face Transformers on 2026-01-29.*
 
 # PP-DocLayoutV3
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -40,12 +37,14 @@ The example below demonstrates how to generate text with PP-DocLayoutV3 using [`
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import pipeline
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)
+
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg", stream=True).raw)
 layout_detector = pipeline("object-detection", model="PaddlePaddle/PP-DocLayoutV3_safetensors")
 results = layout_detector(image)
 for idx, res in enumerate(results):
@@ -56,17 +55,19 @@ for idx, res in enumerate(results):
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
+
 model_path = "PaddlePaddle/PP-DocLayoutV3_safetensors"
-model = AutoModelForObjectDetection.from_pretrained(model_path)
+model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)
-inputs = image_processor(images=image, return_tensors="pt")
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg", stream=True).raw)
+inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 
 outputs = model(**inputs)
 results = image_processor.post_process_object_detection(outputs, target_sizes=[image.size[::-1]])
@@ -87,12 +88,14 @@ PP-DocLayoutV3 also supports batched inference. Here is how you can do it with P
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import pipeline
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)
+
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg", stream=True).raw)
 layout_detector = pipeline("object-detection", model="PaddlePaddle/PP-DocLayoutV3_safetensors")
 results = layout_detector([image, image])
 for result in results:
@@ -105,17 +108,19 @@ for result in results:
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
+
 model_path = "PaddlePaddle/PP-DocLayoutV3_safetensors"
-model = AutoModelForObjectDetection.from_pretrained(model_path)
+model = AutoModelForObjectDetection.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg", stream=True).raw)
-inputs = image_processor(images=[image, image], return_tensors="pt")
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_layout_demo.jpg", stream=True).raw)
+inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 target_sizes = [image.size[::-1], image.size[::-1]]
 
 outputs = model(**inputs)

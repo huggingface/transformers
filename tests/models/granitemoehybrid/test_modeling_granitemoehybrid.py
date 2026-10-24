@@ -30,6 +30,7 @@ from transformers import (
 )
 from transformers.testing_utils import (
     require_flash_attn,
+    require_kernels,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -41,6 +42,7 @@ from ...models.bamba.test_modeling_bamba import BambaModelTester
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -82,7 +84,9 @@ class GraniteMoeHybridModelTester(BambaModelTester):
 
 
 @require_torch
-class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GraniteMoeHybridModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+):
     model_tester_class = GraniteMoeHybridModelTester
     all_model_classes = (
         (
@@ -123,6 +127,16 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
+
+    def test_mamba2_chunked_prefill_cpu(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device="cpu")
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_mamba2_chunked_prefill_torch_device(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba_chunked_prefill(*config_and_inputs, device=torch_device)
 
     def test_attention_outputs(self):
         r"""
@@ -313,10 +327,37 @@ class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, Pipelin
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (batch_size, config.mamba_n_heads, config.mamba_d_head, config.mamba_d_state)
 
+    def test_attention_only_forward(self):
+        """Ensure forward pass works when all layers are attention (no mamba layers). Regression test for #45507."""
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config = config_and_inputs[0]
+        config.layers_block_type = ["full_attention"] * config.num_hidden_layers
+
+        for model_class in self.all_model_classes:
+            model = model_class._from_config(config)
+            model.to(torch_device)
+            model.eval()
+            input_ids = config_and_inputs[1]
+            with torch.no_grad():
+                model(input_ids)
+
     def test_config_requires_mamba_or_attention_layers(self):
         """Ensure we can't create a config with disallowed layers."""
         with pytest.raises(StrictDataclassClassValidationError):
             GraniteMoeHybridConfig(layer_types=["not allowed!"])
+
+    @unittest.skip(
+        "Model doesn't have rope but was added with `config_rope_parameters` which is `None` for some reason..."
+    )
+    def test_model_rope_scaling_frequencies(self):
+        pass
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip(
+        "Model doesn't have rope but was added with `config_rope_parameters` which is `None` for some reason..."
+    )
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
 
 
 @require_torch_accelerator
@@ -332,9 +373,9 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
             out = model(torch.tensor([input_ids]).to(device))
 
         # fmt: off
-        # Expected mean on dim = -1
+        # Expected mean on dim = -1, recorded with the einsum-based CPU chunk scan.
         EXPECTED_MEAN = torch.tensor([
-            [-0.3543, -1.0066, -0.5338, -0.8816, -0.7438,  0.0500, -1.3644, -0.0742, -1.7746, -1.6326, -1.4802, -0.4961]
+            [-0.3543, -1.0456, -0.5024, -0.8578, -0.6664,  0.0618, -1.3840, -0.1416, -1.7800, -1.6412, -1.5263, -0.4934]
         ], device=device)
 
         torch.testing.assert_close(EXPECTED_MEAN, out.logits.float().mean(-1), rtol=1e-2, atol=1e-2)
@@ -357,7 +398,7 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
     @slow
     @parameterized.expand([("cpu",)])
     def test_model_generation(self, device):
-        EXPECTED_TEXT_COMPLETION = "Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers in uniform motion relative"
+        EXPECTED_TEXT_COMPLETION = "Simply put, the theory of relativity states that 1) the laws of physics are the same in all inertial reference frames,"
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.0-h-tiny")
         model = GraniteMoeHybridForCausalLM.from_pretrained("ibm-granite/granite-4.0-h-tiny", device_map=device)
@@ -368,3 +409,17 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
         text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
 
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
+
+
+class GraniteMoeHybridTokenizerTest(unittest.TestCase):
+    @slow
+    def test_tokenizer_encoding_digit_strings(self):
+        tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.0-h-tiny")
+        self.assertEqual(tokenizer.encode("2023", add_special_tokens=False), [2366, 18])
+        self.assertEqual(tokenizer.encode("650841823", add_special_tokens=False), [13655, 25496, 23848])
+        self.assertEqual(tokenizer.encode("60-138-3818", add_special_tokens=False), [1399, 12, 10350, 12, 19162, 23])
+        self.assertEqual(tokenizer.encode("d.o.o", add_special_tokens=False), [67, 14778, 14778])
+        self.assertEqual(tokenizer.encode("FY2023", add_special_tokens=False), [82029, 2366, 18])
+        self.assertEqual(
+            tokenizer.encode("ISO 9001:2015", add_special_tokens=False), [25141, 220, 7467, 16, 25, 679, 20]
+        )

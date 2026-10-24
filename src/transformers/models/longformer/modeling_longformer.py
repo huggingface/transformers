@@ -21,6 +21,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
@@ -31,12 +32,12 @@ from .configuration_longformer import LongformerConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Longformer's outputs, with potential hidden states, local and global attentions.
     """
 )
+@dataclass
 class LongformerBaseModelOutput(ModelOutput):
     r"""
     attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
@@ -69,12 +70,12 @@ class LongformerBaseModelOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Longformer's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 class LongformerBaseModelOutputWithPooling(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -112,12 +113,12 @@ class LongformerBaseModelOutputWithPooling(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for masked language models outputs.
     """
 )
+@dataclass
 class LongformerMaskedLMOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -155,12 +156,12 @@ class LongformerMaskedLMOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of question answering Longformer models.
     """
 )
+@dataclass
 class LongformerQuestionAnsweringModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -197,12 +198,12 @@ class LongformerQuestionAnsweringModelOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of sentence classification models.
     """
 )
+@dataclass
 class LongformerSequenceClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -240,12 +241,12 @@ class LongformerSequenceClassifierOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of multiple choice Longformer models.
     """
 )
+@dataclass
 class LongformerMultipleChoiceModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
@@ -285,12 +286,12 @@ class LongformerMultipleChoiceModelOutput(ModelOutput):
     global_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of token classification models.
     """
 )
+@dataclass
 class LongformerTokenClassifierOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -717,27 +718,7 @@ class LongformerSelfAttention(nn.Module):
             chunk_stride[1] = chunk_stride[1] // 2
             return hidden_states.as_strided(size=chunk_size, stride=chunk_stride)
 
-        # When exporting to ONNX, use this separate logic
-        # have to use slow implementation since as_strided, unfold and 2d-tensor indexing aren't supported (yet) in ONNX export
-
-        # TODO replace this with
-        # > return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
-        # once `unfold` is supported
-        # the case hidden_states.size(1) == window_overlap * 2 can also simply return hidden_states.unsqueeze(1), but that's control flow
-
-        chunk_size = [
-            hidden_states.size(0),
-            torch.div(hidden_states.size(1), window_overlap, rounding_mode="trunc") - 1,
-            window_overlap * 2,
-            hidden_states.size(2),
-        ]
-
-        overlapping_chunks = torch.empty(chunk_size, device=hidden_states.device)
-        for chunk in range(chunk_size[1]):
-            overlapping_chunks[:, chunk, :, :] = hidden_states[
-                :, chunk * window_overlap : chunk * window_overlap + 2 * window_overlap, :
-            ]
-        return overlapping_chunks
+        return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
 
     @staticmethod
     def _mask_invalid_locations(input_tensor, affected_seq_len) -> torch.Tensor:
@@ -1498,15 +1479,21 @@ class LongformerModel(LongformerPreTrainedModel):
             pad_token_id=self.config.pad_token_id,
         )
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)[
-            :, 0, 0, :
-        ]
-
         embedding_output = self.embeddings(
             input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
+
+        extended_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=torch.clamp(attention_mask, min=0, max=1),  # we have a mask of 0, 1, 2 (see bug below)
+            # Always materialize the mask so it can be sliced back to 2D below.
+            allow_is_bidirectional_skip=False,
+        )
+        # Cuts off back to 2D
+        extended_attention_mask = extended_attention_mask[:, 0, 0, :]
+        # Bug in the old mask API converted global masks (==2) to max dtype
+        extended_attention_mask[attention_mask == 2] = torch.finfo(embedding_output.dtype).max
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -1579,10 +1566,6 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
 
         Example Mask filling:
 
@@ -1691,10 +1674,6 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -1943,8 +1922,6 @@ class LongformerForTokenClassification(LongformerPreTrainedModel):
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -2038,10 +2015,6 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         position_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.

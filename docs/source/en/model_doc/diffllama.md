@@ -9,16 +9,15 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-10-07 and added to Hugging Face Transformers on 2025-01-07.*
+*This model was published in HF papers on 2024-10-07 and contributed to Hugging Face Transformers on 2025-01-07.*
 
 # DiffLlama
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -26,7 +25,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The DiffLlama model was proposed in [Differential Transformer](https://huggingface.co/papers/2410.05258) by Kazuma Matsumoto and .
-This model is combine Llama model and Differential Transformer's Attention.
+This model combines Llama model and Differential Transformer's Attention.
 
 The abstract from the paper is the following:
 

@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-05-20 and added to Hugging Face Transformers on 2026-03-18.*
+*This model was contributed to Hugging Face Transformers on 2026-03-19.*
 
 # PP-OCRv5_server_rec
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -38,16 +35,18 @@ The example below demonstrates how to detect text with PP-OCRv5_server_rec using
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForTextRecognition
+
 
 model_path="PaddlePaddle/PP-OCRv5_server_rec_safetensors"
 model = AutoModelForTextRecognition.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png", stream=True).raw).convert("RGB")
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_rec_001.png", stream=True).raw).convert("RGB")
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 
@@ -55,7 +54,6 @@ results = image_processor.post_process_text_recognition(outputs)
 
 for result in results:
     print(result)
-
 ```
 
 </hfoption>
@@ -68,16 +66,18 @@ Here is how you can do it with PP-OCRv5_server_rec using the [`AutoModel`]:
 <hfoptions id="usage">
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForTextRecognition
+
 
 model_path = "PaddlePaddle/PP-OCRv5_server_rec_safetensors"
 model = AutoModelForTextRecognition.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/general_ocr_rec_001.png", stream=True).raw).convert("RGB")
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_rec_001.png", stream=True).raw).convert("RGB")
 inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 

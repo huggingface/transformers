@@ -500,7 +500,14 @@ class CohereAsrForConditionalGeneration(MoonshineForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
+            shift_labels = kwargs.pop("shift_labels", labels)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.vocab_size,
+                shift_labels=shift_labels,
+                **kwargs,
+            )
 
         return Seq2SeqLMOutput(
             loss=loss,

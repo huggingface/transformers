@@ -25,12 +25,12 @@ from ...utils import ModelOutput, auto_docstring
 from .configuration_vitmatte import VitMatteConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of image matting models.
     """
 )
+@dataclass
 class ImageMattingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -59,7 +59,8 @@ class VitMattePreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
-        if isinstance(module, (nn.Conv2d, nn.BatchNorm2d)):
+        super()._init_weights(module)
+        if isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)

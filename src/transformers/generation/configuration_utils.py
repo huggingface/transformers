@@ -16,12 +16,11 @@
 import copy
 import json
 import os
+import warnings
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, is_dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union
-
-from huggingface_hub import create_repo
 
 from .. import __version__
 from ..utils import (
@@ -29,9 +28,9 @@ from ..utils import (
     ExplicitEnum,
     PushToHubMixin,
     cached_file,
-    extract_commit_hash,
-    is_torch_available,
+    hf_api,
     logging,
+    resolve_revision,
 )
 
 
@@ -40,12 +39,13 @@ if TYPE_CHECKING:
 
     from ..configuration_utils import PreTrainedConfig
     from ..modeling_utils import PreTrainedModel
+    from .logits_process import WatermarkLogitsProcessor
 
 
 logger = logging.get_logger(__name__)
 METADATA_FIELDS = ("_from_model_config", "_commit_hash", "_original_object_hash", "transformers_version")
 STATIC_CACHE_IMPLEMENTATIONS = ("static", "offloaded_static")
-DYNAMIC_CACHE_IMPLEMENTATIONS = ("dynamic", "dynamic_full", "offloaded", "quantized")
+DYNAMIC_CACHE_IMPLEMENTATIONS = ("dynamic", "offloaded", "quantized")
 # All the following are redundant and deprecated, but kept for BC
 DEPRECATED_STATIC_CACHE_IMPLEMENTATIONS = (
     "sliding_window",
@@ -58,8 +58,21 @@ ALL_STATIC_CACHE_IMPLEMENTATIONS = STATIC_CACHE_IMPLEMENTATIONS + DEPRECATED_STA
 ALL_CACHE_IMPLEMENTATIONS = ALL_STATIC_CACHE_IMPLEMENTATIONS + DYNAMIC_CACHE_IMPLEMENTATIONS
 
 
-if is_torch_available():
-    from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
+def _should_warn(outer_attr: str, inner_attr: str, user_set_attributes: set | None) -> bool:
+    """Determine if we should raise a warning for the combination `outer_attr` and `inner_attr`, based on whether
+    they were provided explicitly, i.e. if they were in `user_set_attributes`.
+    For example, if `outer_attr="do_sample"`, the warnings should be suppressed for `inner_attr` flags (e.g. "top_p") that weren't
+    explicitly set by the caller. When `do_sample=False` is explicitly required by the user, values such as `top_p` inherited
+    from a model's `generation_config.json` are harmless when the user opts for greedy decoding.
+    """
+    outer_sample_set = user_set_attributes is not None and outer_attr in user_set_attributes
+    inner_attr_set = user_set_attributes is not None and inner_attr in user_set_attributes
+    # We should warn only if both are explicitly set, none are set, or only the inner_attr is set while outer_attr is not
+    return (
+        (outer_sample_set and inner_attr_set)
+        or (not outer_sample_set and not inner_attr_set)
+        or (inner_attr_set and not outer_sample_set)
+    )
 
 
 class GenerationMode(ExplicitEnum):
@@ -129,7 +142,7 @@ class GenerationConfig(PushToHubMixin):
         max_time (`float`, *optional*):
             The maximum amount of time you allow the computation to run for in seconds. generation will still finish
             the current pass after allocated time has been passed.
-        stop_strings (`str or list[str]`, *optional*):
+        stop_strings (`str` or `list[str]`, *optional*):
             A string or a list of strings that should terminate generation if the model outputs them.
 
         > Parameters that control the generation strategy used
@@ -138,6 +151,8 @@ class GenerationConfig(PushToHubMixin):
             Whether or not to use sampling ; use greedy decoding otherwise.
         num_beams (`int`, *optional*):
             Number of beams for beam search. 1 means no beam search.
+        use_mtp: (`bool`):
+            Whether or not to use Multi-Token Prediction (MTP) if the model supports it.
 
         > Parameters that control the cache
 
@@ -157,6 +172,12 @@ class GenerationConfig(PushToHubMixin):
             our [cache documentation](https://huggingface.co/docs/transformers/en/kv_cache) for further information.
         cache_config (`dict`, *optional*, default to `None`):
             Arguments used in the key-value cache class can be passed in `cache_config`.
+        max_cache_len (`int`, *optional*):
+            Only used with static caches (`cache_implementation` set to `"static"` or `"offloaded_static"`).
+            Pre-sizes the cache to this length instead of the current call's `max_length`. Set it once to the
+            largest call you expect so that repeated `generate()` calls with a longer prompt or a larger
+            `max_new_tokens` (up to this ceiling) reuse the same cache instead of triggering a reallocation and a
+            `torch.compile` recompilation.
 
         > Parameters for manipulation of the model output logits
 
@@ -326,6 +347,14 @@ class GenerationConfig(PushToHubMixin):
             If set to a positive integer, the re-encodeing process will additionally consider the last `target_lookbehind` target tokens
             to correctly align tokens. Can only be used with different tokenizers in speculative decoding.
             See this [blog](https://huggingface.co/blog/universal_assisted_generation) for more details.
+        assistant_ensemble_weight (`float`, *optional*):
+            Enables static ensemble verification in speculative decoding. If set to a value in `(0.0, 1.0)`,
+            the verifier accepts tokens against the mixture `w * p_target + (1 - w) * q_draft` instead of
+            `p_target`, trading a controlled distributional bias for a higher acceptance rate. Defaults
+            to `None`, which keeps decoding lossless. Requires the assistant model to return logits, so it
+            is not compatible with prompt lookup decoding.
+        speculation_type (`str`, *optional*):
+            The requested speculation type. Accepted values are [`dflash`].
 
         > Parameters related to performances and compilation
 
@@ -349,7 +378,16 @@ class GenerationConfig(PushToHubMixin):
     # Hash to detect whether the instance was modified after loading
     _original_object_hash: int | None
 
+    # Set at runtime to correctly slice inputs in `_prefill` in case we restart from an existing non-empty Cache, and the mask would
+    # otherwise be dropped due to containing only 1s. This allows to differentiate between restarting with full or sliced input_ids
+    _mask_length: int | None
+
     def __init__(self, **kwargs):
+        # Snapshot of the attributes the caller explicitly provided (before the `kwargs.pop(...)` calls below
+        # consume them). Used by `validate()` to restrict "minor issue" warnings to flags actually set by the user,
+        # as opposed to defaults inherited from a model's `generation_config.json`.
+        user_set_attributes = set(kwargs.keys())
+
         # Parameters that control the length of the output
         self.max_length = kwargs.pop("max_length", None)
         self.max_new_tokens = kwargs.pop("max_new_tokens", None)
@@ -362,11 +400,13 @@ class GenerationConfig(PushToHubMixin):
         # Parameters that control the generation strategy used
         self.do_sample = kwargs.pop("do_sample", None)
         self.num_beams = kwargs.pop("num_beams", None)
+        self.use_mtp = kwargs.pop("use_mtp", None)
 
         # Parameters that control the cache
         self.use_cache = kwargs.pop("use_cache", None)
         self.cache_implementation = kwargs.pop("cache_implementation", None)
         self.cache_config = kwargs.pop("cache_config", None)
+        self.max_cache_len = kwargs.pop("max_cache_len", None)
 
         # Parameters for manipulation of the model output logits
         self.temperature = kwargs.pop("temperature", None)
@@ -424,12 +464,21 @@ class GenerationConfig(PushToHubMixin):
         self.assistant_early_exit = kwargs.pop("assistant_early_exit", None)
         self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", None)
         self.target_lookbehind = kwargs.pop("target_lookbehind", None)
+        self.assistant_ensemble_weight = kwargs.pop("assistant_ensemble_weight", None)
+        self.speculation_type = kwargs.pop("speculation_type", None)
 
         # Performance
         self.compile_config = kwargs.pop("compile_config", None)
         self.disable_compile = kwargs.pop("disable_compile", None)
 
+        # Deprecated in 5.13
         self.continuous_batching_config = kwargs.pop("continuous_batching_config", None)
+        if self.continuous_batching_config is not None:
+            msg = (
+                "Passing ContinuousBatchingConfig through GenerationConfig is deprecated and will be removed in v5.19. "
+                "Please pass it separately using the continuous_batching_config kwarg."
+            )
+            warnings.warn(msg, FutureWarning, stacklevel=2)
 
         # Deprecated (moved to the Hub). TODO remove for v5
         self.low_memory = kwargs.pop("low_memory", None)
@@ -443,7 +492,8 @@ class GenerationConfig(PushToHubMixin):
         self.prefill_chunk_size = kwargs.pop("prefill_chunk_size", None)
 
         # Common attributes
-        self._commit_hash = kwargs.pop("_commit_hash", None)
+        # BC: generation configs saved by older versions may still carry `_commit_hash`, it is not used anymore.
+        kwargs.pop("_commit_hash", None)
         self._from_model_config = kwargs.pop("_from_model_config", None)
         self.transformers_version = kwargs.pop("transformers_version", None)
 
@@ -466,7 +516,7 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # Validate the values of the attributes
-        self.validate()
+        self.validate(user_set_attributes=user_set_attributes)
 
     def __hash__(self):
         return hash(self.to_json_string(ignore_metadata=True))
@@ -522,6 +572,7 @@ class GenerationConfig(PushToHubMixin):
         # Assisted generation may extend some generation modes
         if (
             assistant_model is not None
+            or self.use_mtp
             or self.prompt_lookup_num_tokens is not None
             or self.assistant_early_exit is not None
         ):
@@ -529,7 +580,7 @@ class GenerationConfig(PushToHubMixin):
                 generation_mode = GenerationMode.ASSISTED_GENERATION
             else:
                 logger.warning(
-                    "You've set `assistant_model`, which triggers assisted generate. Currently, assisted generate "
+                    "You've set `assistant_model` or `use_mtp`, which triggers assisted generate. Currently, assisted generate "
                     "is only supported with Greedy Search and Sample. However, the base decoding mode (based on "
                     f"current flags) is {generation_mode} -- some of the set flags will be ignored."
                 )
@@ -549,6 +600,13 @@ class GenerationConfig(PushToHubMixin):
 
     @staticmethod
     def _get_default_generation_params() -> dict[str, Any]:
+        """
+        Defaults to be applied when unset by the model OR by the user, such that `model.generate()` works with minimal
+        parameterization.
+
+        Pretrained checkpoints should set these as appropriate in their `generation_config.json`, to establish
+        a better default baseline. Be mindful that tests will often use these values.
+        """
         return {
             "max_length": 20,
             "min_length": 0,
@@ -587,7 +645,7 @@ class GenerationConfig(PushToHubMixin):
             "diversity_penalty": 0.0,
         }
 
-    def validate(self, strict=False):
+    def validate(self, strict=False, user_set_attributes: set[str] | None = None):
         """
         Validates the values of the attributes of the [`GenerationConfig`] instance. Raises exceptions in the presence
         of parameterization that can be detected as incorrect from the configuration instance alone.
@@ -597,6 +655,11 @@ class GenerationConfig(PushToHubMixin):
 
         Args:
             strict (bool): If True, raise an exception for any issues found. If False, only log issues.
+            user_set_attributes (set[str], *optional*): Names of attributes the caller explicitly provided. When
+                supplied, "minor issue" warnings about conflicting flag combinations (e.g. sampling-only flags set
+                while `do_sample=False`) only fire if the conflicting flag is in this set -- avoiding noisy warnings
+                when the value was inherited from a model's default `generation_config.json`. When `None`, all set
+                attributes are considered user-set (backward-compatible behavior for direct `validate()` calls).
         """
         minor_issues = {}  # format: {attribute_name: issue_description}
 
@@ -606,6 +669,11 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
         if self.max_new_tokens is not None and self.max_new_tokens <= 0:
             raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
+        if self.assistant_ensemble_weight is not None and not (0.0 < self.assistant_ensemble_weight < 1.0):
+            raise ValueError(
+                f"`assistant_ensemble_weight` must be in the open interval `(0.0, 1.0)`, "
+                f"but is {self.assistant_ensemble_weight}. Use `None` for standard (lossless) speculative decoding."
+            )
         if self.pad_token_id is not None and self.pad_token_id < 0:
             minor_issues["pad_token_id"] = (
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "
@@ -620,6 +688,11 @@ class GenerationConfig(PushToHubMixin):
             raise ValueError(
                 f"Invalid `cache_implementation` ({self.cache_implementation}). Choose one of: "
                 f"{valid_cache_implementations}"
+            )
+        if self.max_cache_len is not None and self.cache_implementation not in ALL_STATIC_CACHE_IMPLEMENTATIONS:
+            logger.warning_once(
+                f"`max_cache_len` is only used with static caches ({STATIC_CACHE_IMPLEMENTATIONS}); it will be "
+                f"ignored with `cache_implementation={self.cache_implementation!r}`."
             )
         # 1.3. Performance attributes
         if self.compile_config is not None and not isinstance(self.compile_config, CompileConfig):
@@ -636,47 +709,79 @@ class GenerationConfig(PushToHubMixin):
 
         # Note that we check `is not True` in purpose. Boolean fields can also be `None` so we
         # have to be explicit. Value of `None` is same as having `False`, i.e. the default value
+
         if self.do_sample is not True:
             greedy_wrong_parameter_msg = (
-                "`do_sample` is set not to set `True`. However, `{flag_name}` is set to `{flag_value}` -- this flag is only "
-                "used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
+                "`do_sample` is not set to `True`. However, `{flag_name}` is set to `{flag_value}` -- this flag is "
+                "only used in sample-based generation modes. You should set `do_sample=True` or unset `{flag_name}`."
             )
-            if self.temperature is not None and self.temperature != 1.0:
+
+            if (
+                self.temperature is not None
+                and self.temperature != 1.0
+                and _should_warn("do_sample", "temperature", user_set_attributes)
+            ):
                 minor_issues["temperature"] = greedy_wrong_parameter_msg.format(
                     flag_name="temperature", flag_value=self.temperature
                 )
-            if self.top_p is not None and self.top_p != 1.0:
+            if (
+                self.top_p is not None
+                and self.top_p != 1.0
+                and _should_warn("do_sample", "top_p", user_set_attributes)
+            ):
                 minor_issues["top_p"] = greedy_wrong_parameter_msg.format(flag_name="top_p", flag_value=self.top_p)
-            if self.min_p is not None:
+            if self.min_p is not None and _should_warn("do_sample", "min_p", user_set_attributes):
                 minor_issues["min_p"] = greedy_wrong_parameter_msg.format(flag_name="min_p", flag_value=self.min_p)
-            if self.top_h is not None:
+            if self.top_h is not None and _should_warn("do_sample", "top_h", user_set_attributes):
                 minor_issues["top_h"] = greedy_wrong_parameter_msg.format(flag_name="top_h", flag_value=self.top_h)
-            if self.typical_p is not None and self.typical_p != 1.0:
+            if (
+                self.typical_p is not None
+                and self.typical_p != 1.0
+                and _should_warn("do_sample", "typical_p", user_set_attributes)
+            ):
                 minor_issues["typical_p"] = greedy_wrong_parameter_msg.format(
                     flag_name="typical_p", flag_value=self.typical_p
                 )
-            if self.top_k is not None and self.top_k != 50:
+            if self.top_k is not None and self.top_k != 50 and _should_warn("do_sample", "top_k", user_set_attributes):
                 minor_issues["top_k"] = greedy_wrong_parameter_msg.format(flag_name="top_k", flag_value=self.top_k)
-            if self.epsilon_cutoff is not None and self.epsilon_cutoff != 0.0:
+            if (
+                self.epsilon_cutoff is not None
+                and self.epsilon_cutoff != 0.0
+                and _should_warn("do_sample", "epsilon_cutoff", user_set_attributes)
+            ):
                 minor_issues["epsilon_cutoff"] = greedy_wrong_parameter_msg.format(
                     flag_name="epsilon_cutoff", flag_value=self.epsilon_cutoff
                 )
-            if self.eta_cutoff is not None and self.eta_cutoff != 0.0:
+            if (
+                self.eta_cutoff is not None
+                and self.eta_cutoff != 0.0
+                and _should_warn("do_sample", "eta_cutoff", user_set_attributes)
+            ):
                 minor_issues["eta_cutoff"] = greedy_wrong_parameter_msg.format(
                     flag_name="eta_cutoff", flag_value=self.eta_cutoff
                 )
 
-        # 2.2. detect beam-only parameterization when not in beam mode
+        # 2.2. detect beam-only parameterization when not in beam mode. Same provenance filtering as above --
+        # both `num_beams` and the beam-only flag must be user-set for the warning to fire.
         if self.num_beams is None or self.num_beams == 1:
             single_beam_wrong_parameter_msg = (
-                "`num_beams` is set to {num_beams}. However, `{flag_name}` is set to `{flag_value}` -- this flag is only used "
-                "in beam-based generation modes. You should set `num_beams>1` or unset `{flag_name}`."
+                "`num_beams` is set to {num_beams}. However, `{flag_name}` is set to `{flag_value}` -- this flag is "
+                "only used in beam-based generation modes. You should set `num_beams>1` or unset `{flag_name}`."
             )
-            if self.early_stopping is not None and self.early_stopping is not False:
+
+            if (
+                self.early_stopping is not None
+                and self.early_stopping is not False
+                and _should_warn("num_beams", "early_stopping", user_set_attributes)
+            ):
                 minor_issues["early_stopping"] = single_beam_wrong_parameter_msg.format(
                     num_beams=self.num_beams, flag_name="early_stopping", flag_value=self.early_stopping
                 )
-            if self.length_penalty is not None and self.length_penalty != 1.0:
+            if (
+                self.length_penalty is not None
+                and self.length_penalty != 1.0
+                and _should_warn("num_beams", "length_penalty", user_set_attributes)
+            ):
                 minor_issues["length_penalty"] = single_beam_wrong_parameter_msg.format(
                     num_beams=self.num_beams, flag_name="length_penalty", flag_value=self.length_penalty
                 )
@@ -721,6 +826,24 @@ class GenerationConfig(PushToHubMixin):
                     minor_issues[extra_output_flag] = (
                         f"`return_dict_in_generate` is NOT set to `True`, but `{extra_output_flag}` is. When "
                         f"`return_dict_in_generate` is not `True`, `{extra_output_flag}` is ignored."
+                    )
+
+        # 2.7. Forcing a token while suppressing it. If every forced (bos/eos) token is also suppressed, all logits
+        # become `-inf` at the forcing step, yielding `nan` probabilities and a generation crash (see #24099).
+        if self.suppress_tokens is not None:
+            suppressed_tokens = set(self.suppress_tokens)
+            for forced_attr in ("forced_bos_token_id", "forced_eos_token_id"):
+                forced_tokens = getattr(self, forced_attr)
+                if forced_tokens is None:
+                    continue
+                forced_tokens = {forced_tokens} if isinstance(forced_tokens, int) else set(forced_tokens)
+                if forced_tokens and forced_tokens.issubset(suppressed_tokens):
+                    raise ValueError(
+                        f"Every token in `{forced_attr}` ({sorted(forced_tokens)}) is also in `suppress_tokens`. "
+                        "Forcing a token while suppressing it sets all logits to `-inf` at the forcing step, which "
+                        "produces `nan` probabilities and crashes generation. Remove the overlapping token(s) from "
+                        f"either `{forced_attr}` or `suppress_tokens` (if you meant to prevent an early EOS token, use "
+                        "`min_new_tokens` instead)."
                     )
 
         # 3. Check common issue: passing `generate` arguments inside the generation config
@@ -807,7 +930,7 @@ class GenerationConfig(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", str(save_directory).split(os.path.sep)[-1])
-            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         output_config_file = os.path.join(save_directory, config_file_name)
@@ -922,7 +1045,15 @@ class GenerationConfig(PushToHubMixin):
         subfolder = kwargs.pop("subfolder", "")
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
-        commit_hash = kwargs.pop("_commit_hash", None)
+
+        # Resolve the revision once, so that all the files of this load come from the same repository state.
+        revision = resolve_revision(
+            pretrained_model_name,
+            revision,
+            token=token,
+            local_files_only=local_files_only,
+            cache_dir=cache_dir,
+        )
 
         user_agent = {"file_type": "config", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -951,9 +1082,7 @@ class GenerationConfig(PushToHubMixin):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
-                    _commit_hash=commit_hash,
                 )
-                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -970,7 +1099,6 @@ class GenerationConfig(PushToHubMixin):
         try:
             # Load config dict
             config_dict = cls._dict_from_json_file(resolved_config_file)
-            config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise OSError(f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file.")
 
@@ -1015,9 +1143,6 @@ class GenerationConfig(PushToHubMixin):
         # We remove them so they don't appear in `return_unused_kwargs`.
         kwargs.pop("_from_auto", None)
         kwargs.pop("_from_pipeline", None)
-        # The commit hash might have been updated in the `config_dict`, we don't want the kwargs to erase that update.
-        if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
-            kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
         # The line below allows model-specific config to be loaded as well through kwargs, with safety checks.
         # See https://github.com/huggingface/transformers/pull/21269
@@ -1079,6 +1204,8 @@ class GenerationConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_original_object_hash" in output:
             del output["_original_object_hash"]
+        if "_mask_length" in output:
+            del output["_mask_length"]
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
@@ -1129,7 +1256,9 @@ class GenerationConfig(PushToHubMixin):
             if isinstance(obj, dict):
                 return {key: convert_dataclass_to_dict(value) for key, value in obj.items()}
             elif is_dataclass(obj):
-                return obj.to_dict()
+                # Some of our dataclasses have a custom `to_dict()` method, and we prefer it
+                if hasattr(obj, "to_dict"):
+                    return obj.to_dict()
             else:
                 return obj
 
@@ -1229,11 +1358,14 @@ class GenerationConfig(PushToHubMixin):
                 to_remove.append(key)
             elif hasattr(self, key):
                 if not defaults_only or getattr(self, key) is None:
+                    if key == "watermarking_config" and isinstance(value, dict):
+                        value = WatermarkingConfig.from_dict(value)
                     setattr(self, key, value)
                     to_remove.append(key)
 
-        # Confirm that the updated instance is still valid
-        self.validate()
+        # Confirm that the updated instance is still valid. Only attributes *explicitly* updated in this call count
+        # as user-set for warning purposes: defaults inherited from a model's config shouldn't emit warnings.
+        self.validate(user_set_attributes=set(to_remove))
 
         # Remove all the attributes that were updated, without modifying the input dict
         unused_kwargs = {key: value for key, value in kwargs.items() if key not in to_remove}
@@ -1389,6 +1521,8 @@ class WatermarkingConfig(BaseWatermarkingConfig):
             )
 
     def construct_processor(self, vocab_size: int, device) -> "WatermarkLogitsProcessor":
+        from .logits_process import WatermarkLogitsProcessor
+
         return WatermarkLogitsProcessor(
             vocab_size=vocab_size,
             device=device,
@@ -1419,7 +1553,7 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
             Size of the sampling table.
         skip_first_ngram_calls (`bool`, *optional*, defaults to `False`):
             Whether to skip first ngram calls.
-        debug_mode (`bool`, optional, *optional*, defaults to `False`):
+        debug_mode (`bool`, *optional*, defaults to `False`):
             Logits are modified to uniform one got before watermarking modification is applied. This is to test the
             implementation.
 
@@ -1478,6 +1612,8 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
             )
 
     def construct_processor(self, vocab_size: int, device) -> "WatermarkLogitsProcessor":
+        from .logits_process import SynthIDTextWatermarkLogitsProcessor
+
         return SynthIDTextWatermarkLogitsProcessor(
             ngram_len=self.ngram_len,
             keys=self.keys,
@@ -1550,17 +1686,22 @@ class ContinuousBatchingConfig:
     `generate_batch` method or the `continuous_batching_context_manager` context manager.
 
     Args:
-        block_size (`int`, *optional*, defaults to 256):
-            Size of each KV cache block in tokens.
+        page_size (`int`, *optional*, defaults to 256):
+            The number of tokens stored for each layer inside a (full-attention) page. A block storing the cache of N
+            layers has N pages (one per layer), each holding cache for `page_size` tokens for one layer. Default is 256.
         num_blocks (`int`, *optional*):
             Number of blocks in the KV cache. Auto-inferred from GPU memory when `None`.
         max_batch_tokens (`int`, *optional*):
             Maximum number of tokens in a batch. Auto-inferred from GPU memory when `None`.
-        max_memory_percent (`float`, *optional*, defaults to 0.8):
-            Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache.
-        max_blocks_per_request (`int`, *optional*, defaults to 0):
+        max_memory_percent (`float`, *optional*):
+            Maximum percentage of free GPU memory (after the model is loaded) to use for the KV cache. When `None`,
+            resolved at runtime to 0.9 if there is no logit processing and 0.8 if there is, to leave headroom for
+            vocabulary-sized temporary tensors.
+        max_requests_per_batch (`int`, *optional*):
+            Maximum number of requests per batch. Auto-inferred from workload hints when `None`, with fallback of 1024.
+        max_blocks_per_request (`int`, *optional*):
             Maximum blocks per request, used in the `flash_attn_with_kvcache` fast decode path to dimension
-            the block table. Setting this to 0 disables the fast decode path.
+            the block table. Setting this to 0 disables the fast decode path. Default is None (auto-inferred).
         allow_block_sharing (`bool`, *optional*, defaults to `True`):
             Whether to allow block sharing for prefix caching. Block sharing can only be allowed, never forced,
             as some models do not support it. Disable if you have few short prompts but long generation lengths.
@@ -1577,42 +1718,74 @@ class ContinuousBatchingConfig:
         kv_padding_interval_size (`int`, *optional*, defaults to 0):
             KV padding granularity in tokens for CUDA graphs. Uses a preset from `continuous_api.py` when
             set to 0.
-        max_cached_graphs (`int`, *optional*, defaults to 0):
-            Maximum number of cached CUDA graphs. Uses a preset from `continuous_api.py` when set to 0.
         varlen_compile_config (`CompileConfig`, *optional*):
             CompileConfig for varlen (prefill) path. Default is None (uses generation_config fallback)
             The varlen path handles batches with varying query and KV lengths, often benefiting from dynamic=True.
         decode_compile_config (`CompileConfig`, *optional*):
             CompileConfig for decode (fast) path. Default is None (uses generation_config fallback)
             The decode path handles batches has no dynamic KV length, so static shapes are a better fit.
-        use_default_compile_configs (`bool`, *optional*, defaults to `False`):
-            If True, a default compile config will be used for paths that are not explicitly set.
+        default_compile_level (`int`, *optional*, defaults to 0):
+            If this is >0 and no compile config is provided for varlen or decode path, a default compile config will be
+            provided. The level can go up to 3, and a higher level means more performance but longer warmup time.
         scheduler_type (`str`, *optional*, defaults to `"fifo"`):
             Scheduler type to use.
+        safety_margin (`float`, *optional*):
+            Safety margin used to limit the amount of offloading. Defaults to None (use class default).
         return_logprobs (`bool`, *optional*, defaults to `False`):
             Whether to return log probabilities along with the generated tokens.
+        seed (`int | None`, *optional*):
+            An optional seed for generation. If not specified, the internal seed will be set to a random value.
+        auto_switch_to_flash (`bool`, *optional*, defaults to `True`):
+            Whether to automatically switch to flash attention (if available) when the implementation is SDPA or eager.
+            Default is True, because flash is much better for continuous batching.
+        cpu_offload_space (`float`, *optional*, defaults to 0.0):
+            CPU swap space in GiB for KV cache offloading. A pre-allocated pinned CPU buffer of this size is
+            created at initialization. When the GPU cache is full, evicted requests' KV caches are copied here
+            instead of being discarded. 0 disables offloading (default).
+        cpu_offload_space_safety_threshold (`float`, *optional*, defaults to 0.8):
+            If `cpu_offload_space` exceeds this fraction of total system RAM, it is clamped to avoid host OOM.
+            Set to 1.0 to disable the safety cap. Ignored when psutil is not available.
         max_queue_size (`int`, *optional*, defaults to 0):
             Maximum request queue size for serving. 0 means unlimited.
         per_request_processors (`bool`, *optional*, defaults to `False`):
             Enable per-request logits processor parameters. Default is False.
         drop_unsupported_processors (`bool`, *optional*, defaults to `True`):
             Remove unsupported logits processors instead of erroring. Default is True.
+        disable_nccl_graph_mixing (`bool`, *optional*, defaults to `True`):
+            Disable NCCL's safety net for parallel graph-captured comms. Never happens in CB and gives TP a perf boost.
+        cpu_group_timeout (`float`, *optional*, defaults to 300.0):
+            The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None
+            for no timeout. Default is 300 seconds.
+        use_default_compile_configs (`bool | None`, *optional*):
+            Deprecated in 5.11: please use default_compile_level instead.
+        max_cached_graphs (`int`, *optional*):
+            Deprecated in 5.13: maximum number of graph is no longer an issue.
+        block_size (`int | None`, *optional*):
+            Deprecated in 5.17: now page_size is used instead.
     """
 
-    # Size of each KV cache block
-    block_size: int = 256
+    # The number of tokens stored inside a (full attention) page. A block storing the cache of N layers has N pages, one
+    # per layer. Since different page types can hold different number of tokens, this is for a full attention page.
+    # Default is 256. Must be at least 4 (for an efficient cache, it should be well above that)
+    page_size: int = 256
 
-    # The number of blocks used in the KV cache and the maximum number of tokens in a batch. Once the block size is set,
-    # these can be auto inferred using GPU size.
+    # Number of blocks the cache contains. Usually better to leave it as None and be auto inferred.
     num_blocks: int | None = None
+
+    # The maximum number of tokens in a batch. Once the page size is set, this can be auto inferred using GPU size.
     max_batch_tokens: int | None = None
 
-    # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache.
-    max_memory_percent: float = 0.8
+    # The max percentage of free GPU memory (after the model is loaded) to use for the KV cache. If None, auto resolved
+    # to 0.9 (no logit processing) or 0.8 (logit processing) to leave headroom for temporary tensors.
+    max_memory_percent: float | None = None
+
+    # The maximum number of requests in a batch. Helps limiting the memory footprint of the logits, which scale with the
+    # vocabulary size.
+    max_requests_per_batch: int | None = None
 
     # This is only used in the flash_attn_with_kvcache fast decode path to dimension the block table. If it is set to 0,
-    # the fast decode path will not be used. Currently turned off by default.
-    max_blocks_per_request: int | None = 0
+    # the fast decode path will not be used. Auto-inferred from GPU memory when `None` (default).
+    max_blocks_per_request: int | None = None
 
     # Block sharing can only be allowed, but never forced: some model just do not support it. If you only have a few
     # short prompts, but long generation lengths, you might want to disable block sharing.
@@ -1632,22 +1805,41 @@ class ContinuousBatchingConfig:
     # top of the continuous_batching/continuous_api.py file.
     q_padding_interval_size: int = 0
     kv_padding_interval_size: int = 0
-    max_cached_graphs: int = 0
 
     # Compile configs for the two execution paths. If None, uses the compile_config from generation_config as fallback.
-    # The varlen path is used for prefill and when fast decode is unavailable. The decode path is used when
-    # max_blocks_per_request > 0 (fast decode with block table).
     varlen_compile_config: CompileConfig | None = None
     decode_compile_config: CompileConfig | None = None
-    # If this flag is set to True, a default compile config will be used for paths that are not explicitly set.
-    use_default_compile_configs: bool = False
+    # Compile level for the executions path, if no compile config is provided for the path. Default is 0 (no compile).
+    # Level 1: `mode=default, dynamic=True`
+    # Level 2: `mode=max-autotune-no-cudagraphs, dynamic=True`
+    # Level 3: `mode=max-autotune-no-cudagraphs, dynamic=False`
+    default_compile_level: int = 0
 
     # Scheduler type. FIFO by default. For all types available, checks SCHEDULER_MAPPING in scheduler.py
     scheduler_type: str = "fifo"
+    # Safety margin: if the number of free blocks falls below (safety_margin * num_blocks), then new prefill requests
+    # will not be scheduled to prioritize decoding active requests. Defaults to None (use class default).
+    safety_margin: float | None = None
 
     # Whether to generate log probabilities, which is the log of the softmax of the processed logits. If True, the log
     # probabilities will be returned along with the generated tokens in the generation output.
     return_logprobs: bool = False
+
+    # An optional seed for generation. If not specified, the internal seed will be set to a random value.
+    seed: int | None = None
+
+    # If this is True, the model will switch to flash attention (if available) when the implementation is SDPA or eager
+    auto_switch_to_flash: bool = True  # True by default because much better for continuous batching
+
+    # CPU swap space in GiB for KV cache offloading. When the GPU cache is full and a request must be evicted, its KV
+    # cache is copied to this pre-allocated pinned CPU buffer instead of being discarded. Default to 0.0 GiB. You can
+    # also set this to None to dimension the pool using only the safety threshold, but this will error out if psutil is
+    # not available.
+    # TODO: use async transfer and move this to a non-zero value
+    cpu_offload_space: float | None = 0.0
+    # Safety cap: if cpu_offload_space exceeds this fraction of total system RAM, it is clamped. Set to 0.0 to disable
+    # offloading.
+    cpu_offload_space_safety_threshold: float = 0.8
 
     # The parameters below are mostly useful in the context of serving
     max_queue_size: int = 0
@@ -1659,176 +1851,70 @@ class ContinuousBatchingConfig:
     # are kept but warnings are logged for unsupported/unknown ones.
     drop_unsupported_processors: bool = True
 
-    def account_for_cb_deprecated_arguments(
-        self,
-        max_queue_size: int = 0,
-        q_padding_interval_size: int = 0,
-        kv_padding_interval_size: int = 0,
-        allow_block_sharing: bool = True,
-        use_async_batching: bool | None = None,
-        max_cached_graphs: int = 0,
-    ) -> None:
-        """Some arguments given to `generate_batch`, `init_continuous_batching` or `continuous_batching_context_manager`
-        are now deprecated and are expected inside the continuous batching config. This method checks if any were
-        passed and accounts for them in the continuous batching config. It raises a deprecation warning if any were
-        passed.
-        """
-        kwargs_to_warn = []
-        if max_queue_size > 0:
-            kwargs_to_warn.append("max_queue_size")
-            self.max_queue_size = max_queue_size
-        if q_padding_interval_size > 0:
-            kwargs_to_warn.append("q_padding_interval_size")
-            self.q_padding_interval_size = q_padding_interval_size
-        if kv_padding_interval_size > 0:
-            kwargs_to_warn.append("kv_padding_interval_size")
-            self.kv_padding_interval_size = kv_padding_interval_size
-        if not allow_block_sharing:  # config default is True, so False means the user explicitly set it to False
-            kwargs_to_warn.append("allow_block_sharing")
-            self.allow_block_sharing = allow_block_sharing
-        if use_async_batching is not None:
-            kwargs_to_warn.append("use_async_batching")
-            self.use_async_batching = use_async_batching
-        if max_cached_graphs > 0:
-            kwargs_to_warn.append("max_cached_graphs")
-            self.max_cached_graphs = max_cached_graphs
-        if kwargs_to_warn:
+    # Disable NCCL's safety net for parallel graph-captured communications. This means it is no longer safe to replay a
+    # CUDA graph with NCCL communication at the same time as 1. another CUDA graph with captured comms 2. an eager comm.
+    # This is turned on by default because the above never happens in CB and this gives a nice perf boost.
+    disable_nccl_graph_mixing: bool = True
+
+    # The time (in seconds) after which a CPU communication will timeout and the process will crash. Leave to None for
+    # no timeout. Default is 300 seconds. This exists because dist has a gloo timeout of 30 minutes, which is way too
+    # long for almost all use cases.
+    cpu_group_timeout: float | None = 300.0
+
+    # Deprecated arguments
+    use_default_compile_configs: bool | None = None
+    max_cached_graphs: int | None = None
+    block_size: int | None = None
+
+    def __post_init__(self):
+        # Convert dicts to CompileConfig objects
+        if isinstance(self.varlen_compile_config, dict):
+            self.varlen_compile_config = CompileConfig(**self.varlen_compile_config)
+        if isinstance(self.decode_compile_config, dict):
+            self.decode_compile_config = CompileConfig(**self.decode_compile_config)
+
+        # Only turn off graph mixing support if TP is on
+        graph_mixing_supported = os.environ.get("NCCL_GRAPH_MIXING_SUPPORT", "1") == "1"
+        distributed = int(os.environ.get("WORLD_SIZE", "1")) > 1
+        if self.disable_nccl_graph_mixing and graph_mixing_supported and distributed:
             logger.warning(
-                "The following arguments were provided to a continuous batching entry point instead of being passed "
-                "through the continuous_batching_config: " + ", ".join(kwargs_to_warn)
+                "Setting NCCL_GRAPH_MIXING_SUPPORT = 0 because disable_nccl_graph_mixing is True and WORLD_SIZE > 1."
             )
+            os.environ.setdefault("NCCL_GRAPH_MIXING_SUPPORT", "0")
 
-    def decide_use_cuda_graphs(self, compile_config: CompileConfig | None, is_attn_mask_needed: bool) -> None:
-        """Decides whether or not to use cuda graphs for continuous batching. If the user specified this in the config
-        or if they specified a parameter related to cuda graphs, they are turned on. Otherwise, we use a heuristic
-        based on the attention implementation: we turn on cuda graphs if and only if no attention mask is needed.
-
-        This function modifies the `use_cuda_graph` attribute of the config in place, to a tuple of booleans.
-        """
-        # If cuda is not available, we cannot use cuda graphs
-        import torch
-
-        if not torch.cuda.is_available():
-            intended_use_cuda_graph = any(self.get_cuda_graph_booleans())
-            if intended_use_cuda_graph:  # throw a warning only if the user intended to use cuda graphs
-                logger.warning(f"{self.use_cuda_graph = } but {torch.cuda.is_available() = }: turning off cuda graphs")
-            self.use_cuda_graph = (False, False)
-
-        # Else if use_cuda_graph is specified, we follow the user's choice and make sure it is a tuple of booleans
-        elif self.use_cuda_graph is not None:
-            if isinstance(self.use_cuda_graph, bool):
-                self.use_cuda_graph = (self.use_cuda_graph, self.use_cuda_graph)
-
-        # Else if the user specified a parameter related to cuda graphs, we activate cuda graphs
-        elif self.q_padding_interval_size or self.kv_padding_interval_size or self.max_cached_graphs:
-            self.use_cuda_graph = (True, True)
-
-        # Else if a compile config was found, turn off cuda graphs if the compile config already uses them
-        elif compile_config is not None:
-            options = torch._inductor.list_mode_options().get(compile_config.mode, compile_config.options)
-            compile_uses_cudagraphs = options.get("triton.cudagraphs", False)
-            if compile_uses_cudagraphs:
-                logger.warning(
-                    f"Compile config {compile_config.mode = } uses cudagraphs, which usually does not work well with "
-                    "continuous batching. We recommend using mode 'default' or 'max-autotune-no-cudagraphs' instead."
-                )
-            use_cuda_graph = not compile_uses_cudagraphs  # TODO: should this also match the dynamic shapes?
-            self.use_cuda_graph = (use_cuda_graph, use_cuda_graph)
-
-        # Otherwise we have a default heuristic based on the attention implementation:
-        # attention implementations where an attention mask is needed suffer a lot more from the padding associated
-        # with cuda graphs, so default is to turn cuda graphs off for those implementations
-        else:
-            use_cuda_graph = not is_attn_mask_needed
-            self.use_cuda_graph = (use_cuda_graph, use_cuda_graph)
+        # Warn about deprecated arguments
+        if self.use_default_compile_configs is not None:  # Deprecated in 5.11
+            if self.use_default_compile_configs:
+                level_msg = "setting default_compile_level to 3. Consider using a lower level for faster warmup time."
+                self.default_compile_level = 3
+            else:
+                level_msg = "setting default_compile_level to 0."
+                self.default_compile_level = 0
             logger.warning(
-                f"No behavior specified for use_cuda_graph, defaulting to {self.use_cuda_graph = } because "
-                f"{is_attn_mask_needed = }. If you want to save memory, turn off cuda graphs, but they tend to improve "
-                "performances by a lot."
+                "use_default_compile_configs is deprecated: please use default_compile_level instead. For backwards "
+                f"compatibility, {level_msg}"
             )
+        if self.max_cached_graphs is not None:  # Deprecated in 5.13
+            logger.warning(
+                "max_cached_graphs is deprecated: maximum number of graph is no longer an issue. Deprecated in 5.13."
+            )
+        if self.block_size is not None:  # Deprecated in 5.17
+            logger.warning(
+                "block_size is deprecated: please use page_size instead. For backwards compatibility, block_size will "
+                "be used as the full attention page size."
+            )
+            self.page_size = self.block_size
 
-    def get_cuda_graph_booleans(self) -> tuple[bool, bool]:
-        """Returns the cuda graph booleans for the varlen and decode paths."""
+    @property
+    def cuda_graph_booleans(self) -> tuple[bool, bool]:
+        """The cuda graph booleans for the varlen and decode paths."""
         if self.use_cuda_graph is None:
             return False, False
         if isinstance(self.use_cuda_graph, bool):
             return self.use_cuda_graph, self.use_cuda_graph
         return self.use_cuda_graph
 
-    def decide_use_async_batching(self, is_attn_mask_needed: bool) -> bool:
-        """Returns whether or not to use asynchronous batching for continuous batching. If the user specified this in
-        the config, we follow their choice. Otherwise, we turn on asynchronous batching if and only if CUDA graphs are
-        turned on and no attention mask is needed.
-
-        This function modifies the `use_async_batching` attribute of the config in place.
-        """
-        # If the user specifies to use async or not, no need to decide ourselves
-        if self.use_async_batching is None:
-            use_cuda_graphs = any(self.get_cuda_graph_booleans())
-            self.use_async_batching = use_cuda_graphs and not is_attn_mask_needed
-            logger.info(
-                f"No behavior specified for use_async_batching, choosing {self.use_async_batching = } because "
-                f"{use_cuda_graphs = } and {not is_attn_mask_needed = }. If you want to save memory, you can "
-                "disable asynchronous batching but it will degrade performance."
-            )
-        return self.use_async_batching
-
-    def resolve_sentinel_values(self) -> None:
-        """For some parameters (padding intervals and max cached graphs), the default is a sentinel value of 0: that
-        way, if the user specifies a value for those parameters, we know they want it used, ie. we turn on cuda graphs.
-        But in the case the user does not specify those values, we still need them to resolve to a non-zero value.
-        This function takes care of that."""
-        # Interval sizes are in tokens for both Q and KV
-        if self.q_padding_interval_size == 0:
-            self.q_padding_interval_size = 64
-        if self.kv_padding_interval_size == 0:
-            self.kv_padding_interval_size = 64 * 256  # 64 blocks of 256 tokens ie. 16384 tokens
-        if self.max_cached_graphs == 0:
-            self.max_cached_graphs = 32
-
-    def resolve_compile_configs(
-        self, fallback_compile_config: CompileConfig | None, is_flash_attn: bool, decode_fast_path_available: bool
-    ) -> None:
-        """Resolve if the compile configs for varlen and decode paths, modifying these attributes in place if needed.
-        Default config use full compile over regional compile, because the throughput is significantly higher (~15%)"""
-        logger_ = logging.get_logger("ContinuousBatchingLogger")
-
-        # For each config, priority is: explicit config, default config, fallback config, None
-        if self.varlen_compile_config is None:
-            if self.use_default_compile_configs:
-                # We don't use compile with flash varlen, because max_seqlen_k is volatile and introduces recompilations
-                if is_flash_attn:
-                    varlen_config = None
-                else:
-                    varlen_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=True, dynamic=True)
-            elif fallback_compile_config is not None:
-                varlen_config = fallback_compile_config
-            else:
-                varlen_config = None
-        else:
-            varlen_config = self.varlen_compile_config
-
-        if self.decode_compile_config is None:
-            if self.use_default_compile_configs:
-                # Paged attention is wrapped in @torch.compiler.disable so we can't use fullgraph
-                decode_config = CompileConfig(mode="max-autotune-no-cudagraphs", fullgraph=False, dynamic=False)
-            elif fallback_compile_config is not None:
-                decode_config = fallback_compile_config
-            else:
-                decode_config = None
-        else:
-            decode_config = self.decode_compile_config
-
-        # For decode, we throw a warning if the fast decode path is not available and a compile config was found
-        if not decode_fast_path_available and self.decode_compile_config is not None:
-            decode_config = None
-            logger_.warning("A decode_compile_config was set but fast decode path is not available. Ignoring it.")
-
-        # Log what will be compiled
-        if varlen_config is not None:
-            logger_.info(f"Varlen path will be compiled with {varlen_config.to_dict()}")
-        if decode_config is not None:
-            logger_.info(f"Decode path will be compiled with {decode_config.to_dict()}")
-        # Modify in place
-        self.varlen_compile_config = varlen_config
-        self.decode_compile_config = decode_config
+    @property
+    def fallback_max_blocks_per_request(self) -> int:
+        """Fallback if no user-hint is given and decode path is available."""
+        return 32

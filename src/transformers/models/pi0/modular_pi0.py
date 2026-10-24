@@ -24,19 +24,18 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...masking_utils import create_bidirectional_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import ProcessingKwargs, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast
 from ...utils.import_utils import requires
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
-from ..paligemma.processing_paligemma import PaligemmaProcessor
+from ..auto import AutoConfig, AutoModel
 from ..siglip.image_processing_siglip import SiglipImageProcessor
 
 
@@ -63,7 +62,7 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
 
 @auto_docstring
 @requires(backends=("vision", "torch"))
-class PI0Processor(PaligemmaProcessor):
+class PI0Processor(ProcessorMixin):
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.height, self.width = image_processor.size["height"], image_processor.size["width"]
         state_mean = kwargs.get("state_mean", [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286])
@@ -77,8 +76,30 @@ class PI0Processor(PaligemmaProcessor):
         self.actions_std = torch.tensor(actions_std)
         self.max_state_dim = kwargs.get("max_state_dim", 32)
         self.chunk_size = kwargs.get("chunk_size", 50)
-        super().__init__(image_processor, tokenizer)
+        if not hasattr(image_processor, "image_seq_length"):
+            raise ValueError("Image processor is missing an `image_seq_length` attribute.")
 
+        self.image_seq_length = image_processor.image_seq_length
+
+        if not hasattr(tokenizer, "<image>"):
+            # Just add to vocab if not yet there. Note that the model isn't yet converted and
+            # can be modified when lerobot team decided to adopt it
+            self.image_token = "<image>"
+            image_token = AddedToken(self.image_token, normalized=False, special=True)
+            tokens_to_add = {"additional_special_tokens": [image_token]}
+            tokenizer.add_special_tokens(tokens_to_add)
+            self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        else:
+            self.image_token_id = tokenizer.image_token_id
+            self.image_token = tokenizer.image_token
+
+        tokenizer.add_tokens([f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)])
+        tokenizer.add_bos_token = False
+        tokenizer.add_eos_token = False
+
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+
+    @auto_docstring
     def __call__(
         self,
         images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None,
@@ -142,13 +163,15 @@ class PI0Processor(PaligemmaProcessor):
         padded_pixel_values = torch.zeros(len(batched_images), max_num_cameras, 3, self.height, self.width)
 
         for batch, sample_images in enumerate(batched_images):
+            if not sample_images:
+                continue
             processed = self.image_processor(sample_images, return_tensors="pt", **output_kwargs["images_kwargs"])
 
             num_cameras = len(sample_images)
             pixel_attention_mask[batch, :num_cameras] = True
             padded_pixel_values[batch, :num_cameras] = processed["pixel_values"]
 
-        return_data = {
+        model_inputs = {
             **text_inputs,
             "pixel_values": padded_pixel_values,
             "pixel_attention_mask": pixel_attention_mask,
@@ -158,15 +181,15 @@ class PI0Processor(PaligemmaProcessor):
             actions = (torch.tensor(actions) - self.actions_mean) / (self.actions_std + 1e-08)
             if actions.shape[-1] < self.max_state_dim:
                 actions = F.pad(actions, (0, self.max_state_dim - actions.shape[-1]))
-            return_data["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
+            model_inputs["actions"] = actions.view(-1, self.chunk_size, self.max_state_dim)
 
         if state is not None:
             state = (torch.tensor(state) - self.state_mean) / (self.state_std + 1e-08)
             if state.shape[-1] < self.max_state_dim:
                 state = F.pad(state, (0, self.max_state_dim - state.shape[-1]))
-            return_data["state"] = state.view(-1, self.max_state_dim)
+            model_inputs["state"] = state.view(-1, self.max_state_dim)
 
-        return BatchFeature(data=return_data, tensor_type=return_tensors)
+        return BatchFeature(data=model_inputs, tensor_type=return_tensors)
 
     @property
     def model_input_names(self):
@@ -214,7 +237,48 @@ class PI0Config(PreTrainedConfig):
     """
 
     model_type = "pi0"
-    sub_configs = {"vlm_config": AutoConfig, "dit_config": AutoConfig}
+    sub_configs_defaults = {
+        "vlm_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="paligemma",
+            init_kwargs={
+                "text_config": {
+                    "model_type": "gemma",
+                    "hidden_size": 2048,
+                    "num_hidden_layers": 18,
+                    "intermediate_size": 16384,
+                    "num_attention_heads": 8,
+                    "num_key_value_heads": 1,
+                    "vocab_size": 257152,
+                },
+                "vision_config": {
+                    "model_type": "siglip_vision_model",
+                    "intermediate_size": 4304,
+                    "hidden_size": 1152,
+                    "patch_size": 14,
+                    "image_size": 224,
+                    "num_hidden_layers": 27,
+                    "num_attention_heads": 16,
+                    "vocab_size": 257152,
+                    "vision_use_head": False,
+                },
+                "projection_dim": 2048,
+                "image_token_id": 257152,
+            },
+        ),
+        "dit_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="gemma",
+            init_kwargs={
+                "hidden_size": 1024,
+                "num_hidden_layers": 18,
+                "intermediate_size": 4096,
+                "num_attention_heads": 8,
+                "num_key_value_heads": 1,
+                "head_dim": 256,
+            },
+        ),
+    }
 
     vlm_config: dict | PreTrainedConfig | None = None
     dit_config: dict | PreTrainedConfig | None = None
@@ -231,54 +295,12 @@ class PI0Config(PreTrainedConfig):
     loss_reduction: str = "mean"
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vlm_config, dict):
-            vlm_model_type = self.vlm_config.get("model_type", "paligemma")
-            self.vlm_config = CONFIG_MAPPING[vlm_model_type](**self.vlm_config)
-        elif self.vlm_config is None:
-            self.vlm_config = CONFIG_MAPPING["paligemma"](
-                text_config={
-                    "model_type": "gemma",
-                    "hidden_size": 2048,
-                    "num_hidden_layers": 18,
-                    "intermediate_size": 16384,
-                    "num_attention_heads": 8,
-                    "num_key_value_heads": 1,
-                    "vocab_size": 257152,
-                },
-                vision_config={
-                    "model_type": "siglip_vision_model",
-                    "intermediate_size": 4304,
-                    "hidden_size": 1152,
-                    "patch_size": 14,
-                    "image_size": 224,
-                    "num_hidden_layers": 27,
-                    "num_attention_heads": 16,
-                    "vocab_size": 257152,
-                    "vision_use_head": False,
-                },
-                projection_dim=2048,
-                image_token_id=257152,
-            )
-
-        if isinstance(self.dit_config, dict):
-            dit_model_type = self.dit_config.get("model_type", "gemma")
-            self.dit_config = CONFIG_MAPPING[dit_model_type](**self.dit_config)
-        elif self.dit_config is None:
-            self.dit_config = CONFIG_MAPPING["gemma"](
-                hidden_size=1024,
-                num_hidden_layers=18,
-                intermediate_size=4096,
-                num_attention_heads=8,
-                num_key_value_heads=1,
-                head_dim=256,
-                vocab_size=self.vlm_config.text_config.vocab_size,
-            )
-
-        # Force bidirectional attention
-        self.dit_config.is_causal = False
+        super().__post_init__(**kwargs)
+        self.dit_config.vocab_size = self.vlm_config.text_config.vocab_size
+        # Force bidirectional attention for images in Paligemma
+        self.dit_config.is_causal = True
         self.dit_config.use_bidirectional_attention = True
         self.vlm_config.text_config.use_bidirectional_attention = True
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
@@ -300,7 +322,7 @@ class PI0TimestepEmbeddings(nn.Module):
         super().__init__()
         self.config = config
         sinusoid_freq = self.compute_freqs(config)
-        self.register_buffer("sinusoid_freq", sinusoid_freq, persistent=False)
+        self.sinusoid_freq = nn.Buffer(sinusoid_freq, persistent=False)
 
     @staticmethod
     def compute_freqs(config):
@@ -310,7 +332,7 @@ class PI0TimestepEmbeddings(nn.Module):
         return sinusoid_freq
 
     def forward(self, time):
-        device_type = time.device.type if isinstance(time.device.type, str) and time.device.type != "mps" else "cpu"
+        device_type = time.device.type if isinstance(time.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             sinusoid_freq = self.sinusoid_freq[None, :]
             emb = sinusoid_freq * time[:, None]
@@ -390,12 +412,11 @@ class PI0Model(PI0PreTrainedModel):
         llm_input_ids[input_ids == self.config.vlm_config.image_token_id] = 0
         inputs_embeds = self.vlm.get_input_embeddings()(llm_input_ids)
         special_image_mask = (
-            (input_ids == self.config.vlm_config.image_token_id)
-            .unsqueeze(-1)
-            .expand_as(inputs_embeds)
-            .to(inputs_embeds.device)
+            (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).to(inputs_embeds.device)
         )
-        inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, total_image_features)
+        inputs_embeds = inputs_embeds.masked_scatter(
+            special_image_mask, total_image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        )
 
         return inputs_embeds
 
@@ -426,6 +447,7 @@ class PI0Model(PI0PreTrainedModel):
             if inputs_embeds is None:
                 inputs_embeds = self.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
 
+            # PI0 always passes a prefix and we need to hardcode it to correctly build a mask
             token_type_ids = torch.zeros_like(inputs_embeds)[:, :, 0]
             past_key_values = self.vlm(
                 inputs_embeds=inputs_embeds,
@@ -453,14 +475,19 @@ class PI0Model(PI0PreTrainedModel):
         # We have three blocks: vlm-inputss, state and actions from which only 1 token is `state`
         # The mask should be bidirectional within each block and to prev blocks, but not to next blocks
         vlm_input_length = past_key_values.get_seq_length()
-        block_sizes = torch.tensor([vlm_input_length + 1, action_embeds.shape[1] - 1], device=action_embeds.device)
-        block_boundaries = torch.cumsum(block_sizes, dim=0) - 1
-        bidirectional_mask = create_bidirectional_mask(
+        block_sequence_ids = torch.cat(
+            [
+                torch.zeros(vlm_input_length + 1, device=action_embeds.device, dtype=torch.long),
+                torch.ones(action_embeds.shape[1] - 1, device=action_embeds.device, dtype=torch.long),
+            ]
+        )
+        block_sequence_ids = block_sequence_ids[None, :].repeat(action_embeds.shape[0], 1)
+        bidirectional_mask = create_causal_mask(
             config=self.config.dit_config,
             inputs_embeds=action_embeds,
             attention_mask=dit_attention_mask,
             past_key_values=past_key_values,
-            and_mask_function=blockwise_bidirectional_mask(block_boundaries),
+            block_sequence_ids=block_sequence_ids,
         )
 
         dit_output = self.dit(
@@ -513,7 +540,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         pixel_attention_mask (`torch.Tensor`, *optional*):
             The mask indicating padded positions in the input image.
         actions (`torch.Tensor`, *optional*):
-            Input actions that need to be predicted. Used only when training to compiute loss.
+            Input actions that need to be predicted. Used only when training to compute loss.
         """
         batch_size = state.shape[0]
 
@@ -607,13 +634,16 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             )
 
         # 2. Run VLM once and obtain prefix cache. Must infer positions here!
+        position_ids = None
         if attention_mask is not None:
             position_ids = attention_mask.cumsum(-1) - 1
         inputs_embeds = self.model.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
+        token_type_ids = torch.zeros_like(inputs_embeds)[:, :, 0]
         past_key_values = self.model.vlm(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            token_type_ids=token_type_ids,
             use_cache=True,
             return_dict=True,
         ).past_key_values
@@ -631,10 +661,11 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
                 pixel_attention_mask=pixel_attention_mask,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
+                **kwargs,
             )
 
             # We need to keep only the "vlm-prefix", no attention to past denoising steps!
-            past_key_values.crop(prefix_length)
+            past_key_values.crop(prefix_length - past_key_values.get_seq_length())
             noise = noise + dt * output.logits
         return noise
 

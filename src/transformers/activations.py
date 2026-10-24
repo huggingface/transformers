@@ -214,6 +214,13 @@ class ReLUSquaredActivation(nn.Module):
         return squared
 
 
+class SqrtSoftplusActivation(nn.Module):
+    """sqrt(softplus(x)) — the router scoring function used by DeepSeek V4."""
+
+    def forward(self, input):
+        return nn.functional.softplus(input).sqrt()
+
+
 class ClassInstantier(OrderedDict):
     def __getitem__(self, key):
         content = super().__getitem__(key)
@@ -243,8 +250,8 @@ class XIELUActivation(nn.Module):
         self.alpha_n = nn.Parameter(
             torch.log(torch.expm1(torch.tensor(alpha_n_init - beta, dtype=dtype))).unsqueeze(0)
         )
-        self.register_buffer("beta", torch.tensor(beta, dtype=dtype))
-        self.register_buffer("eps", torch.tensor(eps, dtype=dtype))
+        self.beta = nn.Buffer(torch.tensor(beta, dtype=dtype))
+        self.eps = nn.Buffer(torch.tensor(eps, dtype=dtype))
         self.with_vector_loads = with_vector_loads
         # Temporary until xIELU CUDA fully implemented
         self._beta_scalar = float(beta)
@@ -334,6 +341,7 @@ ACT2CLS = {
     "relu6": nn.ReLU6,
     "sigmoid": nn.Sigmoid,
     "silu": SiLUActivation,
+    "sqrtsoftplus": SqrtSoftplusActivation,
     "swish": nn.SiLU,
     "tanh": nn.Tanh,
     "prelu": nn.PReLU,
@@ -354,6 +362,7 @@ gelu_python = get_activation("gelu_python")
 gelu_new = get_activation("gelu_new")
 gelu = get_activation("gelu")
 gelu_fast = get_activation("gelu_fast")
+gelu_pytorch_tanh = get_activation("gelu_pytorch_tanh")
 quick_gelu = get_activation("quick_gelu")
 silu = get_activation("silu")
 mish = get_activation("mish")

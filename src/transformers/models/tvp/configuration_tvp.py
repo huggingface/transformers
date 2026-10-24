@@ -1,22 +1,21 @@
 # Copyright 2023 The Intel AIA Team Authors, and HuggingFace Inc. team. All rights reserved.
 #
-# Licensed under the Apache License=, Version 2.0 (the "License");
+# Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
 #     http://www.apache.org/licenses/LICENSE-2.0
 #
-# Unless required by applicable law or agreed to in writing=, software
-# distributed under the License is distributed on an "AS IS" BASIS=,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND=, either express or implied.
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """TVP model configuration"""
 
 from huggingface_hub.dataclasses import strict
 
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
 from ..auto import AutoConfig
 
@@ -51,7 +50,13 @@ class TvpConfig(PreTrainedConfig):
     """
 
     model_type = "tvp"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="resnet",
+            init_kwargs={"out_features": ["stage4"]},
+        ),
+    }
 
     backbone_config: dict | PreTrainedConfig | None = None
     distance_loss_weight: float = 1.0
@@ -76,16 +81,6 @@ class TvpConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     attention_probs_dropout_prob: float | int = 0.1
     pad_token_id: int | None = None
-
-    def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="resnet",
-            default_config_kwargs={"out_features": ["stage4"]},
-            **kwargs,
-        )
-
-        super().__post_init__(**kwargs)
 
 
 __all__ = ["TvpConfig"]

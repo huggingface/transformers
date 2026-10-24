@@ -24,10 +24,10 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_experts_implementation
-from ...masking_utils import create_causal_mask
+from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
 from ...models.jamba.modeling_jamba import JambaAttention
 from ...models.llama.modeling_llama import LlamaRMSNorm
@@ -35,20 +35,22 @@ from ...models.nemotron.modeling_nemotron import NemotronMLP
 from ...models.zamba.modeling_zamba import ZambaForCausalLM
 from ...models.zamba2.modeling_zamba2 import Zamba2MambaMixer, Zamba2RMSNormGated
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_nemotron_h import NemotronHConfig
 
 
 logger = logging.get_logger(__name__)
 
-is_fast_path_available = False
+
+class NemotronHRMSNormGated(Zamba2RMSNormGated):
+    pass
 
 
 class NemotronHMamba2Mixer(Zamba2MambaMixer):
-    def __init__(self, config: NemotronHConfig, layer_idx: int | None = None):
-        super().__init__(config, layer_idx)
+    def __init__(self, config: NemotronHConfig, layer_idx: int | None = None, initialize_mixer_weights: bool = True):
+        super().__init__(config, layer_idx, initialize_mixer_weights)
         self.ssm_state_size = config.ssm_state_size
         self.conv_kernel_size = config.conv_kernel
         self.intermediate_size = config.mamba_num_heads * config.mamba_head_dim
@@ -69,41 +71,28 @@ class NemotronHMamba2Mixer(Zamba2MambaMixer):
             groups=self.conv_dim,
             padding=self.conv_kernel_size - 1,
         )
-
         # projection of the input hidden states
         projection_size = self.intermediate_size + self.conv_dim + self.num_heads
-
         self.in_proj = nn.Linear(
             self.hidden_size,
             projection_size,
             bias=config.use_bias,
         )
-
-        self.norm = Zamba2RMSNormGated(
+        self.norm = NemotronHRMSNormGated(
             self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=config.layer_norm_epsilon
         )
-
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
-
-    def forward(
-        self,
-        hidden_states,
-        cache_params: Cache | None = None,
-        attention_mask: torch.Tensor | None = None,
-        **kwargs,
-    ):
-        if is_fast_path_available and "cuda" in self.in_proj.weight.device.type and not is_torchdynamo_compiling():
-            # Use cuda stream to avoid NaN when using multiple GPUs, which is caused by multi-GPU synchronization issue.
-            # Mamba might launch on the default cuda stream that not strictly respect the current Pytorch cuda stream.
-            # This leads to kernel reading uninitialized memory before the data transfer is complete.
-            with torch.cuda.stream(torch.cuda.default_stream(hidden_states.device)):
-                return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
-
-        return self.torch_forward(hidden_states, cache_params, attention_mask)
 
 
 class NemotronHRMSNorm(LlamaRMSNorm):
-    pass
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        # Unlike Llama, the weight multiply is kept in fp32 and only the result is cast back to the input
+        # dtype, matching the reference implementation.
+        return (self.weight.to(torch.float32) * hidden_states).to(input_dtype)
 
 
 class NemotronHMLP(NemotronMLP, nn.Module):
@@ -148,7 +137,7 @@ class NemotronHExperts(nn.Module):
 
         # Create expert mask to identify which tokens go to which experts
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)  # (num_experts, num_experts_per_tok, num_tokens)
             # Only iterate over experts that have at least one token assigned
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero().squeeze(-1)
@@ -209,8 +198,7 @@ class NemotronHMoE(DeepseekV3MoE):
     def forward(self, hidden_states):
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        router_logits = self.gate(hidden_states)
-        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
+        _, topk_weights, topk_indices = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
 
         # NemotronH-specific: latent projection
@@ -239,8 +227,8 @@ class NemotronHAttention(JambaAttention):
 
 
 MIXER_TYPES = {
-    "mamba": NemotronHMamba2Mixer,
-    "attention": NemotronHAttention,
+    "linear_attention": NemotronHMamba2Mixer,
+    "full_attention": NemotronHAttention,
     "moe": NemotronHMoE,
     "mlp": NemotronHMLP,
 }
@@ -283,15 +271,20 @@ class NemotronHBlock(GradientCheckpointingLayer):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
 
-        if self.block_type == "mamba":
-            hidden_states = self.mixer(hidden_states, cache_params=past_key_values, attention_mask=attention_mask)
-        elif self.block_type == "attention":
+        if self.block_type == "linear_attention":
+            hidden_states = self.mixer(
+                hidden_states,
+                cache_params=past_key_values,
+                attention_mask=attention_mask,
+                **kwargs,
+            )
+        elif self.block_type == "full_attention":
             hidden_states, _ = self.mixer(
                 hidden_states=hidden_states,
                 past_key_values=past_key_values,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
-                user_cache=use_cache,
+                use_cache=use_cache,
                 **kwargs,
             )
         else:
@@ -305,6 +298,7 @@ class NemotronHBlock(GradientCheckpointingLayer):
 class NemotronHPreTrainedModel(PreTrainedModel):
     config: NemotronHConfig
     base_model_prefix = "model"
+    supports_gradient_checkpointing = True
     _no_split_modules = ["NemotronHBlock"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
@@ -312,9 +306,11 @@ class NemotronHPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _is_stateful = True
+    _can_compile_fullgraph = True
     _can_record_outputs = {
         "hidden_states": NemotronHBlock,
         "attentions": NemotronHAttention,
+        "router_logits": OutputRecorder(NemotronHTopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
@@ -326,22 +322,27 @@ class NemotronHPreTrainedModel(PreTrainedModel):
         """Initialize the weights."""
         super()._init_weights(module)
         if isinstance(module, NemotronHMamba2Mixer):
-            # Initialize A_log and D parameters
-            A = torch.arange(1, self.config.mamba_num_heads + 1)
-            init.copy_(module.A_log, torch.log(A))
-            init.ones_(module.D)
+            # Only re-initialise params that were NOT loaded from a checkpoint.
+            # `_is_hf_initialized` is set by `from_pretrained` on each loaded
+            # parameter; without this guard a post-load safety pass of
+            # `_init_weights` would overwrite checkpoint values of
+            # A_log / D / dt_bias with fresh random draws.
+            if not getattr(module.A_log, "_is_hf_initialized", False):
+                A = torch.arange(1, self.config.mamba_num_heads + 1)
+                init.copy_(module.A_log, torch.log(A))
+            if not getattr(module.D, "_is_hf_initialized", False):
+                init.ones_(module.D)
+            if not getattr(module.dt_bias, "_is_hf_initialized", False):
+                dt = torch.exp(
+                    torch.rand(self.config.mamba_num_heads)
+                    * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
+                    + math.log(self.config.time_step_min)
+                ).clamp(min=self.config.time_step_floor)
 
-            dt = torch.exp(
-                torch.rand(self.config.mamba_num_heads)
-                * (math.log(self.config.time_step_max) - math.log(self.config.time_step_min))
-                + math.log(self.config.time_step_min)
-            ).clamp(min=self.config.time_step_floor)
-
-            # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
-            inv_dt = dt + torch.log(-torch.expm1(-dt))
-            with torch.no_grad():
-                init.copy_(module.dt_bias, inv_dt)
-            module.dt_bias._no_reinit = True
+                # # Inverse of softplus: https://github.com/pytorch/pytorch/issues/72759
+                inv_dt = dt + torch.log(-torch.expm1(-dt))
+                with torch.no_grad():
+                    init.copy_(module.dt_bias, inv_dt)
         elif isinstance(module, NemotronHTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
@@ -352,7 +353,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, nn.Linear):
             if module.bias is not None:
-                if not getattr(module.bias, "_no_reinit", False):
+                if not getattr(module.bias, "_is_hf_initialized", False):
                     init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             init.normal_(module.weight, std=self.config.initializer_range)
@@ -366,10 +367,12 @@ class NemotronHPreTrainedModel(PreTrainedModel):
             # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
             for name, p in module.named_parameters():
                 if name == "out_proj.weight":
+                    # Skip checkpoint-loaded weights so a post-load safety
+                    # pass of `_init_weights` doesn't silently overwrite them.
+                    if getattr(p, "_is_hf_initialized", False):
+                        continue
                     # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
                     # Following Pytorch init, except scale by 1/sqrt(2 * n_layer)
-                    # We need to reinit p since this code could be called multiple times
-                    # Having just p *= scale would repeatedly scale it down
                     init.kaiming_uniform_(p, a=math.sqrt(5))
                     with torch.no_grad():
                         p_new = p / math.sqrt(self.config.num_hidden_layers)
@@ -404,7 +407,7 @@ class NemotronHModel(NemotronHPreTrainedModel):
         use_cache: bool | None = None,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):  # ^ is python for xor
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -421,29 +424,27 @@ class NemotronHModel(NemotronHPreTrainedModel):
             position_ids = torch.arange(hidden_states.shape[1], device=hidden_states.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
-            config=self.config,
-            input_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            position_ids=position_ids,
-        )
-        mamba_mask = self._update_mamba_mask(attention_mask, past_key_values)
-
-        # Map block types to their corresponding masks
-        block_type_to_mask = {
-            "mamba": mamba_mask,
-            "attention": causal_mask,
-            "moe": None,
-            "mlp": None,
-        }
+        # Under a compilable cache, `generate()` precomputes per-pattern masks and hands them in as a dict;
+        # otherwise we build them here.
+        if not isinstance(causal_mask_mapping := attention_mask, dict):
+            # Prepare mask arguments
+            mask_kwargs = {
+                "config": self.config,
+                "inputs_embeds": inputs_embeds,
+                "attention_mask": attention_mask,
+                "past_key_values": past_key_values,
+                "position_ids": position_ids,
+            }
+            # Create the masks
+            causal_mask_mapping = {
+                "full_attention": create_causal_mask(**mask_kwargs),
+                "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+            }
 
         for layer_idx, mixer_block in enumerate(self.layers):
-            layer_mask = block_type_to_mask[mixer_block.block_type]
-
             hidden_states = mixer_block(
                 hidden_states,
-                attention_mask=layer_mask,
+                attention_mask=causal_mask_mapping.get(mixer_block.block_type),
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
@@ -452,27 +453,30 @@ class NemotronHModel(NemotronHPreTrainedModel):
 
         hidden_states = self.norm_f(hidden_states)
 
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
 
-    def _update_mamba_mask(self, attention_mask, past_key_values):
-        """
-        No need for zeroing states when
-            1. Cached forward
-            2. Attending to all inputs
-        """
-        mamba_mask = attention_mask
-        if (past_key_values is not None and past_key_values.has_previous_state()) or (
-            attention_mask is not None and torch.all(attention_mask == 1)
-        ):
-            mamba_mask = None
-        return mamba_mask
-
 
 class NemotronHForCausalLM(ZambaForCausalLM):
     _tied_weights_keys = {}
+
+    @staticmethod
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+        # Nemotron-H layer_types include non-attention block types (moe / mlp) that the default dispatch
+        # table doesn't enumerate, so we return both masks the forward needs as a dict.
+        mask_kwargs = {
+            "config": config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        return {
+            "full_attention": create_causal_mask(**mask_kwargs),
+            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+        }
 
     @can_return_tuple
     @auto_docstring
@@ -487,7 +491,7 @@ class NemotronHForCausalLM(ZambaForCausalLM):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | MoeCausalLMOutputWithPast:
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -499,20 +503,20 @@ class NemotronHForCausalLM(ZambaForCausalLM):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :]).float()
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states).float()
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 

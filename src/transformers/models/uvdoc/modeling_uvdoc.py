@@ -21,7 +21,6 @@
 
 import torch
 import torch.nn as nn
-from torch import Tensor
 
 from ...activations import ACT2FN
 from ...backbone_utils import BackboneMixin, filter_output_hidden_states
@@ -65,11 +64,11 @@ class UVDocConvLayer(nn.Module):
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
 
-    def forward(self, input: Tensor) -> Tensor:
-        hidden_state = self.convolution(input)
-        hidden_state = self.normalization(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.convolution(hidden_states)
+        hidden_states = self.normalization(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
 
 
 class UVDocResidualBlock(nn.Module):
@@ -250,7 +249,7 @@ class UVDocPreTrainedModel(PreTrainedModel):
     """
 
     config: UVDocConfig
-    base_model_prefix = "uvdoc"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True
@@ -261,8 +260,8 @@ class UVDocPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        super()._init_weights(module)
         """Initialize the weights."""
+        super()._init_weights(module)
         if isinstance(module, nn.PReLU):
             module.reset_parameters()
 
@@ -293,6 +292,7 @@ class UVDocBridge(UVDocPreTrainedModel):
     """
 )
 class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
+    config: UVDocBackboneConfig
     has_attentions = False
     base_model_prefix = "backbone"
 
@@ -317,7 +317,6 @@ class UVDocBackbone(BackboneMixin, UVDocPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
-        kwargs["output_hidden_states"] = True  # required to extract layers for the stages
         hidden_states = self.resnet(pixel_values)
         outputs = self.bridge(hidden_states, **kwargs)
 

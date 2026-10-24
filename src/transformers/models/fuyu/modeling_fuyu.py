@@ -19,10 +19,11 @@ from torch import nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...models.auto.modeling_auto import AutoModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_fuyu import FuyuConfig
 
 
@@ -40,7 +41,7 @@ class FuyuPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
     _no_split_modules = []
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
 
 @auto_docstring(
@@ -51,22 +52,16 @@ class FuyuPreTrainedModel(PreTrainedModel):
 class FuyuModel(FuyuPreTrainedModel):
     def __init__(self, config: FuyuConfig):
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
+        self.padding_idx = config.text_config.pad_token_id
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModel.from_config(config.text_config)
         self.vision_embed_tokens = nn.Linear(
-            config.patch_size * config.patch_size * config.num_channels, config.hidden_size
+            config.patch_size * config.patch_size * config.num_channels, config.text_config.hidden_size
         )
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def gather_continuous_embeddings(
         self,
@@ -133,7 +128,7 @@ class FuyuModel(FuyuPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
@@ -141,35 +136,29 @@ class FuyuModel(FuyuPreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
 
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("image_patches", version="v5.24", new_name="pixel_values")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
-        image_patches: torch.Tensor | None = None,
-        image_patches_indices: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
-        r"""
-        image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
-            Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
-            hidden size of the model.
-        image_patches_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Tensor of indices of the image patches in the input_ids tensor.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -186,9 +175,14 @@ class FuyuModel(FuyuPreTrainedModel):
             )
             position_ids = position_ids.unsqueeze(0)
 
-        if image_patches is not None:
-            patch_embeddings = self.get_image_features(image_patches, return_dict=True).last_hidden_state
-            patch_embeddings = patch_embeddings.to(inputs_embeds.device, inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            patch_embeddings = mm_encoder_outputs["image"].last_hidden_state.to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=patch_embeddings
             )
@@ -220,26 +214,23 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
-
     @can_return_tuple
     @auto_docstring
+    @deprecate_kwarg("image_patches", version="v5.23", new_name="pixel_values")
+    # Keep both image inputs in sig because `generate()` relies on inspect to filter out inputs
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
         # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
         image_patches: torch.Tensor | None = None,
-        image_patches_indices: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         labels: torch.Tensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         logits_to_keep: int | None = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithPast:
@@ -247,8 +238,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
             Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
             hidden size of the model.
-        image_patches_indices (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Tensor of indices of the image patches in the input_ids tensor.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
             config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
@@ -259,7 +248,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import FuyuProcessor, FuyuForCausalLM
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> processor = FuyuProcessor.from_pretrained("adept/fuyu-8b")
@@ -281,20 +270,19 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
 
         outputs = self.model(
             input_ids=input_ids,
-            image_patches=image_patches,
-            image_patches_indices=image_patches_indices,
+            pixel_values=pixel_values,
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -309,37 +297,6 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        image_patches=None,
-        image_patches_indices=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            image_patches=image_patches,
-            image_patches_indices=image_patches_indices,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and kwargs.get("use_cache", True):
-            # set image_patches and image_patches_indices to `None` for decoding stage
-            model_inputs["image_patches_indices"] = None
-            model_inputs["image_patches"] = None
-
-        return model_inputs
 
 
 __all__ = ["FuyuForCausalLM", "FuyuPreTrainedModel", "FuyuModel"]

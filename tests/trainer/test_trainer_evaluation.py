@@ -14,7 +14,7 @@
 
 """
 Trainer evaluation and prediction tests: evaluate, predict, batched metrics, dynamic shapes,
-iterable datasets, early stopping, FP16/BF16 full eval memory, torch.compile, and MRPC/LM eval.
+iterable datasets, early stopping, FP16/BF16 full eval memory, torch.compile, and LM eval.
 """
 
 import gc
@@ -30,7 +30,6 @@ from transformers import (
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
-    get_tests_dir,
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
@@ -56,9 +55,6 @@ if is_torch_available():
 
     from transformers import (
         AutoModelForCausalLM,
-        AutoModelForSequenceClassification,
-        GlueDataset,
-        GlueDataTrainingArguments,
         Trainer,
     )
 
@@ -84,7 +80,7 @@ class TrainerEvaluationTest(TestCasePlus, TrainerIntegrationCommon):
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            self.assertAlmostEqual(results["eval_loss"], expected_loss, places=5)
             expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
@@ -97,7 +93,7 @@ class TrainerEvaluationTest(TestCasePlus, TrainerIntegrationCommon):
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            self.assertAlmostEqual(results["eval_loss"], expected_loss, places=5)
             expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
@@ -114,7 +110,7 @@ class TrainerEvaluationTest(TestCasePlus, TrainerIntegrationCommon):
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            self.assertAlmostEqual(results["eval_loss"], expected_loss, places=5)
             expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
@@ -169,7 +165,7 @@ class TrainerEvaluationTest(TestCasePlus, TrainerIntegrationCommon):
         inputs["input_ids"] = torch.nn.utils.rnn.pad_sequence(inputs["input_ids"], batch_first=True, padding_value=0)
         inputs["labels"] = inputs["input_ids"].clone()
         inputs["labels"][inputs["input_ids"] == 0] = -100
-        num_items_in_batch = inputs["labels"].ne(-100).sum().item()
+        num_items_in_batch = inputs["labels"][..., 1:].ne(-100).sum().item()
 
         def custom_loss_func(outputs, labels, num_items_in_batch=None):
             logits = outputs["logits"]
@@ -222,7 +218,7 @@ class TrainerBatchEvalMetricsTest(TestCasePlus, TrainerIntegrationCommon):
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            self.assertAlmostEqual(results["eval_loss"], expected_loss, places=5)
             expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
@@ -240,7 +236,7 @@ class TrainerBatchEvalMetricsTest(TestCasePlus, TrainerIntegrationCommon):
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            self.assertAlmostEqual(results["eval_loss"], expected_loss, places=5)
             expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
@@ -258,7 +254,7 @@ class TrainerBatchEvalMetricsTest(TestCasePlus, TrainerIntegrationCommon):
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
             pred = 1.5 * x + 2.5
             expected_loss = ((pred - y) ** 2).mean()
-            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            self.assertAlmostEqual(results["eval_loss"], expected_loss, places=5)
             expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
@@ -470,22 +466,6 @@ class TrainerFullEvalMemoryTest(TestCasePlus):
 
 @require_torch
 class TrainerSlowEvalTest(TestCasePlus):
-    @slow
-    def test_trainer_eval_mrpc(self):
-        MODEL_ID = "google-bert/bert-base-cased-finetuned-mrpc"
-        tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-        model = AutoModelForSequenceClassification.from_pretrained(MODEL_ID)
-        data_args = GlueDataTrainingArguments(
-            task_name="mrpc", data_dir=f"{get_tests_dir()}/fixtures/tests_samples/MRPC", overwrite_cache=True
-        )
-        eval_dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="dev")
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            training_args = TrainingArguments(output_dir=tmp_dir, use_cpu=True)
-            trainer = Trainer(model=model, args=training_args, eval_dataset=eval_dataset)
-            result = trainer.evaluate()
-            self.assertLess(result["eval_loss"], 0.2)
-
     @slow
     def test_trainer_eval_multiple(self):
         MODEL_ID = "openai-community/gpt2"

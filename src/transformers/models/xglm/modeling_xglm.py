@@ -25,9 +25,9 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, is_torchdynamo_compiling, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_xglm import XGLMConfig
@@ -67,7 +67,7 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
             # in forward put the weights on the correct dtype and device of the param
             emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
 
-        self.register_buffer("weights", emb_weights, persistent=False)
+        self.weights = nn.Buffer(emb_weights, persistent=False)
 
     @staticmethod
     def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None):
@@ -96,7 +96,10 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
         position_ids = position_ids + self.offset
 
         max_pos = 2 + seq_len + past_key_values_length
-        if max_pos > self.weights.size(0):
+        # a compileable cache makes `past_key_values_length` a tensor, which this check cannot branch on.
+        # `is_torchdynamo_compiling()` alone is not enough: tracing with a non-compileable cache keeps it an
+        # int, and the table must still be allowed to grow there.
+        if not (is_torchdynamo_compiling() and torch.is_tensor(max_pos)) and max_pos > self.weights.size(0):
             self.make_weights(max_pos, self.embedding_dim, self.padding_idx)
 
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, self.weights.shape[-1]).detach()
@@ -206,7 +209,7 @@ class XGLMAttention(nn.Module):
                 )
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = torch.max(
-                attn_weights, torch.tensor(torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
+                attn_weights, torch.full((), torch.finfo(attn_weights.dtype).min, device=attn_weights.device)
             )
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
@@ -344,6 +347,7 @@ class XGLMPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["XGLMDecoderLayer"]
+    _can_compile_fullgraph = True
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -551,9 +555,8 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -562,6 +565,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
                 labels,
                 vocab_size=self.config.vocab_size,
                 pad_token_id=self.config.pad_token_id,
+                **kwargs,
             )
 
         return CausalLMOutputWithCrossAttentions(

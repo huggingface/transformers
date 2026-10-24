@@ -15,6 +15,7 @@
 
 import numpy as np
 import torch
+from torch.nn import functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_utils import (
@@ -24,7 +25,7 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType, is_torchvision_available, logging
+from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
@@ -97,9 +98,16 @@ def get_resize_output_image_size(
 
 
 class SmolVLMVideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    max_image_size (`dict[str, int]`, *optional*, defaults to `{"longest_edge": 364}`):
+        Maximum resolution of the frames accepted by the model. This is a dictionary containing the key
+        "longest_edge".
+    """
+
     max_image_size: dict[str, int]
 
 
+@auto_docstring
 class SmolVLMVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.LANCZOS
     size = {"longest_edge": 4 * 364}
@@ -180,7 +188,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         """Pads the sample with empty video to the padded_size
         Args:
             video (`torch.Tensor`):
-                Video to pad.
+                Batched video to pad.
             padded_size (`tuple[int, int]`):
                 Height and width to pad.
             max_num_frames (`int`):
@@ -191,17 +199,19 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 Whether to return a pixel mask.
         """
         original_size = video.size()[-2:]
+        num_frames = video.shape[1] if video.ndim == 5 else video.shape[0]
         padding_height = padded_size[0] - original_size[0]
         padding_width = padded_size[1] - original_size[1]
-        padding_frame = max_num_frames - video.shape[0]
-        if padding_width < 0 or padding_height < 0:
+        padding_frame = max_num_frames - num_frames
+        if padding_width < 0 or padding_height < 0 or padding_frame < 0:
             raise ValueError(
                 f"Padding dimensions are negative. Please make sure that the padded size is larger than the "
-                f"original size. Got padded size: {padded_size}, original size: {original_size}."
+                f"original size. Got padded max number of frames {max_num_frames} and padded size: {padded_size}, "
+                f"original number of frames {num_frames} and size: {original_size}."
             )
-        if original_size != padded_size:
+        if original_size != padded_size or padding_frame > 0:
             padding = [0, padding_width, 0, padding_height, 0, 0, 0, padding_frame]
-            video = tvF.pad(video, padding, fill=fill)
+            video = F.pad(video, padding, value=fill)
 
         # Make a pixel mask for the video, where 1 indicates a valid pixel and 0 indicates padding.
         # Mask shape is (num_frames, height, width) so we omit the channel dim
@@ -238,8 +248,7 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
                 Number of seconds to skip from the start and end if the video is long enough.
 
         Returns:
-            np.ndarray:
-                Indices to sample video frames.
+            np.ndarray: Indices to sample video frames.
         """
         if metadata is None or getattr(metadata, "fps", None) is None:
             raise ValueError(
@@ -280,7 +289,6 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
@@ -296,8 +304,6 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
-            if do_convert_rgb:
-                stacked_videos = self.convert_to_rgb(stacked_videos)
             if do_resize:
                 stacked_videos = self.resize(stacked_videos, size=size, resample=resample)
             resized_videos_grouped[shape] = stacked_videos

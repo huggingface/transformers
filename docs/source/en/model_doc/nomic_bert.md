@@ -13,10 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-02-10 and added to Hugging Face Transformers on 2026-04-01.*
+*This model was published in HF papers on 2024-02-02 and contributed to Hugging Face Transformers on 2026-04-02.*
 
 
 # NomicBERT
@@ -34,16 +34,21 @@ The abstract from the paper is the following:
 This model was contributed by community member ([Sonny Cooper](https://github.com/ed22699)).
 The original code for nomic-embed-text-v1.5 and nomic-embed-text-v1 can be found [here](https://github.com/nomic-ai/contrastors).
 
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
+
 ## Usage examples
 The examples below demonstrate how to generate dense vector embeddings for different tasks using `[AutoModel]`. Each task requires a specific instruction prefix to optimize the embedding space for that use case.
 
 <hfoptions id="usage">
 <hfoption id="Search Document">
 
-```py
+```python
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+
+from transformers import AutoModel, AutoTokenizer
+
 
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]
@@ -54,10 +59,10 @@ model_id = "nomic-ai/nomic-embed-text-v1.5"
 revision = "refs/pr/57"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
-model = AutoModel.from_pretrained(model_id, revision=revision)
+model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 
 sentences = ['search_document: TSNE is a dimensionality reduction algorithm created by Laurens van Der Maaten']
-encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt').to(model.device)
 
 with torch.no_grad():
     model_output = model(**encoded_input)
@@ -70,10 +75,12 @@ print(embeddings)
 </hfoption>
 <hfoption id="Search Query">
 
-```py
+```python
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+
+from transformers import AutoModel, AutoTokenizer
+
 
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]
@@ -84,10 +91,10 @@ model_id = "nomic-ai/nomic-embed-text-v1.5"
 revision = "refs/pr/57"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
-model = AutoModel.from_pretrained(model_id, revision=revision)
+model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 
 sentences = ['search_query: Who is Laurens van Der Maaten?']
-encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt').to(model.device)
 
 with torch.no_grad():
     model_output = model(**encoded_input)
@@ -100,10 +107,12 @@ print(embeddings)
 </hfoption>
 <hfoption id="Clustering">
 
-```py
+```python
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+
+from transformers import AutoModel, AutoTokenizer
+
 
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]
@@ -114,10 +123,10 @@ model_id = "nomic-ai/nomic-embed-text-v1.5"
 revision = "refs/pr/57"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
-model = AutoModel.from_pretrained(model_id, revision=revision)
+model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 
 sentences = ['clustering: the quick brown fox']
-encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt').to(model.device)
 
 with torch.no_grad():
     model_output = model(**encoded_input)
@@ -130,10 +139,12 @@ print(embeddings)
 </hfoption>
 <hfoption id="Classification">
 
-```py
+```python
 import torch
 import torch.nn.functional as F
-from transformers import AutoTokenizer, AutoModel
+
+from transformers import AutoModel, AutoTokenizer
+
 
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0]
@@ -144,10 +155,10 @@ model_id = "nomic-ai/nomic-embed-text-v1.5"
 revision = "refs/pr/57"
 
 tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision)
-model = AutoModel.from_pretrained(model_id, revision=revision)
+model = AutoModel.from_pretrained(model_id, revision=revision, device_map="auto")
 
 sentences = ['classification: the quick brown fox']
-encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt')
+encoded_input = tokenizer(sentences, padding=True, truncation=True, return_tensors='pt').to(model.device)
 
 with torch.no_grad():
     model_output = model(**encoded_input)
@@ -172,7 +183,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id, revision=revision, model_max
 
 # dynamic RoPE for increased context
 rope_parameters = {"rope_theta": 1000.0, "rope_type": "dynamic", "factor": 2.0}
-model = AutoModel.from_pretrained(model_id, revision=revision, rope_parameters=rope_parameters) 
+model = AutoModel.from_pretrained(model_id, revision=revision, rope_parameters=rope_parameters, device_map="auto") 
 ```
 
 ## Notes

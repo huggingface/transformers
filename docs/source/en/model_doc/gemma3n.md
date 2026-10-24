@@ -10,15 +10,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-05-20 and added to Hugging Face Transformers on 2025-06-26.*
+*This model was published in HF papers on 2024-11-12 and contributed to Hugging Face Transformers on 2025-06-26.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
 </div>
@@ -43,21 +42,22 @@ You can find all the original Gemma 3n checkpoints under the [Gemma 3n][gemma3n-
 > [!TIP]
 > Click on the Gemma 3n models in the right sidebar for more examples of how to apply Gemma to different vision, audio,
 > and language tasks.
+>
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
 
 The example below demonstrates how to generate text based on an image with [`Pipeline`] or the [`AutoModel`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="image-text-to-text",
     model="google/gemma-3n-e4b",
     device=0,
-    dtype=torch.bfloat16
 )
 pipeline(
     "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
@@ -68,13 +68,12 @@ pipeline(
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
-import torch
+```python
 from transformers import AutoProcessor, Gemma3nForConditionalGeneration
+
 
 model = Gemma3nForConditionalGeneration.from_pretrained(
     "google/gemma-3n-e4b-it",
-    dtype=torch.bfloat16,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -142,7 +141,7 @@ print(processor.decode(output[0], skip_special_tokens=True))
     ```
 
 - Text passed to the processor should have a `<image_soft_token>` token wherever an image should be inserted.
-- Gemma 3n accept at most one target audio clip per input, though multiple audio clips can be provided in few-shot
+- Gemma 3n accepts at most one target audio clip per input, though multiple audio clips can be provided in few-shot
     prompts, for example.
 - Text passed to the processor should have a `<audio_soft_token>` token wherever an audio clip should be inserted.
 - The processor has its own [`~ProcessorMixin.apply_chat_template`] method to convert chat messages to model inputs.

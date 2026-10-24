@@ -30,12 +30,12 @@ from .configuration_depth_pro import DepthProConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for DepthPro's outputs.
     """
 )
+@dataclass
 class DepthProOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`):
@@ -50,12 +50,12 @@ class DepthProOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for DepthProForDepthEstimation's output.
     """
 )
+@dataclass
 class DepthProDepthEstimatorOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -378,7 +378,7 @@ class DepthProImageEncoder(nn.Module):
         )
 
         if not return_dict:
-            return (encodings[0], features) + encodings[2:]  # ignore last_hidden_state and poooler output
+            return (encodings[0], features) + encodings[2:]  # ignore last_hidden_state and pooler output
 
         return DepthProOutput(
             last_hidden_state=encodings.last_hidden_state,
@@ -613,14 +613,8 @@ class DepthProPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
+        super()._init_weights(module)
+        if isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
             init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -654,7 +648,7 @@ class DepthProModel(DepthProPreTrainedModel):
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, DepthProModel
 
@@ -1034,16 +1028,13 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         **kwargs,
     ) -> tuple[torch.Tensor] | DepthProDepthEstimatorOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
         Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, DepthProForDepthEstimation
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

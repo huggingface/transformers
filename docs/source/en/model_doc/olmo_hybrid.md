@@ -8,13 +8,12 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-02-25.*
+*This model was contributed to Hugging Face Transformers on 2026-02-26.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -31,13 +30,14 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="allenai/OLMo-Hybrid-7B",
+    device=0,
 )
 
 result = pipe("Plants create energy through a process known as")
@@ -46,9 +46,9 @@ print(result)
 
 </hfoption>
 <hfoption id="AutoModel">
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained(
     "allenai/Olmo-Hybrid-7B"
@@ -81,6 +81,8 @@ echo -e "Plants create energy through a process known as" | transformers-cli run
 ```
 
 - The model uses a custom cache (`OlmoHybridDynamicCache`) that handles both KV cache for attention layers and recurrent state for linear attention layers.
+
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
 
 ## OlmoHybridConfig
 

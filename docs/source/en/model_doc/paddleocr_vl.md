@@ -9,16 +9,15 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-10-16 and added to Hugging Face Transformers on 2025-12-10.*
+*This model was published in HF papers on 2025-10-16 and contributed to Hugging Face Transformers on 2025-12-11.*
 
 # PaddleOCR-VL
 
 <div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
 <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
 </div>
@@ -73,15 +72,16 @@ The example below demonstrates how to generate text with PaddleOCRVL using [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 pipe = pipeline("image-text-to-text", model="PaddlePaddle/PaddleOCR-VL", dtype="bfloat16")
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg"},
+            {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"},
             {"type": "text", "text": "OCR:"},
         ]
     }
@@ -94,16 +94,17 @@ print(result[0]["generated_text"])
 
 <hfoption id="AutoModel">
 
-```py
-from transformers import AutoProcessor, AutoModelForImageTextToText
+```python
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
-model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16")
+
+model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", device_map="auto")
 processor = AutoProcessor.from_pretrained("PaddlePaddle/PaddleOCR-VL")
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg"},
+            {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"},
             {"type": "text", "text": "OCR:"},
         ]
     }
@@ -131,15 +132,16 @@ PaddleOCRVL also supports batched inference. We advise users to use `padding_sid
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 pipe = pipeline("image-text-to-text", model="PaddlePaddle/PaddleOCR-VL", dtype="bfloat16")
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg"},
+            {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"},
             {"type": "text", "text": "OCR:"},
         ]
     }
@@ -153,16 +155,17 @@ print(result[1][0]["generated_text"])
 
 <hfoption id="AutoModel">
 
-```py
-from transformers import AutoProcessor, AutoModelForImageTextToText
+```python
+from transformers import AutoModelForImageTextToText, AutoProcessor
 
-model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16")
+
+model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", device_map="auto")
 processor = AutoProcessor.from_pretrained("PaddlePaddle/PaddleOCR-VL")
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/ocr_demo2.jpg"},
+            {"type": "image", "url": "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_general_ocr_001.png"},
             {"type": "text", "text": "OCR:"},
         ]
     }
@@ -199,7 +202,9 @@ pip install flash-attn --no-build-isolation
 
 ```python
 from transformers import AutoModelForImageTextToText
-model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2")
+
+
+model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL", dtype="bfloat16", attn_implementation="flash_attention_2", device_map="auto")
 ```
 
 ## PaddleOCRVLForConditionalGeneration

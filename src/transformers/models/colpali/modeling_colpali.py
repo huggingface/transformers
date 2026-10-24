@@ -20,7 +20,7 @@ from torch import nn
 
 from transformers import AutoModel
 
-from ... import initialization as init
+from ...backbone_utils import filter_output_hidden_states
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -40,29 +40,15 @@ class ColPaliPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.vlm_config.text_config.initializer_range
-        )
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
+        super()._init_weights(module)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for ColPali embeddings output.
     """
 )
+@dataclass
 class ColPaliForRetrievalOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -106,21 +92,18 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
 
     def __init__(self, config: ColPaliConfig):
         super().__init__(config)
-        self.config = config
         self.vocab_size = config.vlm_config.text_config.vocab_size
-
         self.vlm = AutoModel.from_config(config.vlm_config)
-
         self.embedding_dim = self.config.embedding_dim
         self.embedding_proj_layer = nn.Linear(
             self.config.vlm_config.text_config.hidden_size,
             self.embedding_dim,
         )
-
         self.post_init()
 
     @can_return_tuple
     @auto_docstring
+    @filter_output_hidden_states
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -130,18 +113,14 @@ class ColPaliForRetrieval(ColPaliPreTrainedModel):
     ) -> ColPaliForRetrievalOutput:
         if pixel_values is not None:
             pixel_values = pixel_values.to(dtype=self.dtype)
-        output_hidden_states = kwargs.pop("output_hidden_states", None)
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
 
         vlm_output = self.vlm(
             input_ids=input_ids,
             attention_mask=attention_mask,
             pixel_values=pixel_values,
-            output_hidden_states=True,
             **kwargs,
         )
-        vlm_hidden_states = vlm_output.hidden_states if output_hidden_states else None
+        vlm_hidden_states = vlm_output.hidden_states
         vlm_image_hidden_states = vlm_output.image_hidden_states if pixel_values is not None else None
 
         last_hidden_states = vlm_output[0]  # (batch_size, sequence_length, hidden_size)

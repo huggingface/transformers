@@ -208,6 +208,19 @@ def _get_adamw_torch(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     return AdamW, ctx.optimizer_kwargs
 
 
+def has_mixed_dtensor(tensors) -> bool:
+    """
+    Whether `tensors` do not all share one device mesh, so whole-set ops (fused/foreach kernels, `clip_grad_norm_`)
+    cannot span them and the Trainer groups them by mesh. Expert parallelism leaves the experts sharded and everything
+    else as plain tensors; under a 2-D (fsdp, tp) mesh everything is a `DTensor`, but the experts live on the full mesh
+    and the rest on the `fsdp` sub-mesh.
+    """
+    from torch.distributed.tensor import DTensor
+
+    meshes = {t.device_mesh if isinstance(t, DTensor) else None for t in tensors}
+    return len(meshes) > 1
+
+
 def _get_adamw_torch_xla(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
     """Get Torch XLA syncfree AdamW optimizer."""
     try:
@@ -228,17 +241,6 @@ def _get_adamw_torch_npu_fused(ctx: OptimizerContext) -> tuple[Any, dict[str, An
         return NpuFusedAdamW, ctx.optimizer_kwargs
     except ImportError:
         raise ValueError("Trainer failed to import FusedAdamW from torch_npu.")
-
-
-def _get_adamw_apex_fused(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
-    """Get Apex Fused Adam optimizer."""
-    try:
-        from apex.optimizers import FusedAdam
-
-        ctx.optimizer_kwargs.update(ctx.adam_kwargs)
-        return FusedAdam, ctx.optimizer_kwargs
-    except ImportError:
-        raise ValueError("Trainer tried to instantiate apex FusedAdam but apex is not installed!")
 
 
 def _get_bitsandbytes_optimizer(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
@@ -453,12 +455,6 @@ def _get_torchao_optimizer(ctx: OptimizerContext) -> tuple[Any, dict[str, Any]]:
             "Install it with `pip install torchao` or follow the instructions here: "
             "https://github.com/pytorch/ao"
         )
-    if version.parse(importlib.metadata.version("torch")) <= version.parse("2.4"):
-        raise ImportError(
-            "You need to have `torch>2.4` in order to use torch 4-bit optimizers. "
-            "Install it with `pip install --upgrade torch` it is available on pipy. "
-            "Otherwise, you need to install torch nightly."
-        )
 
     if version.parse(importlib.metadata.version("torchao")) >= version.parse("0.11.0"):
         from torchao.optim import AdamW4bit, AdamW8bit
@@ -610,7 +606,6 @@ _OPTIMIZER_HANDLERS: dict[str, OptimizerHandler] = {
     OptimizerNames.ADAMW_TORCH_FUSED: _get_adamw_torch,
     OptimizerNames.ADAMW_TORCH_XLA: _get_adamw_torch_xla,
     OptimizerNames.ADAMW_TORCH_NPU_FUSED: _get_adamw_torch_npu_fused,
-    OptimizerNames.ADAMW_APEX_FUSED: _get_adamw_apex_fused,
     OptimizerNames.ADAMW_ANYPRECISION: _get_adamw_anyprecision,
     OptimizerNames.SGD: _get_sgd,
     OptimizerNames.ADAGRAD: _get_adagrad,

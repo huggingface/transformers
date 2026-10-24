@@ -1,4 +1,4 @@
-# Copyright 2022 Meta Platforms, Inc.s and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,6 @@
 # limitations under the License.
 """PyTorch MaskFormer model."""
 
-import math
 from dataclasses import dataclass
 from numbers import Number
 
@@ -23,10 +22,8 @@ from huggingface_hub.dataclasses import strict
 from torch import Tensor, nn
 
 from ... import initialization as init
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
     auto_docstring,
@@ -35,9 +32,9 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from ..auto import CONFIG_MAPPING, AutoBackbone, AutoConfig
+from ..auto import AutoBackbone, AutoConfig
 from ..detr.configuration_detr import DetrConfig
-from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput
+from ..detr.modeling_detr import DetrDecoder, DetrDecoderOutput, DetrSinePositionEmbedding
 from .configuration_maskformer_swin import MaskFormerSwinConfig
 
 
@@ -98,7 +95,22 @@ class MaskFormerConfig(PreTrainedConfig):
     """
 
     model_type = "maskformer"
-    sub_configs = {"backbone_config": AutoConfig, "decoder_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="swin",
+            init_kwargs={
+                "depths": [2, 2, 18, 2],
+                "drop_path_rate": 0.3,
+                "image_size": 384,
+                "embed_dim": 128,
+                "num_heads": [4, 8, 16, 32],
+                "window_size": 12,
+                "out_features": ["stage1", "stage2", "stage3", "stage4"],
+            },
+        ),
+        "decoder_config": SubConfigSpec(config_class=AutoConfig, model_type="detr"),
+    }
     attribute_map = {"hidden_size": "mask_feature_size"}
     backbones_supported = ["resnet", "swin"]
     decoders_supported = ["detr"]
@@ -117,57 +129,28 @@ class MaskFormerConfig(PreTrainedConfig):
     output_auxiliary_logits: bool | None = None
 
     def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="swin",
-            default_config_kwargs={
-                "depths": [2, 2, 18, 2],
-                "drop_path_rate": 0.3,
-                "image_size": 384,
-                "embed_dim": 128,
-                "num_heads": [4, 8, 16, 32],
-                "window_size": 12,
-                "out_features": ["stage1", "stage2", "stage3", "stage4"],
-            },
-            **kwargs,
-        )
-
-        # verify that the backbone is supported
-        if self.backbone_config is not None and self.backbone_config.model_type not in self.backbones_supported:
-            logger.warning_once(
-                f"Backbone {self.backbone_config.model_type} is not a supported model and may not be compatible with MaskFormer. "
-                f"Supported model types: {','.join(self.backbones_supported)}"
-            )
-
-        if self.decoder_config is None:
-            # fall back to https://huggingface.co/facebook/detr-resnet-50
-            self.decoder_config = MaskFormerDetrConfig()
-        else:
-            # verify that the decoder is supported
-            decoder_type = (
-                self.decoder_config.pop("model_type")
-                if isinstance(self.decoder_config, dict)
-                else self.decoder_config.model_type
-            )
-            if decoder_type not in self.decoders_supported:
-                raise ValueError(
-                    f"Transformer Decoder {decoder_type} not supported, please use one of"
-                    f" {','.join(self.decoders_supported)}"
-                )
-            if isinstance(self.decoder_config, dict):
-                config_class = CONFIG_MAPPING[decoder_type]
-                self.decoder_config = config_class.from_dict(self.decoder_config)
-
+        super().__post_init__(**kwargs)
         self.num_attention_heads = self.decoder_config.encoder_attention_heads
         self.num_hidden_layers = self.decoder_config.num_hidden_layers
-        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        super().validate_architecture()
+        if self.backbone_config.model_type not in self.backbones_supported:
+            logger.warning_once(
+                f"Backbone {self.backbone_config.model_type} is not a supported model and may not be compatible with Mask2Former. "
+                f"Supported model types: {','.join(self.backbones_supported)}"
+            )
+        if self.decoder_config.model_type not in self.decoders_supported:
+            raise ValueError(
+                f"Transformer Decoder {self.decoder_config.model_type} not supported, please use one of"
+                f" {','.join(self.decoders_supported)}"
+            )
 
 
 class DetrDecoderOutput(DetrDecoderOutput):
     pass
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     MaskFormer's pixel level module output. It returns both the last and (optionally) the hidden states from the
@@ -178,6 +161,7 @@ class DetrDecoderOutput(DetrDecoderOutput):
     as **pixel embeddings**
     """
 )
+@dataclass
 class MaskFormerPixelLevelModuleOutput(ModelOutput):
     r"""
     encoder_last_hidden_state (`torch.FloatTensor` of shape`(batch_size, num_channels, height, width)`):
@@ -200,13 +184,13 @@ class MaskFormerPixelLevelModuleOutput(ModelOutput):
     decoder_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     MaskFormer's pixel decoder module output, practically a Feature Pyramid Network. It returns the last hidden state
     and (optionally) the hidden states.
     """
 )
+@dataclass
 class MaskFormerPixelDecoderOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -218,12 +202,12 @@ class MaskFormerPixelDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`MaskFormerModel`]. This class returns all the needed hidden states to compute the logits.
     """
 )
+@dataclass
 class MaskFormerModelOutput(ModelOutput):
     r"""
     encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -259,7 +243,6 @@ class MaskFormerModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`MaskFormerForInstanceSegmentation`].
@@ -270,6 +253,7 @@ class MaskFormerModelOutput(ModelOutput):
     [`~MaskFormerImageProcessor] for details regarding usage.
     """
 )
+@dataclass
 class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):
@@ -512,6 +496,11 @@ class MaskFormerHungarianMatcher(nn.Module):
     def forward(self, masks_queries_logits, class_queries_logits, mask_labels, class_labels) -> list[tuple[Tensor]]:
         """Performs the matching
 
+        Invalid predictions or targets resulting in NaN or inf values in the matcher cost matrix do not raise
+        errors and instead will only be assigned if no other valid prediction or target can be matched instead.
+        This avoids random crashes at training time. A high training loss indicates that some of the predictions
+        or targets might be invalid. If the loss doesn't improve after a couple of steps the model has likely diverged.
+
         Params:
             masks_queries_logits (`torch.Tensor`):
                 A tensor` of dim `batch_size, num_queries, num_labels` with the
@@ -557,6 +546,10 @@ class MaskFormerHungarianMatcher(nn.Module):
             cost_dice = pair_wise_dice_loss(pred_mask_flat, target_mask_flat)
             # final cost matrix
             cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
+            # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+            # these predictions only if there are no other valid predictions.
+            max_value = torch.finfo(cost_matrix.dtype).max
+            cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
             # do the assignment using the hungarian algorithm in scipy
             assigned_indices: tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
             indices.append(assigned_indices)
@@ -612,7 +605,7 @@ class MaskFormerLoss(nn.Module):
         self.eos_coef = eos_coef
         empty_weight = torch.ones(self.num_labels + 1)
         empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
+        self.empty_weight = nn.Buffer(empty_weight)
 
     def _max_by_axis(self, the_list: list[list[int]]) -> list[int]:
         maxes = the_list[0]
@@ -924,51 +917,8 @@ class MaskFormerPixelDecoder(nn.Module):
         )
 
 
-# copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
-class MaskFormerSinePositionEmbedding(nn.Module):
-    """
-    This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
-    need paper, generalized to work on images.
-    """
-
-    def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
-    ):
-        super().__init__()
-        if scale is not None and normalize is False:
-            raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
-        self.temperature = temperature
-        self.normalize = normalize
-        self.scale = 2 * math.pi if scale is None else scale
-
-    @compile_compatible_method_lru_cache(maxsize=1)
-    def forward(
-        self,
-        shape: torch.Size,
-        device: torch.device | str,
-        dtype: torch.dtype,
-        mask: Tensor | None = None,
-    ) -> Tensor:
-        if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
-            eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
-
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
-
-        pos_x = x_embed[:, :, :, None] / dim_t
-        pos_y = y_embed[:, :, :, None] / dim_t
-        pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
-        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
-        return pos
+class MaskFormerSinePositionEmbedding(DetrSinePositionEmbedding):
+    pass
 
 
 class PredictionBlock(nn.Module):
@@ -1085,7 +1035,9 @@ class MaskFormerTransformerModule(nn.Module):
         super().__init__()
         hidden_size = config.decoder_config.hidden_size
         should_project = in_features != hidden_size
-        self.position_embedder = MaskFormerSinePositionEmbedding(num_pos_feats=hidden_size // 2, normalize=True)
+        self.position_embedder = MaskFormerSinePositionEmbedding(
+            num_position_features=hidden_size // 2, normalize=True
+        )
         self.queries_embedder = nn.Embedding(config.decoder_config.num_queries, hidden_size)
         self.input_projection = nn.Conv2d(in_features, hidden_size, kernel_size=1) if should_project else None
         self.decoder = MaskFormerDetrDecoder(config=config.decoder_config)
@@ -1099,7 +1051,6 @@ class MaskFormerTransformerModule(nn.Module):
     ) -> DetrDecoderOutput:
         if self.input_projection is not None:
             image_features = self.input_projection(image_features)
-        object_queries = self.position_embedder(image_features.shape, image_features.device, image_features.dtype)
         # repeat the queries "q c -> b q c"
         batch_size = image_features.shape[0]
         queries_embeddings = self.queries_embedder.weight.unsqueeze(0).repeat(batch_size, 1, 1)
@@ -1111,8 +1062,12 @@ class MaskFormerTransformerModule(nn.Module):
 
         batch_size, num_channels, height, width = image_features.shape
         # rearrange both image_features and object_queries "b c h w -> b (h w) c"
-        image_features = image_features.view(batch_size, num_channels, height * width).permute(0, 2, 1)
-        object_queries = object_queries.view(batch_size, num_channels, height * width).permute(0, 2, 1)
+        object_queries = (
+            self.position_embedder(image_features.shape, image_features.device, image_features.dtype)
+            .view(batch_size, num_channels, height * width)
+            .transpose(1, 2)
+        )
+        image_features = image_features.view(batch_size, num_channels, height * width).transpose(1, 2)
 
         decoder_output: DetrDecoderOutput = self.decoder(
             inputs_embeds=inputs_embeds,
@@ -1137,8 +1092,8 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
-        std = self.config.init_std
         if isinstance(module, MaskFormerTransformerModule):
             if module.input_projection is not None:
                 init.xavier_uniform_(module.input_projection.weight, gain=xavier_std)
@@ -1160,23 +1115,16 @@ class MaskFormerPreTrainedModel(PreTrainedModel):
                 if isinstance(submodule, nn.Linear):
                     init.xavier_uniform_(submodule.weight, gain=xavier_std)
                     init.constant_(submodule.bias, 0)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        # copied from DETR
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            init.normal_(module.weight, mean=0.0, std=std)
+        # The base class treats BatchNorm as a norm (weight=ones_); MaskFormer instead applies a
+        # normal_ init to the weight and resets the running stats, so this branch must be kept.
+        elif isinstance(module, nn.BatchNorm2d):
+            init.normal_(module.weight, mean=0.0, std=self.config.init_std)
             if module.bias is not None:
                 init.zeros_(module.bias)
             if getattr(module, "running_mean", None) is not None:
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, MaskFormerLoss):
             empty_weight = torch.ones(module.num_labels + 1)
             empty_weight[-1] = module.eos_coef
@@ -1210,7 +1158,7 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerModel
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
@@ -1394,7 +1342,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
@@ -1429,7 +1377,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on COCO panoptic segmentation

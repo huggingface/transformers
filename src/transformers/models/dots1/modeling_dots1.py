@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -28,22 +27,17 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import (
-    use_experts_implementation,
-    use_kernel_forward_from_hub,
-    use_kernel_func_from_hub,
-    use_kernelized_func,
-)
+from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_dots1 import Dots1Config
 
 
@@ -69,9 +63,7 @@ class Dots1RMSNorm(nn.Module):
 
 
 class Dots1RotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: Dots1Config, device=None):
+    def __init__(self, config: Dots1Config):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -82,26 +74,18 @@ class Dots1RotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: Dots1Config | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config: Dots1Config, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -110,25 +94,17 @@ class Dots1RotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -140,7 +116,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
+@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -293,22 +269,48 @@ class Dots1MLP(nn.Module):
 
 
 class Dots1TopkRouter(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: Dots1Config):
         super().__init__()
-        self.config = config
-        self.n_routed_experts = config.n_routed_experts
-
-        self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.routed_scaling_factor = config.routed_scaling_factor
+        self.num_group = config.n_group
+        self.topk_group = config.topk_group
+        self.norm_topk_prob = config.norm_topk_prob
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
-        hidden_states = hidden_states.view(-1, self.config.hidden_size)
+        hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        return router_logits
+        scores = router_logits.sigmoid()
+        scores_for_choice = scores + self.e_score_correction_bias
+        group_scores = (
+            scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
+            .topk(2, dim=-1)[0]
+            .sum(dim=-1)
+        )
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, group_idx, 1)
+        score_mask = (
+            group_mask.unsqueeze(-1)
+            .expand(-1, self.num_group, self.num_experts // self.num_group)
+            .reshape(-1, self.num_experts)
+        )
+        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        topk_weights = scores.gather(1, topk_indices)
+        if self.norm_topk_prob:
+            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weights /= denominator
+        topk_weights = topk_weights * self.routed_scaling_factor
+        return router_logits, topk_weights, topk_indices
 
 
 @use_experts_implementation
-class Dots1NaiveMoe(nn.Module):
+class Dots1Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
     def __init__(self, config):
@@ -328,7 +330,7 @@ class Dots1NaiveMoe(nn.Module):
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
@@ -352,51 +354,19 @@ class Dots1MoE(nn.Module):
     A mixed expert module containing shared experts.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: Dots1Config):
         super().__init__()
         self.config = config
-        self.experts = Dots1NaiveMoe(config)
+        self.experts = Dots1Experts(config)
         self.gate = Dots1TopkRouter(config)
         self.shared_experts = Dots1MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
-        self.n_routed_experts = config.n_routed_experts
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.top_k = config.num_experts_per_tok
 
-    def route_tokens_to_experts(self, router_logits):
-        router_logits = router_logits.sigmoid()
-        router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
-        group_scores = (
-            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .topk(2, dim=-1)[0]
-            .sum(dim=-1)
-        )
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
-        group_mask = torch.zeros_like(group_scores)
-        group_mask.scatter_(1, group_idx, 1)
-        score_mask = (
-            group_mask.unsqueeze(-1)
-            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .reshape(-1, self.n_routed_experts)
-        )
-        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = router_logits.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return topk_indices, topk_weights
-
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        router_logits = self.gate(hidden_states)
-        topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
+        _, topk_weights, topk_indices = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
@@ -466,6 +436,7 @@ class Dots1PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Dots1DecoderLayer,
         "attentions": Dots1Attention,
+        "router_logits": OutputRecorder(Dots1TopkRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = None
@@ -476,7 +447,7 @@ class Dots1PreTrainedModel(PreTrainedModel):
         if isinstance(module, Dots1TopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, Dots1NaiveMoe):
+        elif isinstance(module, Dots1Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
@@ -512,7 +483,7 @@ class Dots1Model(Dots1PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -527,9 +498,7 @@ class Dots1Model(Dots1PreTrainedModel):
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
             mask_kwargs = {
                 "config": self.config,
                 "inputs_embeds": inputs_embeds,
@@ -537,13 +506,13 @@ class Dots1Model(Dots1PreTrainedModel):
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
             }
-            # Create the masks
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
+            mask_creation_functions = {
+                "full_attention": lambda: create_causal_mask(**mask_kwargs),
+                "sliding_attention": lambda: create_sliding_window_causal_mask(**mask_kwargs),
             }
-            # The sliding window alternating layers are not always activated depending on the config
-            if self.has_sliding_layers:
-                causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
+            causal_mask_mapping = {}
+            for layer_type in set(self.config.layer_types):
+                causal_mask_mapping[layer_type] = mask_creation_functions[layer_type]()
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -560,9 +529,9 @@ class Dots1Model(Dots1PreTrainedModel):
             )
 
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
+            past_key_values=past_key_values,
         )
 
 
@@ -571,6 +540,7 @@ class Dots1ForCausalLM(Dots1PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -594,13 +564,8 @@ class Dots1ForCausalLM(Dots1PreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
+    ) -> MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -617,7 +582,7 @@ class Dots1ForCausalLM(Dots1PreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-        outputs: BaseModelOutputWithPast = self.model(
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -629,19 +594,20 @@ class Dots1ForCausalLM(Dots1PreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 

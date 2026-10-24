@@ -23,6 +23,7 @@ from transformers import PreTrainedModel
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 
 from ... import initialization as init
+from ...masking_utils import create_bidirectional_mask
 from ...utils import ModelOutput, auto_docstring, logging
 from ..auto import AutoModelForKeypointDetection
 
@@ -48,7 +49,7 @@ def concat_pairs(tensor_tuple0: tuple[torch.Tensor], tensor_tuple1: tuple[torch.
 
 def normalize_keypoints(keypoints: torch.Tensor, height: int, width: int) -> torch.Tensor:
     """
-    Normalize keypoints locations based on image image_shape
+    Normalize keypoints locations based on image_shape
 
     Args:
         keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
@@ -145,7 +146,6 @@ def arange_like(x, dim: int) -> torch.Tensor:
     return x.new_ones(x.shape[dim]).cumsum(0) - 1
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of SuperGlue keypoint matching models. Due to the nature of keypoint detection and matching, the number
@@ -155,6 +155,7 @@ def arange_like(x, dim: int) -> torch.Tensor:
     information.
     """
 )
+@dataclass
 class SuperGlueKeypointMatchingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
@@ -587,11 +588,11 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         # Keypoint MLP encoder.
         descriptors = descriptors + last_hidden_state
 
-        if mask is not None:
-            input_shape = descriptors.size()
-            extended_attention_mask = self.get_extended_attention_mask(mask, input_shape)
-        else:
-            extended_attention_mask = torch.ones((batch_size, num_keypoints), device=keypoints.device)
+        extended_attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=descriptors[:, 0:1, :],  # force q_len == 1
+            attention_mask=mask,
+        )
 
         # Multi-layer Transformer network.
         gnn_outputs = self.gnn(
@@ -678,7 +679,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"

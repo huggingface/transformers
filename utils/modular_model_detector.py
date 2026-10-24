@@ -257,6 +257,7 @@ class CodeSimilarityAnalyzer:
         self.model = AutoModel.from_pretrained(EMBEDDING_MODEL, torch_dtype="auto", device_map="auto").eval()
 
         self.device = self.model.device
+        self.dtype = self.model.dtype
         self.index_dir: Path | None = None
 
     # ---------- HUB IO ----------

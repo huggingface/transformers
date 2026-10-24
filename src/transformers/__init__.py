@@ -18,11 +18,10 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "5.7.0.dev0"
+__version__ = "5.21.0.dev0"
 
-import importlib
+import re
 import sys
-import types
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -54,7 +53,7 @@ from .utils import is_torchaudio_available as is_torchaudio_available
 from .utils import is_torchvision_available as is_torchvision_available
 from .utils import is_vision_available as is_vision_available
 from .utils import logging as logging
-from .utils.import_utils import define_import_structure
+from .utils.import_utils import _LegacyModuleAliasFinder, define_import_structure
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -65,46 +64,25 @@ _import_structure = {
     "cli": [],
     "configuration_utils": ["PreTrainedConfig", "PretrainedConfig"],
     "convert_slow_tokenizers_checkpoints_to_fast": [],
-    "data": [
-        "DataProcessor",
-        "InputExample",
-        "InputFeatures",
-        "SingleSentenceClassificationProcessor",
-        "SquadExample",
-        "SquadFeatures",
-        "SquadV1Processor",
-        "SquadV2Processor",
-        "glue_compute_metrics",
-        "glue_convert_examples_to_features",
-        "glue_output_modes",
-        "glue_processors",
-        "glue_tasks_num_labels",
-        "squad_convert_examples_to_features",
-        "xnli_compute_metrics",
-        "xnli_output_modes",
-        "xnli_processors",
-        "xnli_tasks_num_labels",
-    ],
+    "data": [],
     "data.data_collator": [
         "DataCollator",
         "DataCollatorForLanguageModeling",
         "DataCollatorForMultipleChoice",
         "DataCollatorForPermutationLanguageModeling",
         "DataCollatorForSeq2Seq",
-        "DataCollatorForSOP",
         "DataCollatorForTokenClassification",
-        "DataCollatorForWholeWordMask",
         "DataCollatorWithFlattening",
         "DataCollatorWithPadding",
         "DefaultDataCollator",
         "default_data_collator",
     ],
-    "data.metrics": [],
-    "data.processors": [],
     "debug_utils": [],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
+    "distributed": ["DistributedConfig"],
     "dynamic_module_utils": [],
+    "exporters": [],
     "feature_extraction_sequence_utils": ["SequenceFeatureExtractor"],
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
@@ -113,6 +91,7 @@ _import_structure = {
         "CompileConfig",
         "ContinuousBatchingConfig",
         "GenerationConfig",
+        "TextDiffusionStreamer",
         "TextIteratorStreamer",
         "TextStreamer",
         "WatermarkingConfig",
@@ -259,11 +238,14 @@ _import_structure = {
         "FineGrainedFP8Config",
         "FourOverSixConfig",
         "FPQuantConfig",
+        "GemmaQuantizationConfig",
+        "GgufConfig",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
         "MetalConfig",
         "Mxfp4Config",
+        "NVFP4Config",
         "QuantoConfig",
         "QuarkConfig",
         "SinqConfig",
@@ -347,7 +329,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure.setdefault("image_processing_backends", [])
     _import_structure["image_processing_backends"] += ["TorchvisionBackend"]
-    _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
+    _import_structure["video_processing_utils"] = ["BaseVideoProcessor", "VideoProcessorMixin"]
 
 # PyTorch-backed objects
 try:
@@ -358,28 +340,35 @@ except OptionalDependencyNotAvailable:
 
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
-    _import_structure["model_debugging_utils"] = [
-        "model_addition_debugger_context",
-    ]
     _import_structure["activations"] = []
+    _import_structure["backbone_utils"] = ["BackboneConfigMixin", "BackboneMixin"]
     _import_structure["cache_utils"] = [
+        "Cache",
         "CacheLayerMixin",
+        "DynamicCache",
+        "DynamicIndexedLayer",
         "DynamicLayer",
+        "EncoderDecoderCache",
+        "Fp8QuantizedLayer",
+        "HQQQuantizedLayer",
+        "QuantizedCache",
+        "QuantoQuantizedLayer",
+        "StaticCache",
+        "StaticIndexedLayer",
         "StaticLayer",
         "StaticSlidingWindowLayer",
-        "QuantoQuantizedLayer",
-        "HQQQuantizedLayer",
-        "Cache",
-        "DynamicCache",
-        "EncoderDecoderCache",
-        "QuantizedCache",
-        "StaticCache",
     ]
-    _import_structure["data.datasets"] = [
-        "GlueDataset",
-        "GlueDataTrainingArguments",
-        "SquadDataset",
-        "SquadDataTrainingArguments",
+    _import_structure["core_model_loading"] = [
+        "Chunk",
+        "Concatenate",
+        "ConversionOps",
+        "GroupWeightRename",
+        "MergeModulelist",
+        "PermuteForRope",
+        "SplitModulelist",
+        "VisionFuseAndPermuteForRope",
+        "VisionUnfuseAndPermuteForRope",
+        "WeightConverter",
     ]
     _import_structure["generation"].extend(
         [
@@ -393,7 +382,6 @@ else:
             "EncoderRepetitionPenaltyLogitsProcessor",
             "EosTokenCriteria",
             "EpsilonLogitsWarper",
-            "MinPLogitsWarper",
             "EtaLogitsWarper",
             "ExponentialDecayLengthPenalty",
             "ForcedBOSTokenLogitsProcessor",
@@ -407,6 +395,7 @@ else:
             "MaxTimeCriteria",
             "MinLengthLogitsProcessor",
             "MinNewTokensLengthLogitsProcessor",
+            "MinPLogitsWarper",
             "NoBadWordsLogitsProcessor",
             "NoRepeatNGramLogitsProcessor",
             "PrefixConstrainedLogitsProcessor",
@@ -438,24 +427,17 @@ else:
         "convert_and_export_with_cache",
     ]
 
-    _import_structure["core_model_loading"] = [
-        "Chunk",
-        "Concatenate",
-        "ConversionOps",
-        "MergeModulelist",
-        "PermuteForRope",
-        "SplitModulelist",
-        "WeightConverter",
-    ]
+    _import_structure["integrations.hub_kernels"] = ["kernelize"]
+    _import_structure["masking_utils"] = ["AttentionMaskInterface"]
+    _import_structure["model_debugging_utils"] = ["model_addition_debugger_context"]
     _import_structure["modeling_flash_attention_utils"] = []
     _import_structure["modeling_layers"] = ["GradientCheckpointingLayer"]
     _import_structure["modeling_outputs"] = []
-    _import_structure["backbone_utils"] = ["BackboneConfigMixin", "BackboneMixin"]
-    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "dynamic_rope_update", "RopeParameters"]
-    _import_structure["modeling_utils"] = ["PreTrainedModel", "AttentionInterface"]
-    _import_structure["masking_utils"] = ["AttentionMaskInterface"]
+    _import_structure["modeling_rope_utils"] = ["ROPE_INIT_FUNCTIONS", "RopeParameters", "dynamic_rope_update"]
+    _import_structure["modeling_utils"] = ["AttentionInterface", "PreTrainedModel"]
     _import_structure["optimization"] = [
         "Adafactor",
+        "GreedyLR",
         "get_constant_schedule",
         "get_constant_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
@@ -469,7 +451,6 @@ else:
         "get_reduce_on_plateau_schedule",
         "get_scheduler",
         "get_wsd_schedule",
-        "GreedyLR",
     ]
     _import_structure["pytorch_utils"] = ["Conv1D", "apply_chunking_to_forward"]
     _import_structure["time_series_utils"] = []
@@ -485,12 +466,15 @@ if TYPE_CHECKING:
     from .backbone_utils import BackboneConfigMixin, BackboneMixin
     from .cache_utils import Cache as Cache
     from .cache_utils import DynamicCache as DynamicCache
+    from .cache_utils import DynamicIndexedLayer as DynamicIndexedLayer
     from .cache_utils import DynamicLayer as DynamicLayer
     from .cache_utils import EncoderDecoderCache as EncoderDecoderCache
+    from .cache_utils import Fp8QuantizedLayer as Fp8QuantizedLayer
     from .cache_utils import HQQQuantizedLayer as HQQQuantizedLayer
     from .cache_utils import QuantizedCache as QuantizedCache
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
     from .cache_utils import StaticCache as StaticCache
+    from .cache_utils import StaticIndexedLayer as StaticIndexedLayer
     from .cache_utils import StaticLayer as StaticLayer
     from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
     from .configuration_utils import PreTrainedConfig as PreTrainedConfig
@@ -500,30 +484,15 @@ if TYPE_CHECKING:
     from .core_model_loading import Chunk as Chunk
     from .core_model_loading import Concatenate as Concatenate
     from .core_model_loading import ConversionOps as ConversionOps
+    from .core_model_loading import GroupWeightRename as GroupWeightRename
     from .core_model_loading import MergeModulelist as MergeModulelist
     from .core_model_loading import PermuteForRope as PermuteForRope
     from .core_model_loading import SplitModulelist as SplitModulelist
+    from .core_model_loading import VisionFuseAndPermuteForRope as VisionFuseAndPermuteForRope
+    from .core_model_loading import VisionUnfuseAndPermuteForRope as VisionUnfuseAndPermuteForRope
     from .core_model_loading import WeightConverter as WeightConverter
 
     # Data
-    from .data import DataProcessor as DataProcessor
-    from .data import InputExample as InputExample
-    from .data import InputFeatures as InputFeatures
-    from .data import SingleSentenceClassificationProcessor as SingleSentenceClassificationProcessor
-    from .data import SquadExample as SquadExample
-    from .data import SquadFeatures as SquadFeatures
-    from .data import SquadV1Processor as SquadV1Processor
-    from .data import SquadV2Processor as SquadV2Processor
-    from .data import glue_compute_metrics as glue_compute_metrics
-    from .data import glue_convert_examples_to_features as glue_convert_examples_to_features
-    from .data import glue_output_modes as glue_output_modes
-    from .data import glue_processors as glue_processors
-    from .data import glue_tasks_num_labels as glue_tasks_num_labels
-    from .data import squad_convert_examples_to_features as squad_convert_examples_to_features
-    from .data import xnli_compute_metrics as xnli_compute_metrics
-    from .data import xnli_output_modes as xnli_output_modes
-    from .data import xnli_processors as xnli_processors
-    from .data import xnli_tasks_num_labels as xnli_tasks_num_labels
     from .data.data_collator import DataCollator as DataCollator
     from .data.data_collator import DataCollatorForLanguageModeling as DataCollatorForLanguageModeling
     from .data.data_collator import DataCollatorForMultipleChoice as DataCollatorForMultipleChoice
@@ -531,17 +500,12 @@ if TYPE_CHECKING:
         DataCollatorForPermutationLanguageModeling as DataCollatorForPermutationLanguageModeling,
     )
     from .data.data_collator import DataCollatorForSeq2Seq as DataCollatorForSeq2Seq
-    from .data.data_collator import DataCollatorForSOP as DataCollatorForSOP
     from .data.data_collator import DataCollatorForTokenClassification as DataCollatorForTokenClassification
-    from .data.data_collator import DataCollatorForWholeWordMask as DataCollatorForWholeWordMask
     from .data.data_collator import DataCollatorWithFlattening as DataCollatorWithFlattening
     from .data.data_collator import DataCollatorWithPadding as DataCollatorWithPadding
     from .data.data_collator import DefaultDataCollator as DefaultDataCollator
     from .data.data_collator import default_data_collator as default_data_collator
-    from .data.datasets import GlueDataset as GlueDataset
-    from .data.datasets import GlueDataTrainingArguments as GlueDataTrainingArguments
-    from .data.datasets import SquadDataset as SquadDataset
-    from .data.datasets import SquadDataTrainingArguments as SquadDataTrainingArguments
+    from .distributed import DistributedConfig as DistributedConfig
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
     # Feature Extractor
@@ -591,6 +555,7 @@ if TYPE_CHECKING:
     from .generation import SynthIDTextWatermarkingConfig as SynthIDTextWatermarkingConfig
     from .generation import SynthIDTextWatermarkLogitsProcessor as SynthIDTextWatermarkLogitsProcessor
     from .generation import TemperatureLogitsWarper as TemperatureLogitsWarper
+    from .generation import TextDiffusionStreamer as TextDiffusionStreamer
     from .generation import TextIteratorStreamer as TextIteratorStreamer
     from .generation import TextStreamer as TextStreamer
     from .generation import TopHLogitsWarper as TopHLogitsWarper
@@ -625,6 +590,7 @@ if TYPE_CHECKING:
     from .integrations import is_wandb_available as is_wandb_available
     from .integrations.executorch import TorchExportableModuleWithStaticCache as TorchExportableModuleWithStaticCache
     from .integrations.executorch import convert_and_export_with_cache as convert_and_export_with_cache
+    from .integrations.hub_kernels import kernelize as kernelize
     from .masking_utils import AttentionMaskInterface as AttentionMaskInterface
     from .model_debugging_utils import model_addition_debugger_context as model_addition_debugger_context
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
@@ -775,10 +741,13 @@ if TYPE_CHECKING:
     from .utils.quantization_config import FineGrainedFP8Config as FineGrainedFP8Config
     from .utils.quantization_config import FourOverSixConfig as FourOverSixConfig
     from .utils.quantization_config import FPQuantConfig as FPQuantConfig
+    from .utils.quantization_config import GemmaQuantizationConfig as GemmaQuantizationConfig
+    from .utils.quantization_config import GgufConfig as GgufConfig
     from .utils.quantization_config import GPTQConfig as GPTQConfig
     from .utils.quantization_config import HiggsConfig as HiggsConfig
     from .utils.quantization_config import HqqConfig as HqqConfig
     from .utils.quantization_config import MetalConfig as MetalConfig
+    from .utils.quantization_config import NVFP4Config as NVFP4Config
     from .utils.quantization_config import QuantoConfig as QuantoConfig
     from .utils.quantization_config import QuarkConfig as QuarkConfig
     from .utils.quantization_config import SinqConfig as SinqConfig
@@ -786,8 +755,18 @@ if TYPE_CHECKING:
     from .utils.quantization_config import TorchAoConfig as TorchAoConfig
     from .utils.quantization_config import VptqConfig as VptqConfig
     from .video_processing_utils import BaseVideoProcessor as BaseVideoProcessor
+    from .video_processing_utils import VideoProcessorMixin as VideoProcessorMixin
 else:
+    # Deprecated top-level module paths -> replacements. Declared here so the legacy names are also part of the lazy
+    # import structure, keeping `transformers.tokenization_utils_fast` attribute access working.
+    _LEGACY_MODULE_ALIASES = {
+        "tokenization_utils_fast": "tokenization_utils_tokenizers",
+        "tokenization_utils": "tokenization_utils_sentencepiece",
+        "image_processing_utils_fast": "image_processing_backends",
+    }
     _import_structure = {k: set(v) for k, v in _import_structure.items()}
+    for _alias in _LEGACY_MODULE_ALIASES:
+        _import_structure.setdefault(_alias, set())
 
     import_structure = define_import_structure(Path(__file__).parent / "models", prefix="models")
     import_structure[frozenset({})].update(_import_structure)
@@ -800,51 +779,22 @@ else:
         extra_objects={"__version__": __version__},
     )
 
-    def _create_module_alias(alias: str, target: str) -> None:
-        """
-        Lazily redirect legacy module paths to their replacements without importing heavy deps.
-        """
-        module = types.ModuleType(alias)
-        module.__doc__ = f"Alias module for backward compatibility with `{target}`."
-        # Set __file__ explicitly so that inspect.py's hasattr(module, '__file__') check
-        # never falls through to __getattr__ and triggers a premature (possibly circular) import.
-        module.__file__ = None
+    # Deprecated module paths, served on demand by `_LegacyModuleAliasFinder`. `models/x/image_processing_x_fast.py`
+    # became `models/x/image_processing_x.py` when torchvision became the default backend (PIL: `image_processing_pil_x.py`).
+    _LEGACY_FAST_IMAGE_PROCESSOR_MODULE = re.compile(
+        rf"{re.escape(__name__)}\.models\.(\w+)\.image_processing_(?!pil_)(\w+)_fast"
+    )
 
-        def _get_target():
-            return importlib.import_module(target, __name__)
+    def _resolve_legacy_module_alias(fullname: str) -> str | None:
+        if (match := _LEGACY_FAST_IMAGE_PROCESSOR_MODULE.fullmatch(fullname)) is not None:
+            return f"{__name__}.models.{match[1]}.image_processing_{match[2]}"
+        package, _, name = fullname.rpartition(".")
+        if package == __name__ and name in _LEGACY_MODULE_ALIASES:
+            return f"{__name__}.{_LEGACY_MODULE_ALIASES[name]}"
+        return None
 
-        module.__getattr__ = lambda name: getattr(_get_target(), name)
-        module.__dir__ = lambda: dir(_get_target())
-
-        sys.modules[alias] = module
-        setattr(sys.modules[__name__], alias.rsplit(".", 1)[-1], module)
-
-    _create_module_alias(f"{__name__}.tokenization_utils_fast", ".tokenization_utils_tokenizers")
-    _create_module_alias(f"{__name__}.tokenization_utils", ".tokenization_utils_sentencepiece")
-    _create_module_alias(f"{__name__}.image_processing_utils_fast", ".image_processing_backends")
-
-    for _proc_file in sorted((Path(__file__).parent / "models").rglob("image_processing_*.py")):
-        _model = _proc_file.parent.name
-        _module = _proc_file.stem
-        _target = f".models.{_model}.{_module}"
-        _create_module_alias(f"{__name__}.models.{_model}.{_module}_fast", _target)
-
-        # Also map XImageProcessorFast -> XImageProcessor for backward compat with old class names.
-        def getattr_factory(target):
-            def _getattr(name):
-                new_name = name.removesuffix("Fast")
-                logger.warning(
-                    "Accessing `%s` from `%s`. Returning `%s` instead. Behavior may be "
-                    "different and this alias will be removed in future versions.",
-                    name,
-                    target,
-                    new_name,
-                )
-                return getattr(importlib.import_module(target, __name__), new_name)
-
-            return _getattr
-
-        sys.modules[f"{__name__}.models.{_model}.{_module}_fast"].__getattr__ = getattr_factory(_target)
+    if not any(isinstance(finder, _LegacyModuleAliasFinder) for finder in sys.meta_path):  # this init can run twice
+        sys.meta_path.append(_LegacyModuleAliasFinder(_resolve_legacy_module_alias))
 
 if not is_torch_available():
     logger.warning_advice(

@@ -42,6 +42,7 @@ if is_torch_available():
     import torch
 
     from transformers import DFineForObjectDetection, DFineModel
+    from transformers.loss.loss_d_fine import DFineLoss
 
 if is_vision_available():
     from PIL import Image
@@ -293,8 +294,6 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     is_encoder_decoder = True
 
-    test_missing_keys = False
-
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -335,10 +334,6 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_d_fine_object_detection_head_model(*config_and_inputs)
 
-    @unittest.skip(reason="DFine doesn't work well with `nn.DataParallel")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip(reason="DFine does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
@@ -361,10 +356,6 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
-        pass
-
-    @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
-    def test_load_save_without_tied_weights(self):
         pass
 
     def test_attention_outputs(self):
@@ -614,6 +605,84 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_dict["backbone_kwargs"] = {"out_indices": [2, 3, 4]}
         config = config.__class__(**config_dict)
         _validate_backbone_init(config)
+
+    def test_auxiliary_losses_without_denoising(self):
+        """Auxiliary losses should still be computed when num_denoising=0. Regression test for #45593."""
+        config = copy.deepcopy(self.model_tester.get_config())
+        config.num_denoising = 0
+        config.auxiliary_loss = True
+        config.num_labels = self.model_tester.num_labels
+
+        model = DFineForObjectDetection(config)
+        model.to(torch_device)
+        model.train()
+
+        pixel_values = torch.rand(
+            self.model_tester.batch_size,
+            self.model_tester.num_channels,
+            self.model_tester.image_size,
+            self.model_tester.image_size,
+        ).to(torch_device)
+        labels = []
+        for _ in range(self.model_tester.batch_size):
+            labels.append(
+                {
+                    "class_labels": torch.randint(0, self.model_tester.num_labels, (self.model_tester.n_targets,)).to(
+                        torch_device
+                    ),
+                    "boxes": torch.rand(self.model_tester.n_targets, 4).to(torch_device),
+                }
+            )
+
+        outputs = model(pixel_values=pixel_values, labels=labels)
+
+        # Main loss must exist
+        self.assertIsNotNone(outputs.loss)
+
+        # Aux losses MUST exist when denoising is off
+        self.assertTrue(
+            any("aux" in k for k in outputs.loss_dict), "Auxiliary losses should be computed even when num_denoising=0"
+        )
+
+        # Denoising losses must NOT exist when denoising is off
+        self.assertFalse(
+            any("dn_" in k for k in outputs.loss_dict), "Denoising losses should not be present when num_denoising=0"
+        )
+
+    def test_main_loss_excludes_denoising_queries(self):
+        """The main loss must only see the normal queries, not the denoising ones.
+        See https://github.com/huggingface/transformers/pull/48528
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_denoising = 10
+        config.auxiliary_loss = True
+        inputs_dict = self._prepare_for_class(inputs_dict, DFineForObjectDetection, return_labels=True)
+
+        model = DFineForObjectDetection(config)
+        model.to(torch_device)
+        model.train()
+
+        outputs = model(**inputs_dict)
+
+        # In training mode the last-layer outputs contain the denoising queries followed by the normal queries.
+        # `num_denoising` is split into groups of one positive and one negative query per (padded) target.
+        num_denoising_queries, num_queries = outputs.denoising_meta_values["dn_num_split"]
+        max_num_targets = max(len(target["class_labels"]) for target in inputs_dict["labels"])
+        num_groups = config.num_denoising // max_num_targets
+        self.assertEqual(num_denoising_queries, 2 * max_num_targets * num_groups)
+        self.assertEqual(outputs.logits.shape[1], num_denoising_queries + num_queries)
+
+        # The main loss terms must equal the loss computed on the normal queries alone
+        criterion = DFineLoss(config).to(torch_device)
+        reference = criterion(
+            {
+                "logits": outputs.logits[:, num_denoising_queries:],
+                "pred_boxes": outputs.pred_boxes[:, num_denoising_queries:],
+            },
+            inputs_dict["labels"],
+        )
+        for key in ("loss_vfl", "loss_bbox", "loss_giou"):
+            torch.testing.assert_close(outputs.loss_dict[key], reference[key])
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator

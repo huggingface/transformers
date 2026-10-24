@@ -63,11 +63,10 @@ class ColModernVBertForRetrievalModelTester:
                 "pad_token_id": 0,
                 "hidden_size": 32,
                 "num_hidden_layers": 2,
-                "num_attention_heads": 4,
+                "num_attention_heads": 2,
                 "intermediate_size": 64,
                 "hidden_activation": "gelu",
                 "mlp_dropout": 0.1,
-                "attention_dropout": 0.1,
                 "embedding_dropout": 0.1,
                 "classifier_dropout": 0.1,
                 "max_position_embeddings": 512,
@@ -97,7 +96,8 @@ class ColModernVBertForRetrievalModelTester:
         self.num_images = num_images
         self.image_size = vision_config["image_size"]
         self.pixel_shuffle_factor = pixel_shuffle_factor
-        self.image_token_id = self.text_config["vocab_size"] - 1
+        # should be smaller than vocab size - 16 to survive clamping
+        self.image_token_id = 57
         self.pad_token_id = text_config["pad_token_id"]
         self.image_seq_length = (
             int(((vision_config["image_size"] // vision_config["patch_size"]) ** 2) / (pixel_shuffle_factor**2))
@@ -181,10 +181,6 @@ class ColModernVBertForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**inputs, return_dict=True)
 
             self.assertIsInstance(outputs, ColModernVBertForRetrievalOutput)
-
-    @unittest.skip(reason="Error related to ModernBERT model parallelism: self.dtype is broken.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
 
 @require_torch

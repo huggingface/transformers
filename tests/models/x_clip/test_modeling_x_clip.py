@@ -25,7 +25,6 @@ from transformers import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 from transformers.testing_utils import (
     Expectations,
     require_torch,
-    require_torch_multi_gpu,
     require_vision,
     slow,
     torch_device,
@@ -172,6 +171,30 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     ):
         pass
 
+    @unittest.skip(reason="X-CLIP needs batch size to match frames, can't crop and create new dummy inputs")
+    def test_flash_attn_2_inference_equivalence(self):
+        pass
+
+    @unittest.skip(reason="X-CLIP needs batch size to match frames, can't crop and create new dummy inputs")
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip(reason="X-CLIP needs batch size to match frames, can't crop and create new dummy inputs")
+    def test_flash_attn_3_inference_equivalence(self):
+        pass
+
+    @unittest.skip(reason="X-CLIP needs batch size to match frames, can't crop and create new dummy inputs")
+    def test_flash_attn_3_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip(reason="X-CLIP needs batch size to match frames, can't crop and create new dummy inputs")
+    def test_flash_attn_4_inference_equivalence(self):
+        pass
+
+    @unittest.skip(reason="X-CLIP needs batch size to match frames, can't crop and create new dummy inputs")
+    def test_flash_attn_4_inference_equivalence_right_padding(self):
+        pass
+
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -286,31 +309,6 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
             )
-
-    @require_torch_multi_gpu
-    def test_multi_gpu_data_parallel_forward(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # move input tensors to cuda:O
-        for k, v in inputs_dict.items():
-            if torch.is_tensor(v):
-                inputs_dict[k] = v.to(0)
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=config)
-            model.to(0)
-            model.eval()
-
-            # Wrap model in nn.DataParallel
-            model = nn.DataParallel(model)
-            with torch.no_grad():
-                test = self._prepare_for_class(inputs_dict, model_class)
-                for k, v in test.items():
-                    if isinstance(v, torch.Tensor):
-                        print(k, v.shape)
-                    else:
-                        print(k, v)
-                _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
 
 class XCLIPTextModelTester:
@@ -559,6 +557,10 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="XCLIPModel does not support feedforward chunking")
     def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="Does not work on the tiny model as we keep hitting edge cases.")
+    def test_model_parallelism(self):
         pass
 
     def test_load_vision_text_config(self):

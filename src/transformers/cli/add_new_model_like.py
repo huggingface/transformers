@@ -84,6 +84,14 @@ COPYRIGHT = f"""
 # limitations under the License.
 """.lstrip()
 
+# Don't modify the following dict unless you changed the format of `models/auto/auto_mappings.py`
+_AUTO_MAPPING_NAMES = {
+    "image_processing_auto.py": "IMAGE_PROCESSOR_MAPPING_NAMES",
+    "video_processing_auto.py": "VIDEO_PROCESSOR_MAPPING_NAMES",
+    "processing_auto.py": "PROCESSOR_MAPPING_NAMES",
+    "feature_extraction_auto.py": "FEATURE_EXTRACTOR_MAPPING_NAMES",
+}
+
 ### Entrypoint
 
 
@@ -204,13 +212,8 @@ def add_model_to_auto_mappings(
     ]
     # fast tokenizer has the same auto mappings as normal ones
     corrected_filenames_to_add = []
-    has_image_processor = has_video_processor = False
     for file, to_add in filenames_to_add:
-        if "image_processing" in file:
-            has_image_processor = True
-        elif "video_processing" in file:
-            has_video_processor = True
-        elif re.search(r"(?:tokenization)|(?:image_processing)_auto_fast.py", file):
+        if "tokenization_auto_fast.py" in file:
             previous_file, previous_to_add = corrected_filenames_to_add[-1]
             corrected_filenames_to_add[-1] = (previous_file, previous_to_add or to_add)
         else:
@@ -223,45 +226,29 @@ def add_model_to_auto_mappings(
         add_after="CONFIG_MAPPING_NAMES = OrderedDict(\n    [\n        ",
     )
     autofile = (repo_path / "src" / "transformers" / "models" / "auto" / "auto_mappings.py").read_text()
-    if has_image_processor:
-        matching_lines = re.findall(rf'^\s+\("{old_lowercase_name}",\s+{{[^}}]+}}\),?$', autofile, re.MULTILINE)
-        if matching_lines:
-            match = matching_lines[0]
-            add_content_to_file(
-                repo_path / "src" / "transformers" / "models" / "auto" / "auto_mappings.py",
-                new_content=match.replace(old_lowercase_name, new_lowercase_name).replace(
-                    old_cased_name, new_cased_name
-                )
-                + "\n",
-                add_after="IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(\n    [\n",
-            )
-    if has_video_processor:
-        # Extract the VIDEO_PROCESSOR_MAPPING_NAMES block first
-        block_match = re.search(
-            r"VIDEO_PROCESSOR_MAPPING_NAMES\s*=\s*OrderedDict\(\s*\[(.*?)\]\s*\)", autofile, re.DOTALL
-        )
-        block = block_match.group(1)  # type: ignore
-        matching_lines = re.findall(rf'^\s+\("{old_lowercase_name}",\s+"[^"]+"\),?$', block, re.MULTILINE)
-        if matching_lines:
-            match = matching_lines[0]
-            add_content_to_file(
-                repo_path / "src" / "transformers" / "models" / "auto" / "auto_mappings.py",
-                new_content=match.replace(old_lowercase_name, new_lowercase_name).replace(
-                    old_cased_name, new_cased_name
-                )
-                + "\n",
-                add_after="VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(\n    [\n",
-            )
 
     for filename, to_add in corrected_filenames_to_add:
         if to_add:
-            # The auto mapping
-            filename = filename.replace("_fast.py", ".py")
-            file = (repo_path / "src" / "transformers" / "models" / "auto" / filename).read_text()
-            # The regex has to be a bit complex like this as the tokenizer mapping has new lines everywhere
-            matching_lines = re.findall(
-                rf'( {{8,12}}\(\s*"{old_lowercase_name}",.*?\),\n)(?: {{4,12}}\(|\])', file, re.DOTALL
-            )
+            if filename in _AUTO_MAPPING_NAMES:
+                # These are saved in `auto_mapping.py` and require a slightly diff regex match
+                mapping_name = _AUTO_MAPPING_NAMES[filename]
+                filename = "auto_mappings.py"  # use the unified mapping filename to write content!
+                block_match = re.search(
+                    rf"[^\w_]{mapping_name}\s*=\s*OrderedDict\(\s*\[(.*?)\]\s*\)", autofile, re.DOTALL
+                )
+                block = block_match.group(1)  # type: ignore
+                matching_lines = re.findall(
+                    rf'( {{8,12}}\(\s*"{old_lowercase_name}",.*?\),\n)(?: {{4,12}}\(|\])', block, re.DOTALL
+                )
+            else:
+                # These auto mappings are filled-in manually (tokenization and modeling files)
+                filename = filename.replace("_fast.py", ".py")
+                file = (repo_path / "src" / "transformers" / "models" / "auto" / filename).read_text()
+                # The regex has to be a bit complex like this as the tokenizer mapping has new lines everywhere
+                matching_lines = re.findall(
+                    rf'( {{8,12}}\(\s*"{old_lowercase_name}",.*?\),\n)(?: {{4,12}}\(|\])', file, re.DOTALL
+                )
+
             for match in matching_lines:
                 add_content_to_file(
                     repo_path / "src" / "transformers" / "models" / "auto" / filename,
@@ -343,7 +330,7 @@ def insert_model_in_doc_toc(
             The fully cased name (as in the official paper name) of the new model.
     """
     toc_file = repo_path / "docs" / "source" / "en" / "_toctree.yml"
-    with open(toc_file, "r") as f:
+    with open(toc_file, "r", encoding="utf-8") as f:
         content = f.read()
 
     toc_match = re.search(rf"- local: model_doc/{old_lowercase_name}\n {{8}}title: .*?\n", content)
@@ -527,7 +514,7 @@ def create_test_files(
             # Sometimes, tests may not exist
             if not original_test_path.is_file():
                 continue
-            with open(original_test_path, "r") as f:
+            with open(original_test_path, "r", encoding="utf-8") as f:
                 test_code = f.read()
             # Remove old copyright and add new one
             test_lines = test_code.split("\n")
@@ -577,12 +564,12 @@ def _add_new_model_like_internal(
     modular_file, public_classes = create_modular_file(
         repo_path, old_model_infos, new_lowercase_name, filenames_to_add
     )
-    with open(new_module_folder / f"modular_{new_lowercase_name}.py", "w") as f:
+    with open(new_module_folder / f"modular_{new_lowercase_name}.py", "w", encoding="utf-8") as f:
         f.write(modular_file)
 
     # 3. Create and add the __init__.py
     init_file = create_init_file(old_lowercase_name, new_lowercase_name, filenames_to_add)
-    with open(new_module_folder / "__init__.py", "w") as f:
+    with open(new_module_folder / "__init__.py", "w", encoding="utf-8") as f:
         f.write(init_file)
 
     # 4. Add new model to the models init
@@ -599,16 +586,18 @@ def _add_new_model_like_internal(
     tests_folder = repo_path / "tests" / "models" / new_lowercase_name
     os.makedirs(tests_folder, exist_ok=True)
     # Add empty __init__.py
-    with open(tests_folder / "__init__.py", "w"):
+    with open(tests_folder / "__init__.py", "w", encoding="utf-8"):
         pass
     test_files = create_test_files(repo_path, old_model_infos, new_lowercase_name, filenames_to_add)
     for filename, content in test_files.items():
-        with open(tests_folder / filename, "w") as f:
+        with open(tests_folder / filename, "w", encoding="utf-8") as f:
             f.write(content)
 
     # 7. Add doc file
     doc_file = create_doc_file(new_model_paper_name, public_classes)
-    with open(repo_path / "docs" / "source" / "en" / "model_doc" / f"{new_lowercase_name}.md", "w") as f:
+    with open(
+        repo_path / "docs" / "source" / "en" / "model_doc" / f"{new_lowercase_name}.md", "w", encoding="utf-8"
+    ) as f:
         f.write(doc_file)
     insert_model_in_doc_toc(repo_path, old_lowercase_name, new_lowercase_name, new_model_paper_name)
 

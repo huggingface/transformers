@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import math
 import warnings
 from collections.abc import Callable
@@ -97,7 +98,7 @@ def multi_scale_deformable_attention_v2(
                 .repeat(1, sampling_coord.shape[1])
             )
             sampling_value_l_ = value_l_[sampling_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]]
-            sampling_value_l_ = sampling_value_l_.permute(0, 2, 1).reshape(
+            sampling_value_l_ = sampling_value_l_.transpose(1, 2).reshape(
                 batch_size * num_heads, hidden_dim, num_queries, num_points_list[level_id]
             )
         sampling_value_list.append(sampling_value_l_)
@@ -161,7 +162,7 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
         n_points_list = [self.n_points for _ in range(self.n_levels)]
         self.n_points_list = n_points_list
         n_points_scale = [1 / n for n in n_points_list for _ in range(n)]
-        self.register_buffer("n_points_scale", torch.tensor(n_points_scale, dtype=torch.float32))
+        self.n_points_scale = nn.Buffer(torch.tensor(n_points_scale, dtype=torch.float32))
 
     def forward(
         self,
@@ -434,7 +435,7 @@ class RTDetrV2DecoderLayer(nn.Module):
 @auto_docstring
 class RTDetrV2PreTrainedModel(PreTrainedModel):
     config: RTDetrV2Config
-    base_model_prefix = "rt_detr_v2"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"RTDetrV2HybridEncoder", r"RTDetrV2DecoderLayer"]
@@ -446,6 +447,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         if isinstance(module, RTDetrV2ForObjectDetection):
             if module.model.decoder.class_embed is not None:
                 for layer in module.model.decoder.class_embed:
@@ -488,7 +490,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
             init.xavier_uniform_(module.enc_score_head.weight)
             init.constant_(module.enc_score_head.bias, bias)
 
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -496,10 +498,6 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
-
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             init.xavier_uniform_(module.weight_embedding.weight)
@@ -510,7 +508,6 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
             init.copy_(module.n_points_scale, torch.tensor(n_points_scale, dtype=torch.float32))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RTDetrV2Decoder. This class adds two attributes to
@@ -519,6 +516,7 @@ class RTDetrV2PreTrainedModel(PreTrainedModel):
     - a stacked tensor of intermediate reference points.
     """
 )
+@dataclass
 class RTDetrV2DecoderOutput(ModelOutput):
     r"""
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -664,12 +662,12 @@ class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the RT-DETR encoder-decoder model.
     """
 )
+@dataclass
 class RTDetrV2ModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -726,16 +724,16 @@ class RTDetrV2FrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
 
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    Copy-paste from torchvision.misc.ops with added eps before rsqrt, without which any other models than
     torchvision.models.resnet[18,34,50,101] produce nans.
     """
 
     def __init__(self, n):
         super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
+        self.weight = nn.Buffer(torch.ones(n))
+        self.bias = nn.Buffer(torch.zeros(n))
+        self.running_mean = nn.Buffer(torch.zeros(n))
+        self.running_var = nn.Buffer(torch.ones(n))
 
     def _load_from_state_dict(
         self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
@@ -955,6 +953,56 @@ class RTDetrV2CSPRepLayer(nn.Module):
         return self.conv3(hidden_state_1 + hidden_state_2)
 
 
+def build_2d_sinusoidal_position_embedding(
+    height: int,
+    width: int,
+    embed_dim: int = 256,
+    temperature: float = 10000.0,
+    cls_token: bool = False,
+    device: torch.device | None = None,
+    dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
+    """2D sinusoidal position embeddings for an image patch grid.
+
+    Each (h, w) position gets an ``embed_dim``-dimensional vector laid out as
+    ``[sin_h | cos_h | sin_w | cos_w]``, with row-major (H-outer) patch ordering.
+
+    Args:
+        height: Grid height in patches.
+        width: Grid width in patches.
+        embed_dim: Total embedding dimension; must be divisible by 4.
+        temperature: Base for the frequency decay.
+        cls_token: If `True`, prepend a zero row for a CLS token.
+        device: Target device; defaults to CPU.
+        dtype: Output dtype; frequency arithmetic uses float64 internally.
+
+    Returns:
+        Tensor of shape ``(height * width [+1], embed_dim)``.
+    """
+    if embed_dim % 4 != 0:
+        raise ValueError(f"`embed_dim` must be divisible by 4, got {embed_dim}")
+
+    pos_dim = embed_dim // 4
+    # mps doesn't support float64
+    compute_dtype = torch.float64 if device is None or device.type != "mps" else torch.float32
+    omega = torch.arange(pos_dim, dtype=compute_dtype, device=device) / pos_dim
+    omega = 1.0 / temperature**omega  # (D/4,)
+
+    grid_h = torch.arange(height, dtype=compute_dtype, device=device)
+    grid_w = torch.arange(width, dtype=compute_dtype, device=device)
+    grid_h, grid_w = torch.meshgrid(grid_h, grid_w, indexing="ij")  # (H, W) each
+
+    emb_h = grid_h.flatten().outer(omega)  # (H*W, D/4)
+    emb_w = grid_w.flatten().outer(omega)  # (H*W, D/4)
+
+    pos_embed = torch.cat([emb_h.sin(), emb_h.cos(), emb_w.sin(), emb_w.cos()], dim=1)
+
+    if cls_token:
+        pos_embed = torch.cat([torch.zeros(1, embed_dim, dtype=compute_dtype, device=device), pos_embed], dim=0)
+
+    return pos_embed.to(dtype)
+
+
 class RTDetrV2SinePositionEmbedding(nn.Module):
     """
     2D sinusoidal position embedding used in RT-DETR hybrid encoder.
@@ -965,7 +1013,11 @@ class RTDetrV2SinePositionEmbedding(nn.Module):
         self.embed_dim = embed_dim
         self.temperature = temperature
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
+    def _cached_build_2d_sinusoidal_position_embedding(*args, **kwargs) -> torch.Tensor:
+        return build_2d_sinusoidal_position_embedding(*args, **kwargs)
+
     def forward(
         self,
         width: int,
@@ -979,19 +1031,14 @@ class RTDetrV2SinePositionEmbedding(nn.Module):
         Returns:
             Position embeddings of shape (1, height*width, embed_dim)
         """
-        grid_w = torch.arange(torch_int(width), device=device).to(dtype)
-        grid_h = torch.arange(torch_int(height), device=device).to(dtype)
-        grid_w, grid_h = torch.meshgrid(grid_w, grid_h, indexing="xy")
-        if self.embed_dim % 4 != 0:
-            raise ValueError("Embed dimension must be divisible by 4 for 2D sin-cos position embedding")
-        pos_dim = self.embed_dim // 4
-        omega = torch.arange(pos_dim, device=device).to(dtype) / pos_dim
-        omega = 1.0 / (self.temperature**omega)
-
-        out_w = grid_w.flatten()[..., None] @ omega[None]
-        out_h = grid_h.flatten()[..., None] @ omega[None]
-
-        return torch.concat([out_h.sin(), out_h.cos(), out_w.sin(), out_w.cos()], dim=1)[None, :, :]
+        return self._cached_build_2d_sinusoidal_position_embedding(
+            height=torch_int(height),
+            width=torch_int(width),
+            embed_dim=self.embed_dim,
+            temperature=self.temperature,
+            device=device,
+            dtype=dtype,
+        ).unsqueeze(0)
 
 
 class RTDetrV2AIFILayer(nn.Module):
@@ -1024,7 +1071,7 @@ class RTDetrV2AIFILayer(nn.Module):
         batch_size = hidden_states.shape[0]
         height, width = hidden_states.shape[2:]
 
-        hidden_states = hidden_states.flatten(2).permute(0, 2, 1)
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
 
         if self.training or self.eval_size is None:
             pos_embed = self.position_embedding(
@@ -1045,7 +1092,7 @@ class RTDetrV2AIFILayer(nn.Module):
             )
 
         hidden_states = (
-            hidden_states.permute(0, 2, 1).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
+            hidden_states.transpose(1, 2).reshape(batch_size, self.encoder_hidden_dim, height, width).contiguous()
         )
 
         return hidden_states
@@ -1374,13 +1421,14 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         for param in self.backbone.parameters():
             param.requires_grad_(True)
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=32)
-    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
-        if spatial_shapes is None:
-            spatial_shapes = [
-                [int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s)]
-                for s in self.config.feat_strides
-            ]
+    def _cached_generate_anchors(
+        spatial_shapes: tuple[tuple[int, int], ...],
+        grid_size: float,
+        device: torch.device | str = "cpu",
+        dtype: torch.dtype = torch.float32,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         anchors = []
         for level, (height, width) in enumerate(spatial_shapes):
             grid_y, grid_x = torch.meshgrid(
@@ -1399,9 +1447,17 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         anchors = torch.concat(anchors, 1)
         valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
-        anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
+        anchors = torch.where(valid_mask, anchors, torch.full((), torch.finfo(dtype).max, dtype=dtype, device=device))
 
         return anchors, valid_mask
+
+    def generate_anchors(self, spatial_shapes=None, grid_size=0.05, device="cpu", dtype=torch.float32):
+        if spatial_shapes is None:
+            spatial_shapes = (
+                (int(self.config.anchor_image_size[0] / s), int(self.config.anchor_image_size[1] / s))
+                for s in self.config.feat_strides
+            )
+        return self._cached_generate_anchors(spatial_shapes, grid_size, device, dtype)
 
     @auto_docstring
     @can_return_tuple
@@ -1429,10 +1485,12 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, RTDetrV2Model
         >>> from PIL import Image
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/RTDetrV2_r50vd")
         >>> model = RTDetrV2Model.from_pretrained("PekingU/RTDetrV2_r50vd")
@@ -1482,7 +1540,7 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state)[-1])
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs.last_hidden_state[-1]))
             for i in range(_len_sources + 1, self.config.num_feature_levels):
                 sources.append(self.decoder_input_proj[i](encoder_outputs.last_hidden_state[-1]))
 
@@ -1620,16 +1678,16 @@ class RTDetrV2MLPPredictionHead(nn.Module):
         return x
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`RTDetrV2ForObjectDetection`].
     """
 )
+@dataclass
 class RTDetrV2ObjectDetectionOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        Total loss as a linear combination of a negative log-likelihood (cross-entropy) for class prediction and a
         bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
         scale-invariant IoU loss.
     loss_dict (`Dict`, *optional*):
@@ -1728,8 +1786,8 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
                 for _ in range(config.decoder_layers)
             ]
         )
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1752,22 +1810,19 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
             can choose to directly pass a flattened representation of an image.
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
         Examples:
 
         ```python
         >>> from transformers import RTDetrV2ImageProcessor, RTDetrV2ForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> from huggingface_hub.utils import httpx
+        >>> from io import BytesIO
         >>> import torch
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = RTDetrV2ImageProcessor.from_pretrained("PekingU/RTDetrV2_r50vd")
         >>> model = RTDetrV2ForObjectDetection.from_pretrained("PekingU/RTDetrV2_r50vd")

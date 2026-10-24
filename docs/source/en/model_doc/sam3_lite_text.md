@@ -13,18 +13,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-02-12 and added to Hugging Face Transformers on 2026-04-12.*
+*This model was published in HF papers on 2026-02-12 and contributed to Hugging Face Transformers on 2026-04-13.*
 
 # SAM3-LiteText
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 ## Overview
 
@@ -54,9 +49,11 @@ SAM3-LiteText is a drop-in replacement for SAM3 with a lightweight text encoder.
 ```python
 from io import BytesIO
 
-import httpx
-from transformers import AutoModel, AutoProcessor
+from huggingface_hub.utils import httpx
 from PIL import Image
+
+from transformers import AutoModel, AutoProcessor
+
 
 model = AutoModel.from_pretrained("yonigozlan/sam3-litetext-s0", device_map="auto")
 processor = AutoProcessor.from_pretrained("yonigozlan/sam3-litetext-s0")

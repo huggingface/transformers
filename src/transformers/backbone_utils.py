@@ -18,9 +18,7 @@ import enum
 import functools
 import inspect
 
-from huggingface_hub import repo_exists
-
-from .utils import logging
+from .utils import hf_api, logging
 from .utils.output_capturing import maybe_install_capturing_hooks
 
 
@@ -159,8 +157,9 @@ class BackboneConfigMixin:
 
 def filter_output_hidden_states(forward_function):
     """
-    Wrapper to filer out `hidden_states` as backbones tend to always use them to get their feature maps, i.e.
-    they also always output `hidden_states`. This controls for user-defined behavior again.
+    Wrapper for backbone forwards. Backbones always compute `hidden_states` to build their feature maps, so
+    this forces `output_hidden_states=True` on the wrapped forward and then removes `hidden_states` from the
+    returned object unless the caller explicitly requested them.
 
     NOTE: We assume a `can_return_tuple` decorator to be applied before so that we always expect a dict like
           object to remove the hidden states.
@@ -169,10 +168,22 @@ def filter_output_hidden_states(forward_function):
     @functools.wraps(forward_function)
     def wrapper(self, *args, **kwargs):
         output_hidden_states = kwargs.get("output_hidden_states", getattr(self.config, "output_hidden_states", False))
+        kwargs["output_hidden_states"] = True
         output = forward_function(self, *args, **kwargs)
         if not output_hidden_states:
-            filtered_output_data = {k: v for k, v in output.items() if k not in ("hidden_states")}
+            filtered_output_data = {k: v for k, v in output.items() if k != "hidden_states"}
             output = type(output)(**filtered_output_data)
+        elif isinstance(output_hidden_states, (list, tuple, set)):
+            capture_initial_hidden_state = getattr(
+                (self._can_record_outputs or {}).get("hidden_states"), "capture_initial_hidden_state", True
+            )
+            # When using a list of layer indices, we never collect the first input, so we may need to start at the index 1
+            collected_hidden_states = (
+                output["hidden_states"][1:] if capture_initial_hidden_state else output["hidden_states"]
+            )
+            output["hidden_states"] = [
+                x if i in output_hidden_states else None for i, x in enumerate(collected_hidden_states)
+            ]
         return output
 
     return wrapper
@@ -334,7 +345,7 @@ def consolidate_backbone_kwargs_to_config(
     ):
         backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **timm_default_kwargs)
     elif backbone is not None and backbone_config is None:
-        if repo_exists(backbone):
+        if hf_api().repo_exists(backbone):
             config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
             config_dict.update(backbone_kwargs)

@@ -68,6 +68,7 @@ class XGLMTokenizer(TokenizersBackend):
         cls_token: str = "<s>",
         unk_token: str = "<unk>",
         pad_token: str = "<pad>",
+        _spm_precompiled_charsmap: str | None = None,
         add_prefix_space: bool = True,
         **kwargs,
     ):
@@ -92,13 +93,14 @@ class XGLMTokenizer(TokenizersBackend):
 
         self._tokenizer = Tokenizer(Unigram(vocab=self._vocab, unk_id=3, byte_fallback=False))
 
-        self._tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Replace(Regex(r"[\n\r\t]"), " "),
-                normalizers.NFKC(),
-                normalizers.Replace(Regex(r" {2,}"), " "),
-            ]
-        )
+        #  {"type": "Replace", "pattern": {"Regex": " {2,}"}, "content": " "}]}
+        normalizers_ = [normalizers.Replace(Regex(r" {2,}"), " ")]
+
+        if _spm_precompiled_charsmap is not None:
+            normalizers_.insert(0, normalizers.Precompiled(_spm_precompiled_charsmap))
+
+        self._tokenizer.normalizer = normalizers.Sequence(normalizers_)
+
         prepend_scheme = "always" if add_prefix_space else "never"
         self._tokenizer.pre_tokenizer = pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
         self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
@@ -114,8 +116,8 @@ class XGLMTokenizer(TokenizersBackend):
         )
 
         self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"{self.eos_token} $A {self.eos_token}",
-            pair=f"{self.eos_token} $A {self.eos_token} {self.eos_token} $B {self.eos_token}",
+            single=f"{self.eos_token} $A",
+            pair=f"{self.eos_token} $A {self.eos_token} {self.eos_token} $B",
             special_tokens=[
                 (self.bos_token, self.bos_token_id),
                 (self.eos_token, self.eos_token_id),

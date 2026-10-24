@@ -25,7 +25,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import (
     auto_docstring,
     logging,
@@ -39,7 +39,7 @@ logger = logging.get_logger(__name__)
 # Copied from transformers.models.gptj.modeling_gptj.create_sinusoidal_positions
 def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
     inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
-    sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=torch.int64).float(), inv_freq).float()
+    sinusoid_inp = torch.arange(num_pos, dtype=torch.int64).float()[:, None] * inv_freq
     return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
 
 
@@ -87,8 +87,8 @@ class CodeGenAttention(nn.Module):
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.rotary_dim = config.rotary_dim
         self.pos_embd_dim = self.rotary_dim or self.embed_dim
-        self.register_buffer(
-            "embed_positions", create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
+        self.embed_positions = nn.Buffer(
+            create_sinusoidal_positions(self.max_positions, self.pos_embd_dim), persistent=False
         )
 
     def _split_heads(self, x, n_head, dim_head, mp_num):
@@ -263,7 +263,7 @@ class CodeGenPreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["CodeGenBlock"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _can_compile_fullgraph = True
 
     def _init_weights(self, module):
@@ -462,9 +462,8 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

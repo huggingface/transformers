@@ -32,8 +32,8 @@ from .configuration_vibevoice_acoustic_tokenizer import (
 )
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class VibeVoiceAcousticTokenizerOutput(ModelOutput):
     r"""
     audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
@@ -50,8 +50,8 @@ class VibeVoiceAcousticTokenizerOutput(ModelOutput):
     padding_cache: Optional["VibeVoiceAcousticTokenizerConv1dPaddingCache"] = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class VibeVoiceAcousticTokenizerEncoderOutput(ModelOutput):
     r"""
     latents (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -65,8 +65,8 @@ class VibeVoiceAcousticTokenizerEncoderOutput(ModelOutput):
     padding_cache: Optional["VibeVoiceAcousticTokenizerConv1dPaddingCache"] = None
 
 
-@dataclass
 @auto_docstring
+@dataclass
 class VibeVoiceAcousticTokenizerDecoderOutput(ModelOutput):
     r"""
     audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):

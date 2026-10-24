@@ -9,11 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-08-05 and added to Hugging Face Transformers on 2025-08-05.*
+*This model was contributed to Hugging Face Transformers on 2025-08-05.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -26,19 +26,21 @@ rendered properly in your Markdown viewer.
 
 [GptOss](https://openai.com/index/introducing-gpt-oss/) is a sparse mixture-of-experts (MoE) language model from OpenAI that routes each token to 4 of 128 experts. It uses attention sinks — learnable auxiliary tokens appended to each attention head — and YaRN rotary embeddings for sequences up to 131k tokens.
 
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
+
 The example below demonstrates how to generate text with [`Pipeline`] or the [`AutoModelForCausalLM`] class.
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="openai/gpt-oss-20b",
-    dtype=torch.bfloat16,
 )
 pipe("Plants create energy through a process known as")
 ```
@@ -46,14 +48,13 @@ pipe("Plants create energy through a process known as")
 </hfoption>
 <hfoption id="AutoModelForCausalLM">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("openai/gpt-oss-20b")
 model = AutoModelForCausalLM.from_pretrained(
     "openai/gpt-oss-20b",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)

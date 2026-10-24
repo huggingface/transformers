@@ -38,6 +38,7 @@ from ...utils import (
     requires_backends,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import maybe_autocast
 from .configuration_oneformer import OneFormerConfig
 
@@ -267,6 +268,11 @@ class OneFormerHungarianMatcher(nn.Module):
     def forward(self, masks_queries_logits, class_queries_logits, mask_labels, class_labels) -> list[tuple[Tensor]]:
         """Performs the matching
 
+        Invalid predictions or targets resulting in NaN or inf values in the matcher cost matrix do not raise
+        errors and instead will only be assigned if no other valid prediction or target can be matched instead.
+        This avoids random crashes at training time. A high training loss indicates that some of the predictions
+        or targets might be invalid. If the loss doesn't improve after a couple of steps the model has likely diverged.
+
         Params:
             masks_queries_logits (`torch.Tensor`):
                 A tensor` of dim `batch_size, num_queries, num_labels` with the
@@ -332,6 +338,10 @@ class OneFormerHungarianMatcher(nn.Module):
                 cost_dice = pair_wise_dice_loss(pred_mask, target_mask)
                 # final cost matrix
                 cost_matrix = self.cost_mask * cost_mask + self.cost_class * cost_class + self.cost_dice * cost_dice
+                # Replace NaN and inf values with max value to avoid linear_sum_assignment errors. Max value is used to match
+                # these predictions only if there are no other valid predictions.
+                max_value = torch.finfo(cost_matrix.dtype).max
+                cost_matrix = torch.nan_to_num(cost_matrix, nan=max_value, posinf=max_value, neginf=max_value)
                 cost_matrix = cost_matrix.reshape(num_queries, -1).cpu()
                 # do the assigmented using the hungarian algorithm in scipy
                 assigned_indices: tuple[np.array] = linear_sum_assignment(cost_matrix.cpu())
@@ -389,7 +399,7 @@ class OneFormerLoss(nn.Module):
         self.eos_coef = eos_coef
         empty_weight = torch.ones(self.num_classes + 1)
         empty_weight[-1] = self.eos_coef
-        self.register_buffer("empty_weight", empty_weight)
+        self.empty_weight = nn.Buffer(empty_weight)
 
         # pointwise mask loss parameters
         self.num_points = num_points
@@ -731,13 +741,13 @@ class OneFormerLoss(nn.Module):
         return num_masks
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of the Transformer decoder. This class adds attributes for class predictions, mask
     predictions and contrastive logits to BaseModelOutputWithCrossAttentions.
     """
 )
+@dataclass
 class OneFormerTransformerDecoderOutput(BaseModelOutput):
     r"""
     object_queries (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_dim)`):
@@ -759,13 +769,13 @@ class OneFormerTransformerDecoderOutput(BaseModelOutput):
     auxiliary_predictions: tuple[dict[str, torch.FloatTensor]] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     OneFormer's pixel decoder module output, practically a Multi-Scale Deformable Attention based decoder. It returns
     the mask features and the multiscale features.
     """
 )
+@dataclass
 # Copied from transformers.models.mask2former.modeling_mask2former.Mask2FormerPixelDecoderOutput with Mask2->One
 class OneFormerPixelDecoderOutput(ModelOutput):
     r"""
@@ -786,7 +796,6 @@ class OneFormerPixelDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     OneFormer's pixel level module output. It returns both the last and (optionally) the hidden states from the
@@ -794,6 +803,7 @@ class OneFormerPixelDecoderOutput(ModelOutput):
     Deformable Attention based decoder.
     """
 )
+@dataclass
 class OneFormerPixelLevelModuleOutput(ModelOutput):
     r"""
     encoder_features (List of `(torch.FloatTensor)`):
@@ -811,12 +821,12 @@ class OneFormerPixelLevelModuleOutput(ModelOutput):
     decoder_last_feature: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`OneFormerModel`]. This class returns all the needed hidden states to compute the logits.
     """
 )
+@dataclass
 class OneFormerModelOutput(ModelOutput):
     r"""
     encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
@@ -863,7 +873,6 @@ class OneFormerModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`OneFormerForUniversalSegmentationOutput`].
@@ -874,6 +883,7 @@ class OneFormerModelOutput(ModelOutput):
     [`~OneFormerImageProcessor] for details regarding usage.
     """
 )
+@dataclass
 class OneFormerForUniversalSegmentationOutput(ModelOutput):
     r"""
     loss (`torch.Tensor`, *optional*):
@@ -981,6 +991,7 @@ class OneFormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         spatial_shapes=None,
         level_start_index=None,
         output_attentions: bool = False,
+        spatial_shapes_list=None,
     ):
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
@@ -1022,7 +1033,7 @@ class OneFormerPixelDecoderEncoderMultiscaleDeformableAttention(nn.Module):
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
         # PyTorch implementation
-        output = multi_scale_deformable_attention(value, spatial_shapes, sampling_locations, attention_weights)
+        output = multi_scale_deformable_attention(value, spatial_shapes_list, sampling_locations, attention_weights)
         output = self.output_proj(output)
 
         return output, attention_weights
@@ -1058,6 +1069,7 @@ class OneFormerPixelDecoderEncoderLayer(nn.Module):
         spatial_shapes=None,
         level_start_index=None,
         output_attentions: bool = False,
+        spatial_shapes_list=None,
     ):
         """
         Args:
@@ -1088,6 +1100,7 @@ class OneFormerPixelDecoderEncoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
+            spatial_shapes_list=spatial_shapes_list,
             level_start_index=level_start_index,
             output_attentions=output_attentions,
         )
@@ -1139,12 +1152,13 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         self.layers = nn.ModuleList([OneFormerPixelDecoderEncoderLayer(config) for _ in range(config.encoder_layers)])
 
     @staticmethod
-    def get_reference_points(spatial_shapes, valid_ratios, device):
+    @deprecate_kwarg("spatial_shapes", version="5.22", new_name="spatial_shapes_list")
+    def get_reference_points(spatial_shapes_list, valid_ratios, device):
         """
         Get reference points for each feature map. Used in decoder.
 
         Args:
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
+            spatial_shapes_list (`list[tuple[int, int]]`):
                 Spatial shapes of each feature map.
             valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
                 Valid ratios of each feature map.
@@ -1154,7 +1168,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
             `torch.FloatTensor` of shape `(batch_size, num_queries, num_feature_levels, 2)`
         """
         reference_points_list = []
-        for lvl, (height, width) in enumerate(spatial_shapes):
+        for lvl, (height, width) in enumerate(spatial_shapes_list):
             ref_y, ref_x = torch.meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
@@ -1179,6 +1193,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        spatial_shapes_list=None,
     ):
         r"""
         Args:
@@ -1213,7 +1228,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         hidden_states = inputs_embeds
-        reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=inputs_embeds.device)
+        reference_points = self.get_reference_points(spatial_shapes_list, valid_ratios, device=inputs_embeds.device)
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1226,6 +1241,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
                 position_embeddings=position_embeddings,
                 reference_points=reference_points,
                 spatial_shapes=spatial_shapes,
+                spatial_shapes_list=spatial_shapes_list,
                 level_start_index=level_start_index,
                 output_attentions=output_attentions,
             )
@@ -1251,7 +1267,9 @@ class OneFormerPixelDecoder(nn.Module):
         self.config = config
 
         #  positional encoding
-        self.position_embedding = OneFormerSinePositionEmbedding(num_pos_feats=config.conv_dim // 2, normalize=True)
+        self.position_embedding = OneFormerSinePositionEmbedding(
+            num_position_features=config.conv_dim // 2, normalize=True
+        )
         self.num_feature_levels = 3
         transformer_in_channels = feature_channels[-self.num_feature_levels :]
         self.transformer_feature_strides = config.strides[-self.num_feature_levels :]
@@ -1367,11 +1385,11 @@ class OneFormerPixelDecoder(nn.Module):
         source_flatten = []
         mask_flatten = []
         lvl_pos_embed_flatten = []
-        spatial_shapes = []
+        spatial_shapes_list = []
         for level, (source, mask, pos_embed) in enumerate(zip(sources, masks, position_embeddings_list)):
             batch_size, num_channels, height, width = source.shape
             spatial_shape = (height, width)
-            spatial_shapes.append(spatial_shape)
+            spatial_shapes_list.append(spatial_shape)
             source = source.flatten(2).transpose(1, 2)
             mask = mask.flatten(1)
             pos_embed = pos_embed.flatten(2).transpose(1, 2)
@@ -1382,7 +1400,7 @@ class OneFormerPixelDecoder(nn.Module):
         source_flatten = torch.cat(source_flatten, 1)
         mask_flatten = torch.cat(mask_flatten, 1)
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
-        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=source_flatten.device)
+        spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
 
@@ -1394,6 +1412,7 @@ class OneFormerPixelDecoder(nn.Module):
                 attention_mask=mask_flatten,
                 position_embeddings=lvl_pos_embed_flatten,
                 spatial_shapes=spatial_shapes,
+                spatial_shapes_list=spatial_shapes_list,
                 level_start_index=level_start_index,
                 valid_ratios=valid_ratios,
                 output_attentions=output_attentions,
@@ -1404,19 +1423,14 @@ class OneFormerPixelDecoder(nn.Module):
         y = encoder_outputs.last_hidden_state
         bs = y.shape[0]
 
-        split_size_or_sections = [None] * self.num_feature_levels
-        for i in range(self.num_feature_levels):
-            if i < self.num_feature_levels - 1:
-                split_size_or_sections[i] = level_start_index[i + 1] - level_start_index[i]
-            else:
-                split_size_or_sections[i] = y.shape[1] - level_start_index[i]
+        split_size_or_sections = [height * width for height, width in spatial_shapes_list]
         y = torch.split(y, split_size_or_sections, dim=1)
 
         out = []
         multi_scale_features = []
         num_cur_levels = 0
         for i, z in enumerate(y):
-            out.append(z.transpose(1, 2).view(bs, -1, spatial_shapes[i][0], spatial_shapes[i][1]))
+            out.append(z.transpose(1, 2).view(bs, -1, spatial_shapes_list[i][0], spatial_shapes_list[i][1]))
 
         # append `out` with extra FPN levels
         # Reverse feature maps into top-down order (from low to high resolution)
@@ -2103,6 +2117,7 @@ class OneFormerTransformerDecoderQueryTransformer(nn.Module):
 
     def forward(self, src, mask, query_embed, pos_embed, task_token=None):
         batch_size = src.shape[0]
+        # flatten NxCxHxW to HWxNxC
         src = src.flatten(2).permute(2, 0, 1)
         pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
         query_embed = query_embed.unsqueeze(1).repeat(1, batch_size, 1)
@@ -2283,7 +2298,7 @@ class OneFormerTransformerModule(nn.Module):
         super().__init__()
         hidden_dim = config.hidden_dim
         self.num_feature_levels = 3
-        self.position_embedder = OneFormerSinePositionEmbedding(num_pos_feats=hidden_dim // 2, normalize=True)
+        self.position_embedder = OneFormerSinePositionEmbedding(num_position_features=hidden_dim // 2, normalize=True)
         self.queries_embedder = nn.Embedding(config.num_queries, hidden_dim)
         self.input_projections = []
 
@@ -2314,6 +2329,7 @@ class OneFormerTransformerModule(nn.Module):
 
         for i in range(self.num_feature_levels):
             size_list.append(multi_scale_features[i].shape[-2:])
+            # Flatten NxCxHxW to NxCxHW
             multi_stage_positional_embeddings.append(
                 self.position_embedder(
                     multi_scale_features[i].shape, multi_scale_features[i].device, multi_scale_features[i].dtype, None
@@ -2323,8 +2339,7 @@ class OneFormerTransformerModule(nn.Module):
                 self.input_projections[i](multi_scale_features[i]).flatten(2)
                 + self.level_embed.weight[i][None, :, None]
             )
-
-            # flatten NxCxHxW to HWxNxC
+            # Permute  NxCxHW to HWxNxC
             multi_stage_positional_embeddings[-1] = multi_stage_positional_embeddings[-1].permute(2, 0, 1)
             multi_stage_features[-1] = multi_stage_features[-1].permute(2, 0, 1)
 
@@ -2357,36 +2372,56 @@ class OneFormerSinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
 
+    @staticmethod
     @compile_compatible_method_lru_cache(maxsize=1)
-    def forward(
-        self,
+    def build_sine_position_embedding(
         shape: torch.Size,
         device: torch.device | str,
         dtype: torch.dtype,
-        mask: Tensor | None = None,
-    ) -> Tensor:
+        num_position_features: int,
+        normalize: bool = False,
+        scale: float | None = None,
+        temperature: int = 10000,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        batch_size, _, height, width = shape
         if mask is None:
-            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
-        not_mask = (~mask).to(dtype)
-        y_embed = not_mask.cumsum(1)
-        x_embed = not_mask.cumsum(2)
-        if self.normalize:
+            # Without a mask this is just a cumsum over ones, written out as arange
+            # instead: inductor's cumsum(ones) rewrite drops the requested dtype
+            # (https://github.com/pytorch/pytorch/issues/189518), which breaks
+            # float16/bfloat16 under torch.compile — don't revert to cumsum here
+            # until that fix is widely released.
+            y_embed = torch.arange(1, height + 1, dtype=dtype, device=device)[None, :, None].expand(
+                batch_size, height, width
+            )
+            x_embed = torch.arange(1, width + 1, dtype=dtype, device=device)[None, None, :].expand(
+                batch_size, height, width
+            )
+        else:
+            embed_mask = mask.to(dtype)
+            y_embed = embed_mask.cumsum(1)
+            x_embed = embed_mask.cumsum(2)
+        if normalize:
             eps = 1e-6
-            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / num_position_features)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -2394,6 +2429,17 @@ class OneFormerSinePositionEmbedding(nn.Module):
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
+
+    def forward(
+        self,
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        return self.build_sine_position_embedding(
+            shape, device, dtype, self.num_position_features, self.normalize, self.scale, self.temperature, mask
+        )
 
 
 # Copied from transformers.models.maskformer.modeling_maskformer.PredictionBlock
@@ -2732,6 +2778,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
+        super()._init_weights(module)
         xavier_std = self.config.init_xavier_std
         std = self.config.init_std
         if isinstance(module, OneFormerTransformerModule):
@@ -2791,7 +2838,7 @@ class OneFormerPreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.MultiheadAttention):
             init.normal_(module.in_proj_weight, mean=0.0, std=std)
             init.zeros_(module.in_proj_bias)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, nn.BatchNorm2d):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -2799,14 +2846,6 @@ class OneFormerPreTrainedModel(PreTrainedModel):
                 init.zeros_(module.running_mean)
                 init.ones_(module.running_var)
                 init.zeros_(module.num_batches_tracked)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, OneFormerLoss):
             init.constant_(module.logit_scale, np.log(1 / self.config.contrastive_temperature))
             empty_weight = torch.ones(module.num_classes + 1)
@@ -2856,11 +2895,11 @@ class OneFormerModel(OneFormerPreTrainedModel):
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import OneFormerProcessor, OneFormerModel
 
-        >>> # download texting image
+        >>> # download test image
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
         ...     image = Image.open(BytesIO(response.read()))
@@ -3054,7 +3093,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         ```python
         >>> from transformers import OneFormerProcessor, OneFormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> import torch
 

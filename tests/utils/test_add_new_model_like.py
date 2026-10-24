@@ -74,12 +74,12 @@ class TestAddNewModelLike(unittest.TestCase):
         cls.tmp_dir.cleanup()
 
     def assertFileIsEqual(self, text: str, filepath: str):
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             file_text = f.read()
         self.assertEqual(file_text.strip(), text.strip())
 
     def assertInFile(self, text: str, filepath: str):
-        with open(filepath, "r") as f:
+        with open(filepath, "r", encoding="utf-8") as f:
             file_text = f.read()
         self.assertTrue(text in file_text)
 
@@ -418,11 +418,11 @@ class TestAddNewModelLike(unittest.TestCase):
         )
         self.assertInFile(
             '("my_test2", "MyTest2FeatureExtractor"),\n',
-            os.path.join(self.MODEL_PATH, "auto", "feature_extraction_auto.py"),
+            os.path.join(self.MODEL_PATH, "auto", "auto_mappings.py"),
         )
         self.assertInFile(
             '("my_test2", "MyTest2Processor"),\n',
-            os.path.join(self.MODEL_PATH, "auto", "processing_auto.py"),
+            os.path.join(self.MODEL_PATH, "auto", "auto_mappings.py"),
         )
         self.assertInFile(
             "- local: model_doc/my_test2\n        title: MyTest2\n",

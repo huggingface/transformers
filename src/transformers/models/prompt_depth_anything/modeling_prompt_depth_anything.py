@@ -372,8 +372,6 @@ class PromptDepthAnythingNeck(nn.Module):
     """
 )
 class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
-    _no_split_modules = ["DPTViTEmbeddings"]
-
     def __init__(self, config):
         super().__init__(config)
 
@@ -409,7 +407,7 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/image.jpg?raw=true"

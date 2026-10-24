@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...image_processing_utils import select_best_resolution
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
@@ -145,12 +145,12 @@ def unpad_image(tensor, original_size):
     return unpadded_tensor
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava outputs, with hidden states and attentions.
     """
 )
+@dataclass
 class LlavaNextModelOutputWithPast(BaseModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
@@ -166,12 +166,12 @@ class LlavaNextModelOutputWithPast(BaseModelOutputWithPast):
     image_hidden_states: torch.FloatTensor | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for LlavaNext causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class LlavaNextCausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -225,8 +225,7 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LlamaDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
 
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -237,13 +236,8 @@ class LlavaNextPreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        std = getattr(self.config, "initializer_range", self.config.get_text_config().initializer_range)
-
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, LlavaNextModel):
+        super()._init_weights(module)
+        if isinstance(module, LlavaNextModel):
             embed_std = 1 / math.sqrt(self.config.text_config.hidden_size)
             init.normal_(module.image_newline, mean=0.0, std=embed_std)
 
@@ -267,12 +261,6 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def pack_image_features(self, image_features, image_sizes, vision_feature_select_strategy, image_newline=None):
         """
@@ -352,11 +340,10 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         image_sizes: torch.Tensor,
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
-        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
             Actual image size of each images (H, W).
@@ -385,9 +372,9 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
             # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
+        kwargs["output_hidden_states"] = True  # Ignore arg on purpose
         image_outputs = self.vision_tower(
             pixel_values,
-            output_hidden_states=True,  # Ignore arg on purpose
             return_dict=True,
             **kwargs,
         )
@@ -425,16 +412,16 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
         )
         return special_image_mask
@@ -454,6 +441,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         vision_feature_layer: int | list[int] | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
         use_cache: bool | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | LlavaNextModelOutputWithPast:
         r"""
@@ -465,18 +453,26 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None and pixel_values.size(0) > 0:
-            image_features = self.get_image_features(
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None and pixel_values.size(0) > 0:
+            mm_encoder_outputs["image"] = self.get_image_features(
                 pixel_values,
                 image_sizes,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 return_dict=True,
-            ).pooler_output
-            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -496,7 +492,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
 
 
@@ -507,18 +503,13 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
 )
 class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: LlavaNextConfig):
         super().__init__(config)
         self.model = LlavaNextModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
@@ -543,7 +534,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
             Actual image size of each images (H, W).
@@ -580,6 +571,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | LlavaNextCausalLMOutputWithPast:
         r"""
@@ -587,16 +579,12 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
             If `"full"`, the full vision features are used.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, LlavaNextForConditionalGeneration
 
@@ -627,14 +615,14 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
             **kwargs,
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -650,40 +638,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             attentions=outputs.attentions,
             image_hidden_states=outputs.image_hidden_states,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        image_sizes=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        # Pixel values are used only in the first iteration if available
-        # In subsequent iterations, they are already merged with text and cached
-        # NOTE: first iteration doesn't have to be prefill, it can be the first
-        # iteration with a question and cached system prompt (continue generate from cache)
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_sizes"] = image_sizes
-
-        return model_inputs
 
 
 __all__ = ["LlavaNextForConditionalGeneration", "LlavaNextPreTrainedModel", "LlavaNextModel"]

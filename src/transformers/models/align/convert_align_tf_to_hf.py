@@ -18,10 +18,10 @@ import os
 from io import BytesIO
 
 import align
-import httpx
 import numpy as np
 import tensorflow as tf
 import torch
+from huggingface_hub.utils import httpx
 from PIL import Image
 from tokenizer import Tokenizer
 

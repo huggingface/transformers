@@ -28,7 +28,7 @@ from torch.nn import CrossEntropyLoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...backbone_utils import load_backbone
+from ...backbone_utils import filter_output_hidden_states, load_backbone
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -42,13 +42,13 @@ from .configuration_dpt import DPTConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs that also contains intermediate activations that can be used at later stages. Useful
     in the context of Vision models.:
     """
 )
+@dataclass
 class BaseModelOutputWithIntermediateActivations(ModelOutput):
     r"""
     last_hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -61,13 +61,13 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
     intermediate_activations: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for model's outputs that also contains a pooling of the last hidden states as well as intermediate
     activations that can be used by the model at later stages.
     """
 )
+@dataclass
 class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
     r"""
     pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
@@ -131,7 +131,7 @@ class DPTViTHybridEmbeddings(nn.Module):
         posemb_tok = posemb[:, :start_index]
         posemb_grid = posemb[0, start_index:]
 
-        old_grid_size = torch_int(len(posemb_grid) ** 0.5)
+        old_grid_size = torch_int(posemb_grid.shape[0] ** 0.5)
 
         posemb_grid = posemb_grid.reshape(1, old_grid_size, old_grid_size, -1).permute(0, 3, 1, 2)
         posemb_grid = nn.functional.interpolate(posemb_grid, size=(grid_size_height, grid_size_width), mode="bilinear")
@@ -297,7 +297,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->DPT
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->DPT
 class DPTSelfAttention(nn.Module):
     def __init__(self, config: DPTConfig):
         super().__init__()
@@ -353,7 +353,7 @@ class DPTSelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViTConfig->DPTConfig, ViTSelfOutput->DPTViTSelfOutput
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViTConfig->DPTConfig, ViTSelfOutput->DPTViTSelfOutput
 class DPTViTSelfOutput(nn.Module):
     """
     The residual connection is defined in ViTLayer instead of here (as is the case with other models), due to the
@@ -371,7 +371,7 @@ class DPTViTSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViTConfig->DPTConfig, ViTSelfAttention->DPTSelfAttention, ViTSelfOutput->DPTViTSelfOutput
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViTConfig->DPTConfig, ViTSelfAttention->DPTSelfAttention, ViTSelfOutput->DPTViTSelfOutput
 class DPTViTAttention(nn.Module):
     def __init__(self, config: DPTConfig):
         super().__init__()
@@ -388,7 +388,7 @@ class DPTViTAttention(nn.Module):
         return output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate with ViTConfig->DPTConfig, ViTIntermediate->DPTViTIntermediate
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTMLP with ViTConfig->DPTConfig, ViTIntermediate->DPTViTIntermediate
 class DPTViTIntermediate(nn.Module):
     def __init__(self, config: DPTConfig):
         super().__init__()
@@ -404,7 +404,7 @@ class DPTViTIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViTConfig->DPTConfig, ViTOutput->DPTViTOutput
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTMLP with ViTConfig->DPTConfig, ViTOutput->DPTViTOutput
 class DPTViTOutput(nn.Module):
     def __init__(self, config: DPTConfig):
         super().__init__()
@@ -418,7 +418,7 @@ class DPTViTOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViTConfig->DPTConfig, ViTAttention->DPTViTAttention, ViTIntermediate->DPTViTIntermediate, ViTOutput->DPTViTOutput, ViTLayer->DPTViTLayer
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTLayer with ViTConfig->DPTConfig, ViTAttention->DPTViTAttention, ViTIntermediate->DPTViTIntermediate, ViTOutput->DPTViTOutput, ViTLayer->DPTViTLayer
 class DPTViTLayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -801,7 +801,7 @@ class DPTModel(DPTPreTrainedModel):
         )
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViTConfig->DPTConfig, ViTPooler->DPTViTPooler
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTPooler with ViTConfig->DPTConfig, ViTPooler->DPTViTPooler
 class DPTViTPooler(nn.Module):
     def __init__(self, config: DPTConfig):
         super().__init__()
@@ -941,6 +941,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @filter_output_hidden_states
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -948,16 +949,13 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> DepthEstimatorOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, DPTForDepthEstimation
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -988,13 +986,6 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         loss = None
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
-
-        # Internally the model always needs to output hidden states, we control the output
-        # per user request on the final output
-        user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
-            self.config, "output_hidden_states", False
-        )
-        kwargs["output_hidden_states"] = True
 
         if self.backbone is not None:
             outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
@@ -1030,7 +1021,7 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         return DepthEstimatorOutput(
             loss=loss,
             predicted_depth=predicted_depth,
-            hidden_states=outputs.hidden_states if user_requested_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
@@ -1094,6 +1085,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
 
     @can_return_tuple
     @auto_docstring
+    @filter_output_hidden_states
     def forward(
         self,
         pixel_values: torch.FloatTensor | None = None,
@@ -1101,15 +1093,11 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> SemanticSegmenterOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
-
         Examples:
         ```python
         >>> from transformers import AutoImageProcessor, DPTForSemanticSegmentation
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1126,13 +1114,6 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         ```"""
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
-
-        # Internally the model always needs to output hidden states, we control the output
-        # per user request on the final output
-        user_requested_hidden_states = kwargs.get("output_hidden_states") or getattr(
-            self.config, "output_hidden_states", False
-        )
-        kwargs["output_hidden_states"] = True
 
         outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(pixel_values, **kwargs)
         hidden_states = outputs.hidden_states
@@ -1177,7 +1158,7 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states if user_requested_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 

@@ -15,7 +15,6 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -27,26 +26,25 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
-    BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
     ModelOutput,
+    MoeCausalLMOutputWithPast,
+    MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     dynamic_rope_update,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_llama4 import Llama4Config, Llama4TextConfig
 
 
@@ -153,7 +151,7 @@ class Llama4Router(nn.Linear):
         return router_scores, router_logits
 
 
-@use_kernel_forward_from_hub("Llama4TextMoe")
+# @use_kernel_forward_from_hub("Llama4TextMoe")
 class Llama4TextMoe(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -177,10 +175,8 @@ class Llama4TextMoe(nn.Module):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Llama4Text
 class Llama4TextRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
     # Ignore copy
-    def __init__(self, config: Llama4TextConfig, device=None):
+    def __init__(self, config: Llama4TextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -191,26 +187,18 @@ class Llama4TextRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: Llama4TextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config: Llama4TextConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -219,25 +207,17 @@ class Llama4TextRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
     # Ignore copy
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.to(x.device) @ position_ids_expanded).transpose(1, 2)
-            freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
-            freqs_cis = freqs_cis * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        freqs_cis = torch.polar(torch.ones_like(freqs), freqs)  # Convert to complex representation
+        freqs_cis = freqs_cis * self.attention_scaling
 
         return freqs_cis
 
@@ -500,7 +480,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
     _can_record_outputs = {
         "attentions": Llama4TextAttention,
         "hidden_states": Llama4TextDecoderLayer,
-        "router_logits": Llama4TextMoe,
+        "router_logits": OutputRecorder(Llama4Router, index=1),
     }
 
     def __init__(self, config: Llama4TextConfig):
@@ -519,7 +499,6 @@ class Llama4TextModel(Llama4PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @can_return_tuple
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
@@ -532,7 +511,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -580,7 +559,7 @@ class Llama4TextModel(Llama4PreTrainedModel):
             )
         hidden_states = self.norm(hidden_states)
 
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values if use_cache else None,
         )
@@ -590,6 +569,7 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer"]
     base_model_prefix = "language_model"
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _fsdp_plan = {"lm_head": "keep_full_weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     config: Llama4TextConfig
 
@@ -615,13 +595,8 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -649,28 +624,28 @@ class Llama4ForCausalLM(Llama4PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         loss = None
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        return CausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits,
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for Llava causal language model (or autoregressive) outputs.
     """
 )
+@dataclass
 class Llama4CausalLMOutputWithPast(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -685,6 +660,8 @@ class Llama4CausalLMOutputWithPast(ModelOutput):
     image_hidden_states (`torch.FloatTensor`, *optional*):
         A `torch.FloatTensor` of size (batch_size, num_images, sequence_length, hidden_size)`.
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
+    router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
+        Tuple of `torch.FloatTensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
 
     loss: torch.FloatTensor | None = None
@@ -693,6 +670,7 @@ class Llama4CausalLMOutputWithPast(ModelOutput):
     hidden_states: tuple[torch.FloatTensor] | None = None
     attentions: tuple[torch.FloatTensor] | None = None
     image_hidden_states: torch.FloatTensor | None = None
+    router_logits: tuple[torch.FloatTensor] | None = None
 
 
 class Llama4VisionMLP2(torch.nn.Module):
@@ -999,11 +977,12 @@ class Llama4UnfoldConvolution(nn.Module):
         return hidden_states
 
 
+# note: this is same axial rope as in Pixtral
 class Llama4VisionRotaryEmbedding(nn.Module):
     def __init__(self, config: Llama4VisionConfig):
         super().__init__()
         self.config = config
-        self.register_buffer("freqs_ci", self._compute_freqs_ci(config), persistent=False)
+        self.freqs_ci = nn.Buffer(self._compute_freqs_ci(config), persistent=False)
 
     @staticmethod
     def _compute_freqs_ci(config):
@@ -1081,7 +1060,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MllamaVisionModel
 
@@ -1169,7 +1148,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
 
 class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     _no_split_modules = ["Llama4TextDecoderLayer", "Llama4VisionEncoderLayer"]
-    _tp_plan = {}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     base_model_prefix = "model"
     config: Llama4Config
 
@@ -1187,12 +1166,6 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
 
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     def get_output_embeddings(self):
         return self.language_model.get_output_embeddings()
 
@@ -1205,22 +1178,13 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    @merge_with_config_defaults
     @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring(custom_intro="Obtains image last hidden states from the vision tower and apply al projection.")
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_select_strategy: str,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-            The tensors corresponding to the input images.
-        vision_feature_select_strategy (`str`):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`
-        """
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         return self.vision_model(pixel_values, **kwargs)
 
@@ -1233,16 +1197,16 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
         else:
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         torch_compilable_check(
-            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
             f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
         )
         return special_image_mask
@@ -1265,19 +1229,15 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Llama4CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, LlavaForConditionalGeneration
 
@@ -1311,16 +1271,18 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
                 "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
             )
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_features = self.get_image_features(
-                pixel_values=pixel_values,
-                vision_feature_select_strategy=vision_feature_select_strategy,
-                return_dict=True,
-            ).last_hidden_state
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values=pixel_values, return_dict=True)
 
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].last_hidden_state
             vision_flat = image_features.view(-1, image_features.size(-1))
             projected_vision_flat = self.multi_modal_projector(vision_flat).to(
                 inputs_embeds.device, inputs_embeds.dtype
@@ -1347,20 +1309,8 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            if attention_mask is not None:
-                # we use the input attention mask to shift the logits and labels, because it is 2D.
-                # we also crop attn mask in case it is longer, which happens in PrefixTuning with peft
-                shift_attention_mask = attention_mask[:, -(logits.shape[1] - 1) :].to(logits.device)
-                shift_logits = logits[..., :-1, :][shift_attention_mask.to(logits.device) != 0].contiguous()
-                shift_labels = labels[..., 1:][shift_attention_mask.to(labels.device) != 0].contiguous()
-            else:
-                shift_logits = logits[..., :-1, :].contiguous()
-                shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1).to(shift_logits.device)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
         if not return_dict:
@@ -1373,40 +1323,9 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
+            router_logits=outputs.router_logits,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        attention_mask=None,
-        logits_to_keep=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = self.language_model.prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            logits_to_keep=logits_to_keep,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if is_first_iteration or not kwargs.get("use_cache", True):
-            # Pixel values are used only in the first iteration if available
-            # In subsequent iterations, they are already merged with text and cached
-            # NOTE: first iteration doesn't have to be prefill, it can be the first
-            # iteration with a question and cached system prompt (continue generate from cache)
-            model_inputs["pixel_values"] = pixel_values
-
-        return model_inputs
 
 
 __all__ = [

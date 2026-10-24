@@ -34,15 +34,15 @@ from .configuration_swinv2 import Swinv2Config
 logger = logging.get_logger(__name__)
 
 
-# drop_path, Swinv2PatchEmbeddings, Swinv2PatchMerging and Swinv2DropPath are from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/swin_transformer_v2.py.
+# Swinv2PatchEmbeddings and Swinv2PatchMerging are from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/swin_transformer_v2.py.
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swinv2 encoder's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 # Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput with Swin->Swinv2
 class Swinv2EncoderOutput(ModelOutput):
     r"""
@@ -60,12 +60,12 @@ class Swinv2EncoderOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swinv2 model's outputs that also contains a pooling of the last hidden states.
     """
 )
+@dataclass
 # Copied from transformers.models.swin.modeling_swin.SwinModelOutput with Swin->Swinv2
 class Swinv2ModelOutput(ModelOutput):
     r"""
@@ -86,12 +86,12 @@ class Swinv2ModelOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swinv2 masked image model outputs.
     """
 )
+@dataclass
 # Copied from transformers.models.swin.modeling_swin.SwinMaskedImageModelingOutput with Swin->Swinv2
 class Swinv2MaskedImageModelingOutput(ModelOutput):
     r"""
@@ -114,12 +114,12 @@ class Swinv2MaskedImageModelingOutput(ModelOutput):
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Swinv2 outputs for image classification.
     """
 )
+@dataclass
 # Copied from transformers.models.swin.modeling_swin.SwinImageClassifierOutput with Swin->Swinv2
 class Swinv2ImageClassifierOutput(ModelOutput):
     r"""
@@ -151,7 +151,7 @@ def window_partition(input_feature, window_size):
     input_feature = input_feature.view(
         batch_size, height // window_size, window_size, width // window_size, window_size, num_channels
     )
-    windows = input_feature.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
+    windows = input_feature.transpose(2, 3).contiguous().view(-1, window_size, window_size, num_channels)
     return windows
 
 
@@ -162,42 +162,11 @@ def window_reverse(windows, window_size, height, width):
     """
     num_channels = windows.shape[-1]
     windows = windows.view(-1, height // window_size, width // window_size, window_size, window_size, num_channels)
-    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, height, width, num_channels)
+    windows = windows.transpose(2, 3).contiguous().view(-1, height, width, num_channels)
     return windows
 
 
-# Copied from transformers.models.swin.modeling_swin.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.swin.modeling_swin.SwinDropPath with Swin->Swinv2
-class Swinv2DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
-# Copied from transformers.models.swin.modeling_swin.SwinEmbeddings with Swin->Swinv2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinEmbeddings with Swin->Swinv2
 class Swinv2Embeddings(nn.Module):
     """
     Construct the patch and position embeddings. Optionally, also the mask token.
@@ -305,15 +274,14 @@ class Swinv2PatchEmbeddings(nn.Module):
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
         self.patch_size = patch_size
-        self.num_channels = num_channels
         self.num_patches = num_patches
         self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
     def maybe_pad(self, pixel_values, height, width):
+        """Pad pixel_values to be divisible by patch_size if needed."""
         if width % self.patch_size[1] != 0:
             pad_values = (0, self.patch_size[1] - width % self.patch_size[1])
             pixel_values = nn.functional.pad(pixel_values, pad_values)
@@ -410,8 +378,8 @@ class Swinv2SelfAttention(nn.Module):
         )
 
         relative_coords_table, relative_position_index = self.create_coords_table_and_index()
-        self.register_buffer("relative_coords_table", relative_coords_table, persistent=False)
-        self.register_buffer("relative_position_index", relative_position_index, persistent=False)
+        self.relative_coords_table = nn.Buffer(relative_coords_table, persistent=False)
+        self.relative_position_index = nn.Buffer(relative_position_index, persistent=False)
 
         self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=False)
@@ -524,7 +492,7 @@ class Swinv2SelfAttention(nn.Module):
         return relative_coords_table, relative_position_index
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->Swinv2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinSelfOutput with Swin->Swinv2
 class Swinv2SelfOutput(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -564,7 +532,7 @@ class Swinv2Attention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->Swinv2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinIntermediate with Swin->Swinv2
 class Swinv2Intermediate(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -580,7 +548,7 @@ class Swinv2Intermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->Swinv2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinOutput with Swin->Swinv2
 class Swinv2Output(nn.Module):
     def __init__(self, config, dim):
         super().__init__()
@@ -591,6 +559,31 @@ class Swinv2Output(nn.Module):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
+
+
+# Copied from transformers.models.swin.modular_swin.SwinDropPath with SwinDropPath->Swinv2DropPath
+class Swinv2DropPath(nn.Module):
+    """Stochastic depth (DropPath) per sample, for residual blocks.
+
+    Identity when ``drop_prob`` is 0 or outside training. See `Deep Networks with Stochastic Depth
+    <https://arxiv.org/abs/1603.09382>`_.
+    """
+
+    def __init__(self, drop_prob: float = 0.0) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        if self.drop_prob == 0.0 or not self.training:
+            return hidden_states
+        keep_prob = 1 - self.drop_prob
+        shape = (hidden_states.shape[0],) + (1,) * (hidden_states.ndim - 1)
+        random_tensor = torch.rand(shape, dtype=hidden_states.dtype, device=hidden_states.device)
+        random_tensor = torch.floor(random_tensor + keep_prob)
+        return hidden_states.div(keep_prob) * random_tensor
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
 
 
 class Swinv2Layer(nn.Module):
@@ -624,32 +617,29 @@ class Swinv2Layer(nn.Module):
         shift_size = [0 if r <= w else s for r, w, s in zip(self.input_resolution, window_size, target_shift_size)]
         return window_size, shift_size
 
-    def get_attn_mask(self, height, width, dtype):
-        if self.shift_size > 0:
-            # calculate attention mask for shifted window multihead self attention
-            img_mask = torch.zeros((1, height, width, 1), dtype=dtype)
-            height_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
-            )
-            width_slices = (
-                slice(0, -self.window_size),
-                slice(-self.window_size, -self.shift_size),
-                slice(-self.shift_size, None),
-            )
-            count = 0
-            for height_slice in height_slices:
-                for width_slice in width_slices:
-                    img_mask[:, height_slice, width_slice, :] = count
-                    count += 1
+    def get_attn_mask(self, height, width, dtype, device=None):
+        """Build the cyclic-shift attention mask for shifted-window MSA; returns None when shift_size is 0.
 
-            mask_windows = window_partition(img_mask, self.window_size)
-            mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
-            attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
-            attn_mask = attn_mask.masked_fill(attn_mask != 0, -100.0).masked_fill(attn_mask == 0, 0.0)
-        else:
-            attn_mask = None
+        Each (h, w) position belongs to one of 9 cyclic-shift regions (3 along each axis), encoded
+        as ``h_region * 3 + w_region``. Regions per axis:
+        - 0: indices ``[0, axis - window_size)``
+        - 1: indices ``[axis - window_size, axis - shift_size)``
+        - 2: indices ``[axis - shift_size, axis)``
+        Implementation note: a single arithmetic pass on `torch.arange` (two comparisons +
+        broadcast add) replaces the original 9-iteration nested-Python-loop slice-assignment —
+        fully vectorised, no per-cell host-side scatter, no GPU↔host sync.
+        """
+        if self.shift_size <= 0:
+            return None
+        h_idx = torch.arange(height, device=device)
+        w_idx = torch.arange(width, device=device)
+        h_region = (h_idx >= height - self.window_size).long() + (h_idx >= height - self.shift_size).long()
+        w_region = (w_idx >= width - self.window_size).long() + (w_idx >= width - self.shift_size).long()
+        img_mask = (h_region[None, :, None, None] * 3 + w_region[None, None, :, None]).to(dtype)
+        mask_windows = window_partition(img_mask, self.window_size)
+        mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
+        attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+        attn_mask = attn_mask.masked_fill(attn_mask != 0, -100.0).masked_fill(attn_mask == 0, 0.0)
         return attn_mask
 
     def maybe_pad(self, hidden_states, height, width):
@@ -682,9 +672,9 @@ class Swinv2Layer(nn.Module):
         # partition windows
         hidden_states_windows = window_partition(shifted_hidden_states, self.window_size)
         hidden_states_windows = hidden_states_windows.view(-1, self.window_size * self.window_size, channels)
-        attn_mask = self.get_attn_mask(height_pad, width_pad, dtype=hidden_states.dtype)
-        if attn_mask is not None:
-            attn_mask = attn_mask.to(hidden_states_windows.device)
+        attn_mask = self.get_attn_mask(
+            height_pad, width_pad, dtype=hidden_states.dtype, device=hidden_states_windows.device
+        )
 
         attention_outputs = self.attention(hidden_states_windows, attn_mask, output_attentions=output_attentions)
 
@@ -883,14 +873,8 @@ class Swinv2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, Swinv2Embeddings):
+        super()._init_weights(module)
+        if isinstance(module, Swinv2Embeddings):
             if module.mask_token is not None:
                 init.zeros_(module.mask_token)
             if module.position_embeddings is not None:
@@ -903,7 +887,7 @@ class Swinv2PreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-# Copied from transformers.models.swin.modeling_swin.SwinModel with SWIN->SWINV2,Swin->Swinv2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinModel with SWIN->SWINV2,Swin->Swinv2
 class Swinv2Model(Swinv2PreTrainedModel):
     def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
         r"""
@@ -991,16 +975,9 @@ class Swinv2Model(Swinv2PreTrainedModel):
     custom_intro="""
         Swinv2 Model with a decoder on top for masked image modeling, as proposed in
     [SimMIM](https://huggingface.co/papers/2111.09886).
-
-        <Tip>
-
-        Note that we provide a script to pre-train this model on custom data in our [examples
-        directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-        </Tip>
     """
 )
-# Copied from transformers.models.swin.modeling_swin.SwinForMaskedImageModeling with swin->swinv2, base-simmim-window6-192->tiny-patch4-window8-256,SWIN->SWINV2,Swin->Swinv2,192->256
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinForMaskedImageModeling with swin->swinv2, base-simmim-window6-192->tiny-patch4-window8-256,SWIN->SWINV2,Swin->Swinv2,192->256
 class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1038,7 +1015,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
         >>> from transformers import AutoImageProcessor, Swinv2ForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1119,7 +1096,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
     </Tip>
     """
 )
-# Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with SWIN->SWINV2,Swin->Swinv2,swin->swinv2
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with SWIN->SWINV2,Swin->Swinv2,swin->swinv2
 class Swinv2ForImageClassification(Swinv2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1146,12 +1123,6 @@ class Swinv2ForImageClassification(Swinv2PreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple | Swinv2ImageClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.swinv2(
@@ -1220,7 +1191,7 @@ class Swinv2Backbone(BackboneMixin, Swinv2PreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import math
-from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
@@ -27,7 +26,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...masking_utils import create_bidirectional_mask
+from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, can_return_tuple
@@ -41,7 +40,7 @@ class PI0TimestepEmbeddings(nn.Module):
         super().__init__()
         self.config = config
         sinusoid_freq = self.compute_freqs(config)
-        self.register_buffer("sinusoid_freq", sinusoid_freq, persistent=False)
+        self.sinusoid_freq = nn.Buffer(sinusoid_freq, persistent=False)
 
     @staticmethod
     def compute_freqs(config):
@@ -51,7 +50,7 @@ class PI0TimestepEmbeddings(nn.Module):
         return sinusoid_freq
 
     def forward(self, time):
-        device_type = time.device.type if isinstance(time.device.type, str) and time.device.type != "mps" else "cpu"
+        device_type = time.device.type if isinstance(time.device.type, str) else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             sinusoid_freq = self.sinusoid_freq[None, :]
             emb = sinusoid_freq * time[:, None]
@@ -101,15 +100,6 @@ class PI0PreTrainedModel(PreTrainedModel):
             init.copy_(module.sinusoid_freq, module.compute_freqs(module.config))
 
 
-def blockwise_bidirectional_mask(block_boundaries: torch.Tensor) -> Callable:
-    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        q_block = torch.bucketize(q_idx, block_boundaries)
-        kv_block = torch.bucketize(kv_idx, block_boundaries)
-        return kv_block <= q_block
-
-    return inner_mask
-
-
 @auto_docstring
 class PI0Model(PI0PreTrainedModel):
     def __init__(self, config: PI0Config):
@@ -140,12 +130,11 @@ class PI0Model(PI0PreTrainedModel):
         llm_input_ids[input_ids == self.config.vlm_config.image_token_id] = 0
         inputs_embeds = self.vlm.get_input_embeddings()(llm_input_ids)
         special_image_mask = (
-            (input_ids == self.config.vlm_config.image_token_id)
-            .unsqueeze(-1)
-            .expand_as(inputs_embeds)
-            .to(inputs_embeds.device)
+            (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).to(inputs_embeds.device)
         )
-        inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, total_image_features)
+        inputs_embeds = inputs_embeds.masked_scatter(
+            special_image_mask, total_image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        )
 
         return inputs_embeds
 
@@ -176,6 +165,7 @@ class PI0Model(PI0PreTrainedModel):
             if inputs_embeds is None:
                 inputs_embeds = self.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
 
+            # PI0 always passes a prefix and we need to hardcode it to correctly build a mask
             token_type_ids = torch.zeros_like(inputs_embeds)[:, :, 0]
             past_key_values = self.vlm(
                 inputs_embeds=inputs_embeds,
@@ -203,14 +193,19 @@ class PI0Model(PI0PreTrainedModel):
         # We have three blocks: vlm-inputss, state and actions from which only 1 token is `state`
         # The mask should be bidirectional within each block and to prev blocks, but not to next blocks
         vlm_input_length = past_key_values.get_seq_length()
-        block_sizes = torch.tensor([vlm_input_length + 1, action_embeds.shape[1] - 1], device=action_embeds.device)
-        block_boundaries = torch.cumsum(block_sizes, dim=0) - 1
-        bidirectional_mask = create_bidirectional_mask(
+        block_sequence_ids = torch.cat(
+            [
+                torch.zeros(vlm_input_length + 1, device=action_embeds.device, dtype=torch.long),
+                torch.ones(action_embeds.shape[1] - 1, device=action_embeds.device, dtype=torch.long),
+            ]
+        )
+        block_sequence_ids = block_sequence_ids[None, :].repeat(action_embeds.shape[0], 1)
+        bidirectional_mask = create_causal_mask(
             config=self.config.dit_config,
             inputs_embeds=action_embeds,
             attention_mask=dit_attention_mask,
             past_key_values=past_key_values,
-            and_mask_function=blockwise_bidirectional_mask(block_boundaries),
+            block_sequence_ids=block_sequence_ids,
         )
 
         dit_output = self.dit(
@@ -263,7 +258,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
         pixel_attention_mask (`torch.Tensor`, *optional*):
             The mask indicating padded positions in the input image.
         actions (`torch.Tensor`, *optional*):
-            Input actions that need to be predicted. Used only when training to compiute loss.
+            Input actions that need to be predicted. Used only when training to compute loss.
         """
         batch_size = state.shape[0]
 
@@ -357,13 +352,16 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             )
 
         # 2. Run VLM once and obtain prefix cache. Must infer positions here!
+        position_ids = None
         if attention_mask is not None:
             position_ids = attention_mask.cumsum(-1) - 1
         inputs_embeds = self.model.embed_prefix(input_ids, pixel_values, pixel_attention_mask)
+        token_type_ids = torch.zeros_like(inputs_embeds)[:, :, 0]
         past_key_values = self.model.vlm(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            token_type_ids=token_type_ids,
             use_cache=True,
             return_dict=True,
         ).past_key_values
@@ -381,10 +379,11 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
                 pixel_attention_mask=pixel_attention_mask,
                 attention_mask=attention_mask,
                 past_key_values=past_key_values,
+                **kwargs,
             )
 
             # We need to keep only the "vlm-prefix", no attention to past denoising steps!
-            past_key_values.crop(prefix_length)
+            past_key_values.crop(prefix_length - past_key_values.get_seq_length())
             noise = noise + dt * output.logits
         return noise
 

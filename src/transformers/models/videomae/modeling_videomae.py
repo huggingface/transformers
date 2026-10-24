@@ -28,7 +28,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
@@ -38,12 +38,12 @@ from .configuration_videomae import VideoMAEConfig
 logger = logging.get_logger(__name__)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for VideoMAEDecoder's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class VideoMAEDecoderOutput(ModelOutput):
     r"""
     logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
@@ -55,12 +55,12 @@ class VideoMAEDecoderOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for VideoMAEForPreTraining's outputs, with potential hidden states and attentions.
     """
 )
+@dataclass
 class VideoMAEForPreTrainingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`):
@@ -222,9 +222,9 @@ class VideoMAESelfAttention(nn.Module):
         self.scaling = self.attention_head_size**-0.5
         self.is_causal = False
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qv_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qv_bias)
 
     def forward(
         self, hidden_states: torch.Tensor | None = None
@@ -257,7 +257,7 @@ class VideoMAESelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VideoMAE
 class VideoMAESelfOutput(nn.Module):
     """
     The residual connection is defined in VideoMAELayer instead of here (as is the case with other models), due to the
@@ -275,7 +275,7 @@ class VideoMAESelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VideoMAE
 class VideoMAEAttention(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()
@@ -292,7 +292,7 @@ class VideoMAEAttention(nn.Module):
         return output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTIntermediate ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTMLP ViT->VideoMAE
 class VideoMAEIntermediate(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()
@@ -308,7 +308,7 @@ class VideoMAEIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTMLP ViT->VideoMAE
 class VideoMAEOutput(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()
@@ -322,7 +322,7 @@ class VideoMAEOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VideoMAE,VIT->VIDEOMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->VideoMAE,VIT->VIDEOMAE
 class VideoMAELayer(GradientCheckpointingLayer):
     """This corresponds to the Block class in the timm implementation."""
 
@@ -357,7 +357,7 @@ class VideoMAELayer(GradientCheckpointingLayer):
         return layer_output
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->VideoMAE
+# Todo - Refactor as part of vision refactor. Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->VideoMAE
 class VideoMAEEncoder(nn.Module):
     def __init__(self, config: VideoMAEConfig):
         super().__init__()
@@ -661,6 +661,10 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
             labels = videos_patch[bool_masked_pos].reshape(batch_size, -1, num_channels)
 
         loss_fct = MSELoss()
+        torch_compilable_check(
+            logits.shape[1] == labels.shape[1],
+            "VideoMAE reconstruction logits and labels must cover the same number of masked patches.",
+        )
         loss = loss_fct(logits, labels)
 
         return VideoMAEForPreTrainingOutput(
@@ -700,11 +704,6 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
         Examples:
 
         ```python

@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import Conv1D
 from ...utils import (
     ModelOutput,
@@ -415,7 +415,7 @@ class GPT2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["GPT2Block"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_attention_backend = True
@@ -432,18 +432,11 @@ class GPT2PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
-        if isinstance(module, (nn.Linear, Conv1D)):
+        super()._init_weights(module)
+        if isinstance(module, Conv1D):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
-            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
 
         # Reinitialize selected weights subject to the OpenAI GPT-2 Paper Scheme:
         #   > A modified initialization which accounts for the accumulation on the residual path with model depth. Scale
@@ -451,19 +444,18 @@ class GPT2PreTrainedModel(PreTrainedModel):
         #   >   -- GPT-2 :: https://openai.com/blog/better-language-models/
         #
         # Reference (Megatron-LM): https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/model/gpt_model.py
-        if isinstance(module, PreTrainedModel):
-            for name, p in module.named_parameters():
-                if name == "c_proj.weight":
-                    # Special Scaled Initialization --> There are 2 Layer Norms per Transformer Block
-                    init.normal_(p, mean=0.0, std=self.config.initializer_range / math.sqrt(2 * self.config.n_layer))
+        if isinstance(module, (GPT2Attention, GPT2MLP)):
+            # Special Scaled Initialization --> 2 residual paths (attention and MLP) per Transformer Block
+            std = self.config.initializer_range / math.sqrt(2 * self.config.n_layer)
+            init.normal_(module.c_proj.weight, mean=0.0, std=std)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of models predicting if two sentences are consecutive or not.
     """
 )
+@dataclass
 class GPT2DoubleHeadsModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -596,7 +588,6 @@ class GPT2Model(GPT2PreTrainedModel):
             position_ids=position_ids,
         )
 
-        encoder_attention_mask = None
         if encoder_hidden_states is not None:
             encoder_attention_mask = create_bidirectional_mask(
                 config=self.config,
@@ -702,8 +693,8 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
         )
         hidden_states = transformer_outputs.last_hidden_state
 
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -901,10 +892,6 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         transformer_outputs: BaseModelOutputWithPastAndCrossAttentions = self.transformer(
             input_ids,

@@ -14,12 +14,18 @@
 """Testing suite for the PyTorch Qwen3.5 model."""
 
 import copy
+import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, is_torch_available
+from parameterized import parameterized
+
+from transformers import AutoProcessor, AutoTokenizer, DataCollatorWithFlattening, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    require_causal_conv1d,
+    require_flash_linear_attention,
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -32,18 +38,24 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
 )
+from ...test_processing_common import url_to_local_path
 
 
 if is_torch_available():
     import torch
 
     from transformers import (
+        AutoModelForCausalLM,
+        AutoModelForImageTextToText,
+        DynamicCache,
         Qwen3_5Config,
         Qwen3_5ForCausalLM,
         Qwen3_5ForConditionalGeneration,
         Qwen3_5ForSequenceClassification,
+        Qwen3_5ForTokenClassification,
         Qwen3_5Model,
         Qwen3_5TextConfig,
+        Qwen3_5TextForSequenceClassification,
         Qwen3_5TextModel,
     )
 
@@ -52,11 +64,19 @@ class Qwen3_5TextModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = Qwen3_5TextModel
         causal_lm_class = Qwen3_5ForCausalLM
-        sequence_classification_class = Qwen3_5ForSequenceClassification
+        sequence_classification_class = Qwen3_5TextForSequenceClassification
 
     def __init__(self, parent):
         super().__init__(parent=parent)
+        self.hidden_act = "silu"
         self.layer_types = ["full_attention", "linear_attention"]
+        self.rope_parameters = {
+            "rope_type": "default",
+            "rope_theta": 10_000,
+            "mrope_section": [2, 1, 1],
+            "mrope_interleaved": True,
+        }
+        self.head_dim = 32
         self.linear_conv_kernel_dim = 2
         self.linear_key_head_dim = 16
         self.linear_value_head_dim = 16
@@ -134,13 +154,95 @@ class Qwen3_5TextModelTest(CausalLMModelTest, unittest.TestCase):
             self.assertEqual(len(self_attentions), sum(layer == "full_attention" for layer in config.layer_types))
             self.assertListEqual(list(self_attentions[0].shape[-3:]), [config.num_attention_heads, seq_len, seq_len])
 
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
     @unittest.skip("Intentionally not reversable (no changes) as only load time within a VLM depends on this")
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         pass
+
+    @require_causal_conv1d
+    @require_flash_linear_attention
+    @require_torch_gpu
+    def test_padding_free_matches_padded_fast_path_regression(self):
+        torch.manual_seed(0)
+        config = self.model_tester.get_config()
+        model = Qwen3_5ForCausalLM(config).to(torch_device).eval()
+
+        data_collator = DataCollatorWithFlattening(
+            return_tensors="pt", return_seq_idx=True, return_flash_attn_kwargs=True
+        )
+        test_cases = [
+            (
+                torch.tensor([[0, 0, 0, 1, 2, 3], [0, 0, 0, 0, 4, 5]], device=torch_device),
+                torch.tensor([[0, 0, 0, 1, 1, 1], [0, 0, 0, 0, 1, 1]], dtype=torch.long, device=torch_device),
+                [{"input_ids": [1, 2, 3]}, {"input_ids": [4, 5]}],
+            ),
+            (
+                torch.tensor([[0, 1, 2, 3, 4, 5], [0, 0, 0, 0, 0, 6]], device=torch_device),
+                torch.tensor([[0, 1, 1, 1, 1, 1], [0, 0, 0, 0, 0, 1]], dtype=torch.long, device=torch_device),
+                [{"input_ids": [1, 2, 3, 4, 5]}, {"input_ids": [6]}],
+            ),
+        ]
+
+        for padded_input_ids, attention_mask, features in test_cases:
+            position_ids = ((attention_mask == 1).long().cumsum(dim=1) - 1) * (attention_mask == 1).long()
+            padding_free_batch = data_collator(features)
+            padding_free_batch = {
+                key: value.to(torch_device) if torch.is_tensor(value) else value
+                for key, value in padding_free_batch.items()
+            }
+
+            with torch.no_grad():
+                res_padded = model(
+                    input_ids=padded_input_ids,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    use_cache=False,
+                )
+                res_padfree = model(**padding_free_batch, use_cache=False)
+
+            logits_padded = res_padded.logits[attention_mask.bool()]
+            logits_padfree = res_padfree.logits[0]
+
+            torch.testing.assert_close(logits_padded, logits_padfree, atol=1e-5, rtol=1e-5)
+
+    def test_linear_attention_multi_token_cached_forward_matches_single_token(self):
+        """
+        Qwen3.5's gated-delta-net layers must produce the same output for a token regardless of
+        whether it's fed as a single-token cached forward or as the first token of a multi-token
+        chunk after the cache has been populated (chunked prefill continuation / speculative
+        verification pattern). A causal LM can never have its logits at position `i` depend on
+        tokens at positions > `i`, even across separate forward calls with a shared cache.
+        """
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = "eager"
+        # GatedDeltaNet's fused norm-gate kernel only supports silu/swish/sigmoid; the shared
+        # tester's default `gelu` would raise before we get to exercise the cache path.
+        config.hidden_act = "silu"
+        model = Qwen3_5TextModel._from_config(config)
+        model.to(torch_device)
+        model.eval()
+
+        prefill_len = 8
+        prompt = ids_tensor((1, prefill_len), config.vocab_size).to(torch_device)
+        next_token = ids_tensor((1, 1), config.vocab_size).to(torch_device)
+
+        # Reference: prefill, then forward the next token alone with the populated cache.
+        cache_single = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_single, use_cache=True)
+            single_out = model(input_ids=next_token, past_key_values=cache_single, use_cache=True)
+        ref_first = single_out.last_hidden_state[:, 0, :]
+
+        # Under test: prefill, then forward [next_token, *distractors] in one call. The first
+        # position must match the single-token forward exactly (causal attention property).
+        distractors = ids_tensor((1, 7), config.vocab_size).to(torch_device)
+        multi_input = torch.cat([next_token, distractors], dim=1)
+        cache_multi = DynamicCache(config=config)
+        with torch.no_grad():
+            model(input_ids=prompt, past_key_values=cache_multi, use_cache=True)
+            multi_out = model(input_ids=multi_input, past_key_values=cache_multi, use_cache=True)
+        under_test_first = multi_out.last_hidden_state[:, 0, :]
+
+        torch.testing.assert_close(under_test_first, ref_first, rtol=1e-4, atol=1e-4)
 
 
 class Qwen3_5VisionText2TextModelTester:
@@ -157,7 +259,7 @@ class Qwen3_5VisionText2TextModelTester:
             "eos_token_id": 1,
             "pad_token_id": 2,
             "hidden_act": "silu",
-            "head_dim": 8,
+            "head_dim": 32,
             "hidden_size": 32,
             "vocab_size": 99,
             "intermediate_size": 37,
@@ -167,9 +269,13 @@ class Qwen3_5VisionText2TextModelTester:
             "num_hidden_layers": 2,
             "layer_types": ["full_attention", "linear_attention"],
             "num_key_value_heads": 2,
-            "rope_theta": 10000,
             "tie_word_embeddings": True,
-            "rope_parameters": {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
+            "rope_parameters": {
+                "rope_type": "default",
+                "rope_theta": 10_000,
+                "mrope_section": [2, 1, 1],
+                "mrope_interleaved": True,
+            },
             "linear_conv_kernel_dim": 2,
             "linear_key_head_dim": 16,
             "linear_value_head_dim": 16,
@@ -213,7 +319,6 @@ class Qwen3_5VisionText2TextModelTester:
         self.num_hidden_layers = text_config["num_hidden_layers"]
         self.num_attention_heads = text_config["num_attention_heads"]
         self.num_key_value_heads = text_config["num_key_value_heads"]
-        self.rope_theta = text_config["rope_theta"]
         self.rope_parameters = text_config["rope_parameters"]
         self.hidden_act = text_config["hidden_act"]
         self.max_position_embeddings = text_config["max_position_embeddings"]
@@ -291,6 +396,8 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         (
             Qwen3_5Model,
             Qwen3_5ForConditionalGeneration,
+            Qwen3_5ForSequenceClassification,
+            Qwen3_5ForTokenClassification,
         )
         if is_torch_available()
         else ()
@@ -303,6 +410,57 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @parameterized.expand([("from_pretrained",), ("from_config",)])
+    def test_automodelforcausallm(self, loader: str) -> None:
+        """`AutoModelForCausalLM` must unwrap the text sub-config for composite-to-text-only mappings."""
+        config = self.model_tester.get_config()
+        self.assertIsInstance(config, Qwen3_5Config, msg="Test setup expects the composite Qwen3_5Config.")
+
+        if loader == "from_config":
+            with torch.device("meta"):
+                model = AutoModelForCausalLM.from_config(config)
+        else:
+            full_model = Qwen3_5ForConditionalGeneration(config)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                full_model.save_pretrained(tmp_dir)
+                model = AutoModelForCausalLM.from_pretrained(tmp_dir)
+
+        self.assertIsInstance(model, Qwen3_5ForCausalLM)
+        self.assertIsInstance(model.config, Qwen3_5TextConfig)
+
+    def test_automodelforcausallm_dtype(self) -> None:
+        """`AutoModelForCausalLM` must honor a concrete `dtype`, overriding the saved composite dtype (#46459)."""
+        config = self.model_tester.get_config()
+        # The saved dtype (bf16) must differ from the requested one (fp32) to exercise the bug.
+        full_model = Qwen3_5ForConditionalGeneration(config).to(torch.bfloat16)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            full_model.save_pretrained(tmp_dir)
+
+            # #46459 regression: a concrete `dtype` must win over the saved bf16 composite dtype.
+            model = AutoModelForCausalLM.from_pretrained(tmp_dir, dtype=torch.float32)
+            self.assertIsInstance(model, Qwen3_5ForCausalLM)
+            self.assertEqual(next(model.parameters()).dtype, torch.float32)
+
+            # Default behavior is unchanged: `auto` and no dtype still load in the checkpoint's saved bf16.
+            model_auto = AutoModelForCausalLM.from_pretrained(tmp_dir, dtype="auto")
+            self.assertEqual(next(model_auto.parameters()).dtype, torch.bfloat16)
+            model_default = AutoModelForCausalLM.from_pretrained(tmp_dir)
+            self.assertEqual(next(model_default.parameters()).dtype, torch.bfloat16)
+
+            # The legacy `torch_dtype` alias is honored the same way.
+            model_legacy = AutoModelForCausalLM.from_pretrained(tmp_dir, torch_dtype=torch.float32)
+            self.assertEqual(next(model_legacy.parameters()).dtype, torch.float32)
+
+            # Non-regression guard: loading the whole VLM already honored `dtype` (this path does not
+            # hit the text-config swap), and must keep doing so before and after the fix.
+            vlm = AutoModelForImageTextToText.from_pretrained(tmp_dir, dtype=torch.float32)
+            self.assertEqual(vlm.config.dtype, torch.float32)
+            self.assertEqual(vlm.config.text_config.dtype, torch.float32)
+            self.assertEqual(vlm.config.vision_config.dtype, torch.float32)
+            # Check the actual weights load in fp32, not just the config metadata.
+            self.assertTrue(all(param.dtype == torch.float32 for param in vlm.parameters()))
 
     @unittest.skip(
         "Conversion only for the `CausalLM` loading from saved `ConditionalLM`, doesn't apply to simple VLM"
@@ -456,7 +614,7 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 channels * temporal_patch * (patch_size**2),
             ]
         )
-        image_grid_thw = torch.tensor([[1, 1, 1]] * (bsz * num_images))
+        image_grid_thw = torch.tensor([[1, 1, 1]] * (bsz * num_images), device=torch_device)
         self.assertEqual(pixel_values.shape[0], image_grid_thw.prod(dim=1).sum().item())
 
         insertion_point = 0
@@ -509,7 +667,7 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             ]
         )
 
-        video_grid_thw = torch.tensor([[patch_t, patch_h, patch_w]] * (bsz * num_video))
+        video_grid_thw = torch.tensor([[patch_t, patch_h, patch_w]] * (bsz * num_video), device=torch_device)
         self.assertEqual(pixel_values_videos.shape[0], video_grid_thw.prod(dim=1).sum().item())
 
         input_ids[:, -1] = self.model_tester.pad_token_id
@@ -569,10 +727,6 @@ class Qwen3_5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             )
             self.assertIsNotNone(outputs)
 
-    @unittest.skip("The specific cache format cannot be instantiated from dp/ddp data.")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
-
 
 @require_torch
 class Qwen3_5IntegrationTest(unittest.TestCase):
@@ -603,8 +757,8 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
 
     @slow
     def test_model_generation(self):
-        expected_text_completion = "My favourite condiment is 100% real.\nThe 100% real is the only one that is"
-        prompt = "My favourite condiment is "
+        expected_text_completion = "My favourite condiment is a little bit of what?\nA. Salt\nB. Sugar\nC. Vinegar\n"
+        prompt = "My favourite condiment is"
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, use_fast=False)
         model = Qwen3_5ForCausalLM.from_pretrained(self.model_id, device_map="auto")
@@ -627,7 +781,9 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
+                        ),
                     },
                     {"type": "text", "text": "What kind of animal is this?"},
                 ],
@@ -673,7 +829,9 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
+                        ),
                     },
                     {"type": "text", "text": "Describe the video in short."},
                 ],
@@ -719,7 +877,9 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
+                        ),
                     },
                     {"type": "text", "text": "Describe the video in short."},
                 ],
@@ -760,7 +920,9 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
+                        ),
                     },
                     {"type": "text", "text": "Describe the video in short."},
                 ],
@@ -800,7 +962,9 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/sample_demo_1.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4"
+                        ),
                     },
                     {"type": "text", "text": "Describe the video in short."},
                 ],
@@ -812,7 +976,9 @@ class Qwen3_5IntegrationTest(unittest.TestCase):
                 "content": [
                     {
                         "type": "video",
-                        "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4",
+                        "url": url_to_local_path(
+                            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"
+                        ),
                     },
                     {"type": "text", "text": "Describe the video in short."},
                 ],

@@ -13,13 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-09-17 and added to Hugging Face Transformers on 2026-03-13.*
+*This model was contributed to Hugging Face Transformers on 2026-03-13.*
 
 # PP-LCNet
 
-<div class="flex flex-wrap space-x-1">
-<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-</div>
 
 ## Overview
 
@@ -43,15 +40,17 @@ The example below demonstrates how to classify image with PP-LCNet using [`Pipel
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import pipeline
+
 
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 image_classifier = pipeline("image-classification", model=model_path, function_to_apply="none", device_map="auto")
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg", stream=True).raw)
 result = image_classifier(image)
 print(result)
 ```
@@ -60,16 +59,18 @@ print(result)
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForImageClassification
+
 
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 model = AutoModelForImageClassification.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg", stream=True).raw)
 inputs = image_processor(images=image, return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 predicted_label = outputs.logits.argmax(-1).item()
@@ -86,15 +87,17 @@ Here is how you can do it with PP-LCNet using [`Pipeline`] or the [`AutoModel`]:
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import pipeline
+
 
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 image_classifier = pipeline("image-classification", model=model_path, function_to_apply="none", device_map="auto")
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg", stream=True).raw)
 result = image_classifier([image, image])
 print(result)
 ```
@@ -103,16 +106,18 @@ print(result)
 
 <hfoption id="AutoModel">
 
-```py
+```python
 import requests
 from PIL import Image
+
 from transformers import AutoImageProcessor, AutoModelForImageClassification
+
 
 model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 model = AutoModelForImageClassification.from_pretrained(model_path, device_map="auto")
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
-image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
+image = Image.open(requests.get("https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/paddle_img_rot180_demo.jpg", stream=True).raw)
 inputs = image_processor(images=[image, image], return_tensors="pt").to(model.device)
 outputs = model(**inputs)
 

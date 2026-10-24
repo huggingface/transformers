@@ -32,7 +32,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
     DUMMY_INPUTS,
@@ -40,6 +40,7 @@ from ...utils import (
     ModelOutput,
     auto_docstring,
     logging,
+    torch_compilable_check,
 )
 from .configuration_reformer import ReformerConfig
 
@@ -262,9 +263,18 @@ class AxialPositionEmbeddings(nn.Module):
                     f"{self.least_common_mult_chunk_length})."
                 )
 
-            # compute how many columns are needed
+            # compute how many columns are needed; ceil-div as `(x + bs - 1) // bs` to keep
+            # the engine on positive-arithmetic, and the `torch_compilable_check` calls propagate
+            # the trivial bounds `0 <= max_position_id < axial_pos_shape[0] * axial_pos_shape[1]`
+            # (from the axial-encoding contract) so the result stays within `[1, axial_pos_shape[0]]`.
             max_position_id = position_ids.max().item()
-            required_pos_encodings_columns = -(-(max_position_id + 1) // self.axial_pos_shape[1])
+            axial_h, axial_w = self.axial_pos_shape
+            torch_compilable_check(max_position_id >= 0, "Axial position id underflow.")
+            torch_compilable_check(
+                max_position_id < axial_h * axial_w,
+                "Position id exceeds axial_pos_shape[0] * axial_pos_shape[1].",
+            )
+            required_pos_encodings_columns = (max_position_id + axial_w) // axial_w
 
             # cut to columns that are needed
             position_encodings = torch.cat(
@@ -429,10 +439,10 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         self.value = nn.Linear(self.hidden_size, self.all_head_size, bias=False)
 
         # save mask value here. Need fp32 and fp16 mask values
-        self.register_buffer("self_mask_value_float16", torch.tensor(-1e3), persistent=False)
-        self.register_buffer("self_mask_value_float32", torch.tensor(-1e5), persistent=False)
-        self.register_buffer("mask_value_float16", torch.tensor(-1e4), persistent=False)
-        self.register_buffer("mask_value_float32", torch.tensor(-1e9), persistent=False)
+        self.self_mask_value_float16 = nn.Buffer(torch.tensor(-1e3), persistent=False)
+        self.self_mask_value_float32 = nn.Buffer(torch.tensor(-1e5), persistent=False)
+        self.mask_value_float16 = nn.Buffer(torch.tensor(-1e4), persistent=False)
+        self.mask_value_float32 = nn.Buffer(torch.tensor(-1e9), persistent=False)
 
     def forward(
         self,
@@ -559,7 +569,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 sequence_length, buckets, num_hashes
             )
 
-            # make sure bucket idx is not longer then sequence length
+            # make sure bucket idx is not longer than sequence length
             sorted_bucket_idx_per_hash = sorted_bucket_idx % sequence_length
 
             # cluster query key value vectors according to hashed buckets
@@ -1120,8 +1130,8 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         self.dropout = config.local_attention_probs_dropout_prob
 
         # save mask value here
-        self.register_buffer("mask_value_float16", torch.tensor(-1e4), persistent=False)
-        self.register_buffer("mask_value_float32", torch.tensor(-1e9), persistent=False)
+        self.mask_value_float16 = nn.Buffer(torch.tensor(-1e4), persistent=False)
+        self.mask_value_float32 = nn.Buffer(torch.tensor(-1e9), persistent=False)
 
     def forward(
         self,
@@ -1372,7 +1382,7 @@ class ReformerAttention(nn.Module):
     ):
         hidden_states = self.layer_norm(hidden_states)
 
-        # use cached buckets for backprob if buckets not None for LSHSelfAttention
+        # use cached buckets for backprop if buckets not None for LSHSelfAttention
         self_attention_outputs = self.self_attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -1615,7 +1625,7 @@ class ReformerLayer(nn.Module):
             # set seed to have correct dropout
             torch.manual_seed(self.attention_seed)
             # f(X_2)
-            # use cached buckets for backprob if buckets not None for LSHSelfAttention
+            # use cached buckets for backprop if buckets not None for LSHSelfAttention
             output = self.attention(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
@@ -1858,12 +1868,12 @@ class ReformerPreTrainedModel(PreTrainedModel):
             init.constant_(module.mask_value_float32, -1e9)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`ReformerModel`].
     """
 )
+@dataclass
 class ReformerModelOutput(ModelOutput):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_predict, hidden_size)`):
@@ -1886,12 +1896,12 @@ class ReformerModelOutput(ModelOutput):
     attentions: tuple[torch.FloatTensor] | None = None
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Output type of [`ReformerModelWithLMHead`].
     """
 )
+@dataclass
 class ReformerModelWithLMHeadOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
@@ -2223,9 +2233,8 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = reformer_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -2456,10 +2465,6 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
             the default defined in `config.num_hashes`.
 
             For more information, see `num_hashes` in [`ReformerConfig`].
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
         Example of single-label classification:
 

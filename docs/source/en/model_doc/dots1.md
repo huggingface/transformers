@@ -9,11 +9,11 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-06-06 and added to Hugging Face Transformers on 2025-06-25.*
+*This model was published in HF papers on 2025-06-06 and contributed to Hugging Face Transformers on 2025-06-25.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -31,14 +31,13 @@ The example below demonstrates how to generate text with [`Pipeline`] or the [`A
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
-import torch
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="text-generation",
     model="rednote-hilab/dots.llm1.base",
-    dtype=torch.bfloat16,
 )
 pipe("The advantage of mixture-of-experts models is")
 ```
@@ -46,14 +45,13 @@ pipe("The advantage of mixture-of-experts models is")
 </hfoption>
 <hfoption id="AutoModelForCausalLM">
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 tokenizer = AutoTokenizer.from_pretrained("rednote-hilab/dots.llm1.base")
 model = AutoModelForCausalLM.from_pretrained(
     "rednote-hilab/dots.llm1.base",
-    dtype=torch.bfloat16,
     device_map="auto",
 )
 input_ids = tokenizer("The advantage of mixture-of-experts models is", return_tensors="pt").to(model.device)

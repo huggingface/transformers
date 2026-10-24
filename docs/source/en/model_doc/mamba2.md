@@ -9,16 +9,12 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-05-31 and added to Hugging Face Transformers on 2024-08-06.*
+*This model was published in HF papers on 2024-05-31 and contributed to Hugging Face Transformers on 2024-08-06.*
 
-<div style="float: right;">
-  <div class="flex flex-wrap space-x-1">
-    <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-  </div>
 
 # Mamba 2
 
@@ -38,13 +34,12 @@ The example below demonstrates how to generate text with [`Pipeline`], [`AutoMod
 <hfoption id="Pipeline">
 
 ```python
-import torch
 from transformers import pipeline
+
 
 pipeline = pipeline(
     task="text-generation",
     model="mistralai/Mamba-Codestral-7B-v0.1",
-    dtype=torch.bfloat16,
     device=0
 )
 pipeline("Plants create energy through a process known as")
@@ -54,11 +49,11 @@ pipeline("Plants create energy through a process known as")
 <hfoption id="AutoModel">
 
 ```python
-import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", dtype=torch.bfloat16, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", device_map="auto")
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
@@ -72,13 +67,13 @@ Quantization reduces the memory burden of large models by representing the weigh
 
 The example below uses [torchao](../quantization/torchao) to only quantize the weights to 4-bit integers.
 
-```py
-import torch
+```python
 from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+
 
 quantization_config = TorchAoConfig("int4_weight_only", group_size=128)
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
-model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", dtype=torch.bfloat16, quantization_config=quantization_config, device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1", quantization_config=quantization_config, device_map="auto")
 input_ids = tokenizer("Plants create energy through a process known as", return_tensors="pt").to(model.device)
 
 output = model.generate(**input_ids)
@@ -96,7 +91,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 - The SSM algorithm heavily relies on tensor contractions, which have matmul equivalents but the order of operations is slightly different. This makes the difference greater at smaller precisions.
 
-- Hidden states that correspond to padding tokens is shutdown in 2 places and is mostly tested with left-padding. Right-padding propagates noise down the line and is not guaranteed to yield satisfactory results. `tokenizer.padding_side = "left"` ensures you are using the correct padding side.
+- Padding is only tested with left padding. Right padding updates the cache with pad positions and gives unreliable results. Set `tokenizer.padding_side="left"` for batched generation. See [Padding side](../llm_tutorial#padding-side).
 
 - The example below demonstrates how to fine-tune Mamba 2 with [PEFT](https://huggingface.co/docs/peft).
 
@@ -104,6 +99,7 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 from datasets import load_dataset
 from peft import LoraConfig
 from trl import SFTConfig, SFTTrainer
+
 
 model_id = "mistralai/Mamba-Codestral-7B-v0.1"
 dataset = load_dataset("Abirate/english_quotes", split="train")

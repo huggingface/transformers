@@ -22,6 +22,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN, gelu
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
@@ -65,9 +66,7 @@ class MPNetEmbeddings(nn.Module):
 
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
+        self.position_ids = nn.Buffer(torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False)
 
     def forward(self, input_ids=None, position_ids=None, inputs_embeds=None, **kwargs):
         if position_ids is None:
@@ -316,13 +315,12 @@ class MPNetEncoder(nn.Module):
             context_position = position_ids[:, :, None]
             memory_position = position_ids[:, None, :]
         else:
-            context_position = torch.arange(qlen, dtype=torch.long)[:, None]
-            memory_position = torch.arange(klen, dtype=torch.long)[None, :]
+            context_position = torch.arange(qlen, dtype=torch.long, device=x.device)[:, None]
+            memory_position = torch.arange(klen, dtype=torch.long, device=x.device)[None, :]
 
         relative_position = memory_position - context_position
 
         rp_bucket = self.relative_position_bucket(relative_position, num_buckets=num_buckets)
-        rp_bucket = rp_bucket.to(x.device)
         values = self.relative_attention_bias(rp_bucket)
         values = values.permute([2, 0, 1]).unsqueeze(0)
         values = values.expand((bsz, -1, qlen, klen)).contiguous()
@@ -408,24 +406,20 @@ class MPNetModel(MPNetPreTrainedModel):
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-            input_shape = input_ids.size()
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
+        elif input_ids is None and inputs_embeds is None:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        if attention_mask is None:
-            attention_mask = torch.ones(input_shape, device=device)
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
         embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids, inputs_embeds=inputs_embeds)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -479,12 +473,6 @@ class MPNetForMaskedLM(MPNetPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | MaskedLMOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.mpnet(
@@ -569,13 +557,6 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.mpnet(
@@ -666,10 +647,6 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
 
         return_dict = return_dict if return_dict is not None else self.config.return_dict
@@ -742,11 +719,6 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
-
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.mpnet(

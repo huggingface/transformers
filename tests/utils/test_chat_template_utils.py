@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import unittest
 from typing import Literal
 
+from transformers.testing_utils import require_jinja
 from transformers.utils import DocstringParsingException, TypeHintParsingException, get_json_schema
+from transformers.utils.chat_template_utils import render_jinja_template
 
 
 class JsonSchemaGeneratorTest(unittest.TestCase):
@@ -56,6 +59,36 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
         }
         self.assertEqual(schema["function"], expected_schema)
 
+    def test_bare_container_types(self):
+        def fn(x: list, y: tuple, z: dict):
+            """
+            Test function
+
+            Args:
+                x: The first input
+                y: The second input
+                z: The third input
+            """
+            return x
+
+        # Bare builtin containers have no typing origin, so they must be mapped explicitly;
+        # they should match their `typing.List` / `typing.Tuple` / `typing.Dict` equivalents.
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "array", "description": "The first input"},
+                    "y": {"type": "array", "description": "The second input"},
+                    "z": {"type": "object", "description": "The third input"},
+                },
+                "required": ["x", "y", "z"],
+            },
+        }
+        self.assertEqual(schema["function"], expected_schema)
+
     def test_union(self):
         def fn(x: int | float):
             """
@@ -73,6 +106,33 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             "parameters": {
                 "type": "object",
                 "properties": {"x": {"type": ["integer", "number"], "description": "The input"}},
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(schema["function"], expected_schema)
+
+    def test_union_with_duplicate_types(self):
+        def fn(x: list | tuple, y: list | tuple | dict | None = None):
+            """
+            Test function
+
+            Args:
+                x: The first input
+                y: The second input
+            """
+            return x
+
+        # `list` and `tuple` both map to "array", which should appear only once in the schema
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {"type": "array", "description": "The first input"},
+                    "y": {"type": ["array", "object"], "nullable": True, "description": "The second input"},
+                },
                 "required": ["x"],
             },
         }
@@ -193,6 +253,39 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
                     "x": {"type": "array", "items": {"type": ["integer", "number"]}, "description": "The input"},
                     "y": {
                         "type": ["integer", "string"],
+                        "nullable": True,
+                        "description": "Also the input",
+                    },
+                },
+                "required": ["x"],
+            },
+        }
+        self.assertEqual(schema["function"], expected_schema)
+
+    def test_union_of_complex_types(self):
+        def fn(x: str | list[str], y: Literal["a", "b"] | int | None = None):
+            """
+            Test function
+
+            Args:
+                x: The input
+                y: Also the input
+            """
+            return x
+
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "x": {
+                        "anyOf": [{"type": "string"}, {"type": "array", "items": {"type": "string"}}],
+                        "description": "The input",
+                    },
+                    "y": {
+                        "anyOf": [{"type": "string", "enum": ["a", "b"]}, {"type": "integer"}],
                         "nullable": True,
                         "description": "Also the input",
                     },
@@ -382,6 +475,41 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
         }
 
+        self.assertEqual(schema["function"], expected_schema)
+
+    def test_enum_extraction_non_string_choices(self):
+        def fn(rating: int, enabled: bool):
+            """
+            Test function
+
+            Args:
+                rating: The rating to give (choices: [1, 2, 3])
+                enabled: Whether it is enabled (choices: [true, false])
+            """
+            return -40.0
+
+        # Non-string choices (numbers, booleans) must be preserved as-is, not stripped as strings
+        schema = get_json_schema(fn)
+        expected_schema = {
+            "name": "fn",
+            "description": "Test function",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "rating": {
+                        "type": "integer",
+                        "enum": [1, 2, 3],
+                        "description": "The rating to give",
+                    },
+                    "enabled": {
+                        "type": "boolean",
+                        "enum": [True, False],
+                        "description": "Whether it is enabled",
+                    },
+                },
+                "required": ["rating", "enabled"],
+            },
+        }
         self.assertEqual(schema["function"], expected_schema)
 
     def test_literal(self):
@@ -611,3 +739,49 @@ class JsonSchemaGeneratorTest(unittest.TestCase):
             },
         }
         self.assertEqual(schema["function"], expected_schema)
+
+
+# Renders reasoning from the message field named FIELD
+REASONING_TEMPLATE = """
+{%- for message in messages %}
+    {{- "<|" + message.role + "|>\n" }}
+    {%- if message.FIELD is defined %}
+        {{- "<think>" + message.FIELD + "</think>\n" }}
+    {%- endif %}
+    {{- message.content + "<|end|>\n" }}
+{%- endfor %}"""
+
+
+@require_jinja
+class ReasoningFieldAliasTest(unittest.TestCase):
+    def test_reasoning_renders_from_any_field_name(self):
+        expected = "<|user|>\nHi<|end|>\n<|assistant|>\n<think>Let me think</think>\nHello!<|end|>\n"
+        for template_field in ("reasoning_content", "thinking"):
+            for message_field in ("reasoning_content", "thinking", "reasoning"):
+                with self.subTest(template_field=template_field, message_field=message_field):
+                    chat = [
+                        {"role": "user", "content": "Hi"},
+                        {"role": "assistant", message_field: "Let me think", "content": "Hello!"},
+                    ]
+                    original_chat = copy.deepcopy(chat)
+                    rendered, _ = render_jinja_template(
+                        [chat], chat_template=REASONING_TEMPLATE.replace("FIELD", template_field)
+                    )
+                    self.assertEqual(rendered[0], expected)
+                    # The aliases are added to copies of the messages, not to the caller's chat
+                    self.assertEqual(chat, original_chat)
+
+    def test_continue_final_message_on_aliased_reasoning(self):
+        expected = "<|user|>\nHi<|end|>\n<|assistant|>\n<think>Let me think"
+        for template_field, message_field in (("thinking", "reasoning_content"), ("reasoning_content", "thinking")):
+            with self.subTest(template_field=template_field, message_field=message_field):
+                chat = [
+                    {"role": "user", "content": "Hi"},
+                    {"role": "assistant", message_field: "Let me think", "content": "Hello!"},
+                ]
+                rendered, _ = render_jinja_template(
+                    [chat],
+                    chat_template=REASONING_TEMPLATE.replace("FIELD", template_field),
+                    continue_final_message=message_field,
+                )
+                self.assertEqual(rendered[0], expected)

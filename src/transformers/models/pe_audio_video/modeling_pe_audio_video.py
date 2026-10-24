@@ -19,7 +19,7 @@
 # limitations under the License.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -27,7 +27,7 @@ import torch.nn as nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MaskedLMOutput
@@ -35,7 +35,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_pe_audio_video import PeAudioVideoConfig, PeAudioVideoEncoderConfig
@@ -297,7 +297,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return (q_ * freqs_cis).sum(5).flatten(3), (k_ * freqs_cis).sum(5).flatten(3)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class PeAudioVideoEncoderAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -449,9 +448,7 @@ class PeAudioVideoEncoderRMSNorm(nn.Module):
 
 
 class PeAudioVideoEncoderRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: PeAudioVideoEncoderConfig, device=None):
+    def __init__(self, config: PeAudioVideoEncoderConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -462,26 +459,18 @@ class PeAudioVideoEncoderRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: PeAudioVideoEncoderConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
+    def compute_default_rope_parameters(config: PeAudioVideoEncoderConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
             config ([`~transformers.PreTrainedConfig`]):
                 The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
         Returns:
             Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
@@ -490,25 +479,17 @@ class PeAudioVideoEncoderRotaryEmbedding(nn.Module):
         dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
         attention_factor = 1.0  # Unused in this type of RoPE
-
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
         return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -545,13 +526,22 @@ class PeAudioVideoPreTrainedModel(PreTrainedModel):
             init.normal_(module.class_embedding, mean=0.0, std=embed_dim**-0.5 * std)
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`PeAudioVideoEncoder`].
     """
 )
+@dataclass
 class PeAudioVideoEncoderOutput(BaseModelOutputWithPooling):
+    r"""
+    audio_model_output (`BaseModelOutputWithPooling`, *optional*):
+        Output of the audio encoder, containing the last hidden state, pooled output, and optional hidden states
+        and attentions. See [`~modeling_outputs.BaseModelOutputWithPooling`] for details.
+    video_model_output (`BaseModelOutputWithPooling`, *optional*):
+        Output of the video encoder, containing the last hidden state, pooled output, and optional hidden states
+        and attentions. See [`~modeling_outputs.BaseModelOutputWithPooling`] for details.
+    """
+
     audio_model_output: BaseModelOutputWithPooling | None = None
     video_model_output: BaseModelOutputWithPooling | None = None
 
@@ -580,9 +570,9 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
 
         self.post_init()
 
-    @can_return_tuple
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None = None,
@@ -591,6 +581,18 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
         padding_mask_videos: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | PeAudioVideoEncoderOutput:
+        r"""
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding samples of `input_values`. Mask values selected in `[0, 1]`:
+
+            - 1 for samples that are **not masked**,
+            - 0 for samples that are **masked**.
+        padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask to avoid performing attention on padding video frames. Mask values selected in `[0, 1]`:
+
+            - 1 for frames that are **not masked**,
+            - 0 for frames that are **masked**.
+        """
         inputs_embeds, padding_mask, audio_output, video_output = self.embedder(
             input_values,
             pixel_values_videos,
@@ -629,13 +631,66 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
         )
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Class for outputs of [`PeAudioVideoModel`] when using text, audio, and/or video.
     """
 )
+@dataclass
 class PeAudioVideoOutput(ModelOutput):
+    r"""
+    audio_embeds (`torch.FloatTensor`, *optional*):
+        Audio modality embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    video_embeds (`torch.FloatTensor`, *optional*):
+        Video modality embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    audio_video_embeds (`torch.FloatTensor`, *optional*):
+        Joint audio-video embeddings produced by a fusion module. Shape `(batch_size, sequence_length, hidden_size)`.
+    text_audio_embeds (`torch.FloatTensor`, *optional*):
+        Joint text-audio embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    text_video_embeds (`torch.FloatTensor`, *optional*):
+        Joint text-video embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    text_audio_video_embeds (`torch.FloatTensor`, *optional*):
+        Joint text-audio-video embeddings combining all three modalities. Shape `(batch_size, sequence_length, hidden_size)`.
+    audio_plus_text_embeds (`torch.FloatTensor`, *optional*):
+        Combined audio and text embeddings (e.g., concatenation or additive fusion). Shape `(batch_size, sequence_length, hidden_size)`.
+    video_plus_text_embeds (`torch.FloatTensor`, *optional*):
+        Combined video and text embeddings. Shape `(batch_size, sequence_length, hidden_size)`.
+    text_outputs (`MaskedLMOutput`, *optional*):
+        Model outputs for the text encoder. Includes hidden states, attentions, and optionally loss.
+    audio_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Model outputs for the audio encoder, including last hidden state and pooled output.
+    video_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Model outputs for the video encoder, including last hidden state and pooled output.
+    audio_video_outputs (`BaseModelOutputWithPooling`, *optional*):
+        Model outputs for the joint audio-video encoder.
+    logits_audio_text (`torch.FloatTensor`, *optional*):
+        Similarity logits between audio and text embeddings. Shape `(batch_size, batch_size)`.
+    logits_video_text (`torch.FloatTensor`, *optional*):
+        Similarity logits between video and text embeddings. Shape `(batch_size, batch_size)`.
+    logits_audio_video (`torch.FloatTensor`, *optional*):
+        Similarity logits between audio and video embeddings. Shape `(batch_size, batch_size)`.
+    logits_audio_video_text (`torch.FloatTensor`, *optional*):
+        Similarity logits across audio, video, and text modalities.
+    logits_audio_plus_text_video (`torch.FloatTensor`, *optional*):
+        Similarity logits between fused (audio + text) embeddings and video embeddings.
+    logits_video_plus_text_audio (`torch.FloatTensor`, *optional*):
+        Similarity logits between fused (video + text) embeddings and audio embeddings.
+    audio_text_loss (`torch.FloatTensor`, *optional*):
+        Contrastive loss computed between audio and text representations.
+    video_text_loss (`torch.FloatTensor`, *optional*):
+        Contrastive loss computed between video and text representations.
+    audio_video_loss (`torch.FloatTensor`, *optional*):
+        Contrastive loss computed between audio and video representations.
+    audio_video_text_loss (`torch.FloatTensor`, *optional*):
+        Joint loss over audio, video, and text modalities.
+    audio_plus_text_video_loss (`torch.FloatTensor`, *optional*):
+        Loss between fused (audio + text) representations and video.
+    video_plus_text_audio_loss (`torch.FloatTensor`, *optional*):
+        Loss between fused (video + text) representations and audio.
+    loss (`torch.FloatTensor`, *optional*):
+        Combined loss for all modality-wise losses.
+    """
+
     # embeddings
     audio_embeds: torch.FloatTensor | None = None
     video_embeds: torch.FloatTensor | None = None
@@ -734,6 +789,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -789,6 +845,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -811,6 +868,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         text_outputs: MaskedLMOutput = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            output_hidden_states=True,
             return_dict=True,
         )
         text_embeds = text_outputs.hidden_states[-1][:, 0]
@@ -819,6 +877,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         return self.video_plus_text_head(video_plus_text_embeds)
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -830,8 +889,25 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         return_loss=False,
         **kwargs,
     ) -> PeAudioVideoOutput:
+        r"""
+        padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask to avoid performing attention on padding video frames. Mask values selected in `[0, 1]`:
+
+            - 1 for frames that are **not masked**,
+            - 0 for frames that are **masked**.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding samples of `input_values`. Mask values selected in `[0, 1]`:
+
+            - 1 for samples that are **not masked**,
+            - 0 for samples that are **masked**.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the loss.
+        """
         if sum([input_ids is not None, pixel_values_videos is not None, input_values is not None]) < 2:
-            raise ValueError("At least two of input_ids, pixel_values_videos, or input_values must be provided")
+            raise ValueError(
+                "At least two of input_ids, pixel_values_videos, or input_values must be provided. "
+                "For encoding individual modalities, get_*_embeds methods are available."
+            )
 
         if pixel_values_videos is None:
             outputs = self.audio_model(
@@ -856,7 +932,8 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
                 return_dict=True,
             )
             video_plus_text_embeds = torch.cat(
-                [outputs.video_outputs.pooler_output, outputs.text_outputs.hidden_states[-1][:, 0]], dim=-1
+                [outputs.mm_encoder_outputs["video"].pooler_output, outputs.text_outputs.hidden_states[-1][:, 0]],
+                dim=-1,
             )
             video_plus_text_embeds = self.video_plus_text_head(video_plus_text_embeds)
             return PeAudioVideoOutput(video_plus_text_embeds=video_plus_text_embeds, **outputs)

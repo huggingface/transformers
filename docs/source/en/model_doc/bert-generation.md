@@ -13,13 +13,8 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2019-07-29 and added to Hugging Face Transformers on 2020-11-16.*
+*This model was published in HF papers on 2019-07-29 and contributed to Hugging Face Transformers on 2020-11-16.*
 
-<div style="float: right;">
-    <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
-    </div>
-</div>
 
 # BertGeneration
 
@@ -38,10 +33,10 @@ The example below demonstrates how to use BertGeneration with [`EncoderDecoderMo
 <hfoption id="AutoModel">
 
 ```python
-import torch
-from transformers import EncoderDecoderModel, AutoTokenizer
+from transformers import AutoTokenizer, EncoderDecoderModel
 
-model = EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_discofuse", dtype="auto")
+
+model = EncoderDecoderModel.from_pretrained("google/roberta2roberta_L-24_discofuse", device_map="auto")
 tokenizer = AutoTokenizer.from_pretrained("google/roberta2roberta_L-24_discofuse")
 
 input_ids = tokenizer(
@@ -57,11 +52,13 @@ print(tokenizer.decode(outputs[0]))
 
 Quantization reduces the memory burden of large models by representing the weights in a lower precision. Refer to the [Quantization](../quantization/overview) overview for more available quantization backends.
 
-The example below uses [BitsAndBytesConfig](../quantizationbitsandbytes) to quantize the weights to 4-bit.
+The example below uses [BitsAndBytesConfig](../quantization/bitsandbytes) to quantize the weights to 4-bit.
 
 ```python
 import torch
-from transformers import EncoderDecoderModel, AutoTokenizer, BitsAndBytesConfig
+
+from transformers import AutoTokenizer, BitsAndBytesConfig, EncoderDecoderModel
+
 
 # Configure 4-bit quantization
 quantization_config = BitsAndBytesConfig(
@@ -72,7 +69,7 @@ quantization_config = BitsAndBytesConfig(
 model = EncoderDecoderModel.from_pretrained(
     "google/roberta2roberta_L-24_discofuse",
     quantization_config=quantization_config,
-    dtype="auto"
+    device_map="auto",
 )
 tokenizer = AutoTokenizer.from_pretrained("google/roberta2roberta_L-24_discofuse")
 
@@ -106,7 +103,7 @@ print(tokenizer.decode(outputs[0]))
    input_ids = tokenizer(
        "This is a long article to summarize", add_special_tokens=False, return_tensors="pt"
    ).input_ids
-   labels = tokenizer("This is a short summary", return_tensors="pt").input_ids
+   labels = tokenizer("This is a short summary", return_tensors="pt").to(model.device).input_ids
 
    # train
    loss = bert2bert(input_ids=input_ids, decoder_input_ids=labels, labels=labels).loss

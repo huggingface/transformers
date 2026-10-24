@@ -18,18 +18,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import itertools
 from dataclasses import dataclass
-from typing import Any
+from itertools import accumulate
 
 import torch
 import torch.nn as nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -37,6 +36,7 @@ from ...utils import (
     can_return_tuple,
     torch_compilable_check,
 )
+from ...utils.generic import accepts_precomputed_kwargs
 from ..auto import AutoModel
 from .configuration_glm46v import Glm46VConfig
 
@@ -48,7 +48,7 @@ class Glm46VPreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = None
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
 
@@ -57,27 +57,15 @@ class Glm46VPreTrainedModel(PreTrainedModel):
     _can_record_outputs = None
 
 
+@auto_docstring
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Llava outputs, with hidden states and attentions.
-    """
-)
-class Glm46VModelOutputWithPast(ModelOutput):
+class Glm46VModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
 
 
@@ -97,19 +85,13 @@ class Glm46VModel(Glm46VPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
-
     def get_vision_position_ids(
         self,
         start_position: int,
         grid_thw: list[int, int, int] | torch.Tensor,
         temp_merge_size: int = 1,
         spatial_merge_size: int = 1,
-        time_interval: int = 1,
+        time_interval: float | torch.Tensor = 1.0,
         device: str | torch.device | None = None,
     ):
         """
@@ -130,8 +112,8 @@ class Glm46VModel(Glm46VPreTrainedModel):
             spatial_merge_size (`int`, *optional*):
                 Factor by which the spatial dimensions (H and W) are reduced in the backbone. Both H and W are divided
                 by this value. Defaults to 1.
-            time_interval (`int`, *optional*):
-                Spacing factor applied between consecutive temporal position indices.Defaults to 1.
+            time_interval (`float` or scalar `torch.Tensor`, *optional*, defaults to 1.0):
+                Spacing factor applied before quantizing temporal position indices.
             device (`str` or `torch.device`, *optional*):
                 Device on which the resulting tensor is allocated. If `None`, uses the current default device.
 
@@ -146,19 +128,13 @@ class Glm46VModel(Glm46VPreTrainedModel):
             grid_thw[2].item() // spatial_merge_size,
         )
 
-        # Add `start_position` after arange for compile
-        position_temporal = torch.arange(llm_grid_t, device=device) * time_interval
-        position_width = torch.arange(llm_grid_w, device=device) + start_position
+        position_temporal = (torch.arange(llm_grid_t, device=device) * time_interval).long()
         position_height = torch.arange(llm_grid_h, device=device) + start_position
+        position_width = torch.arange(llm_grid_w, device=device) + start_position
 
-        # Repeat the positions per each grid and per video frame. Repeat patterns are important
-        # do not modify without checking values!
-        position_width = position_width.repeat(llm_grid_h * llm_grid_t)
-        position_height = position_height.repeat_interleave(llm_grid_w).repeat(llm_grid_t)
-        # Important: add `start_positions` after applying `time_interval`, order matters
-        position_temporal = position_temporal.repeat_interleave(llm_grid_h * llm_grid_w) + start_position
-        vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
-
+        T_grid, H_grid, W_grid = torch.meshgrid(position_temporal, position_height, position_width, indexing="ij")
+        vision_position_ids = torch.stack([T_grid, H_grid, W_grid], dim=0).reshape(3, -1)
+        vision_position_ids[0] += start_position  # must be after time_interval multiply
         return vision_position_ids
 
     def get_rope_index(
@@ -172,7 +148,7 @@ class Glm46VModel(Glm46VPreTrainedModel):
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Difference from Qwen2VL/Qwen2.5VL's get_rope_index:
-        - GLM46V uses timestamps to seperate each video frame, so the video_grid_thw should also be split too.
+        - GLM46V uses timestamps to separate each video frame, so the video_grid_thw should also be split too.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -195,7 +171,7 @@ class Glm46VModel(Glm46VPreTrainedModel):
             mrope_position_deltas (`torch.Tensor` of shape `(batch_size)`)
         """
 
-        # Separate video grid thw into multiple grids because timestamps are used to seperate videos.
+        # Separate video grid thw into multiple grids because timestamps are used to separate videos.
         if video_grid_thw is not None:
             video_grid_thw = torch.repeat_interleave(video_grid_thw, video_grid_thw[:, 0], dim=0)
             video_grid_thw[:, 0] = 1
@@ -254,6 +230,7 @@ class Glm46VModel(Glm46VPreTrainedModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    @accepts_precomputed_kwargs(modality="video")
     @can_return_tuple
     @auto_docstring
     def get_video_features(
@@ -262,29 +239,22 @@ class Glm46VModel(Glm46VPreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
-        temp_frames_hw = []
-        video_grid_thw_list = video_grid_thw.tolist()
-        for t, h, w in video_grid_thw_list:
-            repeated_row = torch.tensor([1, h, w]).unsqueeze(0).repeat(t, 1)
-            temp_frames_hw.append(repeated_row)
-        flattened_video_grid_thw = torch.cat(temp_frames_hw, dim=0)
+        t = video_grid_thw[:, 0]
+        hw = video_grid_thw[:, 1:]
+        # repeat each (h,w) row `t` times
+        flattened_hw = torch.repeat_interleave(hw, t, dim=0)
+        prefix_ones = video_grid_thw.new_ones(flattened_hw.shape[0], 1)
+        flattened_video_grid_thw = torch.cat([prefix_ones, flattened_hw], dim=1)
         vision_outputs = self.visual(
             pixel_values_videos, grid_thw=flattened_video_grid_thw, return_dict=True, **kwargs
         )
         split_sizes = (video_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        video_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = video_embeds
-
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
         return vision_outputs
 
+    @accepts_precomputed_kwargs(modality="image")
     @can_return_tuple
     @auto_docstring
     def get_image_features(
@@ -293,17 +263,10 @@ class Glm46VModel(Glm46VPreTrainedModel):
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()
-        image_embeds = torch.split(vision_outputs.pooler_output, split_sizes)
-        vision_outputs.pooler_output = image_embeds
+        vision_outputs.pooler_output = torch.split(vision_outputs.pooler_output, split_sizes)
 
         return vision_outputs
 
@@ -320,11 +283,11 @@ class Glm46VModel(Glm46VPreTrainedModel):
         """
         if input_ids is None:
             special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_image_mask = special_image_mask.all(-1)
             special_video_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
+                torch.full((), self.config.video_token_id, dtype=torch.long, device=inputs_embeds.device)
             )
             special_video_mask = special_video_mask.all(-1)
         else:
@@ -333,18 +296,18 @@ class Glm46VModel(Glm46VPreTrainedModel):
             special_video_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_image_mask = special_image_mask.unsqueeze(-1).to(inputs_embeds.device)
         if image_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                n_image_tokens * inputs_embeds.shape[-1] == image_features.numel(),
                 f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
-        special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        special_video_mask = special_video_mask.unsqueeze(-1).to(inputs_embeds.device)
         if video_features is not None:
             torch_compilable_check(
-                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                n_video_tokens * inputs_embeds.shape[-1] == video_features.numel(),
                 f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
         return special_image_mask, special_video_mask
@@ -398,8 +361,8 @@ class Glm46VModel(Glm46VPreTrainedModel):
             position_ids = None
         return position_ids
 
-    @auto_docstring
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -411,32 +374,40 @@ class Glm46VModel(Glm46VPreTrainedModel):
         pixel_values_videos: torch.FloatTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         video_grid_thw: torch.LongTensor | None = None,
-        rope_deltas: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm46VModelOutputWithPast:
-        r"""
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-            The rope index difference between sequence length and multimodal rope.
-        """
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
-        if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = mm_encoder_outputs["image"].pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(input_ids, inputs_embeds, image_features=image_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
-        if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True).pooler_output
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = mm_encoder_outputs["video"].pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(input_ids, inputs_embeds, video_features=video_embeds)
             inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
@@ -467,37 +438,21 @@ class Glm46VModel(Glm46VPreTrainedModel):
         )
 
 
+@auto_docstring
 @dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for Glm46V causal language model (or autoregressive) outputs.
-    """
-)
-class Glm46VCausalLMOutputWithPast(ModelOutput):
+class Glm46VCausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
     rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
         The rope index difference between sequence length and multimodal rope.
+        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_key_values: Cache | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
     rope_deltas: torch.LongTensor | None = None
 
 
 class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
@@ -507,12 +462,6 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
 
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
 
     @auto_docstring
     def get_video_features(
@@ -524,12 +473,8 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         r"""
         pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
         """
-        return self.model.get_video_features(
-            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
-        )
+        return self.model.get_video_features(pixel_values_videos, video_grid_thw, **kwargs)
 
     @auto_docstring
     def get_image_features(
@@ -541,10 +486,8 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
         """
-        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
+        return self.model.get_image_features(pixel_values, image_grid_thw, **kwargs)
 
     @can_return_tuple
     @auto_docstring
@@ -562,23 +505,15 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Glm46VCausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Glm46VForConditionalGeneration
 
@@ -617,18 +552,20 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
 
         hidden_states = outputs[0]
 
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size)
+            loss = self.loss_function(
+                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            )
 
         return Glm46VCausalLMOutputWithPast(
             loss=loss,
@@ -638,44 +575,6 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        position_ids=None,
-        use_cache=True,
-        pixel_values=None,
-        pixel_values_videos=None,
-        image_grid_thw=None,
-        video_grid_thw=None,
-        is_first_iteration=False,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        if not is_first_iteration and use_cache:
-            model_inputs["pixel_values"] = None
-            model_inputs["pixel_values_videos"] = None
-
-        return model_inputs
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
         # Overwritten -- requires 3D position ids
@@ -715,149 +614,59 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
 
         return position_ids
 
-    def _get_image_nums_and_video_nums(
+    def _expand_multimodal_outputs(
         self,
-        input_ids: torch.LongTensor | None,
-        inputs_embeds: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
-        These parameters are not passed through the processor to avoid unpredictable impacts from interface modifications.
-
-        Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
-
-        Returns:
-            image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
-            video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
-        """
-
-        if inputs_embeds is not None:
-            is_image = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.tensor(self.config.image_start_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            )[..., 0]
-            is_video_start = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_start_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            )[..., 0]
-            is_video_end = (
-                inputs_embeds
-                == self.get_input_embeddings()(
-                    torch.tensor(self.config.video_end_token_id, dtype=torch.long, device=inputs_embeds.device)
-                )
-            )[..., 0]
-        else:
-            is_image = input_ids == self.config.image_start_token_id
-            is_video_start = input_ids == self.config.video_start_token_id
-            is_video_end = input_ids == self.config.video_end_token_id
-
-        # Cumulative sum to track if we're inside a video span
-        # We'll assume well-formed video tags (i.e. matching starts and ends)
-        video_level = torch.cumsum(is_video_start.int() - is_video_end.int(), dim=1)
-        inside_video = video_level > 0  # shape (batch_size, seq_length)
-
-        # Mask out image tokens that are inside video spans
-        standalone_images = is_image & (~inside_video)
-
-        # Count per batch
-        image_counts = standalone_images.sum(dim=1)
-        video_counts = is_video_start.sum(dim=1)
-
-        return image_counts, video_counts
-
-    def _expand_inputs_for_generation(
-        self,
+        input_ids: torch.LongTensor,
+        mm_encoder_output: dict,
         expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: torch.LongTensor | None = None,
-        **model_kwargs,
-    ) -> tuple[torch.LongTensor, dict[str, Any]]:
-        # Overwritten -- Support for expanding tensors without a batch size dimension
-        # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_t
-        # pixel_values.shape[0] is sum(seqlen_images for samples)
-        # image_grid_thw.shape[0] is sum(num_images for samples)
+        inputs_embeds: torch.LongTensor | None = None,
+    ) -> dict[str, dict]:
+        # override -> model uses the same config key for image and video placeholders
+        def repeat_tensor_or_list(inputs: list | torch.Tensor, repeat_times: int):
+            # Tensor of size [bs, seqlen, dim] where `bs` is number of images in this text sample
+            # Each text can have 1+ images associated with it
+            # Inteleaving on first dim does the same thing as `input_ids.repeat_interlave` in leading batch dim!
+            if isinstance(inputs, torch.Tensor):
+                return inputs.repeat_interleave(repeat_times, dim=0)
+            else:
+                # List of `bs` length where each entry is a tensor (seqlen, dim) is also repeat interleaved
+                return [beam_entry for entry in inputs for beam_entry in [entry] * repeat_times]
 
-        if expand_size == 1:
-            return input_ids, model_kwargs
+        for modality in ["image", "video"]:
+            modalily_outputs = mm_encoder_output.get(modality)
+            if modalily_outputs is None or getattr(modalily_outputs, "pooler_output", None) is None:
+                continue
 
-        visual_keys = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw", "second_per_grid_ts"]
+            # 1. compute cumulative number of placehlder tokens per sample and per each encoded mm-data
+            token_id_key = f"{modality}_token_id"
+            if (input_ids is None or input_ids.numel() == 0) and inputs_embeds is not None:
+                special_image_mask = inputs_embeds == self.get_input_embeddings()(
+                    torch.full((), self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
+                )
+                num_image_tokens_in_text = special_image_mask.all(-1).sum(-1)
+            else:
+                num_image_tokens_in_text = (input_ids == getattr(self.config, token_id_key)).sum(-1)
+            num_image_tokens_in_vision = [len(out) for out in modalily_outputs.pooler_output]
+            num_image_tokens_in_text = list(accumulate(num_image_tokens_in_text))
+            num_image_tokens_in_vision = list(accumulate(num_image_tokens_in_vision))
 
-        def _expand_dict_for_generation_visual(dict_to_expand):
-            image_grid_thw = model_kwargs.get("image_grid_thw", None)
-            video_grid_thw = model_kwargs.get("video_grid_thw", None)
-            image_nums, video_nums = self._get_image_nums_and_video_nums(
-                input_ids, inputs_embeds=model_kwargs.get("inputs_embeds", None)
-            )
+            # 2. Find offsets to split encoder output into separate groups per text. In a single batch
+            # we might get a text with single image and another with two images, so the most reliable
+            # way to split dynamic-sized images is by checking number of placeholders and encoder output lengths!
+            offsets = [0] + [
+                i + 1 for i, num in enumerate(num_image_tokens_in_vision) if num in num_image_tokens_in_text
+            ]
+            is_split_images = not isinstance(modalily_outputs.pooler_output, torch.Tensor)
+            modalily_outputs.pooler_output = [
+                out
+                for start, end in zip(offsets[:-1], offsets[1:])
+                for out in repeat_tensor_or_list(modalily_outputs.pooler_output[start:end], expand_size)
+            ]
 
-            def _repeat_interleave_samples(x, lengths, repeat_times):
-                samples = torch.split(x, lengths)
-                repeat_args = [repeat_times] + [1] * (x.dim() - 1)
-                result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
-                return result
-
-            for key in dict_to_expand:
-                if key == "pixel_values":
-                    # split images into samples
-                    samples = torch.split(image_grid_thw, list(image_nums))
-                    # compute the sequence length of images for each sample
-                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "image_grid_thw":
-                    # get the num of images for each sample
-                    lengths = list(image_nums)
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "pixel_values_videos":
-                    samples = torch.split(video_grid_thw, list(video_nums))
-                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "video_grid_thw":
-                    lengths = list(video_nums)
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
-                    )
-                elif key == "second_per_grid_ts":
-                    dict_to_expand[key] = _repeat_interleave_samples(
-                        dict_to_expand[key], lengths=list(video_nums), repeat_times=expand_size
-                    )
-            return dict_to_expand
-
-        def _expand_dict_for_generation(dict_to_expand):
-            for key in dict_to_expand:
-                if key == "position_ids" and dict_to_expand[key].ndim == 3:
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=1)
-                elif (
-                    dict_to_expand[key] is not None
-                    and isinstance(dict_to_expand[key], torch.Tensor)
-                    and key not in visual_keys
-                ):
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
-            return dict_to_expand
-
-        model_kwargs = _expand_dict_for_generation_visual(model_kwargs)
-
-        if input_ids is not None:
-            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
-
-        model_kwargs = _expand_dict_for_generation(model_kwargs)
-
-        if is_encoder_decoder:
-            if model_kwargs.get("encoder_outputs") is None:
-                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
-
-        return input_ids, model_kwargs
+            # 3. if `pooler_output` was a tensor, cat it back to follow model expectations
+            if not is_split_images:
+                modalily_outputs.pooler_output = torch.stack(modalily_outputs.pooler_output, dim=0)
+        return mm_encoder_output
 
 
 __all__ = ["Glm46VModel", "Glm46VPreTrainedModel", "Glm46VForConditionalGeneration"]

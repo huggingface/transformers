@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -851,7 +851,7 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel, GenerationMixin):
     def __init__(self, config: PegasusConfig):
         super().__init__(config)
         self.model = PegasusModel(config)
-        self.register_buffer("final_logits_bias", torch.zeros((1, self.model.shared.num_embeddings)))
+        self.final_logits_bias = nn.Buffer(torch.zeros((1, self.model.shared.num_embeddings)))
         self.lm_head = nn.Linear(config.d_model, self.model.shared.num_embeddings, bias=False)
 
         # Initialize weights and apply final processing
@@ -871,7 +871,7 @@ class PegasusForConditionalGeneration(PegasusPreTrainedModel, GenerationMixin):
         else:
             extra_bias = torch.zeros((1, new_num_tokens - old_num_tokens), device=self.final_logits_bias.device)
             new_bias = torch.cat([self.final_logits_bias, extra_bias], dim=1)
-        self.register_buffer("final_logits_bias", new_bias)
+        self.final_logits_bias = nn.Buffer(new_bias)
 
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
@@ -1075,11 +1075,6 @@ class PegasusForCausalLM(PegasusPreTrainedModel, GenerationMixin):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -1109,9 +1104,8 @@ class PegasusForCausalLM(PegasusPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

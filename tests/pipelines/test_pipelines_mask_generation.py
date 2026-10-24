@@ -93,12 +93,36 @@ class MaskGenerationPipelineTests(unittest.TestCase):
     def run_pipeline_test(self, mask_generator, examples):
         pass
 
+    def test_preprocess_is_last(self):
+        mask_generator = pipeline("mask-generation", model="hf-internal-testing/tiny-random-SamModel")
+        mask_generator.image_processor.pad_size = {"height": 24, "width": 24}
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        for points_per_batch in (100, 64):
+            with self.subTest(points_per_batch=points_per_batch):
+                batches = list(mask_generator.preprocess(image, points_per_batch=points_per_batch))
+                self.assertTrue(batches[-1]["is_last"])
+                self.assertFalse(any(b["is_last"] for b in batches[:-1]))
+
+    def test_crops_n_layers(self):
+        mask_generator = pipeline("mask-generation", model="hf-internal-testing/tiny-random-SamModel")
+        mask_generator.image_processor.pad_size = {"height": 24, "width": 24}
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        out = mask_generator(image, crops_n_layers=1, points_per_crop=4, pred_iou_thresh=0, stability_score_thresh=0)
+
+        masks = out["masks"]
+
+        self.assertTrue(masks)
+        self.assertTrue(all(mask.shape == (480, 640) for mask in masks))
+
     @slow
     @require_torch
     def test_small_model_pt(self):
         image_segmenter = pipeline("mask-generation", model="facebook/sam-vit-huge")
 
-        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", points_per_batch=256)
+        outputs = image_segmenter(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+            points_per_batch=256,
+        )
 
         # Shortening by hashing
         new_output = []
@@ -156,7 +180,9 @@ class MaskGenerationPipelineTests(unittest.TestCase):
         image_segmenter = pipeline("mask-generation", model=model_id)
 
         outputs = image_segmenter(
-            "http://images.cocodataset.org/val2017/000000039769.jpg", pred_iou_thresh=1, points_per_batch=256
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg",
+            pred_iou_thresh=1,
+            points_per_batch=256,
         )
 
         # Shortening by hashing

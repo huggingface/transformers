@@ -14,7 +14,6 @@
 """Image processor class for Fuyu."""
 
 import math
-from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -29,130 +28,17 @@ from ...image_utils import (
     make_list_of_images,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring, is_torch_available, requires_backends
+from ...utils import TensorType, auto_docstring, is_torch_available, logging, requires_backends
 from ...utils.import_utils import requires
 
 
-if TYPE_CHECKING:
-    import torch
+logger = logging.get_logger(__name__)
+
 
 if is_torch_available():
     import torch
 
 
-# Adapted from transformers.models.fuyu.image_processing_fuyu.FuyuBatchFeature
-class FuyuBatchFeature(BatchFeature):
-    """
-    BatchFeature class for Fuyu image processor and processor.
-
-    The outputs dictionary from the processors contains a mix of tensors and lists of tensors.
-    """
-
-    def convert_to_tensors(self, tensor_type: str | TensorType | None = None, **kwargs):
-        """
-        Convert the inner content to tensors.
-
-        Args:
-            tensor_type (`str` or [`~utils.TensorType`], *optional*):
-                The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
-                `None`, no modification is done.
-        """
-        if tensor_type is None:
-            return self
-
-        is_tensor, as_tensor = self._get_is_as_tensor_fns(tensor_type=tensor_type)
-
-        def _convert_tensor(elem):
-            if is_tensor(elem):
-                return elem
-            return as_tensor(elem)
-
-        def _safe_convert_tensor(elem):
-            try:
-                return _convert_tensor(elem)
-            except:  # noqa E722
-                if key == "overflowing_values":
-                    raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
-                raise ValueError(
-                    "Unable to create tensor, you should probably activate padding "
-                    "with 'padding=True' to have batched tensors with the same length."
-                )
-
-        # Do the tensor conversion in batch
-        for key, value in self.items():
-            if isinstance(value, list) and isinstance(value[0], list):
-                # list[list[Any]] -> list[list[Tensor]]
-                self[key] = [[_safe_convert_tensor(elem) for elem in elems] for elems in value]
-            elif isinstance(value, list):
-                # list[Any] -> list[Tensor]
-                self[key] = [_safe_convert_tensor(elem) for elem in value]
-            else:
-                # Any -> Tensor
-                self[key] = _safe_convert_tensor(value)
-        return self
-
-    def to(self, *args, **kwargs) -> "BatchFeature":
-        """
-        Send all values to device by calling `v.to(*args, **kwargs)` (PyTorch only). This should support casting in
-        different `dtypes` and sending the `BatchFeature` to a different `device`.
-
-        Args:
-            args (`Tuple`):
-                Will be passed to the `to(...)` function of the tensors.
-            kwargs (`Dict`, *optional*):
-                Will be passed to the `to(...)` function of the tensors.
-
-        Returns:
-            [`BatchFeature`]: The same instance after modification.
-        """
-        requires_backends(self, ["torch"])
-        import torch
-
-        from ...utils import is_torch_device, is_torch_dtype
-
-        new_data = {}
-        device = kwargs.get("device")
-        # Check if the args are a device or a dtype
-        if device is None and len(args) > 0:
-            # device should be always the first argument
-            arg = args[0]
-            if is_torch_dtype(arg):
-                # The first argument is a dtype
-                pass
-            elif isinstance(arg, str) or is_torch_device(arg) or isinstance(arg, int):
-                device = arg
-            else:
-                # it's something else
-                raise ValueError(f"Attempting to cast a BatchFeature to type {str(arg)}. This is not supported.")
-
-        def _to(elem):
-            # check if v is a floating point
-            if torch.is_floating_point(elem):
-                # cast and send to device
-                return elem.to(*args, **kwargs)
-            if device is not None:
-                return elem.to(device=device)
-
-            return elem
-
-        # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
-        for k, v in self.items():
-            if isinstance(v, list) and isinstance(v[0], list):
-                # Data structure is a list of lists
-                new_v = []
-                for elems in v:
-                    new_v.append([_to(elem) for elem in elems])
-                new_data[k] = new_v
-            elif isinstance(v, list):
-                # Data structure is a list
-                new_data[k] = [_to(elem) for elem in v]
-            else:
-                new_data[k] = _to(v)
-        self.data = new_data
-        return self
-
-
-# Adapted from transformers.models.fuyu.image_processing_fuyu.FuyuImagesKwargs
 class FuyuImagesKwargs(ImagesKwargs, total=False):
     r"""
     patch_size (`dict[str, int]`, *optional*, defaults to `{"height": 30, "width": 30}`):
@@ -265,7 +151,7 @@ class FuyuImageProcessorPil(PilBackend):
         padding_mode: str | None,
         return_tensors: str | TensorType | None,
         **kwargs,
-    ) -> FuyuBatchFeature:
+    ) -> BatchFeature:
         # Process nested images one by one
         original_image_sizes = []
         processed_images = []
@@ -316,14 +202,16 @@ class FuyuImageProcessorPil(PilBackend):
                     image = self.normalize(image, image_mean, image_std)
                 processed_images[batch_idx][img_idx] = image
 
-        return FuyuBatchFeature(
+        return BatchFeature(
             data={
                 "images": processed_images,
                 "image_unpadded_heights": image_unpadded_heights,
                 "image_unpadded_widths": image_unpadded_widths,
                 "image_scale_factors": image_scale_factors,
+                "image_sizes": original_image_sizes,
             },
             tensor_type=return_tensors,
+            skip_tensor_conversion=["overflowing_values"],
         )
 
     def get_num_patches(self, image_height: int, image_width: int, patch_size: SizeDict | None = None) -> int:
@@ -352,20 +240,15 @@ class FuyuImageProcessorPil(PilBackend):
         num_patches = num_patches_per_dim_h * num_patches_per_dim_w
         return num_patches
 
-    def patchify_image(
-        self, image: "np.ndarray | torch.Tensor", patch_size: SizeDict | None = None
-    ) -> "np.ndarray | torch.Tensor":
+    def patchify_image(self, image: "np.ndarray", patch_size: SizeDict | None = None) -> "np.ndarray":
         """
         Convert an image into a tensor of patches using numpy operations.
         Args:
-            image (`np.ndarray` or `torch.Tensor`):
+            image (`np.ndarray`):
                 Image to convert. Shape: [batch, channels, height, width] or [channels, height, width]
             patch_size (`SizeDict`, *optional*):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the patches.
         """
-        requires_backends(self, ["torch"])
-        import torch
-
         if patch_size is None:
             if isinstance(self.patch_size, SizeDict):
                 patch_size = self.patch_size
@@ -373,25 +256,16 @@ class FuyuImageProcessorPil(PilBackend):
                 patch_size = SizeDict(**self.patch_size)
         patch_height, patch_width = patch_size.height, patch_size.width
 
-        # Handle torch tensors by converting to numpy
-        is_torch = isinstance(image, torch.Tensor)
-        if is_torch:
-            image_np = image.cpu().numpy()
-            device = image.device
-        else:
-            image_np = image
-            device = None
-
         # Handle batch dimension
-        if len(image_np.shape) == 4:
-            batch_size, channels, height, width = image_np.shape
-        elif len(image_np.shape) == 3:
+        if len(image.shape) == 4:
+            batch_size, channels, height, width = image.shape
+        elif len(image.shape) == 3:
             batch_size = 1
-            channels, height, width = image_np.shape
-            image_np = image_np[np.newaxis, ...]
+            channels, height, width = image.shape
+            image = image[np.newaxis, ...]
         else:
             raise ValueError(
-                f"Expected image shape [batch, channels, height, width] or [channels, height, width], got {image_np.shape}"
+                f"Expected image shape [batch, channels, height, width] or [channels, height, width], got {image.shape}"
             )
 
         # Extract patches using numpy operations to match torch unfold behavior exactly
@@ -409,7 +283,7 @@ class FuyuImageProcessorPil(PilBackend):
             # After reshape: (num_patches, channels * patch_height * patch_width)
 
             # Reshape to extract patches: (channels, num_patches_h, patch_height, num_patches_w, patch_width)
-            img_reshaped = image_np[b].reshape(channels, num_patches_h, patch_height, num_patches_w, patch_width)
+            img_reshaped = image[b].reshape(channels, num_patches_h, patch_height, num_patches_w, patch_width)
             # Transpose to (channels, num_patches, patch_height, patch_width) where num_patches = num_patches_h * num_patches_w
             img_reshaped = img_reshaped.transpose(0, 1, 3, 2, 4).reshape(
                 channels, num_patches, patch_height, patch_width
@@ -421,11 +295,6 @@ class FuyuImageProcessorPil(PilBackend):
             patches_list.append(patches)
 
         patches_array = np.stack(patches_list, axis=0) if batch_size > 1 else patches_list[0]
-
-        # Convert back to torch if input was torch
-        if is_torch:
-            patches_array = torch.from_numpy(patches_array).to(device)
-
         return patches_array
 
     def preprocess_with_tokenizer_info(
@@ -438,7 +307,7 @@ class FuyuImageProcessorPil(PilBackend):
         image_newline_id: int,
         variable_sized: bool,
         patch_size: dict[str, int] | None = None,
-    ) -> FuyuBatchFeature:
+    ) -> BatchFeature:
         """
         Process images for model input. In particular, variable-sized images are handled here.
         This method uses PyTorch operations as it operates on model inputs which are tensors.
@@ -463,6 +332,8 @@ class FuyuImageProcessorPil(PilBackend):
         """
         requires_backends(self, ["torch"])
         import torch
+
+        logger.warning("`image_processor.preprocess_with_tokenizer_info` is deprecated and will be removed in v5.20.")
 
         if patch_size is None:
             if isinstance(self.patch_size, SizeDict):
@@ -505,8 +376,8 @@ class FuyuImageProcessorPil(PilBackend):
                         [num_patches], image_placeholder_id, dtype=torch.int32, device=image_input.device
                     )
                     # Patchify the image - convert to numpy, patchify, convert back
-                    image_np = image.cpu().numpy()
-                    patches_np = self.patchify_image(image_np, patch_size=patch_size)
+                    image = image.cpu().numpy()
+                    patches_np = self.patchify_image(image, patch_size=patch_size)
                     patches = torch.from_numpy(patches_np).to(image_input.device)
                     assert num_patches == patches.shape[0]
                     if variable_sized:
@@ -556,7 +427,7 @@ class FuyuImageProcessorPil(PilBackend):
 
             image_patch_indices_per_batch.append(per_batch_indices)
             image_patch_indices_per_subsequence.append(per_subsequence_indices)
-        return FuyuBatchFeature(
+        return BatchFeature(
             data={
                 "images": images,
                 "image_input_ids": batch_image_input_ids,

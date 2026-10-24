@@ -15,19 +15,22 @@
 import base64
 import os
 from collections.abc import Iterable
-from dataclasses import dataclass, fields
+from dataclasses import astuple, dataclass, fields
+from functools import partial
 from io import BytesIO
 from typing import Any, Union
 
-import httpx
 import numpy as np
+from huggingface_hub.utils import httpx
 
 from .utils import (
     ExplicitEnum,
     is_numpy_array,
     is_torch_available,
     is_torch_tensor,
+    is_torchcodec_greater_or_equal,
     is_torchvision_available,
+    is_torchvision_greater_or_equal,
     is_vision_available,
     logging,
     requires_backends,
@@ -50,8 +53,8 @@ if is_vision_available():
 
     PILImageResampling = PIL.Image.Resampling
 
+
 if is_torchvision_available():
-    from torchvision.io import ImageReadMode, decode_image
     from torchvision.transforms import InterpolationMode
     from torchvision.transforms.functional import pil_to_tensor
 
@@ -168,7 +171,7 @@ def make_list_of_images(images, expected_ndims: int = 3) -> list[ImageInput]:
 
     Args:
         images (`ImageInput`):
-            Image of images to turn into a list of images.
+            Image or batch of images to turn into a list of images.
         expected_ndims (`int`, *optional*, defaults to 3):
             Expected number of dimensions for a single input image. If the input image has a different number of
             dimensions, an error is raised.
@@ -346,12 +349,14 @@ def get_channel_dimension_axis(image: np.ndarray, input_data_format: ChannelDime
     raise ValueError(f"Unsupported data format: {input_data_format}")
 
 
-def get_image_size(image: np.ndarray, channel_dim: ChannelDimension | None = None) -> tuple[int, int]:
+def get_image_size(
+    image: Union[np.ndarray, "PIL.Image.Image"], channel_dim: ChannelDimension | None = None
+) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the image.
 
     Args:
-        image (`np.ndarray`):
+        image (`np.ndarray | PIL.Image.Image`):
             The image to get the dimensions of.
         channel_dim (`ChannelDimension`, *optional*):
             Which dimension the channel dimension is in. If `None`, will infer the channel dimension from the image.
@@ -359,6 +364,9 @@ def get_image_size(image: np.ndarray, channel_dim: ChannelDimension | None = Non
     Returns:
         A tuple of the image's height and width.
     """
+    if isinstance(image, PIL.Image.Image):
+        return image.size
+
     if channel_dim is None:
         channel_dim = infer_channel_dimension_format(image)
 
@@ -513,7 +521,8 @@ def load_image_as_tensor(
     timeout: float | None = None,
 ) -> "torch.Tensor":
     """
-    Loads `image` directly to a `torch.Tensor` using torchvision.
+    Loads `image` directly to a `torch.Tensor` using torchcodec or torchvision. The EXIF orientation tag is applied,
+    so the tensor holds the upright image, the same as `load_image` returns.
 
     Args:
         image (`str` or `PIL.Image.Image`):
@@ -525,6 +534,22 @@ def load_image_as_tensor(
         `torch.Tensor`: A `[C, H, W]` uint8 tensor in RGB channel order.
     """
     import torch
+
+    if is_torchcodec_greater_or_equal("0.16.0"):
+        # Try with torchcodec first and warn only if torchvision is used
+        from torchcodec.decoders import ImageReadMode, decode_image
+    else:
+        from torchvision.io import ImageReadMode, decode_image
+
+        # torchcodec applies the EXIF orientation by default; torchvision has to be told to, so that both backends
+        # return the same upright image as `load_image`
+        decode_image = partial(decode_image, apply_exif_orientation=True)
+
+        if is_torchvision_greater_or_equal("0.29.0"):
+            logger.warning_once(
+                "Image decoding with `torchvision` is deprecated and will be removed in future versions ."
+                "Please install `torchcodec>=0.16.0` instead. "
+            )
 
     if isinstance(image, str):
         if image.startswith("http://") or image.startswith("https://"):
@@ -1016,6 +1041,8 @@ class SizeDict:
     shortest_edge: int | None = None
     max_height: int | None = None
     max_width: int | None = None
+    min_pixels: int | None = None
+    max_pixels: int | None = None
 
     def __getitem__(self, key):
         if hasattr(self, key):
@@ -1035,7 +1062,7 @@ class SizeDict:
                 yield f.name, val
 
     def __hash__(self):
-        return hash((self.height, self.width, self.longest_edge, self.shortest_edge, self.max_height, self.max_width))
+        return hash(astuple(self))
 
     def __contains__(self, key):
         return hasattr(self, key) and getattr(self, key) is not None

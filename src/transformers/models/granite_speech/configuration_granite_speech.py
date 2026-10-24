@@ -15,9 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.3-2b")
@@ -53,19 +53,30 @@ class GraniteSpeechEncoderConfig(PreTrainedConfig):
     ```"""
 
     model_type = "granite_speech_encoder"
+    attribute_map = {
+        "hidden_size": "hidden_dim",
+        "num_hidden_layers": "num_layers",
+        "num_attention_heads": "num_heads",
+        "num_mel_bins": "input_dim",
+    }
 
     input_dim: int = 160
     num_layers: int = 10
     hidden_dim: int = 1024
     feedforward_mult: int = 4
     num_heads: int = 8
-    dim_head: int = 128
+    dim_head: int | None = None
     output_dim: int = 42
     context_size: int = 200
     max_pos_emb: int = 512
     dropout: float | int = 0.1
     conv_kernel_size: int = 15
     conv_expansion_factor: int = 2
+
+    def __post_init__(self, **kwargs):
+        super().__post_init__(**kwargs)
+        if self.dim_head is None:
+            self.dim_head = self.hidden_dim // self.num_heads
 
 
 @auto_docstring(checkpoint="ibm-granite/granite-speech-3.3-2b")
@@ -98,13 +109,11 @@ class GraniteSpeechConfig(PreTrainedConfig):
     ```"""
 
     model_type = "granite_speech"
-    attribute_map = {
-        "audio_token_id": "audio_token_index",
-    }
-    sub_configs = {
-        "text_config": AutoConfig,
+    attribute_map = {"audio_token_id": "audio_token_index"}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="granite"),
         "encoder_config": GraniteSpeechEncoderConfig,
-        "projector_config": AutoConfig,
+        "projector_config": SubConfigSpec(config_class=AutoConfig, model_type="blip_2_qformer"),
     }
 
     text_config: dict | PreTrainedConfig | None = None
@@ -115,25 +124,7 @@ class GraniteSpeechConfig(PreTrainedConfig):
     has_lora_adapter: bool = True
     downsample_rate: int = 5
     window_size: int = 15
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "granite")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["granite"]()
-
-        if isinstance(self.projector_config, dict):
-            self.projector_config["model_type"] = self.projector_config.get("model_type", "blip_2_qformer")
-            self.projector_config = CONFIG_MAPPING[self.projector_config["model_type"]](**self.projector_config)
-        elif self.projector_config is None:
-            self.projector_config = CONFIG_MAPPING["blip_2_qformer"]()
-
-        if not isinstance(self.encoder_config, GraniteSpeechEncoderConfig):
-            self.encoder_config = {} if self.encoder_config is None else self.encoder_config
-            self.encoder_config = GraniteSpeechEncoderConfig(**self.encoder_config)
-
-        super().__post_init__(**kwargs)
+    tie_word_embeddings: bool = True
 
 
 __all__ = ["GraniteSpeechEncoderConfig", "GraniteSpeechConfig"]

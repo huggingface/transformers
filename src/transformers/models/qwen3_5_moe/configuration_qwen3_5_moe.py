@@ -69,11 +69,21 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
         "layers.*.mlp.shared_expert.gate_proj": "colwise",
         "layers.*.mlp.shared_expert.up_proj": "colwise",
         "layers.*.mlp.shared_expert.down_proj": "rowwise",
+        "layers.*.linear_attn.in_proj_qkv": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_z": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_b": "colwise_gather_output",
+        "layers.*.linear_attn.in_proj_a": "colwise_gather_output",
+        "layers.*.linear_attn.out_proj": "colwise_gather_output",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 248320
@@ -133,6 +143,8 @@ class Qwen3_5MoeVisionConfig(PreTrainedConfig):
 
     model_type = "qwen3_5_moe_vision"
     base_config_key = "vision_config"
+    default_rope_type = "axial"
+    attribute_map = {"num_attention_heads": "num_heads"}
 
     depth: int = 27
     hidden_size: int = 1152
@@ -146,6 +158,7 @@ class Qwen3_5MoeVisionConfig(PreTrainedConfig):
     out_hidden_size: int = 3584
     num_position_embeddings: int = 2304
     initializer_range: float = 0.02
+    rope_parameters: dict | None = None
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3.5-35B-A3B")
@@ -168,7 +181,10 @@ class Qwen3_5MoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen3_5_moe"
-    sub_configs = {"vision_config": Qwen3_5MoeVisionConfig, "text_config": Qwen3_5MoeTextConfig}
+    sub_configs_defaults = {
+        "vision_config": Qwen3_5MoeVisionConfig,
+        "text_config": Qwen3_5MoeTextConfig,
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
 
     text_config: dict | PreTrainedConfig | None = None
@@ -181,16 +197,9 @@ class Qwen3_5MoeConfig(PreTrainedConfig):
     tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"]()
-
+        if isinstance(self.vision_config, dict) and self.vision_config.get("model_type") == "qwen3_5_moe":
+            # old ckpt with incorrect model type -> override manually
+            self.vision_config["model_type"] = "qwen3_5_moe_vision"
         super().__post_init__(**kwargs)
 
 

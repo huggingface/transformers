@@ -39,7 +39,7 @@ CHECKER_CONFIG = {
     "label": "Doctest list",
     # Over-approximation: the checker validates that paths in .txt list files exist and are
     # sorted. The broad globs ensure cache invalidation when source files are added/removed.
-    "file_globs": [
+    "cache_globs": [
         "utils/not_doctested.txt",
         "utils/slow_documentation_tests.txt",
         "src/transformers/**/*.py",

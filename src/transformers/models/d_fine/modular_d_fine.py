@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import math
 
 import torch
@@ -20,9 +21,9 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...activations import ACT2CLS
-from ...backbone_utils import consolidate_backbone_kwargs_to_config
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_transforms import corners_to_center_format
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ..auto import AutoConfig
@@ -111,9 +112,9 @@ class DFineConfig(PreTrainedConfig):
     matcher_bbox_cost (`float`, *optional*, defaults to 5.0):
         The relative weight of the bounding box loss used by the Hungarian Matcher.
     matcher_giou_cost (`float`, *optional*, defaults to 2.0):
-        The relative weight of the giou loss of used by the Hungarian Matcher.
+        The relative weight of the giou loss used by the Hungarian Matcher.
     use_focal_loss (`bool`, *optional*, defaults to `True`):
-        Parameter informing if focal focal should be used.
+        Parameter informing if focal loss should be used.
     focal_loss_alpha (`float`, *optional*, defaults to 0.75):
         Parameter alpha used to compute the focal loss.
     focal_loss_gamma (`float`, *optional*, defaults to 2.0):
@@ -159,7 +160,11 @@ class DFineConfig(PreTrainedConfig):
     """
 
     model_type = "d_fine"
-    sub_configs = {"backbone_config": AutoConfig}
+    sub_configs_defaults = {
+        "backbone_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="hgnet_v2", init_kwargs={"out_indices": [2, 3, 4]}
+        ),
+    }
     layer_types = ["basic", "bottleneck"]
     attribute_map = {
         "hidden_size": "d_model",
@@ -239,12 +244,6 @@ class DFineConfig(PreTrainedConfig):
     is_encoder_decoder: bool = True
 
     def __post_init__(self, **kwargs):
-        self.backbone_config, kwargs = consolidate_backbone_kwargs_to_config(
-            backbone_config=self.backbone_config,
-            default_config_type="hgnet_v2",
-            default_config_kwargs={"out_indices": [2, 3, 4]},
-            **kwargs,
-        )
         self.head_dim = self.d_model // self.decoder_attention_heads
         super().__post_init__(**kwargs)
 
@@ -369,7 +368,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
 
         self.num_points_list = num_points_list
         num_points_scale = [1 / n for n in self.num_points_list for _ in range(n)]
-        self.register_buffer("num_points_scale", torch.tensor(num_points_scale, dtype=torch.float32))
+        self.num_points_scale = nn.Buffer(torch.tensor(num_points_scale, dtype=torch.float32))
 
         self.total_points = self.n_heads * sum(self.num_points_list)
 
@@ -678,20 +677,20 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        PreTrainedModel._init_weights(self, module)
         # initialize linear layer bias value according to a given probability value.
-        if isinstance(module, (DFineForObjectDetection, DFineDecoder)):
-            if module.class_embed is not None:
-                for layer in module.class_embed:
-                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
-                    bias = float(-math.log((1 - prior_prob) / prior_prob))
-                    init.xavier_uniform_(layer.weight)
-                    init.constant_(layer.bias, bias)
+        if isinstance(module, DFineForObjectDetection):
+            for layer in module.model.decoder.class_embed:
+                prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+                bias = float(-math.log((1 - prior_prob) / prior_prob))
+                init.xavier_uniform_(layer.weight)
+                init.constant_(layer.bias, bias)
 
-            if module.bbox_embed is not None:
-                for layer in module.bbox_embed:
-                    init.constant_(layer.layers[-1].weight, 0)
-                    init.constant_(layer.layers[-1].bias, 0)
+            for layer in module.model.decoder.bbox_embed:
+                init.constant_(layer.layers[-1].weight, 0)
+                init.constant_(layer.layers[-1].bias, 0)
 
+        if isinstance(module, DFineDecoder):
             if hasattr(module, "reg_scale"):
                 init.constant_(module.reg_scale, self.config.reg_scale)
 
@@ -723,15 +722,6 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             init.xavier_uniform_(module.enc_score_head.weight)
             init.constant_(module.enc_score_head.bias, bias)
 
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-            if getattr(module, "running_mean", None) is not None:
-                init.zeros_(module.running_mean)
-                init.ones_(module.running_var)
-                init.zeros_(module.num_batches_tracked)
-
         if isinstance(module, DFineGate):
             bias = float(-math.log((1 - 0.5) / 0.5))
             init.constant_(module.gate.bias, bias)
@@ -740,10 +730,6 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
         if isinstance(module, DFineLQE):
             init.constant_(module.reg_conf.layers[-1].bias, 0)
             init.constant_(module.reg_conf.layers[-1].weight, 0)
-
-        if isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
 
         if hasattr(module, "weight_embedding") and self.config.learn_initial_query:
             init.xavier_uniform_(module.weight_embedding.weight)
@@ -965,8 +951,8 @@ class DFineForObjectDetection(RTDetrForObjectDetection):
             ]
         )
 
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         # Initialize weights and apply final processing
         self.post_init()
 

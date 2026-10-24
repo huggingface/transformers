@@ -9,15 +9,14 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-10-31 and added to Hugging Face Transformers on 2026-03-16.*
+*This model was published in HF papers on 2024-10-31 and contributed to Hugging Face Transformers on 2026-03-16.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
     </div>
@@ -36,16 +35,20 @@ The original code can be found [here](https://github.com/Physical-Intelligence/o
 
 You can find all the checkpoints under the [PI0](https://huggingface.co/collections/lerobot/pi0) collection.
 
+> [!TIP]
+> Set `use_kernels=True` in [`~PreTrainedModel.from_pretrained`] to replace supported layers with optimized kernels from the Hub. Refer to [Loading kernels](../kernel_doc/loading_kernels) to learn more.
+
 ## Usage examples
 
-```py
+```python
 import torch
+
+from transformers import PI0ForConditionalGeneration, PI0Processor
 from transformers.image_utils import load_image
-from transformers import PI0Processor, PI0ForConditionalGeneration
+
 
 model = PI0ForConditionalGeneration.from_pretrained(
     "lerobot/pi0_base",
-    dtype=torch.float32,
     device_map="auto",
     attn_implementation="sdpa"
 )
@@ -53,7 +56,7 @@ processor = PI0Processor.from_pretrained("google/paligemma2-3b-mix-224")
 
 prompt = "Pick up the object"
 image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/vla_pi0.jpg")
-inputs = processor(image, prompt, return_tensors="pt")
+inputs = processor(image, prompt, return_tensors="pt").to(model.device)
 
 state = torch.randn(1, 32) # change with actual robot state
 actions = model.sample_actions(**inputs, state=state, num_steps=3)

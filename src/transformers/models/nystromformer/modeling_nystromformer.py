@@ -21,6 +21,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -55,13 +56,11 @@ class NystromformerEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)) + 2, persistent=False
+        self.position_ids = nn.Buffer(
+            torch.arange(config.max_position_embeddings).expand((1, -1)) + 2, persistent=False
         )
-        self.register_buffer(
-            "token_type_ids",
-            torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
-            persistent=False,
+        self.token_type_ids = nn.Buffer(
+            torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device), persistent=False
         )
 
     def forward(self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None):
@@ -469,19 +468,22 @@ class NystromformerModel(NystromformerPreTrainedModel):
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
         )
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+        )
+
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -536,12 +538,6 @@ class NystromformerForMaskedLM(NystromformerPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | MaskedLMOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
-            config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.nystromformer(
@@ -626,12 +622,6 @@ class NystromformerForSequenceClassification(NystromformerPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.nystromformer(
@@ -733,10 +723,6 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
             model's internal embedding lookup matrix.
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
-            num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors. (See
-            `input_ids` above)
         """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -814,10 +800,6 @@ class NystromformerForTokenClassification(NystromformerPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         outputs = self.nystromformer(

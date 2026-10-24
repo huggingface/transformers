@@ -18,7 +18,7 @@ from typing import Optional, Union
 import torch
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image
 from ...processing_utils import Unpack
@@ -26,7 +26,7 @@ from ...tokenization_utils_base import TextInput
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
 from ...utils.import_utils import requires
-from ..auto import CONFIG_MAPPING
+from ..auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
 from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
 from ..colqwen2.configuration_colqwen2 import ColQwen2Config
@@ -50,26 +50,9 @@ class ColModernVBertConfig(ColQwen2Config):
     ```
     """
 
-    model_type = "colmodernvbert"
-    sub_configs = {"vlm_config": PreTrainedConfig}
-
-    vlm_config: dict | PreTrainedConfig | None = None
-    embedding_dim: int = 128
-    initializer_range: float = 0.02
-
-    def __post_init__(self, **kwargs):
-        if self.vlm_config is None:
-            self.vlm_config = CONFIG_MAPPING["modernvbert"]()
-            logger.info(
-                "`vlm_config` is `None`. Initializing `vlm_config` with the `ModernVBertConfig` with default values."
-            )
-        elif isinstance(self.vlm_config, dict):
-            self.vlm_config = CONFIG_MAPPING[self.vlm_config["model_type"]](**self.vlm_config)
-
-        if not hasattr(self.vlm_config, "vocab_size"):
-            self.vlm_config.vocab_size = self.vlm_config.get_text_config().vocab_size
-
-        super().__post_init__(**kwargs)
+    sub_configs_defaults = {
+        "vlm_config": SubConfigSpec(config_class=AutoConfig, model_type="modernvbert"),
+    }
 
 
 class ColModernVBertProcessorKwargs(Idefics3ProcessorKwargs, total=False):
@@ -89,21 +72,6 @@ class ColModernVBertProcessorKwargs(Idefics3ProcessorKwargs, total=False):
 @requires(backends=("torch",))
 @auto_docstring
 class ColModernVBertProcessor(Idefics3Processor):
-    r"""
-    Constructs a ColModernVBert processor which wraps a ModernVBertProcessor and special methods to process images and queries, as
-    well as to compute the late-interaction retrieval score.
-
-    [`ColModernVBertProcessor`] offers all the functionalities of [`ModernVBertProcessor`]. See the [`~ModernVBertProcessor.__call__`]
-    for more information.
-
-    Args:
-            image_processor ([`Idefics3ImageProcessor`]): An instance of [`Idefics3ImageProcessor`]. The image processor is a required input.
-            tokenizer (`PreTrainedTokenizerFast`, *optional*): An instance of [`PreTrainedTokenizerFast`]. This should correspond with the model's text model. The tokenizer is a required input.
-            image_seq_len (`int`, *optional*, defaults to 64): The length of the image sequence i.e. the number of <image> tokens per image in the input.
-            visual_prompt_prefix (`Optional`, *optional*): A prefix to be prepended to visual prompts.
-            query_prefix (`Optional`, *optional*): A prefix to be prepended to query prompts.
-    """
-
     def __init__(
         self,
         image_processor,
@@ -331,12 +299,12 @@ class ColModernVBertPreTrainedModel(ColPaliPreTrainedModel):
     config: ColModernVBertConfig
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for ColModernVBert embeddings output.
     """
 )
+@dataclass
 class ColModernVBertForRetrievalOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):

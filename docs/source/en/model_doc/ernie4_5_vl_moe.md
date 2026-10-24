@@ -13,11 +13,10 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-06-30 and added to Hugging Face Transformers on 2025-12-19.*
+*This model was contributed to Hugging Face Transformers on 2025-12-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
-        <img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="FlashAttention" src="https://img.shields.io/badge/%E2%9A%A1%EF%B8%8E%20FlashAttention-eae0c8?style=flat">
         <img alt="SDPA" src="https://img.shields.io/badge/SDPA-DE3412?style=flat&logo=pytorch&logoColor=white">
         <img alt="Tensor parallelism" src="https://img.shields.io/badge/Tensor%20parallelism-06b6d4?style=flat&logoColor=white">
@@ -37,7 +36,7 @@ to specific modalities. This becomes especially apparent in the Mixture of Exper
 - Dedicated Vision Experts
 - Shared Experts
 
-This architecture has the advantage to enhance multimodal understanding without compromising, and even improving, performance on text-related tasks. An more detailed breakdown is given in the [Technical Report](https://ernie.baidu.com/blog/publication/ERNIE_Technical_Report.pdf).
+This architecture has the advantage to enhance multimodal understanding without compromising, and even improving, performance on text-related tasks. A more detailed breakdown is given in the [Technical Report](https://ernie.baidu.com/blog/publication/ERNIE_Technical_Report.pdf).
 
 <div class="flex justify-center">
     <img src="https://huggingface.co/datasets/AntonV/doc-images/resolve/main/Ernie4_5_VL_Moe.png"/>
@@ -52,8 +51,9 @@ The example below demonstrates how to generate text based on an image with [`Pip
 <hfoptions id="usage">
 <hfoption id="Pipeline">
 
-```py
+```python
 from transformers import pipeline
+
 
 pipe = pipeline(
     task="image-text-to-text",
@@ -79,12 +79,12 @@ print(pipe(text=message, max_new_tokens=20, return_full_text=False))
 </hfoption>
 <hfoption id="AutoModel">
 
-```py
+```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
+
 
 model = AutoModelForImageTextToText.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
-    dtype="auto",
     device_map="auto",  # Use tp_plan="auto" instead to enable Tensor Parallelism!
     revision="refs/pr/11",
 )
@@ -133,9 +133,9 @@ The model can process video data and generate text based on the content of the v
 ```python
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
+
 model = AutoModelForImageTextToText.from_pretrained(
     "baidu/ERNIE-4.5-VL-28B-A3B-PT",
-    dtype="auto",
     device_map="auto",  # Use tp_plan="auto" instead to enable Tensor Parallelism!
     revision="refs/pr/11",
 )

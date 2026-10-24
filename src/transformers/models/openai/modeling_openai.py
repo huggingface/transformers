@@ -27,7 +27,7 @@ from ... import initialization as init
 from ...activations import gelu_new, get_activation, silu
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import Conv1D
 from ...utils import (
     ModelOutput,
@@ -50,10 +50,8 @@ class Attention(nn.Module):
         n_state = nx  # in Attention: n_state=768 (nx=n_embd)
         if n_state % config.n_head != 0:
             raise ValueError(f"Attention n_state shape: {n_state} must be divisible by config.n_head {config.n_head}")
-        self.register_buffer(
-            "bias",
-            torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions),
-            persistent=False,
+        self.bias = nn.Buffer(
+            torch.tril(torch.ones(n_positions, n_positions)).view(1, 1, n_positions, n_positions), persistent=False
         )
         self.n_head = config.n_head
         self.split_size = n_state
@@ -271,12 +269,12 @@ class OpenAIGPTPreTrainedModel(PreTrainedModel):
             init.copy_(module.position_ids, torch.arange(module.config.n_positions))
 
 
-@dataclass
 @auto_docstring(
     custom_intro="""
     Base class for outputs of models predicting if two sentences are consecutive or not.
     """
 )
+@dataclass
 class OpenAIGPTDoubleHeadsModelOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
@@ -307,7 +305,7 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
         self.drop = nn.Dropout(config.embd_pdrop)
         self.h = nn.ModuleList([Block(config.n_positions, config, scale=True) for _ in range(config.n_layer)])
 
-        self.register_buffer("position_ids", torch.arange(config.n_positions), persistent=False)
+        self.position_ids = nn.Buffer(torch.arange(config.n_positions), persistent=False)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -459,9 +457,8 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -639,12 +636,6 @@ class OpenAIGPTForSequenceClassification(OpenAIGPTPreTrainedModel):
         return_dict: bool | None = None,
         **kwargs,
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         transformer_outputs = self.transformer(
