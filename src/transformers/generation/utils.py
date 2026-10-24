@@ -4332,7 +4332,7 @@ class GenerationMixin(ContinuousMixin):
 
             # Pre-encoded features are consumed in placeholder order over (batch, seq): feature row `i` of a modality
             # fills its `i`-th placeholder token, so each chunk gets the rows of the placeholders it contains
-            chunk_mm_encoder_outputs = [None] * len(input_chunks)
+            chunk_mm_encoder_outputs = [{} for _ in input_chunks]
             if is_first_iteration and mm_encoder_outputs:
                 for modality, output in mm_encoder_outputs.items():
                     if output is None:
@@ -4343,9 +4343,9 @@ class GenerationMixin(ContinuousMixin):
                         zip(mask.split(chunk_size, dim=-1), feature_rows.split(chunk_size, dim=-1))
                     ):
                         if chunk_mask.any():
-                            chunk_outputs = chunk_mm_encoder_outputs[chunk_idx] or {}
-                            chunk_outputs[modality] = _slice_mm_encoder_output(output, chunk_rows[chunk_mask])
-                            chunk_mm_encoder_outputs[chunk_idx] = chunk_outputs
+                            chunk_mm_encoder_outputs[chunk_idx][modality] = _slice_mm_encoder_output(
+                                output, chunk_rows[chunk_mask]
+                            )
 
             past_length = cache.get_seq_length()
             for chunk_idx, input_chunk in enumerate(input_chunks):
@@ -4369,7 +4369,7 @@ class GenerationMixin(ContinuousMixin):
                 ):
                     model_inputs["token_type_ids"] = token_types["token_type_ids"][..., :current_length]
 
-                if chunk_mm_encoder_outputs[chunk_idx] is not None:
+                if chunk_mm_encoder_outputs[chunk_idx]:
                     model_inputs["mm_encoder_outputs"] = chunk_mm_encoder_outputs[chunk_idx]
 
                 outputs = model_forward(**model_inputs, return_dict=True)
