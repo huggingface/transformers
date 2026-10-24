@@ -4963,7 +4963,7 @@ _ci_record_deps_baseline: set[str] | None = None
 # subclass whose .get() is called by importlib._bootstrap for every import.
 # ---------------------------------------------------------------------------
 
-_ci_deps_chains: list[dict] = []
+_ci_deps_chains: list[dict[str, object]] = []
 _ci_deps_tracker_reentrant = threading.local()
 _ci_source_deps_repo_root: Path | None = None
 _ci_source_deps_src_root: Path | None = None
@@ -4998,21 +4998,13 @@ def _record_import_chain(module_name: str) -> None:
         except ValueError:
             return
 
-        chain = []
-        for frame_info in inspect.stack()[2:]:  # skip _tracking_import + _record_import_chain
-            fname = frame_info.filename
-            if not fname or fname.startswith("<"):
-                continue
-            try:
-                frel = Path(fname).resolve().relative_to(repo_root).as_posix()
-            except ValueError:
-                continue
-            if frel.startswith("tests/") or frel.startswith("src/transformers/") or frel == "conftest.py":
-                chain.append({"file": frel, "line": frame_info.lineno, "func": frame_info.function})
-            if len(chain) >= 100:
-                break
-
-        entry: dict = {"module": module_name, "src_file": src_file_rel, "phase": _ci_current_phase, "chain": chain}
+        # chain is kept empty for now — inspect.stack() costs ~30-70ms per call
+        # (reads source lines for each frame) × thousands of imports = minutes of overhead.
+        # To re-enable deep chain analysis:
+        #   chain = []
+        #   for frame_info in inspect.stack(context=0)[2:]:
+        #       ... filter to tests/ and src/transformers/ frames ...
+        entry: dict = {"module": module_name, "src_file": src_file_rel, "phase": _ci_current_phase, "chain": []}
         if _ci_current_test_id is not None:
             entry["test_id"] = _ci_current_test_id
         _ci_deps_chains.append(entry)
