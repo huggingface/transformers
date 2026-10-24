@@ -110,12 +110,16 @@ def sdpa_attention_forward(
         )
 
     sdpa_kwargs = {}
+    fold_query_groups = False
     if hasattr(module, "num_key_value_groups") and module.num_key_value_groups > 1:
-        if not use_gqa_in_sdpa(attention_mask, key, value):
+        if use_gqa_in_sdpa(attention_mask, key, value):
+            sdpa_kwargs["enable_gqa"] = True
+        elif query.shape[2] == 1:
+            # Decoding: the query heads are folded onto their KV head right before the SDPA call, see below
+            fold_query_groups = True
+        else:
             key = repeat_kv(key, module.num_key_value_groups)
             value = repeat_kv(value, module.num_key_value_groups)
-        else:
-            sdpa_kwargs["enable_gqa"] = True
 
     q_length = query.shape[2]
     kv_length = key.shape[2]
@@ -171,6 +175,21 @@ def sdpa_attention_forward(
         attention_mask = create_position_bias_mask(position_bias, attention_mask, is_causal, query, key)
         is_causal = False
 
+    # With a single query token, the query heads sharing a KV head become query rows of that head:
+    # (batch, num_heads, 1, head_dim) -> (batch, num_kv_heads, num_key_value_groups, head_dim). Query head `i` still
+    # attends to KV head `i // num_key_value_groups` as with `repeat_kv`, without copying K/V. A mask shared by all
+    # heads broadcasts over the new rows, and `is_causal` is already False with a single query token.
+    if fold_query_groups:
+        # Explicit sizes (no -1) so that empty batches or KV sequences can be reshaped as well
+        batch_size, num_heads, _, head_dim = query.shape
+        num_kv_heads, num_groups = key.shape[1], module.num_key_value_groups
+        query = query.reshape(batch_size, num_kv_heads, num_groups, head_dim)
+        # A per-head mask (e.g. built from `position_bias`) is folded the same way
+        if attention_mask is not None and attention_mask.ndim > 2 and attention_mask.shape[-3] > 1:
+            attention_mask = attention_mask.reshape(
+                *attention_mask.shape[:-3], num_kv_heads, num_groups, attention_mask.shape[-1]
+            )
+
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
         key,
@@ -181,6 +200,8 @@ def sdpa_attention_forward(
         is_causal=is_causal,
         **sdpa_kwargs,
     )
+    if fold_query_groups:
+        attn_output = attn_output.reshape(batch_size, num_heads, 1, value.shape[-1])
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, None
