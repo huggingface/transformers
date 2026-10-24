@@ -2197,6 +2197,25 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
+    loma_mapping = [
+        WeightRenaming(r"^posenc\.Wr\.weight", "positional_encoder.projector.weight"),
+        WeightRenaming(r"^input_proj\.", "input_projection."),
+        WeightRenaming(r"^transformers\.(\d+)\.", r"layers.\1."),
+        WeightRenaming(r"\.self_attn\.ffn\.0\.", ".self_mlp.fc1."),
+        WeightRenaming(r"\.self_attn\.ffn\.1\.", ".self_mlp.layer_norm."),
+        WeightRenaming(r"\.self_attn\.ffn\.3\.", ".self_mlp.fc2."),
+        WeightRenaming(r"\.cross_attn\.ffn\.0\.", ".cross_mlp.fc1."),
+        WeightRenaming(r"\.cross_attn\.ffn\.1\.", ".cross_mlp.layer_norm."),
+        WeightRenaming(r"\.cross_attn\.ffn\.3\.", ".cross_mlp.fc2."),
+        WeightRenaming(r"\.self_attn\.out_proj\.", ".self_attn.o_proj."),
+        WeightRenaming(r"\.cross_attn\.to_v\.", ".cross_attn.v_proj."),
+        WeightRenaming(r"\.cross_attn\.to_out\.", ".cross_attn.o_proj."),
+        WeightRenaming(r"\.self_attn\.", ".self_attention."),
+        WeightRenaming(r"\.cross_attn\.", ".cross_attention."),
+        WeightRenaming(r"^log_assignment\.8\.final_proj\.", "match_assignment.final_projection."),
+        WeightRenaming(r"^log_assignment\.8\.matchability\.", "match_assignment.matchability."),
+    ]
+    mapping["loma"] = loma_mapping
     # Gradium's runtime checkpoint (`model.safetensors` next to the runtime's files). Its codec (`mimi.`) and its
     # training-only tensors are left unexpected: the codec is the processor's audio tokenizer.
     conditioners = r"^flow_lm\.condition_provider\.conditioners\."
