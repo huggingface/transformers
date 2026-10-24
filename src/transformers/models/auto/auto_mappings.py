@@ -39,6 +39,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("aria", "AriaConfig"),
         ("aria_text", "AriaTextConfig"),
         ("audio-spectrogram-transformer", "ASTConfig"),
+        ("audio_mae", "AudioMAEConfig"),
         ("audioflamingo3", "AudioFlamingo3Config"),
         ("audioflamingo3_encoder", "AudioFlamingo3EncoderConfig"),
         ("autoformer", "AutoformerConfig"),
