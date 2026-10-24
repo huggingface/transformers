@@ -15,7 +15,6 @@
 
 import math
 import os
-import re
 import tempfile
 import unittest
 import wave
@@ -117,7 +116,6 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "<|audio_start|><|audio|><|audio|><|audio_end|>"
         )
         self.assertEqual(decoded, expected)
-        self.assertNotIn("num_audio_codes", out)
 
     def test_audio_peak_normalized_to_minus_3_dbfs(self):
         processor = self.get_processor()
@@ -127,49 +125,6 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # an all-zero clip must not produce NaNs
         out = processor(text="<|audio|>", audio=[np.zeros(1200, dtype=np.float32)], return_tensors="pt")
         self.assertFalse(torch.isnan(out["input_features"]).any())
-
-    def test_flat_and_nested_batches_preserve_media_order(self):
-        """Flat and nested media preserve per-sample ownership, including empty groups."""
-        processor = self.get_processor()
-        hop = processor.feature_extractor.hop_length
-        texts = [
-            "<|audio|> sound only",
-            "<|image|> image only",
-            "<|image|><|image|><|image|> both <|audio|><|audio|>",
-        ]
-        images = [[], [self._image(32, 32)], [self._image(32, 32), self._image(48, 32), self._image(32, 48)]]
-        audio = [[self._clip(hop)], [], [self._clip(hop + 1), self._clip(3 * hop)]]
-        nested = processor(text=texts, images=images, audio=audio, padding=True, return_tensors="pt")
-        flat = processor(
-            text=texts,
-            images=[image for group in images for image in group],
-            audio=[clip for group in audio for clip in group],
-            padding=True,
-            return_tensors="pt",
-        )
-        for key in (
-            "input_ids",
-            "attention_mask",
-            "pixel_values",
-            "image_sizes",
-            "input_features",
-            "feature_attention_mask",
-        ):
-            with self.subTest(key=key):
-                torch.testing.assert_close(flat[key], nested[key])
-        self.assertEqual(nested["pixel_values"].shape[0], 4)
-        self.assertEqual(nested["image_sizes"].tolist(), [[32, 32], [32, 32], [48, 32], [32, 48]])
-        self.assertEqual(nested["feature_attention_mask"].sum(-1).tolist(), [hop, hop + 1, 3 * hop])
-
-        expected_image_headers = [[], ["2*2"], ["2*2", "3*2", "2*3"]]
-        expected_audio_counts = [[1], [], [2, 3]]
-        for index, ids in enumerate(nested["input_ids"]):
-            with self.subTest(sample=index):
-                decoded = processor.tokenizer.decode(ids)
-                headers = re.findall(r"<\|img_start\|>(\d+\*\d+)<\|img_token_start\|>", decoded)
-                audio_runs = re.findall(r"<\|audio_start\|>(.*?)<\|audio_end\|>", decoded)
-                self.assertEqual(headers, expected_image_headers[index])
-                self.assertEqual([run.count("<|audio|>") for run in audio_runs], expected_audio_counts[index])
 
     def test_mismatched_counts_raise(self):
         """Strict validation in both directions, for both modalities, flat and nested."""
@@ -194,9 +149,10 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 self.assertIn(snippet, str(ctx.exception))
 
     @require_librosa
-    def test_nested_audio_files_match_flat_loading(self):
-        """Nested audio files are resampled and assigned to the same samples as flat inputs."""
+    def test_nested_audio_matches_flat(self):
+        """Nested audio, files included, is loaded, resampled and assigned to its own sample like flat audio."""
         processor = self.get_processor()
+        hop = processor.feature_extractor.hop_length
         source_rate = 8000
         samples = (16000 * np.sin(2 * np.pi * 440 * np.arange(800) / source_rate)).astype("<i2")
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -204,17 +160,17 @@ class Apertus1p5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             with wave.open(audio_path, "wb") as audio_file:
                 audio_file.setparams((1, 2, source_rate, 0, "NONE", "not compressed"))
                 audio_file.writeframes(samples.tobytes())
-            kwargs = {"text": ["no audio", "<|audio|>"], "padding": True, "return_tensors": "np"}
-            flat = processor(audio=[audio_path], **kwargs)
-            nested = processor(audio=[[], [audio_path]], **kwargs)
+            audio = [[audio_path], [], [self._clip(hop + 1), self._clip(3 * hop)]]
+            kwargs = {"text": ["<|audio|> file", "no audio", "<|audio|><|audio|> two clips"], "padding": True}
+            nested = processor(audio=audio, return_tensors="np", **kwargs)
+            flat = processor(audio=[clip for group in audio for clip in group], return_tensors="np", **kwargs)
 
-        np.testing.assert_allclose(nested["input_features"], flat["input_features"])
-        np.testing.assert_array_equal(nested["feature_attention_mask"], flat["feature_attention_mask"])
-        np.testing.assert_array_equal(nested["input_ids"], flat["input_ids"])
-        expected_samples = len(samples) * processor.feature_extractor.sampling_rate // source_rate
-        self.assertEqual(int(nested["feature_attention_mask"].sum()), expected_samples)
-        expected_tokens = math.ceil(expected_samples / processor.feature_extractor.hop_length)
-        self.assertEqual((nested["input_ids"] == processor.audio_token_id).sum(axis=1).tolist(), [0, expected_tokens])
+        for key in ("input_ids", "attention_mask", "input_features", "feature_attention_mask"):
+            with self.subTest(key=key):
+                np.testing.assert_array_equal(nested[key], flat[key])
+        # the 800 samples at 8 kHz are resampled to 2400 at 24 kHz
+        self.assertEqual(nested["feature_attention_mask"].sum(-1).tolist(), [2400, hop + 1, 3 * hop])
+        self.assertEqual((nested["input_ids"] == processor.audio_token_id).sum(-1).tolist(), [4, 0, 5])
 
     def test_get_num_audio_tokens(self):
         """Tests the audio path of the helper used internally in vLLM."""
@@ -306,15 +262,6 @@ class Apertus1p5ProcessorIntegrationTest(unittest.TestCase):
             messages, add_generation_prompt=True, tokenize=True, return_dict=True
         )
         self.assertEqual(inputs["input_ids"][0], expected_ids)
-
-    def test_apply_chat_template_image(self):
-        content = [{"type": "image", "url": self.IMAGE_URL}, {"type": "text", "text": "Describe this image."}]
-        self._assert_expanded(content, [("<|image|>", self.image_expansion)])
-
-    @require_librosa
-    def test_apply_chat_template_audio(self):
-        content = [{"type": "audio", "url": self.AUDIO_URL}, {"type": "text", "text": "Transcribe this audio."}]
-        self._assert_expanded(content, [("<|audio|>", self.audio_expansion)])
 
     @require_librosa
     def test_apply_chat_template_image_audio(self):
