@@ -1453,7 +1453,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
                 # Detect if we can skip the mistral fix by
                 #   a) having a non-mistral tokenizer
                 #   b) fixed version of transformers
-                # `transformers_version` unserialized -> can't be mistral
+                #   c) no `transformers_version` serialized
                 if transformers_version is None or version.parse(transformers_version) < version.parse("5.0.0"):
                     if (
                         is_local
