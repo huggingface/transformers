@@ -297,14 +297,19 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         messages = [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device)
 
-        # The template opens a thinking block when `enable_thinking` is not passed, so the prompt
-        # ends with `<think>\n` and the model is expected to continue reasoning.
+        # The template renders an already-closed thinking block when `enable_thinking=False` is
+        # passed, so the prompt ends with the closed thinking tags and the model answers directly.
         expected_input_ids = Expectations(
             {
-                ("cuda", (8, 0)): [248045, 846, 198, 12675, 248046, 198, 248045, 74455, 198, 248068, 198],
+                ("cuda", (8, 0)): [248045, 846, 198, 12675, 248046, 198, 248045, 74455, 198, 248068, 271, 248069, 271],
             }
         ).get_expectation()
         self.assertEqual(inputs["input_ids"][0].tolist(), expected_input_ids)
@@ -312,18 +317,18 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         with torch.no_grad():
             logits = model(**inputs).logits.float()
 
-        self.assertEqual(logits.shape, torch.Size([1, 11, 248100]))
+        self.assertEqual(logits.shape, torch.Size([1, 13, 248100]))
         self.assertTrue(torch.isfinite(logits).all().item())
 
         expected_slice = Expectations(
             {
-                ("cuda", (8, 0)): [1.1719, 3.8750, 2.3750, -2.4531, -3.8750, -6.8438, -2.7812, -0.2520],
+                ("cuda", (8, 0)): [2.765625, 6.0, 0.61328125, 4.8125, 2.0, -2.796875, 3.59375, 3.71875],
             }
         ).get_expectation()
         torch.testing.assert_close(
             logits[0, -1, :8], torch.tensor(expected_slice, device=torch_device), rtol=1e-3, atol=1e-3
         )
-        expected_argmax = Expectations({("cuda", (8, 0)): 31248}).get_expectation()
+        expected_argmax = Expectations({("cuda", (8, 0)): 12675}).get_expectation()
         self.assertEqual(logits[0, -1].argmax().item(), expected_argmax)
 
     @slow
@@ -348,7 +353,12 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             }
         ]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         # 960x686 at `downsample_mode="4x"`: one overview patch plus a 2x2 slice grid, each
@@ -361,8 +371,7 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_text = Expectations(
             {
                 ("cuda", (8, 0)): (
-                    "Based on the visual characteristics in the image, this animal is a "
-                    "**Zoochus caninus**, commonly known as the **Chincotepe"
+                    "This is a **Tibet Wildcat** (*Lynx rufus dovondo*).\n\n### Key Features:\n- **Morph"
                 ),
             }
         ).get_expectation()
@@ -398,6 +407,7 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -406,8 +416,7 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_text = Expectations(
             {
                 ("cuda", (8, 0)): (
-                    "Based on the visual characteristics in the image, this animal is a "
-                    "**Zoochus caninus**, commonly known as the **Chincotepe"
+                    "This is a **Tibet Wildcat** (*Lynx rufus dovondo*).\n\n### Key Features:\n- **Morph"
                 ),
             }
         ).get_expectation()
