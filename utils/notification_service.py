@@ -19,7 +19,9 @@ import json
 import operator
 import os
 import re
+import subprocess
 import sys
+import tempfile
 import time
 from typing import Any
 
@@ -1474,6 +1476,22 @@ if __name__ == "__main__":
     is_nvidia_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(nvidia_daily_ci_workflow)
     is_amd_daily_ci_workflow = os.environ.get("GITHUB_WORKFLOW_REF").startswith(amd_daily_ci_workflows)
 
+    if job_name == "run_models_gpu" and is_nvidia_daily_ci_workflow:
+        model_artifact_dirs = [
+            artifact.paths[0]["path"]
+            for name, artifact in available_artifacts.items()
+            if "run_models_gpu" in name and "test_reports" in name and artifact.paths
+        ]
+        if model_artifact_dirs:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                for d in model_artifact_dirs:
+                    os.symlink(d, os.path.join(tmpdir, os.path.basename(d)))
+                output_path = os.path.join(os.getcwd(), f"ci_results_{job_name}", "fetcher_source_deps.json")
+                subprocess.run(
+                    [sys.executable, "utils/collate_ci_source_deps.py", "--artifacts-dir", tmpdir, "--output", output_path],
+                    check=False,
+                )
+
     is_scheduled_ci_run = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
     # For AMD workflow runs: the different AMD CI callers (MI210/MI250/MI300, etc.) are triggered by `workflow_run`
     #  event of `.github/workflows/self-scheduled-amd-caller.yml`.
@@ -1520,6 +1538,17 @@ if __name__ == "__main__":
             repo_type="dataset",
             token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
         )
+
+    if job_name == "run_models_gpu" and is_nvidia_daily_ci_workflow:
+        fetcher_deps_path = os.path.join(os.getcwd(), f"ci_results_{job_name}", "fetcher_source_deps.json")
+        if os.path.isfile(fetcher_deps_path):
+            api.upload_file(
+                path_or_fileobj=fetcher_deps_path,
+                path_in_repo=f"{report_repo_folder}/ci_results_{job_name}/fetcher_source_deps.json",
+                repo_id=report_repo_id,
+                repo_type="dataset",
+                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            )
 
     # Let's create a file contain job --> job link
     if len(matrix_job_results) > 0:
