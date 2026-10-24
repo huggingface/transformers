@@ -23,6 +23,7 @@ import numpy as np
 import pytest
 
 from transformers import AutoVideoProcessor
+from transformers.video_utils import VideoMetadata, default_sample_indices_fn
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_torch,
@@ -32,7 +33,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import is_torch_available, is_vision_available
-from transformers.video_utils import VideoMetadata
 
 
 if is_torch_available():
@@ -40,6 +40,14 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
+
+
+def test_default_sample_indices_fn_short_video_fps():
+    metadata = VideoMetadata(total_num_frames=1, fps=30)
+
+    indices = default_sample_indices_fn(metadata, fps=1)
+
+    np.testing.assert_array_equal(indices, np.array([0]))
 
 
 def prepare_video(num_frames, num_channels, width=10, height=10, return_tensors="pil"):

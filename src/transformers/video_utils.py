@@ -336,7 +336,7 @@ def default_sample_indices_fn(metadata: VideoMetadata, num_frames=None, fps=None
                 f"which is required when sampling with `{fps}`. "
                 "Please pass in `VideoMetadata` object or use a fixed `num_frames` per input video"
             )
-        num_frames = int(total_num_frames / video_fps * fps)
+        num_frames = max(1, int(total_num_frames / video_fps * fps)) if total_num_frames > 0 else 0
 
     if num_frames is not None:
         if num_frames > total_num_frames:
