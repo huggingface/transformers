@@ -32,6 +32,9 @@ python src/transformers/models/qwen3_tts/convert_qwen3_tts_to_hf.py \
 
 The processor saved here uses the original Qwen3-TTS-Tokenizer-12Hz checkpoint to decode generated codes; pass a
 different tokenizer with `--audio_tokenizer_id`.
+
+The processor uses the shared audio-aware Qwen3-TTS chat template. When present, the source
+`generation_config.json` is preserved alongside the converted model.
 """
 
 import argparse
@@ -47,6 +50,7 @@ from transformers import (
     AutoConfig,
     AutoModel,
     AutoTokenizer,
+    GenerationConfig,
     PreTrainedConfig,
     Qwen3TTSConfig,
     Qwen3TTSFeatureExtractor,
@@ -121,6 +125,8 @@ def create_config_from_checkpoint(checkpoint_path: Path, audio_config: PreTraine
         "attention_bias",
         "use_sliding_window",
         "sliding_window",
+        "max_window_layers",
+        "layer_types",
         "attention_dropout",
         "num_code_groups",
         "text_hidden_size",
@@ -153,6 +159,7 @@ def create_config_from_checkpoint(checkpoint_path: Path, audio_config: PreTraine
         "attention_bias",
         "use_sliding_window",
         "sliding_window",
+        "max_window_layers",
         "attention_dropout",
         "num_code_groups",
         "layer_types",
@@ -161,30 +168,27 @@ def create_config_from_checkpoint(checkpoint_path: Path, audio_config: PreTraine
     talker_filtered = {k: v for k, v in talker_dict.items() if k in keys_to_keep_talker}
     code_predictor_filtered = {k: v for k, v in code_predictor_dict.items() if k in keys_to_keep_code_predictor}
 
-    # Handle rope_scaling -> rope_parameters conversion
-    # rope_theta is a separate key in the original config, needs to be merged into rope_parameters
-    rope_scaling = talker_dict.get("rope_scaling")
-    if rope_scaling is not None:
-        rope_params = dict(rope_scaling)
-        rope_theta = talker_dict.get("rope_theta")
-        if rope_theta is not None:
-            rope_params["rope_theta"] = rope_theta
-        # The original applies mRoPE with an interleaved section layout. The talker feeds identical position
-        # ids to all three sections, so both layouts assign every frequency the same position and are
-        # numerically equivalent; the modeling code therefore uses Qwen2-VL's standard (non-interleaved)
-        # `apply_multimodal_rotary_pos_emb` and the flag is dropped rather than carried as a dead config field.
-        rope_params.pop("interleaved", None)
-        talker_filtered["rope_parameters"] = rope_params
+    # Canonical RoPE parameters take precedence; legacy scaling and theta are independent inputs.
+    for source, filtered in (
+        (talker_dict, talker_filtered),
+        (code_predictor_dict, code_predictor_filtered),
+    ):
+        rope_params = source.get("rope_parameters")
+        if rope_params is not None:
+            filtered["rope_parameters"] = dict(rope_params)
+        else:
+            rope_params = dict(source.get("rope_scaling") or {})
+            if source.get("rope_theta") is not None:
+                rope_params["rope_theta"] = source["rope_theta"]
+            if rope_params:
+                filtered["rope_parameters"] = rope_params
 
-    # The code predictor declares no `rope_scaling`, only a `rope_theta`, so the two are merged
-    # independently: keying this off `rope_scaling` alone would drop `rope_theta` and silently fall
-    # back to the config default, which detunes the rotary frequencies.
-    cp_rope_params = dict(code_predictor_dict.get("rope_scaling") or {})
-    cp_rope_theta = code_predictor_dict.get("rope_theta")
-    if cp_rope_theta is not None:
-        cp_rope_params["rope_theta"] = cp_rope_theta
-    if cp_rope_params:
-        code_predictor_filtered["rope_parameters"] = cp_rope_params
+    # The original applies mRoPE with an interleaved section layout. The talker feeds identical position
+    # ids to all three sections, so both layouts assign every frequency the same position and are
+    # numerically equivalent; the modeling code therefore uses Qwen2-VL's standard (non-interleaved)
+    # `apply_multimodal_rotary_pos_emb` and the flag is dropped rather than carried as a dead config field.
+    if "rope_parameters" in talker_filtered:
+        talker_filtered["rope_parameters"].pop("interleaved", None)
 
     # Pass code_predictor as a dict inside talker_dict, since configs unpack with **
     talker_filtered["code_predictor_config"] = code_predictor_filtered
@@ -293,6 +297,9 @@ def convert_checkpoint(checkpoint_path, output_dir, push_to_hub, bfloat16, max_s
 
     logger.info("Loading weights into model")
     model.load_state_dict(converted_state_dict, strict=True)
+
+    if (Path(checkpoint_path) / "generation_config.json").exists():
+        model.generation_config = GenerationConfig.from_pretrained(str(checkpoint_path))
 
     logger.info(f"Saving model to {output_path}")
     model.save_pretrained(str(output_path), max_shard_size=max_shard_size)
