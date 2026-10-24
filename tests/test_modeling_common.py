@@ -125,7 +125,7 @@ from transformers.utils import (
 )
 from transformers.utils.output_capturing import CompileableContextVar, OutputRecorder
 
-ExportTesterMixin = type("ExportTesterMixin", (), {})  # [dummy] stub to isolate noisy transitive imports
+from .exporters.test_export import ExportTesterMixin
 from .generation.test_utils import GenerationTesterMixin
 
 

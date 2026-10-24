@@ -37,6 +37,7 @@ from transformers import (
     PreTrainedModel,
     is_torch_available,
     logging,
+    pipeline,
     set_seed,
 )
 from transformers.testing_utils import (
@@ -120,7 +121,7 @@ if is_torch_available():
 
 from unittest.mock import patch
 
-ExportGenerateTesterMixin = type("ExportGenerateTesterMixin", (), {})  # [dummy] stub to isolate noisy transitive imports
+from tests.exporters.test_export import ExportGenerateTesterMixin
 
 
 def is_moe_model(config):
@@ -3693,7 +3694,6 @@ class GenerationIntegrationTests(unittest.TestCase):
     # TODO (joao): replace `stop_sequence` in the pipeline by the more recent `generate` functionality
     def test_stop_sequence_stopping_criteria(self):
         prompt = """Hello I believe in"""
-        from transformers import pipeline  # [dummy] moved from top-level to avoid pipelines/__init__.py chain
         generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-bart")
         output = generator(prompt, max_new_tokens=10, do_sample=False)
         self.assertEqual(
