@@ -4360,14 +4360,12 @@ class GenerationMixin(ContinuousMixin):
                 model_inputs = self.prepare_inputs_for_generation(
                     input_chunk, is_first_iteration=is_first_iteration and chunk_idx == 0, **model_kwargs
                 )
-                # Models with a bidirectional mask over image tokens (e.g. Gemma3) drop `token_type_ids` outside the
-                # first iteration, but every prefill chunk needs them up to its end, as the mask reads them by position
-                if (
-                    is_first_iteration
-                    and "token_type_ids" in token_types
-                    and model_inputs.get("token_type_ids") is None
-                ):
-                    model_inputs["token_type_ids"] = token_types["token_type_ids"][..., :current_length]
+                # Models with a bidirectional mask over image tokens (e.g. Gemma3, Gemma4) drop their token types outside
+                # the first iteration, but every prefill chunk needs them up to its end, as the mask reads them by position
+                if is_first_iteration:
+                    for key, token_type in token_types.items():
+                        if model_inputs.get(key) is None:
+                            model_inputs[key] = token_type[..., :current_length]
 
                 if chunk_mm_encoder_outputs[chunk_idx]:
                     model_inputs["mm_encoder_outputs"] = chunk_mm_encoder_outputs[chunk_idx]

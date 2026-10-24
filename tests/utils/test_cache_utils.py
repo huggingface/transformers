@@ -54,8 +54,11 @@ if is_torch_available():
         Gemma3Config,
         Gemma3ForConditionalGeneration,
         Gemma3TextConfig,
+        Gemma4Config,
         Gemma4ForCausalLM,
+        Gemma4ForConditionalGeneration,
         Gemma4TextConfig,
+        Gemma4VisionConfig,
         GenerationConfig,
         LlamaConfig,
         LlamaForCausalLM,
@@ -615,9 +618,9 @@ class CacheTest(unittest.TestCase):
 
     def test_chunked_prefill_keeps_token_type_ids(self):
         """
-        Gemma3 builds a bidirectional mask over each image run from `token_type_ids`. Every chunk of a chunked prefill
-        must get them, or the image tokens of a later chunk attend causally only and the output differs from the
-        unchunked prefill.
+        Gemma3 and Gemma4 build a bidirectional mask over each image run from `token_type_ids` and `mm_token_type_ids`.
+        Every chunk of a chunked prefill must get them, or the image tokens of a later chunk attend causally only and
+        the output differs from the unchunked prefill.
         """
         set_seed(3)
         config = Gemma3Config(
@@ -670,6 +673,53 @@ class CacheTest(unittest.TestCase):
             case = f"{pixel_values.shape[0]} images, prefill_chunk_size={chunk_size}"
             self.assertTrue(torch.equal(out.sequences, expected.sequences), case)
             torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores), msg=case)
+
+        config = Gemma4Config(
+            vision_config=Gemma4VisionConfig(
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=1,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                head_dim=8,
+                patch_size=2,
+                pooling_kernel_size=2,
+                position_embedding_size=16,
+            ),
+            text_config=Gemma4TextConfig(
+                vocab_size=64,
+                hidden_size=16,
+                intermediate_size=32,
+                num_hidden_layers=2,
+                num_attention_heads=2,
+                num_key_value_heads=2,
+                head_dim=8,
+                max_position_embeddings=64,
+                sliding_window=16,
+                layer_types=["sliding_attention", "full_attention"],
+                vocab_size_per_layer_input=64,
+                hidden_size_per_layer_input=8,
+                use_bidirectional_attention="vision",
+                pad_token_id=0,
+            ),
+            boi_token_id=61,
+            eoi_token_id=62,
+            image_token_id=63,
+            video_token_id=60,
+            audio_token_id=59,
+        )
+        model = Gemma4ForConditionalGeneration(config).to(torch_device).eval()
+        # A 4x4 grid of patches, pooled 2x2 into the 4 image tokens of the second chunk
+        grid = torch.stack([torch.arange(4).repeat(4), torch.arange(4).repeat_interleave(4)], dim=-1)
+        inputs = {
+            "pixel_values": torch.randn(1, 16, 12, device=torch_device),
+            "image_position_ids": grid[None].to(torch_device),
+            "mm_token_type_ids": (later_image == 63).long(),
+        }
+        expected = model.generate(later_image, **inputs, **generation_kwargs)
+        out = model.generate(later_image, **inputs, **generation_kwargs, prefill_chunk_size=4)
+        self.assertTrue(torch.equal(out.sequences, expected.sequences))
+        torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
 
     def test_dynamic_layers_reset_drops_their_states(self):
         """
