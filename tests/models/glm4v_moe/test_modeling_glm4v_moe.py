@@ -36,6 +36,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -190,7 +191,9 @@ class Glm4vMoeVisionText2TextModelTester:
 
 
 @require_torch
-class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, TensorParallelTesterMixin, unittest.TestCase):
+class Glm4vMoeModelTest(
+    ModelTesterMixin, GenerationTesterMixin, TensorParallelTesterMixin, ExpertParallelTesterMixin, unittest.TestCase
+):
     all_model_classes = (Glm4vMoeModel, Glm4vMoeForConditionalGeneration) if is_torch_available() else ()
 
     model_split_percents = [0.7, 0.9]  # model too big to split at 0.5
