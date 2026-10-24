@@ -1,0 +1,35 @@
+name: Fetcher Recording CI
+
+# Minimal CI caller to validate the import-chain dep recording pipeline.
+# Runs a handful of models on single GPU only, verifying that deps.json is
+# written alongside the test artifacts (CI_RECORD_DEPS_OUTPUT env var set in
+# daily-ci_reusable_model_job.yml@fetcher-recording).
+#
+# Interesting models:
+#   models/clip  — dynamic image-processor loading (image_processing_clip.py is
+#                  loaded via importlib, not static imports) — the key test case
+#   models/llava — composite model; uses CLIP as backbone (cross-model dep edge)
+#
+# No slack reporting, no new-failure detection — model job only.
+
+on:
+  push:
+    branches:
+      - fetcher-recording
+
+permissions:
+  contents: read
+
+jobs:
+  model-ci:
+    name: "Model CI (fetcher recording)"
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable_model_job.yml@fetcher-recording
+    with:
+      # One slice containing the two models of interest.
+      folder_slices: "[['models/clip', 'models/llava']]"
+      machine_type: aws-g5-4xlarge-cache
+      slice_id: 0
+      docker: huggingface/transformers-all-latest-gpu
+      commit_sha: ${{ github.sha }}
+      ci_event: Fetcher Recording CI
+    secrets: inherit
