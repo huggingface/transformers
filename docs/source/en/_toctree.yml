@@ -989,6 +989,8 @@
         title: Aimv2
       - local: model_doc/beit
         title: BEiT
+      - local: model_doc/bevformer
+        title: BEVFormer
       - local: model_doc/bit
         title: BiT
       - local: model_doc/chmv2
