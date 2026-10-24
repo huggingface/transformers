@@ -16,10 +16,12 @@
 import torch
 from torch import nn
 
-from ...backbone_utils import load_backbone
+from ...backbone_utils import filter_output_hidden_states, load_backbone
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple
 from .configuration_depth_anything import DepthAnythingConfig
 
 
@@ -324,16 +326,15 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
+    @filter_output_hidden_states
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         labels: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor] | DepthEstimatorOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> DepthEstimatorOutput:
         r"""
         Examples:
         ```python
@@ -373,15 +374,10 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
-        outputs = self.backbone.forward_with_filtered_kwargs(
-            pixel_values, output_hidden_states=output_hidden_states, output_attentions=output_attentions
-        )
+        # The backbone has its own config, so honor a flag set on this model's config
+        if "output_attentions" not in kwargs and getattr(self.config, "output_attentions", False):
+            kwargs["output_attentions"] = True
+        outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
         hidden_states = outputs.feature_maps
 
         _, _, height, width = pixel_values.shape
@@ -393,17 +389,10 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
 
         predicted_depth = self.head(hidden_states, patch_height, patch_width)
 
-        if not return_dict:
-            if output_hidden_states:
-                output = (predicted_depth,) + outputs[1:]
-            else:
-                output = (predicted_depth,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
-
         return DepthEstimatorOutput(
             loss=loss,
             predicted_depth=predicted_depth,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
