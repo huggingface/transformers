@@ -4389,13 +4389,13 @@ class GenerationMixin(ContinuousMixin):
 def _slice_mm_encoder_output(output: ModelOutput, rows: torch.LongTensor) -> ModelOutput:
     """
     Keeps the given rows of the flattened `(num_placeholder_tokens, hidden_size)` features of a pre-encoded multimodal
-    output, in the container type the model expects: a single-item list, or a tensor with the same number of dims.
+    output, in the container type the model expects: a single-item list, or a tensor with a batch of one.
     """
 
     def slice_features(features):
         rows_features = torch.cat([feature.reshape(-1, feature.shape[-1]) for feature in features])[rows]
         if isinstance(features, torch.Tensor):
-            return rows_features.view((1,) * (features.ndim - 2) + rows_features.shape)
+            return rows_features.unsqueeze(0)
         return [rows_features]
 
     output = copy.copy(output)
