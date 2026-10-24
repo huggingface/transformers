@@ -167,8 +167,8 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
         image_size: tuple[int, int],
         scale_resolution: int,
         patch_size: int,
-        downsample_mode: str,
         allow_upscale: bool = False,
+        downsample_mode: str = "4x",
     ) -> tuple[int, int]:
         height, width = image_size
         if (height * width > scale_resolution * scale_resolution) or allow_upscale:
@@ -187,8 +187,8 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
         grid: list[int],
         scale_resolution: int,
         patch_size: int,
-        downsample_mode: str,
         allow_upscale: bool = False,
+        downsample_mode: str = "4x",
     ) -> tuple[int, int]:
         height, width = image_size
         grid_y, grid_x = grid
@@ -265,10 +265,10 @@ class MiniCPMOcrImageProcessor(TorchvisionBackend):
         scale_resolution: int,
         patch_size: int,
         slice_mode: bool,
-        downsample_mode: str,
         small_image_upsize: str,
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None,
+        downsample_mode: str = "4x",
         **kwargs,
     ) -> BatchFeature:
         if not do_resize:
