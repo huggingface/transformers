@@ -1762,7 +1762,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     )
 
         # ByT5/CANINE have no vocab files: nothing to check
-        vocab_ids = [k for k in (*cls.vocab_files_names, "tokenizer_file") if k in resolved_vocab_files]
+        # single-file, gguf and sentencepiece/tekken fallbacks resolve under `vocab_file`/`spm_file`
+        vocab_ids = [
+            k
+            for k in (*cls.vocab_files_names, "tokenizer_file", "vocab_file", "spm_file")
+            if k in resolved_vocab_files
+        ]
         if cls.vocab_files_names and all(resolved_vocab_files[k] is None for k in vocab_ids):
             raise OSError(
                 f"Can't load tokenizer for '{pretrained_model_name_or_path}': no {cls.__name__} vocab files found."
