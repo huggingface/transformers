@@ -452,7 +452,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+            model.activation_checkpointing_enable(activation_checkpointing_kwargs={"use_reentrant": False})
             model.enable_input_require_grads()
             model.train()
 
