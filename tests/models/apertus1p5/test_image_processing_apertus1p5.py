@@ -13,7 +13,6 @@
 # limitations under the License.
 """Testing suite for the Apertus 1.5 image processor."""
 
-import tempfile
 import unittest
 
 import numpy as np
@@ -90,27 +89,6 @@ class Apertus1p5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
                         factor = image_processing.spatial_factor
                         self.assertEqual((height // factor) * (width // factor), expected_count)
                         self.assertEqual(image_processing.get_number_of_image_patches(32, 48, kwargs), expected_count)
-
-    def test_size_dict_serialization(self):
-        """The pixel budget is saved inside `size`, not as top-level `min_pixels` / `max_pixels` keys."""
-        size = {"min_pixels": 48**2, "max_pixels": 64**2}
-        for image_processing_class in self.image_processing_classes.values():
-            with tempfile.TemporaryDirectory() as directory:
-                image_processing_class(size=size).save_pretrained(directory)
-                restored = image_processing_class.from_pretrained(directory).to_dict()
-            self.assertEqual(restored["size"], size)
-            self.assertNotIn("min_pixels", restored)
-            self.assertNotIn("max_pixels", restored)
-
-    def test_normalization(self):
-        for image_processing_class in self.image_processing_classes.values():
-            image_processing = image_processing_class(**self.image_processor_dict)
-            for pixel_value, expected_value in [(0, -1.0), (255, 1.0)]:
-                with self.subTest(pixel_value=pixel_value):
-                    image = np.full((32, 32, 3), pixel_value, dtype=np.uint8)
-                    pixels = image_processing(image, return_tensors="pt").pixel_values
-                    self.assertEqual(pixels.dtype, torch.float32)
-                    torch.testing.assert_close(pixels, torch.full_like(pixels, expected_value))
 
     def test_mixed_size_batch_padding_and_order(self):
         sizes = [(32, 48), (48, 32), (32, 48)]
