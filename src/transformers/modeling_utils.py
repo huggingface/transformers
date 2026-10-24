@@ -2322,7 +2322,14 @@ class PreTrainedModel(
             init.normal_(module.weight, mean=0.0, std=std)
             # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
             if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
-                init.zeros_(module.weight[module.padding_idx])
+                if is_deepspeed_zero3_enabled():
+                    import deepspeed
+
+                    # Under ZeRO-3 the weight is partitioned, so it must be gathered before slicing it
+                    with deepspeed.zero.GatheredParameters(module.weight, modifier_rank=0):
+                        init.zeros_(module.weight[module.padding_idx])
+                else:
+                    init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.MultiheadAttention):
             # This uses torch's original init
             module._reset_parameters()
