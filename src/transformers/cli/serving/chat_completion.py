@@ -18,6 +18,7 @@ Supports streaming (SSE via DirectStreamer) and non-streaming (JSON) responses.
 """
 
 import asyncio
+import json
 import time
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
@@ -224,7 +225,7 @@ class ChatCompletionHandler(BaseHandler):
                             done = True
                             break
                         if isinstance(item, _StreamError):
-                            sse_parts.append(f'data: {{"error": "{item.msg}"}}\n\n')
+                            sse_parts.append(f"data: {json.dumps({'error': item.msg})}\n\n")
                             yield "".join(sse_parts)
                             return
                         if isinstance(item, ToolCall):
