@@ -1485,7 +1485,7 @@ if __name__ == "__main__":
         if model_artifact_dirs:
             with tempfile.TemporaryDirectory() as tmpdir:
                 for d in model_artifact_dirs:
-                    os.symlink(d, os.path.join(tmpdir, os.path.basename(d)))
+                    os.symlink(os.path.abspath(d), os.path.join(tmpdir, os.path.basename(d)))
                 output_path = os.path.join(os.getcwd(), f"ci_results_{job_name}", "fetcher_source_deps.json")
                 subprocess.run(
                     [
