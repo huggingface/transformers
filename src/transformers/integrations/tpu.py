@@ -186,7 +186,7 @@ def save_tpu_checkpoint(model, args, accelerator, processing_class, is_fsdp_xla_
 
     if xm.is_master_ordinal(local=False):
         os.makedirs(output_dir, exist_ok=True)
-        torch.save(args, os.path.join(output_dir, "training_args.bin"))
+        args.to_json_file(os.path.join(output_dir, "training_args.json"))
 
     # Save a trained model and configuration using `save_pretrained()`.
     # They can then be reloaded using `from_pretrained()`

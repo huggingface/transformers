@@ -428,6 +428,25 @@ class TrainerResumeTrainingTest(TestCasePlus, TrainerIntegrationCommon):
 
         trainer.train(resume_from_checkpoint=False)
 
+    def test_resume_from_checkpoint_with_legacy_training_args_bin(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            kwargs = {"output_dir": tmpdir, "train_len": 128, "save_steps": 5, "learning_rate": 0.1}
+            trainer = get_regression_trainer(**kwargs)
+            trainer.train()
+
+            # Simulate a checkpoint saved by an older version, which pickled the training arguments
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+            os.remove(os.path.join(checkpoint, "training_args.json"))
+            torch.save(trainer.args, os.path.join(checkpoint, "training_args.bin"))
+
+            trainer = get_regression_trainer(**kwargs)
+            logger = logging.get_logger("transformers.trainer")
+            with CaptureLogger(logger) as cl:
+                trainer.train(resume_from_checkpoint=checkpoint)
+            self.assertIn("deprecated `training_args.bin`", cl.out)
+            # Checkpoints saved after resuming use the new format
+            self.assertTrue(os.path.isfile(os.path.join(tmpdir, "checkpoint-10", "training_args.json")))
+
     @require_torch_up_to_2_accelerators
     def test_resume_training_with_shard_checkpoint(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
