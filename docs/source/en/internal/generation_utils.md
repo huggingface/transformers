@@ -206,6 +206,8 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 
 [[autodoc]] TextDiffusionStreamer
 
+[[autodoc]] LatencyStreamer
+
 ## Caches
 
 [[autodoc]] CacheLayerMixin

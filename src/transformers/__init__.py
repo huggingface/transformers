@@ -91,6 +91,7 @@ _import_structure = {
         "CompileConfig",
         "ContinuousBatchingConfig",
         "GenerationConfig",
+        "LatencyStreamer",
         "TextDiffusionStreamer",
         "TextIteratorStreamer",
         "TextStreamer",
@@ -533,6 +534,7 @@ if TYPE_CHECKING:
     from .generation import GenerationConfig as GenerationConfig
     from .generation import GenerationMixin as GenerationMixin
     from .generation import InfNanRemoveLogitsProcessor as InfNanRemoveLogitsProcessor
+    from .generation import LatencyStreamer as LatencyStreamer
     from .generation import LogitNormalization as LogitNormalization
     from .generation import LogitsProcessor as LogitsProcessor
     from .generation import LogitsProcessorList as LogitsProcessorList

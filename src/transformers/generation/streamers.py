@@ -300,6 +300,118 @@ class AsyncTextIteratorStreamer(TextStreamer):
             return value
 
 
+class LatencyStreamer(BaseStreamer):
+    """
+    Streamer that tracks generation latencies including Time to First Token (TTFT), inter-token latency (ITL), total
+    generation time, and tokens per second throughput.
+
+    Can optionally wrap another [`BaseStreamer`] instance to allow latency tracking alongside text streaming.
+
+    Parameters:
+        streamer ([`BaseStreamer`], *optional*):
+            An optional downstream streamer to receive `put` and `end` calls.
+
+    Examples:
+
+        ```python
+        >>> from transformers import AutoModelForCausalLM, AutoTokenizer, LatencyStreamer
+
+        >>> tok = AutoTokenizer.from_pretrained("openai-community/gpt2")
+        >>> model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
+        >>> inputs = tok(["An increasing sequence: one,"], return_tensors="pt")
+        >>> streamer = LatencyStreamer()
+
+        >>> _ = model.generate(**inputs, streamer=streamer, max_new_tokens=20)
+        >>> print(f"TTFT: {streamer.ttft:.4f}s")
+        >>> print(f"Throughput: {streamer.tokens_per_second:.2f} tokens/s")
+        ```
+    """
+
+    def __init__(self, streamer: BaseStreamer | None = None):
+        self.streamer = streamer
+        self.prompt_time: float | None = None
+        self.first_token_time: float | None = None
+        self.end_time: float | None = None
+        self.last_step_time: float | None = None
+        self.step_latencies: list[float] = []
+        self.num_prompt_tokens: int = 0
+        self.num_generated_tokens: int = 0
+
+    def reset(self):
+        """Resets all recorded latency metrics and token counts."""
+        self.prompt_time = None
+        self.first_token_time = None
+        self.end_time = None
+        self.last_step_time = None
+        self.step_latencies = []
+        self.num_prompt_tokens = 0
+        self.num_generated_tokens = 0
+
+    def put(self, value):
+        """
+        Receives tokens, records step latencies, and forwards them to the wrapped streamer if present.
+        """
+        if hasattr(value, "shape"):
+            if len(value.shape) > 1 and value.shape[0] > 1:
+                raise ValueError("LatencyStreamer only supports batch size 1")
+            num_tokens = value.shape[-1] if len(value.shape) > 0 else 1
+        else:
+            num_tokens = len(value)
+
+        now = time.perf_counter()
+        if self.prompt_time is None:
+            self.prompt_time = now
+            self.num_prompt_tokens = num_tokens
+        elif self.first_token_time is None:
+            self.first_token_time = now
+            self.last_step_time = now
+            self.num_generated_tokens += num_tokens
+        else:
+            self.step_latencies.append(now - self.last_step_time)
+            self.last_step_time = now
+            self.num_generated_tokens += num_tokens
+
+        if self.streamer is not None:
+            self.streamer.put(value)
+
+    def end(self):
+        """
+        Records the end time of generation and signals end to the wrapped streamer if present.
+        """
+        self.end_time = time.perf_counter()
+        if self.streamer is not None:
+            self.streamer.end()
+
+    @property
+    def ttft(self) -> float | None:
+        """Time to First Token (TTFT) in seconds."""
+        if self.prompt_time is not None and self.first_token_time is not None:
+            return self.first_token_time - self.prompt_time
+        return None
+
+    @property
+    def total_time(self) -> float | None:
+        """Total time from prompt receipt to end of generation in seconds."""
+        if self.prompt_time is not None and self.end_time is not None:
+            return self.end_time - self.prompt_time
+        return None
+
+    @property
+    def mean_inter_token_latency(self) -> float:
+        """Average latency between generated decode tokens in seconds."""
+        if not self.step_latencies:
+            return 0.0
+        return sum(self.step_latencies) / len(self.step_latencies)
+
+    @property
+    def tokens_per_second(self) -> float:
+        """Generation throughput in tokens per second."""
+        total = self.total_time
+        if total is not None and total > 0:
+            return self.num_generated_tokens / total
+        return 0.0
+
+
 class TextDiffusionStreamer(TextStreamer):
     """
     Streamer that prints text diffusion outputs. Intermediate diffusion steps (drafts) are temporary
