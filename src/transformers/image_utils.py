@@ -364,7 +364,7 @@ def get_image_size(
         A tuple of the image's height and width.
     """
     if isinstance(image, PIL.Image.Image):
-        return image.size
+        return image.height, image.width
 
     if channel_dim is None:
         channel_dim = infer_channel_dimension_format(image)

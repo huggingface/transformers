@@ -15,13 +15,17 @@
 import unittest
 
 from transformers import GotOcr2Processor
-from transformers.testing_utils import is_torch_available, require_vision
+from transformers.testing_utils import is_torch_available, is_vision_available, require_vision
 
 from ...test_processing_common import MODALITY_TEST_SPECS, ProcessorTesterMixin
 
 
 if is_torch_available():
     import torch
+
+if is_vision_available():
+    import numpy as np
+    from PIL import Image
 
 
 @require_vision
@@ -128,3 +132,13 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for key in input_subproc:
             if input_processor and key in processor.model_input_names:
                 torch.testing.assert_close(input_subproc[key], input_processor[key])
+
+    def test_box_annotation_consistency(self):
+        processor = self.get_processor()
+        image = Image.new("RGB", (320, 120))
+        box = [32, 12, 160, 60]
+
+        inputs_pil = processor(image, box=box, return_tensors="pt")
+        inputs_np = processor(np.asarray(image), box=box, return_tensors="pt")
+
+        self.assertTrue(torch.equal(inputs_pil["input_ids"], inputs_np["input_ids"]))
