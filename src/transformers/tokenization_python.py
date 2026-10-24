@@ -293,10 +293,12 @@ class ExtensionsTrie(Trie):
         ```
         """
         prefix_node = self._get_node(prefix)
+        if prefix_node is None:
+            return []
         ret = self._collect_tokens(prefix_node)
         return [prefix + token for token in ret]
 
-    def _get_node(self, token: str) -> dict:
+    def _get_node(self, token: str) -> dict | None:
         """
         Retrieves the node corresponding to the given token in the Trie.
 
@@ -304,12 +306,13 @@ class ExtensionsTrie(Trie):
             token (str): The token for which the corresponding node needs to be retrieved.
 
         Returns:
-            dict: The node in the Trie corresponding to the given token.
+            dict | None: The node in the Trie corresponding to the given token, or
+                ``None`` if the token is not a prefix of any stored value.
         """
         node = self.data
         for char in token:
             if char not in node:
-                break
+                return None
 
             node = node[char]
         return node
