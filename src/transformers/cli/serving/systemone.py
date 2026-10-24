@@ -257,6 +257,9 @@ class SystemOneHandler(BaseHandler):
     forward pass. Returns one JSON response; streaming is not supported.
     """
 
+    # Decision models answer with their next token, so thinking is always disabled.
+    _ignored_chat_template_kwargs = {"conversation", "add_generation_prompt", "tokenize", "enable_thinking"}
+
     def __init__(
         self,
         model_manager: "ModelManager",
@@ -333,6 +336,37 @@ class SystemOneHandler(BaseHandler):
             processor_inputs.append([{"role": "user", "content": content}])
         return processor_inputs, questions
 
+    def _resolve_chat_template(
+        self,
+        processor: "ProcessorMixin | PreTrainedTokenizerFast",
+        request: TransformersSystemOneRequestParams,
+    ) -> tuple["ProcessorMixin | PreTrainedTokenizerFast", dict, bool]:
+        """Resolve the template renderer, kwargs, and availability, checking image support."""
+        tokenizer = getattr(processor, "tokenizer", processor)
+        chat_template_kwargs = self._filter_chat_template_kwargs(
+            {**self.chat_template_kwargs, **request.chat_template_kwargs}
+        )
+        has_chat_template = (
+            processor.chat_template is not None
+            or self.decision_config.chat_template is not None
+            or chat_template_kwargs.get("chat_template") is not None
+            or tokenizer.chat_template is not None
+        )
+        template_processor = processor
+        if (
+            processor.chat_template is None
+            and self.decision_config.chat_template is None
+            and chat_template_kwargs.get("chat_template") is None
+        ):
+            if request.images:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{request.model} has no chat template to place the images, pass one as `chat_template` in "
+                    "`chat_template_kwargs`.",
+                )
+            template_processor = tokenizer
+        return template_processor, chat_template_kwargs, has_chat_template
+
     def _prepare_inputs(
         self,
         model: "PreTrainedModel",
@@ -342,15 +376,16 @@ class SystemOneHandler(BaseHandler):
         """Apply the model's chat template and batch text and images for one forward pass."""
         tokenizer = getattr(processor, "tokenizer", processor)
         modality = self.model_manager.get_model_modality(model, processor=processor)
-        processor_inputs, questions = self.get_processor_inputs_from_request(request, modality)
-
-        chat_template_kwargs = {
-            **self.chat_template_kwargs,
-            **request.chat_template_kwargs,
-            "enable_thinking": False,
-        }
+        template_processor, chat_template_kwargs, has_chat_template = self._resolve_chat_template(processor, request)
+        processor_inputs, questions = self.get_processor_inputs_from_request(
+            request, Modality.LLM if template_processor is not processor else modality
+        )
         prompts = []
         for messages, question in zip(processor_inputs, questions):
+            if not has_chat_template:
+                # Base models without a chat template read the fallback prompt as is.
+                prompts.append(render_decision_prompt(request.state, question))
+                continue
             if self.decision_config.chat_template is not None:
                 chat_template_kwargs.update(
                     chat_template=self.decision_config.chat_template,
@@ -358,8 +393,8 @@ class SystemOneHandler(BaseHandler):
                     question=question,
                     images=request.images,
                 )
-            prompt = processor.apply_chat_template(
-                messages, add_generation_prompt=True, tokenize=False, **chat_template_kwargs
+            prompt = template_processor.apply_chat_template(
+                messages, add_generation_prompt=True, tokenize=False, enable_thinking=False, **chat_template_kwargs
             )
             prompts.append(prompt)
 
@@ -369,7 +404,8 @@ class SystemOneHandler(BaseHandler):
             padding=True,
             padding_side="left",
             return_tensors="pt",
-            add_special_tokens=False,
+            # Chat templates already add the special tokens, raw prompts need them like in `/v1/completions`.
+            add_special_tokens=not has_chat_template,
             **processor_kwargs,
         )
         if modality == Modality.LLM:
