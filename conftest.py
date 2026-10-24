@@ -34,11 +34,14 @@ from transformers.testing_utils import (
     HfDoctestModule,
     HfDocTestParser,
     get_cpu_ram_total_gib,
+    install_ci_source_deps_tracker,
     is_torch_available,
     patch_psutil_cpu_memory,
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
     record_ci_source_deps,
+    record_ci_source_deps_chains,
+    set_ci_deps_phase,
     snapshot_ci_source_deps_baseline,
 )
 from transformers.utils import enable_tf32
@@ -386,8 +389,29 @@ def pytest_terminal_summary(terminalreporter):
         pytest_terminal_summary_main(terminalreporter, id=make_reports)
 
 
+def pytest_sessionstart(session):
+    install_ci_source_deps_tracker()
+
+
+def pytest_collection(session):
+    set_ci_deps_phase("collection")
+
+
 def pytest_collection_finish(session):
+    set_ci_deps_phase("post_collection")
     snapshot_ci_source_deps_baseline()
+
+
+def pytest_runtest_setup(item):
+    set_ci_deps_phase("setup", item.nodeid)
+
+
+def pytest_runtest_call(item):
+    set_ci_deps_phase("test", item.nodeid)
+
+
+def pytest_runtest_teardown(item):
+    set_ci_deps_phase("teardown", item.nodeid)
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -395,6 +419,7 @@ def pytest_sessionfinish(session, exitstatus):
     if exitstatus == 5:
         session.exitstatus = 0
     record_ci_source_deps()
+    record_ci_source_deps_chains()
 
 
 # Doctest custom flag to ignore output.

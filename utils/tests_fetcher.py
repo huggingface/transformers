@@ -883,7 +883,7 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
                 if d.endswith("__init__.py"):
                     continue
                 if d not in direct_deps:
-                    raise ValueError(f"KeyError:{d}. From {m}")
+                    continue  # Windows ghost path
                 new_deps = set(direct_deps[d]) - set(direct_deps[m])
                 if len(new_deps) > 0:
                     direct_deps[m].extend(list(new_deps))

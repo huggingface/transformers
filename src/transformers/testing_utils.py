@@ -4957,6 +4957,129 @@ def preserve_module_forwards(model: "PreTrainedModel"):
 
 _ci_record_deps_baseline: set[str] | None = None
 
+# ---------------------------------------------------------------------------
+# Import chain tracker — records the full call chain for every transformers.*
+# import statement (cached or not) by overriding sys.modules with a dict
+# subclass whose .get() is called by importlib._bootstrap for every import.
+# ---------------------------------------------------------------------------
+
+_ci_deps_chains: list[dict] = []
+_ci_deps_tracker_reentrant = threading.local()
+_ci_source_deps_repo_root: Path | None = None
+_ci_source_deps_src_root: Path | None = None
+_ci_current_phase: str = "startup"
+_ci_current_test_id: str | None = None
+
+
+def set_ci_deps_phase(phase: str, test_id: str | None = None) -> None:
+    global _ci_current_phase, _ci_current_test_id
+    _ci_current_phase = phase
+    _ci_current_test_id = test_id
+
+
+def _record_import_chain(module_name: str) -> None:
+    _ci_deps_tracker_reentrant.active = True
+    try:
+        module_obj = sys.modules.get(module_name)
+        if module_obj is None:
+            return
+
+        src_file = getattr(module_obj, "__file__", None)
+        if not src_file:
+            return
+
+        src_root = _ci_source_deps_src_root
+        repo_root = _ci_source_deps_repo_root
+        if src_root is None or repo_root is None:
+            return
+
+        try:
+            src_file_rel = f"src/transformers/{Path(src_file).resolve().relative_to(src_root).as_posix()}"
+        except ValueError:
+            return
+
+        chain = []
+        for frame_info in inspect.stack()[2:]:  # skip _tracking_import + _record_import_chain
+            fname = frame_info.filename
+            if not fname or fname.startswith("<"):
+                continue
+            try:
+                frel = Path(fname).resolve().relative_to(repo_root).as_posix()
+            except ValueError:
+                continue
+            if frel.startswith("tests/") or frel.startswith("src/transformers/") or frel == "conftest.py":
+                chain.append({"file": frel, "line": frame_info.lineno, "func": frame_info.function})
+            if len(chain) >= 30:
+                break
+
+        entry: dict = {"module": module_name, "src_file": src_file_rel, "phase": _ci_current_phase, "chain": chain}
+        if _ci_current_test_id is not None:
+            entry["test_id"] = _ci_current_test_id
+        _ci_deps_chains.append(entry)
+    except Exception:
+        pass
+    finally:
+        _ci_deps_tracker_reentrant.active = False
+
+
+def install_ci_source_deps_tracker() -> None:
+    """Override builtins.__import__ to record import call chains for CI dep analysis.
+
+    ``builtins.__import__`` is called by the IMPORT_NAME bytecode for every ``import``
+    statement — cached or not — so we intercept all transformers.* imports with no
+    re-import cost.  No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.
+    Called from ``pytest_sessionstart`` in conftest.py.
+    """
+    if not os.environ.get("CI_RECORD_DEPS_OUTPUT"):
+        return
+    global _ci_source_deps_repo_root, _ci_source_deps_src_root
+    _ci_source_deps_repo_root = Path(__file__).parent.parent.parent.resolve()
+    _ci_source_deps_src_root = _ci_source_deps_repo_root / "src" / "transformers"
+
+    import builtins
+    import importlib as _importlib
+    import importlib.util as _importlib_util
+
+    _original_import = builtins.__import__
+    _original_import_module = _importlib.import_module
+
+    def _tracking_import(name, globals=None, locals=None, fromlist=(), level=0):
+        result = _original_import(name, globals, locals, fromlist, level)
+        if (
+            isinstance(name, str)
+            and name.startswith("transformers.")
+            and not getattr(_ci_deps_tracker_reentrant, "active", False)
+        ):
+            _record_import_chain(name)
+        return result
+
+    def _tracking_import_module(name, package=None):
+        result = _original_import_module(name, package)
+        if isinstance(name, str) and not getattr(_ci_deps_tracker_reentrant, "active", False):
+            resolved = _importlib_util.resolve_name(name, package) if (package and name.startswith(".")) else name
+            if resolved.startswith("transformers."):
+                _record_import_chain(resolved)
+        return result
+
+    builtins.__import__ = _tracking_import
+    _importlib.import_module = _tracking_import_module
+
+
+def record_ci_source_deps_chains() -> None:
+    """Write recorded import chains to ``<CI_RECORD_DEPS_OUTPUT stem>_chains.json``.
+
+    No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.  Call from ``pytest_sessionfinish``.
+    """
+    output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
+    if not output_path:
+        return
+    chains_path = output_path.replace(".json", "_chains.json")
+    try:
+        with open(chains_path, "w", encoding="utf-8") as f:
+            json.dump(_ci_deps_chains, f, indent=2)
+    except OSError:
+        pass
+
 
 def snapshot_ci_source_deps_baseline() -> None:
     """Snapshot the set of already-imported ``src/transformers/`` files after test collection.
