@@ -5004,7 +5004,7 @@ def _record_import_chain(module_name: str) -> None:
         #   chain = []
         #   for frame_info in inspect.stack(context=0)[2:]:
         #       ... filter to tests/ and src/transformers/ frames ...
-        entry: dict = {"module": module_name, "src_file": src_file_rel, "phase": _ci_current_phase, "chain": []}
+        entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": []}
         if _ci_current_test_id is not None:
             entry["test_id"] = _ci_current_test_id
         _ci_deps_chains.append(entry)
@@ -5037,12 +5037,31 @@ def install_ci_source_deps_tracker() -> None:
 
     def _tracking_import(name, globals=None, locals=None, fromlist=(), level=0):
         result = _original_import(name, globals, locals, fromlist, level)
-        if (
-            isinstance(name, str)
-            and name.startswith("transformers.")
-            and not getattr(_ci_deps_tracker_reentrant, "active", False)
-        ):
-            _record_import_chain(name)
+        if isinstance(name, str) and not getattr(_ci_deps_tracker_reentrant, "active", False):
+            # Resolve relative imports (level > 0) to their absolute module name.
+            if level > 0 and globals is not None:
+                pkg = globals.get("__package__") or ""
+                # Go up `level` levels in the package hierarchy.
+                parts = pkg.split(".")
+                if level <= len(parts):
+                    base = ".".join(parts[:-level] if level < len(parts) else parts[:max(0, len(parts) - level + 1)])
+                    # Trim off `level - 1` components (level=1 means same package, level=2 means parent, etc.)
+                    base = ".".join(parts[:max(0, len(parts) - (level - 1))])
+                    resolved_name = f"{base}.{name}" if name else base
+                else:
+                    resolved_name = name
+            else:
+                resolved_name = name
+            if resolved_name.startswith("transformers."):
+                _record_import_chain(resolved_name)
+            # Also record submodules loaded as side-effects via fromlist.
+            if fromlist and resolved_name.startswith("transformers"):
+                for item in fromlist:
+                    if item == "*":
+                        continue
+                    submodule = f"{resolved_name}.{item}"
+                    if submodule.startswith("transformers.") and submodule in sys.modules:
+                        _record_import_chain(submodule)
         return result
 
     def _tracking_import_module(name, package=None):
@@ -5058,17 +5077,45 @@ def install_ci_source_deps_tracker() -> None:
 
 
 def record_ci_source_deps_chains() -> None:
-    """Write recorded import chains to ``<CI_RECORD_DEPS_OUTPUT stem>_chains.json``.
+    """Write recorded import chains to ``deps_chain.json`` next to ``CI_RECORD_DEPS_OUTPUT``.
 
     No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.  Call from ``pytest_sessionfinish``.
     """
     output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
     if not output_path:
         return
-    chains_path = output_path.replace(".json", "_chains.json")
+    out_dir = Path(output_path).parent
     try:
-        with open(chains_path, "w", encoding="utf-8") as f:
+        with open(out_dir / "deps_chain.json", "w", encoding="utf-8") as f:
             json.dump(_ci_deps_chains, f, indent=2)
+    except OSError:
+        pass
+
+
+def record_ci_source_deps_by_file() -> None:
+    """Write a per-test-file import dict to ``deps_by_file.json`` next to ``CI_RECORD_DEPS_OUTPUT``.
+
+    Keys are test file paths (e.g. ``tests/models/clip/test_modeling_clip.py``), values are sorted
+    lists of ``src/transformers/`` source files imported during that file's test execution.
+    Collection-phase entries (no ``test_id``) are excluded.
+
+    No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.  Call from ``pytest_sessionfinish``.
+    """
+    output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
+    if not output_path:
+        return
+    grouped: dict[str, set] = {}
+    for entry in _ci_deps_chains:
+        test_id = entry.get("test_id")
+        if not test_id:
+            continue
+        test_file = test_id.split("::")[0]
+        grouped.setdefault(test_file, set()).add(entry["src_file"])
+    out = {k: sorted(v) for k, v in sorted(grouped.items())}
+    out_dir = Path(output_path).parent
+    try:
+        with open(out_dir / "deps_by_file.json", "w", encoding="utf-8") as f:
+            json.dump(out, f, indent=2)
     except OSError:
         pass
 
@@ -5103,10 +5150,10 @@ def record_ci_source_deps() -> None:
     current = _ci_source_deps_current()
     baseline = _ci_record_deps_baseline or set()
     imported_files = sorted(current - baseline)
-
+    out_dir = Path(output_path).parent
     try:
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(imported_files, f)
+        with open(out_dir / "deps_by_sys_module.json", "w", encoding="utf-8") as f:
+            json.dump(imported_files, f, indent=2)
     except OSError:
         pass
 

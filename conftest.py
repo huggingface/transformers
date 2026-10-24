@@ -40,6 +40,7 @@ from transformers.testing_utils import (
     patch_testing_methods_to_collect_info,
     patch_torch_compile_force_graph,
     record_ci_source_deps,
+    record_ci_source_deps_by_file,
     record_ci_source_deps_chains,
     set_ci_deps_phase,
     snapshot_ci_source_deps_baseline,
@@ -419,6 +420,7 @@ def pytest_sessionfinish(session, exitstatus):
     if exitstatus == 5:
         session.exitstatus = 0
     record_ci_source_deps()
+    record_ci_source_deps_by_file()
     record_ci_source_deps_chains()
 
 
