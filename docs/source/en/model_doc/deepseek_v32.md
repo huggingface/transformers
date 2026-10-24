@@ -79,6 +79,22 @@ outputs = model.generate(**inputs, max_new_tokens=20)
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 
+### Training the indexer
+
+Top-k selection has no gradient, so the indexer is trained with its own distillation loss: the KL divergence from the attention distribution over its selected keys to the softmax of its scores, as described in [the technical report](https://arxiv.org/html/2512.02556v1#S2.SS1.SSS1). Pass `output_indexer_loss=True` (or set it in the config) to add it to `loss`. Only the indexer receives gradients from it.
+
+```python
+model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.bfloat16)
+model.train()
+model.gradient_checkpointing_enable()
+outputs = model(**inputs, labels=inputs["input_ids"], output_indexer_loss=True)
+outputs.loss.backward()  # LM loss + outputs.indexer_loss
+```
+
+The loss is averaged over layers and over the queries the language modeling loss counts, so it is normalized by `num_items_in_batch` under gradient accumulation like the language modeling loss. To give the indexer its own learning rate, use an optimizer parameter group rather than scaling the loss. Gradient checkpointing must be non-reentrant (the default).
+
+For the dense warm-up stage, load the model with `index_topk` at least the sequence length, freeze everything except the indexer, and call `outputs.indexer_loss.backward()`. To build a different loss, record its inputs with `output_indexer_scores=True` and `output_indexer_targets=True`.
+
 The original code can be found [here](https://github.com/deepseek-ai/DeepSeek-V3.2-Exp).
 
 ## DeepseekV32Config
