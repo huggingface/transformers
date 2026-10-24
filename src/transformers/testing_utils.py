@@ -5009,14 +5009,14 @@ def _record_import_chain(module_name: str) -> None:
                 continue
             if frel.startswith("tests/") or frel.startswith("src/transformers/") or frel == "conftest.py":
                 chain.append({"file": frel, "line": frame_info.lineno, "func": frame_info.function})
-            if len(chain) >= 30:
+            if len(chain) >= 100:
                 break
 
         entry: dict = {"module": module_name, "src_file": src_file_rel, "phase": _ci_current_phase, "chain": chain}
         if _ci_current_test_id is not None:
             entry["test_id"] = _ci_current_test_id
         _ci_deps_chains.append(entry)
-    except Exception:
+    except Exception:  # noqa: S110
         pass
     finally:
         _ci_deps_tracker_reentrant.active = False

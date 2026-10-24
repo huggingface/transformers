@@ -1488,7 +1488,14 @@ if __name__ == "__main__":
                     os.symlink(d, os.path.join(tmpdir, os.path.basename(d)))
                 output_path = os.path.join(os.getcwd(), f"ci_results_{job_name}", "fetcher_source_deps.json")
                 subprocess.run(
-                    [sys.executable, "utils/collate_ci_source_deps.py", "--artifacts-dir", tmpdir, "--output", output_path],
+                    [
+                        sys.executable,
+                        "utils/collate_ci_source_deps.py",
+                        "--artifacts-dir",
+                        tmpdir,
+                        "--output",
+                        output_path,
+                    ],
                     check=False,
                 )
 

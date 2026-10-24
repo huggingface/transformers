@@ -48,11 +48,11 @@ def main():
         # e.g. "models_clip" -> "tests/models/clip"
         model_folder = m.group(1).replace("_", "/", 1)  # models_clip -> models/clip
         test_dir = repo_root / "tests" / model_folder
-        test_files = sorted(
-            f"tests/{model_folder}/{p.name}"
-            for p in test_dir.glob("*.py")
-            if p.name != "__init__.py"
-        ) if test_dir.is_dir() else []
+        test_files = (
+            sorted(f"tests/{model_folder}/{p.name}" for p in test_dir.glob("*.py") if p.name != "__init__.py")
+            if test_dir.is_dir()
+            else []
+        )
 
         src_files: list[str] = json.loads(deps_file.read_text(encoding="utf-8"))
         for src_file in src_files:
