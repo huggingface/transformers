@@ -4959,13 +4959,13 @@ _ci_record_deps_baseline: set[str] | None = None
 
 
 def snapshot_ci_source_deps_baseline() -> None:
-    """Snapshot the set of already-imported ``src/transformers/`` files before test collection.
+    """Snapshot the set of already-imported ``src/transformers/`` files after test collection.
 
-    Called from ``pytest_sessionstart`` in ``conftest.py``.  The diff against
-    ``record_ci_source_deps()`` at session end gives what was imported during collection and
-    execution of these specific tests.  Noise from imports common to all model tests (e.g.
-    ``exporter_dynamo.py`` pulling in ~38 fixed model packages) is filtered out later in the
-    collation script by frequency: files appearing in the majority of test folders are excluded.
+    Called from ``pytest_collection_finish`` in ``conftest.py``.  The diff against
+    ``record_ci_source_deps()`` at session end gives only what was imported during actual test
+    execution — excluding collection-time noise (e.g. pipeline mixin materializing model mappings
+    via ``.items()`` on ``_LazyAutoMapping`` at class definition time).  This isolates dynamic
+    runtime deps that the static fetcher misses (backbones, processors loaded via dynamic dispatch).
     """
     global _ci_record_deps_baseline
     if not os.environ.get("CI_RECORD_DEPS_OUTPUT"):

@@ -386,7 +386,7 @@ def pytest_terminal_summary(terminalreporter):
         pytest_terminal_summary_main(terminalreporter, id=make_reports)
 
 
-def pytest_sessionstart(session):
+def pytest_collection_finish(session):
     snapshot_ci_source_deps_baseline()
 
 
