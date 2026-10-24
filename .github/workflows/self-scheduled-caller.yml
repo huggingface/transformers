@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - run_nvidia_ci*
+      - fetcher-recording
   workflow_dispatch:
     inputs:
       prev_workflow_run_id:
@@ -53,13 +54,14 @@ jobs:
 
   model-ci:
     name: Model CI
-    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@main
+    uses: huggingface/transformers-ci/.github/workflows/daily-ci_reusable.yml@fetcher-recording
     with:
       job: run_models_gpu
-      slack_report_channel: "#transformers-ci-daily-models"
+      slack_report_channel: "#transformers-ci-dummy"
       docker: huggingface/transformers-all-latest-gpu
       ci_event: Daily CI
       runner_type: "a10"
+      subdirs: "['models/bert', 'models/clip', 'models/llava', 'models/llava_next', 'models/vipllava', 'models/video_llava', 'models/qwen2', 'models/qwen2_audio', 'models/got_ocr2']"
       report_repo_id: hf-internal-testing/transformers_daily_ci
       commit_sha: ${{ github.sha }}
     secrets: inherit
