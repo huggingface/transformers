@@ -4389,7 +4389,8 @@ class GenerationMixin(ContinuousMixin):
 def _slice_mm_encoder_output(output: ModelOutput, rows: torch.LongTensor) -> ModelOutput:
     """
     Keeps the given rows of the flattened `(num_placeholder_tokens, hidden_size)` features of a pre-encoded multimodal
-    output, in the container type the model expects: a single-item list, or a tensor with a batch of one.
+    output, in the container type the model expects: a single-item list, or a tensor with a batch of one. Only the
+    pooled and deepstack features are kept, as those are what the models read from pre-encoded outputs.
     """
 
     def slice_features(features):
@@ -4398,13 +4399,13 @@ def _slice_mm_encoder_output(output: ModelOutput, rows: torch.LongTensor) -> Mod
             return rows_features.unsqueeze(0)
         return [rows_features]
 
-    output = copy.copy(output)
-    if output.get("pooler_output") is not None:
-        output["pooler_output"] = slice_features(output["pooler_output"])
+    sliced = {"pooler_output": slice_features(output["pooler_output"])}
     deepstack_features = output.get("deepstack_features")
-    if deepstack_features is not None and isinstance(deepstack_features[0][0], torch.Tensor):
-        output["deepstack_features"] = [slice_features(layer_features) for layer_features in deepstack_features]
-    return output
+    if deepstack_features is not None:
+        if isinstance(deepstack_features[0][0], torch.Tensor):
+            deepstack_features = [slice_features(layer_features) for layer_features in deepstack_features]
+        sliced["deepstack_features"] = deepstack_features
+    return type(output)(**sliced)
 
 
 def _speculative_sampling(
