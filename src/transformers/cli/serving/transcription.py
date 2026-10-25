@@ -185,7 +185,8 @@ class TranscriptionHandler:
                 if text is None:
                     break
                 if isinstance(text, _StreamError):
-                    yield f'data: {{"error": "{text.msg}"}}\n\n'
+                    import json
+                    yield f"data: {json.dumps({'error': text.msg})}\n\n"
                     return
                 yield f"data: {text}\n\n"
 
