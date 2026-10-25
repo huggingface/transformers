@@ -379,7 +379,7 @@ def create_warmup_future_states(num: int, status, num_q_tokens: int, max_kv_read
     from .requests import create_warmup_future_states as requests_version
 
     warnings.warn(
-        "`create_warmup_future_states` has been moved the continuous_batching/requests.py and will be deleted from "
+        "`create_warmup_future_states` has been moved to continuous_batching/requests.py and will be deleted from "
         "utils.py in v5.24. Please import it from there instead.",
         FutureWarning,
         stacklevel=2,

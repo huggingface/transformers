@@ -42,7 +42,7 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
     from .utils import get_device_and_memory_breakdown as utils_version
 
     warnings.warn(
-        "`get_device_and_memory_breakdown` has been moved the continuous_batching/utils.py and will be deleted from "
+        "`get_device_and_memory_breakdown` has been moved to continuous_batching/utils.py and will be deleted from "
         "requests.py in v5.24. Please import it from there instead.",
         FutureWarning,
         stacklevel=2,
