@@ -62,7 +62,20 @@ def main():
     # possibly-missing-attribute), not just errors. Without it, warnings print but ty exits 0, so
     # `make typing` and CI both pass and the issue is never caught before commit.
     result = subprocess.run(
-        ["ty", "check", "--respect-ignore-files", "--error-on-warning", "--exclude", "**/*_pb*", *directories],
+        [
+            "ty",
+            "check",
+            "--respect-ignore-files",
+            "--error-on-warning",
+            "--force-exclude",
+            "--exclude",
+            "**/*_pb*",
+            "--exclude",
+            "src/transformers/utils/sentencepiece_model_pb2.py",
+            "--exclude",
+            "src/transformers/utils/sentencepiece_model_pb2_new.py",
+            *directories,
+        ],
     )
     sys.exit(result.returncode)
 
