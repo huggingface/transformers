@@ -971,12 +971,11 @@ class BltModel(BltPreTrainedModel):
             position_ids = torch.arange(encoder_embeds.shape[1], device=encoder_embeds.device) + past_seen_tokens
             position_ids = position_ids.unsqueeze(0)
 
-        encoder_config = self.config.encoder_config
         mask_function = (
-            create_causal_mask if encoder_config.sliding_window is None else create_sliding_window_causal_mask
+            create_causal_mask if self.config.local_attention_window_len is None else create_sliding_window_causal_mask
         )
         causal_mask = mask_function(
-            config=encoder_config,
+            config=self.config.encoder_config,
             inputs_embeds=encoder_embeds,
             attention_mask=attention_mask,
             past_key_values=past_key_values.self_attention_cache if past_key_values is not None else None,
