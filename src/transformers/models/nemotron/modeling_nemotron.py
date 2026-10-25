@@ -39,7 +39,7 @@ from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     dynamic_rope_update,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
@@ -444,6 +444,7 @@ class NemotronModel(NemotronPreTrainedModel):
 # TODO: re-enable check: Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForCausalLM(NemotronPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config):
         super().__init__(config)
@@ -496,8 +497,8 @@ class NemotronForCausalLM(NemotronPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
