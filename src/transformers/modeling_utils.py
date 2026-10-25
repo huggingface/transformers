@@ -5051,7 +5051,13 @@ def get_total_byte_count(
         if param_name in tied_param_names:
             continue
 
-        param = model.get_parameter_or_buffer(param_name)
+        try:
+            param = model.get_parameter_or_buffer(param_name)
+        except AttributeError:
+            # Some quantization methods (e.g. bitsandbytes 8bit) include extra tensors
+            # (SCB, weight_format) in state_dict() that are not registered as parameters
+            # or buffers — they don't count toward the warmup pre-allocation.
+            continue
 
         if hf_quantizer is not None:
             dtype_size = hf_quantizer.param_element_size(model, param_name, param)
