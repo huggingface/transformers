@@ -61,23 +61,23 @@ def dynamic_rope_update(rope_forward):
                 "original_max_position_embeddings"
             ]
 
-        if seq_len > original_max_position_embeddings:
-            if not hasattr(self, f"{layer_type}_long_inv_freq"):
-                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-                long_inv_freq, _ = rope_init_fn(
-                    self.config,
-                    device,
-                    seq_len=original_max_position_embeddings + 1,
-                    layer_type=layer_type,
-                )
-            self.register_buffer(f"{prefix}inv_freq", long_inv_freq, persistent=False)
-            setattr(self, f"{prefix}long_inv_freq", long_inv_freq)
-        else:
-            # This .to() is needed if the model has been moved to a device after being initialized (because
-            # the buffer is automatically moved, but not the original copy)
-            original_inv_freq = original_inv_freq.to(device)
-            self.register_buffer(f"{prefix}inv_freq", original_inv_freq, persistent=False)
-            setattr(self, f"{prefix}original_inv_freq", original_inv_freq)
+        long_inv_freq = getattr(self, f"{prefix}long_inv_freq", None)
+        if long_inv_freq is None:
+            rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
+            long_inv_freq, _ = rope_init_fn(
+                self.config,
+                device,
+                seq_len=original_max_position_embeddings + 1,
+                layer_type=layer_type,
+            )
+        # `long_inv_freq` is a plain attribute and does not follow `model.to(...)`, so move it here
+        long_inv_freq = long_inv_freq.to(device)
+        original_inv_freq = original_inv_freq.to(device)
+        setattr(self, f"{prefix}long_inv_freq", long_inv_freq)
+
+        # `seq_len` is a scalar, so this picks the long or short set for all positions, like an if/else but traceable
+        inv_freq = torch.where(seq_len > original_max_position_embeddings, long_inv_freq, original_inv_freq)
+        self.register_buffer(f"{prefix}inv_freq", inv_freq, persistent=False)
 
     def dynamic_frequency_update(self, position_ids, device, layer_type=None):
         """

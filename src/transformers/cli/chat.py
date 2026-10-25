@@ -22,7 +22,6 @@ from collections.abc import AsyncIterator, Awaitable
 from typing import Annotated, Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
-import requests
 import typer
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
@@ -216,11 +215,6 @@ class RichInterface:
         self._console.print()
 
     def print_model_load(self, model: str):
-        response = requests.post(
-            urljoin(get_service_root_url(self.base_url) + "/", "load_model"), json={"model": model}, stream=True
-        )
-        response.raise_for_status()
-
         class StatsColumn(ProgressColumn):
             def render(self, task):
                 if not task.total:
@@ -266,9 +260,14 @@ class RichInterface:
         task_id = progress.add_task(_label("processor"), total=None)
         cached = False
 
-        with Live(progress, console=self._console, transient=True):
+        url = urljoin(get_service_root_url(self.base_url) + "/", "load_model")
+        with (
+            httpx.stream("POST", url, json={"model": model}, timeout=None) as response,
+            Live(progress, console=self._console, transient=True),
+        ):
+            response.raise_for_status()
             for line in response.iter_lines():
-                if not line or not line.startswith(b"data: "):
+                if not line or not line.startswith("data: "):
                     continue
                 event = json.loads(line[6:])
                 status = event.get("status")

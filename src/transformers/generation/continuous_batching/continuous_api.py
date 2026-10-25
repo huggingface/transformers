@@ -32,7 +32,7 @@ from tqdm.contrib.logging import logging_redirect_tqdm
 from ...configuration_utils import PretrainedConfig
 from ...generation.configuration_utils import ContinuousBatchingConfig, GenerationConfig
 from ...utils.generic import is_flash_attention_requested
-from ...utils.import_utils import is_flash_attn_2_available, is_flash_attn_3_available
+from ...utils.import_utils import is_flash_attn_2_available, is_flash_attn_3_available, is_torch_greater_or_equal
 from ...utils.logging import logging
 from ..logits_process import LogitsProcessorList
 from .cache import PagedAttentionCache
@@ -729,9 +729,18 @@ class ContinuousBatchingManager:
             cb_config=continuous_batching_config,
             workload_hints=workload_hints,
             has_logit_processors=self.logit_processor.do_processing,
+            device=model.device,
         )
         # This is an approximation until the cache is created: it will infer the correct value in cache.__init__
         self._use_prefix_sharing = self.continuous_batching_config.allow_block_sharing
+
+        # For MPS, warn if the torch version is old enough to cause performance issues
+        if self.model.device.type == "mps" and not is_torch_greater_or_equal("2.14", accept_dev=True):
+            logger.warning(
+                f"Continuous batching on MPS with torch {torch.__version__} is slow and memory-hungry (cache reads "
+                "and memory allocation are much slower than on torch >= 2.14). For correct performance, please upgrade "
+                "to torch >= 2.14."
+            )
 
     def switch_to_cb_friendly_attn(self, model: ProtoPretrainedModel, auto_switch_to_flash: bool = True) -> None:
         """Switch the attn implementation to one that is CB compatible. If auto_switch_to_flash is True, and the attn

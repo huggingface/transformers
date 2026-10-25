@@ -20,7 +20,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import divide_to_patches, group_images_by_shape, reorder_images
@@ -319,8 +319,8 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
 class Step3p7Config(PreTrainedConfig):
     model_type = "step3p7"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Step3p7VisionConfig),
-        "text_config": SubConfigSpec(config_class=Step3p7TextConfig),
+        "vision_config": Step3p7VisionConfig,
+        "text_config": Step3p7TextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -689,8 +689,8 @@ class Step3p7PreTrainedModel(PreTrainedModel):
         if isinstance(module, Step3p7VisionEmbeddings):
             init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, Step3p7VisionEncoderLayer):
-            nn.init.constant_(module.lambda_1, module.config.layer_scale_init_value)
-            nn.init.constant_(module.lambda_2, module.config.layer_scale_init_value)
+            init.constant_(module.lambda_1, module.config.layer_scale_init_value)
+            init.constant_(module.lambda_2, module.config.layer_scale_init_value)
         elif isinstance(module, Step3p7RotaryEmbedding):
             for layer_type in module.layer_types:
                 rope_init_fn = module.compute_default_rope_parameters
@@ -993,6 +993,7 @@ class Step3p7TextModel(Gemma3TextModel):
 
 
 class Step3p7Model(DeepseekOcr2Model):
+    input_modalities = ("image", "text")
     config: Step3p7Config
 
     def __init__(self, config: Step3p7Config):
@@ -1049,6 +1050,7 @@ class Step3p7Model(DeepseekOcr2Model):
 
 
 class Step3p7ForConditionalGeneration(DeepseekOcr2ForConditionalGeneration):
+    input_modalities = ("image", "text")
     config: Step3p7Config
 
 
