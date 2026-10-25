@@ -22,7 +22,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
@@ -31,6 +31,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..auto import AutoConfig
 from ..deepseek_v32.modeling_deepseek_v32 import DeepseekV32Indexer, eager_attention_forward
 from ..glm_moe_dsa.configuration_glm_moe_dsa import GlmMoeDsaConfig
 from ..glm_moe_dsa.modeling_glm_moe_dsa import (
@@ -47,7 +48,6 @@ from ..mistral3.modeling_mistral3 import (
     Mistral3Model,
 )
 from ..mistral4.modeling_mistral4 import Mistral4Experts, Mistral4MoE, Mistral4TopkRouter
-from ..pixtral import PixtralVisionConfig
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
@@ -181,32 +181,28 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
 
 class MistralLarge4Config(Mistral3Config):
     model_type = "mistral_large4"
-    # One text model and one vision model: pin the classes instead of resolving them through `model_type`
-    sub_configs = {"text_config": MistralLarge4TextConfig, "vision_config": PixtralVisionConfig}
+    sub_configs_defaults = {
+        "text_config": MistralLarge4TextConfig,
+        # Mistral Large 4 vision tower (same as Mistral Small 3.1: gated SiLU MLP, 1540 px images)
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="pixtral",
+            init_kwargs={
+                "hidden_size": 2048,
+                "intermediate_size": 6144,
+                "num_hidden_layers": 30,
+                "num_attention_heads": 16,
+                "patch_size": 14,
+                "image_size": 1540,
+                "hidden_act": "silu",
+            },
+        ),
+    }
 
     tie_word_embeddings: bool = False
     final_logit_softcapping: float = 30.0
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = PixtralVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            # Mistral Large 4 vision tower (same as Mistral Small 3.1: gated SiLU MLP, 1540 px images)
-            self.vision_config = PixtralVisionConfig(
-                hidden_size=2048,
-                intermediate_size=6144,
-                num_hidden_layers=30,
-                num_attention_heads=16,
-                patch_size=14,
-                image_size=1540,
-                hidden_act="silu",
-            )
-
-        if isinstance(self.text_config, dict):
-            self.text_config = MistralLarge4TextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = MistralLarge4TextConfig()
-
         # Explicit parent call: the modular converter keeps it instead of inlining Mistral3's `model_type` lookups
         PreTrainedConfig.__post_init__(self, **kwargs)
 

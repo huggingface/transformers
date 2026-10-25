@@ -21,9 +21,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..pixtral import PixtralVisionConfig
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="zai-org/GLM-5")
@@ -193,10 +193,6 @@ class MistralLarge4TextConfig(PreTrainedConfig):
         # BC: re-route `num_experts` to `n_routed_experts`
         if (num_experts := kwargs.get("num_experts")) is not None:
             self.n_routed_experts = num_experts
-        # Default to MoE from the second layer and on
-        if self.mlp_layer_types is None:
-            self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
-        self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         super().__post_init__(**kwargs)
 
     def validate_architecture(self):
@@ -239,12 +235,24 @@ class MistralLarge4Config(PreTrainedConfig):
     ```"""
 
     model_type = "mistral_large4"
-    attribute_map = {
-        "image_token_id": "image_token_index",
+    attribute_map = {"image_token_id": "image_token_index"}
+    sub_configs_defaults = {
+        "text_config": MistralLarge4TextConfig,
+        # Mistral Large 4 vision tower (same as Mistral Small 3.1: gated SiLU MLP, 1540 px images)
+        "vision_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="pixtral",
+            init_kwargs={
+                "hidden_size": 2048,
+                "intermediate_size": 6144,
+                "num_hidden_layers": 30,
+                "num_attention_heads": 16,
+                "patch_size": 14,
+                "image_size": 1540,
+                "hidden_act": "silu",
+            },
+        ),
     }
-    # One text model and one vision model: pin the classes instead of resolving them through `model_type`
-    sub_configs = {"text_config": MistralLarge4TextConfig, "vision_config": PixtralVisionConfig}
-    is_composition = True
 
     vision_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
@@ -258,25 +266,6 @@ class MistralLarge4Config(PreTrainedConfig):
     final_logit_softcapping: float = 30.0
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = PixtralVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            # Mistral Large 4 vision tower (same as Mistral Small 3.1: gated SiLU MLP, 1540 px images)
-            self.vision_config = PixtralVisionConfig(
-                hidden_size=2048,
-                intermediate_size=6144,
-                num_hidden_layers=30,
-                num_attention_heads=16,
-                patch_size=14,
-                image_size=1540,
-                hidden_act="silu",
-            )
-
-        if isinstance(self.text_config, dict):
-            self.text_config = MistralLarge4TextConfig(**self.text_config)
-        elif self.text_config is None:
-            self.text_config = MistralLarge4TextConfig()
-
         # Explicit parent call: the modular converter keeps it instead of inlining Mistral3's `model_type` lookups
         super().__post_init__(**kwargs)
 
