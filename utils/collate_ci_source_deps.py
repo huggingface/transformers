@@ -10,13 +10,16 @@ Each model CI job writes deps_by_file.json into its report directory.  Format::
         ...
     }
 
-This script unions collection + execution phases per test file, merges across all
-artifact directories, and writes a single inverted mapping::
+This script merges across all artifact directories, preserving the collection/execution
+phase split, and writes::
 
-    { "src/transformers/models/clip/image_processing_clip.py":
-        ["tests/models/clip/test_processing_clip.py", ...], ... }
-
-suitable for consumption by tests_fetcher.py.
+    {
+        "tests/models/clip/test_processing_clip.py": {
+            "collection": ["src/transformers/...", ...],
+            "execution":  ["src/transformers/...", ...]
+        },
+        ...
+    }
 
 Usage:
     python utils/collate_ci_source_deps.py --artifacts-dir <dir> --output <path>
@@ -40,7 +43,8 @@ def main():
     parser.add_argument("--output", required=True, type=Path)
     args = parser.parse_args()
 
-    test_to_srcs: dict[str, set[str]] = defaultdict(set)
+    # Accumulate per-file, per-phase sets across all artifact dirs.
+    test_to_phases: dict[str, dict[str, set[str]]] = defaultdict(lambda: {"collection": set(), "execution": set()})
 
     for report_dir in sorted(args.artifacts_dir.iterdir()):
         if not report_dir.is_dir():
@@ -52,10 +56,13 @@ def main():
         # deps_by_file.json: {test_file: {"collection": [...], "execution": [...]}}
         by_file: dict[str, dict[str, list[str]]] = json.loads(deps_file.read_text(encoding="utf-8"))
         for test_file, phases in by_file.items():
-            for src_files in phases.values():
-                test_to_srcs[test_file].update(src_files)
+            for phase, src_files in phases.items():
+                test_to_phases[test_file][phase].update(src_files)
 
-    result = {k: sorted(v) for k, v in sorted(test_to_srcs.items())}
+    result = {
+        test_file: {phase: sorted(srcs) for phase, srcs in sorted(phases.items())}
+        for test_file, phases in sorted(test_to_phases.items())
+    }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
     print(f"Written {len(result)} test->src edges to {args.output}")
