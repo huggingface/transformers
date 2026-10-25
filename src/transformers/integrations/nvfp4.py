@@ -58,7 +58,12 @@ def load_nvfp4_kernel() -> NVFP4Kernel:
             f"for example with `pip install kernels=={KERNELS_MIN_VERSION}`."
         )
 
-    kernel = lazy_load_kernel("nvfp4")
+    kernel_name = (
+        "nvfp4-sm121"
+        if is_torch_available() and torch.cuda.is_available() and torch.cuda.get_device_capability() == (12, 1)
+        else "nvfp4"
+    )
+    kernel = lazy_load_kernel(kernel_name)
     if kernel is None:
         raise ImportError(
             "Failed to load the NVFP4 kernel. Check that the Hub kernel has a build matching the current "
