@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import logging
 import queue
 import threading
 import warnings
@@ -24,19 +23,28 @@ import torch
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import is_psutil_available, is_torch_xpu_available
+from ...utils.logging import logging
 
 
 if is_psutil_available():
     import psutil
 
 
-logger = logging.getLogger(__name__)
-
-
 # NOTE: AMD GPUs are supported under the "cuda" module
 DEVICE_TYPE_TO_GRAPH_NAME = {"cuda": "CUDAGraph", "xpu": "XPUGraph"}
 
 T = TypeVar("T")
+
+
+
+# We centralize the logger here to coordinate between logging and progress bar
+logger = logging.getLogger("ContinuousBatchingLogger")
+# Add a handler to the logger to print the logs to the console. Only happens once thanks to setting propagate to False.
+if logger.propagate:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    logger.addHandler(handler)
+    logger.propagate = False
 
 
 class CudaGraphBuffer:

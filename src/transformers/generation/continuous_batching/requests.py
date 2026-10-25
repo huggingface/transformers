@@ -16,26 +16,22 @@ import warnings
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import IntEnum
-from typing import Any
+from typing import TYPE_CHECKING
 
 import torch
 
 from ...utils.logging import logging
+from .utils import logger
+
+
+if TYPE_CHECKING:
+    from .cache import PagedAttentionCache
 
 
 # This is a temporary token ID used to represent a token that is not yet generated
 # TODO: update this to 0 and check it breaks nothing + simplify carry over and time new logic
 TMP_TOKEN_ID = -1
 
-
-# We centralize the logger here to coordinate between logging and progress bar
-logger = logging.getLogger("ContinuousBatchingLogger")
-# Add a handler to the logger to print the logs to the console. Only happens once thanks to setting propagate to False.
-if logger.propagate:
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-    logger.addHandler(handler)
-    logger.propagate = False
 
 
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
@@ -355,7 +351,7 @@ def create_warmup_future_states(
     status: RequestStatus,
     num_q_tokens: int,
     max_kv_read: int,
-    cache: Any,  # not annotated to avoid circular import
+    cache: "PagedAttentionCache",
 ) -> list[FutureRequestState]:
     """A utility function to create a list of FutureRequestStates for the warmup of CB."""
     # Setup
