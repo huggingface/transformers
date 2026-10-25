@@ -32,9 +32,9 @@ from ...utils import is_psutil_available
 from .cache import PagedAttentionCache
 from .cache_allocators import CachePool
 from .distributed import DistributedHelper
-from .requests import FutureRequestState, RequestState, RequestStatus, logger
+from .requests import FutureRequestState, RequestState, RequestStatus
 from .scheduler import Scheduler
-from .utils import stream_context
+from .utils import logger, stream_context
 
 
 def contiguous_runs(indices: list[int]) -> list[tuple[int, int, int]]:

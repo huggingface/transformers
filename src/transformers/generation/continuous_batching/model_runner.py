@@ -21,11 +21,12 @@ from ...generation.configuration_utils import ContinuousBatchingConfig
 from .cache import PagedAttentionCache
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
 from .input_outputs import ContinuousBatchingAsyncIOs, ContinuousBatchingIOs
-from .requests import RequestState, RequestStatus, create_warmup_future_states, logger
+from .requests import RequestState, RequestStatus, create_warmup_future_states
 from .utils import (
     accelerator_graph_capture_context,
     create_accelerator_graph,
     get_memory_pools,
+    logger,
     memory_pool_context,
     pad_to_interval,
     pad_to_pow2,
