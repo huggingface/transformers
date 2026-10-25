@@ -190,6 +190,18 @@ owns `semantic_quantizer_config`.
 
 The loaded components are available as `model.encoder` and `model.decoder`. Their `forward` methods operate on
 continuous representations; the top-level `encode` and `decode` methods handle quantization separately.
+To decode an already-quantized continuous representation without running the quantizer again, pass `latents`
+with shape `(batch_size, model.config.codebook_dim, codes_length)`:
+
+```python
+with torch.no_grad():
+    latents = model.quantizer.decode(audio_codes.transpose(1, 2))
+    audio_values = model.decode(latents=latents).audio_values
+```
+
+Pass `audio_codes` or `latents` to `decode`. If both are provided, `audio_codes` takes precedence.
+Omitting both raises `ValueError`.
+
 You can save and reload the trained components independently:
 
 ```python

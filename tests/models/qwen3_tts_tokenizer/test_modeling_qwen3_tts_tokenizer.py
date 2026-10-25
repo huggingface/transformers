@@ -443,6 +443,29 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertLess(outputs.audio_codes_mask[0].sum(), outputs.audio_codes_mask[1].sum())
         self.assertEqual(outputs.audio_values.shape, inputs_dict["padding_mask"].shape)
 
+    def test_decode_latents_matches_codes_and_preserves_code_precedence(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs()
+        model = Qwen3TTSTokenizerModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            for module in model.quantizer.modules():
+                if hasattr(module, "embed_sum"):
+                    module.embed_sum.normal_()
+            codes = model.encode(**inputs).audio_codes
+            latents = model.quantizer.decode(codes.transpose(1, 2))
+            expected = model.decode(codes).audio_values
+            actual = model.decode(latents=latents).audio_values
+            tuple_output = model.decode(latents=latents, return_dict=False)
+            codes_with_latents = model.decode(codes, latents=torch.full_like(latents, float("nan"))).audio_values
+
+        torch.testing.assert_close(actual, expected)
+        torch.testing.assert_close(tuple_output[0], expected)
+        torch.testing.assert_close(codes_with_latents, expected)
+
+    def test_decode_requires_codes_or_latents(self):
+        model = Qwen3TTSTokenizerModel(self.model_tester.get_config()).to(torch_device).eval()
+        with self.assertRaises(ValueError):
+            model.decode()
+
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

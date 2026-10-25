@@ -169,6 +169,9 @@ class Qwen3TTSTokenizerEncoderConfig(MimiConfig):
     upsample_groups = AttributeError()
     use_cache = AttributeError()
     use_streaming = AttributeError()
+    # This is already a standalone component, not a codec with optional encoder and decoder halves.
+    encoder_config = None
+    decoder_config = None
 
     def __post_init__(self, **kwargs):
         self.upsampling_ratios = self.upsampling_ratios if self.upsampling_ratios else [8, 6, 5, 4]
@@ -188,6 +191,9 @@ class Qwen3TTSTokenizerEncoderConfig(MimiConfig):
 
     def num_codebooks(self):
         raise AttributeError("Not needed for Qwen3TTSTokenizer")
+
+    def to_dict(self):
+        raise AttributeError("Use PreTrainedConfig serialization")
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
@@ -773,15 +779,23 @@ class Qwen3TTSTokenizerModel(VibeVoiceAcousticTokenizerModel, PreTrainedAudioTok
     @auto_docstring
     def decode(
         self,
-        audio_codes: torch.Tensor,
+        audio_codes: torch.Tensor | None = None,
+        latents: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Qwen3TTSTokenizerDecoderOutput:
         r"""
-        audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length, num_quantizers)`):
-            Discrete code indices computed using `model.encode`.
+        audio_codes (`torch.LongTensor` of shape `(batch_size, codes_length, num_quantizers)`, *optional*):
+            Discrete code indices computed using `model.encode`. Takes precedence over `latents` if both are provided.
+        latents (`torch.Tensor` of shape `(batch_size, codebook_dim, codes_length)`, *optional*):
+            Quantized continuous representation, using the decoder's input width. Bypasses the quantizer when
+            `audio_codes` is not provided.
         """
-        quantized_representation = self.quantizer.decode(audio_codes.transpose(1, 2))
-        audio_values = self.decoder(quantized_representation, **kwargs).squeeze(1)
+        if latents is None and audio_codes is None:
+            raise ValueError("Either `latents` or `audio_codes` must be provided.")
+
+        if audio_codes is not None:
+            latents = self.quantizer.decode(audio_codes.transpose(1, 2))
+        audio_values = self.decoder(latents, **kwargs).squeeze(1)
 
         return Qwen3TTSTokenizerDecoderOutput(audio_values=audio_values)
 
