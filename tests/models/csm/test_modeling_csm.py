@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch ConversationalSpeechModel model."""
 
 import copy
+import tempfile
 import unittest
 
 import pytest
@@ -272,9 +273,63 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
     def test_model_parallel_beam_search(self):
         pass
 
-    @unittest.skip(reason="CSM has special embeddings that can never be tied")
-    def test_tied_weights_keys(self):
-        pass
+    @parameterized.expand([True, False])
+    def test_audio_embeddings_tied_across_save_load(self, tie_word_embeddings):
+        config, _, _ = self.model_tester.prepare_config_and_inputs()
+        config = CsmConfig.from_dict({**config.to_dict(), "tie_word_embeddings": tie_word_embeddings})
+        self.assertTrue(config.tie_word_embeddings)
+        model = CsmForConditionalGeneration(config).eval()
+        self.assertEqual(model.all_tied_weights_keys, model._tied_weights_keys)
+        self.assertIs(
+            model.backbone_model.embed_tokens.embed_audio_tokens.weight,
+            model.depth_decoder.model.embed_tokens.weight,
+        )
+        self.assertIsNot(model.embed_text_tokens.weight, model.lm_head.weight)
+        with torch.no_grad():
+            model.depth_decoder.model.embed_tokens.weight.fill_(1.0)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model_reloaded, loading_info = CsmForConditionalGeneration.from_pretrained(
+                tmpdirname, output_loading_info=True
+            )
+        self.assertEqual(loading_info["missing_keys"], set())
+        self.assertEqual(loading_info["unexpected_keys"], set())
+        self.assertTrue(model_reloaded.config.tie_codebooks_embeddings)
+        self.assertTrue(model_reloaded.config.tie_word_embeddings)
+        backbone_embed = model_reloaded.backbone_model.embed_tokens.embed_audio_tokens.weight
+        depth_decoder_embed = model_reloaded.depth_decoder.model.embed_tokens.weight
+        self.assertIs(backbone_embed, depth_decoder_embed)
+        self.assertTrue(torch.equal(backbone_embed, torch.ones_like(backbone_embed)))
+        self.assertIsNot(model_reloaded.embed_text_tokens.weight, model_reloaded.lm_head.weight)
+
+    @parameterized.expand([True, False])
+    def test_audio_embeddings_remain_untied_when_disabled(self, tie_word_embeddings):
+        config, _, _ = self.model_tester.prepare_config_and_inputs()
+        config.tie_codebooks_embeddings = False
+        config = CsmConfig.from_dict({**config.to_dict(), "tie_word_embeddings": tie_word_embeddings})
+        self.assertFalse(config.tie_word_embeddings)
+        model = CsmForConditionalGeneration(config).eval()
+        self.assertEqual(model.all_tied_weights_keys, {})
+        backbone_embed = model.backbone_model.embed_tokens.embed_audio_tokens.weight
+        depth_decoder_embed = model.depth_decoder.model.embed_tokens.weight
+        self.assertIsNot(backbone_embed, depth_decoder_embed)
+
+        with torch.no_grad():
+            backbone_embed.fill_(1.0)
+            depth_decoder_embed.fill_(2.0)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model_reloaded = CsmForConditionalGeneration.from_pretrained(tmpdirname)
+
+        self.assertFalse(model_reloaded.config.tie_codebooks_embeddings)
+        self.assertFalse(model_reloaded.config.tie_word_embeddings)
+        backbone_embed = model_reloaded.backbone_model.embed_tokens.embed_audio_tokens.weight
+        depth_decoder_embed = model_reloaded.depth_decoder.model.embed_tokens.weight
+        self.assertIsNot(backbone_embed, depth_decoder_embed)
+        self.assertTrue(torch.equal(backbone_embed, torch.ones_like(backbone_embed)))
+        self.assertTrue(torch.equal(depth_decoder_embed, torch.full_like(depth_decoder_embed, 2.0)))
 
     @unittest.skip(reason="CSM has no separate base model without a head.")
     def test_model_base_model_prefix(self):

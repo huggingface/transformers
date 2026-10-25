@@ -99,6 +99,7 @@ class CsmConfig(PreTrainedConfig):
         End of stream token id for audio in the text input.
     tie_codebooks_embeddings (`bool`, *optional*, defaults to `True`):
         Whether to tie the codebook tokens embeddings of the backbone model to the codebook tokens embeddings of the depth decoder.
+        This also sets `tie_word_embeddings`; the text embeddings and language modeling head remain untied.
     depth_decoder_config (`CsmDepthDecoderConfig`, *optional*):
         Configuration for the depth decoder.
     codec_config (`PreTrainedConfig`, *optional*):
@@ -160,8 +161,8 @@ class CsmConfig(PreTrainedConfig):
     codec_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        if kwargs.pop("tie_word_embeddings", False):
-            raise ValueError("`tie_word_embeddings=True` is not supported for CsmConfig")
+        # Older checkpoints store this as False even when codebook embeddings should be tied.
+        kwargs.pop("tie_word_embeddings", None)
 
         if self.depth_decoder_config is None:
             self.depth_decoder_config = CsmDepthDecoderConfig()
@@ -179,7 +180,7 @@ class CsmConfig(PreTrainedConfig):
             self.num_key_value_heads = self.num_attention_heads
 
         self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.tie_word_embeddings = False
+        self.tie_word_embeddings = bool(self.tie_codebooks_embeddings)
         super().__post_init__(**kwargs)
 
 
