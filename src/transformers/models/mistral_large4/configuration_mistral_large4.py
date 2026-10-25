@@ -166,15 +166,6 @@ class MistralLarge4TextConfig(PreTrainedConfig):
         # KV sharing: by default every layer owns its latent KV cache
         if self.kv_source_layers is None:
             self.kv_source_layers = list(range(self.num_hidden_layers))
-        if len(self.kv_source_layers) != self.num_hidden_layers:
-            raise ValueError(
-                f"`kv_source_layers` must have one entry per layer ({self.num_hidden_layers}), got {len(self.kv_source_layers)}."
-            )
-        for layer_idx, source in enumerate(self.kv_source_layers):
-            if source > layer_idx or self.kv_source_layers[source] != source:
-                raise ValueError(
-                    f"Layer {layer_idx} must share KV with an earlier layer that owns its cache, got {source}."
-                )
         # Per-layer indexer mode: a pattern (e.g. `"FSSF..."`) overrides the freq/offset schedule.
         if self.indexer_types is None:
             pattern = kwargs.get("index_topk_pattern")
@@ -207,6 +198,19 @@ class MistralLarge4TextConfig(PreTrainedConfig):
             self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
         self.qk_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        # Validate KV sharing patterns
+        if len(self.kv_source_layers) != self.num_hidden_layers:
+            raise ValueError(
+                f"`kv_source_layers` must have one entry per layer ({self.num_hidden_layers}), got {len(self.kv_source_layers)}."
+            )
+        for layer_idx, source in enumerate(self.kv_source_layers):
+            if source > layer_idx or self.kv_source_layers[source] != source:
+                raise ValueError(
+                    f"Layer {layer_idx} must share KV with an earlier layer that owns its cache, got {source}."
+                )
+        super().validate_architecture()
 
 
 @auto_docstring(checkpoint="mistralai/Mistral-Small-3.1-24B-Instruct-2503")

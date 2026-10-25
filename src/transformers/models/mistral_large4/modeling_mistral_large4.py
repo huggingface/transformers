@@ -133,7 +133,7 @@ class MistralLarge4TextSoftmaxScaling(nn.Module):
         self.bias = nn.Parameter(torch.empty(num_heads))
 
     def forward(self, query_states: torch.Tensor, position_ids: torch.Tensor, head_dim_first: bool) -> torch.Tensor:
-        log_pos = (position_ids + 1).float().log()
+        log_pos = (position_ids + 1).float().log()  # convert to float to avoid overflow
         log_pos, scale, bias = (x.to(query_states.dtype) for x in (log_pos, self.scale, self.bias))
         if head_dim_first:
             scale = scale[None, :, None] * log_pos[:, None, :] + bias[None, :, None]
@@ -406,12 +406,11 @@ class MistralLarge4TextAttention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
         shared_kv_states: dict[str, tuple[torch.Tensor, torch.Tensor]],
+        position_ids: torch.Tensor,
         past_key_values: Cache | None = None,
         prev_topk_indices: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
-        # `position_ids` stays in `kwargs` so the attention interface also receives it (padding-free flash-attention)
-        position_ids = kwargs["position_ids"]
         batch_size, seq_length = hidden_states.shape[:-1]
         query_shape = (batch_size, seq_length, -1, self.qk_head_dim)
 
@@ -420,7 +419,7 @@ class MistralLarge4TextAttention(nn.Module):
 
         # Either the layer computes it's own cache or it loads it from shared_kv_states
         if self.is_kv_shared_layer:
-            k_pass, k_rot = shared_kv_states["full_attention"]
+            k_pass, k_rot = shared_kv_states["indexed_attention"]
             k_pass = k_pass.to(q_states.device)  # device of past layer may be different from current one
             k_rot = k_rot.to(q_states.device)
         else:
@@ -444,7 +443,7 @@ class MistralLarge4TextAttention(nn.Module):
             k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
         # If the layer takes part in cache sharing and computes its own cache, store a copy in shared_kv_states
         if self.store_full_length_kv:
-            shared_kv_states["full_attention"] = (k_pass, k_rot)  # one layer type, so it is hardcoded
+            shared_kv_states["indexed_attention"] = (k_pass, k_rot)  # one layer type, so it is hardcoded
 
         # Recompose and apply softmax-scaling to the queries
         query_states = torch.cat((q_pass, q_rot), dim=-1)
@@ -493,6 +492,7 @@ class MistralLarge4TextAttention(nn.Module):
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             indices=sparse_indices,  # consumed by flash_mla_with_kvcache; ignored by eager / SDPA
+            position_ids=position_ids,
             **kwargs,
         )
 
@@ -754,16 +754,17 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel):
             position_ids = position_ids.unsqueeze(0)
 
         # It may already have been prepared by e.g. `generate`
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-                "allow_is_causal_skip": False,  # Always force creation to account for causality in the indexer
-            }
-            causal_mask_mapping = {"indexed_attention": create_causal_mask(**mask_kwargs)}
+        if isinstance(attention_mask, dict):
+            causal_mask = attention_mask["indexed_attention"]
+        else:
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
+                allow_is_causal_skip=False,  # Always force creation to account for causality in the indexer
+            )
 
         # Initialize as empty dict, or reuse past shared states. We use a UserDict instead of built-in dict (it behaves
         # the same) for fsdp2 support (otherwise, `_apply_to_tensors` rebuilds every dict it recurses into, and `shared_kv_states`
@@ -777,7 +778,7 @@ class MistralLarge4TextModel(MistralLarge4PreTrainedModel):
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states, topk_indices = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping["indexed_attention"],
+                attention_mask=causal_mask,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
