@@ -171,6 +171,9 @@ def sdpa_attention_forward(
         attention_mask = create_position_bias_mask(position_bias, attention_mask, is_causal, query, key)
         is_causal = False
 
+    if attention_mask is not None:
+        attention_mask = attention_mask.contiguous()
+
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
         key,
