@@ -945,9 +945,10 @@ class SeamlessM4Tv2ModelIntegrationTest(unittest.TestCase):
         sampling_rate = 16000
         audio_array = torch.rand((2, seq_len))
 
-        return self.processor(audio=audio_array.tolist(), sampling_rate=sampling_rate, return_tensors="pt").to(
-            torch_device
-        )
+        # A single 2-channel sample -- the expected values below were computed with this input. It has to be passed
+        # as a tensor (and not as a nested list) because `make_list_of_audio` only accepts arrays, tensors, or lists
+        # of floats.
+        return self.processor(audio=[audio_array], sampling_rate=sampling_rate, return_tensors="pt").to(torch_device)
 
     def factory_test_task(self, class1, class2, inputs, class1_kwargs, class2_kwargs):
         # half-precision loading to limit GPU usage
