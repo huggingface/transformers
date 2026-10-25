@@ -780,7 +780,7 @@ class GlmOcrTextModel(GlmOcrPreTrainedModel):
             # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
             text_position_ids = None
 
-        # Create the masks
+        # Create the mask
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
