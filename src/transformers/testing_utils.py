@@ -4999,13 +4999,16 @@ def _record_import_chain(module_name: str) -> None:
             return
 
         # Discard imports triggered by _LazyAutoMapping bulk iteration (values/items/keys).
-        # These are registry side-effects, not real test deps. Use sys._getframe() — much
-        # cheaper than inspect.stack() since it doesn't read source lines.
-        frame = sys._getframe(2)  # skip _record_import_chain + _tracking_import
-        while frame is not None:
-            if frame.f_code.co_name == "_load_attr_from_module":
-                return
-            frame = frame.f_back
+        # These are registry side-effects, not real test deps. Only check during test
+        # execution (test_id set) — collection-phase imports have no test_id and won't
+        # appear in deps_by_file.json anyway, so skip the frame walk for them.
+        # Use sys._getframe() — much cheaper than inspect.stack() (no source line reads).
+        if _ci_current_test_id is not None:
+            frame = sys._getframe(2)  # skip _record_import_chain + _tracking_import
+            while frame is not None:
+                if frame.f_code.co_name == "_load_attr_from_module":
+                    return
+                frame = frame.f_back
 
         entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": []}
         if _ci_current_test_id is not None:
