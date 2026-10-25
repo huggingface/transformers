@@ -3105,6 +3105,38 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(n_matches.item() == 2)
         self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
 
+    def test_speculative_sampling_zero_probability_candidate_rejection(self):
+        """Fixes #49936: Ensure candidate with zero target probability is rejected on zero draw."""
+        candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1]])
+        candidate_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # assistant generates token 1
+                ]
+            ]
+        )
+        candidate_length = 1
+        inf = float("inf")
+        # Target distribution assigns token 1 negative infinity logit (p(1) == 0.0)
+        new_logits = torch.tensor(
+            [
+                [
+                    [-inf, -inf, 10.0, -inf, -inf, -inf, -inf, -inf, -inf, -inf],  # target wants token 2, forbids token 1
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],
+                ]
+            ]
+        )
+        # Even when the random acceptance draw is exactly 0.0, token 1 must be rejected
+        with patch("transformers.generation.utils.torch.rand_like", return_value=torch.zeros(1)):
+            validated_tokens, n_matches = _speculative_sampling(
+                candidate_input_ids,
+                candidate_logits,
+                candidate_length,
+                new_logits,
+            )
+        self.assertEqual(n_matches.item(), 0)
+        self.assertNotEqual(validated_tokens.tolist()[0][0], 1)
+
     def test_speculative_sampling_target_distribution(self):
         """
         Asserts that the target distribution is preserved.
