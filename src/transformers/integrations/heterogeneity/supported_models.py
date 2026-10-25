@@ -173,7 +173,7 @@ def nemotron_h() -> HeterogeneousModelingSpec:
                 ),
             },
         },
-        attention_mask_consumers=[("mixer", NemotronHAttention)],
+        attention_mask_consumers=[("mixer", NemotronHAttention), ("mixer", NemotronHMamba2Mixer)],
         cache_writers={
             ("mixer", NemotronHAttention): ["key_value"],
             ("mixer", NemotronHMamba2Mixer): ["linear_attention"],

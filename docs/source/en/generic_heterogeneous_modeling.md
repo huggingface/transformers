@@ -153,10 +153,11 @@ its forward should return:
 
 The `arg_name` must be an argument of the original class's `forward`.
 
-A replacement key is either a member name, or a `(member_name, member_class)`
-tuple, which applies only when the member is an instance of that class and takes precedence over a plain member-name
-key. When several classes match, the most specific one takes precedence. This supports layers whose member class
-varies, like NemotronH's `mixer`. Its built-in spec declares the skip like this (excerpt):
+Skip descriptors name layer members with member keys. A member key is either a path, such as `"self_attn"` or
+`"block.attn"`, or a `(path, class)` tuple, which matches only if the member at that path is an instance of the class
+and takes precedence over the plain path. `(path, class)` keys let one descriptor cover a member that has a different
+class in different layers, like NemotronH's `mixer`. Here is the `"mixer"` skip descriptor of the built-in NemotronH
+spec:
 
 ```py
 skip_descriptors = {
@@ -191,7 +192,9 @@ When a spec has skip descriptors, it must also declare:
   `update_conv_state` or `update_recurrent_state`. For example,
   `{"self_attn": ["key_value"], "mamba": ["linear_attention"]}`, or `{}` if there are none.
 
-Write members like [replacement keys](#replacements), with dotted paths for nested members, such as `"block.attn"`.
+In `attention_mask_consumers` and `cache_writers`, name members with [member keys](#replacements), as in skip
+descriptors. For a member that only some layers build, use a `(path, class)` key: layers without a matching member
+ignore it, while a plain path must name a member in each layer that has a skip.
 
 Skipping all of a layer's attention mask consumers removes its attention mask, and skipping all writers of a cache
 removes that cache from the layer.
