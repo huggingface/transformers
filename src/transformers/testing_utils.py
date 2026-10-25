@@ -5011,18 +5011,6 @@ def _record_import_chain(module_name: str) -> None:
         except ValueError:
             return
 
-        # Discard imports triggered by _LazyAutoMapping bulk iteration (values/items/keys).
-        # These are registry side-effects, not real test deps. Only check during test
-        # execution (test_id set) — collection-phase imports have no test_id and won't
-        # appear in deps_by_file.json anyway, so skip the frame walk for them.
-        # Use sys._getframe() — much cheaper than inspect.stack() (no source line reads).
-        if _ci_current_test_id is not None:
-            frame = sys._getframe(2)  # skip _record_import_chain + _tracking_import
-            while frame is not None:
-                if frame.f_code.co_name == "_load_attr_from_module":
-                    return
-                frame = frame.f_back
-
         # Determine the dedup key: (test_file, phase_bucket) to allow same src_file
         # to appear once per phase (collection + execution) per test file.
         if _ci_current_test_id is not None:
@@ -5033,6 +5021,17 @@ def _record_import_chain(module_name: str) -> None:
             dedup_key = ("__collection__", "collection")
         else:
             return
+
+        # Discard imports triggered by _LazyAutoMapping bulk iteration (values/items/keys).
+        # These are registry side-effects, not real test deps — applies to both collection
+        # and execution phases (e.g. get_values(MODEL_FOR_PRETRAINING_MAPPING) at class
+        # definition time during collection pulls in all 98 registered models).
+        # Use sys._getframe() — much cheaper than inspect.stack() (no source line reads).
+        frame = sys._getframe(2)  # skip _record_import_chain + _tracking_import
+        while frame is not None:
+            if frame.f_code.co_name == "_load_attr_from_module":
+                return
+            frame = frame.f_back
 
         if src_file_rel in _ci_deps_by_file.get(dedup_key, ()):
             return
