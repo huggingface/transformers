@@ -5006,10 +5006,20 @@ def _record_import_chain(module_name: str) -> None:
         if src_root is None or repo_root is None:
             return
 
+        resolved = Path(src_file).resolve()
         try:
-            src_file_rel = f"src/transformers/{Path(src_file).resolve().relative_to(src_root).as_posix()}"
+            rel = resolved.relative_to(src_root)
+            src_file_rel = f"src/transformers/{rel.as_posix()}"
         except ValueError:
-            return
+            # Not under src/transformers/ — check if it's under tests/
+            try:
+                rel = resolved.relative_to(repo_root)
+                rel_str = rel.as_posix()
+                if not rel_str.startswith("tests/"):
+                    return
+                src_file_rel = rel_str
+            except ValueError:
+                return
 
         # Determine the dedup key: (test_file, phase_bucket) to allow same src_file
         # to appear once per phase (collection + execution) per test file.
@@ -5098,15 +5108,16 @@ def install_ci_source_deps_tracker() -> None:
                     resolved_name = name
             else:
                 resolved_name = name
-            if resolved_name.startswith("transformers."):
+            top = resolved_name.split(".")[0]
+            if top in ("transformers", "tests"):
                 _record_import_chain(resolved_name)
             # Also record submodules loaded as side-effects via fromlist.
-            if fromlist and resolved_name.startswith("transformers"):
+            if fromlist and top in ("transformers", "tests"):
                 for item in fromlist:
                     if item == "*":
                         continue
                     submodule = f"{resolved_name}.{item}"
-                    if submodule.startswith("transformers.") and submodule in sys.modules:
+                    if submodule in sys.modules:
                         _record_import_chain(submodule)
         return result
 
@@ -5114,7 +5125,7 @@ def install_ci_source_deps_tracker() -> None:
         result = _original_import_module(name, package)
         if isinstance(name, str) and not getattr(_ci_deps_tracker_reentrant, "active", False):
             resolved = _importlib_util.resolve_name(name, package) if (package and name.startswith(".")) else name
-            if resolved.startswith("transformers."):
+            if resolved.split(".")[0] in ("transformers", "tests"):
                 _record_import_chain(resolved)
         return result
 
