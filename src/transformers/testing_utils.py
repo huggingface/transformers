@@ -5052,8 +5052,7 @@ def _record_import_chain(module_name: str) -> None:
             repo_str = repo_root.as_posix() + "/"
             for fi in inspect.stack(context=0)[2:]:
                 fn = fi.filename.replace("\\", "/") if fi.filename else ""
-                if fn.startswith(repo_str):
-                    fn = fn[len(repo_str):]
+                fn = fn.removeprefix(repo_str)
                 if "tests/" in fn or "src/transformers/" in fn:
                     chain.append({"file": fn, "line": fi.lineno, "func": fi.function})
         entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": chain}
@@ -5100,9 +5099,9 @@ def install_ci_source_deps_tracker() -> None:
                 # Go up `level` levels in the package hierarchy.
                 parts = pkg.split(".")
                 if level <= len(parts):
-                    base = ".".join(parts[:-level] if level < len(parts) else parts[:max(0, len(parts) - level + 1)])
+                    base = ".".join(parts[:-level] if level < len(parts) else parts[: max(0, len(parts) - level + 1)])
                     # Trim off `level - 1` components (level=1 means same package, level=2 means parent, etc.)
-                    base = ".".join(parts[:max(0, len(parts) - (level - 1))])
+                    base = ".".join(parts[: max(0, len(parts) - (level - 1))])
                     resolved_name = f"{base}.{name}" if name else base
                 else:
                     resolved_name = name
