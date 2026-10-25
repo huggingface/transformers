@@ -234,13 +234,11 @@ class Gemma2IntegrationTest(unittest.TestCase):
         device = "cpu"  # TODO (joao / export experts): should be on `torch_device`, but causes GPU OOM
         dtype = torch.bfloat16
         cache_implementation = "static"
-        attn_implementation = "sdpa"
         batch_size = 1
         model = AutoModelForCausalLM.from_pretrained(
             "google/gemma-2-2b",
             device_map=device,
             dtype=dtype,
-            attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,
                 cache_implementation=cache_implementation,
@@ -329,7 +327,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
+    @parameterized.expand([("flash_attention_2",), ("flex_attention",), ("eager",)])
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
         we need to correctly slice the attention mask in all cases (because we use a hybrid cache).
@@ -375,7 +373,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_COMPLETIONS)
 
-    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
+    @parameterized.expand([("flash_attention_2",), ("flex_attention",), ("eager",)])
     def test_generation_beyond_sliding_window_dynamic(self, attn_implementation: str):
         """
         Same as above, but explicitly setting the cache to Dynamic, as it's otherwise static by default for

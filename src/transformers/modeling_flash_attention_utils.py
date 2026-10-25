@@ -562,15 +562,18 @@ def _is_packed_sequence(position_ids, batch_size):
     Check the position ids whether packed sequences are indicated or not
         1. Position ids exist
         2. Flattened sequences only are supported
-        3. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
+        3. More than one position, as a single position (decode) is a single sequence
+        4. Compile-friendly `not (torch.diff(position_ids, dim=-1) >= 0).all()`, i.e. we have multiple increasing sequences
+
+    1. to 3. only look at shapes, while 4. reads the values and forces a device sync in every layer.
     """
-    if position_ids is None:
+    if position_ids is None or batch_size != 1 or position_ids.shape[-1] == 1:
         return False
 
     increasing_position_sequences = (
         torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min()
     )
-    return batch_size == 1 and (increasing_position_sequences - position_ids).abs().sum().bool()
+    return (increasing_position_sequences - position_ids).abs().sum().bool()
 
 
 def fa_peft_integration_check(
@@ -689,8 +692,13 @@ def _process_flash_attention_kwargs(
             deterministic if deterministic is not None else os.getenv("FLASH_ATTENTION_DETERMINISTIC", "0") == "1"
         )
 
-    if supports_mapping["softcap"] and softcap is not None:
-        flash_kwargs["softcap"] = softcap
+    if softcap is not None:
+        if supports_mapping["softcap"]:
+            flash_kwargs["softcap"] = softcap
+        else:
+            raise ValueError(
+                "This flash attention implementation does not support `softcap`. Try using `eager` or `flex_attention` instead."
+            )
 
     if s_aux is not None:
         if supports_mapping["s_aux"]:
