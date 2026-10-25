@@ -408,21 +408,6 @@ _pytest.doctest.DoctestModule = HfDoctestModule
 doctest.DocTestParser = HfDocTestParser
 
 if is_torch_available():
-    # # torch.backends.fp32_precision does not cascade to torch.backends.cudnn.conv.fp32_precision and torch.backends.cudnn.rnn.fp32_precision
-    # TODO: Considering move this to `enable_tf32`, or report a bug to `torch`.
-    import torch
-
-    # In order to set `torch.backends.cudnn.conv.fp32_precision = "ieee"` below (new API), we still need to set this
-    # (old API) because it defaults to `True` (and not changed automatically when we change `cudnn.conv.fp32_precision`)
-    # and such inconsistency cause `torch` to complain `RuntimeError: PyTorch is checking whether allow_tf32 is enabled for cuDNN without a specific operator name,but the current flag(s) indica
-    # te that cuDNN conv and cuDNN RNN have different TF32 flags.This combination indicates that you have used a mix of the legacy and new APIs
-    #  to set the TF32 flags. We suggest only using the new API to set the TF32 flag(s).`.
-    # TODO: report a bug to `torch`
-    if hasattr(torch.backends.cudnn, "allow_tf32"):
-        torch.backends.cudnn.allow_tf32 = False
-
-    # The flag below controls whether to allow TF32 on cuDNN. This flag defaults to True.
-    # We set it to `False` for CI. See https://github.com/pytorch/pytorch/issues/157274#issuecomment-3090791615
     enable_tf32(False)
 
     # some backends (e.g. TPU) ignore `fp32_precision` and default to reduced-precision matmuls
