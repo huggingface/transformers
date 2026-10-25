@@ -24,6 +24,7 @@ from transformers import set_seed
 from transformers.generation.configuration_utils import ALL_CACHE_IMPLEMENTATIONS
 from transformers.testing_utils import (
     CaptureStderr,
+    Expectations,
     backend_device_count,
     backend_torch_accelerator_module,
     cleanup,
@@ -996,13 +997,22 @@ class CacheHardIntegrationTest(unittest.TestCase):
             response = tokenizer.decode(outputs)[0]
             responses.append(response)
 
-        EXPECTED_DECODED_TEXT = [
-            "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
-            "wonderful way to explore the world, learn about different cultures, and create unforgettable "
-            "memories. Whether you're a seasoned traveler or someone",
-            "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
-            " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
-        ]
+        EXPECTED_DECODED_TEXT = Expectations({
+            (None, None): [
+                "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
+                "wonderful way to explore the world, learn about different cultures, and create unforgettable "
+                "memories. Whether you're a seasoned traveler or someone",
+                "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
+                " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
+            ],
+            ("cuda", None): [
+                "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is a "
+                "wonderful way to explore new places, cultures, and experiences. Whether you are a seasoned "
+                "traveler or a first-time adventurer, there is always something",
+                "You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital"
+                " of France.\n\n\n\nAs an AI, I am not a human being.\n\n\n\nThe Great Wall of China is",
+            ],
+        }).get_expectation()  # fmt: skip
 
         self.assertEqual(responses, EXPECTED_DECODED_TEXT)
 
