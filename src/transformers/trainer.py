@@ -2186,6 +2186,63 @@ class Trainer:
             loss_scale = self.accelerator.num_processes // self.get_tp_size()
             loss *= loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
 
+        # Fix MoE auxiliary loss scaling under gradient accumulation and DDP.
+        #
+        # Contract: this block fires only when all of the following hold:
+        #   1. `model_accepts_loss_kwargs=True` with no custom `compute_loss_func` and no
+        #      label-smoother — i.e. the model computed its own loss internally.
+        #   2. `num_items_in_batch` is provided — the CE term is a global-token-count sum,
+        #      so `training_step` sets `loss_is_scaled_for_ga=True` and skips the usual
+        #      `/ gradient_accumulation_steps` division for the full loss.
+        #   3. The model output carries a non-None `aux_loss` *and* the unwrapped model
+        #      has a `router_aux_loss_coef` attribute — the standard MoE load-balancing
+        #      pattern (`loss += router_aux_loss_coef * aux_loss` inside `forward`).
+        #   4. We are inside the training loop, so `current_gradient_accumulation_steps`
+        #      exists (direct `compute_loss()` calls from outside training don't set it).
+        #
+        # Why the correction is needed:
+        #   The aux term is a per-microbatch mean, not a token-count sum.  Because
+        #   `loss_is_scaled_for_ga=True` skips the accumulation divisor for the whole
+        #   loss, the aux gradient accumulates K times unscaled (K = actual window size).
+        #   With `average_tokens_across_devices=True` the combined loss is also multiplied
+        #   by the DDP factor `loss_scale`, applying that factor to the aux term too.
+        #
+        # The fix subtracts the aux contribution at its current (possibly DDP-scaled)
+        # magnitude and re-adds it divided only by `current_gradient_accumulation_steps`,
+        # which uses the actual window size and handles the short final window correctly.
+        #
+        # Note on `return_outputs=True` semantics: the correction is applied to the
+        # returned `loss` tensor only; `outputs.loss` retains the original combined value
+        # the model produced.  Callers relying on `return_outputs=True` should use the
+        # returned `loss`, not `outputs.loss`, for the backward pass — consistent with
+        # how `training_step` already handles the returned scalar.
+        if (
+            self.model_accepts_loss_kwargs
+            and self.compute_loss_func is None
+            and labels is None  # label_smoother path was not taken
+            and num_items_in_batch is not None
+            and hasattr(self, "current_gradient_accumulation_steps")  # only inside training loop
+            and isinstance(outputs, dict)
+            and outputs.get("aux_loss") is not None
+        ):
+            unwrapped = self.accelerator.unwrap_model(model)
+            aux_loss_coef = getattr(unwrapped, "router_aux_loss_coef", None)
+            if aux_loss_coef is not None:
+                aux_loss_term = outputs["aux_loss"].to(loss.device)
+                weighted_aux = aux_loss_coef * aux_loss_term
+                # Remove the aux contribution already embedded in `loss` (at whatever
+                # scale it currently has) and re-add it normalized per accumulation step.
+                if self.args.average_tokens_across_devices:
+                    # `loss` was multiplied by loss_scale above; undo that for the aux
+                    # term specifically before swapping in the accumulation-normalised form.
+                    effective_scale = loss_scale if self.args.n_gpu <= 1 else self.args.n_gpu
+                    loss = (
+                        loss - effective_scale * weighted_aux + weighted_aux / self.current_gradient_accumulation_steps
+                    )
+                else:
+                    # No DDP scaling applied; just replace with accumulation-normalised form.
+                    loss = loss - weighted_aux + weighted_aux / self.current_gradient_accumulation_steps
+
         return (loss, outputs) if return_outputs else loss
 
     def compute_loss_context_manager(self) -> contextlib.ExitStack:
