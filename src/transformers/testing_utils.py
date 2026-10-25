@@ -4969,6 +4969,8 @@ _ci_deps_tracker_reentrant = threading.local()
 # Set to True via CI_RECORD_DEPS_INCLUDE_COLLECTION=1 to also record collection-phase imports
 # in deps_chain.json. Default False: collection imports are noise (not attributed to any test).
 _ci_record_collection_phase: bool = False
+# Set to True via CI_RECORD_DEPS_INCLUDE_CHAIN=1 to record call stack in each chain entry.
+_ci_record_chain: bool = False
 _ci_source_deps_repo_root: Path | None = None
 _ci_source_deps_src_root: Path | None = None
 _ci_current_phase: str = "startup"
@@ -5028,7 +5030,13 @@ def _record_import_chain(module_name: str) -> None:
             return
         _ci_deps_by_file.setdefault(dedup_key, set()).add(src_file_rel)
 
-        entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": []}
+        chain: list = []
+        if _ci_record_chain:
+            for fi in inspect.stack(context=0)[2:]:
+                fn = fi.filename.replace("\\", "/") if fi.filename else ""
+                if "tests/" in fn or "src/transformers/" in fn:
+                    chain.append({"file": fn, "line": fi.lineno, "func": fi.function})
+        entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": chain}
         if _ci_current_test_id is not None:
             entry["test_id"] = _ci_current_test_id
         _ci_deps_chains.append(entry)
@@ -5048,8 +5056,9 @@ def install_ci_source_deps_tracker() -> None:
     """
     if not os.environ.get("CI_RECORD_DEPS_OUTPUT"):
         return
-    global _ci_source_deps_repo_root, _ci_source_deps_src_root, _ci_record_collection_phase
+    global _ci_source_deps_repo_root, _ci_source_deps_src_root, _ci_record_collection_phase, _ci_record_chain
     _ci_record_collection_phase = os.environ.get("CI_RECORD_DEPS_INCLUDE_COLLECTION", "") == "1"
+    _ci_record_chain = os.environ.get("CI_RECORD_DEPS_INCLUDE_CHAIN", "") == "1"
     _ci_source_deps_repo_root = Path(__file__).parent.parent.parent.resolve()
     _ci_source_deps_src_root = _ci_source_deps_repo_root / "src" / "transformers"
 
