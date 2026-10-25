@@ -5014,17 +5014,19 @@ def _record_import_chain(module_name: str) -> None:
                     return
                 frame = frame.f_back
 
-        # Update deps_by_file incrementally — deduplicates within each test file automatically.
+        # Determine the dedup key: test file for execution-phase, "__collection__" for collection.
+        # Skip collection-phase entries by default (not attributed to any test).
+        # Set CI_RECORD_DEPS_INCLUDE_COLLECTION=1 to include them (deduplicated under "__collection__").
         if _ci_current_test_id is not None:
-            test_file = _ci_current_test_id.split("::")[0]
-            if src_file_rel in _ci_deps_by_file.get(test_file, ()):
-                return  # already recorded for this test file, skip chain append too
-            _ci_deps_by_file.setdefault(test_file, set()).add(src_file_rel)
-
-        # Skip collection-phase entries by default — they are not attributed to any test.
-        # Set CI_RECORD_DEPS_INCLUDE_COLLECTION=1 to include them in deps_chain.json.
-        if _ci_current_test_id is None and not _ci_record_collection_phase:
+            dedup_key = _ci_current_test_id.split("::")[0]
+        elif _ci_record_collection_phase:
+            dedup_key = "__collection__"
+        else:
             return
+
+        if src_file_rel in _ci_deps_by_file.get(dedup_key, ()):
+            return
+        _ci_deps_by_file.setdefault(dedup_key, set()).add(src_file_rel)
 
         entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": []}
         if _ci_current_test_id is not None:
