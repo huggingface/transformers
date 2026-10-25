@@ -4998,12 +4998,15 @@ def _record_import_chain(module_name: str) -> None:
         except ValueError:
             return
 
-        # chain is kept empty for now — inspect.stack() costs ~30-70ms per call
-        # (reads source lines for each frame) × thousands of imports = minutes of overhead.
-        # To re-enable deep chain analysis:
-        #   chain = []
-        #   for frame_info in inspect.stack(context=0)[2:]:
-        #       ... filter to tests/ and src/transformers/ frames ...
+        # Discard imports triggered by _LazyAutoMapping bulk iteration (values/items/keys).
+        # These are registry side-effects, not real test deps. Use sys._getframe() — much
+        # cheaper than inspect.stack() since it doesn't read source lines.
+        frame = sys._getframe(2)  # skip _record_import_chain + _tracking_import
+        while frame is not None:
+            if frame.f_code.co_name == "_load_attr_from_module":
+                return
+            frame = frame.f_back
+
         entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": []}
         if _ci_current_test_id is not None:
             entry["test_id"] = _ci_current_test_id
