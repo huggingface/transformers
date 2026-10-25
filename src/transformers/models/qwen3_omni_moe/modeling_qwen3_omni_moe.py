@@ -2673,7 +2673,6 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3OmniMoePreTrainedModel):
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
             causal_mask = create_causal_mask(
                 config=self.config,
                 inputs_embeds=inputs_embeds,
@@ -2681,10 +2680,7 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3OmniMoePreTrainedModel):
                 past_key_values=past_key_values,
                 position_ids=position_ids,
             )
-            # Create the masks
             causal_mask_mapping = {"full_attention": causal_mask}
-
-        hidden_states = inputs_embeds
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
