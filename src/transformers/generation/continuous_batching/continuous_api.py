@@ -419,7 +419,7 @@ class ContinuousBatchProcessor:
         otherwise"""
         # First the TP driver retrieves new requests and cancellations from the queues
         if self.input_queue is not None and self.cancel_queue is not None:
-            payload = (drain_queue(self.input_queue), drain_queue(self.cancel_queue))
+            payload: tuple[list[RequestState], ...] = (drain_queue(self.input_queue), drain_queue(self.cancel_queue))
         else:
             payload = ([], [])
 

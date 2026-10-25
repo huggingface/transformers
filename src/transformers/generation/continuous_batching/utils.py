@@ -196,9 +196,9 @@ def create_warmup_future_states(
     return future_states
 
 
-def drain_queue(request_queue: queue.Queue) -> list[RequestState]:
-    """Drains a queue and returns a list of RequestStates."""
-    new_states: list[RequestState] = []
+def drain_queue(request_queue: queue.Queue) -> list:
+    """Drains a queue and returns its content as a list."""
+    new_states = []
     while not request_queue.empty():
         try:
             state = request_queue.get_nowait()
