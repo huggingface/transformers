@@ -210,10 +210,10 @@ class MiniCPMOcrImageProcessor(MiniCPMV4_6ImageProcessor):
         scale_resolution: int,
         patch_size: int,
         slice_mode: bool,
-        downsample_mode: str,
         small_image_upsize: str,
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None,
+        downsample_mode: str = "4x",
         **kwargs,
     ) -> BatchFeature:
         if not do_resize:
