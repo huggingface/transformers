@@ -18,7 +18,7 @@ import warnings
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from math import ceil, log2
-from typing import Any
+from typing import Any, TypeVar
 
 import torch
 
@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 
 # NOTE: AMD GPUs are supported under the "cuda" module
 DEVICE_TYPE_TO_GRAPH_NAME = {"cuda": "CUDAGraph", "xpu": "XPUGraph"}
+
+T = TypeVar("T")
 
 
 class CudaGraphBuffer:
@@ -176,9 +178,9 @@ def build_attention_mask(
             block.add_(torch.tril(torch.full_like(block, min_value), diagonal=sliding_diagonal))
 
 
-def drain_queue(request_queue: queue.Queue) -> list:
+def drain_queue(request_queue: queue.Queue[T]) -> list[T]:
     """Drains a queue and returns its content as a list."""
-    new_states = []
+    new_states: list[T] = []
     while not request_queue.empty():
         try:
             state = request_queue.get_nowait()

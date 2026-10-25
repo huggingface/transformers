@@ -336,8 +336,8 @@ class ContinuousBatchProcessor:
         self.config = config
         self.cb_config = continuous_batching_config
         self.logit_processor = logit_processor
-        self.input_queue = input_queue
-        self.cancel_queue = cancel_queue
+        self.input_queue: queue.Queue[RequestState] | None = input_queue
+        self.cancel_queue: queue.Queue[str] | None = cancel_queue
         self.output_router = output_router
         self.background_thread_status = background_thread_status
         self.model_device = model_device
@@ -419,7 +419,7 @@ class ContinuousBatchProcessor:
         otherwise"""
         # First the TP driver retrieves new requests and cancellations from the queues
         if self.input_queue is not None and self.cancel_queue is not None:
-            payload: tuple[list[RequestState], ...] = (drain_queue(self.input_queue), drain_queue(self.cancel_queue))
+            payload = (drain_queue(self.input_queue), drain_queue(self.cancel_queue))
         else:
             payload = ([], [])
 
@@ -680,7 +680,7 @@ class ContinuousBatchingManager:
             workload_hints: Workload hints for the continuous batching initialization (optional)
         """
         # Accumulators for request handling
-        self.input_queue = queue.Queue(maxsize=continuous_batching_config.max_queue_size)
+        self.input_queue: queue.Queue[RequestState] = queue.Queue(maxsize=continuous_batching_config.max_queue_size)
         self.cancel_queue: queue.Queue[str] = queue.Queue()
         self._request_counter = 0
         self._request_lock = threading.Lock()
