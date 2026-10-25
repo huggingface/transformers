@@ -42,7 +42,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
@@ -321,9 +321,8 @@ def yarn_get_mscale(scale=1, mscale=1):
 def yarn_apply_mscale(rope_parameters, scaling):
     if rope_parameters.get("rope_type", "default") != "default":
         mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        scaling_factor = rope_parameters["factor"]
         if mscale_all_dim:
-            mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+            mscale = yarn_get_mscale(rope_parameters["factor"], mscale_all_dim)
             scaling = scaling * mscale * mscale
     return scaling
 
@@ -1056,6 +1055,7 @@ class MistralLarge4CausalLMOutputWithPast(ModelOutput):
 )
 class MistralLarge4ForConditionalGeneration(MistralLarge4PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: MistralLarge4Config):
         super().__init__(config)
@@ -1140,9 +1140,10 @@ class MistralLarge4ForConditionalGeneration(MistralLarge4PreTrainedModel, Genera
         )
 
         hidden_states = outputs[0]
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
+        # Logits softcapping
         logits = logits / self.final_logit_softcapping
         logits = torch.tanh(logits)
         logits = logits * self.final_logit_softcapping
