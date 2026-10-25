@@ -178,17 +178,17 @@ def build_attention_mask(
             block.add_(torch.tril(torch.full_like(block, min_value), diagonal=sliding_diagonal))
 
 
-def drain_queue(request_queue: queue.Queue[T]) -> list[T]:
+def drain_queue(q: queue.Queue[T]) -> list[T]:
     """Drains a queue and returns its content as a list."""
-    new_states: list[T] = []
-    while not request_queue.empty():
+    elements: list[T] = []
+    while not q.empty():
         try:
-            state = request_queue.get_nowait()
-            if state is not None:
-                new_states.append(state)
+            elem = q.get_nowait()
+            if elem is not None:
+                elements.append(elem)
         except queue.Empty:
             break
-    return new_states
+    return elements
 
 
 def find_num_key_value_heads(config: PreTrainedConfig) -> int:
