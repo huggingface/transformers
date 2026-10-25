@@ -233,8 +233,6 @@ model_id = "shahvandit/qwen3-tts-base-hf"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForTextToWaveform.from_pretrained(model_id, device_map="auto")
 model.train()
-# Enable activation recomputation; the model's support flag does not enable it automatically.
-model.gradient_checkpointing_enable()
 # Freeze reference-speaker conditioning while training the talker and code predictor.
 model.speaker_encoder.requires_grad_(False)
 model.speaker_encoder.eval()
