@@ -28,10 +28,6 @@ if TYPE_CHECKING:
     from transformers.modeling_utils import PreTrainedModel
 
 
-# A layer member, which is a submodule of the layer, as a path like "self_attn" or "block.attn", or as a (path, class)
-# pair that matches the member at the path only when the layer has one and it's an instance of that class. A plain path
-# must exist in the layer. A (path, class) pair takes precedence over the plain path. When several classes match, the
-# most specific one takes precedence.
 MemberKey: TypeAlias = str | tuple[str, type]
 SkipDescriptor: TypeAlias = dict[MemberKey, Callable[[], "nn.Module"]]
 
@@ -58,12 +54,71 @@ def _validate_caches(member_key: MemberKey, caches: Iterable[str]) -> frozenset[
 
 @dataclass(frozen=True)
 class HeterogeneousModelingSpec:
+    """Describes how generic heterogeneous modeling builds the layers of one layer class.
+
+    Generic heterogeneous modeling is used when a model has a spec and its config is heterogeneous. It patches
+    `layer_cls.__init__`, so that:
+
+    - each layer is built from its own config, `config.per_layer_config[layer_idx]`.
+    - each skip type in the `skip` list of the layer's config replaces the members that its skip descriptor lists with
+      skip replacements, which are no-op modules.
+
+    A model sets its specs in its `_heterogeneous_modeling_spec` class attribute, while built-in models can instead be
+    listed in `MODEL_TYPE_TO_SPEC_FACTORY` (see `get_heterogeneous_modeling_specs`). For a walkthrough, see the generic
+    heterogeneous modeling guide, `docs/source/en/generic_heterogeneous_modeling.md`.
+
+    Skip descriptors, `attention_mask_consumers` and `cache_writers` use member keys to name the members of a layer,
+    which are its submodules. A member key has one of two forms:
+
+    - A path, such as `"self_attn"` or `"block.attn"`, which matches the member at this path whatever its class. The
+      layer must have a member at this path.
+    - A `(path, class)` tuple, which matches only if the layer has a member at this path and that member is an instance
+      of the class.
+
+    If both forms match the same member, the `(path, class)` key is used. If several `(path, class)` keys match the
+    same member, the key with the class closest to the member's class is used. For example, a key with a subclass is
+    used before a key with its base class.
+
+    Args:
+        layer_cls (`type[nn.Module]`):
+            The layer class to patch, usually the model's decoder layer. The model must pass its own config object, not
+            a copy, as the first argument of `layer_cls.__init__` after `self`, where the patched `__init__` replaces
+            it with the layer's config. Only layers that receive this object are patched, and building the model raises
+            an error if any layer isn't. `layer_cls.forward` must also take the attention mask as an argument named
+            `attention_mask`, so that each layer gets its own mask.
+        layer_idx_resolver (`LayerIdxResolver`):
+            Finds the index of each layer while the layer's `__init__` runs. Most models use `LayerIdxFromArgument`.
+        skip_descriptors (`dict[str, dict[str | tuple[str, type], Callable[[], nn.Module]]]`, *optional*):
+            Maps each skip type that layers of class `layer_cls` can list in their `skip` list to its skip descriptor.
+            A skip descriptor maps member keys to factories that build skip replacements for those members, usually
+            created with `get_skip_replacement_factory`.
+
+            When a layer's `skip` list contains the skip type, every path in the skip descriptor, including the paths
+            in `(path, class)` keys, must point to a member of the layer, and at least one key with that path must
+            match that member.
+        attention_mask_consumers (`Iterable[str | tuple[str, type]]`, *optional*):
+            The member keys of all members that use the attention mask. Include members that are never skipped, since
+            otherwise a layer can lose its attention mask while one of its members still uses it, and use a
+            `(path, class)` key for a member that exists in only some layers. Required if `skip_descriptors` is not
+            empty; use `[]` when there are none.
+
+            If a layer has attention mask consumers and its skips replace all of them, the attention mask of the layer
+            is `None`.
+        cache_writers (`dict[str | tuple[str, type], Iterable[str]]`, *optional*):
+            Maps the member key of each member that writes to a cache to the caches that it writes. Include members
+            that are never skipped, since otherwise a layer can lose a cache that one of its members still writes, and
+            use a `(path, class)` key for a member that exists in only some layers. Required if `skip_descriptors` is
+            not empty; use `{}` when there are none. The valid caches are:
+
+            - `"key_value"`, for members that call `Cache.update`.
+            - `"linear_attention"`, for members that call `update_conv_state` or `update_recurrent_state`.
+
+            For example, `{"self_attn": ["key_value"]}`.
+    """
+
     layer_cls: type[nn.Module]
     layer_idx_resolver: LayerIdxResolver
     skip_descriptors: dict[str, SkipDescriptor] | None = None
-    # Required with skip descriptors. List every member that consumes the attention mask, and map every cache writer to
-    # the caches it writes. A layer that skips all its attention mask consumers gets no attention mask, and when it
-    # skips all writers of a cache, it no longer has that cache.
     attention_mask_consumers: Iterable[MemberKey] | None = None
     cache_writers: dict[MemberKey, Iterable[str]] | None = None
 
@@ -93,12 +148,15 @@ class HeterogeneousModelingSpec:
 
 
 def get_heterogeneous_modeling_specs(model: PreTrainedModel) -> tuple[HeterogeneousModelingSpec, ...]:
-    """Return the generic heterogeneous modeling specs of `model`, one per layer class, or `()` if it has none.
+    """Returns the generic heterogeneous modeling specs of `model`, one for each layer class, or `()` if it has none.
 
-    A model can set its own specs in `_heterogeneous_modeling_spec`, which takes precedence over
-    `MODEL_TYPE_TO_SPEC_FACTORY`, or set it to `None` to have none. A model whose layers all have one class sets one
-    spec, and a model with several layer classes sets a tuple with a spec for each.
-    Models without a spec are left unpatched, and can handle `per_layer_config` in their own modeling code.
+    `MODEL_TYPE_TO_SPEC_FACTORY` provides the specs of the supported built-in models, by `model_type`. Other models,
+    such as custom models, can add support by setting the `_heterogeneous_modeling_spec` class attribute to a spec or a
+    tuple of specs. The attribute takes precedence over `MODEL_TYPE_TO_SPEC_FACTORY`, and setting it to `None` turns
+    off generic patching.
+
+    Raises:
+        `ValueError`: If two or more specs have the same `layer_cls`.
     """
     if hasattr(model, "_heterogeneous_modeling_spec"):
         specs = model._heterogeneous_modeling_spec

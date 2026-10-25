@@ -81,7 +81,7 @@ def _get_layer_type_without_caches(layer_idx: int, layer_type: str, dropped_cach
             f"type '{layer_type}' has no cache layer class, so the caches it holds are unknown."
         )
 
-    # The layer type holds none of the dropped caches, which happens when the spec and `layer_types` disagree about a
+    # The layer type holds none of the dropped caches, which happens when the spec and `layer_types` don't match for a
     # layer, so there's nothing to drop
     if layer_type_caches.isdisjoint(dropped_caches):
         return layer_type
@@ -126,9 +126,9 @@ def get_generic_heterogeneous_modeling_cache_layer_types(
 def validate_no_unwritten_caches(past_key_values: Cache, *, layer_idx: int, unwritten_caches: set[str]) -> None:
     """Raise if `past_key_values` has a cache for layer `layer_idx`, but the layer never writes to it.
 
-    `unwritten_caches` are the caches the layer never writes. A cache built from the model config doesn't have them,
-    but other caches, like `DynamicCache()`, have them and they stay empty, so methods like `get_seq_length` can return
-    wrong values.
+    `unwritten_caches` are the caches that the layer never writes. A `Cache` built from the model config doesn't hold
+    them. Other `Cache` objects, like `DynamicCache()`, hold them and they stay empty, so methods like `get_seq_length`
+    can return wrong values.
     """
     if layer_idx < len(past_key_values.layers):
         cache_layer_cls = type(past_key_values.layers[layer_idx])

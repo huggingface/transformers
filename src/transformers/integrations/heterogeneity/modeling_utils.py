@@ -68,12 +68,12 @@ def _select_attention_mask_by_layer_idx(
     mask_position: int | None,
 ) -> tuple[tuple[Any, ...], dict[str, Any]] | None:
     if mask_position is not None and mask_position < len(args):
-        # Mask is positionally passed
+        # The mask is passed by position
         attention_mask = args[mask_position]
         if isinstance(attention_mask, AttentionMasksByLayerIdx):
             return (*args[:mask_position], attention_mask[layer_idx], *args[mask_position + 1 :]), kwargs
     else:
-        # Mask is keyword-passed
+        # The mask is passed by keyword
         attention_mask = kwargs.get("attention_mask")
         if isinstance(attention_mask, AttentionMasksByLayerIdx):
             kwargs["attention_mask"] = attention_mask[layer_idx]
@@ -136,16 +136,15 @@ def _register_layer_cache_validation_hook(*, layer: nn.Module, layer_idx: int, u
 
 
 def _validate_layer_idx(layer_idx: Any, *, resolver: LayerIdxResolver, num_layers: int) -> None:
-    resolver_description = f"{type(resolver).__name__}({resolver.variable_name!r})"
     if isinstance(layer_idx, bool) or not isinstance(layer_idx, int):
         raise TypeError(
-            f"Layer index `{resolver.variable_name}` must be an integer, but `{resolver_description}` got "
-            f"{layer_idx!r} ({type(layer_idx).__name__})."
+            f"The layer index must be an integer, but `{resolver!r}` returned {layer_idx!r} "
+            f"({type(layer_idx).__name__})."
         )
     if not 0 <= layer_idx < num_layers:
         raise IndexError(
-            f"Layer index `{resolver.variable_name}` is out of range for a model with {num_layers} layers: "
-            f"`{resolver_description}` got {layer_idx}."
+            f"The layer index is out of range for a model with {num_layers} layers: `{resolver!r}` returned "
+            f"{layer_idx}."
         )
 
 
@@ -192,7 +191,7 @@ def _patch_layer_init(layer_cls: type[nn.Module]) -> None:
             layer_config = config.per_layer_config[layer_idx]
             orig_layer_init(self, layer_config, *args, **kwargs)
 
-            # --- Replace skipped sublayers ---
+            # --- Replace skipped members ---
             if layer_config.skip:
                 apply_skips(
                     layer=self,
@@ -267,13 +266,14 @@ def _validate_all_layers_built(context: _LayerInitContext) -> None:
 
 
 def _validate_matches_existing_modeling_state(context: _LayerInitContext) -> None:
-    """Raise if the config already has a generic modeling state, from building another model, that differs from
-    this build's.
+    """Raise if the config already has a generic modeling state from another model, and that state differs from the
+    state of this model.
 
-    Mask and cache creation read the state from the config, not from the model, so all models built with the config
-    must have the same state."""
+    The functions that create masks and caches read the state from the config, not from the model, so all models built
+    with the config must have the same state."""
     existing_state = context.model.config._heterogeneity_spec.generic_modeling_state
-    # Layer configs belong to the config, so the states can only differ in what the skips left behind
+    # Layer configs belong to the config, so the two states can only differ in the layers where skips removed all
+    # attention mask consumers, or all writers of a cache
     if existing_state is not None and context.generic_modeling_state != existing_state:
         raise ValueError(
             f"The config of {type(context.model).__name__} was already used to build a model with generic "
@@ -292,10 +292,10 @@ def support_generic_heterogeneous_modeling(orig_init: Callable[..., None]) -> Ca
     modeling is marked as applied only after the root model's construction succeeds. If generic heterogeneous modeling
     is not applied, the wrapper does not change model initialization.
 
-    The wrapper is installed on every subclass through ``__init_subclass__`` because any of them, including a user's,
-    can be the root model, and no other hook runs when the root model's ``__init__`` returns or raises. ``post_init``
-    runs at the end of each nested model's ``__init__``, such as ``LlamaModel`` inside ``LlamaForCausalLM``, and not
-    at all on failure.
+    The wrapper is installed on every subclass through ``__init_subclass__``, because any subclass, including a user's,
+    can be the root model. No other hook runs when the root model's ``__init__`` returns or raises. ``post_init``
+    doesn't work for this: it also runs at the end of each nested model's ``__init__``, such as ``LlamaModel`` inside
+    ``LlamaForCausalLM``, and it doesn't run at all when ``__init__`` fails.
     """
     if getattr(orig_init, "_scoped_for_heterogeneous_modeling", False):
         return orig_init
@@ -303,8 +303,8 @@ def support_generic_heterogeneous_modeling(orig_init: Callable[..., None]) -> Ca
     @wraps(orig_init)
     def _scoped_init(self, *args, **kwargs):
         initializing_models = _initializing_models.get()
-        # The model's `super().__init__()` chain calls the wrapper of each class in its MRO; the first call owns
-        # the scope.
+        # The model's `super().__init__()` chain calls the wrapper of each class in its MRO. Only the first call sets
+        # up the scope and restores it afterwards.
         if any(model is self for model in initializing_models):
             return orig_init(self, *args, **kwargs)
 
@@ -326,12 +326,12 @@ def support_generic_heterogeneous_modeling(orig_init: Callable[..., None]) -> Ca
             return result
         try:
             layer_init_contexts = _layer_init_contexts.get()
-            # Validate all contexts before publishing any, so that a failed initialization publishes nothing
+            # Validate all contexts before setting any state on a config, so that no config changes if a validation
+            # fails
             for context in layer_init_contexts:
                 _validate_all_layers_built(context)
                 _validate_matches_existing_modeling_state(context)
-            # The root model completed initialization, so now we can set what was collected for the models on their
-            # configs
+            # The root model is initialized, so set the state collected for each model on the config of that model
             for context in layer_init_contexts:
                 context.model.config._heterogeneity_spec.generic_modeling_state = context.generic_modeling_state
         finally:

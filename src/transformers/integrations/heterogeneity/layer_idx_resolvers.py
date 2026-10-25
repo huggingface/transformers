@@ -26,11 +26,13 @@ if TYPE_CHECKING:
     from transformers.modeling_utils import PreTrainedModel
 
 
-@dataclass(frozen=True)
 class LayerIdxResolver(ABC):
-    """Resolve a decoder layer's index while its constructor is being called."""
+    """Base class for finding the index of a layer while the layer is being built.
 
-    variable_name: str
+    When a layer is built, the patched `__init__` first calls `resolve` to get the layer index. Then it calls the
+    original `__init__` of `layer_cls` with the layer's config, `config.per_layer_config[layer_idx]`. Create a subclass
+    if `LayerIdxFromArgument` and `LayerIdxFromModelInitStack` can't find the index.
+    """
 
     @abstractmethod
     def resolve(
@@ -41,12 +43,38 @@ class LayerIdxResolver(ABC):
         kwargs: dict[str, Any],
         model: PreTrainedModel,
     ) -> Any:
-        """Resolve the layer index from the active layer-initialization call."""
+        """Returns the index of the layer that is being built.
+
+        Args:
+            layer_init (`FunctionType`):
+                The original `__init__` of the spec's `layer_cls`, before patching.
+            args (`tuple[Any, ...]`):
+                The positional arguments of the `__init__` call. The first two are always the layer (`self`) and the
+                model's config.
+            kwargs (`dict[str, Any]`):
+                The keyword arguments of the `__init__` call.
+            model ([`PreTrainedModel`]):
+                The model that builds the layer in its `__init__`. Its config is the config object that was passed to
+                the layer's `__init__`.
+
+        Returns:
+            `int`: The layer index, from `0` to `config.num_hidden_layers - 1`. Other values raise an error.
+        """
 
 
 @dataclass(frozen=True)
 class LayerIdxFromArgument(LayerIdxResolver):
-    """Resolve a layer index from an argument of the repeated layer's constructor."""
+    """Finds the layer index in an argument of the layer's `__init__`, such as `layer_idx`.
+
+    The argument must be a named parameter of `__init__`, not part of `**kwargs`, and can be passed by position or by
+    keyword.
+
+    Args:
+        variable_name (`str`):
+            The name of the `__init__` argument that holds the layer index.
+    """
+
+    variable_name: str
 
     def resolve(
         self,
@@ -65,19 +93,33 @@ class LayerIdxFromArgument(LayerIdxResolver):
                 f"`{layer_init.__qualname__}`: {e}"
             ) from None
 
-        bound_arguments.apply_defaults()
         if self.variable_name not in bound_arguments.arguments:
+            if self.variable_name in signature.parameters:
+                reason = f"`{self.variable_name}` was not passed to `{layer_init.__qualname__}`"
+            else:
+                reason = f"`{self.variable_name}` is not an argument of `{layer_init.__qualname__}`"
             raise RuntimeError(
                 f"`LayerIdxFromArgument({self.variable_name!r})` could not determine the layer index for "
-                f"heterogeneous model initialization of `{model.__class__.__name__}` because "
-                f"`{self.variable_name}` is not an argument of `{layer_init.__qualname__}`."
+                f"heterogeneous model initialization of `{model.__class__.__name__}` because {reason}."
             )
         return bound_arguments.arguments[self.variable_name]
 
 
 @dataclass(frozen=True)
 class LayerIdxFromModelInitStack(LayerIdxResolver):
-    """Resolve a layer index from a local in the current model initialization stack."""
+    """Finds the layer index in a local variable of the code that builds the layer.
+
+    Use it when the layer's `__init__` doesn't take the index as an argument, for example when the index is a loop
+    variable in the model's `__init__`. The resolver searches the functions that called the layer's `__init__`, from
+    the direct caller outward, and returns the first value that it finds. The search stops at the first `__init__` of
+    the model.
+
+    Args:
+        variable_name (`str`):
+            The name of the local variable that holds the layer index.
+    """
+
+    variable_name: str
 
     def resolve(
         self,
@@ -91,7 +133,8 @@ class LayerIdxFromModelInitStack(LayerIdxResolver):
         if frame is None or frame.f_back is None:
             raise RuntimeError(self._missing_variable_error(model))
 
-        # Skip this resolver and the patched layer initializer so their locals cannot shadow the model's.
+        # Skip the frames of this resolver and of the patched layer `__init__`, so that their local variables can't
+        # hide variables with the same name in the model's code.
         frame = frame.f_back.f_back
 
         while frame is not None:

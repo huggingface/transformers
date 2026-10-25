@@ -250,7 +250,8 @@ class TestHeterogeneousConfig(unittest.TestCase):
     def test_accessing_per_layer_attr_raises(self):
         config = tiny_llama_config(per_layer_config={0: {"num_key_value_heads": 2}, 1: {"num_key_value_heads": 1}})
         with self.assertRaisesRegex(
-            AmbiguousGlobalPerLayerAttributeError, "allow_global_per_layer_attribute_access.*global value incorrectly"
+            AmbiguousGlobalPerLayerAttributeError,
+            "allow_global_per_layer_attribute_access.*deliberately needs the global value",
         ):
             _ = config.num_key_value_heads
 

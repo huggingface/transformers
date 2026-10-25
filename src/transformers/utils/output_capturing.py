@@ -166,7 +166,7 @@ def recursively_install_hooks(
     for key, specs in capture_tasks:
         # Check if the spec matches the target class
         match_target_class = specs.target_class is not None and isinstance(parent_module, specs.target_class)
-        # Support generic heterogeneous modeling: a skipped attention module still matches the class it replaced
+        # Support generic heterogeneous modeling: a skipped attention module still matches the class that it replaced
         if hasattr(parent_module, "_heterogeneity_skipped_class") and key == "attentions":
             match_target_class = specs.target_class is not None and issubclass(
                 parent_module._heterogeneity_skipped_class, specs.target_class

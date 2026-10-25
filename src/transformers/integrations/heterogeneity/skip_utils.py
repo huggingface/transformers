@@ -41,6 +41,18 @@ if is_torch_available():
 
 @dataclass(frozen=True)
 class ReturnEntry:
+    """Describes one output of a skip replacement: the result of `transform` applied to one argument of `forward`.
+
+    Args:
+        arg_name (`str`):
+            The name of an argument of the replaced class's `forward`, other than a variadic one such as `*args` or
+            `**kwargs`. The skip replacement uses the value passed for this argument, or its default value if none is
+            passed.
+        transform (`Callable`):
+            A function that turns the value of the argument into the output, such as `torch.zeros_like` or an identity
+            function.
+    """
+
     arg_name: str
     transform: Callable
 
@@ -164,7 +176,33 @@ def get_skip_replacement_factory(
     cls: type[nn.Module],
     to_return: ReturnEntry | list[ReturnEntry | None] | None,
 ) -> Callable[[], nn.Module]:
-    """Return a factory for no-op modules with the specified forward outputs."""
+    """Returns a factory that builds skip replacements for members of class `cls`.
+
+    A skip replacement is a no-op module with no parameters, so checkpoints of models with skips don't store weights
+    for skipped members.
+
+    Args:
+        cls (`type[nn.Module]`):
+            The class of the members to replace.
+        to_return (`ReturnEntry`, `list[ReturnEntry | None]` or `None`):
+            What the `forward` of the skip replacement returns:
+
+            - `None`: it returns `None`.
+            - A `ReturnEntry`: it returns the result of applying the entry's `transform` to the value of its
+              `arg_name` argument.
+            - A list: it returns a tuple of the same length, with each `ReturnEntry` replaced by its result and each
+              `None` kept as `None`.
+
+            For example, with `[ReturnEntry(arg_name="hidden_states", transform=torch.zeros_like), None]`, it returns
+            `(torch.zeros_like(hidden_states), None)`.
+
+    Returns:
+        `Callable[[], nn.Module]`: A factory that builds a new skip replacement each time it is called. Use it as a
+        value in a skip descriptor of a `HeterogeneousModelingSpec`.
+
+    Raises:
+        `ValueError`: If a `ReturnEntry` names a variadic argument, or an argument that `cls.forward` doesn't have.
+    """
     if to_return is None:
         return_entries = None
         return_tuple = False
@@ -283,8 +321,8 @@ def apply_skips(
     heterogeneous_modeling_spec: HeterogeneousModelingSpec,
     generic_modeling_state: _GenericModelingState,
 ) -> None:
-    """Apply the layer's skips, and record in `generic_modeling_state` whether they leave its attention mask
-    unconsumed and which of its caches they leave unwritten."""
+    """Apply the layer's skips, and record in `generic_modeling_state` whether the skips removed all attention mask
+    consumers of the layer, and which caches of the layer no longer have a writer."""
     # A model with several layer classes has a spec for each, and a skip type can be described in only some of them
     if undescribed_skip_types := set(skip_types) - heterogeneous_modeling_spec.skip_descriptors.keys():
         raise ValueError(

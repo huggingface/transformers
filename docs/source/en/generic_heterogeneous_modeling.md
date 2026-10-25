@@ -29,9 +29,9 @@ mechanism.
 
 ## Architecture support
 
-An architecture can consume `per_layer_config` directly in its modeling code or opt into **generic patching**, where a
-`HeterogeneousModelingSpec` passes each resolved config to its layer and applies skips. Generic patching is active only
-when the config is heterogeneous and a modeling spec is declared:
+An architecture can use `per_layer_config` directly in its modeling code. Alternatively, it can opt into
+**generic patching**: the library uses a `HeterogeneousModelingSpec` to pass each layer its resolved config and to
+apply skips. Generic patching is active only when the config is heterogeneous and a modeling spec is declared:
 
 | Model | Generic patching opt-in |
 | --- | --- |
@@ -75,7 +75,9 @@ spec = HeterogeneousModelingSpec(
 - `layer_cls` is the architecture's repeated layer class, typically its decoder layer. `per_layer_config` describes how
   its instances differ.
 - `layer_idx_resolver` explicitly declares where the layer index comes from. Use `LayerIdxFromArgument("layer_idx")`
-  when it is passed to `layer_cls.__init__`, as it is in most models.
+  when the index is an argument of `layer_cls.__init__`, as in most models. If the index is a local variable, such as
+  a loop variable, in the code that builds the layers, use `LayerIdxFromModelInitStack`. If neither works, create a
+  subclass of `LayerIdxResolver`.
 
 A spec without skip descriptors is enough as long as no layer has a skip. Supporting `skip` additionally
 requires a skip descriptor for each skip type, defining its effect on the layer, and declarations of the layer members

@@ -73,8 +73,7 @@ def _get_mask_layer_indices(config: PreTrainedConfig, create_mask_fn: Callable) 
     matching_patterns = set()
     mask_fn = _unwrap_mask_function(create_mask_fn)
 
-    # Reuse the registry's causal full/sliding attention entries to select layers
-    # for bidirectional masks.
+    # To select the layers for a bidirectional mask, use the registry entry of the matching causal mask
     if mask_fn is _unwrap_mask_function(create_bidirectional_mask):
         mask_fn = _unwrap_mask_function(create_causal_mask)
     elif mask_fn is _unwrap_mask_function(create_bidirectional_sliding_window_mask):
@@ -95,9 +94,9 @@ def _get_cache_geometry(*, past_key_values: Any, query_length: Any, layer_idx: i
     query_offset = past_key_values.get_query_offset(layer_idx)
     key_value_length, key_value_offset = past_key_values.get_mask_sizes(query_length, layer_idx)
     if is_torch_tensor(query_offset):
-        # An initialized `StaticLayer` returns its query offset as a device tensor. Comparing tensor values would force a
-        # device sync, or a graph break under `torch.compile`, so, like upstream mask creation, assume these layers are
-        # all at the same position and leave the query offset out.
+        # An initialized `StaticLayer` returns its query offset as a device tensor. Comparing tensor values would force
+        # a device sync, or a graph break under `torch.compile`. Instead, assume that these layers are all at the same
+        # position, as the standard mask creation in `masking_utils.py` does, and leave the query offset out.
         return key_value_length, key_value_offset
 
     return query_offset, key_value_length, key_value_offset
@@ -111,9 +110,9 @@ def _create_attention_masks_by_layer_idx(
     **kwargs: Any,
 ) -> AttentionMasksByLayerIdx:
     attention_masks = AttentionMasksByLayerIdx()
-    # Keys are compared with `==` instead of being stored in a dict. Under `torch.compile`, a dict lookup ties the
-    # compiled graph to the exact cache length in the key, so it would recompile at every decoding step. `==` only
-    # needs the lengths to be equal to each other.
+    # Keys are compared with `==` instead of being stored in a dict. Under `torch.compile`, a dict lookup makes the
+    # compiled graph depend on the exact cache length in the key, so the graph would recompile at every decoding step.
+    # A comparison with `==` only depends on whether the lengths are equal.
     reuse_keys_and_layer_indices: list[tuple[tuple[Any, ...], int]] = []
     past_key_values = kwargs.get("past_key_values")
     heterogeneity_spec = config._heterogeneity_spec
@@ -128,8 +127,8 @@ def _create_attention_masks_by_layer_idx(
         if past_key_values is not None and KEY_VALUE_CACHE in (
             generic_modeling_state.per_layer_unwritten_caches.get(layer_idx, ())
         ):
-            # An attention mask consumer is left in this layer, but with a cache, the mask factories size each layer's
-            # mask from its key/value cache, and this layer has none
+            # An attention mask consumer remains in this layer. However, with a cache, the mask factories take the size
+            # of each layer's mask from its key/value cache, and this layer has no key/value cache.
             raise ValueError(
                 f"Layer {layer_idx} still has an attention mask consumer, but its skips replaced every writer of its "
                 "key/value cache, so there is no cache entry to build its attention mask from. If the heterogeneous "

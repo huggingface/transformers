@@ -121,8 +121,8 @@ By default that access raises `AmbiguousGlobalPerLayerAttributeError` and points
 `AttributeError`. Reading that global value without a layer index is still wrong. Code that builds a key-value cache from a global
 `num_key_value_heads` would size the wrong layers incorrectly.
 
-Set `allow_global_per_layer_attribute_access=True` only when you intentionally need the global fallback and can handle
-heterogeneous configs. Global access is then allowed. A warning is emitted once.
+Set `allow_global_per_layer_attribute_access=True` only when you deliberately need the global value. The config then
+returns it, and logs a warning the first time each per-layer attribute is read this way.
 
 ```py
 config = LlamaConfig(

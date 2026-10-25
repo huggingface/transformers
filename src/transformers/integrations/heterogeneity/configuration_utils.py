@@ -43,14 +43,23 @@ _GLOBAL_ONLY_ATTRIBUTES = {
 
 
 class AmbiguousGlobalPerLayerAttributeError(RuntimeError):
-    """Raised when a per-layer attribute is read from a heterogeneous global config."""
+    """Raised when a per-layer attribute is read from a heterogeneous global config, instead of from a layer's config.
+
+    When `per_layer_config` gives an attribute a value that differs from the global value, the attribute has no single
+    value for the whole model. Read it from the layer's config instead, `config.per_layer_config[layer_idx]`.
+
+    If the code deliberately needs the global value, set `allow_global_per_layer_attribute_access=True` on the config.
+    The config then returns the global value and logs a warning once for each attribute.
+
+    This error is not an `AttributeError`, so `hasattr` and `getattr` with a default value don't catch it.
+    """
 
 
 @dataclass
 class _GenericModelingState:
     """Records the layers in which skips removed every attention mask consumer, and the caches in each layer that no
     longer have a writer. Generic heterogeneous modeling sets this state on the config when it builds a model, because
-    this information is needed for mask and cache creation, which receive only the config."""
+    the functions that create masks and caches get only the config."""
 
     unconsumed_attention_mask_layers: set[int] = field(default_factory=set)
     per_layer_unwritten_caches: dict[int, set[str]] = field(default_factory=dict)
@@ -372,7 +381,8 @@ class HeterogeneousConfigMixin:
         for layer_config in tracking_layer_configs:
             setattr(layer_config, key, value)
 
-        # Remove overrides that now equal the global value, as on creation, to match a saved and loaded config
+        # Remove overrides that now equal the global value, as when the config is created, so that the config matches
+        # the same config after saving and loading
         heterogeneity_spec = self.__dict__.get("_heterogeneity_spec")
         if heterogeneity_spec is not None and key in heterogeneity_spec.per_layer_attributes:
             _remove_overrides_equal_to_global(self, heterogeneity_spec, [key])
@@ -383,7 +393,8 @@ class HeterogeneousConfigMixin:
         for layer_config in tracking_layer_configs:
             delattr(layer_config, key)
 
-        # Remove overrides that now equal the global value, as on creation, to match a saved and loaded config
+        # Remove overrides that now equal the global value, as when the config is created, so that the config matches
+        # the same config after saving and loading
         heterogeneity_spec = self.__dict__.get("_heterogeneity_spec")
         if heterogeneity_spec is not None and key in heterogeneity_spec.per_layer_attributes:
             _remove_overrides_equal_to_global(self, heterogeneity_spec, [key])
@@ -399,14 +410,14 @@ class HeterogeneousConfigMixin:
                         f"'{key}' is a per-layer attribute and may vary across layers. Access it via the individual layer "
                         f"configs instead (e.g. config.per_layer_config[i].{key}). To read the global config value from "
                         f"config.{key} anyway, set `allow_global_per_layer_attribute_access` to `True` on the config. "
-                        f"Warning: only do this if the caller can safely handle heterogeneous configs; code that assumes "
-                        f"a homogeneous model may use the global value incorrectly."
+                        f"Warning: only do this if the caller deliberately needs the global value; code that assumes "
+                        f"a homogeneous model may use it incorrectly."
                     )
 
                 logger.warning_once(
                     f"Reading global config value for per-layer attribute `{key}` on a heterogeneous config. "
-                    "Only do this if the caller can safely handle heterogeneous configs; code that assumes a homogeneous "
-                    "model may use the global value incorrectly."
+                    "Only do this if the caller deliberately needs the global value; code that assumes a homogeneous "
+                    "model may use it incorrectly."
                 )
 
         return super().__getattribute__(key)
