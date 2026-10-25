@@ -33,7 +33,6 @@ if is_psutil_available():
 logger = logging.getLogger(__name__)
 
 
-
 # NOTE: AMD GPUs are supported under the "cuda" module
 DEVICE_TYPE_TO_GRAPH_NAME = {"cuda": "CUDAGraph", "xpu": "XPUGraph"}
 
@@ -310,6 +309,7 @@ def memory_pool_context(mem_pool: Any) -> AbstractContextManager:
 
 # --------------------------------------------------- MEMORY UTILS --------------------------------------------------- #
 
+
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
     """Returns the device and memory breakdown for the current device."""
     if torch.cuda.is_available():
@@ -372,9 +372,7 @@ def mem_pool_ctx(mem_pool: Any):
     return memory_pool_context(mem_pool)
 
 
-def create_warmup_future_states(
-    num: int, status, num_q_tokens: int, max_kv_read: int, cache
-) -> list:
+def create_warmup_future_states(num: int, status, num_q_tokens: int, max_kv_read: int, cache) -> list:
     """A deprecated utility function to create a list of FutureRequestStates for the warmup of CB."""
     from .requests import create_warmup_future_states as requests_version
 
