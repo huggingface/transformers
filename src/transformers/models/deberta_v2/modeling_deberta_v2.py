@@ -38,7 +38,6 @@ from .configuration_deberta_v2 import DebertaV2Config
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaSelfOutput with DebertaLayerNorm->LayerNorm
 class DebertaV2SelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -345,7 +344,6 @@ class DisentangledSelfAttention(nn.Module):
         return score
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaAttention with Deberta->DebertaV2
 class DebertaV2Attention(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -380,7 +378,6 @@ class DebertaV2Attention(nn.Module):
             return (attention_output, None)
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->DebertaV2
 class DebertaV2Intermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -396,7 +393,6 @@ class DebertaV2Intermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaOutput with DebertaLayerNorm->LayerNorm
 class DebertaV2Output(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -412,7 +408,6 @@ class DebertaV2Output(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.deberta.modeling_deberta.DebertaLayer with Deberta->DebertaV2
 class DebertaV2Layer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()

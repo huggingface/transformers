@@ -198,7 +198,6 @@ class BlipTextSelfAttention(nn.Module):
         return context_layer, attention_probs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert -> BlipText
 class BlipTextSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -238,7 +237,6 @@ class BlipTextAttention(nn.Module):
         return attention_output, attention_probs
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert -> BlipText
 class BlipTextIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -254,7 +252,6 @@ class BlipTextIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert -> BlipText
 class BlipTextOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
