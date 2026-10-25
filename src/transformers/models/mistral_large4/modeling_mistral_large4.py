@@ -517,7 +517,7 @@ class MistralLarge4TextMLP(nn.Module):
 
 
 class MistralLarge4TextTopkRouter(nn.Module):
-    """Same as Mistral4TopkRouter, but with fp32 precision for routing logits."""
+    """Same as Mistral4TopkRouter, with fp32 precision for routing logits and norming of topk weights is always on."""
 
     def __init__(self, config):
         super().__init__()
@@ -528,10 +528,11 @@ class MistralLarge4TextTopkRouter(nn.Module):
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
+        # weight.float() should be a no-op because the weight is in _keep_in_fp32_modules_strict, but if a user changed
+        # the dtype of the model after loading, it will prevent an error
         router_logits = F.linear(hidden_states.float(), self.weight.float())
         scores = router_logits.softmax(-1)
         group_scores = (
@@ -548,9 +549,8 @@ class MistralLarge4TextTopkRouter(nn.Module):
         scores_for_choice = scores.masked_fill(~score_mask.bool(), 0.0)
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
         topk_weights = scores.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
+        denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+        topk_weights /= denominator
         topk_weights = topk_weights * self.routed_scaling_factor
         return router_logits, topk_weights, topk_indices
 
@@ -686,7 +686,7 @@ class MistralLarge4PreTrainedModel(PreTrainedModel):
         "attentions": MistralLarge4TextAttention,
         "router_logits": OutputRecorder(MistralLarge4TextTopkRouter, index=0),
     }
-    _keep_in_fp32_modules_strict = ["rotary_emb"]
+    _keep_in_fp32_modules_strict = ["rotary_emb", "mlp.gate.weight"]
     # The checkpoint ships a multi-token-prediction draft head that this model does not implement yet # TODO
     _keys_to_ignore_on_load_unexpected = [r"mtp_dspark\..*"]
     _keep_in_fp32_modules = ["indexer.weights_proj"]

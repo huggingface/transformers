@@ -120,7 +120,6 @@ class MistralLarge4TextConfig(PreTrainedConfig):
     n_group: int = 1
     topk_group: int = 1
     num_experts_per_tok: int = 4
-    norm_topk_prob: bool = True
     hidden_act: str = "silu"
     max_position_embeddings: int = 1048576
     initializer_range: float = 0.02

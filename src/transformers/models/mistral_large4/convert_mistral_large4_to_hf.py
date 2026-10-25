@@ -128,7 +128,6 @@ def convert_config(source: dict, special_token_ids: dict | None = None) -> dict:
         "text_config": {
             "model_type": "mistral_large4_text",
             "hidden_act": "silu",
-            "norm_topk_prob": True,
             "rope_parameters": {"rope_type": "yarn", "attention_factor": 1.0},
         },
         "vision_config": {
