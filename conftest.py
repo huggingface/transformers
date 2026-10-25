@@ -42,6 +42,7 @@ from transformers.testing_utils import (
     record_ci_source_deps,
     record_ci_source_deps_by_file,
     record_ci_source_deps_chains,
+    set_ci_collecting_file,
     set_ci_deps_phase,
     snapshot_ci_source_deps_baseline,
 )
@@ -398,8 +399,15 @@ def pytest_collection(session):
     set_ci_deps_phase("collection")
 
 
+def pytest_collectstart(collector):
+    if isinstance(collector, pytest.Module):
+        # collector.nodeid is already repo-relative (e.g. "tests/models/clip/test_processing_clip.py")
+        set_ci_collecting_file(collector.nodeid)
+
+
 def pytest_collection_finish(session):
     set_ci_deps_phase("post_collection")
+    set_ci_collecting_file(None)
     snapshot_ci_source_deps_baseline()
 
 
