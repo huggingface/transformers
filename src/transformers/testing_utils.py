@@ -5032,8 +5032,11 @@ def _record_import_chain(module_name: str) -> None:
 
         chain: list = []
         if _ci_record_chain:
+            repo_str = repo_root.as_posix() + "/"
             for fi in inspect.stack(context=0)[2:]:
                 fn = fi.filename.replace("\\", "/") if fi.filename else ""
+                if fn.startswith(repo_str):
+                    fn = fn[len(repo_str):]
                 if "tests/" in fn or "src/transformers/" in fn:
                     chain.append({"file": fn, "line": fi.lineno, "func": fi.function})
         entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": chain}
