@@ -399,3 +399,28 @@ class AutoVideoProcessorTest(unittest.TestCase):
                 del CONFIG_MAPPING._extra_content["custom"]
             if CustomConfig in VIDEO_PROCESSOR_MAPPING._extra_content:
                 del VIDEO_PROCESSOR_MAPPING._extra_content[CustomConfig]
+
+    def test_legacy_positional_exist_ok_registration(self):
+        """Regression test for https://github.com/huggingface/transformers/issues/49469.
+
+        Before PR #48984 the signature was register(config_class, video_processor_class, exist_ok).
+        PR #48984 inserted video_processor_classes before exist_ok, breaking the legacy 3-positional
+        call where the third argument was a bool meant to be exist_ok.
+        """
+        class LegacyVideoProcessor(LlavaOnevisionVideoProcessor):
+            legacy_flag = True
+
+        # LlavaOnevisionConfig is already in the base mapping, so re-registering with
+        # exist_ok=False raises ValueError (the correct behavior for the legacy 3-positional call).
+        # With the bug, `False` was bound to `video_processor_classes` and caused TypeError.
+        with self.assertRaises(ValueError):
+            AutoVideoProcessor.register(LlavaOnevisionConfig, LegacyVideoProcessor, False)
+
+        # 3-positional with True: should mean exist_ok=True and succeed (overwriting).
+        AutoVideoProcessor.register(LlavaOnevisionConfig, LegacyVideoProcessor, True)
+
+        # Verify the legacy 2-positional call still works
+        AutoVideoProcessor.register(CustomConfig, LegacyVideoProcessor)
+
+        if CustomConfig in VIDEO_PROCESSOR_MAPPING._extra_content:
+            del VIDEO_PROCESSOR_MAPPING._extra_content[CustomConfig]
