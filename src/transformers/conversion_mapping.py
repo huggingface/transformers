@@ -183,6 +183,12 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.mlp\.up_proj\.", ".mlp.fc1."),
             WeightRenaming(r"\.mlp\.down_proj\.", ".mlp.fc2."),
         ],
+        "llava_onevision1_5": [
+            WeightRenaming(r"merger\.mlp\.0\.", "merger.fc1."),
+            WeightRenaming(r"merger\.mlp\.2\.", "merger.fc2."),
+            WeightRenaming(r"^visual\.", "model.visual."),
+            WeightRenaming(r"^model\.(?!language_model\.|visual\.)", "model.language_model."),
+        ],
         "inkling_mm_model": [
             WeightRenaming(source_patterns=r"model\.llm\.layers", target_patterns=r"model.language_model.layers"),
             WeightRenaming(
