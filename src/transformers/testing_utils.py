@@ -4964,6 +4964,7 @@ _ci_record_deps_baseline: set[str] | None = None
 # ---------------------------------------------------------------------------
 
 _ci_deps_chains: list[dict[str, object]] = []
+_ci_deps_by_file: dict[str, set[str]] = {}  # test_file -> set of src_files, built incrementally
 _ci_deps_tracker_reentrant = threading.local()
 _ci_source_deps_repo_root: Path | None = None
 _ci_source_deps_src_root: Path | None = None
@@ -5009,6 +5010,13 @@ def _record_import_chain(module_name: str) -> None:
                 if frame.f_code.co_name == "_load_attr_from_module":
                     return
                 frame = frame.f_back
+
+        # Update deps_by_file incrementally — deduplicates within each test file automatically.
+        if _ci_current_test_id is not None:
+            test_file = _ci_current_test_id.split("::")[0]
+            if src_file_rel in _ci_deps_by_file.get(test_file, ()):
+                return  # already recorded for this test file, skip chain append too
+            _ci_deps_by_file.setdefault(test_file, set()).add(src_file_rel)
 
         entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": []}
         if _ci_current_test_id is not None:
@@ -5110,14 +5118,7 @@ def record_ci_source_deps_by_file() -> None:
     output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
     if not output_path:
         return
-    grouped: dict[str, set] = {}
-    for entry in _ci_deps_chains:
-        test_id = entry.get("test_id")
-        if not test_id:
-            continue
-        test_file = test_id.split("::")[0]
-        grouped.setdefault(test_file, set()).add(entry["src_file"])
-    out = {k: sorted(v) for k, v in sorted(grouped.items())}
+    out = {k: sorted(v) for k, v in sorted(_ci_deps_by_file.items())}
     out_dir = Path(output_path).parent
     try:
         with open(out_dir / "deps_by_file.json", "w", encoding="utf-8") as f:
