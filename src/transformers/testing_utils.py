@@ -5161,12 +5161,13 @@ def record_ci_source_deps_by_file() -> None:
     output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
     if not output_path:
         return
-    # Accumulate per-file, per-phase sets.
+    # Accumulate per-file, per-phase sets; always emit both keys for a consistent schema.
     by_file: dict[str, dict[str, set[str]]] = {}
     for (test_file, phase), src_files in _ci_deps_by_file.items():
         if test_file.startswith("__"):
             continue  # skip global __collection__ pool
-        by_file.setdefault(test_file, {}).setdefault(phase, set()).update(src_files)
+        entry = by_file.setdefault(test_file, {"collection": set(), "execution": set()})
+        entry.setdefault(phase, set()).update(src_files)
     out = {
         test_file: {phase: sorted(srcs) for phase, srcs in sorted(phases.items())}
         for test_file, phases in sorted(by_file.items())
