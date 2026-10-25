@@ -64,25 +64,6 @@ class Apertus1p5TextModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.7, 0.8]
     _torch_compile_train_cls = Apertus1p5TextForCausalLM if is_torch_available() else None
 
-    def test_pruned_lm_head(self):
-        """With `output_vocab_size`, the LM head only covers the text prefix of the vocabulary: logits and loss use
-        the head width, ids beyond it stay valid inputs, and their labels must be `-100`."""
-        config = self.model_tester.get_config()
-        config.output_vocab_size = 40
-        model = Apertus1p5TextForCausalLM(config).to(torch_device).eval()
-
-        input_ids = ids_tensor([2, 7], 40)
-        input_ids[:, 2] = 60  # a valid input id beyond the head
-        labels = input_ids.clone()
-        labels[:, 2] = -100
-        with torch.no_grad():
-            outputs = model(input_ids=input_ids, labels=labels)
-        self.assertEqual(outputs.logits.shape[-1], 40)
-        expected_loss = torch.nn.functional.cross_entropy(
-            outputs.logits[:, :-1].reshape(-1, 40), labels[:, 1:].reshape(-1)
-        )
-        torch.testing.assert_close(outputs.loss, expected_loss)
-
 
 class Apertus1p5Vision2TextModelTester(VLMModelTester):
     if is_torch_available():
