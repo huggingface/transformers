@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import time
+import warnings
 from copy import deepcopy
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -19,12 +20,8 @@ from typing import Any
 
 import torch
 
-from ...utils import is_psutil_available, is_torch_xpu_available
 from ...utils.logging import logging
 
-
-if is_psutil_available():
-    import psutil
 
 # This is a temporary token ID used to represent a token that is not yet generated
 # TODO: update this to 0 and check it breaks nothing + simplify carry over and time new logic
@@ -42,43 +39,16 @@ if logger.propagate:
 
 
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-        torch.cuda.empty_cache()
-        torch.cuda.synchronize()
-        # Use mem_get_info to get actual free memory: device_properties().total_memory returns the physical device
-        # total which ignores CUDA context and driver overhead (~0.5 GiB), leading to overcommit.
-        free_memory, total_memory = torch.cuda.mem_get_info(device)
-        reserved_memory = torch.cuda.memory_reserved(device)
-        allocated_memory = total_memory - free_memory
-    elif is_torch_xpu_available():
-        device = torch.device("xpu")
-        torch.xpu.empty_cache()
-        torch.xpu.synchronize()
-        total_memory = torch.xpu.get_device_properties(device).total_memory
-        reserved_memory = torch.xpu.memory_reserved(device)
-        allocated_memory = torch.xpu.memory_allocated(device)
-    elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
-        device = torch.device("mps")
-        total_memory = torch.mps.recommended_max_memory()
-        allocated_memory = torch.mps.current_allocated_memory()
-        reserved_memory = torch.mps.driver_allocated_memory()
-    else:
-        device = torch.device("cpu")
-        if is_psutil_available():
-            total_memory = psutil.virtual_memory().total
-            allocated_memory = psutil.Process().memory_info().rss
-            reserved_memory = allocated_memory
-        else:
-            logger.error(
-                "Cannot get memory breakdown on CPU without psutil: returning 0 for all memory values. Please install "
-                "psutil to get an actual memory breakdown."
-            )
-            total_memory = 0
-            reserved_memory = 0
-            allocated_memory = 0
+    from .utils import get_device_and_memory_breakdown as utils_version
 
-    return device, total_memory, reserved_memory, allocated_memory
+    warnings.warn(
+        "`get_device_and_memory_breakdown` has been moved the continuous_batching/utils.py and will be deleted from "
+        "requests.py in v5.24. Please import it from there instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
+
+    return utils_version()
 
 
 class RequestStatus(IntEnum):
