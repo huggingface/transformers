@@ -4971,10 +4971,17 @@ _ci_deps_tracker_reentrant = threading.local()
 _ci_record_collection_phase: bool = False
 # Set to True via CI_RECORD_DEPS_INCLUDE_CHAIN=1 to record call stack in each chain entry.
 _ci_record_chain: bool = False
+# Tracks which test file is currently being collected (set by pytest_collectstart hook).
+_ci_currently_collecting_file: str | None = None
 _ci_source_deps_repo_root: Path | None = None
 _ci_source_deps_src_root: Path | None = None
 _ci_current_phase: str = "startup"
 _ci_current_test_id: str | None = None
+
+
+def set_ci_collecting_file(path: str | None) -> None:
+    global _ci_currently_collecting_file
+    _ci_currently_collecting_file = path
 
 
 def set_ci_deps_phase(phase: str, test_id: str | None = None) -> None:
@@ -5016,13 +5023,14 @@ def _record_import_chain(module_name: str) -> None:
                     return
                 frame = frame.f_back
 
-        # Determine the dedup key: test file for execution-phase, "__collection__" for collection.
-        # Skip collection-phase entries by default (not attributed to any test).
-        # Set CI_RECORD_DEPS_INCLUDE_COLLECTION=1 to include them (deduplicated under "__collection__").
+        # Determine the dedup key: (test_file, phase_bucket) to allow same src_file
+        # to appear once per phase (collection + execution) per test file.
         if _ci_current_test_id is not None:
-            dedup_key = _ci_current_test_id.split("::")[0]
+            dedup_key = (_ci_current_test_id.split("::")[0], "execution")
+        elif _ci_currently_collecting_file is not None:
+            dedup_key = (_ci_currently_collecting_file, "collection")
         elif _ci_record_collection_phase:
-            dedup_key = "__collection__"
+            dedup_key = ("__collection__", "collection")
         else:
             return
 
@@ -5042,6 +5050,8 @@ def _record_import_chain(module_name: str) -> None:
         entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": chain}
         if _ci_current_test_id is not None:
             entry["test_id"] = _ci_current_test_id
+        elif _ci_currently_collecting_file is not None:
+            entry["test_file"] = _ci_currently_collecting_file
         _ci_deps_chains.append(entry)
     except Exception:  # noqa: S110
         pass
@@ -5132,16 +5142,35 @@ def record_ci_source_deps_chains() -> None:
 def record_ci_source_deps_by_file() -> None:
     """Write a per-test-file import dict to ``deps_by_file.json`` next to ``CI_RECORD_DEPS_OUTPUT``.
 
-    Keys are test file paths (e.g. ``tests/models/clip/test_modeling_clip.py``), values are sorted
-    lists of ``src/transformers/`` source files imported during that file's test execution.
-    Collection-phase entries (no ``test_id``) are excluded.
+    Output format::
+
+        {
+            "tests/models/clip/test_processing_clip.py": {
+                "collection": ["src/transformers/models/clip/processing_clip.py", ...],
+                "execution":  ["src/transformers/models/clip/image_processing_clip.py", ...]
+            },
+            ...
+        }
+
+    Both phases are kept separate so consumers can union them for a complete picture or
+    inspect each independently.  ``collate_ci_source_deps.py`` unions them when building
+    the fetcher map.
 
     No-op if ``CI_RECORD_DEPS_OUTPUT`` is not set.  Call from ``pytest_sessionfinish``.
     """
     output_path = os.environ.get("CI_RECORD_DEPS_OUTPUT")
     if not output_path:
         return
-    out = {k: sorted(v) for k, v in sorted(_ci_deps_by_file.items())}
+    # Accumulate per-file, per-phase sets.
+    by_file: dict[str, dict[str, set[str]]] = {}
+    for (test_file, phase), src_files in _ci_deps_by_file.items():
+        if test_file.startswith("__"):
+            continue  # skip global __collection__ pool
+        by_file.setdefault(test_file, {}).setdefault(phase, set()).update(src_files)
+    out = {
+        test_file: {phase: sorted(srcs) for phase, srcs in sorted(phases.items())}
+        for test_file, phases in sorted(by_file.items())
+    }
     out_dir = Path(output_path).parent
     try:
         with open(out_dir / "deps_by_file.json", "w", encoding="utf-8") as f:

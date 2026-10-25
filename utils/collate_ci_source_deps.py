@@ -1,9 +1,22 @@
 """Collate per-model deps_by_file.json artifacts into a single fetcher_source_deps.json.
 
-Each model CI job writes deps_by_file.json (dict: test_file -> [src/transformers/ files]
-imported during test execution) into its report directory.  This script merges them into
-a single inverted mapping: src_file -> [test_files], suitable for consumption by
-tests_fetcher.py.
+Each model CI job writes deps_by_file.json into its report directory.  Format::
+
+    {
+        "tests/models/clip/test_processing_clip.py": {
+            "collection": ["src/transformers/...", ...],
+            "execution":  ["src/transformers/...", ...]
+        },
+        ...
+    }
+
+This script unions collection + execution phases per test file, merges across all
+artifact directories, and writes a single inverted mapping::
+
+    { "src/transformers/models/clip/image_processing_clip.py":
+        ["tests/models/clip/test_processing_clip.py", ...], ... }
+
+suitable for consumption by tests_fetcher.py.
 
 Usage:
     python utils/collate_ci_source_deps.py --artifacts-dir <dir> --output <path>
@@ -36,10 +49,11 @@ def main():
         if not deps_file.is_file():
             continue
 
-        # deps_by_file.json: {test_file: [src_file, ...], ...}
-        by_file: dict[str, list[str]] = json.loads(deps_file.read_text(encoding="utf-8"))
-        for test_file, src_files in by_file.items():
-            test_to_srcs[test_file].update(src_files)
+        # deps_by_file.json: {test_file: {"collection": [...], "execution": [...]}}
+        by_file: dict[str, dict[str, list[str]]] = json.loads(deps_file.read_text(encoding="utf-8"))
+        for test_file, phases in by_file.items():
+            for src_files in phases.values():
+                test_to_srcs[test_file].update(src_files)
 
     result = {k: sorted(v) for k, v in sorted(test_to_srcs.items())}
     args.output.parent.mkdir(parents=True, exist_ok=True)
