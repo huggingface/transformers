@@ -5032,6 +5032,14 @@ def _record_import_chain(module_name: str) -> None:
         else:
             return
 
+        # Fast path: skip frame walk entirely for already-seen files (the common case
+        # after the first few imports).  Correctness is preserved: a false-positive first
+        # call is still caught by the frame walk below (file not yet in set); a legitimate
+        # first call adds the file; subsequent calls (legitimate or false-positive) are
+        # harmlessly skipped here.
+        if src_file_rel in _ci_deps_by_file.get(dedup_key, ()):
+            return
+
         # Discard imports triggered by _LazyAutoMapping bulk iteration (values/items/keys).
         # These are registry side-effects, not real test deps — applies to both collection
         # and execution phases (e.g. get_values(MODEL_FOR_PRETRAINING_MAPPING) at class
@@ -5043,8 +5051,6 @@ def _record_import_chain(module_name: str) -> None:
                 return
             frame = frame.f_back
 
-        if src_file_rel in _ci_deps_by_file.get(dedup_key, ()):
-            return
         _ci_deps_by_file.setdefault(dedup_key, set()).add(src_file_rel)
 
         chain: list = []
