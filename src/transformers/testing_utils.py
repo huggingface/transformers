@@ -4966,6 +4966,9 @@ _ci_record_deps_baseline: set[str] | None = None
 _ci_deps_chains: list[dict[str, object]] = []
 _ci_deps_by_file: dict[str, set[str]] = {}  # test_file -> set of src_files, built incrementally
 _ci_deps_tracker_reentrant = threading.local()
+# Set to True via CI_RECORD_DEPS_INCLUDE_COLLECTION=1 to also record collection-phase imports
+# in deps_chain.json. Default False: collection imports are noise (not attributed to any test).
+_ci_record_collection_phase: bool = False
 _ci_source_deps_repo_root: Path | None = None
 _ci_source_deps_src_root: Path | None = None
 _ci_current_phase: str = "startup"
@@ -5018,6 +5021,11 @@ def _record_import_chain(module_name: str) -> None:
                 return  # already recorded for this test file, skip chain append too
             _ci_deps_by_file.setdefault(test_file, set()).add(src_file_rel)
 
+        # Skip collection-phase entries by default — they are not attributed to any test.
+        # Set CI_RECORD_DEPS_INCLUDE_COLLECTION=1 to include them in deps_chain.json.
+        if _ci_current_test_id is None and not _ci_record_collection_phase:
+            return
+
         entry: dict = {"src_file": src_file_rel, "phase": _ci_current_phase, "chain": []}
         if _ci_current_test_id is not None:
             entry["test_id"] = _ci_current_test_id
@@ -5038,7 +5046,8 @@ def install_ci_source_deps_tracker() -> None:
     """
     if not os.environ.get("CI_RECORD_DEPS_OUTPUT"):
         return
-    global _ci_source_deps_repo_root, _ci_source_deps_src_root
+    global _ci_source_deps_repo_root, _ci_source_deps_src_root, _ci_record_collection_phase
+    _ci_record_collection_phase = os.environ.get("CI_RECORD_DEPS_INCLUDE_COLLECTION", "") == "1"
     _ci_source_deps_repo_root = Path(__file__).parent.parent.parent.resolve()
     _ci_source_deps_src_root = _ci_source_deps_repo_root / "src" / "transformers"
 
