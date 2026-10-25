@@ -720,9 +720,9 @@ class DeepseekV32Model(DeepseekV32PreTrainedModel):
 
         # It may already have been prepared by e.g. `generate`
         if isinstance(attention_mask, dict):
-            attention_mask = attention_mask["indexed_attention"]
+            causal_mask = attention_mask["indexed_attention"]
         else:
-            attention_mask = create_causal_mask(
+            causal_mask = create_causal_mask(
                 config=self.config,
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
@@ -737,7 +737,7 @@ class DeepseekV32Model(DeepseekV32PreTrainedModel):
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=attention_mask,
+                attention_mask=causal_mask,
                 position_embeddings=position_embeddings,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
