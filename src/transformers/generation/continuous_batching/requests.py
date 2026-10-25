@@ -33,7 +33,6 @@ if TYPE_CHECKING:
 TMP_TOKEN_ID = -1
 
 
-
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
     from .utils import get_device_and_memory_breakdown as utils_version
 

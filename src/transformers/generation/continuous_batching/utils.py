@@ -36,7 +36,6 @@ DEVICE_TYPE_TO_GRAPH_NAME = {"cuda": "CUDAGraph", "xpu": "XPUGraph"}
 T = TypeVar("T")
 
 
-
 # We centralize the logger here to coordinate between logging and progress bar
 logger = logging.getLogger("ContinuousBatchingLogger")
 # Add a handler to the logger to print the logs to the console. Only happens once thanks to setting propagate to False.
