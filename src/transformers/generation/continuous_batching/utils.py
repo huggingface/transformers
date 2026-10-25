@@ -370,3 +370,19 @@ def mem_pool_ctx(mem_pool: Any):
         stacklevel=2,
     )
     return memory_pool_context(mem_pool)
+
+
+def create_warmup_future_states(
+    num: int, status, num_q_tokens: int, max_kv_read: int, cache
+) -> list:
+    """A deprecated utility function to create a list of FutureRequestStates for the warmup of CB."""
+    from .requests import create_warmup_future_states as requests_version
+
+    warnings.warn(
+        "`create_warmup_future_states` has been moved the continuous_batching/requests.py and will be deleted from "
+        "utils.py in v5.24. Please import it from there instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
+
+    return requests_version(num, status, num_q_tokens, max_kv_read, cache)
