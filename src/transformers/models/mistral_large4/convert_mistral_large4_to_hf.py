@@ -1,12 +1,30 @@
 import argparse
 import json
 import os
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from transformers import PixtralImageProcessor, PixtralProcessor
 from transformers.integrations.mistral import convert_tekken_tokenizer
 from transformers.models.mistral_large4.modular_mistral_large4 import MistralLarge4Config
+
+
+BASE_CONFIG_DICT = {
+    "model_type": "mistral_large4",
+    "projector_hidden_act": "gelu",
+    "vision_feature_layer": -1,
+    "text_config": {
+        "model_type": "mistral_large4_text",
+        "hidden_act": "silu",
+        "rope_parameters": {"rope_type": "yarn", "attention_factor": 1.0},
+    },
+    "vision_config": {
+        "model_type": "pixtral",
+        "hidden_act": "silu",
+        "rope_parameters": {"rope_type": "axial"},
+    },
+}
 
 
 HF_TO_VLLM_MAPPING = {
@@ -121,21 +139,8 @@ def format_quantization_config(source: dict) -> dict:
 
 def convert_config(source: dict, special_token_ids: dict | None = None) -> dict:
     # Start with a config dict that has the parameters vLLM hardcodes
-    config_dict = {
-        "model_type": "mistral_large4",
-        "projector_hidden_act": "gelu",
-        "vision_feature_layer": -1,
-        "text_config": {
-            "model_type": "mistral_large4_text",
-            "hidden_act": "silu",
-            "rope_parameters": {"rope_type": "yarn", "attention_factor": 1.0},
-        },
-        "vision_config": {
-            "model_type": "pixtral",
-            "hidden_act": "silu",
-            "rope_parameters": {"rope_type": "axial"},
-        },
-    }
+    config_dict = deepcopy(BASE_CONFIG_DICT)
+    # And if they are provided, set the special token ids
     if special_token_ids is not None:
         config_dict["text_config"]["bos_token_id"] = special_token_ids["bos_token_id"]
         config_dict["text_config"]["eos_token_id"] = special_token_ids["eos_token_id"]
