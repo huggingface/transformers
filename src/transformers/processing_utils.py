@@ -40,7 +40,6 @@ from .image_utils import (
     ImageInput,
     is_vision_available,
     make_flat_list_of_images,
-    make_nested_list_of_images,
 )
 from .tokenization_utils_base import (
     PaddingStrategy,
@@ -777,13 +776,11 @@ class ProcessorMixin(PushToHubMixin):
             if getattr(self, "image_token", None) is not None:
                 n_images_in_text = [sample.count(self.image_token) for sample in text]
                 if images is not None:
-                    images = make_nested_list_of_images(images)
-
-                    n_images_in_images = [len(sublist) for sublist in images]
-                    if n_images_in_text != n_images_in_images:
+                    images = make_flat_list_of_images(images)
+                    if sum(n_images_in_text) != len(images):
                         raise ValueError(
                             f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                            f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
+                            f" Found {sum(n_images_in_text)} {self.image_token} tokens and {len(images)} images per sample."
                         )
                 elif any(n_images_in_text):
                     raise ValueError(
