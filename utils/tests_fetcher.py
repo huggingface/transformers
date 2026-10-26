@@ -786,7 +786,7 @@ def create_reverse_dependency_tree() -> list[tuple[str, str]]:
     all_modules = list(PATH_TO_TRANSFORMERS.glob("**/*.py"))
     all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
     all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
-    all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
+    all_modules = [mod.relative_to(PATH_TO_REPO).as_posix() for mod in all_modules]
     edges = [(dep, mod) for mod in all_modules for dep in get_module_dependencies(mod, cache=cache)]
     edges += create_backbone_edges()
     return list(set(edges))
@@ -868,7 +868,7 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
     all_modules = list(PATH_TO_TRANSFORMERS.glob("**/*.py"))
     all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
     all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
-    all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
+    all_modules = [mod.relative_to(PATH_TO_REPO).as_posix() for mod in all_modules]
     # Compute the direct dependencies of all modules.
     direct_deps = {m: get_module_dependencies(m, cache=cache) for m in all_modules}
 
