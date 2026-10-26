@@ -19,6 +19,7 @@ import contextlib
 import functools
 import glob
 import inspect
+import itertools
 import json
 import math
 import os
@@ -629,6 +630,8 @@ class Trainer:
         self._created_lr_scheduler = False
         # Resolved lazily at the first gradient clip; see `_has_mixed_mesh_grads`.
         self._mixed_mesh_grads: bool | None = None
+        # Set by a full fp16/bf16 eval outside of train(), which casts the model in place; restored by train()
+        self._dtypes_before_full_eval: dict[str, torch.dtype] | None = None
         if (
             self.is_distributed_loading_by_transformers
             and args.save_strategy != SaveStrategy.NO
@@ -1495,6 +1498,13 @@ class Trainer:
         # evaluation_loop can cast dtype and move in one step. Move the model now for training.
         if (args.fp16_full_eval or args.bf16_full_eval) and not self.is_model_parallel and self.model_init is None:
             self._move_model_to_device(self.model, args.device)
+
+        # A full fp16/bf16 `evaluate()` or `predict()` before `train()` cast the model in place. Cast it back, or
+        # training would run on fp16/bf16 weights and optimizer states.
+        if self._dtypes_before_full_eval is not None:
+            if self.model_init is None:
+                self._restore_dtypes_after_full_eval()
+            self._dtypes_before_full_eval = None
 
         # Activate gradient checkpointing if needed
         if args.gradient_checkpointing:
@@ -2904,6 +2914,17 @@ class Trainer:
         # if full fp16 or bf16 eval is wanted and this ``evaluation`` or ``predict`` isn't called
         # while ``train`` is running, cast it to the right dtype first and then put on device
         if not self.is_in_train:
+            # The cast is in place, so keep the original dtypes for `train()` to restore. Not done for DeepSpeed and
+            # FSDP, whose sharded parameters can't be cast back one tensor at a time.
+            if (
+                (args.fp16_full_eval or args.bf16_full_eval)
+                and self._dtypes_before_full_eval is None
+                and not (self.is_deepspeed_enabled or self.is_fsdp_enabled)
+            ):
+                self._dtypes_before_full_eval = {
+                    name: tensor.dtype
+                    for name, tensor in itertools.chain(self.model.named_parameters(), self.model.named_buffers())
+                }
             if args.fp16_full_eval:
                 model = model.to(dtype=torch.float16, device=args.device)
             elif args.bf16_full_eval:
@@ -4724,3 +4745,19 @@ class Trainer:
         # Moving a model to an XLA device disconnects the tied weights, so we have to retie them.
         if self.args.parallel_mode == ParallelMode.TPU and hasattr(model, "tie_weights"):
             model.tie_weights()
+
+    def _restore_dtypes_after_full_eval(self) -> None:
+        """Cast back the parameters and buffers that a full fp16/bf16 eval outside of `train()` cast in place."""
+        restored = False
+        for name, tensor in itertools.chain(self.model.named_parameters(), self.model.named_buffers()):
+            dtype = self._dtypes_before_full_eval.get(name)
+            if dtype is not None and tensor.dtype != dtype:
+                tensor.data = tensor.data.to(dtype)
+                restored = True
+        if restored:
+            half = "fp16" if self.args.fp16_full_eval else "bf16"
+            logger.warning(
+                f"`evaluate()` or `predict()` with `{half}_full_eval=True` cast the model to {half} in place before "
+                f"training. It is cast back to its original dtype for training, but its weights keep the {half} "
+                "rounding. To avoid this, evaluate after training, or use `eval_on_start=True` for a baseline."
+            )
