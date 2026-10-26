@@ -120,8 +120,7 @@ def build_messages(rules: str, pr: dict, files: list[dict]) -> list[dict]:
 
 
 def tool_call_dict(tc: ToolCall) -> dict:
-    """Record Serge's request to read a file in the expected format.
-    """
+    """Record Serge's request to read a file in the expected format."""
     call = {"id": tc.id, "type": "function", "function": {"name": tc.name, "arguments": tc.arguments}}
     if tc.thought_signature:
         call["extra_content"] = {"google": {"thought_signature": tc.thought_signature}}
