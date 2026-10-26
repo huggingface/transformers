@@ -648,17 +648,17 @@ class Qwen3TTSTokenizerResidualVectorQuantizer(nn.Module):
 class Qwen3TTSTokenizerSplitResidualVectorQuantizer(nn.Module):
     """Split Residual Vector Quantizer."""
 
-    def __init__(self, config):
+    def __init__(self, acoustic_config, semantic_config):
         super().__init__()
-        self.codebook_size = config.codebook_size
-        self.max_num_quantizers = config.n_codebooks
-        self.num_semantic_quantizers = config.semantic_quantizer_config.n_codebooks
-        self.num_acoustic_quantizers = config.n_codebooks - self.num_semantic_quantizers
+        self.codebook_size = acoustic_config.codebook_size
+        self.num_semantic_quantizers = semantic_config.n_codebooks
+        self.num_acoustic_quantizers = acoustic_config.n_codebooks
+        self.max_num_quantizers = self.num_semantic_quantizers + self.num_acoustic_quantizers
         self.semantic_residual_vector_quantizer = Qwen3TTSTokenizerResidualVectorQuantizer(
-            config.semantic_quantizer_config, self.num_semantic_quantizers
+            semantic_config, self.num_semantic_quantizers
         )
         self.acoustic_residual_vector_quantizer = Qwen3TTSTokenizerResidualVectorQuantizer(
-            config, self.num_acoustic_quantizers
+            acoustic_config, self.num_acoustic_quantizers
         )
 
     def encode(self, embeddings: torch.Tensor, num_quantizers: float | None = None) -> torch.Tensor:
@@ -1486,7 +1486,9 @@ class Qwen3TTSTokenizerModel(Qwen3TTSTokenizerPreTrainedModel, PreTrainedAudioTo
         super().__init__(config)
         self.encoder = AutoModel.from_config(config.encoder_config)
         self.decoder = AutoModel.from_config(config.decoder_config)
-        self.quantizer = Qwen3TTSTokenizerSplitResidualVectorQuantizer(self.config.quantizer_config)
+        self.quantizer = Qwen3TTSTokenizerSplitResidualVectorQuantizer(
+            self.config.acoustic_quantizer_config, self.config.semantic_quantizer_config
+        )
         self.post_init()
 
     @can_return_tuple
