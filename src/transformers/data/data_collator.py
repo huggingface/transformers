@@ -68,6 +68,50 @@ def pad_without_fast_tokenizer_warning(tokenizer, *pad_args, **pad_kwargs):
     return padded
 
 
+def _extract_offset_mappings(
+    examples: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[Any] | None]:
+    """
+    Moves `offset_mapping` out of the examples so the batch can be padded.
+
+    `offset_mapping` is a ragged list of `(start, end)` pairs, so `tokenizer.pad` can't pad it (it only pads
+    token ids and known keys such as `special_tokens_mask`). Leaving it in place makes padding fail as soon as
+    the sequences have different lengths. The examples passed in are never modified: copies are returned.
+    """
+    if not any(isinstance(example, Mapping) and "offset_mapping" in example for example in examples):
+        return examples, None
+
+    padded_examples, offset_mappings = [], []
+    for example in examples:
+        if isinstance(example, Mapping) and "offset_mapping" in example:
+            example = dict(example)
+            offset_mappings.append(example.pop("offset_mapping"))
+        else:
+            offset_mappings.append(None)
+        padded_examples.append(example)
+
+    return padded_examples, offset_mappings
+
+
+def _pad_offset_mappings(offset_mappings: list[Any], target_length: int) -> "np.ndarray":
+    """
+    Pads ragged offset mappings to `target_length` so they form a rectangular `(batch, length, 2)` array.
+
+    Padded positions are filled with `(0, 0)`. This is harmless: those positions are padding tokens, which
+    are flagged in the special tokens mask and are therefore never selected for masking.
+    """
+    padded = np.zeros((len(offset_mappings), target_length, 2), dtype=np.int64)
+    for index, offsets in enumerate(offset_mappings):
+        if offsets is None:
+            continue
+        offsets = to_numpy(offsets)
+        length = min(len(offsets), target_length)
+        if length:
+            padded[index, :length] = offsets[:length]
+
+    return padded
+
+
 def default_data_collator(features: list[InputDataClass], return_tensors="pt") -> dict[str, Any]:
     """
     Very simple data collator that simply collates batches of dict-like objects and performs special handling for
@@ -772,7 +816,10 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             # If no seed supplied, we will use the global RNG
             self.create_rng()
 
+        offset_mappings = None
         if isinstance(examples[0], Mapping):
+            # `offset_mapping` is ragged and can't be padded by the tokenizer, handle it separately
+            examples, offset_mappings = _extract_offset_mappings(examples)
             batch = pad_without_fast_tokenizer_warning(
                 self.tokenizer, examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of
             )
@@ -784,6 +831,8 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         # If special token mask has been preprocessed, pop it from the dict.
         special_tokens_mask = batch.pop("special_tokens_mask", None)
         offset_mapping = batch.pop("offset_mapping", None)
+        if offset_mapping is None and offset_mappings is not None:
+            offset_mapping = _pad_offset_mappings(offset_mappings, batch["input_ids"].shape[-1])
         if self.mlm:
             batch["input_ids"], batch["labels"] = self.torch_mask_tokens(
                 batch["input_ids"], special_tokens_mask=special_tokens_mask, offset_mapping=offset_mapping
@@ -866,7 +915,10 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             # If no seed supplied, we will use the global RNG
             self.create_rng()
 
+        offset_mappings = None
         if isinstance(examples[0], Mapping):
+            # `offset_mapping` is ragged and can't be padded by the tokenizer, handle it separately
+            examples, offset_mappings = _extract_offset_mappings(examples)
             batch = pad_without_fast_tokenizer_warning(
                 self.tokenizer, examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of
             )
@@ -878,6 +930,8 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         # If special token mask has been preprocessed, pop it from the dict.
         special_tokens_mask = batch.pop("special_tokens_mask", None)
         offset_mapping = batch.pop("offset_mapping", None)
+        if offset_mapping is None and offset_mappings is not None:
+            offset_mapping = _pad_offset_mappings(offset_mappings, batch["input_ids"].shape[-1])
         if self.mlm:
             batch["input_ids"], batch["labels"] = self.numpy_mask_tokens(
                 batch["input_ids"], special_tokens_mask=special_tokens_mask, offset_mapping=offset_mapping

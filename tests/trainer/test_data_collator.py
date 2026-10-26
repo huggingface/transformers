@@ -1013,6 +1013,76 @@ class TestDataCollatorForLanguageModelingWholeWordMask(DataCollatorTestMixin, un
 
         self.assertEqual(batch["input_ids"].shape, torch.Size((2, 10)))
 
+    def test_variable_length_sequences(self):
+        """Offset mapping is padded along with the token ids when sequences have different lengths (#49971)."""
+        tokenizer = BertTokenizerFast(self.vocab_file)
+        input_tokens = [f"token_{i}" for i in range(8)]
+        tokenizer.add_tokens(input_tokens)
+        features = [
+            tokenizer(" ".join(input_tokens[:5]), return_offsets_mapping=True),
+            tokenizer(" ".join(input_tokens[5:]), return_offsets_mapping=True),
+        ]
+
+        collator = DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, seed=42, return_tensors="pt")
+        batch = collator(features)
+
+        # the shorter sequence is padded to the length of the longer one
+        self.assertEqual(batch["input_ids"].shape, (2, 7))
+        self.assertEqual(batch["labels"].shape, (2, 7))
+        # padding positions are never selected for masking
+        padding = batch["input_ids"] == tokenizer.pad_token_id
+        self.assertTrue((batch["labels"][padding] == -100).all())
+
+    def test_variable_length_sequences_with_pad_to_multiple_of(self):
+        """Offset mapping follows the padded length, including `pad_to_multiple_of`."""
+        tokenizer = BertTokenizerFast(self.vocab_file)
+        input_tokens = [f"token_{i}" for i in range(8)]
+        tokenizer.add_tokens(input_tokens)
+        features = [
+            tokenizer(" ".join(input_tokens[:5]), return_offsets_mapping=True),
+            tokenizer(" ".join(input_tokens[5:]), return_offsets_mapping=True),
+        ]
+
+        collator = DataCollatorForLanguageModeling(
+            tokenizer, whole_word_mask=True, seed=42, pad_to_multiple_of=8, return_tensors="pt"
+        )
+        batch = collator(features)
+
+        # the longest sequence is 7 tokens, padded to the next multiple of 8
+        self.assertEqual(batch["input_ids"].shape, (2, 8))
+        padding = batch["input_ids"] == tokenizer.pad_token_id
+        self.assertTrue((batch["labels"][padding] == -100).all())
+
+    def test_variable_length_sequences_with_numpy_inputs(self):
+        """Same as above, through the numpy code path."""
+        tokenizer = BertTokenizerFast(self.vocab_file)
+        input_tokens = [f"token_{i}" for i in range(8)]
+        tokenizer.add_tokens(input_tokens)
+        features = [
+            tokenizer(" ".join(input_tokens[:5]), return_offsets_mapping=True),
+            tokenizer(" ".join(input_tokens[5:]), return_offsets_mapping=True),
+        ]
+
+        collator = DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, seed=42, return_tensors="np")
+        batch = collator(features)
+
+        self.assertEqual(batch["input_ids"].shape, (2, 7))
+        padding = batch["input_ids"] == tokenizer.pad_token_id
+        self.assertTrue((batch["labels"][padding] == -100).all())
+
+    def test_variable_length_sequences_do_not_mutate_features(self):
+        """The collator strips offset mapping from copies, never from the caller's features."""
+        tokenizer = BertTokenizerFast(self.vocab_file)
+        input_tokens = [f"token_{i}" for i in range(8)]
+        tokenizer.add_tokens(input_tokens)
+        features = [
+            tokenizer(" ".join(input_tokens[:5]), return_offsets_mapping=True),
+            tokenizer(" ".join(input_tokens[5:]), return_offsets_mapping=True),
+        ]
+
+        collator = DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, seed=42, return_tensors="pt")
+        self._check_immutability(collator, features)
+
     def test_seed_reproducibility(self):
         """Test reproducibility with seed."""
         tokenizer = BertTokenizerFast(self.vocab_file)
