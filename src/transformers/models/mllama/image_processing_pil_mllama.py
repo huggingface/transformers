@@ -14,7 +14,6 @@
 """PIL Image processor class for Mllama."""
 
 import math
-from functools import lru_cache
 
 import numpy as np
 
@@ -132,7 +131,9 @@ def pack_images(
     return stacked_images, all_num_tiles
 
 
-def convert_aspect_ratios_to_ids_np(aspect_ratios: list[list[tuple[int, int]]], max_image_tiles: int) -> np.ndarray:
+def convert_aspect_ratios_to_ids_np(
+    aspect_ratios: list[list[tuple[int, int]]], supported_aspect_ratios: list[list[int]]
+) -> np.ndarray:
     """
     Convert aspect ratio tuples to ids (numpy version).
 
@@ -142,8 +143,8 @@ def convert_aspect_ratios_to_ids_np(aspect_ratios: list[list[tuple[int, int]]], 
     Args:
         aspect_ratios (`List[List[Tuple[int, int]]]`):
             A list of aspect ratios for each image in the batch.
-        max_image_tiles (`int`):
-            The maximum number of tiles any image can be split into.
+        supported_aspect_ratios (`list[list[int]]`):
+            The (rows, columns) tile grids, in aspect ratio id order.
 
     Returns:
         `np.ndarray`:
@@ -153,12 +154,11 @@ def convert_aspect_ratios_to_ids_np(aspect_ratios: list[list[tuple[int, int]]], 
     """
     batch_size = len(aspect_ratios)
     max_num_images = max(len(row) for row in aspect_ratios)
-    supported_aspect_ratios = get_all_supported_aspect_ratios(max_image_tiles)
 
     aspect_ratios_ids = np.zeros((batch_size, max_num_images), dtype=np.int64)
     for i, sample_aspect_ratios in enumerate(aspect_ratios):
         for j, (num_tiles_h, num_tiles_w) in enumerate(sample_aspect_ratios):
-            aspect_ratios_ids[i, j] = supported_aspect_ratios.index((num_tiles_h, num_tiles_w)) + 1
+            aspect_ratios_ids[i, j] = supported_aspect_ratios.index([num_tiles_h, num_tiles_w]) + 1
     return aspect_ratios_ids
 
 
@@ -166,10 +166,16 @@ def convert_aspect_ratios_to_ids_np(aspect_ratios: list[list[tuple[int, int]]], 
 class MllamaImageProcessorKwargs(ImagesKwargs, total=False):
     """
     max_image_tiles (`int`, *optional*):
-        The maximum number of tiles allowed.
+        The maximum number of tiles allowed. Only used to build `supported_aspect_ratios`, so it can't be changed in
+        `preprocess`.
+    supported_aspect_ratios (`list[list[int]]`, *optional*):
+        The (rows, columns) tile grids an image can be split into. The position of a grid in this list is its
+        `aspect_ratio_id` (minus one), so the order must match the model's aspect ratio embeddings. Built from
+        `max_image_tiles` at init if not provided.
     """
 
     max_image_tiles: int
+    supported_aspect_ratios: list[list[int]]
 
 
 # Adapted from transformers.models.mllama.image_processing_mllama._validate_size
@@ -189,37 +195,6 @@ def _validate_mllama_preprocess_arguments(do_resize, size, do_pad, max_image_til
     if max_image_tiles is None or max_image_tiles <= 0:
         raise ValueError(f"MllamaImageProcessor `max_image_tiles` must be a positive integer, got {max_image_tiles}.")
     _validate_size(size)
-
-
-# Adapted from transformers.models.mllama.image_processing_mllama.get_all_supported_aspect_ratios
-@lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(max_image_tiles: int) -> list[tuple[int, int]]:
-    """
-    Computes all allowed aspect ratios for a given maximum number of input tiles.
-
-    This function calculates all possible arrangements of tiles that can be formed
-    within the constraint of the maximum number of tiles. Each arrangement is
-    represented by its aspect ratio (width/height) and the corresponding tile configuration.
-
-    Args:
-        max_image_tiles (`int`):
-            The maximum number of tiles allowed.
-
-    Returns:
-        `list[tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
-        configuration in terms of number of tiles.
-
-    Example:
-        >>> get_all_supported_aspect_ratios(4)
-        [(1, 1), (1, 2), (1, 3), (1, 4), (2, 1), (2, 2), (3, 1), (4, 1)]
-
-    """
-    aspect_ratios = []
-    for width in range(1, max_image_tiles + 1):
-        for height in range(1, max_image_tiles + 1):
-            if width * height <= max_image_tiles:
-                aspect_ratios.append((width, height))
-    return aspect_ratios
 
 
 # Adapted from transformers.models.mllama.image_processing_mllama.get_image_size_fit_to_canvas
@@ -275,11 +250,10 @@ def get_image_size_fit_to_canvas(
 
 
 # Adapted from transformers.models.mllama.image_processing_mllama.get_optimal_tiled_canvas
-@lru_cache(maxsize=100)
 def get_optimal_tiled_canvas(
     image_height: int,
     image_width: int,
-    max_image_tiles: int,
+    supported_aspect_ratios: list[list[int]],
     tile_size: int,
 ) -> tuple[int, int]:
     r"""
@@ -296,16 +270,15 @@ def get_optimal_tiled_canvas(
             The height of the image.
         image_width (`int`):
             The width of the image.
-        max_image_tiles (`int`):
-            The maximum number of tiles any image can be split into.
+        supported_aspect_ratios (`list[list[int]]`):
+            The (rows, columns) tile grids the image can be split into.
         tile_size (`int`):
             The tile size.
 
     Returns:
         `tuple[int, int]`: The best canvas resolution [height, width] for the given image.
     """
-    possible_tile_arrangements = get_all_supported_aspect_ratios(max_image_tiles)
-    possible_canvas_sizes = np.array(possible_tile_arrangements) * tile_size
+    possible_canvas_sizes = np.array(supported_aspect_ratios) * tile_size
 
     target_heights, target_widths = np.array(possible_canvas_sizes).T
 
@@ -351,10 +324,24 @@ class MllamaImageProcessorPil(PilBackend):
     def __init__(self, **kwargs: Unpack[MllamaImageProcessorKwargs]):
         super().__init__(**kwargs)
         _validate_mllama_preprocess_arguments(self.do_resize, self.size, self.do_pad, self.max_image_tiles)
+        # build the grids for configs saved without them, or when `max_image_tiles` was changed
+        tile_counts = [height * width for height, width in self.supported_aspect_ratios or [[0, 0]]]
+        if max(tile_counts) != self.max_image_tiles:
+            self.supported_aspect_ratios = [
+                [height, width]
+                for height in range(1, self.max_image_tiles + 1)
+                for width in range(1, self.max_image_tiles + 1)
+                if height * width <= self.max_image_tiles
+            ]
 
-    def _validate_preprocess_kwargs(self, **kwargs):
+    def _validate_preprocess_kwargs(self, max_image_tiles: int | None = None, **kwargs):
         super()._validate_preprocess_kwargs(**kwargs)
         _validate_mllama_preprocess_arguments(self.do_resize, self.size, self.do_pad, self.max_image_tiles)
+        if max_image_tiles != self.max_image_tiles:
+            raise ValueError(
+                "`max_image_tiles` defines `supported_aspect_ratios`, so it can only be set at init, "
+                "e.g. `from_pretrained(..., max_image_tiles=4)`."
+            )
 
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[MllamaImageProcessorKwargs]) -> BatchFeature:
@@ -408,7 +395,7 @@ class MllamaImageProcessorPil(PilBackend):
         self,
         image: np.ndarray,
         size: SizeDict,
-        max_image_tiles: int,
+        supported_aspect_ratios: list[list[int]],
         resample: PILImageResampling | None = None,
     ) -> tuple[np.ndarray, tuple[int, int]]:
         """
@@ -424,8 +411,8 @@ class MllamaImageProcessorPil(PilBackend):
                 Image to resize.
             size (`Dict[str, int]`):
                 Size of the output image.
-            max_image_tiles (`int`):
-                The maximum number of tiles to split the image into.
+            supported_aspect_ratios (`list[list[int]]`):
+                The (rows, columns) tile grids the image can be split into.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resizing the image.
 
@@ -439,7 +426,7 @@ class MllamaImageProcessorPil(PilBackend):
         canvas_height, canvas_width = get_optimal_tiled_canvas(
             image_height=image_height,
             image_width=image_width,
-            max_image_tiles=max_image_tiles,
+            supported_aspect_ratios=supported_aspect_ratios,
             tile_size=tile_size,
         )
         num_tiles_height = canvas_height // tile_size
@@ -467,6 +454,7 @@ class MllamaImageProcessorPil(PilBackend):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         max_image_tiles: int | None,
+        supported_aspect_ratios: list[list[int]],
         return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
@@ -480,7 +468,9 @@ class MllamaImageProcessorPil(PilBackend):
             sample_aspect_ratios = []
 
             for image in sample_images:
-                image, aspect_ratio = self.resize(image, size=size, max_image_tiles=max_image_tiles, resample=resample)
+                image, aspect_ratio = self.resize(
+                    image, size=size, supported_aspect_ratios=supported_aspect_ratios, resample=resample
+                )
                 image = self.pad(image, size=size_dict, aspect_ratio=aspect_ratio)
 
                 # Rescale and normalize
@@ -498,7 +488,7 @@ class MllamaImageProcessorPil(PilBackend):
             batch_aspect_ratios.append(sample_aspect_ratios)
 
         stacked_images, num_tiles = pack_images(batch_images, max_image_tiles)
-        aspect_ratio_ids = convert_aspect_ratios_to_ids_np(batch_aspect_ratios, max_image_tiles)
+        aspect_ratio_ids = convert_aspect_ratios_to_ids_np(batch_aspect_ratios, supported_aspect_ratios)
         aspect_ratio_mask = build_aspect_ratio_mask_np(batch_aspect_ratios, max_image_tiles)
 
         encoded_inputs = BatchFeature(

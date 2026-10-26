@@ -85,14 +85,15 @@ class Ovis2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_crop_to_patches(self):
         for backend_name, image_processing_class in self.image_processing_classes.items():
-            image_processor = image_processing_class(**self.image_processor_dict)
+            image_processor = image_processing_class(
+                **{**self.image_processor_dict, "min_patches": 1, "max_patches": 6}
+            )
             if backend_name == "pil":
                 # PIL backend processes single images
                 image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)[0]
                 processed_images, grid = image_processor.crop_image_to_patches(
                     image,
-                    min_patches=1,
-                    max_patches=6,
+                    supported_aspect_ratios=image_processor.supported_aspect_ratios,
                     patch_size=SizeDict(height=20, width=20),
                 )
                 self.assertEqual(len(processed_images), 5)
@@ -103,8 +104,7 @@ class Ovis2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)[0]
                 processed_images, grid = image_processor.crop_image_to_patches(
                     image.unsqueeze(0),
-                    min_patches=1,
-                    max_patches=6,
+                    supported_aspect_ratios=image_processor.supported_aspect_ratios,
                     patch_size=SizeDict(height=20, width=20),
                 )
                 self.assertEqual(len(processed_images[0]), 5)

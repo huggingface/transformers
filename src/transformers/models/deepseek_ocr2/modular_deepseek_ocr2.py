@@ -94,10 +94,13 @@ class DeepseekOcr2ImageProcessorKwargs(GotOcr2ImageProcessorKwargs, total=False)
         `preprocess` method.
     min_patches (`int`, *optional*, defaults to `self.min_patches`):
         The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+        set to `True`. Only used to build `supported_aspect_ratios`, so it can't be changed in `preprocess`.
     max_patches (`int`, *optional*, defaults to `self.max_patches`):
         The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+        set to `True`. Only used to build `supported_aspect_ratios`, so it can't be changed in `preprocess`.
+    supported_aspect_ratios (`list[list[int]]`, *optional*):
+        The (columns, rows) tile grids an image can be cropped to, sorted by number of tiles. Built from
+        `min_patches` and `max_patches` at init if not provided.
     tile_size (`int`, *optional*, defaults to `768`):
         The size of each local tile. Must match the model's query embedding size.
     background_color (`list[int]`, *optional*, defaults to `[127, 127, 127]`):
@@ -166,8 +169,7 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
     def crop_image_to_patches(
         self,
         images: "torch.Tensor",
-        min_patches: int,
-        max_patches: int,
+        supported_aspect_ratios: list[list[int]],
         tile_size: int,
         resample: PILImageResampling | None = None,
     ) -> tuple["torch.Tensor", int]:
@@ -177,10 +179,8 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
         Args:
             images (`torch.Tensor`):
                 The images to crop, shape `(batch, channels, height, width)`.
-            min_patches (`int`):
-                Minimum number of patches.
-            max_patches (`int`):
-                Maximum number of patches.
+            supported_aspect_ratios (`list[list[int]]`):
+                The (columns, rows) tile grids the image can be cropped to.
             tile_size (`int`):
                 The size of each tile.
             resample (`PILImageResampling`, *optional*):
@@ -193,7 +193,7 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
         original_height, original_width = images.shape[-2:]
 
         num_columns, num_rows = get_optimal_tiled_canvas(
-            (original_height, original_width), (tile_size, tile_size), min_patches, max_patches
+            (original_height, original_width), (tile_size, tile_size), supported_aspect_ratios
         )
 
         target_width = tile_size * num_columns
@@ -222,8 +222,7 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
         images: list["torch.Tensor"],
         size: SizeDict,
         crop_to_patches: bool,
-        min_patches: int,
-        max_patches: int,
+        supported_aspect_ratios: list[list[int]],
         tile_size: int,
         resample: PILImageResampling | None,
         do_rescale: bool,
@@ -247,8 +246,7 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
                 if max(h, w) > tile_size:
                     stacked_patches, n_patches = self.crop_image_to_patches(
                         stacked_images,
-                        min_patches=min_patches,
-                        max_patches=max_patches,
+                        supported_aspect_ratios=supported_aspect_ratios,
                         tile_size=tile_size,
                         resample=resample,
                     )
@@ -302,15 +300,14 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
         Returns the number of image patches for a given image size (1 global + local patches).
         """
         images_kwargs = images_kwargs or {}
-        min_patches = images_kwargs.get("min_patches", self.min_patches)
-        max_patches = images_kwargs.get("max_patches", self.max_patches)
+        supported_aspect_ratios = images_kwargs.get("supported_aspect_ratios", self.supported_aspect_ratios)
         tile_size = images_kwargs.get("tile_size", self.tile_size)
         crop_to_patches = images_kwargs.get("crop_to_patches", self.crop_to_patches)
 
         num_patches = 1  # global view
         if crop_to_patches and max(height, width) > tile_size:
             num_columns, num_rows = get_optimal_tiled_canvas(
-                (height, width), (tile_size, tile_size), min_patches, max_patches
+                (height, width), (tile_size, tile_size), supported_aspect_ratios
             )
             num_patches += num_columns * num_rows
 
@@ -333,8 +330,7 @@ class DeepseekOcr2ImageProcessorPil(GotOcr2ImageProcessorPil):
     def crop_image_to_patches(
         self,
         image: np.ndarray,
-        min_patches: int,
-        max_patches: int,
+        supported_aspect_ratios: list[list[int]],
         tile_size: int,
         resample: "PILImageResampling | int | None" = None,
     ):
@@ -347,7 +343,7 @@ class DeepseekOcr2ImageProcessorPil(GotOcr2ImageProcessorPil):
         original_height, original_width = get_image_size(image, channel_dim=ChannelDimension.FIRST)
 
         num_columns, num_rows = get_optimal_tiled_canvas(
-            (original_height, original_width), (tile_size, tile_size), min_patches, max_patches
+            (original_height, original_width), (tile_size, tile_size), supported_aspect_ratios
         )
 
         target_width = tile_size * num_columns
@@ -430,8 +426,7 @@ class DeepseekOcr2ImageProcessorPil(GotOcr2ImageProcessorPil):
         image_std: float | list[float] | None,
         return_tensors: str | TensorType | None,
         crop_to_patches: bool = True,
-        min_patches: int = 2,
-        max_patches: int = 6,
+        supported_aspect_ratios: list[list[int]] | None = None,
         tile_size: int = 768,
         background_color: list[int] | None = None,
         **kwargs,
@@ -450,8 +445,7 @@ class DeepseekOcr2ImageProcessorPil(GotOcr2ImageProcessorPil):
             if crop_to_patches and max(original_width, original_height) > tile_size:
                 local_patches = self.crop_image_to_patches(
                     image,
-                    min_patches=min_patches,
-                    max_patches=max_patches,
+                    supported_aspect_ratios=supported_aspect_ratios,
                     tile_size=tile_size,
                     resample=resample,
                 )

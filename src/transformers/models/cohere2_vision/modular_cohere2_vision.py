@@ -13,8 +13,6 @@
 # limitations under the License.
 """PyTorch AyaVision model."""
 
-from functools import lru_cache
-
 import numpy as np
 import torch
 from torch import nn
@@ -26,13 +24,13 @@ from transformers.models.aya_vision.modeling_aya_vision import (
     AyaVisionModelOutputWithPast,
     AyaVisionPreTrainedModel,
 )
-from transformers.models.got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessor
+from transformers.models.got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessor, GotOcr2ImageProcessorKwargs
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
-from ...processing_utils import ImagesKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_cohere2_vision import Cohere2VisionConfig
 
@@ -244,44 +242,12 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
         )
 
 
-@lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(max_image_tiles: int) -> list[tuple[int, int]]:
-    """
-    Computes all allowed aspect ratios for a given maximum number of input tiles.
-
-    This function calculates all possible arrangements of tiles that can be formed
-    within the constraint of the maximum number of tiles. Each arrangement is
-    represented by its aspect ratio (width/height) and the corresponding tile configuration.
-
-    Args:
-        max_image_tiles (`int`):
-            The maximum number of tiles allowed.
-
-    Returns:
-        `list[tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
-        configuration in terms of number of tiles.
-
-    Example:
-        >>> get_all_supported_aspect_ratios(4)
-        [(1, 1), (1, 2), (1, 3), (1, 4), (2, 1), (2, 2), (3, 1), (4, 1)]
-
-    """
-    aspect_ratios = []
-    for width in range(1, max_image_tiles + 1):
-        for height in range(1, max_image_tiles + 1):
-            if width * height <= max_image_tiles:
-                aspect_ratios.append((width, height))
-    return aspect_ratios
-
-
 def get_optimal_tiled_canvas(
     original_image_size: tuple[int, int],
     target_tile_size: tuple[int, int],
-    min_image_tiles: int,
-    max_image_tiles: int,
+    supported_aspect_ratios: list[list[int]],
 ) -> tuple[int, int]:
-    possible_resolutions = get_all_supported_aspect_ratios(max_image_tiles)
-    possible_resolutions = sorted(possible_resolutions, key=lambda x: x[0] * x[1])
+    possible_resolutions = supported_aspect_ratios
     image_height, image_width = original_image_size
     patch_size_height, patch_size_width = target_tile_size  # (height == width)
 
@@ -300,22 +266,21 @@ def get_optimal_tiled_canvas(
     return best_grid  # (width, height)
 
 
-class Cohere2VisionImageProcessorKwargs(ImagesKwargs, total=False):
+class Cohere2VisionImageProcessorKwargs(GotOcr2ImageProcessorKwargs, total=False):
     r"""
     crop_to_patches (`bool`, *optional*, defaults to `False`):
         Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
         `preprocess` method.
     min_patches (`int`, *optional*, defaults to 1):
         The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `min_patches` parameter in the `preprocess` method.
+        set to `True`. Only used to build `supported_aspect_ratios`, so it can't be changed in `preprocess`.
     max_patches (`int`, *optional*, defaults to 12):
         The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Can be overridden by the `max_patches` parameter in the `preprocess` method.
+        set to `True`. Only used to build `supported_aspect_ratios`, so it can't be changed in `preprocess`.
+    supported_aspect_ratios (`list[list[int]]`, *optional*):
+        The (columns, rows) tile grids an image can be cropped to, sorted by number of tiles. Built from
+        `min_patches` and `max_patches` at init if not provided.
     """
-
-    crop_to_patches: bool
-    min_patches: int
-    max_patches: int
 
 
 @auto_docstring

@@ -15,20 +15,35 @@
 import math
 from dataclasses import dataclass
 
+import numpy as np
 import torch
 from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import group_images_by_shape, reorder_images, to_channel_dimension_format
+from ...image_utils import (
+    ChannelDimension,
+    PILImageResampling,
+    SizeDict,
+    infer_channel_dimension_format,
+)
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..aimv2.modeling_aimv2 import Aimv2Attention, Aimv2EncoderLayer
 from ..auto import AutoModel
+from ..got_ocr2.image_processing_got_ocr2 import (
+    GotOcr2ImageProcessor,
+    GotOcr2ImageProcessorKwargs,
+    get_optimal_tiled_canvas,
+)
+from ..got_ocr2.image_processing_pil_got_ocr2 import GotOcr2ImageProcessorPil
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel
 from ..llava_next.modeling_llava_next import LlavaNextCausalLMOutputWithPast, LlavaNextModelOutputWithPast
@@ -443,4 +458,363 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
         )
 
 
-__all__ = ["Ovis2PreTrainedModel", "Ovis2Model", "Ovis2ForConditionalGeneration"]
+def compute_patch_covering_area(left: int, upper: int, right: int, lower: int, side: int) -> float:
+    w = right - left
+    h = lower - upper
+    w, h = max(w, h), min(w, h)
+    if w > side:
+        h = h / w * side
+        w = side
+    return w * h
+
+
+def split_image_into_grid(h: int, w: int, grid: tuple[int, int]) -> list[tuple[int, int, int, int]]:
+    row_height = h // grid[0]
+    col_width = w // grid[1]
+    return [
+        (
+            col * col_width,
+            row * row_height,
+            w if col == grid[1] - 1 else (col + 1) * col_width,
+            h if row == grid[0] - 1 else (row + 1) * row_height,
+        )
+        for row in range(grid[0])
+        for col in range(grid[1])
+    ]
+
+
+def get_min_tile_covering_grid(
+    image_size: tuple[int, int],
+    target_patch_size: int,
+    supported_aspect_ratios: list[list[int]],
+    covering_threshold: float = 0.9,
+) -> tuple[int, int]:
+    image_height, image_width = image_size
+    image_area = image_width * image_height
+    evaluated_grids = []
+    sufficient_covering_grids = []
+
+    for tile_grid in supported_aspect_ratios:
+        tile_regions = split_image_into_grid(image_height, image_width, tile_grid)
+        tile_covering_ratio = (
+            sum(compute_patch_covering_area(*region, target_patch_size) for region in tile_regions) / image_area
+        )
+        evaluated_grids.append((tile_grid, tile_covering_ratio))
+        if tile_covering_ratio > covering_threshold:
+            sufficient_covering_grids.append((tile_grid, tile_covering_ratio))
+
+    if sufficient_covering_grids:
+        return min(sufficient_covering_grids, key=lambda x: (x[0][0] * x[0][1], -x[1]))[0]
+    return min(evaluated_grids, key=lambda x: (-x[1], x[0][0] * x[0][1]))[0]
+
+
+class Ovis2ImageProcessorKwargs(GotOcr2ImageProcessorKwargs, total=False):
+    """
+    crop_to_patches (`bool`, *optional*, defaults to `False`):
+        Whether to crop the image to patches. Can be overridden by the `crop_to_patches` parameter in the
+        `preprocess` method.
+    min_patches (`int`, *optional*, defaults to 1):
+        The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Only used to build `supported_aspect_ratios`, so it can't be changed in `preprocess`.
+    max_patches (`int`, *optional*, defaults to 12):
+        The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
+        set to `True`. Only used to build `supported_aspect_ratios`, so it can't be changed in `preprocess`.
+    supported_aspect_ratios (`list[list[int]]`, *optional*):
+        The (columns, rows) tile grids an image can be cropped to, sorted by number of tiles. Built from
+        `min_patches` and `max_patches` at init if not provided.
+    use_covering_area_grid (`bool`, *optional*, defaults to `True`):
+        Whether to use the covering area grid to determine the number of patches. Only has an effect if
+        `crop_to_patches` is set to `True`. Can be overridden by the `use_covering_area_grid` parameter in the
+        `preprocess` method.
+    """
+
+    use_covering_area_grid: bool
+
+
+@auto_docstring
+class Ovis2ImageProcessor(GotOcr2ImageProcessor):
+    default_to_square = True
+    use_covering_area_grid = True
+    valid_kwargs = Ovis2ImageProcessorKwargs
+
+    def crop_image_to_patches(
+        self,
+        images: "torch.Tensor",
+        supported_aspect_ratios: list[list[int]],
+        use_covering_area_grid: bool = True,
+        covering_threshold: float = 0.9,
+        patch_size: SizeDict | None = None,
+        resample: "PILImageResampling | int | None" = None,
+    ):
+        """
+        Crop the images to patches and return a list of cropped images.
+        The number of patches and their grid arrangement are determined by the original image size,
+        the target patch size and the supported tile grids.
+        The aspect ratio of the patches grid is chosen to be the closest to the original image aspect ratio.
+
+        Args:
+            images (`torch.Tensor`):
+                The images to be cropped.
+            supported_aspect_ratios (`list[list[int]]`):
+                The (columns, rows) tile grids the image can be cropped to.
+            use_covering_area_grid (`bool`, *optional*, defaults to `True`):
+                Whether to use the original OVIS2 approach: compute the minimal number of tiles that cover at least 90%
+                of the image area. If `False`, the closest aspect ratio to the target is used.
+            covering_threshold (`float`, *optional*, defaults to `0.9`):
+                The threshold for the covering area. Only has an effect if `use_covering_area_grid` is set to `True`.
+            patch_size (`SizeDict`, *optional*):
+                The size of the output patches.
+            resample (`PILImageResampling | int | None`, *optional*):
+                Resampling filter to use if resizing the image.
+
+        Returns:
+            Tuple[`torch.Tensor`, `list`]: A tuple containing the processed images tensor and the grid information.
+        """
+        num_image = images.shape[0]
+        patch_size_height, patch_size_width = patch_size.height, patch_size.width
+        original_height, original_width = images.shape[-2:]
+
+        if use_covering_area_grid:
+            # Use the original OVIS2 approach: compute the minimal number of tiles that cover at least 90% of the image area
+            num_columns, num_rows = get_min_tile_covering_grid(
+                (original_height, original_width),
+                target_patch_size=patch_size_height,  # square patch size
+                supported_aspect_ratios=supported_aspect_ratios,
+                covering_threshold=covering_threshold,
+            )
+        else:
+            # find the closest aspect ratio to the target
+            num_columns, num_rows = get_optimal_tiled_canvas(
+                (original_height, original_width), (patch_size_height, patch_size_width), supported_aspect_ratios
+            )
+
+        # calculate the target width and height
+        target_width = patch_size_width * num_columns
+        target_height = patch_size_height * num_rows
+        num_blocks = num_columns * num_rows
+
+        # resize the image so that each patch is of patch_size
+        resized_image = self.resize(images, SizeDict(height=target_height, width=target_width), resample=resample)
+        # split the image into patches
+        processed_images = []
+        for i in range(num_blocks):
+            column = i % num_columns
+            row = i // num_columns
+            box = (
+                column * patch_size_width,
+                row * patch_size_height,
+                (column + 1) * patch_size_width,
+                (row + 1) * patch_size_height,
+            )
+            # split the image
+            patch_image = resized_image[..., box[1] : box[3], box[0] : box[2]]
+            processed_images.append(patch_image)
+
+        if len(processed_images) != 1:
+            thumbnail_img = self.resize(images, patch_size, resample=resample)
+            processed_images.insert(0, thumbnail_img)
+
+        processed_images = torch.stack(processed_images, dim=0).transpose(0, 1).contiguous()
+        grid = [[num_rows, num_columns] for _ in range(num_image)]
+
+        return processed_images, grid
+
+    def _preprocess(
+        self,
+        images: list["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | int | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        crop_to_patches: bool = False,
+        supported_aspect_ratios: list[list[int]] | None = None,
+        use_covering_area_grid: bool = True,
+        **kwargs,
+    ) -> BatchFeature:
+        if crop_to_patches and self.max_patches > 1:
+            grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+            processed_images_grouped = {}
+            grids = {}
+            for shape, stacked_images in grouped_images.items():
+                stacked_images, grid = self.crop_image_to_patches(
+                    stacked_images,
+                    supported_aspect_ratios,
+                    patch_size=size,
+                    use_covering_area_grid=use_covering_area_grid,
+                    resample=resample,
+                )
+                processed_images_grouped[shape] = stacked_images
+                grids[shape] = grid
+            images = reorder_images(processed_images_grouped, grouped_images_index)
+            images = [image for images_list in images for image in images_list]
+            grids = reorder_images(grids, grouped_images_index)
+        else:
+            grids = [[1, 1] for _ in range(len(images))]
+
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(image=stacked_images, size=size, resample=resample)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
+
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images, disable_grouping=disable_grouping)
+        processed_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_images_grouped[shape] = stacked_images
+
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        return BatchFeature(data={"pixel_values": processed_images, "grids": grids}, tensor_type=return_tensors)
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None):
+        raise AttributeError("Not needed for Ovis2")
+
+
+@auto_docstring
+class Ovis2ImageProcessorPil(GotOcr2ImageProcessorPil):
+    default_to_square = True
+    use_covering_area_grid = True
+    valid_kwargs = Ovis2ImageProcessorKwargs
+
+    def crop_image_to_patches(
+        self,
+        image: np.ndarray,
+        supported_aspect_ratios: list[list[int]],
+        use_covering_area_grid: bool = True,
+        covering_threshold: float = 0.9,
+        patch_size: SizeDict | None = None,
+        resample: "PILImageResampling | None" = None,
+    ):
+        """
+        Crop the image to patches and return a list of cropped images.
+        Mirrors TorchvisionBackend.crop_image_to_patches.
+        """
+        # Normalize to CHW when called directly (e.g. from tests); _preprocess already receives CHW
+        input_data_format = infer_channel_dimension_format(image)
+        image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_data_format)
+
+        patch_size_height, patch_size_width = patch_size.height, patch_size.width
+        original_height, original_width = image.shape[-2:]
+
+        if use_covering_area_grid:
+            # Use the original OVIS2 approach: compute the minimal number of tiles that cover at least 90% of the image area
+            num_columns, num_rows = get_min_tile_covering_grid(
+                (original_height, original_width),
+                target_patch_size=patch_size_height,  # square patch size
+                supported_aspect_ratios=supported_aspect_ratios,
+                covering_threshold=covering_threshold,
+            )
+        else:
+            # find the closest aspect ratio to the target
+            num_columns, num_rows = get_optimal_tiled_canvas(
+                (original_height, original_width), (patch_size_height, patch_size_width), supported_aspect_ratios
+            )
+
+        # calculate the target width and height
+        target_width = patch_size_width * num_columns
+        target_height = patch_size_height * num_rows
+        num_blocks = num_columns * num_rows
+
+        # resize the image so that each patch is of patch_size
+        resized_image = self.resize(image, SizeDict(height=target_height, width=target_width), resample=resample)
+        # split the image into patches
+        processed_images = []
+        for i in range(num_blocks):
+            column = i % num_columns
+            row = i // num_columns
+            box = (
+                column * patch_size_width,
+                row * patch_size_height,
+                (column + 1) * patch_size_width,
+                (row + 1) * patch_size_height,
+            )
+            patch_image = resized_image[:, box[1] : box[3], box[0] : box[2]]
+            processed_images.append(patch_image)
+
+        if len(processed_images) != 1:
+            thumbnail_img = self.resize(image, patch_size, resample=resample)
+            processed_images.insert(0, thumbnail_img)
+
+        return processed_images, [num_rows, num_columns]
+
+    def _preprocess(
+        self,
+        images: list[np.ndarray],
+        do_resize: bool,
+        size: SizeDict,
+        resample: "PILImageResampling | None",
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None,
+        crop_to_patches: bool = False,
+        supported_aspect_ratios: list[list[int]] | None = None,
+        use_covering_area_grid: bool = True,
+        **kwargs,
+    ) -> BatchFeature:
+        if crop_to_patches and self.max_patches > 1:
+            # Crop to patches first
+            processed_images = []
+            grids = []
+            for image in images:
+                patches, grid = self.crop_image_to_patches(
+                    image,
+                    supported_aspect_ratios,
+                    patch_size=size,
+                    use_covering_area_grid=use_covering_area_grid,
+                    resample=resample,
+                )
+                processed_images.extend(patches)
+                grids.append(grid)
+            images = processed_images
+        else:
+            grids = [[1, 1] for _ in range(len(images))]
+
+        # Process all images (including patches if any) through the standard pipeline
+        processed_images = []
+        for image in images:
+            if do_resize:
+                image = self.resize(image, size=size, resample=resample)
+            if do_center_crop:
+                image = self.center_crop(image, crop_size)
+            if do_rescale:
+                image = self.rescale(image, rescale_factor)
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std)
+            processed_images.append(image)
+
+        return BatchFeature(data={"pixel_values": processed_images, "grids": grids}, tensor_type=return_tensors)
+
+    def get_number_of_image_patches(self, height: int, width: int, images_kwargs: dict | None = None):
+        raise AttributeError("Not needed for Ovis2")
+
+
+__all__ = [
+    "Ovis2PreTrainedModel",
+    "Ovis2Model",
+    "Ovis2ForConditionalGeneration",
+    "Ovis2ImageProcessor",
+    "Ovis2ImageProcessorPil",
+]

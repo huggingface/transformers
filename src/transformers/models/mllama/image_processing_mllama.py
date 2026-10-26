@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-from functools import lru_cache
 from typing import Optional, Union
 
 import numpy as np
@@ -38,40 +37,16 @@ from ...utils import TensorType, auto_docstring
 class MllamaImageProcessorKwargs(ImagesKwargs, total=False):
     """
     max_image_tiles (`int`, *optional*):
-        The maximum number of tiles allowed.
+        The maximum number of tiles allowed. Only used to build `supported_aspect_ratios`, so it can't be changed in
+        `preprocess`.
+    supported_aspect_ratios (`list[list[int]]`, *optional*):
+        The (rows, columns) tile grids an image can be split into. The position of a grid in this list is its
+        `aspect_ratio_id` (minus one), so the order must match the model's aspect ratio embeddings. Built from
+        `max_image_tiles` at init if not provided.
     """
 
     max_image_tiles: int
-
-
-@lru_cache(maxsize=10)
-def get_all_supported_aspect_ratios(max_image_tiles: int) -> list[tuple[int, int]]:
-    """
-    Computes all allowed aspect ratios for a given maximum number of input tiles.
-
-    This function calculates all possible arrangements of tiles that can be formed
-    within the constraint of the maximum number of tiles. Each arrangement is
-    represented by its aspect ratio (width/height) and the corresponding tile configuration.
-
-    Args:
-        max_image_tiles (`int`):
-            The maximum number of tiles allowed.
-
-    Returns:
-        `list[tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
-        configuration in terms of number of tiles.
-
-    Example:
-        >>> get_all_supported_aspect_ratios(4)
-        [(1, 1), (1, 2), (1, 3), (1, 4), (2, 1), (2, 2), (3, 1), (4, 1)]
-
-    """
-    aspect_ratios = []
-    for width in range(1, max_image_tiles + 1):
-        for height in range(1, max_image_tiles + 1):
-            if width * height <= max_image_tiles:
-                aspect_ratios.append((width, height))
-    return aspect_ratios
+    supported_aspect_ratios: list[list[int]]
 
 
 def get_image_size_fit_to_canvas(
@@ -125,11 +100,10 @@ def get_image_size_fit_to_canvas(
     return new_height, new_width
 
 
-@lru_cache(maxsize=100)
 def get_optimal_tiled_canvas(
     image_height: int,
     image_width: int,
-    max_image_tiles: int,
+    supported_aspect_ratios: list[list[int]],
     tile_size: int,
 ) -> tuple[int, int]:
     r"""
@@ -146,16 +120,15 @@ def get_optimal_tiled_canvas(
             The height of the image.
         image_width (`int`):
             The width of the image.
-        max_image_tiles (`int`):
-            The maximum number of tiles any image can be split into.
+        supported_aspect_ratios (`list[list[int]]`):
+            The (rows, columns) tile grids the image can be split into.
         tile_size (`int`):
             The tile size.
 
     Returns:
         `tuple[int, int]`: The best canvas resolution [height, width] for the given image.
     """
-    possible_tile_arrangements = get_all_supported_aspect_ratios(max_image_tiles)
-    possible_canvas_sizes = np.array(possible_tile_arrangements) * tile_size
+    possible_canvas_sizes = np.array(supported_aspect_ratios) * tile_size
 
     target_heights, target_widths = np.array(possible_canvas_sizes).T
 
@@ -294,7 +267,7 @@ def pad_batches_and_tiles(
 
 def convert_aspect_ratios_to_ids(
     aspect_ratios: list[list[tuple[int, int]]],
-    max_image_tiles: int,
+    supported_aspect_ratios: list[list[int]],
     device: Optional["torch.device"] = None,
 ) -> "torch.Tensor":
     """
@@ -306,8 +279,8 @@ def convert_aspect_ratios_to_ids(
     Args:
         aspect_ratios (`List[List[Tuple[int, int]]]`):
             A list of aspect ratios for each image in the batch.
-        max_image_tiles (`int`):
-            The maximum number of tiles any image can be split into.
+        supported_aspect_ratios (`list[list[int]]`):
+            The (rows, columns) tile grids, in aspect ratio id order.
         device (`torch.device`, *optional*):
             The device to create the tensor on. Defaults to CPU.
 
@@ -319,12 +292,11 @@ def convert_aspect_ratios_to_ids(
     """
     batch_size = len(aspect_ratios)
     max_num_images = max(len(row) for row in aspect_ratios)
-    supported_aspect_ratios = get_all_supported_aspect_ratios(max_image_tiles)
 
     aspect_ratios_ids = torch.zeros((batch_size, max_num_images), dtype=torch.long, device=device)
     for i, sample_aspect_ratios in enumerate(aspect_ratios):
         for j, (num_tiles_h, num_tiles_w) in enumerate(sample_aspect_ratios):
-            aspect_ratios_ids[i, j] = supported_aspect_ratios.index((num_tiles_h, num_tiles_w)) + 1
+            aspect_ratios_ids[i, j] = supported_aspect_ratios.index([num_tiles_h, num_tiles_w]) + 1
     return aspect_ratios_ids
 
 
@@ -346,10 +318,24 @@ class MllamaImageProcessor(TorchvisionBackend):
     def __init__(self, **kwargs: Unpack[MllamaImageProcessorKwargs]):
         super().__init__(**kwargs)
         _validate_mllama_preprocess_arguments(self.do_resize, self.size, self.do_pad, self.max_image_tiles)
+        # build the grids for configs saved without them, or when `max_image_tiles` was changed
+        tile_counts = [height * width for height, width in self.supported_aspect_ratios or [[0, 0]]]
+        if max(tile_counts) != self.max_image_tiles:
+            self.supported_aspect_ratios = [
+                [height, width]
+                for height in range(1, self.max_image_tiles + 1)
+                for width in range(1, self.max_image_tiles + 1)
+                if height * width <= self.max_image_tiles
+            ]
 
-    def _validate_preprocess_kwargs(self, **kwargs):
+    def _validate_preprocess_kwargs(self, max_image_tiles: int | None = None, **kwargs):
         super()._validate_preprocess_kwargs(**kwargs)
         _validate_mllama_preprocess_arguments(self.do_resize, self.size, self.do_pad, self.max_image_tiles)
+        if max_image_tiles != self.max_image_tiles:
+            raise ValueError(
+                "`max_image_tiles` defines `supported_aspect_ratios`, so it can only be set at init, "
+                "e.g. `from_pretrained(..., max_image_tiles=4)`."
+            )
 
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[MllamaImageProcessorKwargs]) -> BatchFeature:
@@ -394,7 +380,7 @@ class MllamaImageProcessor(TorchvisionBackend):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        max_image_tiles: int,
+        supported_aspect_ratios: list[list[int]],
         resample: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
     ) -> Union["torch.Tensor", tuple[int, int]]:
@@ -411,8 +397,8 @@ class MllamaImageProcessor(TorchvisionBackend):
                 Image to resize.
             size (`Dict[str, int]`):
                 Size of the output image.
-            max_image_tiles (`int`):
-                The maximum number of tiles to split the image into.
+            supported_aspect_ratios (`list[list[int]]`):
+                The (rows, columns) tile grids the image can be split into.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resizing the image.
 
@@ -426,7 +412,7 @@ class MllamaImageProcessor(TorchvisionBackend):
         canvas_height, canvas_width = get_optimal_tiled_canvas(
             image_height=image_height,
             image_width=image_width,
-            max_image_tiles=max_image_tiles,
+            supported_aspect_ratios=supported_aspect_ratios,
             tile_size=tile_size,
         )
         num_tiles_height = canvas_height // tile_size
@@ -457,6 +443,7 @@ class MllamaImageProcessor(TorchvisionBackend):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         max_image_tiles: int | None,
+        supported_aspect_ratios: list[list[int]],
         return_tensors: str | TensorType | None,
         disable_grouping: bool | None,
         **kwargs,
@@ -469,7 +456,7 @@ class MllamaImageProcessor(TorchvisionBackend):
         aspect_ratio_grouped = {}
         for shape, stacked_images in grouped_images.items():
             stacked_images, aspect_ratio = self.resize(
-                image=stacked_images, size=size, resample=resample, max_image_tiles=max_image_tiles
+                image=stacked_images, size=size, resample=resample, supported_aspect_ratios=supported_aspect_ratios
             )
             stacked_images = self.pad(
                 image=stacked_images,
@@ -495,7 +482,7 @@ class MllamaImageProcessor(TorchvisionBackend):
         # Use the same device as the processed image tiles so that all output tensors are consistent.
         pixel_values_device = split_images.device
         aspect_ratio_ids = convert_aspect_ratios_to_ids(
-            aspect_ratios, max_image_tiles=max_image_tiles, device=pixel_values_device
+            aspect_ratios, supported_aspect_ratios=supported_aspect_ratios, device=pixel_values_device
         )
         aspect_ratio_mask = build_aspect_ratio_mask(
             aspect_ratios, max_image_tiles=max_image_tiles, device=pixel_values_device
