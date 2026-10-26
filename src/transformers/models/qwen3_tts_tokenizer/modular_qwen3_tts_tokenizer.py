@@ -169,9 +169,8 @@ class Qwen3TTSTokenizerEncoderConfig(MimiConfig):
     upsample_groups = AttributeError()
     use_cache = AttributeError()
     use_streaming = AttributeError()
-    # This is already a standalone component, not a codec with optional encoder and decoder halves.
-    encoder_config = None
-    decoder_config = None
+    encoder_config = AttributeError()
+    decoder_config = AttributeError()
 
     def __post_init__(self, **kwargs):
         self.upsampling_ratios = self.upsampling_ratios if self.upsampling_ratios else [8, 6, 5, 4]
