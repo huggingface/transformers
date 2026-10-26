@@ -124,7 +124,7 @@ class CsmConfig(PreTrainedConfig):
     default_theta = 500000.0
     sub_configs_defaults = {
         "codec_config": SubConfigSpec(config_class=AutoConfig, model_type="mimi"),
-        "depth_decoder_config": SubConfigSpec(config_class=CsmDepthDecoderConfig),
+        "depth_decoder_config": CsmDepthDecoderConfig,
     }
     attribute_map = {
         "codebook_size": "vocab_size",

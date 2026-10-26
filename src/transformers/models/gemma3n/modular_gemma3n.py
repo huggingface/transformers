@@ -26,11 +26,11 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -397,9 +397,9 @@ class Gemma3nConfig(PreTrainedConfig):
 
     model_type = "gemma3n"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Gemma3nTextConfig),
-        "vision_config": SubConfigSpec(config_class=Gemma3nVisionConfig),
-        "audio_config": SubConfigSpec(config_class=Gemma3nAudioConfig),
+        "text_config": Gemma3nTextConfig,
+        "vision_config": Gemma3nVisionConfig,
+        "audio_config": Gemma3nAudioConfig,
     }
 
     text_config: Gemma3nTextConfig | dict[str, Any] | None = None
@@ -1624,6 +1624,7 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
         "hidden_states": Gemma3nTextDecoderLayer,
         "attentions": Gemma3nTextAttention,
     }
+    _supports_sdpa = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -2410,9 +2411,8 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if (final_logit_softcapping := self.config.get_text_config().final_logit_softcapping) is not None:
             logits = logits / final_logit_softcapping
             logits = torch.tanh(logits)
