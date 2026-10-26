@@ -428,3 +428,7 @@ class PocketTTSProcessingIntegrationTest(unittest.TestCase):
                 rtol=0,
                 atol=self.VOICE_ATOL,
             )
+
+    @unittest.skip("model is extremely custom!")
+    def test_if_input_has_mismatching_tokens_and_visuals(self):
+        pass

@@ -878,7 +878,6 @@ class ProcessorTesterMixin:
         """
         Tests that vision models raise an error when number of data doesn't match number
         of special token in input text.
-        FIXME: audio needs to be tested as well!
         """
         processor = self.get_processor()
         call_signature = inspect.signature(processor.__call__)
@@ -887,23 +886,21 @@ class ProcessorTesterMixin:
         if not ("text" in input_args and hasattr(processor, "tokenizer")):
             self.skipTest(f"{self.processor_class} doesn't accpet text inputs.")
 
+        processing_kwargs = {"return_tensors": "pt", "padding": True}
         if (
             "images" in input_args
-            and hasattr(processor, "image_processor")
             and getattr(processor, "image_token", None) is not None
             and self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token")
         ):
             image_inputs = self.prepare_images_inputs(batch_size=4)
             image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
             text = self.prepare_text_inputs(batch_size=3, modalities=["image"])
-            processing_kwargs = {"return_tensors": "pt", "padding": True}
 
             with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
                 processor(images=image_inputs_nested, text=text, **processing_kwargs)
 
         if (
             "videos" in input_args
-            and hasattr(processor, "video_processor")
             and getattr(processor, "video_token", None) is not None
             and self.does_processor_return_mm_offsets(processor.__class__, "replace_video_token")
         ):
@@ -913,6 +910,17 @@ class ProcessorTesterMixin:
 
             with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
                 processor(videos=videos, text=text, do_sample_frames=False, **processing_kwargs)
+
+        if (
+            "audio" in input_args
+            and getattr(processor, "audio_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_audio_token")
+        ):
+            audio_inputs = self.prepare_audio_inputs(batch_size=4)
+            text = self.prepare_text_inputs(batch_size=3, modalities=["audio"])
+
+            with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+                processor(audio=audio_inputs, text=text, **processing_kwargs)
 
     # These kwargs-related tests ensure that processors are correctly instantiated.
     # they need to be applied only if an image_processor exists.
