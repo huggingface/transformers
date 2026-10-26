@@ -43,7 +43,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, maybe_autocast, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
@@ -230,7 +230,9 @@ class MiniMaxM3VLTopKRouter(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Keep the gate's dtype, even under autocast
+            router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)
         # Sigmoid scoring (not softmax), as in M2.
         routing_weights = F.sigmoid(router_logits.float())
         scores_for_choice = routing_weights + self.e_score_correction_bias
@@ -683,6 +685,8 @@ class MiniMaxM3VLPreTrainedModel(PreTrainedModel):
         "hidden_states": MiniMaxM3VLDecoderLayer,
         "attentions": MiniMaxM3VLAttention,
     }
+    # The checkpoints store the router and its correction bias in float32
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "mlp.gate.weight"]
     input_modalities = ("image", "video", "text")
     _keys_to_ignore_on_load_unexpected = [r"(^|\.)mtp\..*"]
     _compatible_flash_implementations = ["MiniMaxAI/msa"]

@@ -213,6 +213,24 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
 
     model_tester_class = LongcatFlashModelTester
 
+    def test_e_score_correction_bias_kept_in_float32(self):
+        # LongCat-Flash checkpoints store the routing bias in float32, and loading in bfloat16 must keep it there:
+        # with large biases (the values below), bfloat16 would collapse experts' biases to a few distinct values.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = LongcatFlashForCausalLM(config)
+        biases = [b for n, b in model.named_buffers() if n.endswith("e_score_correction_bias")]
+        self.assertTrue(biases)
+        for bias in biases:
+            bias.copy_(8.5 + 0.02 * torch.arange(bias.numel(), dtype=torch.float32))
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = LongcatFlashForCausalLM.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+        for name, bias in model.named_buffers():
+            if name.endswith("e_score_correction_bias"):
+                self.assertEqual(bias.dtype, torch.float32, name)
+                expected = 8.5 + 0.02 * torch.arange(bias.numel(), dtype=torch.float32)
+                torch.testing.assert_close(bias, expected.to(bias.device), rtol=0, atol=0)
+
     @unittest.skip("LongcatFlash buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass

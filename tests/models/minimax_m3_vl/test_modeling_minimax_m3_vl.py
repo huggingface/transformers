@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch MiniMax-M3-VL model."""
 
+import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -376,6 +377,35 @@ class MiniMaxM3VLModelTest(VLMModelTest, unittest.TestCase):
 
         torch.testing.assert_close(cosine, angles.cos())
         torch.testing.assert_close(sine, angles.sin())
+
+    def test_router_and_correction_bias_kept_in_float32(self):
+        # The checkpoints store the router weight and its correction bias in float32. The bias has values of
+        # 4.9-7.9 that differ by ~0.05 between experts, which bfloat16 would collapse to a few distinct values.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = MiniMaxM3SparseForConditionalGeneration(config)
+        biases = [b for n, b in model.named_buffers() if n.endswith("e_score_correction_bias")]
+        self.assertTrue(biases)
+        for bias in biases:
+            bias.copy_(8.5 + 0.02 * torch.arange(bias.numel(), dtype=torch.float32))
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = MiniMaxM3SparseForConditionalGeneration.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+        for name, bias in model.named_buffers():
+            if name.endswith("e_score_correction_bias"):
+                self.assertEqual(bias.dtype, torch.float32, name)
+                expected = 8.5 + 0.02 * torch.arange(bias.numel(), dtype=torch.float32)
+                torch.testing.assert_close(bias, expected.to(bias.device), rtol=0, atol=0)
+        gates = [p for n, p in model.named_parameters() if n.endswith("mlp.gate.weight")]
+        self.assertTrue(gates)
+        for gate in gates:
+            self.assertEqual(gate.dtype, torch.float32)
+
+        # Under bf16 autocast, as in training, the router still computes in float32
+        router = next(m for m in model.modules() if type(m).__name__ == "MiniMaxM3VLTopKRouter")
+        hidden_states = torch.randn(4, router.hidden_dim, dtype=torch.bfloat16)
+        with torch.autocast("cpu", dtype=torch.bfloat16):
+            router_logits, _, _ = router(hidden_states)
+        self.assertEqual(router_logits.dtype, torch.float32)
 
 
 @slow

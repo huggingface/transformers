@@ -543,6 +543,7 @@ class LongcatFlashPreTrainedModel(PreTrainedModel):
     _keep_in_fp32_modules = [
         "classifier.weight"
     ]  # TODO let's make sure original code base has this, for now it fixes quantization
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     @torch.no_grad()
     def _init_weights(self, module):
