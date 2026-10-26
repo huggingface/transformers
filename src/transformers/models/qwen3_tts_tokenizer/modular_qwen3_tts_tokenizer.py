@@ -734,9 +734,6 @@ class Qwen3TTSTokenizerEncoderModel(Qwen3TTSTokenizerPreTrainedModel):
         return BaseModelOutput(last_hidden_state=embeddings)
 
 
-#  Top-level Model
-
-
 @auto_docstring
 class Qwen3TTSTokenizerModel(VibeVoiceAcousticTokenizerModel, PreTrainedAudioTokenizerBase):
     config_class = Qwen3TTSTokenizerConfig
