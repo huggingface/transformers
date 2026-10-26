@@ -743,9 +743,6 @@ class TensorParallelTesterMixin(ABC):
         model_class = self._get_tp_model_class()
         if model_class is None:
             self.skipTest("Model tester has neither causal_lm_class nor conditional_generation_class")
-        if model_class not in self.all_model_classes:
-            # e.g. a classifier wrapping another model's `*ForConditionalGeneration`, which that model's tests cover
-            self.skipTest(f"{model_class.__name__} is not one of the model classes this test covers")
 
         if expert_parallel:
             if not self._has_ep_plan():
