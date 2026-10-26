@@ -15,6 +15,7 @@
 import copy
 import functools
 import gc
+import io
 import itertools
 import math
 import os
@@ -65,6 +66,8 @@ from transformers.generation.continuous_batching.requests import (
 )
 from transformers.generation.continuous_batching.utils import (
     DEVICE_TYPE_TO_GRAPH_NAME,
+    _get_allowed_numa_nodes,
+    _get_numa_nodes_memory,
     get_device_and_memory_breakdown,
 )
 from transformers.integrations.eager_paged import eager_paged_attention_forward
@@ -2414,6 +2417,54 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             max_new_tokens=30,
             num_repeat_prompts=4,
         )
+
+
+class ContinuousBatchingMemoryTests(unittest.TestCase):
+    """Tests the detection of the CPU memory available to the process, with the /proc and /sys files faked."""
+
+    STATUS = "/proc/self/status"
+    NUMA_MAPS = "/proc/self/numa_maps"
+
+    @staticmethod
+    def fake_files(files: dict[str, str]):
+        """Patches `open` in the CB utils so it reads from `files` (path -> content) instead of the filesystem."""
+
+        def _open(path, *args, **kwargs):
+            if path not in files:
+                raise FileNotFoundError(path)
+            return io.StringIO(files[path])
+
+        return patch("transformers.generation.continuous_batching.utils.open", _open, create=True)
+
+    def test_allowed_numa_nodes(self):
+        cases = [
+            # (Mems_allowed_list, first numa_maps line, expected)
+            ("0-1", "00400000 default file=/usr/bin/python3", {0, 1}),  # unrestricted
+            ("0-1", "00400000 bind:0 file=/usr/bin/python3", {0}),  # numactl --membind=0
+            ("0", "00400000 bind:0-1 file=/usr/bin/python3", {0}),  # cpuset narrower than policy
+            ("0-1", "00400000 bind=static:1 file=/usr/bin/python3", {1}),  # policy flags
+            ("0-1", "00400000 prefer:1 file=/usr/bin/python3", {0, 1}),  # not a hard limit
+            (None, "00400000 bind:1 file=/usr/bin/python3", {1}),  # no cpuset line
+            (None, None, set()),  # not Linux
+        ]
+        for mems_allowed, first_mapping, expected in cases:
+            files = {}
+            if mems_allowed is not None:
+                files[self.STATUS] = f"Name:\tpython\nMems_allowed_list:\t{mems_allowed}\n"
+            if first_mapping is not None:
+                files[self.NUMA_MAPS] = first_mapping + "\n"
+            with self.subTest(mems_allowed=mems_allowed, first_mapping=first_mapping), self.fake_files(files):
+                self.assertEqual(_get_allowed_numa_nodes(), expected)
+
+    def test_numa_nodes_memory(self):
+        meminfo = "/sys/devices/system/node/node{}/meminfo"
+        files = {
+            meminfo.format(0): "Node 0 MemTotal:       1024 kB\nNode 0 MemFree: ...\n",
+            meminfo.format(1): "Node 1 MemTotal:       2048 kB\n",
+        }
+        with self.fake_files(files):
+            self.assertEqual(_get_numa_nodes_memory({0, 1}), 3072 * 1024)
+            self.assertIsNone(_get_numa_nodes_memory({0, 2}))  # node 2 unreadable
 
 
 @require_torch_accelerator
