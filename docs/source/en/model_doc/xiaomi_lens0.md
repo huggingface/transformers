@@ -37,7 +37,7 @@ The original code can be found [here](https://github.com/SeerRay-Lab/Xiaomi-Lens
 
 ## Usage
 
-Grounded instances are written as `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|></mask>`, with box coordinates normalized to `[0, 1000]`. Generate the answer first, then run a forward pass over the full sequence to decode one mask per `<|mask|>` token. [`~XiaomiLens0Processor.post_process_grounding`] keeps the boxes and masks of the final answer, after the thinking block, and resizes them to the original image.
+Grounded instances are written as `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|></mask>`, with box coordinates normalized to `[0, 1000]`. Generate the answer first, then append it to the conversation and run a forward pass over the full sequence to decode one mask per `<|mask|>` token. [`~XiaomiLens0Processor.post_process_grounding`] keeps the boxes and masks of the final answer, after the thinking block, and resizes them to the original image.
 
 ```python
 import torch
@@ -64,19 +64,18 @@ inputs = processor.apply_chat_template(
 ).to(model.device)
 
 generated_ids = model.generate(**inputs, max_new_tokens=1024)
-print(processor.decode(generated_ids[0, inputs.input_ids.shape[1] :]))
+completion = processor.decode(generated_ids[0, inputs.input_ids.shape[1] :]).removesuffix("<|im_end|>")
+print(completion)
 
-# Decode the masks of the generated `<|mask|>` tokens
-mm_token_type_ids = torch.tensor(processor.create_mm_token_type_ids(generated_ids), device=model.device)
+# Decode the masks of the generated `<|mask|>` tokens with a forward pass over the full conversation
+messages.append({"role": "assistant", "content": completion})
+mask_inputs = processor.apply_chat_template(messages, tokenize=True, return_dict=True, return_tensors="pt").to(
+    model.device
+)
 with torch.no_grad():
-    outputs = model(
-        input_ids=generated_ids,
-        pixel_values=inputs.pixel_values,
-        image_grid_thw=inputs.image_grid_thw,
-        mm_token_type_ids=mm_token_type_ids,
-    )
+    outputs = model(**mask_inputs)
 results = processor.post_process_grounding(
-    generated_ids, outputs.pred_masks, inputs.image_grid_thw, target_sizes=[(480, 640)]
+    mask_inputs.input_ids, outputs.pred_masks, mask_inputs.image_grid_thw, target_sizes=[(480, 640)]
 )
 print(results[0]["boxes"], results[0]["masks"].shape)
 ```
@@ -85,7 +84,6 @@ Tips:
 
 - Ask for boxes and masks explicitly with "Report bbox coordinates and masks." at the end of the instruction. Without it, the model answers in plain text.
 - The mask decoder sees the image at the resolution chosen by the image processor (up to `max_pixels`). Masks are predicted at that resolution and [`~XiaomiLens0Processor.post_process_grounding`] resizes them to `target_sizes`.
-- For batched inputs with padding, also pass the `attention_mask` of the full sequences to the forward pass.
 
 ## XiaomiLens0Config
 

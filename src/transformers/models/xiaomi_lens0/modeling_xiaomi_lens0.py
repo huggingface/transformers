@@ -1968,7 +1968,6 @@ class XiaomiLens0ForConditionalGeneration(XiaomiLens0PreTrainedModel, Generation
         Example:
 
         ```python
-        >>> import torch
         >>> from transformers import AutoProcessor, XiaomiLens0ForConditionalGeneration
 
         >>> model = XiaomiLens0ForConditionalGeneration.from_pretrained("SeerRay-Lab/Xiaomi-Lens-0", device_map="auto")
@@ -1992,14 +1991,15 @@ class XiaomiLens0ForConditionalGeneration(XiaomiLens0PreTrainedModel, Generation
 
         >>> # Generate the answer, then decode one mask per generated `<|mask|>` token
         >>> generated_ids = model.generate(**inputs, max_new_tokens=1024)
-        >>> mm_token_type_ids = torch.tensor(processor.create_mm_token_type_ids(generated_ids), device=model.device)
-        >>> outputs = model(
-        ...     input_ids=generated_ids,
-        ...     pixel_values=inputs.pixel_values,
-        ...     image_grid_thw=inputs.image_grid_thw,
-        ...     mm_token_type_ids=mm_token_type_ids,
+        >>> completion = processor.decode(generated_ids[0, inputs.input_ids.shape[1] :]).removesuffix("<|im_end|>")
+        >>> messages.append({"role": "assistant", "content": completion})
+        >>> mask_inputs = processor.apply_chat_template(
+        ...     messages, tokenize=True, return_dict=True, return_tensors="pt"
+        ... ).to(model.device)
+        >>> outputs = model(**mask_inputs)
+        >>> results = processor.post_process_grounding(
+        ...     mask_inputs.input_ids, outputs.pred_masks, mask_inputs.image_grid_thw
         ... )
-        >>> results = processor.post_process_grounding(generated_ids, outputs.pred_masks, inputs.image_grid_thw)
         ```
         """
         image_features = mm_encoder_outputs.get("image") if mm_encoder_outputs is not None else None

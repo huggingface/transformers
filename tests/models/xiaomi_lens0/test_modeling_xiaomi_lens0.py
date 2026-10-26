@@ -18,7 +18,6 @@ import unittest
 from transformers import AutoProcessor, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    cleanup,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -27,6 +26,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_processing_common import url_to_local_path
 
@@ -309,9 +309,7 @@ class XiaomiLens0ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
 @slow
 @require_torch_accelerator
-class XiaomiLens0IntegrationTest(unittest.TestCase):
-    # Expected values were generated with the original implementation (https://github.com/SeerRay-Lab/Xiaomi-Lens-0 at
-    # commit 05106853, transformers==5.4.0, sdpa attention) on an A100.
+class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     model_id = "SeerRay-Lab/Xiaomi-Lens-0"
     image_url = (
         "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
@@ -319,13 +317,10 @@ class XiaomiLens0IntegrationTest(unittest.TestCase):
     grounding_suffix = "\nReport bbox coordinates and masks."
 
     def setUp(self):
-        cleanup(torch_device, gc_collect=True)
+        super().setUp()
         self.processor = AutoProcessor.from_pretrained(self.model_id)
 
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def prepare_inputs(self, text):
+    def prepare_inputs(self, text, completion=None):
         messages = [
             {
                 "role": "user",
@@ -335,33 +330,33 @@ class XiaomiLens0IntegrationTest(unittest.TestCase):
                 ],
             }
         ]
+        if completion is not None:
+            messages.append({"role": "assistant", "content": completion})
         return self.processor.apply_chat_template(
-            messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+            messages,
+            tokenize=True,
+            add_generation_prompt=completion is None,
+            return_dict=True,
+            return_tensors="pt",
         ).to(torch_device)
 
     def test_forward_logits_and_masks(self):
+        # fp32 as bf16 logits differ by a few ulps from the original, too much for a meaningful comparison
         model = XiaomiLens0ForConditionalGeneration.from_pretrained(
             self.model_id, dtype=torch.float32, device_map=torch_device
         )
-        inputs = self.prepare_inputs("How many cats are there?" + self.grounding_suffix)
+        text = "How many cats are there?" + self.grounding_suffix
         completion = (
             "\n</think>\n\n<bbox>[541, 52, 1000, 775]</bbox><mask><|mask|></mask>"
-            "<bbox>[14, 115, 494, 988]</bbox><mask><|mask|></mask><|im_end|>"
+            "<bbox>[14, 115, 494, 988]</bbox><mask><|mask|></mask>"
         )
-        completion_ids = self.processor.tokenizer(completion, return_tensors="pt").input_ids.to(torch_device)
-        input_ids = torch.cat([inputs.input_ids, completion_ids], dim=1)
-        with torch.no_grad():
-            outputs = model(
-                input_ids=input_ids,
-                pixel_values=inputs.pixel_values,
-                image_grid_thw=inputs.image_grid_thw,
-                mm_token_type_ids=(input_ids == model.config.image_token_id).long(),
-            )
+        inputs = self.prepare_inputs(text, completion)
+        outputs = model(**inputs)
 
-        prompt_length = inputs.input_ids.shape[1]
+        prompt_length = self.prepare_inputs(text).input_ids.shape[1]
         expected_logits = Expectations(
             {
-                ("cuda", 8): [5.1495, 6.4181, 7.1162, 6.4838, 1.0018, 3.2301, 4.3108, 3.6959, 5.5932, 5.8554],
+                ("cuda", 8): [5.1540, 6.4170, 7.1199, 6.4834, 1.0022, 3.2335, 4.3166, 3.6997, 5.5916, 5.8586],
             }
         ).get_expectation()
         torch.testing.assert_close(
@@ -372,12 +367,12 @@ class XiaomiLens0IntegrationTest(unittest.TestCase):
         # Mask logits inside each predicted cat mask, and the number of foreground pixels
         expected_mask_slices = Expectations(
             {
-                ("cuda", 8): [[6.152, 6.09, 6.023, 5.953, 5.887], [8.711, 8.758, 8.797, 8.836, 8.844]],
+                ("cuda", 8): [[6.156, 6.09, 6.023, 5.957, 5.887], [8.711, 8.75, 8.797, 8.836, 8.844]],
             }
         ).get_expectation()
         mask_slices = torch.stack([outputs.pred_masks[0, 0, 198, 493:498], outputs.pred_masks[0, 1, 228, 146:151]])
         torch.testing.assert_close(mask_slices.cpu(), torch.tensor(expected_mask_slices), atol=5e-2, rtol=5e-2)
-        expected_foreground = Expectations({("cuda", 8): [59131, 51828]}).get_expectation()
+        expected_foreground = Expectations({("cuda", 8): [59138, 51824]}).get_expectation()
         foreground = (outputs.pred_masks[0] > 0).sum(dim=(-1, -2)).tolist()
         for pixels, expected_pixels in zip(foreground, expected_foreground):
             self.assertAlmostEqual(pixels, expected_pixels, delta=0.005 * expected_pixels)
@@ -386,10 +381,11 @@ class XiaomiLens0IntegrationTest(unittest.TestCase):
         model = XiaomiLens0ForConditionalGeneration.from_pretrained(
             self.model_id, dtype=torch.bfloat16, device_map=torch_device
         )
-        inputs = self.prepare_inputs(
+        text = (
             'Locate all instances in the image that match the description "the cat on the left".'
             + self.grounding_suffix
         )
+        inputs = self.prepare_inputs(text)
         generated_ids = model.generate(**inputs, max_new_tokens=64, do_sample=False)
         completion = self.processor.decode(generated_ids[0, inputs.input_ids.shape[1] :])
 
@@ -400,15 +396,10 @@ class XiaomiLens0IntegrationTest(unittest.TestCase):
         ).get_expectation()
         self.assertEqual(completion, expected_completion)
 
-        with torch.no_grad():
-            outputs = model(
-                input_ids=generated_ids,
-                pixel_values=inputs.pixel_values,
-                image_grid_thw=inputs.image_grid_thw,
-                mm_token_type_ids=(generated_ids == model.config.image_token_id).long(),
-            )
+        mask_inputs = self.prepare_inputs(text, completion.removesuffix("<|im_end|>"))
+        outputs = model(**mask_inputs)
         results = self.processor.post_process_grounding(
-            generated_ids, outputs.pred_masks, inputs.image_grid_thw, target_sizes=[(480, 640)]
+            mask_inputs.input_ids, outputs.pred_masks, mask_inputs.image_grid_thw, target_sizes=[(480, 640)]
         )
         torch.testing.assert_close(results[0]["boxes"], torch.tensor([[8.96, 55.2, 316.16, 474.24]]))
         self.assertEqual(results[0]["masks"].shape, (1, 480, 640))
