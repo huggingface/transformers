@@ -769,7 +769,9 @@ class ProcessorMixin(PushToHubMixin):
         # Check that number of placeholders in text is same as number of mm-data for models
         # that have a special multimodal placeholder token defined
         if text is not None:
-            if not isinstance(text, list) or not all(isinstance(sample, str) for sample in text):
+            if not isinstance(text, str) or (
+                isinstance(text, list) and all(isinstance(sample, str) for sample in text)
+            ):
                 raise ValueError("`text` must be a string or list of strings.")
 
             if getattr(self, "image_token", None) is not None:
