@@ -542,7 +542,7 @@ class AutoTokenizerTest(unittest.TestCase):
 
     @require_tokenizers
     def test_auto_tokenizer_loads_bloom_repo_without_tokenizer_class(self):
-        tokenizer = AutoTokenizer.from_pretrained("trl-internal-testing/tiny-BloomForCausalLM")
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-BloomForCausalLM")
         self.assertIsInstance(tokenizer, TokenizersBackend)
         self.assertTrue(tokenizer.is_fast)
 
