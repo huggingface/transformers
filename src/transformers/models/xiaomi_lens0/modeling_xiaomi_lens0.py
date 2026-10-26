@@ -1804,7 +1804,6 @@ class XiaomiLens0MaskEmbedding(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        # Projects to the pixel embedding size instead of back to `hidden_size`
         self.fc1 = nn.Linear(config.hidden_size, config.hidden_size)
         self.fc2 = nn.Linear(config.hidden_size, config.mask_embed_dim)
 
@@ -1841,30 +1840,48 @@ class XiaomiLens0LayerNorm(nn.LayerNorm):
         return features
 
 
+class XiaomiLens0MaskUpscaleBlock(nn.Module):
+    def __init__(self, config: XiaomiLens0MaskDecoderConfig):
+        super().__init__()
+        self.conv1 = nn.ConvTranspose2d(config.upscale_channels, config.upscale_channels // 2, kernel_size=2, stride=2)
+        self.layer_norm = XiaomiLens0LayerNorm(config.upscale_channels // 2, data_format="channels_first")
+        self.activation = ACT2FN[config.hidden_act]
+        self.conv2 = nn.ConvTranspose2d(config.upscale_channels // 2, config.mask_embed_dim, kernel_size=2, stride=2)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.activation(self.layer_norm(hidden_states))
+        return self.conv2(hidden_states)
+
+
+class XiaomiLens0PixelDecoder(nn.Module):
+    def __init__(self, config: XiaomiLens0MaskDecoderConfig):
+        super().__init__()
+        self.patch_proj = nn.Linear(config.vision_hidden_size, config.hidden_size)
+        self.patch_layer = XiaomiLens0MaskDecoderLayer(config)
+        self.channel_reduce = nn.Conv2d(config.hidden_size, config.upscale_channels, kernel_size=1)
+        self.upscale_block = XiaomiLens0MaskUpscaleBlock(config)
+
+    def forward(self, image_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+        batch_size, grid_height, grid_width, _ = image_features.shape
+        patch_embeddings = self.patch_proj(image_features).flatten(1, 2)
+        patch_embeddings = self.patch_layer(patch_embeddings, attention_mask=None, **kwargs)
+        patch_embeddings = patch_embeddings.transpose(1, 2).reshape(batch_size, -1, grid_height, grid_width)
+
+        pixel_embeddings = self.channel_reduce(patch_embeddings)
+        return self.upscale_block(pixel_embeddings)
+
+
 @auto_docstring
 class XiaomiLens0MaskDecoder(XiaomiLens0PreTrainedModel):
-    """
-    Decodes `<|mask|>` token hidden states into mask logits. The pre-merge vision patch features go through one
-    self-attention layer and are upscaled 16x into per-pixel embeddings, which are matched against an embedding of each
-    `<|mask|>` hidden state.
-    """
+    """Decodes `<|mask|>` token hidden states into mask logits."""
 
     config: XiaomiLens0MaskDecoderConfig
 
     def __init__(self, config: XiaomiLens0MaskDecoderConfig):
         super().__init__(config)
         self.mask_embed = XiaomiLens0MaskEmbedding(config)
-        self.patch_proj = nn.Linear(config.vision_hidden_size, config.hidden_size)
-        self.patch_layer = XiaomiLens0MaskDecoderLayer(config)
-        self.channel_reduce = nn.Conv2d(config.hidden_size, config.upscale_channels, kernel_size=1)
-        self.upscale_conv1 = nn.ConvTranspose2d(
-            config.upscale_channels, config.upscale_channels // 2, kernel_size=2, stride=2
-        )
-        self.upscale_layer_norm = XiaomiLens0LayerNorm(config.upscale_channels // 2, data_format="channels_first")
-        self.activation = ACT2FN[config.hidden_act]
-        self.upscale_conv2 = nn.ConvTranspose2d(
-            config.upscale_channels // 2, config.mask_embed_dim, kernel_size=2, stride=2
-        )
+        self.pixel_decoder = XiaomiLens0PixelDecoder(config)
 
         self.post_init()
 
@@ -1884,17 +1901,10 @@ class XiaomiLens0MaskDecoder(XiaomiLens0PreTrainedModel):
         Returns:
             `torch.Tensor` of shape `(batch_size, num_masks, 16 * grid_height, 16 * grid_width)`: the mask logits.
         """
-        batch_size, grid_height, grid_width, _ = image_features.shape
+        batch_size = image_features.shape[0]
         mask_embeddings = self.mask_embed(mask_hidden_states)
 
-        patch_embeddings = self.patch_proj(image_features).flatten(1, 2)
-        patch_embeddings = self.patch_layer(patch_embeddings, attention_mask=None, **kwargs)
-        patch_embeddings = patch_embeddings.transpose(1, 2).reshape(batch_size, -1, grid_height, grid_width)
-
-        pixel_embeddings = self.channel_reduce(patch_embeddings)
-        pixel_embeddings = self.upscale_conv1(pixel_embeddings)
-        pixel_embeddings = self.activation(self.upscale_layer_norm(pixel_embeddings))
-        pixel_embeddings = self.upscale_conv2(pixel_embeddings)
+        pixel_embeddings = self.pixel_decoder(image_features, **kwargs)
 
         height, width = pixel_embeddings.shape[-2:]
         mask_logits = mask_embeddings @ pixel_embeddings.flatten(2) / self.config.mask_embed_dim**0.5
