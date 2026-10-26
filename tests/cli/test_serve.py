@@ -402,6 +402,12 @@ class TestBuildGenerationConfig(unittest.TestCase):
         result = self._make_handler()._build_generation_config({"temperature": 0.0}, GenerationConfig(do_sample=True))
         self.assertFalse(result.do_sample)
 
+    def test_temperature_non_zero_enables_sampling(self):
+        from transformers import GenerationConfig
+
+        result = self._make_handler()._build_generation_config({"temperature": 0.5}, GenerationConfig(do_sample=False))
+        self.assertTrue(result.do_sample)
+
     def test_frequency_penalty(self):
         from transformers import GenerationConfig
 
