@@ -1706,7 +1706,12 @@ class DSparkTokenCandidateGenerator(DFlashTokenCandidateGenerator):
     of the DFlash backbone to add cross-token dependency. Hence, this class expects the assistant model to have:
         - a "backbone" module, that will run as a DFlash model,
         - a "sequential_block" module, that will run after the backbone.
-    You can check "DFlashTokenCandidateGenerator" for more details on how DFlash works.
+
+    Note that since DSpark is based on DFlash, this class inherits from "DFlashTokenCandidateGenerator", and the forward
+    is pretty similar (it evens called the main part of DFlash's forward). Only the ladt step, of translating logits to
+    tokens, is different, because the logits from DSpark are added with the bias computed sequentially. Also, for the
+    same `block_size`, DSpark predicts one more token than DFlash: DFlash predicts `block_size - 1` tokens, whereas
+    DSpark predicts `block_size` tokens. Check "DFlashTokenCandidateGenerator" for more details on how DFlash works.
 
     Args:
         assistant_model (`PreTrainedModel`):
