@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import queue
+import re
 import threading
 import warnings
 from contextlib import AbstractContextManager, nullcontext
@@ -34,6 +35,11 @@ if is_psutil_available():
 DEVICE_TYPE_TO_GRAPH_NAME = {"cuda": "CUDAGraph", "xpu": "XPUGraph"}
 
 T = TypeVar("T")
+
+# NUMA policy as shown in /proc/<pid>/numa_maps: "<mode>[=<flags>]:<nodes>", e.g. "bind:0-1,3" or "bind=static:0"
+_NUMA_BIND_POLICY_PATTERN = re.compile(r"bind(=[a-z|]+)?:(?P<nodes>\d+(-\d+)?(,\d+(-\d+)?)*)")
+# First line of /sys/devices/system/node/node<N>/meminfo
+_NUMA_NODE_MEMTOTAL_PATTERN = re.compile(r"Node \d+ MemTotal:\s+(?P<size_kb>\d+) kB")
 
 
 # We centralize the logger here to coordinate between logging and progress bar
@@ -319,6 +325,73 @@ def memory_pool_context(mem_pool: Any) -> AbstractContextManager:
 # --------------------------------------------------- MEMORY UTILS --------------------------------------------------- #
 
 
+def _parse_numa_node_list(node_list: str) -> set[int]:
+    """Parses a node list in the kernel format, e.g. "0-1,3" -> {0, 1, 3}."""
+    nodes = set()
+    for node_range in node_list.split(","):
+        first_node, _, last_node = node_range.partition("-")
+        nodes.update(range(int(first_node), int(last_node or first_node) + 1))
+    return nodes
+
+
+def _get_allowed_numa_nodes() -> set[int]:
+    """Returns the NUMA nodes the process can allocate memory from, i.e. the nodes allowed both by its cpuset (cgroups,
+    `docker --cpuset-mems`, ...) and by its memory policy (`numactl --membind`, ...). Returns an empty set if they
+    cannot be read, e.g. if we are not on Linux or there is no NUMA support."""
+    allowed_sets: list[set[int]] = []
+
+    # Retrieve the allowed nodes from the cpuset
+    mems_allowed = None
+    try:
+        # The cpuset restricts memory to the nodes in "Mems_allowed_list: <nodes>"
+        with open("/proc/self/status", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                if line.startswith("Mems_allowed_list:"):
+                    mems_allowed = line.split(":")[1].strip()
+                    break
+    except OSError:
+        pass
+
+    if mems_allowed is not None:
+        allowed_sets.append(_parse_numa_node_list(mems_allowed))
+
+    # Retrieve the allowed nodes from the numa_maps
+    first_mapping = None
+    try:
+        # Each line of numa_maps is "<address> <policy> ...". Usually, the <policy> is the same for all address ranges,
+        # because it's the policy of the process: thus we only need to read the first line to learn the process' policy
+        with open("/proc/self/numa_maps", encoding="utf-8", errors="replace") as f:
+            first_mapping = f.readline()
+    except OSError:
+        pass
+
+    if first_mapping is not None:
+        # Only the "bind" mode is a hard limit: other modes (preferred, interleave, ...) fall back to any allowed node
+        fields = first_mapping.split()
+        policy_match = _NUMA_BIND_POLICY_PATTERN.fullmatch(fields[1]) if len(fields) > 1 else None
+        if policy_match is not None:
+            allowed_sets.append(_parse_numa_node_list(policy_match["nodes"]))
+
+    # The process can only use nodes allowed by both the cpuset and the numa policy
+    return set.intersection(*allowed_sets) if allowed_sets else set()
+
+
+def _get_numa_nodes_memory(nodes: set[int]) -> int | None:
+    """Returns the total memory of the given NUMA nodes in bytes, or None if the size of one of them cannot be read."""
+    total_memory = 0
+    for node in sorted(nodes):
+        try:
+            with open(f"/sys/devices/system/node/node{node}/meminfo", encoding="utf-8") as f:
+                memtotal_match = _NUMA_NODE_MEMTOTAL_PATTERN.match(f.readline())
+        except OSError:
+            memtotal_match = None
+        if memtotal_match is None:
+            logger.warning(f"Cannot read the size of NUMA node {node}, ignoring the NUMA restrictions.")
+            return None
+        total_memory += int(memtotal_match["size_kb"]) * 1024  # the kernel's kB are KiB
+    return total_memory
+
+
 def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
     """Returns the device and memory breakdown for the current device."""
     if torch.cuda.is_available():
@@ -346,16 +419,14 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         device = torch.device("cpu")
         if is_psutil_available():
             total_memory = psutil.virtual_memory().total
-            allocated_memory = psutil.Process().memory_info().rss
-            reserved_memory = allocated_memory
+            allocated_memory = reserved_memory = psutil.Process().memory_info().rss
         else:
-            logger.error(
-                "Cannot get memory breakdown on CPU without psutil: returning 0 for all memory values. Please install "
-                "psutil to get an actual memory breakdown."
-            )
-            total_memory = 0
-            reserved_memory = 0
-            allocated_memory = 0
+            total_memory = allocated_memory = reserved_memory = 0
+            logger.error("Cannot get memory breakdown on CPU without psutil: please install psutil.")
+        # If the process is restricted to some NUMA nodes (numactl, cgroups), it can only use their memory
+        numa_memory = _get_numa_nodes_memory(_get_allowed_numa_nodes())
+        if numa_memory is not None and numa_memory > 0:
+            total_memory = min(total_memory, numa_memory) if total_memory else numa_memory
 
     return device, total_memory, reserved_memory, allocated_memory
 
