@@ -175,8 +175,8 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"((?:layers?|svtr_block)\.\d+)\.layer_norm2\.", r"\1.post_attention_layernorm."),
     ]
     granitemoe_block_renames = [
-        WeightRenaming(r"(layers\.\d+)\.block_sparse_moe\.", r"\1.mlp."),
-        WeightRenaming(r"(layers\.\d+)\.mlp\.router\.", r"\1.mlp.gate."),
+        WeightRenaming(r"(layers\.\d+)\.block_sparse_moe\.router\.", r"\1.mlp.gate."),
+        WeightRenaming(r"(layers\.\d+)\.block_sparse_moe\.experts\.", r"\1.mlp.experts."),
     ]
     mapping = {
         "hy_v4": [
@@ -771,18 +771,17 @@ def _build_checkpoint_conversion_mapping():
         ],
         "granitemoe": [
             WeightRenaming(
-                source_patterns=r"block_sparse_moe\.input_linear\.weight",
-                target_patterns="block_sparse_moe.experts.gate_up_proj",
+                source_patterns=r"(layers\.\d+)\.block_sparse_moe\.input_linear\.weight",
+                target_patterns=r"\1.mlp.experts.gate_up_proj",
             ),
             WeightRenaming(
-                source_patterns=r"block_sparse_moe\.output_linear\.weight",
-                target_patterns="block_sparse_moe.experts.down_proj",
+                source_patterns=r"(layers\.\d+)\.block_sparse_moe\.output_linear\.weight",
+                target_patterns=r"\1.mlp.experts.down_proj",
             ),
             WeightRenaming(
-                source_patterns=r"block_sparse_moe\.router\.layer\.weight",
-                target_patterns="block_sparse_moe.router.weight",
+                source_patterns=r"(layers\.\d+)\.block_sparse_moe\.router\.layer\.weight",
+                target_patterns=r"\1.mlp.gate.weight",
             ),
-            *granitemoe_block_renames,
         ],
         "GraniteSpeechModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
@@ -1364,7 +1363,7 @@ def _build_checkpoint_conversion_mapping():
         # if it runs before the DETR reverse "layers.N.mlp.up_proj → layers.N.fc1".
         # By adding a "maskformer"-level mapping with the DETR fc1 rename, it is collected first
         # (model-level before submodule-level), so its reverse runs first and removes "mlp.up_proj"
-        # from DETR decoder paths before the Swin reverse can match them.
+        # from DETR decoder paths before the Swin reverse can match them.  # noqa: NC001, NC002
         "maskformer": [
             WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.up_proj"),
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.down_proj"),
@@ -2179,14 +2178,15 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"^encoder\.", "pixio."),
     ]
 
-    mapping["minimax_m2"] = mapping["mixtral"].copy()
-    mapping["minimax_m2"] += [
-        WeightRenaming(r"\.mlp\.e_score_correction_bias", ".mlp.gate.e_score_correction_bias"),
+    mapping["minimax_m2"] = [
+        WeightRenaming(r"\.block_sparse_moe\.gate\.", ".mlp.gate."),
+        WeightRenaming(r"\.block_sparse_moe\.experts\.", ".mlp.experts."),
+        WeightRenaming(r"\.block_sparse_moe\.e_score_correction_bias", ".mlp.gate.e_score_correction_bias"),
+        *mapping["mixtral"][1:],
     ]
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
     mapping["hunyuan_v1_moe"] += [
         WeightRenaming(r"\.mlp\.shared_mlp\.", ".mlp.shared_experts."),
-        WeightRenaming(r"(layers\.\d+)\.mlp\.gate\.wg\.", r"\1.mlp.gate."),
     ]
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
     mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
@@ -2210,10 +2210,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["hy_v3"] = mapping["qwen2_moe"].copy()
     mapping["hy_v3"] += [
         WeightRenaming(source_patterns=r"mlp\.router\.gate\.weight", target_patterns="mlp.gate.weight"),
-        WeightRenaming(source_patterns=r"mlp\.expert_bias", target_patterns="mlp.e_score_correction_bias"),
-        WeightRenaming(
-            source_patterns=r"mlp\.e_score_correction_bias", target_patterns="mlp.gate.e_score_correction_bias"
-        ),
+        WeightRenaming(source_patterns=r"mlp\.expert_bias", target_patterns="mlp.gate.e_score_correction_bias"),
         WeightRenaming(source_patterns=r"mlp\.shared_mlp\.", target_patterns="mlp.shared_experts."),
     ]
     mapping["qwen3_5_moe_text"] = mapping["qwen3_5_text"].copy()

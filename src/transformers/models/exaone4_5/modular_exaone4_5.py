@@ -194,7 +194,7 @@ class Exaone4_5_VisionBlock(Qwen2_5_VLVisionBlock):
 
 class Exaone4_5_PreTrainedModel(Exaone4PreTrainedModel):
     config_class = Exaone4_5_Config
-    _no_split_modules = ["Exaone4_5_VisionBlock", "Exaone4_5_DecoderLayer"]
+    _no_split_modules = ["Exaone4_5_VisionBlock"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
     _can_record_outputs = AttributeError()
 

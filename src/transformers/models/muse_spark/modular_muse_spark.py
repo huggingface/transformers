@@ -463,7 +463,11 @@ class MuseSparkResidualGate(nn.Module):
 class MuseSparkTextDecoderLayer(MuseGlimmerTextDecoderLayer):
     def __init__(self, config: MuseSparkTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.mlp = MuseSparkSparseMoeBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else MuseSparkTextMLP(config)
+        self.mlp = (
+            MuseSparkSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else MuseSparkTextMLP(config)
+        )
         self.post_attention_layernorm = MuseSparkRMSNorm(
             config.hidden_size, eps=config.post_norm_eps, with_scale=False
         )

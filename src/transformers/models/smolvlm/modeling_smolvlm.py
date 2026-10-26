@@ -233,11 +233,11 @@ class SmolVLMVisionMLP(nn.Module):
 class SmolVLMEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: SmolVLMVisionConfig):
         super().__init__()
-        self.embed_dim = config.hidden_size
+        self.hidden_size = config.hidden_size
         self.self_attn = SmolVLMVisionAttention(config)
-        self.input_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = SmolVLMVisionMLP(config)
-        self.post_attention_layernorm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
     @auto_docstring
     def forward(

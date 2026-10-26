@@ -56,13 +56,13 @@ class HunYuanMoEV1TopKRouter(nn.Module):
         self.layer_idx = layer_idx
         self.num_experts = config.num_experts if isinstance(config.num_experts, int) else config.num_experts[layer_idx]
         self.top_k = config.moe_topk if isinstance(config.moe_topk, int) else config.moe_topk[layer_idx]
-        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size, dtype=torch.float32))
+        self.wg = nn.Linear(config.hidden_size, self.num_experts, bias=False, dtype=torch.float32)
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
-        if self.weight.dtype == torch.float32:
+        if self.wg.weight.dtype == torch.float32:
             hidden_states = hidden_states.float()
-        router_logits = F.linear(hidden_states, self.weight)
+        router_logits = self.wg(hidden_states)
         router_probs = F.softmax(router_logits, dim=1, dtype=torch.float)
         top_k_weights, top_k_index = torch.topk(router_probs, self.top_k, dim=-1)
         top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
@@ -104,8 +104,6 @@ class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
         if isinstance(module, HunYuanMoEV1Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, HunYuanMoEV1TopKRouter):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 class HunYuanMoEV1RotaryEmbedding(HunYuanDenseV1RotaryEmbedding):

@@ -409,7 +409,7 @@ class Kosmos2VisionAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Kosmos2Vision
+# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->Kosmos2Vision,up_proj->fc1,down_proj->fc2
 class Kosmos2VisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -425,7 +425,7 @@ class Kosmos2VisionMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIPVisionConfig->Kosmos2VisionConfig,AltCLIP->Kosmos2Vision
+# Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIPVisionConfig->Kosmos2VisionConfig,AltCLIP->Kosmos2Vision,self\.hidden_size->self.embed_dim,input_layernorm->layer_norm1,post_attention_layernorm->layer_norm2
 class Kosmos2VisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Kosmos2VisionConfig):
         super().__init__()
