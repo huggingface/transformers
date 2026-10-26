@@ -62,9 +62,11 @@ from transformers.generation.continuous_batching.requests import (
     GenerationOutput,
     RequestState,
     RequestStatus,
+)
+from transformers.generation.continuous_batching.utils import (
+    DEVICE_TYPE_TO_GRAPH_NAME,
     get_device_and_memory_breakdown,
 )
-from transformers.generation.continuous_batching.utils import DEVICE_TYPE_TO_GRAPH_NAME
 from transformers.integrations.eager_paged import eager_paged_attention_forward
 from transformers.testing_utils import (
     Expectations,
