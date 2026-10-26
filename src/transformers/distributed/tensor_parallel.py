@@ -431,6 +431,35 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
         return module
 
 
+class LocalColwiseParamParallel(TensorParallelLayer):
+    """Shard a bare parameter along dim 0 and hand its owner the local shard during forward.
+
+    For per-head parameters that are not part of a linear layer, e.g. the attention `sinks` of a block whose
+    q/k/v projections are colwise. The owning attention module has no TP hooks and only sees this rank's heads as
+    plain tensors, so it needs this rank's slice of the parameter as a plain tensor too.
+    """
+
+    def shard_param(self, module, param, mesh):
+        meta = module._parameters.get(param)
+        if meta is None:
+            return
+        module._parameters[param] = torch.nn.Parameter(
+            distribute_tensor(meta, mesh, [Shard(0)], src_data_rank=None),
+            requires_grad=meta.requires_grad,
+        )
+        # Wrap the owner's forward once, even if it holds several such parameters. The params are looked up at call
+        # time, so the wrapper survives them being replaced during weight loading.
+        if not getattr(module, "_tp_local_params_forward", False):
+            module._tp_local_params_forward = True
+            original_forward = module.forward
+
+            def local_params_forward(*args, **kwargs):
+                with _use_local_dtensor_params(module):
+                    return original_forward(*args, **kwargs)
+
+            module.forward = local_params_forward
+
+
 class AllReduceParallel(TensorParallelLayer):
     """All-reduce a module's partial forward output across the TP mesh."""
 
@@ -1025,6 +1054,7 @@ class ParallelInterface(GeneralInterface):
             "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
             "moe_identity_expert": MoeIdentityParallel(),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
+            "local_colwise": LocalColwiseParamParallel(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
             # Every rank keeps the full param, e.g. a per-tensor quantization scale
