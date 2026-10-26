@@ -161,7 +161,6 @@ class Qwen3TTSTokenizerEncoderConfig(PreTrainedConfig):
     attention_dropout: float | int = 0.0
     layer_scale_initial_scale: float = 0.01
     attention_bias: bool = False
-    tie_word_embeddings: bool = True
     base_config_key = "encoder_config"
 
     def __post_init__(self, **kwargs):
@@ -174,14 +173,6 @@ class Qwen3TTSTokenizerEncoderConfig(PreTrainedConfig):
     def encodec_frame_rate(self) -> int:
         hop_length = np.prod(self.upsampling_ratios)
         return math.ceil(self.sampling_rate / hop_length)
-
-    @property
-    def latent_stride(self) -> int:
-        return int(self.encodec_frame_rate / self.frame_rate)
-
-    @property
-    def latent_dim(self) -> int:
-        return self.hidden_size
 
     @property
     def frame_size(self) -> int:
