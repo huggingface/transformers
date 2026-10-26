@@ -185,9 +185,9 @@ print("Audio values shape:", output.audio_values.shape)
 
 [[autodoc]] Qwen3TTSTokenizerDecoderConfig
 
-## Qwen3TTSTokenizerQuantizerConfig
+## Qwen3TTSTokenizerAcousticQuantizerConfig
 
-[[autodoc]] Qwen3TTSTokenizerQuantizerConfig
+[[autodoc]] Qwen3TTSTokenizerAcousticQuantizerConfig
 
 ## Qwen3TTSTokenizerSemanticQuantizerConfig
 
