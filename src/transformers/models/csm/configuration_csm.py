@@ -161,8 +161,10 @@ class CsmConfig(PreTrainedConfig):
     codec_config: dict | PreTrainedConfig | None = None
 
     def __post_init__(self, **kwargs):
-        # Older checkpoints store this as False even when codebook embeddings should be tied.
+        # Checkpoints use `tie_codebooks_embeddings` to decide whether to tie, but they also serialized `tie_word_embeddings=False` for
+        # some reason, so we need to remove this one otherwise it's overwritten
         kwargs.pop("tie_word_embeddings", None)
+        self.tie_word_embeddings = self.tie_codebooks_embeddings
 
         if self.depth_decoder_config is None:
             self.depth_decoder_config = CsmDepthDecoderConfig()
@@ -180,7 +182,6 @@ class CsmConfig(PreTrainedConfig):
             self.num_key_value_heads = self.num_attention_heads
 
         self.head_dim = self.head_dim if self.head_dim is not None else self.hidden_size // self.num_attention_heads
-        self.tie_word_embeddings = bool(self.tie_codebooks_embeddings)
         super().__post_init__(**kwargs)
 
 
