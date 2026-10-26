@@ -444,6 +444,20 @@ class AllReduceParallel(TensorParallelLayer):
         return output.to_local()
 
 
+class ReplicatedOutputParallel(TensorParallelLayer):
+    """Mark a module's local output as replicated on the TP mesh.
+
+    For a replicated block whose output feeds a layer that a plan shared with other blocks shards rowwise, e.g. a
+    linear attention under the same `self_attn.o_proj` name as a head-sharded attention. A plain local input reads as
+    this rank's shard to the rowwise layer; a replicated DTensor is sliced to the rank's columns instead.
+    """
+
+    def transform_output_post_forward(self, module, output, mesh):
+        if output is None or isinstance(output, DTensor):
+            return output
+        return DTensor.from_local(output, mesh, [Replicate()], run_check=False)
+
+
 class MlaKvAProjParallel(TensorParallelLayer):
     """
     For MLA attention used in DeepSeek-V2 style models (deepseek_v2, longcat_flash, glm_moe_dsa, glm4_moe_lite):
@@ -1027,6 +1041,7 @@ class ParallelInterface(GeneralInterface):
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
+            "replicated_output": ReplicatedOutputParallel(),
             # Every rank keeps the full param, e.g. a per-tensor quantization scale
             "replicate": TensorParallelLayer(),
         }
