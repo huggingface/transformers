@@ -173,44 +173,6 @@ print("Audio values shape:", output.audio_values.shape)
 # Audio values shape: torch.Size([1, 140520])
 ```
 
-## Quantizer configuration
-
-`quantizer_config.semantic_quantizer_config` configures the semantic residual vector quantizer independently.
-The outer `quantizer_config.n_codebooks` counts all codebooks; `semantic_quantizer_config.n_codebooks` assigns
-the first codebooks to semantic codes, and the remaining codebooks are acoustic.
-The semantic codebook count must be between `1` and `quantizer_config.n_codebooks`, inclusive.
-
-```python
-from transformers import Qwen3TTSTokenizerConfig
-
-config = Qwen3TTSTokenizerConfig(
-    quantizer_config={
-        "n_codebooks": 16,
-        "semantic_quantizer_config": {"n_codebooks": 1, "codebook_size": 2048},
-    }
-)
-```
-
-The semantic config also exposes `codebook_dim`, `hidden_size`, and `vector_quantization_hidden_dimension`.
-Unspecified semantic dictionary fields inherit the outer quantizer settings, except `n_codebooks`, which defaults to
-`1`. You can also pass a
-[`Qwen3TTSTokenizerSemanticQuantizerConfig`] instance with its own settings. Keep dimensions and codebook sizes
-consistent with the weights when loading a pretrained checkpoint.
-
-Configure codebook sizes and counts in `quantizer_config`. Its `hidden_size` is the quantizer's input/output
-width; `codebook_dim` and `vector_quantization_hidden_dimension` describe its internal embeddings and projections.
-These are separate from the components' transformer hidden sizes and the decoder's continuous input width.
-When `quantizer_config` is omitted, its `hidden_size` defaults to the decoder's `codebook_dim`, and its
-`codebook_dim` and `vector_quantization_hidden_dimension` default to half that width.
-
-`Qwen3TTSTokenizerConfig.from_dict` and `from_pretrained` normalize published checkpoint dictionaries that contain
-nested `encoder_config` and `decoder_config`, including their older quantizer fields. The same normalization is
-used for an embedded `Qwen3TTSConfig.audio_config`. Input dictionaries are not modified, and explicitly supplied
-canonical fields or keyword overrides take precedence over imported nested settings.
-Saved configs use flat `encoder_*` fields and unprefixed decoder fields, with only `quantizer_config` nested;
-the semantic count is saved only as `quantizer_config.semantic_quantizer_config.n_codebooks`, not
-`num_semantic_quantizers`.
-
 ## Qwen3TTSTokenizerConfig
 
 [[autodoc]] Qwen3TTSTokenizerConfig
