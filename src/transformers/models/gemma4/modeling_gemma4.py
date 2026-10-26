@@ -1658,7 +1658,11 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
                 "attention_mask": attention_mask,
                 "past_key_values": past_key_values,
                 "position_ids": position_ids,
-                "allow_is_causal_skip": isinstance(logits_to_keep, int) and logits_to_keep <= 1,
+                "allow_is_causal_skip": isinstance(logits_to_keep, int)
+                and (
+                    logits_to_keep == 0
+                    or (logits_to_keep == 1 and not getattr(past_key_values, "is_compileable", False))
+                ),
             }
             # Create the masks
             causal_mask_mapping = {
@@ -1680,15 +1684,12 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             if i == self.first_kv_shared_layer_idx:
-                hidden_states, per_layer_inputs, position_ids, position_embeddings, causal_mask_mapping = (
+                hidden_states, per_layer_inputs, position_embeddings, causal_mask_mapping = (
                     self._maybe_slice_kv_shared_inputs(
                         hidden_states,
                         per_layer_inputs,
-                        position_ids,
                         position_embeddings,
                         causal_mask_mapping,
-                        shared_kv_states,
-                        past_key_values,
                         logits_to_keep,
                         **kwargs,
                     )
@@ -1800,11 +1801,8 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         self,
         hidden_states,
         per_layer_inputs,
-        position_ids,
         position_embeddings,
         causal_mask_mapping,
-        shared_kv_states,
-        past_key_values,
         logits_to_keep,
         **kwargs,
     ):
@@ -1817,47 +1815,43 @@ class Gemma4TextModel(Gemma4PreTrainedModel):
         """
         seq_len = hidden_states.shape[1]
         record_keys = ("output_hidden_states", "output_attentions", "output_router_logits")
-        if isinstance(logits_to_keep, int):
-            can_slice = 0 < logits_to_keep < seq_len
-            masks_valid = all(
-                m is None or (isinstance(m, torch.Tensor) and m.ndim == 4) for m in causal_mask_mapping.values()
-            )
-        else:
-            can_slice = logits_to_keep.dtype != torch.bool and 0 < logits_to_keep.shape[-1] < seq_len
-            masks_valid = all(isinstance(m, torch.Tensor) and m.ndim == 4 for m in causal_mask_mapping.values())
+        can_slice = (
+            0 < logits_to_keep < seq_len
+            if isinstance(logits_to_keep, int)
+            else logits_to_keep.dtype != torch.bool and 0 < logits_to_keep.shape[-1] < seq_len
+        )
+        masks_valid = all(
+            (m is None and isinstance(logits_to_keep, int) and logits_to_keep == 1)
+            or (isinstance(m, torch.Tensor) and m.ndim == 4)
+            for m in causal_mask_mapping.values()
+        )
 
         if (
             not can_slice
             or not masks_valid
             or any(kwargs.get(k) or getattr(self.config, k, False) for k in record_keys)
         ):
-            return hidden_states, per_layer_inputs, position_ids, position_embeddings, causal_mask_mapping
+            return hidden_states, per_layer_inputs, position_embeddings, causal_mask_mapping
 
-        def slice_dim(tensor, dim=1):
-            if tensor is None:
-                return None
-            if isinstance(logits_to_keep, torch.Tensor) and logits_to_keep.ndim == 2:
-                tensor = tensor.expand(logits_to_keep.shape[0], *tensor.shape[1:])
-                view_shape = [
-                    logits_to_keep.shape[0],
-                    *(logits_to_keep.shape[1] if i == dim else 1 for i in range(1, tensor.ndim)),
-                ]
-                return torch.take_along_dim(tensor, logits_to_keep.view(*view_shape), dim=dim)
-            slice_obj = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-            idx = tuple(slice_obj if i == dim else slice(None) for i in range(tensor.ndim))
-            return tensor[idx]
+        batch_size = hidden_states.shape[0]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        if per_layer_inputs is not None:
+            per_layer_inputs = slice_logits_to_keep(per_layer_inputs.flatten(2), logits_to_keep).unflatten(
+                2, per_layer_inputs.shape[2:]
+            )
+        position_embeddings = {
+            k: (
+                slice_logits_to_keep(cos.expand(batch_size, -1, -1), logits_to_keep),
+                slice_logits_to_keep(sin.expand(batch_size, -1, -1), logits_to_keep),
+            )
+            for k, (cos, sin) in position_embeddings.items()
+        }
+        causal_mask_mapping = {
+            k: slice_logits_to_keep(v.squeeze(1), logits_to_keep).unsqueeze(1) if v is not None else None
+            for k, v in causal_mask_mapping.items()
+        }
 
-        hidden_states = slice_dim(hidden_states)
-        per_layer_inputs = slice_dim(per_layer_inputs)
-        position_ids = slice_dim(position_ids)
-        position_embeddings = {k: (slice_dim(v[0]), slice_dim(v[1])) for k, v in position_embeddings.items()}
-        causal_mask_mapping = {k: slice_dim(v, dim=2) for k, v in causal_mask_mapping.items()}
-        if getattr(past_key_values, "is_compileable", False):
-            for k, (key_states, value_states) in shared_kv_states.items():
-                if causal_mask_mapping.get(k) is None and key_states.shape[-2] > seq_len:
-                    shared_kv_states[k] = (key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :])
-
-        return hidden_states, per_layer_inputs, position_ids, position_embeddings, causal_mask_mapping
+        return hidden_states, per_layer_inputs, position_embeddings, causal_mask_mapping
 
 
 @auto_docstring(custom_intro="The base Gemma 4 language model with a language modeling head.")
@@ -1926,7 +1920,7 @@ class Gemma4ForCausalLM(Gemma4PreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             per_layer_inputs=per_layer_inputs,
             use_cache=use_cache,
-            logits_to_keep=logits_to_keep if labels is None else 0,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
@@ -2691,7 +2685,7 @@ class Gemma4ForConditionalGeneration(Gemma4PreTrainedModel, GenerationMixin):
             image_position_ids=image_position_ids,
             video_position_ids=video_position_ids,
             mm_encoder_outputs=mm_encoder_outputs,
-            logits_to_keep=logits_to_keep if labels is None else 0,
+            logits_to_keep=logits_to_keep,
             return_dict=True,
             **kwargs,
         )
