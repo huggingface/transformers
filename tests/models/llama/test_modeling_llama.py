@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch LLaMA model."""
 
+import tempfile
 import unittest
 
 import pytest
@@ -38,6 +39,7 @@ if is_torch_available():
     from transformers import (
         AutoModelForCausalLM,
         LlamaForCausalLM,
+        LlamaForQuestionAnswering,
         LlamaModel,
         LlamaTokenizer,
         StaticLayer,
@@ -59,6 +61,23 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = LlamaForCausalLM if is_torch_available() else None
+
+    def test_question_answering_loads_causal_lm_weights(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        causal_lm = LlamaForCausalLM(config)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            causal_lm.save_pretrained(tmp)
+            qa_model, loading_info = LlamaForQuestionAnswering.from_pretrained(tmp, output_loading_info=True)
+
+        base_keys = {key for key in qa_model.state_dict() if key.startswith("transformer.")}
+        self.assertTrue(base_keys)
+        self.assertTrue(base_keys.isdisjoint(loading_info["missing_keys"]), loading_info["missing_keys"] & base_keys)
+
+        causal_lm_state_dict = causal_lm.state_dict()
+        for key in base_keys:
+            expected_key = key.replace("transformer.", "model.", 1)
+            self.assertTrue(torch.equal(qa_model.state_dict()[key], causal_lm_state_dict[expected_key]))
 
 
 @require_torch_accelerator

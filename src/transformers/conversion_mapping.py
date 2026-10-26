@@ -2243,6 +2243,26 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
+    # These `ForQuestionAnswering` heads inherited `base_model_prefix = "transformer"` from Llama for backward
+    # compatibility, so their base weights live under `transformer.*`. Checkpoints they are fine-tuned from (e.g.
+    # `LlamaForCausalLM`) store the same weights under `model.*` instead. Rename on load; the reverse transform
+    # still lets old QA checkpoints saved under `transformer.*` load unchanged.
+    for model_name in (
+        "Arcee",
+        "DiffLlama",
+        "Exaone4",
+        "Llama",
+        "Ministral",
+        "Nemotron",
+        "Qwen2",
+        "Qwen3",
+        "Qwen3Moe",
+        "Qwen3Next",
+        "SeedOss",
+        "SmolLM3",
+    ):
+        mapping[f"{model_name}ForQuestionAnswering"] = [WeightRenaming(r"^model\.", "transformer.")]
+
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue
