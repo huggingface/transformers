@@ -143,53 +143,38 @@ jobs:
               issue_number: prNumber
             });
 
-            // Find existing comments that start with our prefix
+            // Find existing bot comments that start with our prefix
             const existingComments = comments.filter(comment =>
               comment.user.login === 'github-actions[bot]' &&
               comment.body.startsWith(commentPrefix)
             );
 
-            let shouldCreateNewComment = true;
-            let commentsToDelete = [];
+            // --- conditions ---
+            const mostRecentBotComment = existingComments.length > 0
+              ? existingComments.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
+              : null;
 
-            if (existingComments.length > 0) {
-              // Get the most recent comment
-              const mostRecentComment = existingComments
-                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+            const isOld = mostRecentBotComment ? new Date(mostRecentBotComment.created_at) < thirtyMinutesAgo : false;
+            const isDifferentContent = mostRecentBotComment ? mostRecentBotComment.body !== newBody : false;
 
-              const commentDate = new Date(mostRecentComment.created_at);
-              const isOld = commentDate < thirtyMinutesAgo;
-              const isDifferentContent = mostRecentComment.body !== newBody;
+            const mergeCommitTimestamp = parseInt(process.env.PR_MERGE_COMMIT_TIMESTAMP, 10) * 1000;
+            const maintainerRanSlow = comments.some(comment =>
+              ['MEMBER', 'OWNER', 'COLLABORATOR'].includes(comment.author_association) &&
+              comment.body.trimStart().startsWith('run-slow:') &&
+              new Date(comment.created_at).getTime() > mergeCommitTimestamp
+            );
 
-              console.log(`Most recent comment created: ${mostRecentComment.created_at}`);
-              console.log(`Is older than 30 minutes: ${isOld}`);
-              console.log(`Has different content: ${isDifferentContent}`);
+            // --- decide ---
+            const needsRefresh = !mostRecentBotComment || isOld || isDifferentContent;
+            const commentsToDelete = (needsRefresh && mostRecentBotComment) ? existingComments : [];
+            const shouldCreateNewComment = needsRefresh && !maintainerRanSlow;
 
-              if (isOld || isDifferentContent) {
-                // Delete all existing comments and create new one
-                commentsToDelete = existingComments;
-                console.log(`Will delete ${commentsToDelete.length} existing comment(s) and create new one`);
-              } else {
-                // Content is same and comment is recent, skip
-                shouldCreateNewComment = false;
-                console.log('Comment is recent and content unchanged, skipping update');
-              }
-            } else {
-              // Skip if a maintainer already posted run-slow: after the current merge commit
-              // (they already saw the current state and acted on it)
-              const mergeCommitTimestamp = parseInt(process.env.PR_MERGE_COMMIT_TIMESTAMP, 10) * 1000;
-              const maintainerRanSlow = comments.some(comment =>
-                ['MEMBER', 'OWNER', 'COLLABORATOR'].includes(comment.author_association) &&
-                comment.body.trimStart().startsWith('run-slow:') &&
-                new Date(comment.created_at).getTime() > mergeCommitTimestamp
-              );
-              if (maintainerRanSlow) {
-                shouldCreateNewComment = false;
-                console.log('A maintainer already posted a run-slow: comment after the current commit, skipping bot suggestion');
-              } else {
-                console.log('No existing comments found, will create new one');
-              }
-            }
+            // --- log ---
+            console.log(`Existing bot comment: ${mostRecentBotComment ? mostRecentBotComment.created_at : 'none'}`);
+            console.log(`Is older than 30 minutes: ${isOld}`);
+            console.log(`Has different content: ${isDifferentContent}`);
+            console.log(`Maintainer already ran slow after current commit: ${maintainerRanSlow}`);
+            console.log(`Will delete ${commentsToDelete.length} comment(s), will create new: ${shouldCreateNewComment}`);
 
             // Delete old comments if needed
             for (const comment of commentsToDelete) {
