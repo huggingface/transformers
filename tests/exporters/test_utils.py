@@ -205,9 +205,9 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
 
     def test_register_patch_skips_unresolvable_path(self):
         # Silent-skip lets exporters co-exist when only one backend is installed.
-        # Resolution moved from decoration time to apply_patches time: the string path is now
-        # stored in _PATCHES, but apply_patches drops it (resolves to None) — no patch installed,
-        # no exception, import-time safety unchanged.
+        # Resolution moved from decoration time to apply_patches time (#50000): the string
+        # path is now stored in _PATCHES, but apply_patches drops it (resolves to None) —
+        # no patch installed, no exception, import-time safety unchanged.
         backend = "_test_unresolvable"
 
         @register_patch(backend, "does.not.exist.at.all")
