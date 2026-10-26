@@ -29,6 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...integrations import use_experts_implementation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -539,6 +540,7 @@ class Step3p7MLP(nn.Module):
         return self.down_proj(gate * up)
 
 
+@use_experts_implementation
 class Step3p7Experts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 

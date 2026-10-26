@@ -317,7 +317,11 @@ def _reference_grad_shard(name, grad, local_grad, rank, world_size, tp_plan, exp
     return grad
 
 
-def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
+def _to_device(inputs, device):
+    return {name: value.to(device) for name, value in inputs.items()}
+
+
+def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol, extra_inputs):
     """Implementation for comparing TP and non-TP model outputs."""
     set_seed(0)
 
@@ -331,10 +335,11 @@ def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
     vocab_size = model.config.get_text_config().vocab_size
     set_seed(0)
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
+    extra_inputs = _to_device(extra_inputs, device)
 
     with torch.no_grad():
-        logits = model(input_ids).logits
-        logits_tp = model_tp(input_ids).logits
+        logits = model(input_ids, **extra_inputs).logits
+        logits_tp = model_tp(input_ids, **extra_inputs).logits
 
     diff = (logits - logits_tp).abs()
     assert torch.allclose(logits, logits_tp, atol=atol, rtol=rtol), (
@@ -344,7 +349,7 @@ def _test_tp_forward_impl(_rank, model_path, model_class, atol, rtol):
     dist.barrier()
 
 
-def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
+def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol, extra_inputs):
     """Implementation for comparing TP and non-TP model backward passes."""
     set_seed(0)
 
@@ -357,11 +362,12 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
     set_seed(0)
     labels = torch.randint(0, vocab_size, (2, 64)).to(device)
+    extra_inputs = _to_device(extra_inputs, device)
 
-    loss = model(input_ids, labels=labels).loss
+    loss = model(input_ids, labels=labels, **extra_inputs).loss
     loss.backward()
 
-    loss_tp = model_tp(input_ids, labels=labels).loss
+    loss_tp = model_tp(input_ids, labels=labels, **extra_inputs).loss
     loss_tp.backward()
 
     assert torch.allclose(loss, loss_tp, atol=atol, rtol=rtol), (
@@ -395,7 +401,7 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
     dist.barrier()
 
 
-def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new_tokens):
+def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new_tokens, extra_inputs):
     """Implementation for comparing TP and non-TP model generation outputs (direct load path)."""
     set_seed(0)
 
@@ -406,6 +412,7 @@ def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new
     set_seed(0)
     vocab_size = model.config.get_text_config().vocab_size
     input_ids = torch.randint(0, vocab_size, (1, 10)).to(device)
+    extra_inputs = _to_device(extra_inputs, device)
     generation_kwargs = {
         "max_new_tokens": max_new_tokens,
         "do_sample": False,
@@ -413,6 +420,7 @@ def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new
         "output_scores": True,
         "return_dict_in_generate": True,
         "use_cache": True,
+        **extra_inputs,
     }
 
     with torch.no_grad():
@@ -438,8 +446,29 @@ def _test_tp_generation_impl(_rank, model_path, model_class, atol, rtol, max_new
     dist.barrier()
 
 
-def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_tokens):
-    """Implementation for comparing TP+quantized and non-TP quantized generation (sequence equality)."""
+def _quantized_weight_names(model):
+    """Names of the modules whose weight is quantized, i.e. a tensor subclass (sharded or not)."""
+    names = set()
+    for name, module in model.named_modules():
+        weight = getattr(module, "weight", None)
+        if isinstance(weight, DTensor):
+            weight = weight.to_local()
+        if isinstance(weight, torch.Tensor) and type(weight) not in (torch.Tensor, torch.nn.Parameter):
+            names.add(name)
+    return names
+
+
+def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_tokens, extra_inputs):
+    """Implementation for comparing TP+quantized and non-TP quantized generation.
+
+    The TP model quantizes its weight shards, so its float8 scales (and rounding) differ from the non-TP model's
+    wherever a layer is sharded along its input dim: the two are different float8 roundings of the same weights, as
+    different from each other as each is from the unquantized model. On tiny random models that flips greedy near-ties,
+    and comparing free-running generations position by position turns a single flip into a mismatch of every later
+    token. Instead, every model scores the non-TP model's generation (teacher forcing), and the TP model may only pick
+    another token than the non-TP one where the non-TP model ranks the two closer than float8 quantization itself moves
+    its logits (the gap to the unquantized model at that position).
+    """
     set_seed(0)
 
     quantization_config = TorchAoConfig(Float8WeightOnlyConfig())
@@ -454,43 +483,68 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
     device = model_tp.device
     model = model_class.from_pretrained(model_path, quantization_config=quantization_config)
     model = model.to(device)
+    model_unquantized = model_class.from_pretrained(model_path).to(device)
 
     model_tp.eval()
     model.eval()
+    model_unquantized.eval()
+
+    quantized, quantized_tp = _quantized_weight_names(model), _quantized_weight_names(model_tp)
+    assert quantized and quantized == quantized_tp, (
+        f"TP and non-TP models quantize different layers. Only quantized without TP: {sorted(quantized - quantized_tp)}"
+        f" | Only quantized with TP: {sorted(quantized_tp - quantized)}"
+    )
 
     vocab_size = model.config.get_text_config().vocab_size
     set_seed(0)
     input_ids = torch.randint(0, vocab_size, (1, 10)).to(device)
+    extra_inputs = _to_device(extra_inputs, device)
 
     generation_kwargs = {
         "max_new_tokens": max_new_tokens,
         "do_sample": False,
         "num_beams": 1,
-        "output_scores": True,
         "return_dict_in_generate": True,
         "use_cache": True,
+        **extra_inputs,
     }
 
     with torch.no_grad():
         output = model.generate(input_ids, **generation_kwargs)
         output_tp = model_tp.generate(input_ids, **generation_kwargs)
 
-    print(f"[Rank {_rank}] Non-TP-quantized model tokens: {output.sequences[0].tolist()}")
-    print(f"[Rank {_rank}] TP-quantized tokens:     {output_tp.sequences[0].tolist()}")
-    print(f"[Rank {_rank}] Sequences match: {torch.equal(output.sequences, output_tp.sequences)}")
+        # the logits predicting each generated token of the non-TP model, given its own previous tokens
+        sequence = output.sequences
+        generated = slice(input_ids.shape[1] - 1, sequence.shape[1] - 1)
+        logits = model(sequence, **extra_inputs).logits[0, generated].float()
+        logits_tp = model_tp(sequence, **extra_inputs).logits[0, generated].float()
+        logits_unquantized = model_unquantized(sequence, **extra_inputs).logits[0, generated].float()
 
-    # Compare generated token sequences (allow up to 25% mismatch due to Float8 quantization
-    # scale differences between full-weight and sharded-weight quantization)
-    # NOTE(3outeille): Some models have no perfect match. Investigate better the discrepancy but for now low priority.
-    seq = output.sequences[0]
-    seq_tp = output_tp.sequences[0]
-    min_len = min(len(seq), len(seq_tp))
-    match_count = (seq[:min_len] == seq_tp[:min_len]).sum().item()
-    match_ratio = match_count / max(len(seq), len(seq_tp))
-    assert match_ratio >= 0.75, (
-        f"non-TP-quantized + TP-quantized model generated too many different tokens "
-        f"(match ratio: {match_ratio:.2%}, threshold: 75%).\n"
-        f"Non-TP+quantized: {output.sequences.tolist()} \n TP+quantized: {output_tp.sequences.tolist()}"
+    quantization_noise = (logits - logits_unquantized).abs().amax(-1)
+
+    def _ranked_clearly_below(tokens):
+        """The positions where the non-TP model scores `tokens` lower than its own choice by more than float8 noise."""
+        positions = torch.arange(len(tokens), device=logits.device)
+        gap = logits[positions].amax(-1) - logits[positions, tokens]
+        return [
+            f"position {i}: gap {gap[i]:.3g} > float8 noise {quantization_noise[i]:.3g}"
+            for i in positions[gap > quantization_noise[positions]].tolist()
+        ]
+
+    # the TP model's choices given the same previous tokens: its forward ...
+    failures = [f"forward {failure}" for failure in _ranked_clearly_below(logits_tp.argmax(-1))]
+    # ... and its cached decoding, up to the first token where its generation departs from the non-TP one (included)
+    tokens = sequence[0, input_ids.shape[1] :]
+    tokens_tp = output_tp.sequences[0, input_ids.shape[1] :]
+    length = min(len(tokens), len(tokens_tp))
+    differs = (tokens[:length] != tokens_tp[:length]).nonzero()
+    if len(differs):
+        failures += [f"decoding {failure}" for failure in _ranked_clearly_below(tokens_tp[: differs[0].item() + 1])]
+
+    assert not failures, (
+        "The TP+quantized model picks tokens the non-TP quantized model ranks clearly below its own choice:\n"
+        + "\n".join(failures)
+        + f"\nNon-TP+quantized: {output.sequences.tolist()}\nTP+quantized: {output_tp.sequences.tolist()}"
     )
 
     dist.barrier()
@@ -511,7 +565,7 @@ def _load_ep_and_reference_models(model_path, model_class):
     return model_ep, model_ref, device
 
 
-def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation):
+def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation, extra_inputs):
     """Implementation for comparing EP and non-EP model outputs."""
     set_seed(0)
 
@@ -525,10 +579,11 @@ def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_im
 
     vocab_size = model_ref.config.get_text_config().vocab_size
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
+    extra_inputs = _to_device(extra_inputs, device)
 
     with torch.no_grad():
-        logits_ref = model_ref(input_ids).logits
-        logits_ep = model_ep(input_ids).logits
+        logits_ref = model_ref(input_ids, **extra_inputs).logits
+        logits_ep = model_ep(input_ids, **extra_inputs).logits
 
     diff = (logits_ref - logits_ep).abs()
     assert torch.allclose(logits_ref, logits_ep, atol=atol, rtol=rtol), (
@@ -538,7 +593,7 @@ def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_im
     dist.barrier()
 
 
-def _test_ep_backward_impl(rank, model_path, model_class, atol, rtol, experts_implementation):
+def _test_ep_backward_impl(rank, model_path, model_class, atol, rtol, experts_implementation, extra_inputs):
     """Implementation for comparing EP and non-EP model backward passes."""
     set_seed(0)
 
@@ -552,11 +607,12 @@ def _test_ep_backward_impl(rank, model_path, model_class, atol, rtol, experts_im
     vocab_size = model_ref.config.get_text_config().vocab_size
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
     labels = torch.randint(0, vocab_size, (2, 64)).to(device)
+    extra_inputs = _to_device(extra_inputs, device)
 
-    loss_ref = model_ref(input_ids, labels=labels).loss
+    loss_ref = model_ref(input_ids, labels=labels, **extra_inputs).loss
     loss_ref.backward()
 
-    loss_ep = model_ep(input_ids, labels=labels).loss
+    loss_ep = model_ep(input_ids, labels=labels, **extra_inputs).loss
     loss_ep.backward()
 
     assert torch.allclose(loss_ref, loss_ep, atol=atol, rtol=rtol), (
@@ -648,6 +704,11 @@ class TensorParallelTesterMixin(ABC):
                 config.tie_word_embeddings = tie_word_embeddings
         return config
 
+    def _get_tp_extra_inputs(self, batch_size: int, seq_length: int) -> dict:
+        """Inputs besides `input_ids` that the model needs to run on `batch_size` sequences of up to `seq_length`
+        tokens (prompt and generated ones), e.g. the audio of a model that cannot run on text alone. None by default."""
+        return {}
+
     def _skip_if_not_supported(self, expert_parallel: bool = False):
         """Check and skip the test if tensor/expert parallel is not supported for this model/environment."""
         parallelism = "Expert" if expert_parallel else "Tensor"
@@ -665,8 +726,12 @@ class TensorParallelTesterMixin(ABC):
                 f"but only {os.cpu_count()} available"
             )
 
-        if self._get_tp_model_class() is None:
+        model_class = self._get_tp_model_class()
+        if model_class is None:
             self.skipTest("Model tester has neither causal_lm_class nor conditional_generation_class")
+        if model_class not in self.all_model_classes:
+            # e.g. a classifier wrapping another model's `*ForConditionalGeneration`, which that model's tests cover
+            self.skipTest(f"{model_class.__name__} is not one of the model classes this test covers")
 
         if expert_parallel:
             if not self._has_ep_plan():
@@ -733,7 +798,9 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_forward_impl)(tmp_dir, model_class, atol, rtol)
+            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_forward_impl)(
+                tmp_dir, model_class, atol, rtol, self._get_tp_extra_inputs(2, 64)
+            )
 
     @is_tensor_parallel_test
     def test_tp_backward(self):
@@ -749,7 +816,9 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_backward_impl)(tmp_dir, model_class, atol, rtol)
+            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_backward_impl)(
+                tmp_dir, model_class, atol, rtol, self._get_tp_extra_inputs(2, 64)
+            )
 
     @is_tensor_parallel_test
     def test_tp_generation(self):
@@ -768,7 +837,7 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
             _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_impl)(
-                tmp_dir, model_class, atol, rtol, max_new_tokens
+                tmp_dir, model_class, atol, rtol, max_new_tokens, self._get_tp_extra_inputs(1, 10 + max_new_tokens)
             )
 
     @is_tensor_parallel_test
@@ -788,7 +857,7 @@ class TensorParallelTesterMixin(ABC):
             model.save_pretrained(tmp_dir, save_original_format=True)
 
             _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_quantized_impl)(
-                tmp_dir, model_class, max_new_tokens
+                tmp_dir, model_class, max_new_tokens, self._get_tp_extra_inputs(1, 10 + max_new_tokens)
             )
 
     @parameterized.expand(
@@ -814,7 +883,7 @@ class TensorParallelTesterMixin(ABC):
             model.save_pretrained(tmp_dir, save_original_format=True)
 
             _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(
-                tmp_dir, model_class, atol, rtol, experts_implementation
+                tmp_dir, model_class, atol, rtol, experts_implementation, self._get_tp_extra_inputs(2, 64)
             )
 
     @parameterized.expand([("eager",), ("grouped_mm",), ("batched_mm",)])
@@ -833,5 +902,5 @@ class TensorParallelTesterMixin(ABC):
             model.save_pretrained(tmp_dir, save_original_format=True)
 
             _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(
-                tmp_dir, model_class, atol, rtol, experts_implementation
+                tmp_dir, model_class, atol, rtol, experts_implementation, self._get_tp_extra_inputs(2, 64)
             )
