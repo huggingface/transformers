@@ -80,13 +80,19 @@ def _build_tiny_audio_tokenizer(num_quantizers=4):
         decoder_dim=32,
         upsample_rates=[2, 2],
         upsampling_ratios=[2, 2],
-        quantizer_config={
+        acoustic_quantizer_config={
             "codebook_size": 8,
             "codebook_dim": 8,
-            "n_codebooks": num_quantizers,
+            "n_codebooks": num_quantizers - 1,
             "vector_quantization_hidden_dimension": 8,
             "hidden_size": 16,
-            "semantic_quantizer_config": {"n_codebooks": 1},
+        },
+        semantic_quantizer_config={
+            "codebook_size": 8,
+            "codebook_dim": 8,
+            "n_codebooks": 1,
+            "vector_quantization_hidden_dimension": 8,
+            "hidden_size": 16,
         },
     )
     return Qwen3TTSTokenizerModel(config).eval()
@@ -777,8 +783,8 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             feature_size=config.speaker_encoder_config.mel_dim, n_fft=64, hop_length=16, win_length=64
         )
         codec_config = _build_tiny_audio_tokenizer(num_quantizers=2).config
-        codec_config.quantizer_config.codebook_size = 2048
-        codec_config.quantizer_config.semantic_quantizer_config.codebook_size = 2048
+        codec_config.acoustic_quantizer_config.codebook_size = 2048
+        codec_config.semantic_quantizer_config.codebook_size = 2048
         processor.audio_tokenizer = Qwen3TTSTokenizerModel(codec_config).eval()
         with torch.no_grad():
             for module in processor.audio_tokenizer.quantizer.modules():
@@ -901,7 +907,8 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             self.assertNotIn("encoder_config", saved_audio_config)
             self.assertNotIn("decoder_config", saved_audio_config)
             self.assertNotIn("codebook_size", saved_audio_config)
-            self.assertIn("quantizer_config", saved_audio_config)
+            self.assertIn("acoustic_quantizer_config", saved_audio_config)
+            self.assertIn("semantic_quantizer_config", saved_audio_config)
             restored_config = AutoConfig.from_pretrained(directory)
 
         for origin, candidate in (
@@ -968,7 +975,12 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with torch.no_grad():
             codes = processor.audio_tokenizer.encode(input_values).audio_codes[0]
             audio = processor.decode(codes)
-        self.assertEqual(codes.shape[-1], processor.audio_tokenizer.config.quantizer_config.n_codebooks)
+        audio_tokenizer_config = processor.audio_tokenizer.config
+        num_codebooks = (
+            audio_tokenizer_config.acoustic_quantizer_config.n_codebooks
+            + audio_tokenizer_config.semantic_quantizer_config.n_codebooks
+        )
+        self.assertEqual(codes.shape[-1], num_codebooks)
         self.assertEqual(audio.ndim, 1)
         self.assertGreaterEqual(audio.numel(), sampling_rate)
         self.assertTrue(torch.isfinite(audio).all())
