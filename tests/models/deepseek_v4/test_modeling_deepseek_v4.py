@@ -255,6 +255,17 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
     model_id = "deepseek-ai/DeepSeek-V4-Flash"
     prompt = "Pipeline parallelism in ai is "
 
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.offload_dir = tempfile.TemporaryDirectory()
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls.offload_dir is not None:
+            cls.offload_dir.cleanup()
+        super().tearDownClass()
+
     @is_flaky(
         description=(
             "Greedy decoding of 64 tokens on the FP8-dequantized checkpoint across `device_map='auto'` "
@@ -274,6 +285,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
             device_map="auto",
             attn_implementation="eager",
             quantization_config=quantization_config,
+            offload_folder=self.offload_dir.name,
         )
 
         inputs = tokenizer(self.prompt, return_tensors="pt").to(model.device)
@@ -392,6 +404,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
             device_map="auto",
             attn_implementation="eager",
             quantization_config=quantization_config,
+            offload_folder=self.offload_dir.name,
         )
 
         for i, (prompt, expected) in enumerate(cases, start=1):
