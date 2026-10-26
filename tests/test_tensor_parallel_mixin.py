@@ -48,6 +48,7 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
     import torch.multiprocessing as mp
+    from torch.distributed.distributed_c10d import GroupMember, _world
     from torch.distributed.tensor import DTensor
 
 
@@ -161,6 +162,10 @@ def _pool_worker(rank, world_size, port, backend, task_queue, result_queue):
         gc.collect()
         if device_type != "cpu":
             backend_empty_cache(device_type)
+        # and the process groups of the device meshes it built, which would otherwise pile up (with their sockets)
+        for group in list(_world.pg_map):
+            if group is not GroupMember.WORLD:
+                dist.destroy_process_group(group)
         result_queue.put((rank, None))
 
     dist.destroy_process_group()
