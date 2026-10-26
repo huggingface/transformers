@@ -17,6 +17,7 @@ import multiprocessing
 import os
 import queue
 import socket
+import sys
 import tempfile
 import traceback
 from abc import ABC, abstractmethod
@@ -97,6 +98,17 @@ def _pool_worker(rank, world_size, port, backend, task_queue, result_queue):
     os.environ["LOCAL_RANK"] = str(rank)
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = str(port)
+
+    # every TP/EP load builds its device mesh, i.e. new process groups whose sockets and pipes stay open: a rank that
+    # runs many tests outgrows the usual 1024 open files
+    if sys.platform != "win32":
+        import resource
+
+        _, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        try:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (hard, hard))
+        except (ValueError, OSError):  # e.g. an unlimited hard limit on macOS
+            pass
 
     # some backends, e.g. tpu, require the rank to be set before initializing the process group
     _set_rank_device(rank, backend)
