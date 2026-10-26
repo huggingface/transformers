@@ -60,22 +60,6 @@ class HrmTextModelTest(CausalLMModelTest, unittest.TestCase):
 
     # z_L_init does not have any gradients
 
-    @unittest.skip(reason="Higher tols (likely due to different recursion and grad patterns). FIXME later")
-    def test_tp_generation_quantized(self):
-        pass
-
-    @unittest.skip(reason="Higher tols (likely due to different recursion and grad patterns). FIXME later")
-    def test_tp_forward(self):
-        pass
-
-    @unittest.skip(reason="Higher tols (likely due to different recursion and grad patterns). FIXME later")
-    def test_tp_backward(self):
-        pass
-
-    @unittest.skip(reason="Higher tols (likely due to different recursion and grad patterns). FIXME later")
-    def test_tp_generation(self):
-        pass
-
     @unittest.skip(reason="Low cycle iterations can have non-grad steps")
     def test_retain_grad_hidden_states_attentions(self):
         pass

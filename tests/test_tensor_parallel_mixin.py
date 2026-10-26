@@ -358,9 +358,12 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol):
     set_seed(0)
     labels = torch.randint(0, vocab_size, (2, 64)).to(device)
 
+    # Same RNG state for both forwards: a training forward may sample (dropout, stochastic MoE routing)
+    set_seed(0)
     loss = model(input_ids, labels=labels).loss
     loss.backward()
 
+    set_seed(0)
     loss_tp = model_tp(input_ids, labels=labels).loss
     loss_tp.backward()
 
@@ -553,9 +556,12 @@ def _test_ep_backward_impl(rank, model_path, model_class, atol, rtol, experts_im
     input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
     labels = torch.randint(0, vocab_size, (2, 64)).to(device)
 
+    # Same RNG state for both forwards: a training forward may sample (dropout, stochastic MoE routing)
+    set_seed(0)
     loss_ref = model_ref(input_ids, labels=labels).loss
     loss_ref.backward()
 
+    set_seed(0)
     loss_ep = model_ep(input_ids, labels=labels).loss
     loss_ep.backward()
 

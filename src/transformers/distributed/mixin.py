@@ -106,6 +106,12 @@ class DistributedMixin:
             if plan := getattr(module, "_fsdp_plan", None):
                 self._fsdp_plan.update({f"{name}.{k}": v for k, v in plan.copy().items()})
 
+        # A sharded `lm_head` may share its weight with the input embeddings, so shard them too, even when the base
+        # model's own plan is empty (an EP-only model's)
+        embed_tokens = getattr(self.base_model, "embed_tokens", None)
+        if self.base_model is not self and "lm_head" in self._tp_plan and isinstance(embed_tokens, torch.nn.Embedding):
+            self._tp_plan.setdefault(f"{self.base_model_prefix}.embed_tokens", "embedding_rowwise")
+
     @property
     def tp_plan(self) -> dict[str, str]:
         """The full tensor parallel plan for the model's modules."""
