@@ -27,7 +27,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import AutoTokenizer, MiniCPM4Config, MiniCPM4ForCausalLM, MiniCPM4Model
+    from transformers import AutoTokenizer, MiniCPM4Config, MiniCPM4ForCausalLM, MiniCPM4Model, MiniCPMConfig
 
 
 class MiniCPM4ModelTester(CausalLMModelTester):
@@ -91,7 +91,12 @@ class MiniCPM4ModelTest(CausalLMModelTest, unittest.TestCase):
                 else:
                     checkpoint_config.pop("model_type", None)
                 Path(directory, "config.json").write_text(json.dumps(checkpoint_config), encoding="utf-8")
-                config = AutoConfig.from_pretrained(directory, trust_remote_code=False)
+                if legacy_model_type is None:
+                    with self.assertRaisesRegex(ValueError, "contains custom code"):
+                        AutoConfig.from_pretrained(directory, trust_remote_code=False)
+                    config = MiniCPM4Config.from_pretrained(directory)
+                else:
+                    config = AutoConfig.from_pretrained(directory, trust_remote_code=False)
 
             self.assertIsInstance(config, MiniCPM4Config)
             self.assertEqual(config.model_type, "minicpm4")
@@ -100,16 +105,16 @@ class MiniCPM4ModelTest(CausalLMModelTest, unittest.TestCase):
 
     @slow
     def test_bitcpm_config_is_not_routed_to_minicpm4(self):
-        with self.assertRaisesRegex(ValueError, "contains custom code"):
-            AutoConfig.from_pretrained(
-                "openbmb/BitCPM4-1B",
-                revision="70d989c4972efa636e8a2211975515d188e000b0",
-                trust_remote_code=False,
-            )
+        config_dict, _ = MiniCPMConfig.get_config_dict(
+            "openbmb/BitCPM4-1B",
+            revision="70d989c4972efa636e8a2211975515d188e000b0",
+        )
+        with self.assertRaisesRegex(ValueError, "not supported by MiniCPM4"):
+            MiniCPMConfig.from_dict(config_dict)
 
     @slow
     def test_older_minicpm_config_is_not_routed_to_minicpm4(self):
-        with self.assertRaisesRegex(ValueError, "contains custom code"):
+        with self.assertRaisesRegex(ValueError, "not supported by MiniCPM4"):
             AutoConfig.from_pretrained(
                 "optimum-intel-internal-testing/tiny-random-minicpm",
                 revision="1927b1cf467bc1c53eec3101cd323aeb2469963c",

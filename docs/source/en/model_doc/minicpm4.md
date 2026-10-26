@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 [MiniCPM4](https://huggingface.co/papers/2506.07900) is a family of decoder-only language models from OpenBMB designed for efficient on-device inference. It uses grouped-query attention, SwiGLU feed-forward layers, RMS normalization, and LongRoPE. MiniCPM4 also scales its embeddings, residual branches, and language-model logits to keep training stable across model sizes.
 
-MiniCPM4 uses the `minicpm4` model type and the `MiniCPM4` class prefix in Transformers. Auto classes also recognize the legacy identifiers stored in the official checkpoint configurations, so the released weights load without custom model code.
+MiniCPM4 uses the `minicpm4` model type and the `MiniCPM4` class prefix in Transformers. For supported checkpoints saved with the legacy `minicpm` model type, [`MiniCPMConfig`] redirects loading to [`MiniCPM4Config`]. Checkpoints without a `model_type`, such as MiniCPM4-0.5B, can be loaded directly with [`MiniCPM4ForCausalLM`] while their Hub configuration metadata is being updated.
 
 The original code can be found at [OpenBMB/MiniCPM](https://github.com/OpenBMB/MiniCPM).
 
@@ -45,12 +45,12 @@ The following checkpoints use the same native [`MiniCPM4ForCausalLM`] implementa
 The example below loads MiniCPM4 without custom model code.
 
 ```python
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer, MiniCPM4ForCausalLM
 
 
 checkpoint = "openbmb/MiniCPM4-0.5B"
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-model = AutoModelForCausalLM.from_pretrained(checkpoint, dtype="auto", device_map="auto")
+model = MiniCPM4ForCausalLM.from_pretrained(checkpoint, dtype="auto", device_map="auto")
 
 inputs = tokenizer("Large language models are", return_tensors="pt").to(model.device)
 outputs = model.generate(**inputs, max_new_tokens=32, do_sample=False)
@@ -60,6 +60,10 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ## MiniCPM4Config
 
 [[autodoc]] MiniCPM4Config
+
+## MiniCPMConfig
+
+[[autodoc]] MiniCPMConfig
 
 ## MiniCPM4Model
 
