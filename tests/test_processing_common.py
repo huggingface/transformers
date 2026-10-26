@@ -891,6 +891,7 @@ class ProcessorTesterMixin:
             "images" in input_args
             and hasattr(processor, "image_processor")
             and getattr(processor, "image_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_image_token")
         ):
             image_inputs = self.prepare_images_inputs(batch_size=4)
             image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
@@ -904,6 +905,7 @@ class ProcessorTesterMixin:
             "videos" in input_args
             and hasattr(processor, "video_processor")
             and getattr(processor, "video_token", None) is not None
+            and self.does_processor_return_mm_offsets(processor.__class__, "replace_video_token")
         ):
             video_inputs = self.prepare_videos_inputs(batch_size=4)
             videos = [[video] for video in video_inputs]
