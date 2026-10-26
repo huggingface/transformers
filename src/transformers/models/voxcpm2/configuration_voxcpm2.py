@@ -160,18 +160,10 @@ class VoxCPM2EncoderConfig(PreTrainedConfig):
 @strict
 class VoxCPM2CfmConfig(PreTrainedConfig):
     r"""
-    sigma_min (`float`, *optional*, defaults to 1e-6):
-        Minimum noise scale used by conditional flow matching.
-    solver (`str`, *optional*, defaults to `"euler"`):
-        Numerical solver used for flow-matching inference.
-    t_scheduler (`str`, *optional*, defaults to `"log-norm"`):
-        Distribution used to sample flow-matching timesteps during training.
     training_cfg_rate (`float`, *optional*, defaults to 0.1):
         Probability of dropping the conditioning signal during training.
     inference_cfg_rate (`float`, *optional*, defaults to 2.0):
         Default classifier-free guidance scale stored by the released checkpoint.
-    reg_loss_type (`str`, *optional*, defaults to `"l1"`):
-        Regression loss used for the flow-matching objective.
     noise_cond_prob_range (`tuple[float, float]`, *optional*, defaults to `(0.0, 0.0)`):
         Sampling range for noisy conditioning probability.
     noise_cond_scale (`float`, *optional*, defaults to 0.0):
@@ -181,24 +173,16 @@ class VoxCPM2CfmConfig(PreTrainedConfig):
     model_type = "voxcpm2_cfm"
     base_config_key = "cfm_config"
 
-    sigma_min: int | float = 1e-6
-    solver: str = "euler"
-    t_scheduler: str = "log-norm"
     training_cfg_rate: int | float = 0.1
     inference_cfg_rate: int | float = 2.0
-    reg_loss_type: str = "l1"
     noise_cond_prob_range: list[int | float] | tuple[int | float, ...] = (0.0, 0.0)
     noise_cond_scale: int | float = 0.0
 
     def validate_architecture(self):
         super().validate_architecture()
-        if self.sigma_min < 0:
-            raise ValueError("`sigma_min` must be non-negative.")
         value = self.noise_cond_prob_range
-        if len(value) != 2 or value[0] > value[1]:
-            raise ValueError("`noise_cond_prob_range` must contain two ordered values.")
-        if not 0 <= value[0] <= value[1] <= 1:
-            raise ValueError("`noise_cond_prob_range` values must be between 0 and 1.")
+        if len(value) != 2 or not 0 <= value[0] <= value[1] <= 1:
+            raise ValueError("`noise_cond_prob_range` must contain two ordered values between 0 and 1.")
 
 
 @auto_docstring(checkpoint="openbmb/VoxCPM2")

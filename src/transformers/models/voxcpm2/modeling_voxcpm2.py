@@ -233,10 +233,7 @@ class VoxCPM2CausalConvTranspose1d(nn.ConvTranspose1d):
 
 
 def _apply_voxcpm2_weight_norm(module: nn.Module) -> nn.Module:
-    weight_norm = nn.utils.weight_norm
-    if hasattr(nn.utils.parametrizations, "weight_norm"):
-        weight_norm = nn.utils.parametrizations.weight_norm
-    return weight_norm(module)
+    return nn.utils.parametrizations.weight_norm(module)
 
 
 class VoxCPM2CausalResidualUnit(nn.Module):
