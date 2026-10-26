@@ -253,9 +253,13 @@ class NemotronHOmniModelTestMixin:
         return tester.get_config(), {"pixel_values": pixel_values, "image_grid_hw": image_grid_hw}
 
     def _video_features_prepare_config_and_inputs(self):
+        # `pixel_values_videos` holds the frames of a single video: two tubelets of non-square frames, since the
+        # processor keeps the aspect ratio
         tester = self.model_tester
-        pixel_values_videos = floats_tensor([tester.batch_size, 3, tester.image_size, tester.image_size])
-        return tester.get_config(), {"pixel_values_videos": pixel_values_videos}
+        config = tester.get_config()
+        num_frames = 2 * config.video_temporal_patch_size
+        pixel_values_videos = floats_tensor([num_frames, 3, tester.image_size, 2 * tester.image_size])
+        return config, {"pixel_values_videos": pixel_values_videos}
 
     def _audio_features_prepare_config_and_inputs(self):
         tester = self.model_tester
@@ -273,6 +277,43 @@ class NemotronHOmniModelTestMixin:
 
     def _audio_features_get_expected_num_attentions(self, model_tester=None):
         return TINY_AUDIO_LAYERS
+
+    @parameterized.expand([True, False, None])
+    def test_get_video_features_output(self, return_dict: bool | None):
+        # `get_video_features` encodes one video, so the common batch-size checks do not apply: the vision tower runs
+        # once per tubelet of `video_temporal_patch_size` frames
+        config, inputs_dict = self._video_features_prepare_config_and_inputs()
+        if return_dict is not None:
+            config.return_dict = return_dict
+        model = NemotronH_Omni_Reasoning_V3(config).to(torch_device).eval()
+        with torch.no_grad():
+            outputs = model.get_video_features(**inputs_dict)
+
+        if return_dict is False:
+            self.assertIsInstance(outputs, tuple)
+            return
+        num_frames = inputs_dict["pixel_values_videos"].shape[0]
+        self.assertEqual(outputs.last_hidden_state.shape[0], num_frames // config.video_temporal_patch_size)
+        self.assertEqual(outputs.last_hidden_state.shape[-1], config.vision_config.hidden_size)
+        self.assertIsNotNone(outputs.pooler_output)
+
+    def test_get_video_features_pooler_output(self):
+        # `forward` concatenates the `pooler_output` entries and prunes on their token grid, so the single entry keeps
+        # it: `(num_tubelets, grid_height, grid_width, hidden_size)`, with a grid that is not square here
+        config, inputs_dict = self._video_features_prepare_config_and_inputs()
+        model = NemotronH_Omni_Reasoning_V3(config).to(torch_device).eval()
+        with torch.no_grad():
+            pooler_output = model.get_video_features(**inputs_dict, return_dict=True).pooler_output
+
+        num_frames, _, height, width = inputs_dict["pixel_values_videos"].shape
+        tokens_per_side = [
+            int(side // self.model_tester.patch_size * config.downsample_ratio) for side in (height, width)
+        ]
+        self.assertEqual(len(pooler_output), 1)
+        self.assertEqual(
+            tuple(pooler_output[0].shape),
+            (num_frames // config.video_temporal_patch_size, *tokens_per_side, config.text_config.hidden_size),
+        )
 
     def test_attention_outputs(self):
         # only the language model's attention layers return attention maps; the mamba and moe layers do not
@@ -356,16 +397,6 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
     def test_get_image_features_output(self, return_dict: bool | None):
         pass
 
-    @parameterized.expand([True, False, None])
-    @unittest.skip("FIXME raushan - should apply temporal factor while processing!")
-    def test_get_video_features_output(self, return_dict: bool | None):
-        pass
-
-    @unittest.skip("FIXME raushan - should apply temporal factor while processing!")
-    # prob this model doesn't even work with beam/sampling atm, low prio
-    def test_get_video_features_pooler_output(self):
-        pass
-
     def test_mismatching_num_image_tokens(self):
         # packed `pixel_values` have no batch dimension, so images are dropped or added by their patches
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -440,9 +471,9 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
 
     @parameterized.expand([("square", 32, 32), ("non_square", 32, 64)])
     def test_video_forward(self, _, frame_height, frame_width):
-        # The common `get_video_features` tests are skipped above, so this covers the video branch of `forward`: it
-        # concatenates the per-video `pooler_output` and, with `video_pruning_rate > 0`, drops redundant tokens on the
-        # tubelets' token grid, which is not square when the frames are not (the processor keeps the aspect ratio).
+        # The video branch of `forward`: it concatenates the per-video `pooler_output` and, with
+        # `video_pruning_rate > 0`, drops redundant tokens on the tubelets' token grid, which is not square when the
+        # frames are not (the processor keeps the aspect ratio).
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         tester = self.model_tester
         num_tubelets = 2
@@ -462,14 +493,8 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
             config.video_pruning_rate = video_pruning_rate
             model = NemotronH_Omni_Reasoning_V3(config).to(torch_device).eval()
             with torch.no_grad():
-                video_features = model.get_video_features(pixel_values_videos, return_dict=True).pooler_output
                 logits = model(input_ids=input_ids, pixel_values_videos=pixel_values_videos).logits
 
-            self.assertEqual(len(video_features), 1)
-            self.assertEqual(
-                tuple(video_features[0].shape),
-                (num_tubelets, grid_height, grid_width, config.text_config.hidden_size),
-            )
             kept_video_tokens = num_tubelets * tokens_per_tubelet
             if video_pruning_rate > 0:
                 kept_video_tokens = max(tokens_per_tubelet, int(kept_video_tokens * (1 - video_pruning_rate)))
@@ -484,16 +509,6 @@ class NemotronHOmniAudio2TextModelTest(NemotronHOmniModelTestMixin, ALMModelTest
     @parameterized.expand([True, False, None])
     @unittest.skip("FIXME raushan - common needs a better way to tell bs for packed images")
     def test_get_image_features_output(self, return_dict: bool | None):
-        pass
-
-    @parameterized.expand([True, False, None])
-    @unittest.skip("FIXME raushan - should apply temporal factor while processing!")
-    def test_get_video_features_output(self, return_dict: bool | None):
-        pass
-
-    @unittest.skip("FIXME raushan - should apply temporal factor while processing!")
-    # prob this model doesn't even work with beam/sampling atm, low prio
-    def test_get_video_features_pooler_output(self):
         pass
 
     @unittest.skip(reason="Audio tester isnt supported yet")
