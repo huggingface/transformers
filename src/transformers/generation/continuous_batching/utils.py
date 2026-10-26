@@ -17,16 +17,33 @@ import warnings
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from math import ceil, log2
-from typing import Any
+from typing import Any, TypeVar
 
 import torch
 
 from ...configuration_utils import PreTrainedConfig
-from .requests import FutureRequestState, RequestState, RequestStatus
+from ...utils import is_psutil_available, is_torch_xpu_available
+from ...utils.logging import logging
+
+
+if is_psutil_available():
+    import psutil
 
 
 # NOTE: AMD GPUs are supported under the "cuda" module
 DEVICE_TYPE_TO_GRAPH_NAME = {"cuda": "CUDAGraph", "xpu": "XPUGraph"}
+
+T = TypeVar("T")
+
+
+# We centralize the logger here to coordinate between logging and progress bar
+logger = logging.getLogger("ContinuousBatchingLogger")
+# Add a handler to the logger to print the logs to the console. Only happens once thanks to setting propagate to False.
+if logger.propagate:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+    logger.addHandler(handler)
+    logger.propagate = False
 
 
 class CudaGraphBuffer:
@@ -168,45 +185,17 @@ def build_attention_mask(
             block.add_(torch.tril(torch.full_like(block, min_value), diagonal=sliding_diagonal))
 
 
-def create_warmup_future_states(
-    num: int,
-    status: RequestStatus,
-    num_q_tokens: int,
-    max_kv_read: int,
-    cache: Any,  # not annotated to avoid circular import
-) -> list[FutureRequestState]:
-    """A utility function to create a list of FutureRequestStates for the warmup of CB."""
-    # Setup
-    request_ids = [f"__warmup_{status.name}_{i}__" for i in range(num)]
-    total_tokens = num_q_tokens + max_kv_read
-    # Main loop
-    future_states = []
-    for req_id in request_ids:
-        state = RequestState(request_id=req_id, initial_tokens=[0] * total_tokens, max_new_tokens=1)
-        state._status = status  # bypass the property setter to avoid the lifecycle side effects
-        state.tokens_to_process = [0] * num_q_tokens
-        state.position_offset = max_kv_read
-        # Stop if allocation fails for any request. Since position_offset acts as the past length, this allocates
-        # enough cache for the whole fake request (past + query).
-        if not cache.can_store_request_tokens(state, num_q_tokens):
-            return future_states
-        future_states.append(
-            FutureRequestState(state, has_new_token=True, complete_blocks=0, query_length=num_q_tokens)
-        )
-    return future_states
-
-
-def drain_queue(request_queue: queue.Queue) -> list[RequestState]:
-    """Drains a queue and returns a list of RequestStates."""
-    new_states: list[RequestState] = []
-    while not request_queue.empty():
+def drain_queue(q: queue.Queue[T]) -> list[T]:
+    """Drains a queue and returns its content as a list."""
+    elements: list[T] = []
+    while not q.empty():
         try:
-            state = request_queue.get_nowait()
-            if state is not None:
-                new_states.append(state)
+            elem = q.get_nowait()
+            if elem is not None:
+                elements.append(elem)
         except queue.Empty:
             break
-    return new_states
+    return elements
 
 
 def find_num_key_value_heads(config: PreTrainedConfig) -> int:
@@ -327,6 +316,50 @@ def memory_pool_context(mem_pool: Any) -> AbstractContextManager:
     return torch.get_device_module().use_mem_pool(mem_pool)
 
 
+# --------------------------------------------------- MEMORY UTILS --------------------------------------------------- #
+
+
+def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
+    """Returns the device and memory breakdown for the current device."""
+    if torch.cuda.is_available():
+        device = torch.device("cuda")
+        torch.cuda.empty_cache()
+        torch.cuda.synchronize()
+        # Use mem_get_info to get actual free memory: device_properties().total_memory returns the physical device
+        # total which ignores CUDA context and driver overhead (~0.5 GiB), leading to overcommit.
+        free_memory, total_memory = torch.cuda.mem_get_info(device)
+        reserved_memory = torch.cuda.memory_reserved(device)
+        allocated_memory = total_memory - free_memory
+    elif is_torch_xpu_available():
+        device = torch.device("xpu")
+        torch.xpu.empty_cache()
+        torch.xpu.synchronize()
+        total_memory = torch.xpu.get_device_properties(device).total_memory
+        reserved_memory = torch.xpu.memory_reserved(device)
+        allocated_memory = torch.xpu.memory_allocated(device)
+    elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
+        device = torch.device("mps")
+        total_memory = torch.mps.recommended_max_memory()
+        allocated_memory = torch.mps.current_allocated_memory()
+        reserved_memory = torch.mps.driver_allocated_memory()
+    else:
+        device = torch.device("cpu")
+        if is_psutil_available():
+            total_memory = psutil.virtual_memory().total
+            allocated_memory = psutil.Process().memory_info().rss
+            reserved_memory = allocated_memory
+        else:
+            logger.error(
+                "Cannot get memory breakdown on CPU without psutil: returning 0 for all memory values. Please install "
+                "psutil to get an actual memory breakdown."
+            )
+            total_memory = 0
+            reserved_memory = 0
+            allocated_memory = 0
+
+    return device, total_memory, reserved_memory, allocated_memory
+
+
 # ------------------------------------------------- DEPRECATED UTILS ------------------------------------------------- #
 
 
@@ -346,3 +379,17 @@ def mem_pool_ctx(mem_pool: Any):
         stacklevel=2,
     )
     return memory_pool_context(mem_pool)
+
+
+def create_warmup_future_states(num: int, status, num_q_tokens: int, max_kv_read: int, cache) -> list:
+    """A deprecated utility function to create a list of FutureRequestStates for the warmup of CB."""
+    from .requests import create_warmup_future_states as requests_version
+
+    warnings.warn(
+        "`create_warmup_future_states` has been moved to continuous_batching/requests.py and will be deleted from "
+        "utils.py in v5.24. Please import it from there instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
+
+    return requests_version(num, status, num_q_tokens, max_kv_read, cache)
