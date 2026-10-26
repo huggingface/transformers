@@ -20,12 +20,23 @@ from typing import Literal
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import TextInput
+from ...tokenization_utils_base import TextInput, TruncationStrategy
 from ...utils import auto_docstring, is_numpy_array, is_torch_available
 
 
 if is_torch_available():
     import torch
+
+
+# Per-token outputs that `_call_with_literal_texts` cannot keep aligned after splicing in the user text.
+_UNSUPPORTED_RETRIEVAL_OUTPUTS = (
+    "return_offsets_mapping",
+    "return_token_type_ids",
+    "return_special_tokens_mask",
+    "return_overflowing_tokens",
+    "return_length",
+    "return_mm_token_type_ids",
+)
 
 
 @auto_docstring
@@ -61,9 +72,9 @@ class NeoMMEProcessor(ProcessorMixin):
         Tokenize text or process images. Depending on the downstream task, inputs must first be formatted with
         [`~NeoMMEProcessor.apply_chat_template`].
 
-        - Text inputs are tokenized as provided. For masked language modeling, prepend the document token
-          (`tokenizer.document_token`) manually. For retrieval, use [`~NeoMMEProcessor.apply_chat_template`]
-          instead.
+        - Text inputs are tokenized as provided, so special-token strings in the text become special tokens. For
+          masked language modeling, prepend the document token (`tokenizer.document_token`) manually. For
+          retrieval, use [`~NeoMMEProcessor.apply_chat_template`] instead.
         - Image inputs always receive the complete document-page token formatting (the `<doc>` prefix followed
           by the `<img>` patch grid with `<row>` markers). For retrieval, use
           `apply_chat_template(..., task="document")` instead.
@@ -73,41 +84,19 @@ class NeoMMEProcessor(ProcessorMixin):
             and `pixel_values`.
         """
         retrieval_task = kwargs.pop("_retrieval_task", None)
-        text_batch = [text] if isinstance(text, str) else text
-        expected_prefix_id = getattr(self.tokenizer, f"{retrieval_task}_token_id", None)
-        query_mask_counts = (
-            [value.count(self.tokenizer.mask_token) for value in text_batch]
-            if retrieval_task == "query" and text_batch is not None
-            else []
-        )
-        batch = super().__call__(images=images, text=text, **kwargs)
-
-        input_ids = batch["input_ids"]
-        input_ids_list = input_ids.tolist() if hasattr(input_ids, "tolist") else input_ids
-        attention_mask = batch.get("attention_mask")
-        attention_mask_list = attention_mask.tolist() if hasattr(attention_mask, "tolist") else attention_mask
-        for index, input_ids_row in enumerate(input_ids_list):
-            non_padded_ids = (
-                [
-                    token_id
-                    for token_id, is_non_padding in zip(input_ids_row, attention_mask_list[index])
-                    if is_non_padding
-                ]
-                if attention_mask_list is not None
-                else input_ids_row
-            )
-            if expected_prefix_id is not None and (not non_padded_ids or non_padded_ids[0] != expected_prefix_id):
-                raise ValueError("The NeoMME retrieval template must preserve its leading task marker.")
-            if query_mask_counts and input_ids_row.count(self.tokenizer.mask_token_id) != query_mask_counts[index]:
-                raise ValueError("Truncation removed NeoMME query expansion tokens; increase `max_length`.")
+        retrieval_texts = kwargs.pop("_retrieval_texts", None)
+        if retrieval_texts is None:
+            batch = super().__call__(images=images, text=text, **kwargs)
+        else:
+            batch = self._call_with_literal_texts(images, text, retrieval_task, retrieval_texts, **kwargs)
 
         image_grid_hw = batch.pop("image_grid_hw", None)
         if image_grid_hw is not None:
-            if attention_mask is None:
+            if "attention_mask" not in batch:
                 raise ValueError("NeoMME image inputs require `return_attention_mask=True`.")
             batch["position_ids"] = self._build_position_ids(
-                input_ids,
-                attention_mask,
+                batch["input_ids"],
+                batch["attention_mask"],
                 image_grid_hw,
             )
         return batch
@@ -141,15 +130,24 @@ class NeoMMEProcessor(ProcessorMixin):
         processor_kwargs: dict | None = None,
         **kwargs,
     ):
-        """Apply the configured retrieval template and optionally tokenize its output.
+        """Apply the NeoMME retrieval template and optionally tokenize the result.
 
-        When `tokenize=True`, image content must include an image, URL, path, or base64 value. Pass processing
-        options such as `max_length` or `max_side` through `processor_kwargs`.
+        With `tokenize=True`, user text is tokenized as plain text: a string such as `<img>` or `<mask>` in the text
+        never becomes a special token. This does not hold for `tokenize=False`: the template rejects `<img>` in
+        text, and tokenizing the rendered string yourself turns strings such as `<mask>` into special tokens.
+
+        Image content must include an image, URL, path, or base64 value. Pass processing options such as
+        `max_length` or `max_side` through `processor_kwargs`.
+
+        A custom template used with `tokenize=True` must insert the text as is (no filters) and join text items with
+        no separator, like the default template.
         """
         if kwargs.get("return_assistant_tokens_mask"):
             raise ValueError("NeoMME retrieval templates do not support `return_assistant_tokens_mask`.")
 
         processor_kwargs = {**(processor_kwargs or {}), "_retrieval_task": task}
+        if kwargs.get("tokenize"):
+            conversation, processor_kwargs["_retrieval_texts"] = self._replace_texts_with_placeholder(conversation)
         template_kwargs = {"task": task} if task is not None else {}
         return super().apply_chat_template(
             conversation,
@@ -162,6 +160,139 @@ class NeoMMEProcessor(ProcessorMixin):
     @property
     def model_input_names(self) -> list[str]:
         return [name for name in super().model_input_names if name != "image_grid_hw"] + ["position_ids"]
+
+    def _replace_texts_with_placeholder(self, conversation: list) -> tuple[list, list[str | None]]:
+        """
+        Put one `unk` placeholder where each conversation's text goes, so the template never sees user text. Returns
+        the new conversation and each conversation's joined text (`None` when it has no text).
+
+        Example:
+
+        ```python
+        >>> processor._replace_texts_with_placeholder(
+        ...     [
+        ...         {"role": "system", "content": "find "},
+        ...         {"role": "user", "content": [{"type": "text", "text": "<mask>"}]},
+        ...     ]
+        ... )
+        (
+            [
+                {"role": "system", "content": "<unk>"},  # first text: the placeholder
+                {"role": "user", "content": [{"type": "text", "text": ""}]},  # later texts: emptied
+            ],
+            ["find <mask>"],  # all texts joined, tokenized later with `split_special_tokens=True`
+        )
+        ```
+        """
+        if self.tokenizer.unk_token is None:
+            raise ValueError("NeoMME retrieval templates need `tokenizer.unk_token` to mark where text goes.")
+        is_batched = isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
+        conversations = conversation if is_batched else [conversation]
+        placeholder = self.tokenizer.unk_token
+        placeholder_conversations, retrieval_texts = [], []
+        for messages in conversations:
+            text_parts, placeholder_messages = [], []
+            for message in messages:
+                content = message.get("content")
+                if isinstance(content, str):
+                    placeholder_messages.append({**message, "content": "" if text_parts else placeholder})
+                    text_parts.append(content)
+                elif isinstance(content, list):
+                    placeholder_content = []
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") == "text":
+                            placeholder_content.append({**item, "text": "" if text_parts else placeholder})
+                            text_parts.append(item["text"])
+                        else:
+                            placeholder_content.append(item)
+                    placeholder_messages.append({**message, "content": placeholder_content})
+                else:
+                    placeholder_messages.append(message)
+            placeholder_conversations.append(placeholder_messages)
+            retrieval_texts.append("".join(text_parts) if text_parts else None)
+        return (placeholder_conversations if is_batched else placeholder_conversations[0]), retrieval_texts
+
+    def _call_with_literal_texts(
+        self,
+        images: ImageInput | None,
+        text: TextInput | list[TextInput],
+        retrieval_task: str | None,
+        retrieval_texts: list[str | None],
+        **kwargs,
+    ) -> BatchFeature:
+        """
+        Process the template output, then put each text's ids where its placeholder landed. The text is tokenized
+        with `split_special_tokens=True` and truncated on its own, so markers and query expansion stay.
+        """
+        merged_kwargs = self._merge_kwargs(
+            self.valid_processor_kwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
+        )
+        text_kwargs = merged_kwargs["text_kwargs"]
+        unsupported_outputs = [name for name in _UNSUPPORTED_RETRIEVAL_OUTPUTS if text_kwargs.get(name)]
+        if unsupported_outputs:
+            raise ValueError(f"NeoMME retrieval templates do not support {', '.join(unsupported_outputs)}.")
+        padding, truncation, max_length, _ = self.tokenizer._get_padding_truncation_strategies(
+            padding=text_kwargs.get("padding", False),
+            truncation=text_kwargs.get("truncation"),
+            max_length=text_kwargs.get("max_length"),
+            pad_to_multiple_of=text_kwargs.get("pad_to_multiple_of"),
+        )
+        truncate = truncation != TruncationStrategy.DO_NOT_TRUNCATE
+        batch = super().__call__(
+            images=images,
+            text=text,
+            text_kwargs={
+                **text_kwargs,
+                "padding": False,
+                "truncation": False,
+                "return_tensors": None,
+            },
+            images_kwargs=merged_kwargs["images_kwargs"],
+        )
+        # Image rows have no text; an empty string keeps one tokenizer call aligned with the batch.
+        text_ids_batch = self.tokenizer(
+            [retrieval_text or "" for retrieval_text in retrieval_texts],
+            add_special_tokens=False,
+            split_special_tokens=True,
+        )["input_ids"]
+
+        task_token_id = getattr(self.tokenizer, f"{retrieval_task}_token_id", None)
+        placeholder_id = self.tokenizer.unk_token_id
+        input_ids = []
+        for template_ids, retrieval_text, text_ids in zip(batch["input_ids"], retrieval_texts, text_ids_batch):
+            # Check the marker first: a template that drops the text also drops the placeholder.
+            if task_token_id is not None and template_ids[:1] != [task_token_id]:
+                raise ValueError("The NeoMME retrieval template must preserve its leading task marker.")
+            has_text = retrieval_text is not None
+            if has_text and template_ids.count(placeholder_id) != 1:
+                raise ValueError("The NeoMME retrieval template must render the text content exactly once.")
+            if truncate:
+                # Only the text is cut: cutting the template would drop query expansion tokens or break an image layout.
+                max_text_length = max_length - (len(template_ids) - has_text)
+                if max_text_length < 0:
+                    raise ValueError("`max_length` is too short for the NeoMME retrieval template.")
+                if self.tokenizer.truncation_side == "left":
+                    text_ids = text_ids[max(len(text_ids) - max_text_length, 0) :]
+                else:
+                    text_ids = text_ids[:max_text_length]
+            if has_text:
+                placeholder_index = template_ids.index(placeholder_id)
+                template_ids = template_ids[:placeholder_index] + text_ids + template_ids[placeholder_index + 1 :]
+            input_ids.append(template_ids)
+
+        padded_text = self.tokenizer.pad(
+            {"input_ids": input_ids},
+            padding=padding,
+            max_length=max_length,
+            pad_to_multiple_of=text_kwargs.get("pad_to_multiple_of"),
+            padding_side=text_kwargs.get("padding_side"),
+            return_attention_mask=text_kwargs.get("return_attention_mask"),
+        )
+        return BatchFeature(
+            {**batch, **padded_text},
+            tensor_type=text_kwargs.get("return_tensors"),
+            skip_tensor_conversion=self.skip_tensor_conversion,
+        )
 
     def _build_position_ids(self, input_ids, attention_mask, image_grid_hw):
         """

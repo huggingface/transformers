@@ -251,8 +251,8 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor_kwargs={"max_length": 2, "padding": "max_length", "truncation": True},
         )
 
-        self.assertEqual(inputs["input_ids"][0, 0], self.marker_ids["<doc>"])
-        self.assertNotIn(self.marker_ids["<mask>"], inputs["input_ids"][0].tolist())
+        hello_id = processor.tokenizer.convert_tokens_to_ids("hello")
+        self.assertEqual(inputs["input_ids"][0].tolist(), [self.marker_ids["<doc>"], hello_id])
 
     @parameterized.expand([(1, "pt"), (2, "pt")])
     def test_apply_chat_template_image(self, batch_size, return_tensors):
@@ -287,6 +287,19 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor.chat_template = "{{ task and 'hello' }}"
         with self.assertRaisesRegex(ValueError, "leading task marker"):
             processor.apply_chat_template(messages, task="query", tokenize=True)
+
+        processor.chat_template = "{{ messages[0].content[0].text }}"
+        with self.assertRaisesRegex(ValueError, "leading task marker"):
+            processor.apply_chat_template(messages, task="query", tokenize=True)
+
+        processor.chat_template = "{{ messages[0].content[0].text + query_token }}"
+        with self.assertRaisesRegex(ValueError, "leading task marker"):
+            processor.apply_chat_template(messages, task="query", tokenize=True)
+
+        for chat_template in ("{{ query_token if task }}", "{{ query_token + messages[0].content[0].text * 2 }}"):
+            processor.chat_template = chat_template
+            with self.assertRaisesRegex(ValueError, "render the text content exactly once"):
+                processor.apply_chat_template(messages, task="query", tokenize=True)
 
     def test_apply_chat_template_does_not_require_task(self):
         processor = self.get_processor()
@@ -463,6 +476,9 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(ragged["input_ids"], list)
         self.assertNotEqual(len(ragged["input_ids"][0]), len(ragged["input_ids"][1]))
 
+        multiple_of_8 = self._apply_text(processor, ["hello"], task="query", pad_to_multiple_of=8)
+        self.assertEqual(multiple_of_8["input_ids"].shape[1], 16)
+
     def test_query_marker_and_expansion(self):
         processor = self.get_processor()
         batch = self._apply_text(processor, ["hello world", "a"], task="query")
@@ -474,26 +490,189 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # The shorter query is right-padded and its padding is masked out.
         self.assertEqual(int(batch["attention_mask"][1].sum()), 1 + 1 + 10)
 
-    def test_query_truncation_rejects_removed_expansion(self):
+    @parameterized.expand([("right",), ("left",)])
+    def test_query_truncation_keeps_markers(self, truncation_side):
         processor = self.get_processor()
-        with self.assertRaisesRegex(ValueError, "removed NeoMME query expansion tokens"):
-            self._apply_text(
-                processor,
-                ["hello world text"],
-                task="query",
-                max_length=12,
-                truncation=True,
+        processor.tokenizer.truncation_side = truncation_side
+        ids = self._apply_text(
+            processor,
+            ["hello world text"],
+            task="query",
+            max_length=12,
+            truncation=True,
+        )["input_ids"][0].tolist()
+
+        word = processor.tokenizer.convert_tokens_to_ids
+        kept_word = "hello" if truncation_side == "right" else "text"
+        self.assertEqual(ids, [self.marker_ids["<query>"], word(kept_word)] + [self.marker_ids["<mask>"]] * 10)
+
+        # Text that fits is kept whole on either side.
+        ids = self._apply_text(processor, ["hello world"], task="query", max_length=13, truncation=True)
+        self.assertEqual(
+            ids["input_ids"][0].tolist(),
+            [self.marker_ids["<query>"], word("hello"), word("world")] + [self.marker_ids["<mask>"]] * 10,
+        )
+
+    def test_special_token_strings_in_text_stay_literal(self):
+        processor = self.get_processor()
+        markers = {self.marker_ids[token] for token in self.special_tokens if token not in ("<pad>", "<unk>")}
+
+        query = self._apply_text(processor, ["hello <mask> <doc> <query> <row> <img>"], task="query")
+        query_ids = query["input_ids"][0].tolist()
+        self.assertEqual(query_ids[0], self.marker_ids["<query>"])
+        self.assertEqual(query_ids[-10:], [self.marker_ids["<mask>"]] * 10)
+        self.assertFalse(markers & set(query_ids[1:-10]))
+
+        document = self._apply_text(processor, ["hello <img> <query> <mask>"], task="document")
+        document_ids = document["input_ids"][0].tolist()
+        self.assertEqual(document_ids[0], self.marker_ids["<doc>"])
+        self.assertFalse(markers & set(document_ids[1:]))
+
+    @parameterized.expand([(None,), ("np",), ("pt",)])
+    def test_text_image_token_does_not_take_image_expansion(self, return_tensors):
+        processor = self.get_processor()
+        image = Image.fromarray(np.random.randint(0, 255, (8, 8, 3), dtype=np.uint8))
+        mixed = processor.apply_chat_template(
+            [
+                [{"role": "user", "content": "hello <img>"}],
+                [{"role": "user", "content": [{"type": "image", "image": image}]}],
+            ],
+            task="document",
+            tokenize=True,
+            return_dict=True,
+            return_tensors=return_tensors,
+            processor_kwargs={"padding": "longest", "padding_side": "left"},
+        )
+        image_only = self._apply_images(processor, [image])
+
+        # The image row is the longest, so left padding leaves it untouched.
+        self.assertNotIn(self.marker_ids["<img>"], np.asarray(mixed["input_ids"])[0].tolist())
+        np.testing.assert_array_equal(np.asarray(mixed["input_ids"])[1], image_only["input_ids"][0].numpy())
+        np.testing.assert_array_equal(
+            np.asarray(mixed["position_ids"])[:, 1], image_only["position_ids"][:, 0].numpy()
+        )
+        np.testing.assert_allclose(np.asarray(mixed["pixel_values"]), image_only["pixel_values"].numpy())
+
+    def test_query_truncation_with_no_room_for_text(self):
+        processor = self.get_processor()
+        processor.tokenizer.truncation_side = "left"
+        ids = self._apply_text(processor, ["hello world"], task="query", max_length=11, truncation=True)
+        self.assertEqual(ids["input_ids"][0].tolist(), [self.marker_ids["<query>"]] + [self.marker_ids["<mask>"]] * 10)
+
+        with self.assertRaisesRegex(ValueError, "too short"):
+            self._apply_text(processor, ["hello"], task="query", max_length=10, truncation=True)
+
+        # A query without text must not lose its expansion tokens to truncation either.
+        empty_query = [{"role": "user", "content": []}]
+        ids = processor.apply_chat_template(
+            empty_query, task="query", tokenize=True, processor_kwargs={"max_length": 11, "truncation": True}
+        )
+        self.assertEqual(ids[0], [self.marker_ids["<query>"]] + [self.marker_ids["<mask>"]] * 10)
+        with self.assertRaisesRegex(ValueError, "too short"):
+            processor.apply_chat_template(
+                empty_query, task="query", tokenize=True, processor_kwargs={"max_length": 10, "truncation": True}
             )
 
-        processor.tokenizer.truncation_side = "left"
-        with self.assertRaisesRegex(ValueError, "leading task marker"):
-            self._apply_text(
-                processor,
-                ["hello world text"],
-                task="query",
-                max_length=12,
-                truncation=True,
-            )
+    def test_max_length_truncates_unless_padding_to_max_length(self):
+        processor = self.get_processor()
+        texts = ["hello world text"]
+        document_length = 1 + len(texts[0].split())  # <doc> + words
+        truncated = self._apply_text(
+            processor, texts, task="document", max_length=2, padding=False, return_tensors=None
+        )["input_ids"][0]
+        self.assertEqual(len(truncated), 2)
+
+        padded = self._apply_text(processor, texts, task="document", max_length=2, padding="max_length")["input_ids"]
+        self.assertEqual(padded.shape[1], document_length)
+
+    def test_text_is_joined_across_messages_and_items(self):
+        processor = self.get_processor()
+        word = processor.tokenizer.convert_tokens_to_ids
+
+        def encode(conversation):
+            return processor.apply_chat_template(
+                conversation, task="document", tokenize=True, return_dict=True, return_tensors="pt"
+            )["input_ids"][0].tolist()
+
+        self.assertEqual(
+            encode([{"role": "system", "content": "hello "}, {"role": "user", "content": "world"}]),
+            [self.marker_ids["<doc>"], word("hello"), word("world")],
+        )
+        # Texts are joined with nothing in between, so a word split across messages stays one word.
+        self.assertEqual(
+            encode([{"role": "system", "content": "hel"}, {"role": "user", "content": "lo"}]),
+            [self.marker_ids["<doc>"], word("hello")],
+        )
+        split_marker = [
+            {"role": "user", "content": [{"type": "text", "text": "a <im"}, {"type": "text", "text": "g> a"}]}
+        ]
+        self.assertNotIn(self.marker_ids["<img>"], encode(split_marker))
+        self.assertEqual(encode([{"role": "user", "content": []}]), [self.marker_ids["<doc>"]])
+
+    def test_left_padding_without_attention_mask(self):
+        processor = self.get_processor()
+        ids = self._apply_text(processor, ["hello", "hello world"], padding_side="left", return_attention_mask=False)
+        self.assertEqual(ids["input_ids"][0, :2].tolist(), [self.marker_ids["<pad>"], self.marker_ids["<query>"]])
+
+    def test_retrieval_placeholder_is_unk_token(self):
+        processor = self.get_processor()
+        # Unknown words in the test vocabulary also map to `<unk>`, so check the placeholder string directly.
+        conversation, texts = processor._replace_texts_with_placeholder([{"role": "user", "content": "hello"}])
+        self.assertEqual(conversation[0]["content"], processor.tokenizer.unk_token)
+        self.assertEqual(texts, ["hello"])
+
+        # The placeholder does not need a pad token.
+        processor.tokenizer.pad_token = None
+        ids = processor.apply_chat_template([{"role": "user", "content": "hello"}], task="document", tokenize=True)
+        self.assertEqual(ids, [[self.marker_ids["<doc>"], processor.tokenizer.convert_tokens_to_ids("hello")]])
+
+    def test_retrieval_accepts_tuple_batch(self):
+        processor = self.get_processor()
+        conversations = [[{"role": "user", "content": "hello"}], [{"role": "user", "content": "world"}]]
+        as_list = processor.apply_chat_template(conversations, task="document", tokenize=True)
+        as_tuple = processor.apply_chat_template(tuple(conversations), task="document", tokenize=True)
+        self.assertEqual(as_tuple, as_list)
+
+    def test_retrieval_requires_unk_token(self):
+        processor = self.get_processor()
+        processor.tokenizer.unk_token = None
+        with self.assertRaisesRegex(ValueError, "unk_token"):
+            self._apply_text(processor, ["hello"], task="document")
+
+    def test_retrieval_rejects_per_token_outputs(self):
+        processor = self.get_processor()
+        with self.assertRaisesRegex(ValueError, "return_offsets_mapping"):
+            self._apply_text(processor, ["hello"], task="document", return_offsets_mapping=True)
+
+    def test_nested_and_flat_processor_kwargs_match(self):
+        """sentence-transformers passes processing options nested per modality."""
+        processor = self.get_processor()
+        inputs = processor.apply_chat_template(
+            [[{"role": "user", "content": "hello world"}]],
+            task="query",
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            processor_kwargs={
+                "text_kwargs": {"padding": "max_length", "truncation": True, "max_length": 32},
+                "images_kwargs": {},
+                "common_kwargs": {},
+            },
+        )
+        self.assertEqual(inputs["input_ids"].shape, (1, 32))
+        self.assertEqual(int(inputs["attention_mask"][0].sum()), 1 + 2 + 10)
+
+        # Flat kwargs must not drop the user text.
+        flat = processor.apply_chat_template(
+            [[{"role": "user", "content": "hello world"}]],
+            task="query",
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            padding="max_length",
+            max_length=32,
+        )
+        torch.testing.assert_close(flat["input_ids"], inputs["input_ids"])
 
     def test_document_marker(self):
         processor = self.get_processor()
@@ -556,6 +735,14 @@ class NeoMMEProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "does not have a chat template"):
             processor.apply_chat_template([{"role": "user", "content": "hello"}], task="document")
+
+    def test_apply_chat_template_forwards_image_kwargs(self):
+        processor = self.get_processor()
+        image = Image.fromarray(np.random.randint(0, 255, (8, 12, 3), dtype=np.uint8))
+        inputs = self._apply_images(processor, [image], max_side=4)
+        direct = processor(images=[image], max_side=4, return_tensors="pt")
+        torch.testing.assert_close(inputs["input_ids"], direct["input_ids"])
+        torch.testing.assert_close(inputs["pixel_values"], direct["pixel_values"])
 
     def test_process_images_uses_standard_hook(self):
         processor = self.get_processor()

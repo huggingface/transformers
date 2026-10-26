@@ -67,6 +67,8 @@ with torch.inference_mode():
 text_hidden_states, image_hidden_states = outputs.last_hidden_state
 ```
 
+The processor tokenizes raw text as given, so strings such as `<img>` or `<mask>` in the text become special tokens. Retriever checkpoints keep text literal through [`~NeoMMEProcessor.apply_chat_template`] with `tokenize=True`. With the base model, tokenize only the untrusted text with `processor.tokenizer(text, split_special_tokens=True)` and prepend `processor.tokenizer.document_token_id` yourself.
+
 **Masked language modeling**
 
 ```python
