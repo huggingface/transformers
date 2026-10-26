@@ -408,6 +408,22 @@
       "checkpoints": {
         "Qwen/Qwen2.5-Omni-7B": "ae9e1690543ffd5c0221dc27f79834d0294cba00"
       }
+    },
+    "mic-audioflamingo3": {
+      "integration": {
+        "repo": "huggingface-mic/audio-flamingo-3-hf-mic",
+        "revision": "287dd67293c15fa969279ac7a7771ce7c1b1df69",
+        "files_sha256": "989a835564c0ea410f117b7a4ce1f0fcc32d5caf6004e2b3ad2c2217197ad15c"
+      },
+      "fixtures": {
+        "huggingface-mic/audio-flamingo-3-hf-mic": {
+          "revision": "287dd67293c15fa969279ac7a7771ce7c1b1df69",
+          "files_sha256": "fbc4b3cf0ac78667f13d2d19f2209128af9b462e6e20264fe6be579286d89e34"
+        }
+      },
+      "checkpoints": {
+        "nvidia/audio-flamingo-3-hf": "7d4bae64ee29878af6504ae6f6bb3e40492838ad"
+      }
     }
   },
   "known_failures": {
