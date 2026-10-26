@@ -749,7 +749,6 @@ class RopeParameters(TypedDict, total=False):
     mscale_all_dim: float | None
     truncate: bool | None
     mrope_section: list[int] | None
-    mrope_interleaved: bool | None
 
 
 class RotaryEmbeddingConfigMixin:
