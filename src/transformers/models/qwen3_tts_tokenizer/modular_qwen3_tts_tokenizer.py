@@ -39,6 +39,7 @@ from ..mimi.modeling_mimi import (
     MimiVectorQuantization,
 )
 from ..qwen2_5_omni.modeling_qwen2_5_omni import Qwen2_5OmniSnakeBeta
+from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeCode2WavConfig
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeCausalConvNet,
     Qwen3OmniMoeCausalTransConvNet,
@@ -200,7 +201,7 @@ class Qwen3TTSTokenizerEncoderConfig(MimiConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
 @strict
-class Qwen3TTSTokenizerDecoderConfig(PreTrainedConfig):
+class Qwen3TTSTokenizerDecoderConfig(Qwen3OmniMoeCode2WavConfig):
     r"""
     upsample_rates (`Tuple[int]`, *optional*, defaults to `(8, 5, 4, 3)`):
         Rate at which features are upsampled in the final waveform synthesis stage.
@@ -222,27 +223,15 @@ class Qwen3TTSTokenizerDecoderConfig(PreTrainedConfig):
     base_config_key = "decoder_config"
 
     hidden_size: int = 512
-    max_position_embeddings: int = 8000
-    rope_parameters: dict | None = None
-    num_attention_heads: int = 16
-    num_key_value_heads: int = 16
-    attention_bias: bool = False
-    sliding_window: int = 72
     intermediate_size: int = 1024
-    hidden_act: str = "silu"
-    layer_scale_initial_scale: float = 0.01
-    rms_norm_eps: float = 1e-5
-    num_hidden_layers: int = 8
-    upsample_rates: list[int] | tuple[int, ...] = (8, 5, 4, 3)
-    upsampling_ratios: list[int] | tuple[int, ...] = (2, 2)
-    decoder_dim: int = 1536
-    attention_dropout: float | int = 0.0
-    initializer_range: float = 0.02
     head_dim: int = 64
     codebook_dim: int = 512
     latent_dim: int = 1024
     decoder_chunk_size: int = 300
     decoder_left_context_size: int = 25
+
+    codebook_size = AttributeError()
+    num_quantizers = AttributeError()
 
     @classmethod
     def get_config_dict(cls, pretrained_model_name_or_path, **kwargs):
@@ -250,10 +239,6 @@ class Qwen3TTSTokenizerDecoderConfig(PreTrainedConfig):
         if config_dict.get("model_type") == Qwen3TTSTokenizerConfig.model_type:
             config_dict = Qwen3TTSTokenizerConfig.from_dict(config_dict).decoder_config.to_dict()
         return config_dict, kwargs
-
-    @property
-    def layer_types(self):
-        return ["sliding_attention"] * self.num_hidden_layers
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
