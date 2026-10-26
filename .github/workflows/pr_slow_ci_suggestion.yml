@@ -175,8 +175,8 @@ jobs:
                 console.log('Comment is recent and content unchanged, skipping update');
               }
             } else {
-              // No bot comment yet — skip if a maintainer posted run-slow: after the merge commit
-              // (meaning they already saw the current state and acted on it)
+              // Skip if a maintainer already posted run-slow: after the current merge commit
+              // (they already saw the current state and acted on it)
               const mergeCommitTimestamp = parseInt(process.env.PR_MERGE_COMMIT_TIMESTAMP, 10) * 1000;
               const maintainerRanSlow = comments.some(comment =>
                 ['MEMBER', 'OWNER', 'COLLABORATOR'].includes(comment.author_association) &&
