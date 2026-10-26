@@ -92,7 +92,6 @@ from transformers.testing_utils import (
     get_device_properties,
     hub_retry,
     is_flaky,
-    preserve_module_forwards,
     require_accelerate,
     require_bitsandbytes,
     require_deepspeed,
@@ -3204,18 +3203,18 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(copy.deepcopy(config)).eval()
-            model = model.to(torch_device)
-            set_seed(42)
-            base_output = model(**inputs_dict_class)
-
-            model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
+                model = model_class(copy.deepcopy(config))
                 # Since we don't support saving with bins files anymore, but still support loading we use this context
                 # to easily create the bins files and try to load them
                 with force_serialization_as_bin_files():
-                    model.cpu().save_pretrained(tmp_dir)
+                    model.save_pretrained(tmp_dir)
 
+                model = model.from_pretrained(tmp_dir, device_map=torch_device)
+                set_seed(42)
+                base_output = model(**inputs_dict_class)
+
+                model_size = compute_module_sizes(model)[0][""]
                 with self.assertRaises(ValueError):
                     max_size = int(self.model_split_percents[0] * model_size)
                     max_memory = {0: max_size, "cpu": max_size}
@@ -3253,15 +3252,15 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(copy.deepcopy(config)).eval()
-            model = model.to(torch_device)
-            set_seed(42)
-            base_output = model(**inputs_dict_class)
-
-            model_size = compute_module_sizes(model)[0][""]
             with tempfile.TemporaryDirectory() as tmp_dir:
-                model.cpu().save_pretrained(tmp_dir)
+                model = model_class(copy.deepcopy(config))
+                model.save_pretrained(tmp_dir)
 
+                model = model.from_pretrained(tmp_dir, device_map=torch_device)
+                set_seed(42)
+                base_output = model(**inputs_dict_class)
+
+                model_size = compute_module_sizes(model)[0][""]
                 max_size = int(self.model_split_percents[1] * model_size)
                 max_memory = {0: max_size, "cpu": max_size}
 
@@ -3293,17 +3292,17 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(copy.deepcopy(config)).eval()
-            model = model.to(torch_device)
-
-            set_seed(42)
-            base_output = model(**inputs_dict_class)
-
-            model_size = compute_module_sizes(model)[0][""]
-            # We test several splits of sizes to make sure it works.
-            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
             with tempfile.TemporaryDirectory() as tmp_dir:
-                model.cpu().save_pretrained(tmp_dir)
+                model = model_class(copy.deepcopy(config))
+                model.save_pretrained(tmp_dir)
+
+                model = model.from_pretrained(tmp_dir, device_map=torch_device)
+                set_seed(42)
+                base_output = model(**inputs_dict_class)
+
+                model_size = compute_module_sizes(model)[0][""]
+                # We test several splits of sizes to make sure it works.
+                max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
 
                 for max_size in max_gpu_sizes:
                     max_memory = {0: max_size, "cpu": model_size * 2}
@@ -3582,6 +3581,9 @@ class ModelTesterMixin(ExportTesterMixin):
             set_seed(42)
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+            # disable flakiness via norms as much as possible
+            set_config_for_less_flaky_test(config)
+
             # flash attention variants does not always support arbitrary headim
             config = self._prepare_config_headdim(config, 16)
 
@@ -3671,6 +3673,8 @@ class ModelTesterMixin(ExportTesterMixin):
                 model = model_class.from_pretrained(
                     tmpdirname, dtype=dtype, attn_implementation="eager", device_map=torch_device
                 )
+                # disable flakiness via norms as much as possible
+                set_model_for_less_flaky_test(model)
 
                 def _get_output_logits(outputs):
                     if "hidden_states" in outputs:
@@ -3696,18 +3700,23 @@ class ModelTesterMixin(ExportTesterMixin):
                 model = model_class.from_pretrained(
                     tmpdirname, dtype=dtype, attn_implementation=attn_implementation, device_map=torch_device
                 )
+                set_model_for_less_flaky_test(model)
+
                 outputs = model(**first_inputs)
                 logits_1_fa = _get_output_logits(outputs)
-                # Second run with attention mask and padding
                 outputs = model(**second_inputs)
                 logits_2_fa = _get_output_logits(outputs)
 
                 # Check the results
+                # No mask
                 torch.testing.assert_close(logits_1_eager, logits_1_fa, atol=atol, rtol=rtol)
-                if padding_side == "left":
-                    torch.testing.assert_close(logits_2_eager[1:], logits_2_fa[1:], atol=atol, rtol=rtol)
-                else:
-                    torch.testing.assert_close(logits_2_eager[:-1], logits_2_fa[:-1], atol=atol, rtol=rtol)
+
+                # With mask
+                if dummy_attention_mask is not None:
+                    attention_mask = slice(1, None) if padding_side == "left" else slice(None, -1)
+                    logits_2_fa = logits_2_fa[:, attention_mask]
+                    logits_2_eager = logits_2_eager[:, attention_mask]
+                torch.testing.assert_close(logits_2_eager, logits_2_fa, atol=atol, rtol=rtol)
 
         # In this case, the test should appear as skipped, not successful
         if not _has_run_at_least_one_model:
@@ -4212,6 +4221,12 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_generative_model_classes:  # TODO: this test should run on all classes instead
             if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+
+            # Some models only support a sub set of all FA implementations
+            valid_fa_implementations = model_class._compatible_flash_implementations
+            if valid_fa_implementations is not None and "flash_attention_2" not in valid_fa_implementations:
+                self.skipTest(f"{model_class.__name__} only supports {valid_fa_implementations}")
+
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             if not all(
@@ -4553,14 +4568,19 @@ class ModelTesterMixin(ExportTesterMixin):
 
             # 3d rope also depends on the head dim
             # (we assume easy shapes here where we get to the requested head dim at least)
-            if (
-                getattr(config, "rope_parameters", None) is not None
-                and len(config.rope_parameters.get("mrope_section", [])) > 0
-            ):
-                scaling_factor = max(requested_dim // (sum(config.rope_parameters["mrope_section"]) * 2), 1)
-                config.rope_parameters["mrope_section"] = [
-                    section * scaling_factor for section in config.rope_parameters["mrope_section"]
-                ]
+            rope_parameters = config._getattr_without_heterogeneous_validation("rope_parameters", None)
+            if rope_parameters is not None:
+                rope_configs = (
+                    [rope_parameters]
+                    if "mrope_section" in rope_parameters
+                    else [params for params in rope_parameters.values() if isinstance(params, dict)]
+                )
+
+                for rope_config in rope_configs:
+                    sections = rope_config.get("mrope_section", [])
+                    if sections:
+                        scaling_factor = max(requested_dim // (sum(sections) * 2), 1)
+                        rope_config["mrope_section"] = [section * scaling_factor for section in sections]
 
         def update_config_headdim_recursive(config, requested_dim):
             # Needs to recurse since we have some models with 3-level nesting
@@ -6190,19 +6210,41 @@ class ModelTesterMixin(ExportTesterMixin):
                     all(isinstance(hidden_states[i], torch.Tensor) for i in range(N_layers) if i in indices_to_capture)
                 )
 
-    @require_kernels
     @require_torch_accelerator
+    @require_kernels
     def test_kernels_can_load_without_crashing(self):
         """Check whether activating kernels leads to an (value) error"""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            # Most kernels are inference mode so ensure to enable as much as we can
+            model.eval()
 
-            # `kernelize` mutates module-level singletons, so restore them to keep later tests kernel-free
-            with preserve_module_forwards(model):
-                # Using kernels should not raise a `ValueError`
-                model.use_kernels = True
+            # Using kernels should not raise a `ValueError`
+            model.use_kernels = True
+
+    @require_torch_accelerator
+    @require_kernels
+    def test_kernels_can_run_without_crashing(self):
+        """
+        Check whether activating kernels and then running through some input leads to an (value) error
+
+        NOTE: This is run in inference mode for now. When we enable training a fwd + bwd test will be added separately.
+        """
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            model.use_kernels = True
+
+            prepared_inputs = self._prepare_for_class(inputs, model_class)
+            prepared_inputs = {
+                k: v.to(torch_device) if isinstance(v, torch.Tensor) else v for k, v in prepared_inputs.items()
+            }
+
+            model(**prepared_inputs)
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):

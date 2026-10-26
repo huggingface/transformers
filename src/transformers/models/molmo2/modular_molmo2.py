@@ -38,6 +38,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
+from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_masks_for_generate
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
@@ -1119,6 +1120,7 @@ class Molmo2RMSNorm(LlamaRMSNorm):
     pass
 
 
+@use_kernelized_func(apply_rotary_pos_emb)
 class Molmo2Attention(Olmo2Attention):
     """Olmo2 attention whose q/k RMSNorm runs either over the full projection (`olmo`) or per head (`qwen3`)."""
 

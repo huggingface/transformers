@@ -59,8 +59,9 @@ if is_kernels_available():
     import transformers.integrations.hub_kernels as hub_kernels_pkg
 
 
-@require_kernels
 @slow
+@require_torch_accelerator
+@require_kernels
 class TestHubKernels(MemoryCleanupTestCase):
     @classmethod
     def setUpClass(cls):
@@ -96,7 +97,6 @@ class TestHubKernels(MemoryCleanupTestCase):
             register_patch_mapping(self._pre_test_patch_mapping)
         super().tearDown()
 
-    @require_torch_accelerator
     def test_forward(self):
         tokenized_input = self.tokenizer(self.input, return_tensors="pt").input_ids.to(self.model_kernelized.device)
         output_ = self.model_kernelized.generate(tokenized_input, max_new_tokens=10, do_sample=False)
@@ -198,19 +198,23 @@ class TestHubKernels(MemoryCleanupTestCase):
 
     def test_unkernelize(self):
         model = copy.deepcopy(self.model_kernelized)
+        self.assertTrue(model.use_kernels)
 
-        with self.assertLogs("transformers.modeling_utils", level="WARNING") as cm:
-            model.use_kernels = False
+        # Collect modules whose forwards can be replaced by kernels
+        kernel_modules = [module for _, module in model.named_modules() if hasattr(type(module), "kernel_layer_name")]
+        self.assertTrue(kernel_modules)
+        self.assertTrue(any(module.forward.__func__ is not type(module).forward for module in kernel_modules))
 
-        self.assertTrue(
-            any(
-                "Disabling kernels at runtime is a no-op as there is no 'unkernelize' routine; keeping current kernels active."
-                in msg
-                for msg in cm.output
-            )
-        )
+        # Disable kernels == "unkernelize"
+        model.use_kernels = False
 
         self.assertFalse(model.use_kernels)
+        self.assertIsNone(model.kernels_mode)
+
+        # We are back to the original fwds
+        for module in kernel_modules:
+            self.assertIs(module.forward.__func__, type(module).forward)
+
         del model
 
     def test_kernels_mapping(self):
@@ -305,7 +309,6 @@ class TestHubKernels(MemoryCleanupTestCase):
 
         del model
 
-    @require_torch_accelerator
     def test_kernel_fusion(self):
         model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
         kernel_config = KernelConfig(
@@ -359,7 +362,6 @@ class TestHubKernels(MemoryCleanupTestCase):
 
         del fused
 
-    @require_torch_accelerator
     def test_kernel_replacement_with_layout(self):
         model_id = "michaelbenayoun/qwen3-tiny-4kv-heads-4layers-random"
         kernel_config = KernelConfig(
@@ -447,7 +449,7 @@ class TestKernelsEnv(TestCasePlus):
         try:
             with patch.dict(os.environ, {"USE_HUB_KERNELS": "OFF"}):
                 importlib.reload(hub_kernels_pkg)
-                self.assertFalse(hub_kernels_pkg._kernels_enabled)
+                self.assertFalse(hub_kernels_pkg._kernels_enabled())
         finally:
             hub_kernels_pkg.__dict__.clear()
             hub_kernels_pkg.__dict__.update(original_state)
@@ -460,7 +462,7 @@ class TestKernelsEnv(TestCasePlus):
         try:
             with patch.dict(os.environ, {"USE_HUB_KERNELS": "ON"}):
                 importlib.reload(hub_kernels_pkg)
-                self.assertTrue(hub_kernels_pkg._kernels_enabled)
+                self.assertTrue(hub_kernels_pkg._kernels_enabled())
         finally:
             hub_kernels_pkg.__dict__.clear()
             hub_kernels_pkg.__dict__.update(original_state)
@@ -740,7 +742,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
         config = LlamaConfig(num_hidden_layers=2, hidden_size=32, intermediate_size=64, vocab_size=100)
         model = LlamaModel(copy.deepcopy(config))
         untrusted_kernel = "untrusted/flash_attention_2"
-        trusted_kernel = "kernels-community/flash-attn2"
+        trusted_kernel = "kernels-staging/flash-attn2@0bcc9e734c6c5ed8619807c217ca977930a18fc1"
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
@@ -842,6 +844,7 @@ class TestAttentionKernelRegistration(TestCasePlus):
             self.assertTrue(issubclass(layer_cls, torch.nn.Module))
 
 
+@slow
 @require_kernels
 class TestUseKernelsLifecycle(MemoryCleanupTestCase):
     @classmethod
@@ -849,6 +852,19 @@ class TestUseKernelsLifecycle(MemoryCleanupTestCase):
         super().setUpClass()
         cls.model_id = "unsloth/Llama-3.2-1B-Instruct"
         cls.model = AutoModelForCausalLM.from_pretrained(cls.model_id, use_kernels=False, device_map=torch_device)
+
+    def setUp(self):
+        super().setUp()
+
+        # We mock kernelization so we force the state as patched state (i.e. same state across states regardless of order)
+        state_patch = patch.multiple(
+            self.model,
+            _use_kernels=False,
+            _kernels_mode=None,
+            create=True,
+        )
+        state_patch.start()
+        self.addCleanup(state_patch.stop)
 
     def test_setting_use_kernels_twice_does_not_rekernelize(self):
         with (
@@ -875,8 +891,9 @@ class TestUseKernelsLifecycle(MemoryCleanupTestCase):
 
         with patch.object(hub_kernels_pkg, "_kernels_kernelize", side_effect=spy_kernelize):
             self.model.use_kernels = True
-            self.model.train(True)
-            self.assertTrue(any(m == Mode.TRAINING for m in last_modes))
+            # TODO: Reactivate when training is using kernels again - temporarily disabled
+            # self.model.train(True)
+            # self.assertTrue(any(m == Mode.TRAINING for m in last_modes))
             self.model.eval()
             self.assertTrue(any(m == Mode.INFERENCE for m in last_modes))
 

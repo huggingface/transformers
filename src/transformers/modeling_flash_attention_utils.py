@@ -50,11 +50,11 @@ def flash_attn_supports_top_left_mask():
 
 
 # TODO Deprecate when all models have the attention interface
-def is_flash_attn_available():
+def is_flash_attn_available(kernels_fallback_ok=False):
     return (
-        is_flash_attn_4_available()
-        or is_flash_attn_3_available()
-        or is_flash_attn_2_available()
+        is_flash_attn_4_available(kernels_fallback_ok=kernels_fallback_ok)
+        or is_flash_attn_3_available(kernels_fallback_ok=kernels_fallback_ok)
+        or is_flash_attn_2_available(kernels_fallback_ok=kernels_fallback_ok)
         or is_torch_npu_available()
         or is_torch_xpu_available()
     )
@@ -63,8 +63,11 @@ def is_flash_attn_available():
 # Mapping from flash attention implementations to their kernel fallback repositories.
 
 FLASH_ATTN_KERNEL_FALLBACK = {
+    # "flash_attention_2": "kernels-community/flash-attn2",
     "flash_attention_2": (
-        "kernels-community/aiter-flash-attn" if is_rocm_platform() else "kernels-community/flash-attn2"
+        "kernels-community/aiter-flash-attn"
+        if is_rocm_platform()
+        else "kernels-staging/flash-attn2@0bcc9e734c6c5ed8619807c217ca977930a18fc1"
     ),
     "flash_attention_3": (
         "kernels-community/aiter-flash-attn" if is_rocm_platform() else "kernels-community/vllm-flash-attn3"
@@ -73,11 +76,11 @@ FLASH_ATTN_KERNEL_FALLBACK = {
 }
 
 FLASH_ATTN_KERNEL_VERSIONS = {
-    "kernels-community/flash-attn2": 3,
-    "kernels-community/flash-attn3": 1,
+    "kernels-community/flash-attn2": 4,
+    "kernels-community/flash-attn3": 2,
     "kernels-community/vllm-flash-attn3": 1,
     "kernels-community/aiter-flash-attn": 2,
-    "kernels-community/flash-attn4": 0,
+    "kernels-community/flash-attn4": 1,
     "kernels-community/metal-flash-sdpa": 2,
 }
 

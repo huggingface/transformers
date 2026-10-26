@@ -123,7 +123,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-@use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -157,7 +156,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-@use_kernelized_func(apply_rotary_pos_emb)
 class OlmoHybridAttention(nn.Module):
     """
     Multi-headed attention for OLMo Hybrid that supports optional RoPE (NoPE mode).
