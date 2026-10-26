@@ -461,13 +461,12 @@ def _quantized_weight_names(model):
 def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_tokens, extra_inputs):
     """Implementation for comparing TP+quantized and non-TP quantized generation.
 
-    The TP model quantizes its weight shards, so its float8 scales (and rounding) differ from the non-TP model's
-    wherever a layer is sharded along its input dim: the two are different float8 roundings of the same weights, as
-    different from each other as each is from the unquantized model. On tiny random models that flips greedy near-ties,
-    and comparing free-running generations position by position turns a single flip into a mismatch of every later
-    token. Instead, every model scores the non-TP model's generation (teacher forcing), and the TP model may only pick
-    another token than the non-TP one where the non-TP model ranks the two closer than float8 quantization itself moves
-    its logits (the gap to the unquantized model at that position).
+    The TP model quantizes its weight shards, so wherever a layer is sharded along its input dim its float8 scales (and
+    rounding) differ from the non-TP model's: the two are different float8 roundings of the same weights. On tiny random
+    models that flips greedy near-ties (and MoE routing), and comparing free-running generations position by position
+    turns one flip into a mismatch of every later token. Instead, every model scores the non-TP model's generation
+    (teacher forcing), and a token the TP model picks must be one that float8 noise can explain: one the non-TP model
+    ranks below its own choice by no more than both models' quantization errors allow.
     """
     set_seed(0)
 
@@ -520,15 +519,19 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
         logits_tp = model_tp(sequence, **extra_inputs).logits[0, generated].float()
         logits_unquantized = model_unquantized(sequence, **extra_inputs).logits[0, generated].float()
 
+    # Both quantized models are the unquantized logits plus a quantization error: at most `quantization_noise` for the
+    # non-TP model, and assumed no larger than its largest one for the TP model. A token the TP model prefers is then
+    # ranked by the non-TP model at most twice the sum of both errors below its own choice.
     quantization_noise = (logits - logits_unquantized).abs().amax(-1)
+    tolerance = 2 * (quantization_noise + quantization_noise.max())
 
     def _ranked_clearly_below(tokens):
-        """The positions where the non-TP model scores `tokens` lower than its own choice by more than float8 noise."""
+        """The positions where the non-TP model scores `tokens` further below its own choice than float8 can explain."""
         positions = torch.arange(len(tokens), device=logits.device)
         gap = logits[positions].amax(-1) - logits[positions, tokens]
         return [
-            f"position {i}: gap {gap[i]:.3g} > float8 noise {quantization_noise[i]:.3g}"
-            for i in positions[gap > quantization_noise[positions]].tolist()
+            f"position {i}: gap {gap[i]:.3g} > tolerance {tolerance[i]:.3g}"
+            for i in positions[gap > tolerance[positions]].tolist()
         ]
 
     # the TP model's choices given the same previous tokens: its forward ...
