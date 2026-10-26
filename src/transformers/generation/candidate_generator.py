@@ -1719,6 +1719,9 @@ class DSparkTokenCandidateGenerator(DFlashTokenCandidateGenerator):
         generation_config (`~generation.GenerationConfig`, *optional*):
             The generation configuration to be used as base parametrization for the generation call.
     """
+    # TODO: right now, DSpark is missing its confidence head. It will be added in the future, though its absence is not
+    # critical because the goal of the confidence head is to reduce the amount of sampling in the case of high
+    # concurrency: since we only support batch_size == 1 in assisted generation, the concurrency can't be that high.
 
     def __init__(
         self,
