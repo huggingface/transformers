@@ -2206,6 +2206,7 @@ class Gemma4Model(Gemma3nModel):
 )
 class Gemma4ForConditionalGeneration(Gemma3nForConditionalGeneration):
     base_model_prefix = "model"
+    _token_types_read_by_position = ("mm_token_type_ids",)
 
     def get_per_layer_input_embeddings(self):
         return self.model.get_per_layer_input_embeddings()

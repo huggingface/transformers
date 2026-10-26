@@ -725,13 +725,13 @@ class CacheTest(unittest.TestCase):
         self.assertTrue(torch.equal(out.sequences, expected.sequences))
         torch.testing.assert_close(torch.stack(out.scores), torch.stack(expected.scores))
 
-    @pytest.mark.xfail(strict=True, reason="token types are passed up to the chunk end to every model")
     def test_chunked_prefill_slices_per_token_types(self):
         """
         Ernie4.5-VL-MoE routes each token by its `moe_mm_token_type_ids`, so every chunk of a chunked prefill must
         get the types of its own tokens. CTRL drops `token_type_ids` in generation, so no chunk may get them back.
         """
         set_seed(3)
+        # Both layers route by type, so a wrong route of the first one reaches the later chunks through the cache
         config = Ernie4_5_VLMoeConfig(
             text_config={
                 "vocab_size": 64,
@@ -742,7 +742,7 @@ class CacheTest(unittest.TestCase):
                 "num_key_value_heads": 1,
                 "rope_parameters": {"rope_type": "default", "rope_theta": 500_000.0, "mrope_section": [3, 3, 2]},
                 "moe_intermediate_size": [32, 32],
-                "mlp_layer_types": ["dense", "sparse"],
+                "mlp_layer_types": ["sparse", "sparse"],
                 "pad_token_id": 0,
             },
             vision_config={

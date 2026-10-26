@@ -918,6 +918,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
 class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
     # the loss must not be normalized by `num_items_in_batch`: logits/labels are filtered before computing it
     accepts_loss_kwargs = False
+    _token_types_read_by_position = ("mm_token_type_ids",)
     config: Molmo2Config
 
     def __init__(self, config: Molmo2Config):

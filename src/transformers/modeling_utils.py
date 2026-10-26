@@ -1093,6 +1093,9 @@ class PreTrainedModel(
     _auto_class = None
     base_model_prefix: str = ""
     _is_stateful: bool = False
+    # Token type inputs the model reads by absolute position, e.g. to build a bidirectional mask over image tokens: each
+    # chunk of a chunked prefill gets them from the start of the sequence instead of for its own tokens only
+    _token_types_read_by_position: tuple[str, ...] = ()
     model_tags: list[str] | None = None
 
     # Input-related properties

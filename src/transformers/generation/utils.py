@@ -4325,7 +4325,7 @@ class GenerationMixin(ContinuousMixin):
             position_ids = model_kwargs.pop("position_ids", None)
             token_types = {
                 key: model_kwargs.pop(key)
-                for key in ("token_type_ids", "mm_token_type_ids")
+                for key in ("token_type_ids", "mm_token_type_ids", "moe_mm_token_type_ids")
                 if model_kwargs.get(key) is not None
             }
             mm_encoder_outputs = model_kwargs.pop("mm_encoder_outputs", None)
@@ -4360,12 +4360,14 @@ class GenerationMixin(ContinuousMixin):
                 model_inputs = self.prepare_inputs_for_generation(
                     input_chunk, is_first_iteration=is_first_iteration and chunk_idx == 0, **model_kwargs
                 )
-                # Models with a bidirectional mask over image tokens (e.g. Gemma3, Gemma4) drop their token types outside
-                # the first iteration, but every prefill chunk needs them up to its end, as the mask reads them by position
+                # Models drop their token types outside the first iteration as decoding does not need them, but every
+                # prefill chunk does: the chunk's own, or all of them up to its end for the models that read them by
+                # position (e.g. the bidirectional image mask of Gemma3). Keys a model pops are never passed back
                 if is_first_iteration:
                     for key, token_type in token_types.items():
-                        if model_inputs.get(key) is None:
-                            model_inputs[key] = token_type[..., :current_length]
+                        if key in model_inputs:
+                            start = 0 if key in self._token_types_read_by_position else past_length
+                            model_inputs[key] = token_type[..., start:current_length]
 
                 if chunk_mm_encoder_outputs[chunk_idx]:
                     model_inputs["mm_encoder_outputs"] = chunk_mm_encoder_outputs[chunk_idx]

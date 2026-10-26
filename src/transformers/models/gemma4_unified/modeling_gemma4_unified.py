@@ -1278,6 +1278,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4UnifiedPreTrainedModel, Genera
     _tp_plan = {"lm_head": "colwise_gather_output"}
     accepts_loss_kwargs = False
     base_model_prefix = "model"
+    _token_types_read_by_position = ("mm_token_type_ids",)
 
     def __init__(self, config: Gemma4UnifiedConfig):
         super().__init__(config)

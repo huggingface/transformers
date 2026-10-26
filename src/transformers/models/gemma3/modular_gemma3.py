@@ -754,6 +754,8 @@ class Gemma3Model(PaliGemmaModel):
 
 
 class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
+    _token_types_read_by_position = ("token_type_ids",)
+
     @can_return_tuple
     @auto_docstring
     def forward(
