@@ -1574,7 +1574,6 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         model_outputs: ModelOutput,
         n_last_matches: int,
     ) -> torch.Tensor:
-
         # Make sure we correctly collected all the main model outputs we needed
         if model_outputs is None or not hasattr(model_outputs, "hidden_states"):
             raise ValueError("`model_outputs` cannot be None and they need to contain `hidden_states`!")
@@ -1724,6 +1723,7 @@ class DSparkTokenCandidateGenerator(DFlashTokenCandidateGenerator):
         generation_config (`~generation.GenerationConfig`, *optional*):
             The generation configuration to be used as base parametrization for the generation call.
     """
+
     # TODO: right now, DSpark is missing its confidence head. It will be added in the future, though its absence is not
     # critical because the goal of the confidence head is to reduce the amount of sampling in the case of high
     # concurrency: since we only support batch_size == 1 in assisted generation, the concurrency can't be that high.
@@ -1764,7 +1764,7 @@ class DSparkTokenCandidateGenerator(DFlashTokenCandidateGenerator):
                 f"Invalid head type: {self.head_type = }. Only 'vanilla' is supported ('rnn' is not supported yet)."
             )
 
-    def get_candidates( # TODO: check the devices in this function, it's a bit messy.
+    def get_candidates(  # TODO: check the devices in this function, it's a bit messy.
         self,
         input_ids: torch.LongTensor,
         model_kwargs: dict[str, Any],
