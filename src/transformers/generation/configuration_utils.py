@@ -354,7 +354,7 @@ class GenerationConfig(PushToHubMixin):
             to `None`, which keeps decoding lossless. Requires the assistant model to return logits, so it
             is not compatible with prompt lookup decoding.
         speculation_type (`str`, *optional*):
-            The requested speculation type. Accepted values are [`dflash`].
+            The requested speculation type. Accepted values are [`dflash`, `dspark`].
 
         > Parameters related to performances and compilation
 

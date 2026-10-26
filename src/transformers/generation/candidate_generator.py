@@ -1699,6 +1699,126 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         return candidate_ids, candidate_logits
 
 
+class DSparkTokenCandidateGenerator(DFlashTokenCandidateGenerator):
+    """
+    Candidate generator for predicting multiple draft tokens from a single forward pass with a draft model.
+    DSpark is based on DFlash, which predicts several draft tokens in parallel, but adds a small sequential block on top
+    of the DFlash backbone to add cross-token dependency. Hence, this class expects the assistant model to have:
+        - a "backbone" module, that will run as a DFlash model,
+        - a "sequential_block" module, that will run after the backbone.
+    You can check "DFlashTokenCandidateGenerator" for more details on how DFlash works.
+
+    Args:
+        assistant_model (`PreTrainedModel`):
+            The model to be used for generating candidates. This model should be smaller than the main model, and should
+            have a "backbone" module and a "sequential_block" module.
+        main_model_input_embeddings (`torch.nn.Embedding`):
+            The input embedding table from main model, used to get the embeddings from the last seen token.
+        main_model_output_embeddings (`torch.nn.Linear`):
+            The output embedding table from main model, used to get the candidate logits.
+        generation_config (`~generation.GenerationConfig`, *optional*):
+            The generation configuration to be used as base parametrization for the generation call.
+    """
+
+    def __init__(
+        self,
+        assistant_model: "PreTrainedModel",
+        main_model_input_embeddings: nn.Embedding,
+        main_model_output_embeddings: nn.Linear,
+        generation_config: "GenerationConfig",
+        logits_processor: Optional["LogitsProcessorList"] = None,
+        **kwargs,
+    ) -> None:
+        # Check that the assistant model has a "backbone" module and a "sequential_block" module
+        backbone = getattr(assistant_model, "backbone", None)
+        if not isinstance(backbone, nn.Module):
+            raise ValueError(f"assistant.backbone is not a valid nn.Module: {backbone = }")
+        sequential_block = getattr(assistant_model, "sequential_block", None)
+        if not isinstance(sequential_block, nn.Module):
+            raise ValueError(f"assistant.sequential_block is not a valid nn.Module: {sequential_block = }")
+
+        # DSpark is based on DFlash, so we init all DFlash attributes + candidate generator attributes here
+        super().__init__(
+            assistant_model,
+            main_model_input_embeddings,
+            main_model_output_embeddings,
+            generation_config,
+            logits_processor,
+            **kwargs,
+        )
+
+        # There are two possible head types for DSpark:
+        # - "vanilla": a drafted token is biased only by the one right before it
+        # - "rnn" (NOT SUPPORTED YET): a drafted token is biased by all that came before it, requiring a state to be passed
+        self.head_type = self.assistant_model.config.head_type
+        if self.head_type not in ["vanilla"]:
+            raise ValueError(
+                f"Invalid head type: {self.head_type = }. Only 'vanilla' is supported ('rnn' is not supported yet)."
+            )
+
+    def get_candidates( # TODO: check the devices in this function, it's a bit messy.
+        self,
+        input_ids: torch.LongTensor,
+        model_kwargs: dict[str, Any],
+        model_outputs: ModelOutput,
+        is_first_iteration: bool,
+        n_last_matches: int,
+        **kwargs,
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+        """Generate draft token candidates using the drafter. Start with a call to the DSpark backbone, and then call
+        the sequential block token by token to get the final logits."""
+        # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
+        # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the
+        # outputs (this is because usually `get_candidates` is called first in the main `_assisted_decoding` loop)
+        if is_first_iteration:
+            return input_ids, None
+
+        # Early exit if we cannot generate new tokens.
+        max_new_tokens = min(int(self.block_size), self.main_model_max_length - input_ids.shape[1] - 1)
+        if max_new_tokens <= 0:
+            return input_ids, None
+
+        draft_hidden_states = self._get_assistant_hidden_states(
+            assistant_model=self.assistant_model.backbone,
+            input_ids=input_ids,
+            model_kwargs=model_kwargs,
+            model_outputs=model_outputs,
+            n_last_matches=n_last_matches,
+        )
+
+        # Logits for all candidate tokens are obtained in one forward, and the biases will be computed sequentially
+        candidate_logits = self.main_model_output_embeddings(
+            draft_hidden_states.to(self.main_model_output_embeddings.weight.device)
+        ).to(dtype=torch.float32, device=input_ids.device)
+        # For logits processors
+        candidate_ids = input_ids
+        # We initialize the previous drafted ID with the last real token ID
+        previous_drafted_id = input_ids[:, -1]
+
+        for i in range(draft_hidden_states.shape[1]):
+            # Compute bias
+            if self.head_type == "vanilla":
+                bias = self.assistant_model.sequential_block(previous_drafted_id.to(self.device))
+            else:
+                raise ValueError(f"Invalid head type: {self.head_type = }")
+            # Compute logits, maybe apply logits processor, and change them in place
+            logits = candidate_logits[:, i] + bias.to(candidate_logits.device)
+            if self.logits_processor is not None:
+                logits = self.logits_processor(candidate_ids, logits)
+            candidate_logits[:, i, :].copy_(logits)
+            # Sample next token
+            if self.do_sample:
+                probs = nn.functional.softmax(candidate_logits[:, i, :], dim=-1, dtype=torch.float32)
+                next_token = torch.multinomial(probs, num_samples=1)
+            else:
+                next_token = torch.argmax(candidate_logits[:, i, :], dim=-1, keepdim=True)
+            previous_drafted_id = next_token[:, 0]
+            # Append it to the full sequence to be used by the next round of `self.logits_processor`
+            candidate_ids = torch.cat([candidate_ids, next_token], dim=-1)
+
+        return candidate_ids, candidate_logits
+
+
 def _prepare_attention_mask(model_kwargs: dict[str, Any], new_length: int, is_encoder_decoder: bool) -> dict[str, Any]:
     """Expands or crops the model's mask for decoding purposes, to the defined length"""
 
