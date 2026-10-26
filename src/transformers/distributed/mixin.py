@@ -19,6 +19,8 @@ import shutil
 from itertools import chain
 from typing import TYPE_CHECKING
 
+import torch
+
 from ..dynamic_module_utils import custom_object_save
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
@@ -29,12 +31,12 @@ from .checkpoint import (
     consolidate_distributed_checkpoint,
 )
 from .configuration_utils import DistributedConfig
+from .expert_parallel import apply_expert_parallelism
 from .fsdp import ALL_FSDP_STYLES, _resolve_tied_embed_lm_head_plan, apply_fully_sharded_data_parallelism
+from .parallel_utils import ALL_PARALLEL_STYLES
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
-    ALL_PARALLEL_STYLES,
     _get_parameter_plan,
-    apply_expert_parallelism,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
     replace_layer_number_by_wildcard,
@@ -91,6 +93,9 @@ class DistributedMixin:
             self._tp_plan.update(self.config.base_model_tp_plan or {})
             self._ep_plan.update(self.config.base_model_ep_plan or {})
             self._fsdp_plan.update(self.config.base_model_fsdp_plan or {})
+            # Shard the input embeddings on the vocabulary unless the plan already names them.
+            if self._tp_plan and isinstance(getattr(self, "embed_tokens", None), torch.nn.Embedding):
+                self._tp_plan = {"embed_tokens": "embedding_rowwise", **self._tp_plan}
 
         for name, module in self.named_children():
             if plan := getattr(module, "_ep_plan", None):

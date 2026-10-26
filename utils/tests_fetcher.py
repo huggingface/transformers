@@ -682,6 +682,9 @@ def extract_imports(module_fname: str, cache: dict[str, list[str]] | None = None
             module_file = f"{module_file}.py"
         elif (PATH_TO_REPO / module_file).is_dir() and (PATH_TO_REPO / module_file / "__init__.py").is_file():
             module_file = os.path.sep.join([module_file, "__init__.py"])
+        else:
+            # Some supported imports, such as deprecated module aliases, have no file on disk.
+            continue
         imports = [imp for imp in imports if len(imp) > 0 and re.match("^[A-Za-z0-9_]*$", imp)]
         if len(imports) > 0:
             result.append((module_file, imports))
@@ -907,7 +910,48 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
             for child_model in children_models:
                 child_file = PATH_TO_TRANSFORMERS / "models" / child_model / f"{kind}_{child_model}.py"
                 if (PATH_TO_REPO / child_file).is_file():
-                    reverse_map.setdefault(child_file.as_posix(), []).extend(existing_backbone_files(parent_model))
+                    child_file_posix = child_file.relative_to(PATH_TO_REPO).as_posix()
+                    for parent_file in existing_backbone_files(parent_model):
+                        parent_file_posix = Path(parent_file).relative_to(PATH_TO_REPO).as_posix()
+                        reverse_map.setdefault(child_file_posix, []).extend(reverse_map.get(parent_file_posix, []))
+
+    # Preprocessor source files (image/video processors, feature extractors, tokenizers) are not
+    # statically imported by their test files because class resolution happens dynamically (e.g.
+    # via IMAGE_PROCESSOR_MAPPING_NAMES, TOKENIZER_MAPPING) or because processing_<model>.py
+    # itself has no static import of those classes (e.g. CLIP's processing_clip.py only imports
+    # ProcessorMixin). Wire them explicitly by naming convention: for each glob pattern we wire
+    # matching source files to the pattern-specific test file (e.g. test_image_processing_<model>.py)
+    # and to test_processing_<model>.py (the processor integration test).
+    preprocessor_patterns = [
+        ("image_processing*.py", "test_image_processing"),
+        ("video_processing*.py", "test_video_processing"),
+        ("feature_extraction*.py", "test_feature_extraction"),
+        ("audio_processing*.py", "test_audio_processing"),
+        ("tokenization*.py", "test_tokenization"),
+    ]
+    for model_dir in (PATH_TO_TRANSFORMERS / "models").iterdir():
+        if not model_dir.is_dir():
+            continue
+        model_name = model_dir.name
+        test_model_dir = PATH_TO_TESTS / "models" / model_name
+        processing_test = test_model_dir / f"test_processing_{model_name}.py"
+        for glob_pattern, test_prefix in preprocessor_patterns:
+            src_files = list(model_dir.glob(glob_pattern))
+            if not src_files:
+                continue
+            candidate_tests = [
+                test_model_dir / f"{test_prefix}_{model_name}.py",
+                processing_test,
+            ]
+            test_files = [str(t.relative_to(PATH_TO_REPO)) for t in candidate_tests if t.is_file()]
+            if not test_files:
+                continue
+            for src_file in src_files:
+                src_key = str(src_file.relative_to(PATH_TO_REPO))
+                existing = set(reverse_map.get(src_key, []))
+                for test_file in test_files:
+                    if test_file not in existing:
+                        reverse_map.setdefault(src_key, []).append(test_file)
 
     return reverse_map
 
@@ -1150,7 +1194,8 @@ JOB_TO_TEST_FILE = {
     # torch-light.
     "tests_non_model": r"tests/(?!peft_integration/|conftest_tests/|repo_utils/)[^/]*?/test_.*\.py",
     "tests_training_ci": r"tests/models/.*/test_modeling_.*",
-    "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_tensor_parallel\.py)?)",
+    "tests_tensor_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/tensor_parallel(?:/test_.*\.py)?)",
+    "tests_expert_parallel_ci": r"(tests/models/.*/test_modeling_.*|tests/expert_parallel(?:/test_.*\.py)?)",
     "tests_fsdp_ci": r"(tests/models/.*/test_modeling_.*|tests/test_fsdp_mixin\.py)",
     "tests_peft_integration": r"tests/peft_integration/test_.*\.py",
 }

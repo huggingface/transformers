@@ -32,7 +32,7 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import ModelOutput, auto_docstring
 from ...utils.import_utils import (
     is_mambapy_available,
@@ -387,7 +387,12 @@ class FalconMambaMixer(nn.Module):
     ):
         seq_len = hidden_states.shape[1]
         dtype = hidden_states.dtype
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        if cache_params is not None:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -422,12 +427,8 @@ class FalconMambaMixer(nn.Module):
 
         hidden_states_B_C, gate = projected_states.chunk(2, dim=1)
 
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
-
         # 2. Convolution sequence transformation
-        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,
@@ -476,7 +477,7 @@ class FalconMambaMixer(nn.Module):
         time_proj_bias = self.dt_proj.bias.float() if self.dt_proj.bias is not None else None
 
         # Recurrent form
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             scan_output = mamba_selective_state_update(
                 recurrent_state,
                 hidden_states_B_C.transpose(1, 2)[..., 0],
@@ -818,9 +819,8 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = falcon_mamba_outputs[0]
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :].to(self.lm_head.weight.dtype)).float()
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
 
         loss = None
         if labels is not None:
