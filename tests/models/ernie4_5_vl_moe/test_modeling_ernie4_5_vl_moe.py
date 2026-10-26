@@ -66,7 +66,7 @@ class Ernie4_5_VLMoeVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("patch_size", 14)
         kwargs.setdefault("num_image_tokens", 64)
         kwargs.setdefault("hidden_act", "silu")
-        kwargs.setdefault("num_key_value_heads", 1)
+        kwargs.setdefault("num_key_value_heads", 2)
         kwargs.setdefault("tie_word_embeddings", True)
         kwargs.setdefault("rope_parameters", {"type": "default", "rope_theta": 500_000.0, "mrope_section": [3, 3, 2]})
         kwargs.setdefault("mlp_layer_types", ["dense", "sparse"])
