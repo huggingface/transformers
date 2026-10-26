@@ -231,7 +231,7 @@ class EmbeddingGemma2Processor(ProcessorMixin):
         audio: AudioInput = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        super().validate_inputs(images=images, text=text, **kwargs)
+        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         # Unlike Gemma 4, any single modality on its own is a valid embedding input.
         if text is None and images is None and videos is None and audio is None:

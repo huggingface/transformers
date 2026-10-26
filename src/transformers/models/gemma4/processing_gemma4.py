@@ -188,7 +188,7 @@ class Gemma4Processor(ProcessorMixin):
         audio: AudioInput = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        super().validate_inputs(images=images, text=text, **kwargs)
+        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
