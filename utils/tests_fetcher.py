@@ -943,11 +943,11 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
                 test_model_dir / f"{test_prefix}_{model_name}.py",
                 processing_test,
             ]
-            test_files = [str(t.relative_to(PATH_TO_REPO)) for t in candidate_tests if t.is_file()]
+            test_files = [t.relative_to(PATH_TO_REPO).as_posix() for t in candidate_tests if t.is_file()]
             if not test_files:
                 continue
             for src_file in src_files:
-                src_key = str(src_file.relative_to(PATH_TO_REPO))
+                src_key = src_file.relative_to(PATH_TO_REPO).as_posix()
                 existing = set(reverse_map.get(src_key, []))
                 for test_file in test_files:
                     if test_file not in existing:
