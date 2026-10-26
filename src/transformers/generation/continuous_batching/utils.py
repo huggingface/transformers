@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
 import queue
 import re
 import threading
@@ -337,9 +336,9 @@ def _parse_numa_node_list(node_list: str) -> set[int]:
 
 def _get_allowed_numa_nodes() -> set[int]:
     """Returns the NUMA nodes the process can allocate memory from, i.e. the nodes allowed both by its cpuset (cgroups,
-    `docker --cpuset-mems`, ...) and by its memory policy (`numactl --membind`, ...). Returns None if they cannot be
-    read, e.g. if we are not on Linux or there is no NUMA support."""
-    allowed_nodes = []
+    `docker --cpuset-mems`, ...) and by its memory policy (`numactl --membind`, ...). Returns an empty set if they
+    cannot be read, e.g. if we are not on Linux or there is no NUMA support."""
+    allowed_sets: list[set[int]] = []
 
     # Retrieve the allowed nodes from the cpuset
     mems_allowed = None
@@ -354,7 +353,7 @@ def _get_allowed_numa_nodes() -> set[int]:
         pass
 
     if mems_allowed is not None:
-        allowed_nodes.append(_parse_numa_node_list(mems_allowed))
+        allowed_sets.append(_parse_numa_node_list(mems_allowed))
 
     # Retrieve the allowed nodes from the numa_maps
     first_mapping = None
@@ -371,10 +370,10 @@ def _get_allowed_numa_nodes() -> set[int]:
         fields = first_mapping.split()
         policy_match = _NUMA_BIND_POLICY_PATTERN.fullmatch(fields[1]) if len(fields) > 1 else None
         if policy_match is not None:
-            allowed_nodes.append(_parse_numa_node_list(policy_match["nodes"]))
+            allowed_sets.append(_parse_numa_node_list(policy_match["nodes"]))
 
     # The process can only use nodes allowed by both the cpuset and the numa policy
-    return set.intersection(*allowed_nodes) if allowed_nodes else set()
+    return set.intersection(*allowed_sets) if allowed_sets else set()
 
 
 def _get_numa_nodes_memory(nodes: set[int]) -> int | None:
@@ -418,7 +417,6 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         reserved_memory = torch.mps.driver_allocated_memory()
     else:
         device = torch.device("cpu")
-        # If psutil is available, use it to get the memory breakdown
         if is_psutil_available():
             total_memory = psutil.virtual_memory().total
             allocated_memory = reserved_memory = psutil.Process().memory_info().rss
@@ -427,7 +425,7 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
             logger.error("Cannot get memory breakdown on CPU without psutil: please install psutil.")
         # If the process is restricted to some NUMA nodes (numactl, cgroups), it can only use their memory
         numa_memory = _get_numa_nodes_memory(_get_allowed_numa_nodes())
-        if numa_memory: # avoids both 0 and None
+        if numa_memory is not None and numa_memory > 0:
             total_memory = min(total_memory, numa_memory) if total_memory else numa_memory
 
     return device, total_memory, reserved_memory, allocated_memory
