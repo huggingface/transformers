@@ -35,7 +35,13 @@ from huggingface_hub.errors import EntryNotFoundError
 from .audio_utils import AudioInput, load_audio, make_list_of_audio
 from .dynamic_module_utils import custom_object_save
 from .feature_extraction_utils import BatchFeature
-from .image_utils import ChannelDimension, ImageInput, is_vision_available, make_flat_list_of_images
+from .image_utils import (
+    ChannelDimension,
+    ImageInput,
+    is_vision_available,
+    make_flat_list_of_images,
+    make_nested_list_of_images,
+)
 from .tokenization_utils_base import (
     PaddingStrategy,
     PreTokenizedInput,
@@ -759,6 +765,57 @@ class ProcessorMixin(PushToHubMixin):
 
         if images is None and text is None and videos is None and audio is None:
             raise ValueError(f"You need to provide at least one input to call {self.__class__.__name__}")
+
+        # Check that number of placeholders in text is same as number of mm-data for models
+        # that have a special multimodal placeholder token defined
+        if text is not None:
+            if not isinstance(text, list) or not all(isinstance(sample, str) for sample in text):
+                raise ValueError("`text` must be a string or list of strings.")
+
+            if getattr(self, "image_token", None) is not None:
+                n_images_in_text = [sample.count(self.image_token) for sample in text]
+                if images is not None:
+                    images = make_nested_list_of_images(images)
+
+                    n_images_in_images = [len(sublist) for sublist in images]
+                    if n_images_in_text != n_images_in_images:
+                        raise ValueError(
+                            f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
+                            f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
+                        )
+                elif any(n_images_in_text):
+                    raise ValueError(
+                        f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
+                    )
+
+            if getattr(self, "video_token", None) is not None:
+                n_videos_in_text = [sample.count(self.video_token) for sample in text]
+                if videos is not None:
+                    videos = make_batched_videos(videos)
+                    if sum(n_videos_in_text) != len(videos):
+                        raise ValueError(
+                            f"The total number of {self.video_token} tokens in the prompts should be the same as the number of videos passed."
+                            f" Found {sum(n_videos_in_text)} {self.video_token} tokens and {len(videos)} videos."
+                        )
+                elif any(n_videos_in_text):
+                    raise ValueError(
+                        f"Found {sum(n_videos_in_text)} {self.video_token} tokens in the text but no videos were passed."
+                    )
+
+            if getattr(self, "audio_token", None) is not None:
+                # by this point audio is a flat list because `prepare_inputs` has applied `make_list`
+                n_audio_in_text = [sample.count(self.audio_token) for sample in text]
+                if audio is not None:
+                    n_audio_passed = len(audio) if isinstance(audio, (list, tuple)) else 1
+                    if sum(n_audio_in_text) != n_audio_passed:
+                        raise ValueError(
+                            f"The total number of {self.audio_token} tokens in the prompts should be the same as the number of audio inputs passed."
+                            f" Found {sum(n_audio_in_text)} {self.audio_token} tokens and {n_audio_passed} audio inputs."
+                        )
+                elif any(n_audio_in_text):
+                    raise ValueError(
+                        f"Found {sum(n_audio_in_text)} {self.audio_token} tokens in the text but no audio inputs were passed."
+                    )
 
     # Simple preprocessing includes calling the `subprocessor` and optionally
     # building placeholder strings. Each processor can override and add their

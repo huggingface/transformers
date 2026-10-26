@@ -13,7 +13,7 @@
 # limitations under the License.
 import re
 
-from ...image_utils import ImageInput, make_flat_list_of_images
+from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
@@ -114,21 +114,7 @@ class HunYuanVLProcessor(ProcessorMixin):
     ):
         super().validate_inputs(images=images, text=text, **kwargs)
 
-        if images is not None and text is not None:
-            if any(not isinstance(prompt, str) for prompt in text):
-                raise ValueError(
-                    "`HunYuanVLProcessor` expects string prompts when multimodal inputs are provided so that multimodal "
-                    "placeholder tokens can be expanded before tokenization."
-                )
-
-            num_image_tokens = sum(prompt.count(self.image_token) for prompt in text)
-            num_images = len(make_flat_list_of_images(images))
-            if num_image_tokens != num_images:
-                raise ValueError(
-                    f"Number of {self.image_token} tokens in text ({num_image_tokens}) does not match the number of "
-                    f"images ({num_images})."
-                )
-
+        if text is not None:
             for prompt in text:
                 for match in re.finditer(re.escape(self.image_token), prompt):
                     if not self._has_wrappers(

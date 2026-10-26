@@ -194,20 +194,6 @@ class Idefics3Processor(ProcessorMixin):
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
 
-        if text is not None:
-            n_images_in_text = [sample.count(self.image_token) for sample in text]
-            if images is not None:
-                n_images_in_images = [len(sublist) for sublist in images]
-                if n_images_in_text != n_images_in_images:
-                    raise ValueError(
-                        f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                        f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
-                    )
-            elif images is None and any(n_images_in_text):
-                raise ValueError(
-                    f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
-                )
-
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         image_rows = [row for row_list in image_inputs["rows"] for row in row_list][image_idx]
         image_cols = [col for col_list in image_inputs["cols"] for col in col_list][image_idx]
