@@ -14,6 +14,7 @@
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 import torch
@@ -37,6 +38,37 @@ def _convert_weight_norm_key(key: str) -> str:
     return key
 
 
+def _convert_audio_vae_key(key: str) -> str | None:
+    if key.startswith("audio_vae.encoder.fc_logvar."):
+        return None
+
+    match = re.fullmatch(r"audio_vae\.encoder\.block\.0\.(weight(?:_[gv])?|bias|parametrizations\..+)", key)
+    if match is not None:
+        return f"audio_vae.encoder.conv1.{match.group(1)}"
+
+    match = re.fullmatch(r"audio_vae\.encoder\.block\.([1-9]\d*)\.block\.([0-4])\.(.+)", key)
+    if match is not None:
+        stage, layer, suffix = match.groups()
+        layer_name = ("res_unit1", "res_unit2", "res_unit3", "snake1", "conv1")[int(layer)]
+        key = f"audio_vae.encoder.block.{int(stage) - 1}.{layer_name}.{suffix}"
+
+    match = re.fullmatch(r"audio_vae\.decoder\.model\.(\d+)\.block\.([0-4])\.(.+)", key)
+    if match is not None:
+        stage, layer, suffix = match.groups()
+        layer_name = ("snake1", "conv_t1", "res_unit1", "res_unit2", "res_unit3")[int(layer)]
+        key = f"audio_vae.decoder.model.{stage}.{layer_name}.{suffix}"
+
+    match = re.fullmatch(
+        r"(audio_vae\.(?:encoder\.block|decoder\.model)\.\d+\.res_unit[1-3])\.block\.([0-3])\.(.+)", key
+    )
+    if match is not None:
+        prefix, layer, suffix = match.groups()
+        layer_name = ("snake1", "conv1", "snake2", "conv2")[int(layer)]
+        key = f"{prefix}.{layer_name}.{suffix}"
+
+    return key
+
+
 def convert_voxcpm2_state_dict(
     model_state_dict: dict[str, torch.Tensor],
     audio_vae_state_dict: dict[str, torch.Tensor],
@@ -50,6 +82,11 @@ def convert_voxcpm2_state_dict(
         for key, value in state_dict.items():
             if prefix and not key.startswith(prefix):
                 key = prefix + key
+            if key.startswith("audio_vae."):
+                audio_vae_key = _convert_audio_vae_key(key)
+                if audio_vae_key is None:
+                    continue
+                key = audio_vae_key
             converted_key = _convert_weight_norm_key(key)
             if converted_key in converted_state_dict:
                 raise ValueError(f"Duplicate converted key: {converted_key}")

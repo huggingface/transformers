@@ -237,116 +237,96 @@ def _apply_voxcpm2_weight_norm(module: nn.Module) -> nn.Module:
 
 
 class VoxCPM2CausalResidualUnit(nn.Module):
-    def __init__(self, hidden_dim: int = 16, dilation: int = 1, kernel_size: int = 7, groups: int = 1):
+    def __init__(self, hidden_dim: int, dilation: int = 1, groups: int = 1):
         super().__init__()
-        padding = ((7 - 1) * dilation) // 2
-        self.block = nn.Sequential(
-            VoxCPM2Snake1d(hidden_dim),
-            _apply_voxcpm2_weight_norm(
-                VoxCPM2CausalConv1d(
-                    hidden_dim,
-                    hidden_dim,
-                    kernel_size=kernel_size,
-                    dilation=dilation,
-                    padding=padding,
-                    groups=groups,
-                )
-            ),
-            VoxCPM2Snake1d(hidden_dim),
-            _apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(hidden_dim, hidden_dim, kernel_size=1)),
+        self.snake1 = VoxCPM2Snake1d(hidden_dim)
+        self.conv1 = _apply_voxcpm2_weight_norm(
+            VoxCPM2CausalConv1d(
+                hidden_dim, hidden_dim, kernel_size=7, dilation=dilation, padding=3 * dilation, groups=groups
+            )
         )
+        self.snake2 = VoxCPM2Snake1d(hidden_dim)
+        self.conv2 = _apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(hidden_dim, hidden_dim, kernel_size=1))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return hidden_states + self.block(hidden_states)
+        residual = hidden_states
+        hidden_states = self.conv1(self.snake1(hidden_states))
+        hidden_states = self.conv2(self.snake2(hidden_states))
+        return residual + hidden_states
 
 
 class VoxCPM2CausalEncoderBlock(nn.Module):
-    def __init__(self, output_dim: int = 16, input_dim: int | None = None, stride: int = 1, groups: int = 1):
+    def __init__(self, output_dim: int, stride: int = 1):
         super().__init__()
-        input_dim = input_dim or output_dim // 2
-        self.block = nn.Sequential(
-            VoxCPM2CausalResidualUnit(input_dim, dilation=1, groups=groups),
-            VoxCPM2CausalResidualUnit(input_dim, dilation=3, groups=groups),
-            VoxCPM2CausalResidualUnit(input_dim, dilation=9, groups=groups),
-            VoxCPM2Snake1d(input_dim),
-            _apply_voxcpm2_weight_norm(
-                VoxCPM2CausalConv1d(
-                    input_dim,
-                    output_dim,
-                    kernel_size=2 * stride,
-                    stride=stride,
-                    padding=math.ceil(stride / 2),
-                    output_padding=stride % 2,
-                )
-            ),
+        input_dim = output_dim // 2
+        self.res_unit1 = VoxCPM2CausalResidualUnit(input_dim, dilation=1, groups=input_dim)
+        self.res_unit2 = VoxCPM2CausalResidualUnit(input_dim, dilation=3, groups=input_dim)
+        self.res_unit3 = VoxCPM2CausalResidualUnit(input_dim, dilation=9, groups=input_dim)
+        self.snake1 = VoxCPM2Snake1d(input_dim)
+        self.conv1 = _apply_voxcpm2_weight_norm(
+            VoxCPM2CausalConv1d(
+                input_dim,
+                output_dim,
+                kernel_size=2 * stride,
+                stride=stride,
+                padding=math.ceil(stride / 2),
+                output_padding=stride % 2,
+            )
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.block(hidden_states)
+        hidden_states = self.res_unit1(hidden_states)
+        hidden_states = self.res_unit2(hidden_states)
+        hidden_states = self.res_unit3(hidden_states)
+        return self.conv1(self.snake1(hidden_states))
 
 
 class VoxCPM2AudioEncoder(nn.Module):
     def __init__(self, config: VoxCPM2AudioVAEConfig):
         super().__init__()
         hidden_dim = config.encoder_dim
-        layers = [_apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(1, hidden_dim, kernel_size=7, padding=3))]
+        self.conv1 = _apply_voxcpm2_weight_norm(VoxCPM2CausalConv1d(1, hidden_dim, kernel_size=7, padding=3))
+        blocks = []
         for stride in config.encoder_rates:
             hidden_dim *= 2
-            groups = hidden_dim // 2
-            layers.append(VoxCPM2CausalEncoderBlock(output_dim=hidden_dim, stride=stride, groups=groups))
-
+            blocks.append(VoxCPM2CausalEncoderBlock(hidden_dim, stride=stride))
+        self.block = nn.ModuleList(blocks)
         self.fc_mu = _apply_voxcpm2_weight_norm(
             VoxCPM2CausalConv1d(hidden_dim, config.latent_dim, kernel_size=3, padding=1)
         )
-        self.fc_logvar = _apply_voxcpm2_weight_norm(
-            VoxCPM2CausalConv1d(hidden_dim, config.latent_dim, kernel_size=3, padding=1)
-        )
-        self.block = nn.Sequential(*layers)
         self.encoder_dim = hidden_dim
 
-    def forward(self, input_values: torch.Tensor) -> dict[str, torch.Tensor]:
-        hidden_states = self.block(input_values)
-        return {
-            "hidden_state": hidden_states,
-            "mu": self.fc_mu(hidden_states),
-            "logvar": self.fc_logvar(hidden_states),
-        }
+    def forward(self, input_values: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.conv1(input_values)
+        for block in self.block:
+            hidden_states = block(hidden_states)
+        return self.fc_mu(hidden_states)
 
 
 class VoxCPM2CausalDecoderBlock(nn.Module):
-    def __init__(
-        self,
-        input_dim: int = 16,
-        output_dim: int = 8,
-        stride: int = 1,
-        groups: int = 1,
-    ):
+    def __init__(self, input_dim: int, output_dim: int, stride: int = 1):
         super().__init__()
-        layers = [
-            VoxCPM2Snake1d(input_dim),
-            _apply_voxcpm2_weight_norm(
-                VoxCPM2CausalConvTranspose1d(
-                    input_dim,
-                    output_dim,
-                    kernel_size=2 * stride,
-                    stride=stride,
-                    padding=math.ceil(stride / 2),
-                    output_padding=stride % 2,
-                )
-            ),
-        ]
-        layers.extend(
-            [
-                VoxCPM2CausalResidualUnit(output_dim, dilation=1, groups=groups),
-                VoxCPM2CausalResidualUnit(output_dim, dilation=3, groups=groups),
-                VoxCPM2CausalResidualUnit(output_dim, dilation=9, groups=groups),
-            ]
+        self.snake1 = VoxCPM2Snake1d(input_dim)
+        self.conv_t1 = _apply_voxcpm2_weight_norm(
+            VoxCPM2CausalConvTranspose1d(
+                input_dim,
+                output_dim,
+                kernel_size=2 * stride,
+                stride=stride,
+                padding=math.ceil(stride / 2),
+                output_padding=stride % 2,
+            )
         )
-        self.block = nn.Sequential(*layers)
+        self.res_unit1 = VoxCPM2CausalResidualUnit(output_dim, dilation=1, groups=output_dim)
+        self.res_unit2 = VoxCPM2CausalResidualUnit(output_dim, dilation=3, groups=output_dim)
+        self.res_unit3 = VoxCPM2CausalResidualUnit(output_dim, dilation=9, groups=output_dim)
         self.input_channels = input_dim
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.block(hidden_states)
+        hidden_states = self.conv_t1(self.snake1(hidden_states))
+        hidden_states = self.res_unit1(hidden_states)
+        hidden_states = self.res_unit2(hidden_states)
+        return self.res_unit3(hidden_states)
 
 
 class VoxCPM2SampleRateConditionLayer(nn.Module):
@@ -381,7 +361,7 @@ class VoxCPM2AudioDecoder(nn.Module):
         for stride_index, stride in enumerate(config.decoder_rates):
             input_dim = config.decoder_dim // 2**stride_index
             output_dim = config.decoder_dim // 2 ** (stride_index + 1)
-            layers.append(VoxCPM2CausalDecoderBlock(input_dim, output_dim, stride, groups=output_dim))
+            layers.append(VoxCPM2CausalDecoderBlock(input_dim, output_dim, stride))
 
         layers.extend(
             [
@@ -450,7 +430,7 @@ class VoxCPM2AudioVAE(nn.Module):
         if input_values.ndim == 2:
             input_values = input_values.unsqueeze(1)
         input_values = self.preprocess(input_values, sampling_rate)
-        return self.encoder(input_values)["mu"]
+        return self.encoder(input_values)
 
     def decode(
         self, latent_features: torch.Tensor, output_sampling_rate: int | torch.Tensor | None = None
