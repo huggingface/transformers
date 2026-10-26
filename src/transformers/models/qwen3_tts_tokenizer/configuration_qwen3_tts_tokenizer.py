@@ -47,56 +47,36 @@ class Qwen3TTSTokenizerSemanticQuantizerConfig(PreTrainedConfig):
     vector_quantization_hidden_dimension: int = 256
     hidden_size: int = 512
 
+    def validate_architecture(self):
+        """Part of `@strict`-powered validation. Validates the architecture of the config."""
+        if self.n_codebooks < 1:
+            raise ValueError(
+                f"The semantic quantizer needs at least one codebook, but `n_codebooks` is {self.n_codebooks}."
+            )
+
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
 @strict
 class Qwen3TTSTokenizerAcousticQuantizerConfig(PreTrainedConfig):
     r"""
-    semantic_quantizer_config (`dict` or `Qwen3TTSTokenizerSemanticQuantizerConfig`, *optional*):
-        Configuration for the semantic residual vector quantizer. Unspecified dictionary fields inherit the shared
-        quantizer settings, with one semantic codebook by default. `n_codebooks` on this config counts both semantic
-        and acoustic codebooks; the remaining settings configure the acoustic quantizer.
     vector_quantization_hidden_dimension (`int`, *optional*, defaults to 256):
-        Dimension used within the vector quantizers.
+        Dimension used within the acoustic vector quantizers.
     """
 
     model_type = "qwen3_tts_tokenizer_acoustic_quantizer"
-    base_config_key = "quantizer_config"
+    base_config_key = "acoustic_quantizer_config"
     attribute_map = {"num_quantizers": "n_codebooks"}
-    sub_configs = {"semantic_quantizer_config": Qwen3TTSTokenizerSemanticQuantizerConfig}
 
     codebook_size: int = 2048
     codebook_dim: int = 256
-    n_codebooks: int = 16
+    n_codebooks: int = 15
     vector_quantization_hidden_dimension: int = 256
     hidden_size: int = 512
-    semantic_quantizer_config: dict | PreTrainedConfig | None = None
-
-    def __post_init__(self, **kwargs):
-        # Older configs stored the semantic count alongside settings shared by both quantizers.
-        num_semantic_quantizers = kwargs.pop("num_semantic_quantizers", 1)
-        if self.semantic_quantizer_config is None:
-            self.semantic_quantizer_config = {}
-        if isinstance(self.semantic_quantizer_config, dict):
-            semantic_config = {
-                "codebook_size": self.codebook_size,
-                "codebook_dim": self.codebook_dim,
-                "n_codebooks": num_semantic_quantizers,
-                "vector_quantization_hidden_dimension": self.vector_quantization_hidden_dimension,
-                "hidden_size": self.hidden_size,
-                **self.semantic_quantizer_config,
-            }
-            self.semantic_quantizer_config = Qwen3TTSTokenizerSemanticQuantizerConfig(**semantic_config)
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        semantic_count = self.semantic_quantizer_config.n_codebooks
-        if not 1 <= semantic_count <= self.n_codebooks:
-            raise ValueError(
-                f"The number of semantic codebooks must be between 1 and the total number of codebooks "
-                f"({self.n_codebooks}), but is currently {semantic_count}."
-            )
+        if self.n_codebooks < 0:
+            raise ValueError(f"`n_codebooks` must not be negative, but is {self.n_codebooks}.")
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
@@ -335,8 +315,10 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
         Convolutional downsampling ratios used by the encoder, in reverse order.
     encoder_frame_rate (`float` or `int`, *optional*):
         Encoder frame rate. If unset, derived from the input sampling rate and encoder convolution strides.
-    quantizer_config (`dict`, *optional*):
-        Configuration for the split residual vector quantizer.
+    acoustic_quantizer_config (`dict` or `Qwen3TTSTokenizerAcousticQuantizerConfig`, *optional*):
+        Configuration for the acoustic residual vector quantizer.
+    semantic_quantizer_config (`dict` or `Qwen3TTSTokenizerSemanticQuantizerConfig`, *optional*):
+        Configuration for the semantic residual vector quantizer, applied before the acoustic one.
     upsample_rates (`Tuple[int]`, *optional*, defaults to `(8, 5, 4, 3)`):
         Rate at which features are upsampled in the final waveform synthesis stage.
     upsampling_ratios (`Tuple[int]`, *optional*, defaults to `(2, 2)`):
@@ -344,7 +326,7 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
     decoder_dim (`int`, *optional*, defaults to 1536):
         Final dimensionality of the decoder's output before waveform generation.
     codebook_dim (`int`, *optional*, defaults to 512):
-        Width of the continuous representation passed to the decoder, not `quantizer_config.codebook_dim`.
+        Width of the continuous representation passed to the decoder, not the quantizers' `codebook_dim`.
     latent_dim (`int`, *optional*, defaults to 1024):
         Latent dimension used between pre-conv and transformer.
     decoder_chunk_size (`int`, *optional*, defaults to 300):
@@ -363,7 +345,10 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
         "input_sample_rate": "input_sampling_rate",
         "output_sample_rate": "output_sampling_rate",
     }
-    sub_configs = {"quantizer_config": Qwen3TTSTokenizerAcousticQuantizerConfig}
+    sub_configs = {
+        "acoustic_quantizer_config": Qwen3TTSTokenizerAcousticQuantizerConfig,
+        "semantic_quantizer_config": Qwen3TTSTokenizerSemanticQuantizerConfig,
+    }
 
     encoder_audio_channels: int = 1
     encoder_hidden_size: int = 512
@@ -417,19 +402,20 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
     decoder_chunk_size: int = 300
     decoder_left_context_size: int = 25
 
-    quantizer_config: dict | PreTrainedConfig | None = None
+    acoustic_quantizer_config: dict | PreTrainedConfig | None = None
+    semantic_quantizer_config: dict | PreTrainedConfig | None = None
     input_sampling_rate: int | None = 24000
     output_sampling_rate: int | None = 24000
 
     def __post_init__(self, **kwargs):
-        if self.quantizer_config is None:
-            self.quantizer_config = Qwen3TTSTokenizerAcousticQuantizerConfig(
-                codebook_dim=self.codebook_dim // 2,
-                vector_quantization_hidden_dimension=self.codebook_dim // 2,
-                hidden_size=self.codebook_dim,
-            )
-        elif isinstance(self.quantizer_config, dict):
-            self.quantizer_config = Qwen3TTSTokenizerAcousticQuantizerConfig(**self.quantizer_config)
+        if self.acoustic_quantizer_config is None:
+            self.acoustic_quantizer_config = Qwen3TTSTokenizerAcousticQuantizerConfig()
+        elif isinstance(self.acoustic_quantizer_config, dict):
+            self.acoustic_quantizer_config = Qwen3TTSTokenizerAcousticQuantizerConfig(**self.acoustic_quantizer_config)
+        if self.semantic_quantizer_config is None:
+            self.semantic_quantizer_config = Qwen3TTSTokenizerSemanticQuantizerConfig()
+        elif isinstance(self.semantic_quantizer_config, dict):
+            self.semantic_quantizer_config = Qwen3TTSTokenizerSemanticQuantizerConfig(**self.semantic_quantizer_config)
         super().__post_init__(**kwargs)
 
     @classmethod
@@ -463,24 +449,31 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
         for key, value in decoder_config.items():
             if key in Qwen3TTSTokenizerDecoderConfig.__annotations__ or key in ("rope_theta", "rope_scaling"):
                 config_dict.setdefault(key, value)
+        quantizer_keys = ("acoustic_quantizer_config", "semantic_quantizer_config")
         for key in tuple(kwargs):
-            if key in cls.__dataclass_fields__ and key != "quantizer_config":
+            if key in cls.__dataclass_fields__ and key not in quantizer_keys:
                 config_dict[key] = deepcopy(kwargs.pop(key))
-        if decoder_config and config_dict.get("quantizer_config") is None:
+        if decoder_config:
+            # The original checkpoint describes both quantizers with shared settings in its decoder config.
             input_width = config_dict.get("codebook_dim", 512)
-            config_dict["quantizer_config"] = {
+            num_semantic_quantizers = decoder_config.get("num_semantic_quantizers", 1)
+            shared = {
                 "codebook_size": decoder_config.get("codebook_size", 2048),
                 "codebook_dim": input_width // 2,
-                "n_codebooks": decoder_config.get("num_quantizers", 16),
-                "semantic_quantizer_config": {"n_codebooks": decoder_config.get("num_semantic_quantizers", 1)},
                 "vector_quantization_hidden_dimension": input_width // 2,
                 "hidden_size": input_width,
             }
-        if "quantizer_config" in kwargs:
-            quantizer_config = deepcopy(kwargs.pop("quantizer_config"))
-            if isinstance(config_dict.get("quantizer_config"), dict) and isinstance(quantizer_config, dict):
-                quantizer_config = {**config_dict["quantizer_config"], **quantizer_config}
-            config_dict["quantizer_config"] = quantizer_config
+            if config_dict.get("acoustic_quantizer_config") is None:
+                num_acoustic_quantizers = decoder_config.get("num_quantizers", 16) - num_semantic_quantizers
+                config_dict["acoustic_quantizer_config"] = {**shared, "n_codebooks": num_acoustic_quantizers}
+            if config_dict.get("semantic_quantizer_config") is None:
+                config_dict["semantic_quantizer_config"] = {**shared, "n_codebooks": num_semantic_quantizers}
+        for key in quantizer_keys:
+            if key in kwargs:
+                quantizer_config = deepcopy(kwargs.pop(key))
+                if isinstance(config_dict.get(key), dict) and isinstance(quantizer_config, dict):
+                    quantizer_config = {**config_dict[key], **quantizer_config}
+                config_dict[key] = quantizer_config
         return super().from_dict(config_dict, **kwargs)
 
     @classmethod
