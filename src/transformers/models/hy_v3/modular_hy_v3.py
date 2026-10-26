@@ -31,6 +31,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.generic import maybe_autocast
 from ...utils.output_capturing import OutputRecorder
 from ..apertus.modeling_apertus import ApertusAttention
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3DecoderLayer
@@ -170,7 +171,9 @@ class HYV3TopKRouter(MixtralTopKRouter):
         e_score_correction_bias: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.float(), self.weight.float())
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            router_logits = F.linear(hidden_states.float(), self.weight.float())
         routing_weights = torch.sigmoid(router_logits)
 
         scores_for_choice = routing_weights + e_score_correction_bias

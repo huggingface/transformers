@@ -59,7 +59,7 @@ from ...utils import (
     torch_compilable_check,
     torch_int,
 )
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_unlimited_ocr import (
     UnlimitedOcrConfig,
@@ -1155,7 +1155,9 @@ class UnlimitedOcrTextTopkRouter(nn.Module):
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         scores = router_logits.softmax(dim=-1, dtype=torch.float32)
         if self.topk_method == "greedy":
             topk_weights, topk_indices = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)

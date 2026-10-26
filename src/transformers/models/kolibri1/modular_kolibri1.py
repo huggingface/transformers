@@ -20,6 +20,7 @@ from torch import nn
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, is_torch_greater_or_equal
+from ...utils.generic import maybe_autocast
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3ForCausalLM, DeepseekV3MoE
 from ..exaone4.modeling_exaone4 import Exaone4Attention
 from ..glm4.modeling_glm4 import Glm4DecoderLayer
@@ -132,7 +133,9 @@ class Kolibri1TopKRouter(Qwen3MoeTopKRouter):
             # `out_dtype` is CUDA-only, has no autograd and needs matching dtypes
             router_logits = torch.mm(hidden_states, self.weight.t(), out_dtype=torch.float32)
         else:
-            router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+            device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
+            with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+                router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
         router_indices = torch.topk(router_logits + self.e_score_correction_bias, self.top_k, dim=-1)[1]
         router_scores = router_logits.gather(1, router_indices).sigmoid()
         if self.norm_topk_prob:

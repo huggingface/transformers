@@ -44,6 +44,7 @@ if is_torch_available():
         DeepseekV3ForTokenClassification,
         DeepseekV3Model,
     )
+    from transformers.models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3TopkRouter
 
 
 class DeepseekV3ModelTester:
@@ -376,6 +377,22 @@ class DeepseekV3ModelTest(
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_router_ignores_autocast(self):
+        # `F.linear` is on autocast's lower-precision list, which would undo the router's float32 casts
+        config = DeepseekV3Config(hidden_size=64, n_routed_experts=16, num_experts_per_tok=4, n_group=4, topk_group=2)
+        router = DeepseekV3TopkRouter(config).to(torch_device)
+        torch.nn.init.normal_(router.weight, std=0.02)
+        torch.nn.init.normal_(router.e_score_correction_bias, std=0.01)
+        hidden_states = torch.randn(256, config.hidden_size, device=torch_device)
+
+        with torch.no_grad():
+            expected = router(hidden_states)
+            with torch.autocast(torch_device, dtype=torch.bfloat16):
+                outputs = router(hidden_states)
+
+        self.assertEqual(outputs[0].dtype, torch.float32)
+        torch.testing.assert_close(outputs, expected)
 
 
 @require_torch_accelerator
