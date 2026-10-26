@@ -118,7 +118,7 @@ jobs:
     #   - or the previous comment is 30 minutes or more old
     name: Send a comment to suggest jobs to run
     if: ${{ needs.get-jobs.outputs.jobs != '' }}
-    needs: [get-pr-number, get-jobs]
+    needs: [get-pr-number, get-pr-info, get-jobs]
     permissions:
       pull-requests: write
     runs-on: ubuntu-22.04
@@ -128,6 +128,7 @@ jobs:
         env:
           BODY: "\n\nrun-slow: ${{ needs.get-jobs.outputs.jobs }}"
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
         with:
           script: |
             const prNumber = parseInt(process.env.PR_NUMBER, 10);
@@ -147,16 +148,6 @@ jobs:
               comment.user.login === 'github-actions[bot]' &&
               comment.body.startsWith(commentPrefix)
             );
-
-            // If a maintainer already posted a run-slow: comment, don't override it
-            const maintainerRanSlow = comments.some(comment =>
-              ['MEMBER', 'OWNER', 'COLLABORATOR'].includes(comment.author_association) &&
-              comment.body.trimStart().startsWith('run-slow:')
-            );
-            if (maintainerRanSlow) {
-              console.log('A maintainer already posted a run-slow: comment, skipping bot suggestion');
-              return;
-            }
 
             let shouldCreateNewComment = true;
             let commentsToDelete = [];
@@ -184,7 +175,20 @@ jobs:
                 console.log('Comment is recent and content unchanged, skipping update');
               }
             } else {
-              console.log('No existing comments found, will create new one');
+              // No bot comment yet — skip if a maintainer posted run-slow: after the merge commit
+              // (meaning they already saw the current state and acted on it)
+              const mergeCommitTimestamp = parseInt(process.env.PR_MERGE_COMMIT_TIMESTAMP, 10) * 1000;
+              const maintainerRanSlow = comments.some(comment =>
+                ['MEMBER', 'OWNER', 'COLLABORATOR'].includes(comment.author_association) &&
+                comment.body.trimStart().startsWith('run-slow:') &&
+                new Date(comment.created_at).getTime() > mergeCommitTimestamp
+              );
+              if (maintainerRanSlow) {
+                shouldCreateNewComment = false;
+                console.log('A maintainer already posted a run-slow: comment after the current commit, skipping bot suggestion');
+              } else {
+                console.log('No existing comments found, will create new one');
+              }
             }
 
             // Delete old comments if needed
