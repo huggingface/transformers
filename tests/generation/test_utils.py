@@ -3105,6 +3105,29 @@ class UtilsFunctionsTest(unittest.TestCase):
         self.assertTrue(n_matches.item() == 2)
         self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
 
+    def test_speculative_sampling_zero_probability_boundary(self):
+        # A zero draw must not accept a candidate that has zero target probability.
+        candidate_input_ids = torch.tensor([[0]])
+        candidate_logits = torch.tensor([[[0.0, -float("inf")]]])
+        target_logits = torch.tensor([[[-float("inf"), 0.0], [-float("inf"), 0.0]]])
+        with patch("transformers.generation.utils.torch.rand_like", side_effect=lambda x: torch.zeros_like(x)):
+            validated_tokens, n_matches = _speculative_sampling(
+                candidate_input_ids, candidate_logits, 1, target_logits
+            )
+        self.assertEqual(n_matches.item(), 0)
+        self.assertEqual(validated_tokens.tolist(), [[1]])
+
+        # A candidate with nonzero target probability remains eligible at the zero-draw boundary.
+        candidate_input_ids = torch.tensor([[1]])
+        candidate_logits = torch.tensor([[[-float("inf"), 0.0]]])
+        target_logits = torch.tensor([[[-float("inf"), 0.0], [-float("inf"), 0.0]]])
+        with patch("transformers.generation.utils.torch.rand_like", side_effect=lambda x: torch.zeros_like(x)):
+            validated_tokens, n_matches = _speculative_sampling(
+                candidate_input_ids, candidate_logits, 1, target_logits
+            )
+        self.assertEqual(n_matches.item(), 1)
+        self.assertEqual(validated_tokens.tolist(), [[1, 1]])
+
     def test_speculative_sampling_target_distribution(self):
         """
         Asserts that the target distribution is preserved.
