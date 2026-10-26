@@ -369,9 +369,12 @@ def _test_tp_backward_impl(rank, model_path, model_class, atol, rtol, extra_inpu
     labels = torch.randint(0, vocab_size, (2, 64)).to(device)
     extra_inputs = _to_device(extra_inputs, device)
 
+    # Same RNG state for both forwards: a training forward may sample (dropout, stochastic MoE routing)
+    set_seed(0)
     loss = model(input_ids, labels=labels, **extra_inputs).loss
     loss.backward()
 
+    set_seed(0)
     loss_tp = model_tp(input_ids, labels=labels, **extra_inputs).loss
     loss_tp.backward()
 
@@ -617,9 +620,12 @@ def _test_ep_backward_impl(rank, model_path, model_class, atol, rtol, experts_im
     labels = torch.randint(0, vocab_size, (2, 64)).to(device)
     extra_inputs = _to_device(extra_inputs, device)
 
+    # Same RNG state for both forwards: a training forward may sample (dropout, stochastic MoE routing)
+    set_seed(0)
     loss_ref = model_ref(input_ids, labels=labels, **extra_inputs).loss
     loss_ref.backward()
 
+    set_seed(0)
     loss_ep = model_ep(input_ids, labels=labels, **extra_inputs).loss
     loss_ep.backward()
 
@@ -737,9 +743,6 @@ class TensorParallelTesterMixin(ABC):
         model_class = self._get_tp_model_class()
         if model_class is None:
             self.skipTest("Model tester has neither causal_lm_class nor conditional_generation_class")
-        if model_class not in self.all_model_classes:
-            # e.g. a classifier wrapping another model's `*ForConditionalGeneration`, which that model's tests cover
-            self.skipTest(f"{model_class.__name__} is not one of the model classes this test covers")
 
         if expert_parallel:
             if not self._has_ep_plan():
