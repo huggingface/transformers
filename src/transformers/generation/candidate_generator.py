@@ -1566,26 +1566,14 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
 
         return embeds
 
-    def get_candidates(
+    def _get_assistant_hidden_states(
         self,
+        assistant_model: "PreTrainedModel",  # passed as an argument so DSpark can pass only the backbone module
         input_ids: torch.LongTensor,
         model_kwargs: dict[str, Any],
         model_outputs: ModelOutput,
-        is_first_iteration: bool,
         n_last_matches: int,
-        **kwargs,
-    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
-        """Generate draft token candidates using the drafter."""
-        # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
-        # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the outputs
-        # (this is because usually `get_candidates` is called first in the main `_assisted_decoding` loop)
-        if is_first_iteration:
-            return input_ids, None
-
-        # Early exit if we cannot generate new tokens.
-        max_new_tokens = min(int(self.block_size), self.main_model_max_length - input_ids.shape[1] - 1)
-        if max_new_tokens <= 0:
-            return input_ids, None
+    ) -> torch.Tensor:
 
         # Make sure we correctly collected all the main model outputs we needed
         if model_outputs is None or not hasattr(model_outputs, "hidden_states"):
@@ -1631,20 +1619,55 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
             )
             attention_mask = torch.cat([attention_mask, noise_attention_mask], dim=-1)
 
-        # Get assistant model outputs
-        outputs = self.assistant_model(
+        # Get the assistant hidden states, possibly unwrapping them from a ModelOutput object
+        outputs = assistant_model(
             noise_embeds=noise_embeds.to(self.device),
             context_hidden_states=context_hidden_states,
             position_ids=position_ids.to(self.device),
             attention_mask=attention_mask.to(self.device) if attention_mask is not None else None,
             past_key_values=self.cache,
         )
+        if hasattr(outputs, "last_hidden_state"):
+            outputs = outputs.last_hidden_state
+        if not isinstance(outputs, torch.Tensor):
+            raise ValueError(f"assistant model returned an unexpected type: {type(outputs) = }")
 
         # Once we arrive here the first time, it's no longer the case
         self.is_main_model_prefill = False
+        return outputs
+
+    def get_candidates(
+        self,
+        input_ids: torch.LongTensor,
+        model_kwargs: dict[str, Any],
+        model_outputs: ModelOutput,
+        is_first_iteration: bool,
+        n_last_matches: int,
+        **kwargs,
+    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+        """Generate draft token candidates using the drafter."""
+        # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
+        # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the outputs
+        # (this is because usually `get_candidates` is called first in the main `_assisted_decoding` loop)
+        if is_first_iteration:
+            return input_ids, None
+
+        # Early exit if we cannot generate new tokens.
+        max_new_tokens = min(int(self.block_size), self.main_model_max_length - input_ids.shape[1] - 1)
+        if max_new_tokens <= 0:
+            return input_ids, None
+
+        # Get the hidden states from the DFlash backbone
+        draft_hidden_states = self._get_assistant_hidden_states(
+            assistant_model=self.assistant_model,
+            input_ids=input_ids,
+            model_kwargs=model_kwargs,
+            model_outputs=model_outputs,
+            n_last_matches=n_last_matches,
+        )
 
         candidate_logits = self.main_model_output_embeddings(
-            outputs.last_hidden_state[:, 1:].to(self.main_model_output_embeddings.weight.device)
+            draft_hidden_states[:, 1:].to(self.main_model_output_embeddings.weight.device)
         ).to(input_ids.device)
 
         # Potentially allow some logits manipulation and sampling - in this case we need to loop over new tokens to correctly apply processors
