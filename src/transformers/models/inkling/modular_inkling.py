@@ -108,6 +108,9 @@ class InklingTextConfig(PreTrainedConfig):
     model_type = "inkling_text"
     base_config_key = "text_config"
     base_model_tp_plan = {
+        # the embedding normalizes its own lookup: the norm needs the reduced vocab-parallel lookup
+        "embed_tokens": "embedding_rowwise",
+        "embed_tokens.embed_norm": "replicate_input",
         "layers.*.mlp.experts.gate_up_proj": "colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",

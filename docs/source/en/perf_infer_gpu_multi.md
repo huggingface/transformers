@@ -124,6 +124,7 @@ class ParallelInterface(GeneralInterface):
         "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
         "moe_identity_expert": MoeIdentityParallel(),
         "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
+        "replicate_input": ReplicateInputParallel(),
         "mla_kv_a_proj": MlaKvAProjParallel(),
         "all_reduce": AllReduceParallel(),
         "replicated_output": ReplicatedOutputParallel(),
@@ -143,7 +144,8 @@ The table below describes each strategy.
 | `PackedRowwiseParallel` | The row-wise counterpart, for weights packed along the final dim. Replicates 1D parameters. |
 | `SequenceParallel` | Replicates the module's parameters and shards its input on `sequence_dim` (defaults to `1`). Used for norms that operate per-token, such as `LayerNorm` and `RMSNorm`. |
 | `ReplicatedWithGradAllReduce` | Replicates a parameter but all-reduces its gradient. Needed for norms that sit between a column-wise and a row-wise layer and normalize along a sharded axis, where each rank only sees its own heads. |
-| `AllReduceParallel` | All-reduces a module's `Partial()` forward output to `Replicate()`. Use it as a sync point for a module whose compute ends in a partial sum. |
+| `ReplicateInputParallel` | Reduces a `DTensor` input to a full replicated value once, runs the module on plain tensors, and returns a replicated `DTensor`. Needed for a norm that an `nn.Embedding` subclass applies to its own vocab-parallel lookup, which still holds partial sums inside the embedding's `forward`. |
+| `AllReduceParallel` | All-reduces a module's `Partial()` forward output to `Replicate()`. Use it as a sync point for a module whose compute ends in a partial sum. A module that holds sharded params itself runs on local tensors and all-reduces the gradients of its inputs. |
 | `ReplicatedOutputParallel` | Marks a replicated module's local output as a `Replicate()` tensor, so a following `rowwise` layer slices it rather than reading it as a shard. Used when one plan name covers both a head-sharded attention and a replicated one, such as a linear attention whose `o_proj` shares the name. |
 | `MlaKvAProjParallel` | Splits the `kv_a_proj_with_mqa` output of DeepSeek-V2 style MLA attention and all-reduces the gradient of the RoPE half, which bypasses `kv_b_proj` and would otherwise keep a partial gradient. Requires `qk_rope_head_dim` in the model config. |
 | `MoEParamShard` | Shards MoE expert weights on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` also rewrites `module.num_experts` to the per-rank expert count. |
