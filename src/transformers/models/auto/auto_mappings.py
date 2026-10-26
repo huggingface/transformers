@@ -941,6 +941,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("metaclip_2_text_model", "metaclip_2"),
         ("metaclip_2_vision_model", "metaclip_2"),
         ("mgp-str", "mgp_str"),
+        ("minicpm", "minicpm4"),
         ("minicpm_ocr_vision", "minicpm_ocr"),
         ("minicpmv4_6_vision", "minicpmv4_6"),
         ("minicpmv4_7_vision", "minicpmv4_7"),

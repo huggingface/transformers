@@ -296,7 +296,6 @@ if TYPE_CHECKING:
     from .mgp_str import *
     from .mimi import *
     from .mimo_v2_flash import *
-    from .minicpm import *
     from .minicpm3 import *
     from .minicpm4 import *
     from .minicpm_ocr import *
