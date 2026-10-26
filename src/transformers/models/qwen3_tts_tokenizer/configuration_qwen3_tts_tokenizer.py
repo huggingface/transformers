@@ -233,12 +233,9 @@ class Qwen3TTSTokenizerDecoderConfig(PreTrainedConfig):
         Number of preceding frames prepended to each decoder chunk as context and dropped from its output.
     """
 
-    model_type = "qwen3_tts_tokenizer_decoder"
-    base_config_key = "decoder_config"
-
     hidden_size: int = 512
     max_position_embeddings: int = 8000
-    rope_parameters: dict | None = None
+    rope_parameters: RopeParameters | dict | None = None
     num_attention_heads: int = 16
     num_key_value_heads: int = 16
     attention_bias: bool = False
@@ -253,11 +250,21 @@ class Qwen3TTSTokenizerDecoderConfig(PreTrainedConfig):
     decoder_dim: int = 1536
     attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
+
+    model_type = "qwen3_tts_tokenizer_decoder"
+    base_config_key = "decoder_config"
     head_dim: int = 64
     codebook_dim: int = 512
     latent_dim: int = 1024
     decoder_chunk_size: int = 300
     decoder_left_context_size: int = 25
+
+    @property
+    def layer_types(self):
+        """
+        All layers in code2wav should be sliding attention
+        """
+        return ["sliding_attention"] * self.num_hidden_layers
 
     @classmethod
     def get_config_dict(cls, pretrained_model_name_or_path, **kwargs):
@@ -265,10 +272,6 @@ class Qwen3TTSTokenizerDecoderConfig(PreTrainedConfig):
         if config_dict.get("model_type") == Qwen3TTSTokenizerConfig.model_type:
             config_dict = Qwen3TTSTokenizerConfig.from_dict(config_dict).decoder_config.to_dict()
         return config_dict, kwargs
-
-    @property
-    def layer_types(self):
-        return ["sliding_attention"] * self.num_hidden_layers
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
