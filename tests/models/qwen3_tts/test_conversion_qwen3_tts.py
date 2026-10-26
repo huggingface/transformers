@@ -164,8 +164,8 @@ class Qwen3TTSConversionTest(unittest.TestCase):
                 source.mkdir()
                 # Generation reserves the top 1024 talker IDs; real codec IDs occupy the lower 2048.
                 codec = _build_tiny_audio_tokenizer(num_quantizers=4)
-                codec.config.quantizer_config.codebook_size = 2048
-                codec.config.quantizer_config.semantic_quantizer_config.codebook_size = 2048
+                codec.config.acoustic_quantizer_config.codebook_size = 2048
+                codec.config.semantic_quantizer_config.codebook_size = 2048
                 codec = type(codec)(codec.config).eval()
                 codec.save_pretrained(codec_path)
                 tokens = ["<|endoftext|>", "<|im_start|>", "<|im_end|>", "<|audio|>", "assistant", "Hello", "."]
