@@ -173,45 +173,6 @@ print("Audio values shape:", output.audio_values.shape)
 # Audio values shape: torch.Size([1, 140520])
 ```
 
-## Separate encoder and decoder
-
-[`Qwen3TTSTokenizerConfig`] is the source of truth for both components. Encoder architecture settings are flat
-`encoder_*` fields, such as `encoder_hidden_size`, `encoder_num_hidden_layers`, and `encoder_upsampling_ratios`.
-The encoder's sampling rate comes from `input_sampling_rate`. Decoder settings keep their unprefixed names,
-such as `hidden_size`, `num_hidden_layers`, `upsampling_ratios`, and `codebook_dim`; the latter is the decoder's
-continuous input width, not the quantizer's codebook embedding dimension.
-
-The tokenizer builds its encoder and decoder through `AutoModel.from_config`, using the computed
-`model.config.encoder_config` and `model.config.decoder_config` views. These return independent component configs
-containing only that component's settings, with the root dtype and attention implementation forwarded.
-Mutating a view does not update the main config; configure the root fields before constructing the model.
-Neither view is stored as a nested configuration. The only stored subconfig is `quantizer_config`, which in turn
-owns `semantic_quantizer_config`.
-
-The loaded components are available as `model.encoder` and `model.decoder`. Their `forward` methods operate on
-continuous representations; the top-level `encode` and `decode` methods handle quantization separately.
-To decode an already-quantized continuous representation without running the quantizer again, pass `latents`
-with shape `(batch_size, model.config.codebook_dim, codes_length)`:
-
-```python
-with torch.no_grad():
-    latents = model.quantizer.decode(audio_codes.transpose(1, 2))
-    audio_values = model.decode(latents=latents).audio_values
-```
-
-Pass `audio_codes` or `latents` to `decode`. If both are provided, `audio_codes` takes precedence.
-Omitting both raises `ValueError`.
-
-You can save and reload the trained components independently:
-
-```python
-model.encoder.save_pretrained("qwen3_tts_encoder")
-model.decoder.save_pretrained("qwen3_tts_decoder")
-
-encoder = AutoModel.from_pretrained("qwen3_tts_encoder")
-decoder = AutoModel.from_pretrained("qwen3_tts_decoder")
-```
-
 ## Quantizer configuration
 
 `quantizer_config.semantic_quantizer_config` configures the semantic residual vector quantizer independently.
