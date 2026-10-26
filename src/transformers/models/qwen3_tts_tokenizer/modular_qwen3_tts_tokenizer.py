@@ -76,7 +76,9 @@ class Qwen3TTSTokenizerSemanticQuantizerConfig(PreTrainedConfig):
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
         if self.n_codebooks < 1:
-            raise ValueError(f"The semantic quantizer needs at least one codebook, but `n_codebooks` is {self.n_codebooks}.")
+            raise ValueError(
+                f"The semantic quantizer needs at least one codebook, but `n_codebooks` is {self.n_codebooks}."
+            )
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
