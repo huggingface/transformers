@@ -158,6 +158,9 @@ class TorchvisionBackend(BaseImageProcessor):
     ) -> "torch.Tensor":
         """Convert an image to RGB format."""
         # no-op for 3/4-channel inputs and converts only if grayscale
+        # NOTEL tvF cannot handle images with no channel dim so fix it before
+        if image.ndim == 2:
+            image = image[None]
         image = tvF.grayscale_to_rgb(image)
 
         if image.shape[0] == 4:

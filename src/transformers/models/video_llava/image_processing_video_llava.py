@@ -333,7 +333,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         # PIL RGBA images are converted to RGB
         # TODO: use proper PilBackend class to support proper RGB conversion in arrays
         if do_convert_rgb and isinstance(image, PIL.Image.Image):
-            image = convert_to_rgb(image)
+            image = convert_to_rgb(image, return_numpy=True)
 
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
