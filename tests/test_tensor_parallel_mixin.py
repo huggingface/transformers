@@ -52,34 +52,6 @@ if is_torch_available():
 
 
 # =============================================================================
-# Constants
-# =============================================================================
-
-# Set to None to run distributed TP tests for every model with a plan.
-# Representative MoE and dense model types covered by distributed TP tests.
-TP_DISTRIBUTED_TEST_MODEL_TYPES = {
-    # Dense
-    "qwen3",
-    "qwen2",
-    # MoE
-    "qwen4_exp_text",
-    "qwen3_moe",
-    "glm_moe_dsa",
-    "deepseek_v4",
-    "glm4_moe_lite",
-    "glm4_moe",
-    "olmoe",
-    "qwen2_moe",
-    "cohere2_moe",
-    # VLM
-    "glm4v_moe",
-    # ALM
-    "qwen2_audio",
-    "voxtral",
-}
-
-
-# =============================================================================
 # Distributed helpers (top-level for pickling to the worker processes)
 # =============================================================================
 
@@ -653,16 +625,6 @@ class TensorParallelTesterMixin(ABC):
         config = self.model_tester.get_config().get_text_config()
         return hasattr(config, "base_model_tp_plan") and config.base_model_tp_plan is not None
 
-    def _skip_if_tp_distributed_not_enabled(self):
-        """Skip expensive distributed TP/EP tests for models outside the allowlist."""
-        config = self.model_tester.get_config()
-        if TP_DISTRIBUTED_TEST_MODEL_TYPES is not None and config.model_type not in TP_DISTRIBUTED_TEST_MODEL_TYPES:
-            self.skipTest(
-                f"Tensor parallel distributed tests are not enabled for model_type={config.model_type!r} "
-                f"(enabled: {sorted(TP_DISTRIBUTED_TEST_MODEL_TYPES)}). "
-                "Set TP_DISTRIBUTED_TEST_MODEL_TYPES = None to run all tests."
-            )
-
     def _skip_if_single_process_device(self):
         if torch_device in SINGLE_PROCESS_DEVICES:
             self.skipTest(f"Distributed tests spawn one process per device, which {torch_device!r} doesn't allow")
@@ -711,8 +673,6 @@ class TensorParallelTesterMixin(ABC):
                 self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
         elif not self._has_tp_plan():
             self.skipTest("Model does not have a tensor parallel plan (base_model_tp_plan)")
-
-        self._skip_if_tp_distributed_not_enabled()
 
         # # Skip encoder-decoder models (TP not supported)
         # if getattr(self, "is_encoder_decoder", False):
