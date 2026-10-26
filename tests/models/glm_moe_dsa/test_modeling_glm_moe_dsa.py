@@ -80,10 +80,6 @@ class GlmMoeDsaModelTest(CausalLMModelTest, unittest.TestCase):
     test_all_params_have_gradient = False
     model_split_percents = [0.5, 0.7, 0.8]
 
-    @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
-    def test_tp_generation_quantized(self):
-        pass
-
     def test_default_mlp_layer_types(self):
         config = GlmMoeDsaConfig(num_hidden_layers=8)
         self.assertEqual(

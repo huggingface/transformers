@@ -62,10 +62,6 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Glm4MoeLiteModelTester
     model_split_percents = [0.5, 0.7, 0.8]
 
-    @unittest.skip("MoE topk routing is too sensitive to Float8 quantization numerical noise")
-    def test_tp_generation_quantized(self):
-        pass
-
 
 @require_torch_accelerator
 @slow

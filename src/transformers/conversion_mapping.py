@@ -1097,7 +1097,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "colqwen2": [PrefixChange(prefix_to_remove="model", model_prefix="vlm")],
-        "ShieldGemma2ForImageClassification": [PrefixChange(prefix_to_add="model", model_prefix="model")],
+        "shieldgemma2": [PrefixChange(prefix_to_add="model", model_prefix="model")],
         "timm_wrapper": [PrefixChange(prefix_to_add="timm_model")],
         "pi0": [
             WeightRenaming(source_patterns=r"state_proj", target_patterns="embed_action_time.state_proj"),

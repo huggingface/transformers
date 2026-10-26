@@ -69,10 +69,6 @@ if is_torch_available():
 GEMMA4_RANDOM_MOE_FA2_SKIP_REASON = (
     "Randomly initialized Gemma4 MoE routers are too sensitive to tiny eager/FA2 input differences"
 )
-GEMMA4_RANDOM_MOE_TP_QUANTIZED_SKIP_REASON = (
-    "Randomly initialized Gemma4 MoE routers flip experts under Float8 quantization noise: the quantized model alone "
-    "already moves the logits by ~80% of their magnitude, so per-shard Float8 scales under TP diverge greedy decoding"
-)
 
 
 class Gemma4TextModelTester(CausalLMModelTester):
@@ -325,10 +321,6 @@ class Gemma4Audio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         pass
 
-    @unittest.skip(GEMMA4_RANDOM_MOE_TP_QUANTIZED_SKIP_REASON)
-    def test_tp_generation_quantized(self):
-        pass
-
     def test_audio_rel_pos_encoding_uses_context_size_from_config(self):
         """Regression test for #45468; attention context size is properly read from config"""
         from transformers.models.gemma4.configuration_gemma4 import Gemma4AudioConfig
@@ -525,10 +517,6 @@ class Gemma4Vision2TextModelTest(VLMModelTest, unittest.TestCase):
         cos, sin = rope_module(hidden_states, position_ids)
         self.assertEqual(cos.shape[-1], inv_freq.shape[-1] * 4)  # the freq are `//4` of head dim
         self.assertEqual(cos.shape[0], 3)  # angles presserve batch
-
-    @unittest.skip(GEMMA4_RANDOM_MOE_TP_QUANTIZED_SKIP_REASON)
-    def test_tp_generation_quantized(self):
-        pass
 
     @unittest.skip("The tester has no audios in input dict")
     def test_get_audio_features_hidden_states(self):

@@ -105,6 +105,9 @@ class MuseSparkTextConfig(MuseGlimmerTextConfig):
     model_type = "muse_spark_text"
 
     base_model_tp_plan = {
+        # the embedding normalizes its own lookup: the norm needs the reduced vocab-parallel lookup
+        "embed_tokens": "embedding_rowwise",
+        "embed_tokens.embed_norm": "replicate_input",
         "layers.*.mlp.pre_expert_proj": "rowwise_split_input",
         "layers.*.mlp.post_expert_proj": "rowwise_split_input",
         "layers.*.mlp.gate_proj": "colwise",
