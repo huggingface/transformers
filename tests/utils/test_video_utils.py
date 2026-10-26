@@ -33,7 +33,6 @@ from transformers.testing_utils import (
 )
 from transformers.video_utils import (
     VideoMetadata,
-    default_sample_indices_fn,
     group_videos_by_shape,
     is_torchvision_video_decoding_available,
     make_batched_videos,
@@ -58,15 +57,6 @@ def get_random_video(height, width, num_frames=8, return_torch=False):
         # move channel first
         return torch.from_numpy(video).permute(0, 3, 1, 2)
     return video
-
-
-class VideoFrameSamplingTester(unittest.TestCase):
-    def test_fps_sampling_short_video_keeps_one_frame(self):
-        metadata = VideoMetadata(total_num_frames=10, fps=30.0)
-
-        indices = default_sample_indices_fn(metadata, fps=1)
-
-        self.assertEqual(indices.tolist(), [0])
 
 
 @require_vision
@@ -415,6 +405,13 @@ class LoadVideoTester(unittest.TestCase):
             num_frames=22,
         )
         self.assertEqual(video.shape, (22, 360, 640, 3))
+
+    def test_fps_sampling_short_video_keeps_one_frame(self):
+        video, _ = load_video(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4",
+            fps=0.25,
+        )
+        self.assertEqual(video.shape, (1, 2160, 3840, 3))
 
     def test_load_video_num_frames_exceeds_total(self):
         video_file_path = hf_hub_download(
