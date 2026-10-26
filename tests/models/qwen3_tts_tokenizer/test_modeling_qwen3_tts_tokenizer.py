@@ -23,9 +23,9 @@ from huggingface_hub.errors import StrictDataclassClassValidationError
 
 from transformers import (
     AutoModel,
+    Qwen3TTSTokenizerAcousticQuantizerConfig,
     Qwen3TTSTokenizerConfig,
     Qwen3TTSTokenizerModel,
-    Qwen3TTSTokenizerQuantizerConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -147,7 +147,7 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
                 self.subTest(total_count=total_count, semantic_count=semantic_count),
                 self.assertRaises(StrictDataclassClassValidationError),
             ):
-                Qwen3TTSTokenizerQuantizerConfig(
+                Qwen3TTSTokenizerAcousticQuantizerConfig(
                     n_codebooks=total_count, semantic_quantizer_config={"n_codebooks": semantic_count}
                 )
 
@@ -352,7 +352,7 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertEqual(kwargs, original_kwargs)
 
     def test_independent_semantic_quantizer_encode_decode(self):
-        config = Qwen3TTSTokenizerQuantizerConfig(
+        config = Qwen3TTSTokenizerAcousticQuantizerConfig(
             n_codebooks=3,
             codebook_size=5,
             codebook_dim=2,

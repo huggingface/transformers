@@ -76,7 +76,7 @@ class Qwen3TTSTokenizerSemanticQuantizerConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
 @strict
-class Qwen3TTSTokenizerQuantizerConfig(PreTrainedConfig):
+class Qwen3TTSTokenizerAcousticQuantizerConfig(PreTrainedConfig):
     r"""
     semantic_quantizer_config (`dict` or `Qwen3TTSTokenizerSemanticQuantizerConfig`, *optional*):
         Configuration for the semantic residual vector quantizer. Unspecified dictionary fields inherit the shared
@@ -86,7 +86,7 @@ class Qwen3TTSTokenizerQuantizerConfig(PreTrainedConfig):
         Dimension used within the vector quantizers.
     """
 
-    model_type = "qwen3_tts_tokenizer_quantizer"
+    model_type = "qwen3_tts_tokenizer_acoustic_quantizer"
     base_config_key = "quantizer_config"
     attribute_map = {"num_quantizers": "n_codebooks"}
     sub_configs = {"semantic_quantizer_config": Qwen3TTSTokenizerSemanticQuantizerConfig}
@@ -330,7 +330,7 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
         "input_sample_rate": "input_sampling_rate",
         "output_sample_rate": "output_sampling_rate",
     }
-    sub_configs = {"quantizer_config": Qwen3TTSTokenizerQuantizerConfig}
+    sub_configs = {"quantizer_config": Qwen3TTSTokenizerAcousticQuantizerConfig}
 
     encoder_audio_channels: int = 1
     encoder_hidden_size: int = 512
@@ -390,13 +390,13 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
 
     def __post_init__(self, **kwargs):
         if self.quantizer_config is None:
-            self.quantizer_config = Qwen3TTSTokenizerQuantizerConfig(
+            self.quantizer_config = Qwen3TTSTokenizerAcousticQuantizerConfig(
                 codebook_dim=self.codebook_dim // 2,
                 vector_quantization_hidden_dimension=self.codebook_dim // 2,
                 hidden_size=self.codebook_dim,
             )
         elif isinstance(self.quantizer_config, dict):
-            self.quantizer_config = Qwen3TTSTokenizerQuantizerConfig(**self.quantizer_config)
+            self.quantizer_config = Qwen3TTSTokenizerAcousticQuantizerConfig(**self.quantizer_config)
         super().__post_init__(**kwargs)
 
     @classmethod
@@ -812,7 +812,7 @@ __all__ = [
     "Qwen3TTSTokenizerConfig",
     "Qwen3TTSTokenizerEncoderConfig",
     "Qwen3TTSTokenizerDecoderConfig",
-    "Qwen3TTSTokenizerQuantizerConfig",
+    "Qwen3TTSTokenizerAcousticQuantizerConfig",
     "Qwen3TTSTokenizerSemanticQuantizerConfig",
     "Qwen3TTSTokenizerModel",
     "Qwen3TTSTokenizerEncoderModel",
