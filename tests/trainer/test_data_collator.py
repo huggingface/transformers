@@ -987,6 +987,31 @@ class TestDataCollatorForLanguageModelingWholeWordMask(DataCollatorTestMixin, un
         self.assertEqual(batch["input_ids"].shape, (2, 10))
         self.assertEqual(batch["labels"].shape, (2, 10))
 
+    def test_whole_word_mask_dynamic_padding(self):
+        """Test whole word masking with variable-length sequences requiring dynamic padding (#49971)."""
+        tokenizer = BertTokenizerFast(self.vocab_file)
+        tokens_a = [f"token_{i}" for i in range(4)]
+        tokens_b = [f"token_{i}" for i in range(8)]
+        tokenizer.add_tokens(tokens_b)
+        features = [
+            tokenizer(" ".join(tokens_a), return_offsets_mapping=True),
+            tokenizer(" ".join(tokens_b), return_offsets_mapping=True),
+        ]
+        collator = DataCollatorForLanguageModeling(tokenizer, whole_word_mask=True, return_tensors="pt")
+        batch = collator(features)
+        self.assertEqual(batch["input_ids"].shape, (2, 10))
+        self.assertEqual(batch["labels"].shape, (2, 10))
+
+    def test_whole_word_mask_pad_to_multiple_of(self):
+        """Test whole word masking with pad_to_multiple_of (#49971)."""
+        tokenizer, features = self._get_tokenizer_and_features()
+        collator = DataCollatorForLanguageModeling(
+            tokenizer, whole_word_mask=True, return_tensors="pt", pad_to_multiple_of=16
+        )
+        batch = collator(features)
+        self.assertEqual(batch["input_ids"].shape, (2, 16))
+        self.assertEqual(batch["labels"].shape, (2, 16))
+
     def test_with_numpy_inputs(self):
         """Test with numpy array inputs."""
         tokenizer, _ = self._get_tokenizer_and_features()
