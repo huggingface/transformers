@@ -1012,17 +1012,15 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             else:
                 return False
 
+        invalid_input_message = (
+            "text input must be of type `str` (single example), `list[str]` (batch or single pretokenized example) "
+            "or `list[list[str]]` (batch of pretokenized examples) or `list[tuple[list[str], list[str]]]` (batch of pretokenized sequence pairs)."
+        )
         if not _is_valid_text_input(text):
-            raise ValueError(
-                "text input must be of type `str` (single example), `list[str]` (batch or single pretokenized example) "
-                "or `list[list[str]]` (batch of pretokenized examples) or `list[tuple[list[str], list[str]]]` (batch of pretokenized sequence pairs)."
-            )
+            raise ValueError(f"{invalid_input_message} Received `text` of type `{type(text).__name__}`.")
 
         if text_pair is not None and not _is_valid_text_input(text_pair):
-            raise ValueError(
-                "text input must be of type `str` (single example), `list[str]` (batch or single pretokenized example) "
-                "or `list[list[str]]` (batch of pretokenized examples) or `list[tuple[list[str], list[str]]]` (batch of pretokenized sequence pairs)."
-            )
+            raise ValueError(f"{invalid_input_message} Received `text_pair` of type `{type(text_pair).__name__}`.")
 
         # Batch detection (from _call_one)
         if is_split_into_words:

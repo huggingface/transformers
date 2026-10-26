@@ -105,6 +105,17 @@ class PreTrainedTokenizationFastTest(unittest.TestCase):
     def test_additional_special_tokens_serialization(self):
         pass
 
+    def test_invalid_text_input_error_includes_received_type(self):
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(self.model_paths[0])
+
+        with self.assertRaises(ValueError) as error:
+            tokenizer(123)
+        self.assertIn("Received `text` of type `int`.", str(error.exception))
+
+        with self.assertRaises(ValueError) as error:
+            tokenizer("hello", 123)
+        self.assertIn("Received `text_pair` of type `int`.", str(error.exception))
+
     def test_training_new_tokenizer(self):
         tmpdirname_orig = self.tmpdirname
         # Here we want to test the 2 available tokenizers that use 2 different types of models: Unigram and WordLevel.
