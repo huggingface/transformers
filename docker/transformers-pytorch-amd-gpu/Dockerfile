@@ -77,6 +77,9 @@ RUN python3 -m pip install --no-cache-dir timm
 
 RUN python3 -m pip install --no-cache-dir onnxruntime
 
+# Download the test images / audio / videos into the repo, so tests don't fetch them from the Hub at runtime.
+RUN cd transformers && RUN_PIPELINE_TESTS=0 python3 utils/fetch_hub_objects_for_ci.py
+
 # Deterministic MIOpen conv kernel selection, otherwise bf16 outputs can change between runners.
 ENV MIOPEN_DEBUG_CONV_IMPLICIT_GEMM=0
 ENV MIOPEN_FIND_MODE=2
