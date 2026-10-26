@@ -28,7 +28,7 @@ from ...cache_utils import (
     DynamicSlidingWindowLayer,
     StaticSlidingWindowLayer,
 )
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
@@ -41,6 +41,7 @@ from ...masking_utils import (
     or_masks,
 )
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, MoeModelOutputWithPast
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import (
@@ -377,8 +378,8 @@ class UnlimitedOcrVisionConfig(DeepseekOcr2VisionConfig):
     model_type = "unlimited_ocr_vision"
     base_config_key = "vision_config"
     sub_configs_defaults = {
-        "sam_config": SubConfigSpec(config_class=UnlimitedOcrSamVisionConfig),
-        "encoder_config": SubConfigSpec(config_class=UnlimitedOcrVisionEncoderConfig),
+        "sam_config": UnlimitedOcrSamVisionConfig,
+        "encoder_config": UnlimitedOcrVisionEncoderConfig,
     }
 
 
@@ -465,8 +466,8 @@ class UnlimitedOcrConfig(DeepseekOcr2Config):
 
     model_type = "unlimited_ocr"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=UnlimitedOcrVisionConfig),
-        "text_config": SubConfigSpec(config_class=UnlimitedOcrTextConfig),
+        "vision_config": UnlimitedOcrVisionConfig,
+        "text_config": UnlimitedOcrTextConfig,
     }
 
     def __post_init__(self, **kwargs):
@@ -1177,7 +1178,7 @@ class UnlimitedOcrModel(DeepseekOcr2Model):
             per_image_local = [None] * batch_size
 
         hidden_size = global_features.shape[-1]
-        newline = self.image_newline[None, None, :]
+        newline = self.image_newline[None, None, :].to(global_features.device)
         num_queries_global = int(global_features.shape[1] ** 0.5)
 
         # Different from DeepseekOcr2: each row of image patches gets a newline token appended.
@@ -1414,8 +1415,7 @@ class UnlimitedOcrForConditionalGeneration(UnlimitedOcrPreTrainedModel, Unlimite
         )
 
         hidden_states = outputs[0]
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        hidden_states = hidden_states[:, slice_indices, :]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
 
         loss = None
