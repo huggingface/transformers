@@ -24,6 +24,7 @@ from .parallel_utils import (
     ALL_PARALLEL_STYLES,
     ParallelInterface,  # noqa: F401
     _use_local_dtensor_params,
+    replace_layer_number_by_wildcard,
 )
 from .utils import _get_torch_distributed_rank
 
@@ -47,16 +48,6 @@ if is_torch_distributed_available():
     from torch.distributed.tensor.placement_types import _StridedShard
 
     from .parallel_utils import _AllReduceBackward, _AllReduceForward
-
-
-def replace_layer_number_by_wildcard(name: str) -> str:
-    """
-    Replace the numbers in the `name` by wildcards, only if they are in-between dots (`.`) or if they are between
-    a dot (`.`) and the end of the string.
-    This matches how modules are named/numbered when using a nn.ModuleList or nn.Sequential, but will NOT match
-    numbers in a parameter name itself, e.g. if the param is named `"w1"` or `"w2"`.
-    """
-    return re.sub(r"\.\d+(\.|$)", lambda m: ".*" + m.group(1), name)
 
 
 def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
@@ -86,24 +77,6 @@ def verify_tp_plan(expected_keys: list[str], tp_plan: dict[str, str] | None):
         logger.warning(f"The following TP rules were not applied on any of the layers: {unused_rules}")
     if len(unsharded_layers) > 0:
         logger.warning(f"The following layers were not sharded: {', '.join(unsharded_layers)}")
-
-
-def _get_parameter_plan(parameter_name: str, plan: dict[str, str], is_weight=True) -> str | None:
-    """
-    Get the parallel style for a parameter or module from a TP or EP plan.
-
-    The plan is a dictionary that maps parameter or module names to parallel styles.
-    The parameter name can be a generic name with wildcards (e.g. "*.weight") or a specific name (e.g. "layer_1.weight").
-
-    The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
-    not parent classes for `post_init` calls
-    """
-    generic_param_name = replace_layer_number_by_wildcard(parameter_name)
-    if generic_param_name in plan:
-        return plan[generic_param_name]
-    elif is_weight and "." in generic_param_name and (module_name := generic_param_name.rsplit(".", 1)[0]) in plan:
-        return plan[module_name]
-    return None
 
 
 def get_kv_heads_per_rank(tp_plan: dict[str, str], num_heads: int | list[int], tp_size: int) -> int | list[int] | None:

@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, is_torch_distributed_available, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
-from .tensor_parallel import replace_layer_number_by_wildcard
+from .parallel_utils import replace_layer_number_by_wildcard
 from .utils import _get_torch_distributed_rank, _is_torch_distributed_initialized
 
 
