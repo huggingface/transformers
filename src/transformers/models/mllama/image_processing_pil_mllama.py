@@ -166,8 +166,7 @@ def convert_aspect_ratios_to_ids_np(
 class MllamaImageProcessorKwargs(ImagesKwargs, total=False):
     """
     max_image_tiles (`int`, *optional*):
-        The maximum number of tiles allowed. Only used to build `supported_aspect_ratios`, so it can't be changed in
-        `preprocess`.
+        The maximum number of tiles allowed. Can only be set at init.
     supported_aspect_ratios (`list[list[int]]`, *optional*):
         The (rows, columns) tile grids an image can be split into. The position of a grid in this list is its
         `aspect_ratio_id` (minus one), so the order must match the model's aspect ratio embeddings. Built from
@@ -318,6 +317,7 @@ class MllamaImageProcessorPil(PilBackend):
     do_convert_rgb = True
     do_pad = True  # trf-ignore: TRF016 (enforced by validator)
     max_image_tiles = 4
+    init_only_kwargs = ("max_image_tiles",)
     valid_kwargs = MllamaImageProcessorKwargs
     model_input_names = ["pixel_values", "num_tiles", "aspect_ratio_ids", "aspect_ratio_mask"]
 
@@ -334,14 +334,9 @@ class MllamaImageProcessorPil(PilBackend):
                 if height * width <= self.max_image_tiles
             ]
 
-    def _validate_preprocess_kwargs(self, max_image_tiles: int | None = None, **kwargs):
+    def _validate_preprocess_kwargs(self, **kwargs):
         super()._validate_preprocess_kwargs(**kwargs)
         _validate_mllama_preprocess_arguments(self.do_resize, self.size, self.do_pad, self.max_image_tiles)
-        if max_image_tiles != self.max_image_tiles:
-            raise ValueError(
-                "`max_image_tiles` defines `supported_aspect_ratios`, so it can only be set at init, "
-                "e.g. `from_pretrained(..., max_image_tiles=4)`."
-            )
 
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[MllamaImageProcessorKwargs]) -> BatchFeature:

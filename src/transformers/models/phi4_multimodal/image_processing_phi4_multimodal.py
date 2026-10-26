@@ -33,11 +33,7 @@ class Phi4MultimodalImageProcessorKwargs(ImagesKwargs, total=False):
     patch_size (`int`, *optional*):
         The size of the patch.
     dynamic_hd (`int`, *optional*):
-        The maximum number of crops per image. Only used to build `supported_aspect_ratios`, so it can't be changed in
-        `preprocess`.
-    supported_aspect_ratios (`list[list[int]]`, *optional*):
-        The (columns, rows) crop grids an image can be resized to when it needs more than `dynamic_hd` crops, sorted
-        by number of crops. Built from `dynamic_hd` at init if not provided.
+        The maximum number of crops per image. Can only be set at init.
     """
 
     patch_size: int
@@ -51,6 +47,7 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
     size = {"height": 448, "width": 448}
     patch_size = 14
     dynamic_hd = 36
+    init_only_kwargs = ("dynamic_hd",)
     image_mean = [0.5, 0.5, 0.5]
     image_std = [0.5, 0.5, 0.5]
     do_rescale = True
@@ -73,14 +70,6 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
             }
             self.supported_aspect_ratios = [list(grid) for grid in sorted(grids, key=lambda grid: grid[0] * grid[1])]
 
-    def _validate_preprocess_kwargs(self, dynamic_hd: int | None = None, **kwargs):
-        super()._validate_preprocess_kwargs(**kwargs)
-        if dynamic_hd != self.dynamic_hd:
-            raise ValueError(
-                "`dynamic_hd` defines `supported_aspect_ratios`, so it can only be set at init, "
-                "e.g. `from_pretrained(..., dynamic_hd=36)`."
-            )
-
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[Phi4MultimodalImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
@@ -100,12 +89,12 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
                     best_ratio = ratio
         return best_ratio
 
-    def dynamic_preprocess(self, image, image_size, patch_size, mask_size, supported_aspect_ratios, max_num=36):
+    def dynamic_preprocess(self, image, image_size, patch_size, mask_size, supported_aspect_ratios):
         orig_height, orig_width = image.shape[-2:]
 
         w_crop_num = math.ceil(orig_width / float(image_size))
         h_crop_num = math.ceil(orig_height / float(image_size))
-        if w_crop_num * h_crop_num > max_num:
+        if w_crop_num * h_crop_num > self.dynamic_hd:
             aspect_ratio = orig_width / orig_height
 
             # find the closest aspect ratio to the target
@@ -179,7 +168,6 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
         patch_size: int,
-        dynamic_hd: int,
         supported_aspect_ratios: list[list[int]],
         return_tensors: str | TensorType | None,
         **kwargs,
@@ -193,7 +181,7 @@ class Phi4MultimodalImageProcessor(TorchvisionBackend):
         image_sizes = []
         for image in images:
             resized_image, attention_mask = self.dynamic_preprocess(
-                image, size.height, patch_size, mask_size, supported_aspect_ratios, max_num=dynamic_hd
+                image, size.height, patch_size, mask_size, supported_aspect_ratios
             )
             processed_image = self.rescale_and_normalize(
                 resized_image, do_rescale, rescale_factor, do_normalize, image_mean, image_std

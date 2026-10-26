@@ -171,14 +171,9 @@ class Lfm2VlImageProcessorKwargs(ImagesKwargs, total=False):
         Whether to split large images into a grid of smaller tiles. When enabled, images exceeding the maximum token
         limit are divided into multiple tiles based on `min_tiles` and `max_tiles` constraints.
     min_tiles (`int`, *optional*, defaults to `2`):
-        Minimum number of tiles (width × height) to use when splitting an image into a grid. Only used to build
-        `supported_aspect_ratios`, so it can't be changed in `preprocess`.
+        Minimum number of tiles (width × height) to use when splitting an image into a grid. Can only be set at init.
     max_tiles (`int`, *optional*, defaults to `10`):
-        Maximum number of tiles (width × height) to use when splitting an image into a grid. Only used to build
-        `supported_aspect_ratios`, so it can't be changed in `preprocess`.
-    supported_aspect_ratios (`list[list[int]]`, *optional*):
-        The (columns, rows) tile grids an image can be split into, sorted by number of tiles. The grid closest to the
-        image's aspect ratio is used. Built from `min_tiles` and `max_tiles` at init if not provided.
+        Maximum number of tiles (width × height) to use when splitting an image into a grid. Can only be set at init.
     use_thumbnail (`bool`, *optional*, defaults to `True`):
         Whether to include a thumbnail version of the image when splitting into tiles. The thumbnail provides a
         low-resolution overview of the entire image and is added as an additional patch when the grid has more than
@@ -224,6 +219,7 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
     do_image_splitting = True
     min_tiles = 2
     max_tiles = 10
+    init_only_kwargs = ("min_tiles", "max_tiles")
     use_thumbnail = True
     min_image_tokens = 64
     max_image_tokens = 256
@@ -266,14 +262,6 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
                 if self.min_tiles <= width * height <= self.max_tiles
             }
             self.supported_aspect_ratios = [list(grid) for grid in sorted(grids, key=lambda grid: grid[0] * grid[1])]
-
-    def _validate_preprocess_kwargs(self, min_tiles: int | None = None, max_tiles: int | None = None, **kwargs):
-        super()._validate_preprocess_kwargs(**kwargs)
-        if (min_tiles, max_tiles) != (self.min_tiles, self.max_tiles):
-            raise ValueError(
-                "`min_tiles` and `max_tiles` define `supported_aspect_ratios`, so they can only be set at init, "
-                "e.g. `from_pretrained(..., max_tiles=10)`."
-            )
 
     def _get_grid_layout(
         self,

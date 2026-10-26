@@ -34,13 +34,10 @@ class GotOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
         `preprocess` method.
     min_patches (`int`, *optional*, defaults to `self.min_patches`):
         The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Only used to build `supported_aspect_ratios`, so it can't be changed in `preprocess`.
+        set to `True`. Can only be set at init.
     max_patches (`int`, *optional*, defaults to `self.max_patches`):
         The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Only used to build `supported_aspect_ratios`, so it can't be changed in `preprocess`.
-    supported_aspect_ratios (`list[list[int]]`, *optional*):
-        The (columns, rows) tile grids an image can be cropped to, sorted by number of tiles. Built from
-        `min_patches` and `max_patches` at init if not provided.
+        set to `True`. Can only be set at init.
     """
 
     crop_to_patches: bool
@@ -98,6 +95,7 @@ class GotOcr2ImageProcessor(TorchvisionBackend):
     crop_to_patches = False
     min_patches = 1
     max_patches = 12
+    init_only_kwargs = ("min_patches", "max_patches")
 
     def __init__(self, **kwargs: Unpack[GotOcr2ImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -112,14 +110,6 @@ class GotOcr2ImageProcessor(TorchvisionBackend):
                     if self.min_patches <= width * height <= self.max_patches
                 ),
                 key=lambda grid: grid[0] * grid[1],
-            )
-
-    def _validate_preprocess_kwargs(self, min_patches: int | None = None, max_patches: int | None = None, **kwargs):
-        super()._validate_preprocess_kwargs(**kwargs)
-        if (min_patches, max_patches) != (self.min_patches, self.max_patches):
-            raise ValueError(
-                "`min_patches` and `max_patches` define `supported_aspect_ratios`, so they can only be set at init, "
-                "e.g. `from_pretrained(..., max_patches=6)`."
             )
 
     def crop_image_to_patches(

@@ -247,22 +247,21 @@ def get_optimal_tiled_canvas(
     target_tile_size: tuple[int, int],
     supported_aspect_ratios: list[list[int]],
 ) -> tuple[int, int]:
-    possible_resolutions = supported_aspect_ratios
     image_height, image_width = original_image_size
     patch_size_height, patch_size_width = target_tile_size  # (height == width)
 
-    candidate_resolutions = np.array(possible_resolutions) * patch_size_height
+    candidate_resolutions = np.array(supported_aspect_ratios) * patch_size_height
     # tiles following (width, height) order to align with aspect ratio convention
     tile_size = np.stack([image_width, image_height])
     required_scales = candidate_resolutions / tile_size
     required_scale = np.min(required_scales, axis=-1, keepdims=True)  # [n_resolutions, 1]
     if np.all(required_scale < 1):
         # We are forced to downscale, so try to minimize the amount of downscaling
-        best_grid = possible_resolutions[np.argmax(required_scale)]
+        best_grid = supported_aspect_ratios[np.argmax(required_scale)]
     else:
         # Pick the resolution that required the least upscaling so that it most closely fits the image
         required_scale = np.where(required_scale < 1.0, 10e9, required_scale)
-        best_grid = possible_resolutions[np.argmin(required_scale)]
+        best_grid = supported_aspect_ratios[np.argmin(required_scale)]
     return best_grid  # (width, height)
 
 
@@ -273,13 +272,10 @@ class Cohere2VisionImageProcessorKwargs(GotOcr2ImageProcessorKwargs, total=False
         `preprocess` method.
     min_patches (`int`, *optional*, defaults to 1):
         The minimum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Only used to build `supported_aspect_ratios`, so it can't be changed in `preprocess`.
+        set to `True`. Can only be set at init.
     max_patches (`int`, *optional*, defaults to 12):
         The maximum number of patches to be extracted from the image. Only has an effect if `crop_to_patches` is
-        set to `True`. Only used to build `supported_aspect_ratios`, so it can't be changed in `preprocess`.
-    supported_aspect_ratios (`list[list[int]]`, *optional*):
-        The (columns, rows) tile grids an image can be cropped to, sorted by number of tiles. Built from
-        `min_patches` and `max_patches` at init if not provided.
+        set to `True`. Can only be set at init.
     """
 
 

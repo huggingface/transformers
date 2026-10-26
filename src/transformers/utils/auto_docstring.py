@@ -174,6 +174,14 @@ class ImageProcessorArgs:
         "shape": None,
     }
 
+    supported_aspect_ratios = {
+        "description": """
+    The tile grids an image can be split into. Built from the model's tile bounds (e.g. `max_patches`) at init when not
+    provided, and saved with the image processor.
+    """,
+        "shape": None,
+    }
+
     pad_size = {
         "description": """
     The size in `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
