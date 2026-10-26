@@ -97,7 +97,7 @@ def compute_retention_mask(
     Computes the retention mask for video embeddings based on the grid dimensions.
 
     Args:
-        video_embeds (`torch.FloatTensor` of shape `(T, H, W, hidden_size)` or `(T * H * W, hidden_size)`):
+        video_embeds (`torch.FloatTensor` of shape `(T, H, W, hidden_size)`):
             The video embeddings to compute the retention mask for.
         thw (`torch.LongTensor` of shape `(3)`):
             The temporal, height and width of feature shape of each video in LLM.
