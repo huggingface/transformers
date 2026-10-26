@@ -163,9 +163,6 @@ class Qwen3TTSTokenizerEncoderConfig(PreTrainedConfig):
     attention_bias: bool = False
     tie_word_embeddings: bool = True
     base_config_key = "encoder_config"
-    # This is already a standalone component, not a codec with optional encoder and decoder halves.
-    encoder_config = None
-    decoder_config = None
 
     def __post_init__(self, **kwargs):
         self.upsampling_ratios = self.upsampling_ratios if self.upsampling_ratios else [8, 6, 5, 4]
