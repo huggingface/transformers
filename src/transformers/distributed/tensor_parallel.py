@@ -409,6 +409,26 @@ class EmbeddingParallel(TensorParallelLayer):
         return output.to_local() if self.use_local_output else output
 
 
+class ReplicateInputParallel(TensorParallelLayer):
+    """Module that needs the full value of a `DTensor` input, e.g. a norm that an `nn.Embedding` subclass applies to
+    its own lookup in `forward`, where a vocab-parallel embedding still holds partial sums (`embedding_rowwise` only
+    reduces the output of the whole module). The input is reduced once and the module runs on plain tensors, so its
+    replicated params need no sharding; the output is handed back as a replicated `DTensor`. Plain inputs pass
+    through untouched."""
+
+    def install_forward(self, module, mesh):
+        original_forward = module.forward
+
+        def tp_forward(x, *args, **kwargs):
+            if not isinstance(x, DTensor):
+                return original_forward(x, *args, **kwargs)
+            output = original_forward(x.redistribute(placements=[Replicate()]).to_local(), *args, **kwargs)
+            return DTensor.from_local(output, mesh, [Replicate()], run_check=False)
+
+        module.forward = tp_forward
+        return module
+
+
 class ReplicatedWithGradAllReduce(TensorParallelLayer):
     """Replicated parameter whose gradient is partial.
 
@@ -461,7 +481,31 @@ class LocalColwiseParamParallel(TensorParallelLayer):
 
 
 class AllReduceParallel(TensorParallelLayer):
-    """All-reduce a module's partial forward output across the TP mesh."""
+    """All-reduce a module's partial forward output across the TP mesh.
+
+    A module that holds sharded params itself (e.g. colwise / rowwise expert weights used through `torch.bmm`), rather
+    than through `colwise` / `rowwise` children, runs on local tensors; the gradients of its replicated inputs are then
+    partial as well, so they are all-reduced in backward."""
+
+    def should_use_local_tensors(self, module):
+        return any(
+            isinstance(param, DTensor) and any(not placement.is_replicate() for placement in param.placements)
+            for param in module.parameters(recurse=False)
+        )
+
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
+        if not self.should_use_local_tensors(module):
+            return args, kwargs
+        process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+
+        def to_local(x):
+            if isinstance(x, DTensor):
+                x = x.redistribute(placements=[Replicate()]).to_local()
+            if isinstance(x, torch.Tensor) and x.is_floating_point():
+                x = _AllReduceBackward.apply(x, process_group)
+            return x
+
+        return tuple(to_local(x) for x in args), {k: to_local(v) for k, v in kwargs.items()}
 
     def transform_output_post_forward(self, module, output, mesh):
         if output is None:
@@ -1068,6 +1112,7 @@ class ParallelInterface(GeneralInterface):
             "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
             "moe_identity_expert": MoeIdentityParallel(),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
+            "replicate_input": ReplicateInputParallel(),
             "local_colwise": LocalColwiseParamParallel(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
