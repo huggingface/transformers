@@ -244,6 +244,8 @@ class HfQuantizer(ABC):
         if hasattr(model, "quantization_method"):
             del model.quantization_method
         model.is_quantized = False
+        # Drop the conversions the quantizer set up for loading, so a save uses the model's own conversion mapping
+        model._weight_conversions = None
 
     def dequantize(self, model, dtype=None):
         """
