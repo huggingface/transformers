@@ -210,7 +210,7 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         scale_resolution: int,
         patch_size: int,
         allow_upscale: bool = False,
-        downsample_mode: str = "4x",
+        downsample_mode: str = "16x",
     ) -> tuple[int, int]:
         height, width = video_size
         if (height * width > scale_resolution * scale_resolution) or allow_upscale:
@@ -230,7 +230,7 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         scale_resolution: int,
         patch_size: int,
         allow_upscale: bool = False,
-        downsample_mode: str = "4x",
+        downsample_mode: str = "16x",
     ) -> tuple[int, int]:
         height, width = video_size
         grid_y, grid_x = grid
@@ -347,7 +347,7 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         max_slice_nums: int,
         scale_resolution: int,
         patch_size: int,
-        downsample_mode: str = "4x",
+        downsample_mode: str = "16x",
     ):
         num_frames = video.shape[1]
         video_size = video.shape[-2:]
@@ -425,7 +425,7 @@ class MiniCPMOcrVideoProcessor(BaseVideoProcessor):
         max_num_frames: int,
         video_metadata: list[VideoMetadata],
         return_tensors: str | TensorType | None,
-        downsample_mode: str = "4x",
+        downsample_mode: str = "16x",
         **kwargs,
     ) -> BatchFeature:
         # Stage 1 — Build an ordered list of visual units.
