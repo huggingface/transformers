@@ -169,8 +169,11 @@ class Qwen3TTSTokenizerEncoderConfig(MimiConfig):
     upsample_groups = AttributeError()
     use_cache = AttributeError()
     use_streaming = AttributeError()
+    tie_word_embeddings = AttributeError()
     encoder_config = AttributeError()
     decoder_config = AttributeError()
+    latent_stride = AttributeError()
+    latent_dim = AttributeError()
 
     def __post_init__(self, **kwargs):
         self.upsampling_ratios = self.upsampling_ratios if self.upsampling_ratios else [8, 6, 5, 4]
