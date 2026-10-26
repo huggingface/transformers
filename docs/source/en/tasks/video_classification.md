@@ -22,7 +22,7 @@ Video classification is the task of assigning a label or class to an entire vide
 
 This guide will show you how to:
 
-1. Fine-tune [VideoMAE](https://huggingface.co/docs/transformers/main/en/model_doc/videomae) on a subset of the [UCF101](https://www.crcv.ucf.edu/data/UCF101.php) dataset.
+1. Fine-tune [VideoMAE](../model_doc/videomae) on a subset of the [UCF101](https://www.crcv.ucf.edu/data/UCF101.php) dataset.
 2. Use your fine-tuned model for inference.
 
 <Tip>

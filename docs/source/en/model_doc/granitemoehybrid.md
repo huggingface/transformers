@@ -75,6 +75,8 @@ This HF implementation is contributed by [Sukriti Sharma](https://huggingface.co
   )
   ```
 
+- Use left padding for batched generation. See [Padding side](../llm_tutorial#padding-side).
+
 ## GraniteMoeHybridConfig
 
 [[autodoc]] GraniteMoeHybridConfig

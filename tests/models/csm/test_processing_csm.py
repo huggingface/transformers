@@ -34,6 +34,7 @@ if is_torch_available():
 class CsmProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = CsmProcessor
     audio_input_name = "input_values"
+    chat_template_user_role = "0"  # CSM's template expects a stringified speaker id as role
     tiny_model_id = "hf-internal-testing/tiny-processor-csm"
     model_id = "hf-internal-testing/namespace-sesame-repo_name_csm-1b"
 

@@ -362,27 +362,7 @@ class LEDEncoderSelfAttention(nn.Module):
             chunk_stride[1] = chunk_stride[1] // 2
             return hidden_states.as_strided(size=chunk_size, stride=chunk_stride)
 
-        # When exporting to ONNX, use this separate logic
-        # have to use slow implementation since as_strided, unfold and 2d-tensor indexing aren't supported (yet) in ONNX export
-
-        # TODO replace this with
-        # > return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
-        # once `unfold` is supported
-        # the case hidden_states.size(1) == window_overlap * 2 can also simply return hidden_states.unsqueeze(1), but that's control flow
-
-        chunk_size = [
-            hidden_states.size(0),
-            torch.div(hidden_states.size(1), window_overlap, rounding_mode="trunc") - 1,
-            window_overlap * 2,
-            hidden_states.size(2),
-        ]
-
-        overlapping_chunks = torch.empty(chunk_size, device=hidden_states.device)
-        for chunk in range(chunk_size[1]):
-            overlapping_chunks[:, chunk, :, :] = hidden_states[
-                :, chunk * window_overlap : chunk * window_overlap + 2 * window_overlap, :
-            ]
-        return overlapping_chunks
+        return hidden_states.unfold(dimension=1, size=window_overlap * 2, step=window_overlap).transpose(2, 3)
 
     @staticmethod
     def _mask_invalid_locations(input_tensor, affected_seq_len) -> torch.Tensor:
@@ -1957,10 +1937,6 @@ class LEDForConditionalGeneration(LEDPreTrainedModel, GenerationMixin):
 
             - 0 for local attention (a sliding window attention),
             - 1 for global attention (tokens that attend to all other tokens, and all other tokens attend to them).
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Example Summarization:
 

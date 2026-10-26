@@ -39,18 +39,16 @@ from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import TransformersKwargs, maybe_autocast, merge_with_config_defaults
+from ...utils.generic import TransformersKwargs, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_bamba import BambaConfig
 
 
 class BambaRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: BambaConfig, device=None):
+    def __init__(self, config: BambaConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -61,13 +59,12 @@ class BambaRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
     def compute_default_rope_parameters(config: BambaConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -91,18 +88,10 @@ class BambaRotaryEmbedding(nn.Module):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].expand(position_ids.shape[0], -1, 1).to(dtype=torch.float, device=x.device)
-        )
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        # Disable any outside autocast context if any, to really force fp32
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded @ position_ids_expanded).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -509,7 +498,9 @@ def mamba2_chunk_scan(
     hidden_states = hidden_states * dt[..., None].float()
     A = A.to(hidden_states.dtype) * dt.float()
 
-    # Rearrange into blocks/chunks
+    # Rearrange into blocks/chunks. This fixes the layout the einsums below are written against:
+    # b = batch, c = chunk index, l and s = positions within a chunk, h = head, p = head_dim,
+    # n = ssm state. So hidden_states is (b, c, l, h, p) and B and C are (b, c, l, h, n).
     hidden_states, A, B, C = [reshape_into_chunks(tensor, pad_size, chunk_size) for tensor in (hidden_states, A, B, C)]
 
     A = A.permute(0, 3, 1, 2)
@@ -519,20 +510,23 @@ def mamba2_chunk_scan(
     # This is the analog of a causal mask
     L = torch.exp(segment_sum(A))
 
-    # Contraction of C and B to get G (attention-weights like)
-    G = (C[:, :, :, None, :, :] * B[:, :, None, :, :, :]).sum(dim=-1)
+    # Contraction of C and B to get G (attention-weights like): sum over the state n, leaving a
+    # position-by-position score per head. (b,c,l,h,n) x (b,c,s,h,n) -> (b,c,l,s,h).
+    G = torch.einsum("bclhn,bcshn->bclsh", C, B)
 
     # Compute M, equivalent to applying attention mask to weights
-    M = (G[..., None] * L.permute(0, 2, 3, 4, 1)[..., None]).sum(dim=-1)
+    M = G * L.permute(0, 2, 3, 4, 1)
 
-    # Compute Y_diag (apply to values)
-    Y_diag = (M[..., None] * hidden_states[:, :, None]).sum(dim=3)
+    # Compute Y_diag (apply to values): sum over the source position s. (b,c,l,s,h) x (b,c,s,h,p)
+    # -> (b,c,l,h,p).
+    Y_diag = torch.einsum("bclsh,bcshp->bclhp", M, hidden_states)
 
     # 2. Compute the state for each intra-chunk
     # (right term of low-rank factorization of off-diagonal blocks; B terms)
     decay_states = torch.exp(A_cumsum[:, :, :, -1:] - A_cumsum)
     B_decay = B * decay_states.permute(0, -2, -1, 1)[..., None]
-    states = (B_decay[..., None, :] * hidden_states[..., None]).sum(dim=2)
+    # Sum over the positions l in the chunk: (b,c,l,h,n) x (b,c,l,h,p) -> (b,c,h,p,n).
+    states = torch.einsum("bclhn,bclhp->bchpn", B_decay, hidden_states)
 
     # 3. Compute the inter-chunk SSM recurrence; produces correct SSM states at chunk boundaries
     # (middle term of factorization of off-diag blocks; A terms)
@@ -543,17 +537,22 @@ def mamba2_chunk_scan(
     )
     states = torch.cat([previous_states, states], dim=1)
     decay_chunk = torch.exp(segment_sum(F.pad(A_cumsum[:, :, :, -1], (1, 0)))).transpose(1, 3)
-    new_states = (decay_chunk[..., None, None] * states[:, :, None, ...]).sum(dim=1)
+    # Sum over the source chunk z to get each chunk's start state: (b,z,c,h) x (b,z,h,p,n) -> (b,c,h,p,n).
+    new_states = torch.einsum("bzch,bzhpn->bchpn", decay_chunk, states)
     states, final_state = new_states[:, :-1], new_states[:, -1]
 
     # 4. Compute state -> output conversion per chunk
     # (left term of low-rank factorization of off-diagonal blocks; C terms)
     state_decay_out = torch.exp(A_cumsum)
-    C_times_states = C[..., None, :] * states[:, :, None, ...]
-    Y_off = C_times_states.sum(-1) * state_decay_out.permute(0, 2, 3, 1)[..., None]
+    # Sum over the state n again, now against each chunk's start state: (b,c,l,h,n) x (b,c,h,p,n)
+    # -> (b,c,l,h,p).
+    C_times_states = torch.einsum("bclhn,bchpn->bclhp", C, states)
+    Y_off = C_times_states * state_decay_out.permute(0, 2, 3, 1)[..., None]
 
-    # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks)
-    output = Y_diag + Y_off
+    # Add output of intra-chunk and inter-chunk terms (diagonal and off-diagonal blocks).
+    # `contiguous` because einsum may return a permuted view, and callers such as FalconH1Mixer
+    # call `.view()` on this return value, which a permuted view refuses.
+    output = (Y_diag + Y_off).contiguous()
     output = output.reshape(batch_size, -1, num_heads, head_dim)
 
     if D_residual is not None:
@@ -657,7 +656,12 @@ class BambaMixer(nn.Module):
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        if cache_params is not None:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -694,13 +698,9 @@ class BambaMixer(nn.Module):
             [self.intermediate_size, self.conv_dim, self.num_heads], dim=-1
         )
 
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
-
         # 2. Convolution sequence transformation
         hidden_states_B_C = hidden_states_B_C.transpose(1, 2)
-        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,
@@ -736,7 +736,7 @@ class BambaMixer(nn.Module):
         )
 
         # Recurrent form
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             hidden_states = hidden_states.view(batch_size, self.num_heads, self.head_dim)
             dt = dt.transpose(1, 2).expand(-1, -1, self.head_dim)
             A = A[:, None, None].expand(-1, self.head_dim, self.ssm_state_size)
@@ -775,7 +775,7 @@ class BambaMixer(nn.Module):
                 return_final_states=output_final_state,
                 dt_bias=self.dt_bias,
                 dt_softplus=True,
-                initial_states=recurrent_state if use_precomputed_states else None,
+                initial_states=recurrent_state,
                 dt_limit=self.time_step_limit,
                 **kwargs,
             )
@@ -1032,11 +1032,6 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         **kwargs,
     ) -> CausalLMOutputWithPast:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
         Example:
 
         ```python
@@ -1064,8 +1059,8 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

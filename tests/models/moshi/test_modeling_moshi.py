@@ -42,6 +42,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -828,14 +829,14 @@ def place_dict_on_device(dict_to_place, device):
 
 
 @require_torch
-class MoshiIntegrationTests(unittest.TestCase):
+class MoshiIntegrationTests(MemoryCleanupMixin, unittest.TestCase):
     @cached_property
     def feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained("kmhf/hf-moshiko")
+        return AutoFeatureExtractor.from_pretrained("kmhf/hf-moshika")
 
     @cached_property
     def tokenizer(self):
-        return AutoTokenizer.from_pretrained("kmhf/hf-moshiko")
+        return AutoTokenizer.from_pretrained("kmhf/hf-moshika")
 
     def _load_datasample(self):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

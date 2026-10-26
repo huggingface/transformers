@@ -185,6 +185,24 @@ class Glm5NextVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             )
             self.assertEqual(video_processor.min_image_tokens, 42)
 
+    def test_get_num_patches_without_videos(self):
+        for video_processing_class in self.video_processor_list:
+            video_processing = video_processing_class(**self.video_processor_dict)
+            num_patches = video_processing.get_num_of_video_patches(
+                num_frames=8, height=100, width=100, videos_kwargs={}
+            )
+            self.assertEqual(num_patches, 256)
+
+            num_patches = video_processing.get_num_of_video_patches(
+                num_frames=7, height=200, width=50, videos_kwargs={}
+            )
+            self.assertEqual(num_patches, 256)
+
+            num_patches = video_processing.get_num_of_video_patches(
+                num_frames=8, height=480, width=640, videos_kwargs={}
+            )
+            self.assertEqual(num_patches, 192)
+
     def test_call_pil(self):
         for video_processing_class in self.video_processor_list:
             video_processing = video_processing_class(**self.video_processor_dict)

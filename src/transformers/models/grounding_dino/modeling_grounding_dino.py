@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch Grounding DINO model."""
 
+import copy
 import math
 import warnings
 from dataclasses import dataclass
@@ -2410,8 +2411,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             [GroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
         )
         # hack for box-refinement
-        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         self.post_init()
 
     @auto_docstring
@@ -2440,11 +2440,6 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             1]`: 0 corresponds to a `sentence A` token, 1 corresponds to a `sentence B` token
 
             [What are token type IDs?](../glossary#token-type-ids)
-        labels (`list[Dict]` of len `(batch_size,)`, *optional*):
-            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
-            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
-            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
-            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
 
         Examples:
 

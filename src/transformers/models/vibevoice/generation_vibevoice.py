@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 
-from ...cache_utils import DynamicCache, QuantizedCache, QuantizedLayer, StaticCache
+from ...cache_utils import BaseQuantizedLayer, DynamicCache, QuantizedCache, StaticCache
 from ...generation import (
     GenerateDecoderOnlyOutput,
     GenerationConfig,
@@ -399,7 +399,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             mask_4d = diffusion_start_mask.view(-1, 1, 1, 1)
             # Reset the KV cache
             for layer in negative_model_kwargs["past_key_values"].layers:
-                if isinstance(layer, QuantizedLayer):
+                if isinstance(layer, BaseQuantizedLayer):
                     continue
                 if layer.keys is not None and layer.values is not None:
                     layer_mask_4d = mask_4d.to(layer.keys.device)
@@ -688,8 +688,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 )
                 audio_output = self._decode_audio_latent(audio_latent, diffusion_mask, batch_size, acoustic_cache)
                 acoustic_cache = audio_output.padding_cache
-                for i, sample_idx in enumerate(diffusion_mask.nonzero(as_tuple=False).view(-1)):
-                    audio_chunks[sample_idx.item()].append(audio_output.audio[i])
+                for sample_idx in diffusion_mask.nonzero(as_tuple=False).view(-1):
+                    audio_chunks[sample_idx.item()].append(audio_output.audio[sample_idx])
 
                 # prepare inputs for next LM step
                 semantic_outputs = self.model.semantic_tokenizer_encoder(

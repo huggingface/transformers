@@ -24,10 +24,10 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_masks_for_generate
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
-from ...utils.generic import TransformersKwargs, is_flash_attention_requested, split_attention_implementation
+from ...utils.generic import TransformersKwargs, is_flash_attention_requested
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -128,8 +128,7 @@ class HrmTextConfig(LlamaConfig):
     @_attn_implementation.setter
     def _attn_implementation(self, value: str | dict | None):
         if value is not None and self.prefix_lm:
-            _, base_implementation = split_attention_implementation(value)
-            if is_flash_attention_requested(requested_attention_implementation=base_implementation):
+            if is_flash_attention_requested(requested_attention_implementation=value):
                 raise ValueError(
                     f"`attn_implementation={value!r}` is not supported when "
                     "`config.prefix_lm=True`: FlashAttention cannot represent the PrefixLM 4-D mask "
@@ -258,8 +257,7 @@ class HrmTextPreTrainedModel(LlamaPreTrainedModel):
         self, attn_implementation: str | None, is_init_check: bool = False, allow_all_kernels: bool = False
     ) -> str:
         if attn_implementation is not None and self.config.prefix_lm:
-            _, base_implementation = split_attention_implementation(attn_implementation)
-            if is_flash_attention_requested(requested_attention_implementation=base_implementation):
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
                 raise ValueError(
                     f"`attn_implementation={attn_implementation!r}` is not supported when "
                     "`config.prefix_lm=True`: FlashAttention cannot represent the PrefixLM 4-D mask "
@@ -464,8 +462,8 @@ class HrmTextForCausalLM(LlamaForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
