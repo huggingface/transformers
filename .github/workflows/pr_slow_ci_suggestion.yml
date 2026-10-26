@@ -148,6 +148,16 @@ jobs:
               comment.body.startsWith(commentPrefix)
             );
 
+            // If a maintainer already posted a run-slow: comment, don't override it
+            const maintainerRanSlow = comments.some(comment =>
+              ['MEMBER', 'OWNER', 'COLLABORATOR'].includes(comment.author_association) &&
+              comment.body.trimStart().startsWith('run-slow:')
+            );
+            if (maintainerRanSlow) {
+              console.log('A maintainer already posted a run-slow: comment, skipping bot suggestion');
+              return;
+            }
+
             let shouldCreateNewComment = true;
             let commentsToDelete = [];
 
