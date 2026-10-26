@@ -219,6 +219,15 @@ class HfQuantizer(ABC):
 
         if self.pre_quantized and getattr(self.quantization_config, "dequantize", False):
             self.remove_quantization_config(model)
+            conversions = getattr(model, "_weight_conversions", None)
+            model_transforms = getattr(self, "_model_transforms", None)
+            if conversions is not None and model_transforms is not None:
+                # The loader kept the transforms that fired. Swap each for the model transform it derives from.
+                unquantized = [
+                    model_transforms[conversion] for conversion in conversions if conversion in model_transforms
+                ]
+                # a plain attribute, not the tensor or module `nn.Module.__setattr__` is typed for
+                setattr(model, "_weight_conversions", unquantized)
         else:
             _assign_is_quantized(model)
 
@@ -235,14 +244,6 @@ class HfQuantizer(ABC):
         if hasattr(model, "quantization_method"):
             del model.quantization_method
         model.is_quantized = False
-        # Save like the unquantized model: swap each conversion that fired for the model's own, drop the quantizer's
-        conversions = getattr(model, "_weight_conversions", None)
-        model_conversions = getattr(self, "_model_conversions", None)
-        if conversions is not None and model_conversions is not None:
-            # `setattr`, as `nn.Module.__setattr__` is typed for tensors and modules
-            setattr(
-                model, "_weight_conversions", [model_conversions[c] for c in conversions if c in model_conversions]
-            )
 
     def dequantize(self, model, dtype=None):
         """
@@ -367,11 +368,12 @@ class HfQuantizer(ABC):
         param_names = "\n".join(name for name, _ in model.named_parameters())
         dequantize = self.get_load_operations().get("dequantize") if self.pre_quantized else None
         updated = []
-        # The model's conversion each one stands for, for `remove_quantization_config`. The quantizer's own are left out
-        self._model_conversions = {}
+        # The model transform each one derives from, so a dequantized model saves like an unquantized one. The
+        # quantizer's own transforms are left out.
+        self._model_transforms = {}
         for converter in weight_conversions:
             updated.append(converter)
-            self._model_conversions[converter] = converter
+            self._model_transforms[converter] = converter
             if not isinstance(converter, WeightConverter):
                 continue
             sources, targets = converter._original_source_patterns, converter._original_target_patterns
@@ -395,7 +397,7 @@ class HfQuantizer(ABC):
                 updated[-1] = converter.copy(
                     all_sources, targets, operations=[dequantize(self)] + converter.operations
                 )
-                self._model_conversions[updated[-1]] = converter
+                self._model_transforms[updated[-1]] = converter
                 # A checkpoint already in the model's layout, e.g. `experts.gate_up_proj` with its `_scale_inv`
                 for target in targets:
                     sources = [target] + [target + suffix for suffix in suffixes]

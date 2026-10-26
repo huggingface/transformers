@@ -573,9 +573,18 @@ class FP8Ue8m0LoadingTest(unittest.TestCase):
             self.assertEqual(scale.dtype, torch.float8_e8m0fnu, name)
             torch.testing.assert_close(scale.float(), expected[name], rtol=0, atol=0)
 
-    @parameterized.expand(["per_expert", "fused"])
-    def test_dequantized_model_saves_unquantized(self, layout):
-        """A dequantized model saves like the unquantized one, in the layout of the checkpoint it was loaded from."""
+
+class FP8SavingTest(unittest.TestCase):
+    @parameterized.expand(["bf16_per_expert", "bf16_fused", "fp8_per_expert"])
+    @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)
+    def test_save_fp8(self, checkpoint):
+        """Save an FP8 MoE and reload it as the same quantized model, starting from:
+        - `bf16_per_expert`: a bf16 checkpoint with the experts per expert as on the Hub (`experts.0.w1.weight`),
+          quantized on load
+        - `bf16_fused`: a bf16 checkpoint with the experts fused as in transformers (`experts.gate_up_proj`),
+          quantized on load
+        - `fp8_per_expert`: an FP8 checkpoint as on the Hub, loaded as is. It saves with its own names.
+        """
         from safetensors.torch import load_file, save_file
 
         from transformers import MixtralConfig, MixtralForCausalLM
@@ -583,26 +592,86 @@ class FP8Ue8m0LoadingTest(unittest.TestCase):
         config = MixtralConfig(
             vocab_size=64, hidden_size=128, intermediate_size=128, num_hidden_layers=1, num_attention_heads=4
         )
-        config.quantization_config = {"quant_method": "fp8", "weight_block_size": [128, 128]}
-        model = MixtralForCausalLM(config)
+        model = MixtralForCausalLM(config).to(torch.bfloat16)
         with tempfile.TemporaryDirectory() as tmp:
             model.save_pretrained(tmp)
-            # Mimic an FP8 checkpoint from the Hub (experts per expert) or in transformers' layout (experts fused):
-            # each attention and expert weight in fp8, with a scale per 128x128 block
-            state_dict = load_file(f"{tmp}/model.safetensors") if layout == "per_expert" else dict(model.state_dict())
-            unquantized_keys = set(state_dict)
-            for key in [k for k in unquantized_keys if "proj" in k or "experts" in k]:
-                weight = state_dict[key]
-                scale = weight.abs().max() / torch.finfo(torch.float8_e4m3fn).max
-                state_dict[key] = (weight / scale).to(torch.float8_e4m3fn)
-                blocks = (*weight.shape[:-2], weight.shape[-2] // 128, weight.shape[-1] // 128)
-                state_dict[f"{key}_scale_inv"] = scale.expand(blocks).contiguous()
-            save_file(state_dict, f"{tmp}/model.safetensors", metadata={"format": "pt"})
+            if checkpoint == "bf16_fused":
+                save_file(model.state_dict(), f"{tmp}/model.safetensors", metadata={"format": "pt"})
+            unquantized_keys = set(load_file(f"{tmp}/model.safetensors"))
+            if checkpoint == "fp8_per_expert":
+                self._quantize_to_fp8(tmp)
+            checkpoint_keys = set(load_file(f"{tmp}/model.safetensors"))
 
-            dequantized = MixtralForCausalLM.from_pretrained(
-                tmp, quantization_config=FineGrainedFP8Config(dequantize=True)
-            )
+            config = FineGrainedFP8Config() if checkpoint.startswith("bf16") else None
+            quantized = MixtralForCausalLM.from_pretrained(tmp, quantization_config=config)
+            quantized.save_pretrained(f"{tmp}/fp8")
+            saved_keys = set(load_file(f"{tmp}/fp8/model.safetensors"))
+            # The weights keep the checkpoint's names, next to their scales
+            self.assertEqual({key for key in saved_keys if not key.endswith("_scale_inv")}, unquantized_keys)
+            if checkpoint == "fp8_per_expert":
+                self.assertEqual(saved_keys, checkpoint_keys)
+            reloaded = MixtralForCausalLM.from_pretrained(f"{tmp}/fp8")
+
+        self.assertEqual(reloaded.state_dict().keys(), quantized.state_dict().keys())
+        for name, tensor in quantized.state_dict().items():
+            torch.testing.assert_close(reloaded.state_dict()[name].float(), tensor.float(), rtol=0, atol=0, msg=name)
+
+    @parameterized.expand(["bf16_per_expert", "bf16_fused", "fp8_per_expert"])
+    @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)
+    def test_dequantize_and_save(self, checkpoint):
+        """Load an FP8 MoE with `dequantize=True` and save it, starting from:
+        - `bf16_per_expert`: a bf16 checkpoint with the experts per expert as on the Hub (`experts.0.w1.weight`),
+          quantized on load then saved
+        - `bf16_fused`: a bf16 checkpoint with the experts fused as in transformers (`experts.gate_up_proj`),
+          quantized on load then saved
+        - `fp8_per_expert`: an FP8 checkpoint as on the Hub, each expert weight with its own scale
+        """
+        from safetensors.torch import load_file, save_file
+
+        from transformers import MixtralConfig, MixtralForCausalLM
+
+        config = MixtralConfig(
+            vocab_size=64, hidden_size=128, intermediate_size=128, num_hidden_layers=1, num_attention_heads=4
+        )
+        model = MixtralForCausalLM(config).to(torch.bfloat16)
+        with tempfile.TemporaryDirectory() as tmp:
+            # 1. The starting checkpoint. `save_pretrained` writes the experts per expert
+            model.save_pretrained(tmp)
+            if checkpoint == "bf16_fused":
+                save_file(model.state_dict(), f"{tmp}/model.safetensors", metadata={"format": "pt"})
+            unquantized_keys = set(load_file(f"{tmp}/model.safetensors"))
+            if checkpoint == "fp8_per_expert":
+                self._quantize_to_fp8(tmp)
+
+            # 2. An FP8 checkpoint: the bf16 ones are quantized on load and saved
+            fp8_path = tmp
+            if checkpoint.startswith("bf16"):
+                fp8_path = f"{tmp}/fp8"
+                quantized = MixtralForCausalLM.from_pretrained(tmp, quantization_config=FineGrainedFP8Config())
+                quantized.save_pretrained(fp8_path)
+
+            # 3. Dequantize it: the original weights, saved with the starting checkpoint's names
+            config = FineGrainedFP8Config(dequantize=True)
+            dequantized = MixtralForCausalLM.from_pretrained(fp8_path, quantization_config=config)
+            torch.testing.assert_close(dequantized.state_dict(), model.state_dict(), rtol=0, atol=1e-2)
             dequantized.save_pretrained(f"{tmp}/dequantized")
             self.assertEqual(set(load_file(f"{tmp}/dequantized/model.safetensors")), unquantized_keys)
             reloaded = MixtralForCausalLM.from_pretrained(f"{tmp}/dequantized")
-        torch.testing.assert_close(reloaded.state_dict(), model.state_dict(), rtol=0, atol=1e-2)
+        torch.testing.assert_close(reloaded.state_dict(), dequantized.state_dict(), rtol=0, atol=0)
+
+    @staticmethod
+    def _quantize_to_fp8(path):
+        """Quantize a checkpoint like the FP8 ones on the Hub: each attention and expert weight in fp8 with its scale."""
+        from safetensors.torch import load_file, save_file
+
+        from transformers import AutoConfig
+
+        state_dict = load_file(f"{path}/model.safetensors")
+        for key in [k for k in list(state_dict) if "proj" in k or "experts" in k]:
+            scale = state_dict[key].float().abs().max() / torch.finfo(torch.float8_e4m3fn).max
+            state_dict[key] = (state_dict[key] / scale).to(torch.float8_e4m3fn)
+            state_dict[f"{key}_scale_inv"] = scale.reshape(1, 1)
+        save_file(state_dict, f"{path}/model.safetensors", metadata={"format": "pt"})
+        config = AutoConfig.from_pretrained(path)
+        config.quantization_config = {"quant_method": "fp8", "weight_block_size": [128, 128]}
+        config.save_pretrained(path)
