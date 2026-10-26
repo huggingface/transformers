@@ -10,10 +10,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import atexit
 import copy
+import gc
+import multiprocessing
 import os
+import queue
 import socket
 import tempfile
+import traceback
 from abc import ABC, abstractmethod
 from itertools import product
 
@@ -24,13 +29,14 @@ from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.distributed.tensor_parallel import _get_parameter_plan
 from transformers.testing_utils import (
     SINGLE_PROCESS_DEVICES,
+    backend_empty_cache,
     is_tensor_parallel_test,
     is_torch_available,
     torch_device,
 )
 from transformers.utils import is_torch_greater_or_equal, is_torchao_available
 
-from .test_fsdp_mixin import _get_distributed_backend, _set_rank_device
+from .test_fsdp_mixin import _get_distributed_backend, _get_distributed_device_type, _set_rank_device
 
 
 if is_torchao_available():
@@ -43,7 +49,6 @@ if is_torch_available():
     import torch.distributed as dist
     import torch.multiprocessing as mp
     from torch.distributed.tensor import DTensor
-    from torch.multiprocessing.spawn import ProcessRaisedException
 
 
 # =============================================================================
@@ -75,7 +80,7 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
 
 
 # =============================================================================
-# Distributed helpers (top-level for pickling by mp.spawn)
+# Distributed helpers (top-level for pickling to the worker processes)
 # =============================================================================
 
 
@@ -113,49 +118,148 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
     return grad.index_select(dim, torch.tensor(indices, device=grad.device))
 
 
-def _global_wrapper(rank, func, tp, port, backend, func_args, func_kwargs):
-    """Wrapper to set up distributed environment and run the test function."""
-
-    def setup_dist_env(rank, world_size, port):
-        os.environ["WORLD_SIZE"] = str(world_size)
-        os.environ["RANK"] = str(rank)
-        os.environ["LOCAL_RANK"] = str(rank)
-        os.environ["MASTER_ADDR"] = "localhost"
-        os.environ["MASTER_PORT"] = str(port)
-
-    world_size = tp
-    setup_dist_env(rank, world_size, port)
+def _pool_worker(rank, world_size, port, backend, task_queue, result_queue):
+    """Long-lived rank: initializes the process group once, then runs the test functions it receives until stopped."""
+    os.environ["WORLD_SIZE"] = str(world_size)
+    os.environ["RANK"] = str(rank)
+    os.environ["LOCAL_RANK"] = str(rank)
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = str(port)
 
     # some backends, e.g. tpu, require the rank to be set before initializing the process group
     _set_rank_device(rank, backend)
 
-    dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
+    try:
+        dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
+    except Exception:
+        result_queue.put((rank, traceback.format_exc()))
+        return
+    result_queue.put((rank, None))
 
-    func(rank, *func_args, **func_kwargs)
+    device_type = _get_distributed_device_type()
+    while True:
+        try:
+            task = task_queue.get(timeout=5)
+        except queue.Empty:
+            # the parent can die without stopping us (e.g. pytest-xdist worker killed or hard-exited)
+            if not multiprocessing.parent_process().is_alive():
+                return
+            continue
+        if task is None:
+            break
 
-    dist.barrier()
+        func, func_args, func_kwargs = task
+        try:
+            func(rank, *func_args, **func_kwargs)
+            dist.barrier()
+        except BaseException:
+            # the other ranks may be stuck in a collective, the parent tears the whole pool down
+            result_queue.put((rank, traceback.format_exc()))
+            return
+        # free the test's models before the next one, as the pool lives for the whole pytest session
+        del func, func_args, func_kwargs, task
+        gc.collect()
+        if device_type != "cpu":
+            backend_empty_cache(device_type)
+        result_queue.put((rank, None))
+
     dist.destroy_process_group()
 
 
+class _DistributedWorkerPool:
+    """`world_size` ranks with an initialized process group, reused across tests.
+
+    Spawning fresh ranks for every test spends most of its time re-importing torch and transformers in each of them;
+    a test only takes a fraction of that once the ranks are warm.
+    """
+
+    def __init__(self, world_size: int, backend: str, max_retries: int):
+        self.world_size = world_size
+        ctx = mp.get_context("spawn")
+        for attempt in range(max_retries):
+            port = _find_free_port()
+            self.result_queue = ctx.Queue()
+            self.task_queues = [ctx.Queue() for _ in range(world_size)]
+            self.processes = [
+                ctx.Process(
+                    target=_pool_worker,
+                    args=(rank, world_size, port, backend, self.task_queues[rank], self.result_queue),
+                )
+                for rank in range(world_size)
+            ]
+            for process in self.processes:
+                process.start()
+            try:
+                self._wait_for_ranks()
+                return
+            except RuntimeError as e:
+                self.terminate()
+                if "EADDRINUSE" in str(e) and attempt < max_retries - 1:
+                    continue
+                raise
+
+    def run(self, func, args, kwargs):
+        for task_queue in self.task_queues:
+            task_queue.put((func, args, kwargs))
+        self._wait_for_ranks()
+
+    def _wait_for_ranks(self):
+        """Wait for every rank to report success, raising on the first rank error or crash."""
+        pending = set(range(self.world_size))
+        while pending:
+            try:
+                rank, error = self.result_queue.get(timeout=1)
+            except queue.Empty:
+                dead = {rank: self.processes[rank].exitcode for rank in pending if not self.processes[rank].is_alive()}
+                if dead and self.result_queue.empty():
+                    raise RuntimeError(f"Distributed ranks exited unexpectedly (rank: exit code): {dead}")
+                continue
+            if error is not None:
+                raise RuntimeError(f"Rank {rank} failed:\n{error}")
+            pending.discard(rank)
+
+    def shutdown(self):
+        for task_queue in self.task_queues:
+            task_queue.put(None)
+        for process in self.processes:
+            process.join(timeout=10)
+        self.terminate()
+
+    def terminate(self):
+        for process in self.processes:
+            if process.is_alive():
+                process.kill()
+            process.join()
+
+
+# one pool per (world_size, backend) and per pytest(-xdist worker) process
+_WORKER_POOLS: dict[tuple[int, str], _DistributedWorkerPool] = {}
+
+
+@atexit.register
+def _shutdown_worker_pools():
+    for pool in _WORKER_POOLS.values():
+        pool.shutdown()
+    _WORKER_POOLS.clear()
+
+
 def _init_distributed(tp: int, max_retries: int = 5, backend: str | None = None):
-    """Decorator to initialize distributed environment and spawn processes."""
+    """Decorator to run a function on `tp` ranks, reusing the ranks (and their process group) across calls."""
     # default to the current accelerator's backend, as "gloo" cannot carry every accelerator's tensors
     if backend is None:
         backend = _get_distributed_backend()
 
     def _init_distributed_inner(func):
         def wrapper(*args, **kwargs):
-            world_size = tp
-            for attempt in range(max_retries):
-                port = _find_free_port()
-                spawn_args = (func, tp, port, backend, args, kwargs)
-                try:
-                    mp.spawn(_global_wrapper, args=spawn_args, nprocs=world_size)
-                    return
-                except ProcessRaisedException as e:
-                    if "EADDRINUSE" in str(e) and attempt < max_retries - 1:
-                        continue
-                    raise
+            key = (tp, backend)
+            if key not in _WORKER_POOLS:
+                _WORKER_POOLS[key] = _DistributedWorkerPool(tp, backend, max_retries)
+            try:
+                _WORKER_POOLS[key].run(func, args, kwargs)
+            except BaseException:
+                # the surviving ranks can be stuck in a collective, the next call starts from fresh ranks
+                _WORKER_POOLS.pop(key).terminate()
+                raise
 
         return wrapper
 
