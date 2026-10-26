@@ -2102,7 +2102,16 @@ class PreTrainedModel(
 
         # Check the requested implementation is supported
         if requested_implementation != self.config._experts_implementation:
-            requested_implementation = self._check_and_adjust_experts_implementation(requested_implementation)
+            # A composite model whose experts all live in sub-models (e.g. an `AutoModel` text backbone) has none of
+            # its own to check: the sub-models check the implementation they are given below
+            experts_only_in_submodels = not self._can_set_experts_implementation() and any(
+                submodule is not self
+                and isinstance(submodule, PreTrainedModel)
+                and submodule._can_set_experts_implementation()
+                for submodule in self.modules()
+            )
+            if not experts_only_in_submodels:
+                requested_implementation = self._check_and_adjust_experts_implementation(requested_implementation)
 
             # Modify the implementation of the top level config
             if self._can_set_experts_implementation():
