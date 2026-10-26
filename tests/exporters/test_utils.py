@@ -204,13 +204,10 @@ class PatchRegistryEdgeCasesTest(unittest.TestCase):
         self.assertEqual(b.method(), "original")
 
     def test_register_patch_skips_unresolvable_path(self):
-        # Real backends only register paths that resolve; the silent-skip fallback is what lets
-        # `exporter_onnx.py` and `exporter_executorch.py` co-exist when only one backend is
-        # installed. If it ever started raising, one of the two backends would fail to import.
-        #
-        # Since path resolution was moved from decoration time to apply_patches time, the string
-        # path IS stored in _PATCHES — but apply_patches silently drops it (resolves to None),
-        # so no patch is ever installed. The import-time safety guarantee is unchanged.
+        # Silent-skip lets exporters co-exist when only one backend is installed.
+        # Resolution moved from decoration time to apply_patches time: the string path is now
+        # stored in _PATCHES, but apply_patches drops it (resolves to None) — no patch installed,
+        # no exception, import-time safety unchanged.
         backend = "_test_unresolvable"
 
         @register_patch(backend, "does.not.exist.at.all")
