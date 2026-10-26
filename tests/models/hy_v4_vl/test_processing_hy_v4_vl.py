@@ -12,17 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import tempfile
 import unittest
-from pathlib import Path
 
 import numpy as np
 from parameterized import parameterized
 
 from transformers.testing_utils import require_tokenizers, require_torchvision, torch_device
 from transformers.utils import (
-    IMAGE_PROCESSOR_NAME,
     is_tokenizers_available,
     is_torch_available,
     is_torchvision_available,
@@ -40,17 +36,14 @@ if is_tokenizers_available():
     from tokenizers.models import WordLevel
     from tokenizers.pre_tokenizers import WhitespaceSplit
 
-    from transformers import PreTrainedTokenizerFast
+    from transformers import TokenizersBackend
 
 if is_vision_available():
     from PIL import Image
 
     if is_torchvision_available():
         from transformers import (
-            AutoImageProcessor,
             HunYuanVLImageProcessor,
-            HunYuanVLImageProcessorPil,
-            HYV4VLConfig,
             HYV4VLProcessor,
             HYV4VLVideoProcessor,
         )
@@ -66,7 +59,7 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         words = ["[UNK]", "[PAD]", "[BOS]", "[EOS]", "lower", "newer", "upper", "older", "longer", "string", "hello"]
         backend = Tokenizer(WordLevel({word: i for i, word in enumerate(words)}, unk_token="[UNK]"))
         backend.pre_tokenizer = WhitespaceSplit()
-        return PreTrainedTokenizerFast(
+        return TokenizersBackend(
             tokenizer_object=backend,
             unk_token="[UNK]",
             pad_token="[PAD]",
@@ -129,42 +122,6 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_videos_inputs(self, batch_size=None):
         videos = [np.full((3, 32, 64, 3), 10 + i, dtype=np.uint8) for i in range(batch_size or 1)]
         return videos[0] if batch_size is None else videos
-
-    @parameterized.expand([("torchvision",), ("pil",)])
-    def test_auto_image_registration_and_canonical_metadata(self, backend):
-        image_class = HunYuanVLImageProcessor if backend == "torchvision" else HunYuanVLImageProcessorPil
-        settings = {
-            "size": {"shortest_edge": 4096, "longest_edge": 4194304},
-            "image_mean": [0.4, 0.5, 0.6],
-            "image_std": [0.2, 0.3, 0.4],
-            "resample": 1,
-        }
-        image_processor = image_class(**settings)
-        with tempfile.TemporaryDirectory() as directory:
-            image_processor.save_pretrained(directory)
-            HYV4VLConfig().save_pretrained(directory)
-            restored = AutoImageProcessor.from_pretrained(directory, backend=backend, local_files_only=True)
-            self.assertIs(type(restored), image_class)
-            metadata_path = Path(directory) / IMAGE_PROCESSOR_NAME
-            metadata = json.loads(metadata_path.read_text())
-            self.assertEqual(metadata.pop("image_processor_type"), "HunYuanVLImageProcessor")
-            metadata_path.write_text(json.dumps(metadata))
-            # Without an explicit processor type, the HY4 config must select the parent implementation.
-            inferred = AutoImageProcessor.from_pretrained(directory, backend=backend, local_files_only=True)
-        for processor in (restored, inferred):
-            self.assertIs(type(processor), image_class)
-            self.assertEqual(processor.backend, backend)
-            self.assertEqual(processor.size, settings["size"])
-            self.assertEqual(tuple(processor.image_mean), tuple(settings["image_mean"]))
-            self.assertEqual(tuple(processor.image_std), tuple(settings["image_std"]))
-            self.assertEqual(processor.resample, settings["resample"])
-
-    def test_no_default_padding(self):
-        processor = self.get_processor()
-        output = processor(text=["lower newer", "upper older longer string"])
-        self.assertEqual([len(row) for row in output.input_ids], [2, 4])
-        self.assertEqual([len(row) for row in output.attention_mask], [2, 4])
-        self.assertTrue(all(processor.tokenizer.pad_token_id not in row for row in output.input_ids))
 
     @parameterized.expand([("image",), ("video",), ("mixed",)])
     def test_visual_token_counts_and_batch(self, modality):

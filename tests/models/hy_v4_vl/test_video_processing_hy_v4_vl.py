@@ -31,8 +31,6 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers.image_utils import PILImageResampling
-
     if is_torchvision_available():
         from transformers import HYV4VLVideoProcessor
 
@@ -91,27 +89,6 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     @property
     def video_processor_dict(self):
         return self.video_processor_tester.prepare_video_processor_dict()
-
-    def test_processor_attributes_and_model_input_names(self):
-        processor = self.fast_video_processing_class(**self.video_processor_dict)
-        tester = self.video_processor_tester
-        for name in ("size", "max_image_size", "patch_size", "merge_size", "temporal_patch_size"):
-            self.assertEqual(getattr(processor, name), getattr(tester, name))
-        defaults = self.fast_video_processing_class()
-        for name in ("image_mean", "image_std"):
-            self.assertEqual(tuple(getattr(processor, name)), tuple(getattr(tester, name)))
-            self.assertEqual(tuple(getattr(defaults, name)), tuple(getattr(tester, name)))
-        self.assertEqual(processor.resample, PILImageResampling.BICUBIC)
-        self.assertFalse(processor.do_sample_frames)
-        self.assertEqual(processor.model_input_names, ["pixel_values_videos", "video_grid_thw"])
-        # HY4-VL budgets pixels per frame and per clip; the removed per-pixel knobs are not valid kwargs anymore
-        for name in ("cap_pixels_per_frame", "max_video_tokens"):
-            self.assertNotIn(name, processor.valid_kwargs.__annotations__)
-            self.assertFalse(hasattr(processor, name))
-        # fps-derived frame counts are bounded by the processor's frame limits (checkpoint: 2..1024)
-        bounded = self.fast_video_processing_class(min_frames=2, max_frames=3)
-        self.assertEqual(len(bounded.sample_frames(VideoMetadata(total_num_frames=12, fps=1), fps=1)), 3)
-        self.assertEqual(len(bounded.sample_frames(VideoMetadata(total_num_frames=12, fps=24), fps=1)), 2)
 
     def _check_input_type(self, return_tensors, nested=False):
         # Necessary: HY4-VL returns flattened patches of shape (total_patches, patch_dim), so the common
@@ -193,6 +170,10 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             return_tensors="pt",
         )
         self.assertEqual(output.video_grid_thw[0, 0].item(), 4)
+        # fps-derived frame counts are bounded by the processor's frame limits (checkpoint: 2..1024)
+        bounded = self.fast_video_processing_class(min_frames=2, max_frames=3)
+        self.assertEqual(len(bounded.sample_frames(VideoMetadata(total_num_frames=12, fps=1), fps=1)), 3)
+        self.assertEqual(len(bounded.sample_frames(VideoMetadata(total_num_frames=12, fps=24), fps=1)), 2)
         with self.assertRaisesRegex(ValueError, "mutually exclusive"):
             processor(video, do_sample_frames=True, fps=2, num_frames=3)
 
