@@ -1,0 +1,92 @@
+name: Docs check
+
+# Starts after the docs-check-trigger.yml workflow. It picks up the saved PR number, downloads the check_pr_needs_docs.py script and docs-check-rules.md from main, installs and runs Serge on the PR to decide whether it needs docs.
+
+on:
+  workflow_run:
+    workflows: ["Docs check trigger"]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  check-docs:
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    if: |
+      github.repository == 'huggingface/transformers' &&
+      github.event.workflow_run.event == 'pull_request_review' &&
+      github.event.workflow_run.conclusion == 'success'
+    concurrency:
+      group: docs-check-${{ github.event.workflow_run.head_sha }}
+      cancel-in-progress: false
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download PR number
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: docs-check-pr
+          path: ${{ runner.temp }}/docs-check-pr
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Look up an earlier decision for this commit
+        id: verdict-cache
+        uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/docs-check-pr
+          key: docs-check-verdict-${{ github.event.workflow_run.head_sha }}
+
+      - name: Checkout default branch (script and rules)
+        if: steps.verdict-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: base
+          persist-credentials: false
+          sparse-checkout: |
+            utils/check_pr_needs_docs.py
+            .ai/docs-check-rules.md
+          sparse-checkout-cone-mode: false
+
+      - name: Checkout PR head (browsed, never executed)
+        if: steps.verdict-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          path: pr-head
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        if: steps.verdict-cache.outputs.cache-hit != 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Install Serge
+        if: steps.verdict-cache.outputs.cache-hit != 'true'
+        run: pip install --disable-pip-version-check "reviewbot @ git+https://github.com/huggingface/serge@91665cc22cbe07168c01cb10629800a80a9c5fc1"
+
+      - name: Check whether the PR needs docs
+        id: check
+        if: steps.verdict-cache.outputs.cache-hit != 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LLM_API_KEY: ${{ secrets.DOCS_CHECK_LLM_API_KEY }}
+          LLM_API_BASE: ${{ vars.DOCS_CHECK_LLM_API_BASE || 'https://router.huggingface.co/v1' }}
+          LLM_MODEL: ${{ vars.DOCS_CHECK_LLM_MODEL }}
+          LLM_BILL_TO: huggingface
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          python3 base/utils/check_pr_needs_docs.py \
+            --pr "$(cat "${{ runner.temp }}/docs-check-pr/number")" \
+            --head-sha "${HEAD_SHA}" \
+            --rules base/.ai/docs-check-rules.md \
+            --checkout pr-head
+
+      - name: Remember the decision for this commit
+        if: steps.check.outputs.verdict == 'done'
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ${{ runner.temp }}/docs-check-pr
+          key: docs-check-verdict-${{ github.event.workflow_run.head_sha }}
