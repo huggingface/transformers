@@ -134,27 +134,27 @@ def eager_attention_forward(
 
 
 class Kolibri1Attention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def __init__(self, config: Kolibri1Config, layer_idx: int):
         super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
         self.num_attention_heads = config.num_attention_heads
         self.num_key_value_heads = config.num_key_value_heads
         self.hidden_size = config.hidden_size
+        self.config = config
+        self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        self.scaling = self.head_dim**-0.5
-        self.sliding_window = config.sliding_window
-        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
-        self.is_sliding = layer_type == "sliding_attention"
-
         self.q_proj = nn.Linear(self.hidden_size, self.num_attention_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(self.num_attention_heads * self.head_dim, self.hidden_size, bias=False)
-
+        self.sliding_window = config.sliding_window
+        layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.is_sliding = layer_type == "sliding_attention"
         self.q_norm = Kolibri1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = Kolibri1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
@@ -228,12 +228,16 @@ class Kolibri1Experts(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -253,8 +257,9 @@ class Kolibri1Experts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -266,10 +271,10 @@ class Kolibri1TopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
-        self.norm_topk_prob = config.norm_topk_prob
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.norm_topk_prob = config.norm_topk_prob
         self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
@@ -307,9 +312,9 @@ class Kolibri1SparseMoeBlock(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 

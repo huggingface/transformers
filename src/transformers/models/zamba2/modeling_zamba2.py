@@ -873,15 +873,16 @@ class Zamba2MLP(nn.Module):
         is tied, un-tied adapter modules (formally same as LoRA, but used in the base model) are added to the up and gate projectors to increase expressivity with a small memory overhead.
         """
         super().__init__()
+
         self.config = config
+
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=config.add_bias_linear)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.add_bias_linear)
+        self.activation_fn = ACT2FN[config.hidden_act]
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
         self.block_id = block_id
-
-        self.gate_up_proj = nn.Linear(self.hidden_size, 2 * self.intermediate_size, bias=config.add_bias_linear)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
-        self.act_fn = ACT2FN[config.hidden_act]
 
         self.gate_up_proj_adapter_list = nn.ModuleList([])
         for i in range(self.num_fwd_mem_blocks):
@@ -897,13 +898,13 @@ class Zamba2MLP(nn.Module):
         layer_block_map = config.hybrid_layer_ids
         self.layer_dic = {value: index for index, value in enumerate(layer_block_map)}
 
-    def forward(self, hidden_state, layer_idx=None):
+    def forward(self, hidden_state, layer_idx=None) -> torch.FloatTensor:
         gate_up_state = self.gate_up_proj(hidden_state)
         layer_idx = self.layer_dic[layer_idx]
         gate_up_state = gate_up_state + self.gate_up_proj_adapter_list[layer_idx](hidden_state)
 
         gate_up_state = torch.chunk(gate_up_state, 2, dim=-1)
-        hidden_state = self.act_fn(gate_up_state[0]) * gate_up_state[1]
+        hidden_state = self.activation_fn(gate_up_state[0]) * gate_up_state[1]
         output = self.down_proj(hidden_state)
         return output
 

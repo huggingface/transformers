@@ -57,6 +57,7 @@ class RadioConfig(PreTrainedConfig):
     """
 
     model_type = "radio"
+    attribute_map = {"attention_probs_dropout_prob": "attention_dropout"}
 
     hidden_size: int = 1280
     num_hidden_layers: int = 32
@@ -64,7 +65,7 @@ class RadioConfig(PreTrainedConfig):
     mlp_ratio: float = 4.0
     hidden_act: str = "gelu"
     layer_norm_eps: float = 1e-6
-    attention_probs_dropout_prob: float = 0.0
+    attention_dropout: float = 0.0
     hidden_dropout_prob: float = 0.0
     drop_path_rate: float = 0.0
     use_swiglu_ffn: bool = False

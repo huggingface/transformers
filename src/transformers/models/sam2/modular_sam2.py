@@ -46,10 +46,11 @@ from ...utils.generic import (
 )
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
+from ..convnext.modeling_convnext import ConvNextLayerNorm
 from ..detr.modeling_detr import DetrSinePositionEmbedding
 from ..sam.image_processing_sam import SamImageProcessor
 from ..sam.modeling_sam import (
-    SamLayerNorm,
+    SamFeedForward,
     SamMaskDecoder,
     SamMaskEmbedding,
     SamModel,
@@ -481,7 +482,7 @@ class Sam2MultiScaleAttention(nn.Module):
         return attn_output
 
 
-class Sam2FeedForward(nn.Module):
+class Sam2FeedForward(SamFeedForward):
     def __init__(
         self,
         input_dim: int,
@@ -498,17 +499,6 @@ class Sam2FeedForward(nn.Module):
         self.proj_out = nn.Linear(hidden_dim, output_dim)
         self.layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(num_layers - 2)])
         self.sigmoid_output = sigmoid_output
-
-    def forward(self, hidden_states):
-        hidden_states = self.proj_in(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        for layer in self.layers:
-            hidden_states = self.activation(layer(hidden_states))
-
-        hidden_states = self.proj_out(hidden_states)
-        if self.sigmoid_output:
-            hidden_states = F.sigmoid(hidden_states)
-        return hidden_states
 
 
 class Sam2MultiScaleBlock(GradientCheckpointingLayer):
@@ -528,7 +518,7 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
             else config.embed_dim_per_stage[stage_idx]
         )
         self.dim_out = config.embed_dim_per_stage[stage_idx]
-        self.layer_norm1 = nn.LayerNorm(self.dim, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(self.dim, eps=config.layer_norm_eps)
         # take window size from previous stage if first block of stage
         self.window_size = (
             config.window_size_per_stage[stage_idx - 1]
@@ -548,7 +538,7 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
             num_attention_heads=config.num_attention_heads_per_stage[stage_idx],
             query_stride=self.query_stride,
         )
-        self.layer_norm2 = nn.LayerNorm(self.dim_out, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.dim_out, eps=config.layer_norm_eps)
         self.mlp = Sam2FeedForward(
             self.dim_out,
             int(self.dim_out * config.mlp_ratio),
@@ -566,7 +556,7 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states  # batch_size, height, width, channel
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
 
         # Skip connection
         if self.dim != self.dim_out:
@@ -597,7 +587,7 @@ class Sam2MultiScaleBlock(GradientCheckpointingLayer):
             hidden_states = window_unpartition(hidden_states, window_size, pad_hw, (H, W))
 
         hidden_states = residual + hidden_states
-        layernorm_output = self.layer_norm2(hidden_states)
+        layernorm_output = self.post_attention_layernorm(hidden_states)
         hidden_states = hidden_states + self.mlp(layernorm_output)
 
         return hidden_states
@@ -958,7 +948,7 @@ class Sam2TwoWayTransformer(SamTwoWayTransformer):
     pass
 
 
-class Sam2LayerNorm(SamLayerNorm):
+class Sam2LayerNorm(ConvNextLayerNorm):
     pass
 
 

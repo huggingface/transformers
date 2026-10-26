@@ -14,7 +14,7 @@
 import math
 from collections import UserDict
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -23,7 +23,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
@@ -38,6 +38,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
+from ..gemma3n.modeling_gemma3n import Gemma3nRMSNorm
 from ..gemma4.configuration_gemma4 import Gemma4Config, Gemma4TextConfig
 from ..gemma4.image_processing_gemma4 import (
     _SUPPORTED_SOFT_TOKENS,
@@ -54,7 +55,6 @@ from ..gemma4.modeling_gemma4 import (
     Gemma4ModelOutputWithPast,
     Gemma4MultimodalEmbedder,
     Gemma4PreTrainedModel,
-    Gemma4RMSNorm,
     Gemma4TextAttention,
     Gemma4TextMLP,
     Gemma4TextModelOutputWithPast,
@@ -462,6 +462,7 @@ class Gemma4UnifiedTextConfig(Gemma4TextConfig):
         "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_ep_plan = None  # No MoE
+    attribute_map = {"hidden_activation": "hidden_act"}
 
     sliding_window: int = 1024
     use_bidirectional_attention: Literal["all", "vision"] | None = "vision"
@@ -524,7 +525,15 @@ class Gemma4UnifiedVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="google/gemma-4-12B-it")
 @strict
 class Gemma4UnifiedConfig(Gemma4Config):
-    pass
+    sub_configs_defaults = {
+        "text_config": Gemma4UnifiedTextConfig,
+        "vision_config": SubConfigSpec(config_class=Gemma4UnifiedVisionConfig, optional=True),
+        "audio_config": SubConfigSpec(config_class=Gemma4UnifiedAudioConfig, optional=True),
+    }
+
+    text_config: Gemma4UnifiedTextConfig | dict[str, Any] | None = None
+    vision_config: Gemma4UnifiedVisionConfig | dict[str, Any] | None = None
+    audio_config: Gemma4UnifiedAudioConfig | dict[str, Any] | None = None
 
 
 @auto_docstring
@@ -600,7 +609,7 @@ class Gemma4UnifiedModelOutputWithPast(Gemma4ModelOutputWithPast):
     router_logits = AttributeError()
 
 
-class Gemma4UnifiedRMSNorm(Gemma4RMSNorm):
+class Gemma4UnifiedRMSNorm(Gemma3nRMSNorm):
     pass
 
 

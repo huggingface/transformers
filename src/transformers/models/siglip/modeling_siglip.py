@@ -312,23 +312,23 @@ class SiglipMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
 class SiglipEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: SiglipVisionConfig | SiglipTextConfig):
         super().__init__()
-        self.embed_dim = config.hidden_size
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.hidden_size = config.hidden_size
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.self_attn = SiglipAttention(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = SiglipMLP(config)
 
     @auto_docstring
@@ -340,7 +340,7 @@ class SiglipEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -349,7 +349,7 @@ class SiglipEncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
@@ -404,10 +404,10 @@ class SiglipPreTrainedModel(PreTrainedModel):
             init.zeros_(module.v_proj.bias)
             init.zeros_(module.out_proj.bias)
         elif isinstance(module, SiglipMLP):
-            init.xavier_uniform_(module.fc1.weight)
-            init.xavier_uniform_(module.fc2.weight)
-            init.normal_(module.fc1.bias, std=1e-6)
-            init.normal_(module.fc2.bias, std=1e-6)
+            init.xavier_uniform_(module.up_proj.weight)
+            init.xavier_uniform_(module.down_proj.weight)
+            init.normal_(module.up_proj.bias, std=1e-6)
+            init.normal_(module.down_proj.bias, std=1e-6)
         elif isinstance(module, SiglipMultiheadAttentionPoolingHead):
             init.xavier_uniform_(module.probe)
             init.xavier_uniform_(module.attention.in_proj_weight)

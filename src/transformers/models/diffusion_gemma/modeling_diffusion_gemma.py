@@ -61,40 +61,35 @@ from .generation_diffusion_gemma import DiffusionGemmaGenerationConfig, Diffusio
 
 
 class DiffusionGemmaTextRotaryEmbedding(nn.Module):
-    def __init__(self, config: DiffusionGemmaTextConfig, device=None):
+    def __init__(self, config: DiffusionGemmaTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
         self.layer_types = sorted(set(config.layer_types))
-        self.rope_init_fns: dict[str, Callable[..., tuple[torch.Tensor, float]]] = {}
-        self.rope_type: dict[str, str] = {}
-
+        self.rope_type = {}
+        self.rope_init_fns = {}  # diff with Gemma3: kept for `_init_weights`
         for layer_type in self.layer_types:
             rope_params = self.config.rope_parameters[layer_type]
             if rope_params is None:
                 continue
 
-            if (rope_type := rope_params["rope_type"]) != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-            else:
-                rope_init_fn = self.compute_default_rope_parameters
-
+            self.rope_type[layer_type] = rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
             self.rope_init_fns[layer_type] = rope_init_fn
-            self.rope_type[layer_type] = rope_type
-
-            # `inv_freq` depends on the head dim, which varies by layer type, so initialise
-            # from a config resolved for this layer type rather than the global one.
+            # diff with Gemma3: the head dim varies by layer type, so use the config resolved for this layer type
             rope_config = config.per_layer_config[layer_type]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, layer_type=layer_type)
             setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
             setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: DiffusionGemmaTextConfig, device=None, layer_type: str | None = None, **kwargs
+        config: DiffusionGemmaTextConfig, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -118,7 +113,7 @@ class DiffusionGemmaTextRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -488,7 +483,7 @@ class DiffusionGemmaDecoderTextAttention(nn.Module):
 
 
 class DiffusionGemmaText4MLP(nn.Module):
-    def __init__(self, config: DiffusionGemmaTextConfig, layer_idx: int):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -496,14 +491,14 @@ class DiffusionGemmaText4MLP(nn.Module):
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
 
 
-class DiffusionGemmaTextRouter(nn.Module):
+class DiffusionGemmaTextTopKRouter(nn.Module):
     def __init__(self, config: DiffusionGemmaTextConfig):
         super().__init__()
         self.config = config
@@ -520,13 +515,13 @@ class DiffusionGemmaTextRouter(nn.Module):
         hidden_states = self.norm(hidden_states)
         hidden_states = hidden_states * self.scale * self.scalar_root_size
 
-        expert_scores = self.proj(hidden_states)  # [B*S, E]
+        router_logits = self.proj(hidden_states)  # [B*S, E]
         # fp32 for numerical stability
-        router_probabilities = nn.functional.softmax(expert_scores, dim=-1, dtype=torch.float32)
+        router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=torch.float32)
 
         # topk returns both values (probabilities) and indices directly
         top_k_weights, top_k_index = torch.topk(
-            router_probabilities,
+            router_probs,
             k=self.config.top_k_experts,
             dim=-1,
         )  # both [B*S, K]
@@ -537,21 +532,25 @@ class DiffusionGemmaTextRouter(nn.Module):
         # Apply per-expert scale directly to the weights
         top_k_weights = top_k_weights * self.per_expert_scale[top_k_index]
 
-        return router_probabilities, top_k_weights, top_k_index
+        return router_probs, top_k_weights, top_k_index
 
 
 @use_experts_implementation
 class DiffusionGemmaTextExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    def __init__(self, config: DiffusionGemmaTextConfig):
+    def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -571,8 +570,9 @@ class DiffusionGemmaTextExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -596,14 +596,14 @@ class DiffusionGemmaEncoderTextLayer(nn.Module):
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
         self.self_attn = DiffusionGemmaEncoderTextAttention(config=config, layer_idx=layer_idx)
-        self.mlp = DiffusionGemmaText4MLP(config, layer_idx)
+        self.mlp = DiffusionGemmaText4MLP(config)
         self.input_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.layer_scalar = nn.Buffer(torch.ones(1))
 
-        self.router = DiffusionGemmaTextRouter(config)
+        self.router = DiffusionGemmaTextTopKRouter(config)
         self.experts = DiffusionGemmaTextExperts(config)
         self.post_feedforward_layernorm_1 = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm_2 = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -674,14 +674,14 @@ class DiffusionGemmaDecoderTextLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
         self.self_attn = DiffusionGemmaDecoderTextAttention(config=config, layer_idx=layer_idx)
-        self.mlp = DiffusionGemmaText4MLP(config, layer_idx)
+        self.mlp = DiffusionGemmaText4MLP(config)
         self.input_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.pre_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.layer_scalar = nn.Buffer(torch.ones(1))
 
-        self.router = DiffusionGemmaTextRouter(config)
+        self.router = DiffusionGemmaTextTopKRouter(config)
         self.experts = DiffusionGemmaTextExperts(config)
         self.post_feedforward_layernorm_1 = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm_2 = DiffusionGemmaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -796,7 +796,7 @@ class DiffusionGemmaSelfConditioning(nn.Module):
         self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=False)
         self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=False)
-        self.act_fn = ACT2FN[config.hidden_activation]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, inputs_embeds, self_conditioning_signal: torch.Tensor) -> torch.Tensor:
         """
@@ -844,7 +844,7 @@ class DiffusionGemmaPreTrainedModel(PreTrainedModel):
 
         elif isinstance(module, DiffusionGemmaTextScaledWordEmbedding):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
-        elif isinstance(module, DiffusionGemmaTextRouter):
+        elif isinstance(module, DiffusionGemmaTextTopKRouter):
             init.ones_(module.scale)
             init.ones_(module.per_expert_scale)
         elif isinstance(module, DiffusionGemmaTextExperts):
@@ -882,7 +882,7 @@ class DiffusionGemmaEncoderTextModel(DiffusionGemmaPreTrainedModel):
     config: DiffusionGemmaTextConfig
     input_modalities = ("text",)
     _can_record_outputs = {
-        "router_logits": OutputRecorder(DiffusionGemmaTextRouter, index=0),
+        "router_logits": OutputRecorder(DiffusionGemmaTextTopKRouter, index=0),
         "hidden_states": DiffusionGemmaEncoderTextLayer,
         "attentions": DiffusionGemmaEncoderTextAttention,
     }
@@ -996,7 +996,7 @@ class DiffusionGemmaEncoderModel(DiffusionGemmaPreTrainedModel):
     # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
     accepts_loss_kwargs = False
     _can_record_outputs = {
-        "router_logits": OutputRecorder(DiffusionGemmaTextRouter, index=0),
+        "router_logits": OutputRecorder(DiffusionGemmaTextTopKRouter, index=0),
         "hidden_states": DiffusionGemmaEncoderTextLayer,
         "attentions": DiffusionGemmaEncoderTextAttention,
     }
@@ -1183,7 +1183,7 @@ class DiffusionGemmaDecoderModel(DiffusionGemmaPreTrainedModel):
 
     input_modalities = ("text",)
     _can_record_outputs = {
-        "router_logits": OutputRecorder(DiffusionGemmaTextRouter, index=0),
+        "router_logits": OutputRecorder(DiffusionGemmaTextTopKRouter, index=0),
         "hidden_states": DiffusionGemmaDecoderTextLayer,
         "attentions": DiffusionGemmaDecoderTextAttention,
     }

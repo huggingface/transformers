@@ -31,7 +31,7 @@ from ...masking_utils import (
     maybe_pad_block_sequence_ids,
     sliding_window_overlay,
 )
-from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
+from ...modeling_layers import GenericForSequenceClassification
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, SequenceClassifierOutputWithPast
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
@@ -41,18 +41,19 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig
+from ..gemma.modeling_gemma import GemmaRMSNorm, GemmaTextScaledWordEmbedding
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
+    Gemma2DecoderLayer,
     Gemma2ForCausalLM,
-    Gemma2MLP,
     Gemma2Model,
     Gemma2PreTrainedModel,
-    Gemma2RMSNorm,
-    Gemma2RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..llama.modeling_llama import LlamaRotaryEmbedding
+from ..mistral.modeling_mistral import MistralMLP
 from ..paligemma.modeling_paligemma import (
     PaliGemmaCausalLMOutputWithPast,
     PaliGemmaForConditionalGeneration,
@@ -226,32 +227,20 @@ class Gemma3CausalLMOutputWithPast(PaliGemmaCausalLMOutputWithPast):
     pass
 
 
-class Gemma3TextScaledWordEmbedding(nn.Embedding):
-    """
-    This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
-    """
-
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float = 1.0):
-        super().__init__(num_embeddings, embedding_dim, padding_idx)
-        self.scalar_embed_scale = embed_scale
-        self.embed_scale = nn.Buffer(torch.tensor(embed_scale), persistent=False)
-
-    def forward(self, input_ids: torch.Tensor):
-        return super().forward(input_ids) * self.embed_scale.to(self.weight.dtype)
+class Gemma3TextScaledWordEmbedding(GemmaTextScaledWordEmbedding):
+    pass
 
 
-class Gemma3MLP(Gemma2MLP):
+class Gemma3MLP(MistralMLP):
+    pass
+
+
+class Gemma3RMSNorm(GemmaRMSNorm):
+    pass
+
+
+class Gemma3RotaryEmbedding(LlamaRotaryEmbedding):
     def __init__(self, config: Gemma3TextConfig):
-        super().__init__(config)
-
-
-class Gemma3RMSNorm(Gemma2RMSNorm):
-    def __init__(self, dim: int, eps: float = 1e-6):
-        super().__init__(dim=dim, eps=eps)
-
-
-class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
-    def __init__(self, config: Gemma3TextConfig, device=None):
         nn.Module.__init__(self)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -267,13 +256,13 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
             setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     def compute_default_rope_parameters(
-        config: Gemma3TextConfig, device=None, layer_type: str | None = None, **kwargs
+        config: Gemma3TextConfig, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -295,7 +284,7 @@ class Gemma3RotaryEmbedding(Gemma2RotaryEmbedding):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -319,8 +308,8 @@ class Gemma3Attention(Gemma2Attention):
         self.is_sliding = self.layer_type == "sliding_attention"
         self.is_causal = not self.config.use_bidirectional_attention
 
-        self.q_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = Gemma3RMSNorm(dim=config.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = Gemma3RMSNorm(config.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = Gemma3RMSNorm(config.head_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -367,57 +356,16 @@ class Gemma3Attention(Gemma2Attention):
         return attn_output, attn_weights
 
 
-class Gemma3DecoderLayer(GradientCheckpointingLayer):
+class Gemma3DecoderLayer(Gemma2DecoderLayer):
     def __init__(self, config: Gemma3TextConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
+        super().__init__(config, layer_idx)
         self.layer_idx = layer_idx
-        self.self_attn = Gemma3Attention(config=config, layer_idx=layer_idx)
-        self.mlp = Gemma3MLP(config)
-        self.input_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.pre_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = Gemma3RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            **kwargs,
-        )
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        residual = hidden_states
-        hidden_states = self.pre_feedforward_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_feedforward_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        return hidden_states
 
 
 GEMMA3_START_DOCSTRING = None
 
 
 class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
-    base_model_prefix = "model"
     input_modalities = ("image", "text")
     _no_split_modules = ["Gemma3DecoderLayer"]
     _supports_sdpa = True
@@ -653,9 +601,6 @@ def create_masks_for_vision_model(
 
 
 class Gemma3Model(PaliGemmaModel):
-    # we are filtering the logits/labels so we shouldn't divide the loss based on num_items_in_batch
-    accepts_loss_kwargs = False
-
     def __init__(self, config: Gemma3Config):
         super().__init__(config)
         del self.text_config_dtype

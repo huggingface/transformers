@@ -31,17 +31,17 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..auto import AutoConfig
-from ..sam2.modeling_sam2 import eager_attention_forward, window_partition
+from ..clip.modeling_clip import CLIPMLP
+from ..convnext.modeling_convnext import ConvNextLayerNorm
+from ..sam2.modeling_sam2 import Sam2Attention, Sam2TwoWayAttentionBlock, eager_attention_forward, window_partition
 from ..sam2_video.configuration_sam2_video import (
     Sam2VideoMaskDecoderConfig,
     Sam2VideoPromptEncoderConfig,
 )
 from ..sam2_video.modeling_sam2_video import (
-    Sam2VideoAttention,
     Sam2VideoFeedForward,
     Sam2VideoImageSegmentationOutput,
     Sam2VideoInferenceSession,
-    Sam2VideoLayerNorm,
     Sam2VideoMemoryAttention,
     Sam2VideoMemoryEncoder,
     Sam2VideoMemoryFuserCXBlock,
@@ -49,7 +49,6 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoPositionEmbeddingSine,
     Sam2VideoPreTrainedModel,
     Sam2VideoSegmentationOutput,
-    Sam2VideoTwoWayAttentionBlock,
     Sam2VideoVisionEncoderOutput,
     Sam2VideoVisionRotaryEmbedding,
     rotate_pairwise,
@@ -294,7 +293,7 @@ class EdgeTamVideoConfig(PreTrainedConfig):
         self.rope_parameters["rope_theta"] = value
 
 
-class EdgeTamVideoLayerNorm(Sam2VideoLayerNorm):
+class EdgeTamVideoLayerNorm(ConvNextLayerNorm):
     pass
 
 
@@ -310,8 +309,11 @@ class EdgeTamVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):
     pass
 
 
-class EdgeTamVideoAttention(Sam2VideoAttention):
-    pass
+class EdgeTamVideoAttention(Sam2Attention):
+    """
+    EDGETAM_VIDEO's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
+    values.
+    """
 
 
 def apply_rotary_pos_emb_2d_self_attn(
@@ -555,7 +557,7 @@ class EdgeTamVideoRoPECrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class EdgeTamVideoTwoWayAttentionBlock(Sam2VideoTwoWayAttentionBlock):
+class EdgeTamVideoTwoWayAttentionBlock(Sam2TwoWayAttentionBlock):
     pass
 
 
@@ -587,19 +589,16 @@ class EdgeTamVideoInferenceSession(Sam2VideoInferenceSession):
     pass
 
 
-class EdgeTamVideoMemoryAttentionMLP(nn.Module):
+class EdgeTamVideoMemoryAttentionMLP(CLIPMLP):
     def __init__(self, config: EdgeTamVideoConfig):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.memory_attention_hidden_size
-        self.intermediate_size = config.memory_attention_mlp_hidden_size
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size)
+        super().__init__(config)
+        self.up_proj = nn.Linear(config.memory_attention_hidden_size, config.memory_attention_mlp_hidden_size)
+        self.down_proj = nn.Linear(config.memory_attention_mlp_hidden_size, config.memory_attention_hidden_size)
         self.dropout = nn.Dropout(config.memory_attention_dropout)
-        self.act_fn = ACT2FN[config.memory_attention_mlp_hidden_act]
+        self.activation_fn = ACT2FN[config.memory_attention_mlp_hidden_act]
 
-    def forward(self, x):
-        return self.down_proj(self.dropout(self.act_fn(self.up_proj(x))))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.down_proj(self.dropout(self.activation_fn(self.up_proj(hidden_states))))
 
 
 class EdgeTamVideoMemoryAttentionLayer(nn.Module):

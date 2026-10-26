@@ -24,7 +24,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2Attention
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..gemma3.modeling_gemma3 import Gemma3TextScaledWordEmbedding
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -152,7 +152,7 @@ class MiniCPM3MLP(LlamaMLP):
     pass
 
 
-class MiniCPM3Attention(DeepseekV2Attention):
+class MiniCPM3Attention(DeepseekV3Attention):
     """
     Multi-head Latent Attention (MLA), structurally identical to `DeepseekV2Attention`.
     The only difference is the rotary convention: MiniCPM3 keeps the original cos/sin RoPE

@@ -33,12 +33,12 @@ from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
-    LlamaMLP,
     LlamaModel,
     LlamaRotaryEmbedding,
     eager_attention_forward,
     rotate_half,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from .configuration_olmo import OlmoConfig
 
 
@@ -59,12 +59,8 @@ class OlmoLayerNorm(nn.Module):
         )
 
 
-class OlmoMLP(LlamaMLP):
-    def __init__(self, config):
-        super().__init__(config)
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+class OlmoMLP(MistralMLP):
+    pass
 
 
 # This is identical to LlamaRotaryEmbedding except the output cos and sin are returned
@@ -163,7 +159,6 @@ class OlmoDecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.input_layernorm = OlmoLayerNorm(config.hidden_size)
         self.post_attention_layernorm = OlmoLayerNorm(config.hidden_size)
-        self.self_attn = OlmoAttention(config=config, layer_idx=layer_idx)
 
 
 class OlmoModel(LlamaModel):

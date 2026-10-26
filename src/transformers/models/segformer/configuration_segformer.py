@@ -55,6 +55,7 @@ class SegformerConfig(PreTrainedConfig):
     ```"""
 
     model_type = "segformer"
+    attribute_map = {"attention_probs_dropout_prob": "attention_dropout"}
 
     num_channels: int = 3
     num_encoder_blocks: int = 4
@@ -67,7 +68,7 @@ class SegformerConfig(PreTrainedConfig):
     mlp_ratios: list[int] | tuple[int, ...] = (4, 4, 4, 4)
     hidden_act: str = "gelu"
     hidden_dropout_prob: float | int = 0.0
-    attention_probs_dropout_prob: float | int = 0.0
+    attention_dropout: float | int = 0.0
     classifier_dropout_prob: float | int = 0.1
     initializer_range: float = 0.02
     drop_path_rate: float | int = 0.1

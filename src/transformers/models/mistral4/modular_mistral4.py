@@ -15,7 +15,6 @@ from collections.abc import Callable
 
 import torch
 import torch.nn.functional as F
-from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -25,14 +24,13 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
 from ...utils.output_capturing import OutputRecorder
-from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopkRouter
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopKRouter
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3DecoderLayer,
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
-    DeepseekV3MoE,
+    DeepseekV3SparseMoeBlock,
     apply_rotary_pos_emb_interleave,
 )
 from ..llama.modeling_llama import (
@@ -42,7 +40,7 @@ from ..llama.modeling_llama import (
     eager_attention_forward,
 )
 from ..ministral3.modeling_ministral3 import get_llama_4_attn_scale
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 from .configuration_mistral4 import Mistral4Config
 
 
@@ -61,19 +59,18 @@ class Mistral4MLP(Qwen2MoeMLP):
     pass
 
 
-class Mistral4TopkRouter(DeepseekV2TopkRouter):
+class Mistral4TopKRouter(DeepseekV2TopKRouter):
     def __init__(self, config):
         super().__init__(config)
         del self.topk_method
-        self.num_experts = config.num_local_experts
         self.norm_topk_prob = config.norm_topk_prob
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)
-        scores = router_logits.softmax(-1)
+        router_probs = router_logits.softmax(-1)
         group_scores = (
-            scores.view(-1, self.num_group, self.num_experts // self.num_group).topk(2, dim=-1)[0].sum(dim=-1)
+            router_probs.view(-1, self.num_group, self.num_experts // self.num_group).topk(2, dim=-1)[0].sum(dim=-1)
         )
         group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
         group_mask = torch.zeros_like(group_scores)
@@ -83,21 +80,21 @@ class Mistral4TopkRouter(DeepseekV2TopkRouter):
             .expand(-1, self.num_group, self.num_experts // self.num_group)
             .reshape(-1, self.num_experts)
         )
-        scores_for_choice = scores.masked_fill(~score_mask.bool(), 0.0)
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = scores.gather(1, topk_indices)
+        scores_for_choice = router_probs.masked_fill(~score_mask.bool(), 0.0)
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        top_k_weights = router_probs.gather(1, top_k_index)
         if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights, topk_indices
+            denominator = top_k_weights.sum(dim=-1, keepdim=True) + 1e-20
+            top_k_weights /= denominator
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
-class Mistral4Experts(DeepseekV3Experts):
+class Mistral4Experts(Qwen2MoeExperts):
     pass
 
 
-class Mistral4MoE(DeepseekV3MoE):
+class Mistral4SparseMoeBlock(DeepseekV3SparseMoeBlock):
     pass
 
 
@@ -168,19 +165,7 @@ class Mistral4Attention(DeepseekV3Attention):
 
 
 class Mistral4DecoderLayer(DeepseekV3DecoderLayer):
-    def __init__(self, config: Mistral4Config, layer_idx: int):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = Mistral4Attention(config=config, layer_idx=layer_idx)
-
-        if layer_idx >= config.first_k_dense_replace:
-            self.mlp = Mistral4MoE(config)
-        else:
-            self.mlp = Mistral4MLP(config)
-
-        self.input_layernorm = Mistral4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Mistral4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+    pass
 
 
 class Mistral4PreTrainedModel(PreTrainedModel):
@@ -198,7 +183,7 @@ class Mistral4PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Mistral4DecoderLayer,
         "attentions": Mistral4Attention,
-        "router_logits": OutputRecorder(Mistral4TopkRouter, index=0),
+        "router_logits": OutputRecorder(Mistral4TopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = []
     _keys_to_ignore_on_load_unexpected = []
@@ -206,7 +191,7 @@ class Mistral4PreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Mistral4TopkRouter):
+        if isinstance(module, Mistral4TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Mistral4Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)

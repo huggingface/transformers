@@ -30,24 +30,23 @@ from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ..clip.modeling_clip import CLIPMLP
 from ..deepseek_v3.modeling_deepseek_v3 import (
-    DeepseekV3RMSNorm,
+    DeepseekV3Attention,
     apply_rotary_pos_emb_interleave,
     eager_attention_forward,
 )
 from ..deepseek_v32.configuration_deepseek_v32 import DeepseekV32Config
 from ..deepseek_v32.modeling_deepseek_v32 import (
-    DeepseekV32Attention,
-    DeepseekV32DecoderLayer,
-    DeepseekV32Experts,
     DeepseekV32ForCausalLM,
     DeepseekV32Indexer,
     DeepseekV32Model,
-    DeepseekV32MoE,
     DeepseekV32PreTrainedModel,
-    DeepseekV32RotaryEmbedding,
-    DeepseekV32TopkRouter,
+    DeepseekV32SparseMoeBlock,
     yarn_apply_mscale,
 )
+from ..glm4_moe.modeling_glm4_moe import Glm4MoeTopKRouter
+from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
+from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 
 
 logger = logging.get_logger(__name__)
@@ -180,7 +179,7 @@ class AXK2Config(DeepseekV32Config):
                 raise ValueError(f"`topk_group` ({self.topk_group}) cannot exceed `n_group` ({self.n_group}).")
 
 
-class AXK2RMSNorm(DeepseekV3RMSNorm):
+class AXK2RMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -188,8 +187,8 @@ class AXK2GateMLP(CLIPMLP):
     def __init__(self, config: AXK2Config):
         super().__init__(config)
         self.activation_fn = nn.SiLU()
-        self.fc1 = nn.Linear(config.hidden_size, config.gated_norm_rank, bias=False)
-        self.fc2 = nn.Linear(config.gated_norm_rank, config.hidden_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, config.gated_norm_rank, bias=False)
+        self.down_proj = nn.Linear(config.gated_norm_rank, config.hidden_size, bias=False)
 
 
 class AXK2GatedRMSNorm(nn.Module):
@@ -202,14 +201,14 @@ class AXK2GatedRMSNorm(nn.Module):
     def __init__(self, config: AXK2Config):
         super().__init__()
         self.norm = AXK2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.mlp = AXK2GateMLP(config)
+        self.gate_mlp = AXK2GateMLP(config)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         y = self.norm(x)
-        return (y * torch.sigmoid(self.mlp(y).float())).to(y.dtype)
+        return (y * torch.sigmoid(self.gate_mlp(y).float())).to(y.dtype)
 
 
-class AXK2RotaryEmbedding(DeepseekV32RotaryEmbedding):
+class AXK2RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
@@ -217,7 +216,7 @@ class AXK2Indexer(DeepseekV32Indexer):
     pass
 
 
-class AXK2TopkRouter(DeepseekV32TopkRouter):
+class AXK2TopKRouter(Glm4MoeTopKRouter):
     def apply_group_scoring(self, scores_for_choice):
         """Apply DeepSeek style grouped scoring"""
         group_scores = (
@@ -240,31 +239,36 @@ class AXK2TopkRouter(DeepseekV32TopkRouter):
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        scores = router_logits.sigmoid()
-        scores_for_choice = scores + self.e_score_correction_bias
+        router_probs = router_logits.sigmoid()
+        scores_for_choice = router_probs + self.e_score_correction_bias
 
         # Key difference: light checkpoints do not use group based routing and skip this path
         if self.num_group is not None:
             scores_for_choice = self.apply_group_scoring(scores_for_choice)
 
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = scores.gather(1, topk_indices)
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        top_k_weights = router_probs.gather(1, top_k_index)
         if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights, topk_indices
+            denominator = top_k_weights.sum(dim=-1, keepdim=True) + 1e-20
+            top_k_weights /= denominator
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
-class AXK2Experts(DeepseekV32Experts):
+class AXK2Experts(Qwen2MoeExperts):
     pass
 
 
-class AXK2MoE(DeepseekV32MoE):
+class AXK2SparseMoeBlock(DeepseekV32SparseMoeBlock):
     pass
 
 
-class AXK2Attention(DeepseekV32Attention):
+class AXK2Attention(DeepseekV3Attention):
+    """
+    DeepSeek-V3 MLA, with a DSA indexer whose top-k sparse mask is folded into the attention mask.
+    Qlora rank formulation is dropped as it is never used in released models.
+    """
+
     def __init__(self, config: AXK2Config, layer_idx: int):
         nn.Module.__init__(self)
         self.config = config
@@ -398,7 +402,7 @@ class AXK2Attention(DeepseekV32Attention):
         return attn_output, attn_weights
 
 
-class AXK2DecoderLayer(DeepseekV32DecoderLayer):
+class AXK2DecoderLayer(Glm4MoeLiteDecoderLayer):
     def __init__(self, config: AXK2Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.input_layernorm = AXK2GatedRMSNorm(config)
@@ -415,7 +419,7 @@ class AXK2PreTrainedModel(DeepseekV32PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, AXK2TopkRouter):
+        if isinstance(module, AXK2TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, AXK2Experts):

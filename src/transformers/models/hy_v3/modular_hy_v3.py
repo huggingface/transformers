@@ -32,8 +32,7 @@ from ...utils import (
     logging,
 )
 from ...utils.output_capturing import OutputRecorder
-from ..apertus.modeling_apertus import ApertusAttention
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3DecoderLayer
+from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaMLP,
@@ -41,9 +40,9 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
 )
-from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2Model, MiniMaxM2SparseMoeBlock
-from ..mixtral.modeling_mixtral import MixtralTopKRouter
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeExperts
+from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2Model, MiniMaxM2SparseMoeBlock, MiniMaxM2TopKRouter
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
+from ..qwen3.modeling_qwen3 import Qwen3Attention
 
 
 logger = logging.get_logger(__name__)
@@ -155,27 +154,25 @@ class HYV3MLP(LlamaMLP):
         self.intermediate_size = intermediate_size or config.intermediate_size
 
 
-class HYV3Attention(ApertusAttention):
-    pass
+class HYV3Attention(Qwen3Attention):
+    def __init__(self, config: HYV3Config, layer_idx: int | None = None):
+        super().__init__(config, layer_idx)
+        self.sliding_window = None
 
 
-class HYV3TopKRouter(MixtralTopKRouter):
+class HYV3TopKRouter(MiniMaxM2TopKRouter):
     def __init__(self, config: HYV3Config):
         super().__init__(config)
         self.router_scaling_factor = config.router_scaling_factor
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        e_score_correction_bias: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.float(), self.weight.float())
-        routing_weights = torch.sigmoid(router_logits)
+        router_probs = torch.sigmoid(router_logits)
 
-        scores_for_choice = routing_weights + e_score_correction_bias
+        scores_for_choice = router_probs + self.e_score_correction_bias
         _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
-        top_k_weights = routing_weights.gather(1, top_k_index)
+        top_k_weights = router_probs.gather(1, top_k_index)
 
         top_k_weights = top_k_weights / (top_k_weights.sum(dim=-1, keepdim=True) + 1e-20)
         # Key difference: extra scaling factor
@@ -184,11 +181,11 @@ class HYV3TopKRouter(MixtralTopKRouter):
         return router_logits, top_k_weights, top_k_index
 
 
-class HYV3Experts(Qwen3MoeExperts):
+class HYV3Experts(Qwen2MoeExperts):
     pass
 
 
-class HYV3MoE(MiniMaxM2SparseMoeBlock):
+class HYV3SparseMoeBlock(MiniMaxM2SparseMoeBlock):
     def __init__(self, config: HYV3Config):
         super().__init__(config)
         del self.jitter_noise
@@ -202,7 +199,7 @@ class HYV3MoE(MiniMaxM2SparseMoeBlock):
         batch_size, seq_len, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
 
-        _, top_k_weights, top_k_index = self.gate(hidden_states, self.e_score_correction_bias)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         routed_output = self.experts(hidden_states, top_k_index, top_k_weights)
 
         # Key difference: optional float casting on combing shared experts
@@ -216,14 +213,8 @@ class HYV3MoE(MiniMaxM2SparseMoeBlock):
         return hidden_states.reshape(batch_size, seq_len, hidden_dim)
 
 
-class HYV3DecoderLayer(DeepseekV3DecoderLayer):
-    def __init__(self, config: HYV3Config, layer_idx: int):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
-        self.self_attn = HYV3Attention(config=config, layer_idx=layer_idx)
-        self.mlp = HYV3MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else HYV3MLP(config)
-        self.input_layernorm = HYV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = HYV3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+class HYV3DecoderLayer(Glm4MoeLiteDecoderLayer):
+    pass
 
 
 class HYV3PreTrainedModel(LlamaPreTrainedModel):
@@ -242,11 +233,10 @@ class HYV3PreTrainedModel(LlamaPreTrainedModel):
         std = self.config.initializer_range
         if isinstance(module, HYV3TopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
+            init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, HYV3Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, HYV3MoE):
-            init.zeros_(module.e_score_correction_bias)
 
 
 class HYV3Model(MiniMaxM2Model):

@@ -48,12 +48,16 @@ class DeepseekV2Experts(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -73,8 +77,9 @@ class DeepseekV2Experts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -82,13 +87,13 @@ class DeepseekV2Experts(nn.Module):
         return final_hidden_states
 
 
-class DeepseekV2TopkRouter(nn.Module):
+class DeepseekV2TopKRouter(nn.Module):
     def __init__(self, config: DeepseekV2Config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.topk_method = config.topk_method
         self.num_group = config.n_group
@@ -97,11 +102,11 @@ class DeepseekV2TopkRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        scores = router_logits.softmax(dim=-1, dtype=torch.float32)
+        router_probs = router_logits.softmax(dim=-1, dtype=torch.float32)
         if self.topk_method == "greedy":
-            topk_weights, topk_indices = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
+            top_k_weights, top_k_index = torch.topk(router_probs, k=self.top_k, dim=-1, sorted=False)
         elif self.topk_method == "group_limited_greedy":
-            group_scores = scores.view(-1, self.num_group, self.num_experts // self.num_group).max(dim=-1).values
+            group_scores = router_probs.view(-1, self.num_group, self.num_experts // self.num_group).max(dim=-1).values
             group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
             group_mask = torch.zeros_like(group_scores)
             group_mask.scatter_(1, group_idx, 1)
@@ -110,18 +115,18 @@ class DeepseekV2TopkRouter(nn.Module):
                 .expand(-1, self.num_group, self.num_experts // self.num_group)
                 .reshape(-1, self.num_experts)
             )
-            scores = scores.masked_fill(~score_mask.bool(), 0.0)
-            topk_weights, topk_indices = torch.topk(scores, k=self.top_k, dim=-1, sorted=False)
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights, topk_indices
+            router_probs = router_probs.masked_fill(~score_mask.bool(), 0.0)
+            top_k_weights, top_k_index = torch.topk(router_probs, k=self.top_k, dim=-1, sorted=False)
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
-class DeepseekV2Moe(nn.Module):
+class DeepseekV2SparseMoeBlock(nn.Module):
     def __init__(self, config: DeepseekV2Config):
         super().__init__()
         self.config = config
         self.experts = DeepseekV2Experts(config)
-        self.gate = DeepseekV2TopkRouter(config)
+        self.gate = DeepseekV2TopKRouter(config)
         self.shared_experts = DeepseekV2MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -129,9 +134,9 @@ class DeepseekV2Moe(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
@@ -424,8 +429,10 @@ class DeepseekV2DecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = DeepseekV2Attention(config=config, layer_idx=layer_idx)
-        self.mlp = DeepseekV2Moe(config) if layer_idx >= config.first_k_dense_replace else DeepseekV2MLP(config)
 
+        self.mlp = (
+            DeepseekV2SparseMoeBlock(config) if layer_idx >= config.first_k_dense_replace else DeepseekV2MLP(config)
+        )
         self.input_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = DeepseekV2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
@@ -477,13 +484,13 @@ class DeepseekV2PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": DeepseekV2DecoderLayer,
         "attentions": DeepseekV2Attention,
-        "router_logits": OutputRecorder(DeepseekV2TopkRouter, index=0),
+        "router_logits": OutputRecorder(DeepseekV2TopKRouter, index=0),
     }
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, DeepseekV2TopkRouter):
+        if isinstance(module, DeepseekV2TopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, DeepseekV2Experts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)

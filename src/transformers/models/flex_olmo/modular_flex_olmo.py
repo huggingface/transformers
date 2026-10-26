@@ -25,15 +25,16 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..llama.modeling_llama import LlamaDecoderLayer
+from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralModel, MixtralPreTrainedModel
-from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RMSNorm, Olmo2RotaryEmbedding
+from ..olmo.modeling_olmo import OlmoRotaryEmbedding
+from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2RMSNorm
 from ..olmoe.modeling_olmoe import (
-    OlmoeDecoderLayer,
     OlmoeForCausalLM,
-    OlmoeMLP,
     OlmoeSparseMoeBlock,
-    OlmoeTopKRouter,
 )
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeTopKRouter
 
 
 @auto_docstring(checkpoint="allenai/FlexOlmo-7x7B-1T")
@@ -116,11 +117,11 @@ class FlexOlmoRMSNorm(Olmo2RMSNorm):
 
 # FlexOlmo RMS norm reuses Olmo2 RMS norm, so that the output cos and sin are returned
 # as float32 rather than the input type.
-class FlexOlmoRotaryEmbedding(Olmo2RotaryEmbedding):
+class FlexOlmoRotaryEmbedding(OlmoRotaryEmbedding):
     pass
 
 
-class FlexOlmoMLP(OlmoeMLP):
+class FlexOlmoMLP(MistralMLP):
     pass
 
 
@@ -130,7 +131,7 @@ class FlexOlmoAttention(Olmo2Attention):
     pass
 
 
-class FlexOlmoTopKRouter(OlmoeTopKRouter):
+class FlexOlmoTopKRouter(Qwen2MoeTopKRouter):
     pass
 
 
@@ -140,12 +141,11 @@ class FlexOlmoSparseMoeBlock(OlmoeSparseMoeBlock):
 
 # FlexOlmo decoder layer is identical to OlmoE decoder layer except:
 # - Norm is applied after attention/feedforward rather than before.
-class FlexOlmoDecoderLayer(OlmoeDecoderLayer):
+class FlexOlmoDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: FlexOlmoConfig, layer_idx: int):
         super().__init__(config, layer_idx=layer_idx)
-        self.post_attention_layernorm = FlexOlmoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.mlp = FlexOlmoSparseMoeBlock(config)
         self.post_feedforward_layernorm = FlexOlmoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.self_attn = FlexOlmoAttention(config=config, layer_idx=layer_idx)
         del self.input_layernorm
 
     def forward(

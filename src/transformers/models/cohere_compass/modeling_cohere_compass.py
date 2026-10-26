@@ -65,7 +65,7 @@ from .configuration_cohere_compass import CohereCompassConfig, CohereCompassText
 
 
 class CohereCompassRotaryEmbedding(nn.Module):
-    def __init__(self, config: CohereCompassTextConfig, device=None):
+    def __init__(self, config: CohereCompassTextConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -83,14 +83,14 @@ class CohereCompassRotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
             setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: CohereCompassTextConfig, device=None, layer_type: str | None = None, **kwargs
+        config: CohereCompassTextConfig, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -112,11 +112,11 @@ class CohereCompassRotaryEmbedding(nn.Module):
 
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids, layer_type=None):
+    def forward(self, x, position_ids, layer_type):
         inv_freq = getattr(self, f"{layer_type}_inv_freq")
         attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
 
@@ -177,6 +177,39 @@ class CohereCompassLayerNorm(nn.Module):
         return hidden_states.to(input_dtype)
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+@use_kernel_forward_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -214,39 +247,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-@use_kernel_forward_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 class CohereCompassAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -259,7 +259,6 @@ class CohereCompassAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -273,6 +272,7 @@ class CohereCompassAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
     def forward(
         self,
@@ -614,14 +614,16 @@ class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
 class CohereCompassVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.linear_fc1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
-        self.linear_fc2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
-    def forward(self, hidden_state):
-        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
+        return hidden_states
 
 
 class CohereCompassVisionPatchEmbed(nn.Module):
@@ -665,9 +667,7 @@ class CohereCompassVisionRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_axial_rope_parameters(
-        config: CohereCompassVisionConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: CohereCompassVisionConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -683,11 +683,11 @@ class CohereCompassVisionRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        # position_ids: (N, 2) — column 0 = h coords, column 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
         sin = freqs.sin() * self.attention_scaling
@@ -700,9 +700,8 @@ class CohereCompassVisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        freq = freq.flatten(1)
+        return torch.cat([freq, freq], dim=-1)
 
 
 class CohereCompassVisionPatchMerger(nn.Module):
@@ -826,7 +825,6 @@ class CohereCompassVisionBlock(GradientCheckpointingLayer):
         self.attn = CohereCompassVisionAttention(config=config)
         self.mlp = CohereCompassVisionMLP(config=config)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -834,10 +832,6 @@ class CohereCompassVisionBlock(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,

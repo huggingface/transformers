@@ -24,14 +24,16 @@ from ..cohere.modeling_cohere import CohereAttention
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
     DeepseekV3ForCausalLM,
-    DeepseekV3MLP,
     DeepseekV3Model,
     DeepseekV3PreTrainedModel,
-    DeepseekV3RMSNorm,
-    DeepseekV3TopkRouter,
+    DeepseekV3TopKRouter,
 )
-from ..glm.modeling_glm import GlmRotaryEmbedding
-from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb  # noqa
+from ..gpt_neox.modeling_gpt_neox import (
+    GPTNeoXRotaryEmbedding,
+    apply_rotary_pos_emb,  # noqa
+)
+from ..llama.modeling_llama import LlamaRMSNorm
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 logger = logging.get_logger(__name__)
@@ -137,7 +139,7 @@ class Glm4MoeConfig(PreTrainedConfig):
         super().__post_init__(**kwargs)
 
 
-class Glm4MoeRotaryEmbedding(GlmRotaryEmbedding):
+class Glm4MoeRotaryEmbedding(GPTNeoXRotaryEmbedding):
     pass
 
 
@@ -169,25 +171,17 @@ class Glm4MoeAttention(CohereAttention):
             self.k_norm = Glm4MoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
 
-class Glm4MoeMLP(DeepseekV3MLP):
+class Glm4MoeMLP(Qwen2MoeMLP):
     pass
 
 
-class Glm4MoeTopkRouter(DeepseekV3TopkRouter):
+class Glm4MoeTopKRouter(DeepseekV3TopKRouter):
     def __init__(self, config: Glm4MoeConfig):
-        nn.Module.__init__(self)
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.num_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
+        super().__init__(config)
         self.e_score_correction_bias = nn.Buffer(torch.zeros((self.num_experts), dtype=torch.float32))
 
 
-class Glm4MoeRMSNorm(DeepseekV3RMSNorm):
+class Glm4MoeRMSNorm(LlamaRMSNorm):
     pass
 
 

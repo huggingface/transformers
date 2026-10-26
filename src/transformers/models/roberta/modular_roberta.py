@@ -175,8 +175,7 @@ class RobertaPreTrainedModel(PreTrainedModel):
 
 
 class RobertaModel(BertModel):
-    def __init__(self, config, add_pooling_layer=True):
-        super().__init__(self, config)
+    pass
 
 
 @auto_docstring(

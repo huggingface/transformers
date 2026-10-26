@@ -985,7 +985,7 @@ class Qwen3OmniMoeVisionRotaryEmbedding(nn.Module):
     The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig, device=None):
+    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig):
         super().__init__()
         self.config = config
 
@@ -999,9 +999,7 @@ class Qwen3OmniMoeVisionRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_axial_rope_parameters(
-        config: Qwen3OmniMoeVisionEncoderConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: Qwen3OmniMoeVisionEncoderConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -1017,11 +1015,11 @@ class Qwen3OmniMoeVisionRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        # position_ids: (N, 2) — column 0 = h coords, column 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
         sin = freqs.sin() * self.attention_scaling
@@ -1034,41 +1032,43 @@ class Qwen3OmniMoeVisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        freq = freq.flatten(1)
+        return torch.cat([freq, freq], dim=-1)
 
 
 class Qwen3OmniMoeTextTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.norm_topk_prob = True
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
         router_probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
-        router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
-        router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
-        router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = router_top_value
-        return router_logits, router_scores, router_indices
+        top_k_weights, top_k_index = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
+        if self.norm_topk_prob:
+            top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(router_logits.dtype)
+        return router_logits, top_k_weights, top_k_index
 
 
 class Qwen3OmniMoeVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.linear_fc1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
-        self.linear_fc2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
-    def forward(self, hidden_state):
-        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
+        return hidden_states
 
 
 class Qwen3OmniMoeVisionBlock(GradientCheckpointingLayer):
@@ -1079,7 +1079,6 @@ class Qwen3OmniMoeVisionBlock(GradientCheckpointingLayer):
         self.attn = Qwen3OmniMoeVisionAttention(config=config)
         self.mlp = Qwen3OmniMoeVisionMLP(config=config)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1087,10 +1086,6 @@ class Qwen3OmniMoeVisionBlock(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
@@ -1250,9 +1245,7 @@ class Qwen3OmniMoeThinkerTextRotaryEmbedding(nn.Module):
         self.mrope_section = config.rope_parameters.get("mrope_section", [24, 20, 20])
 
     @staticmethod
-    def compute_default_rope_parameters(
-        config: Qwen3OmniMoeTextConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: Qwen3OmniMoeConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -1304,12 +1297,16 @@ class Qwen3OmniMoeThinkerTextExperts(nn.Module):
 
     def __init__(self, config: Qwen3OmniMoeThinkerConfig):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -1329,8 +1326,9 @@ class Qwen3OmniMoeThinkerTextExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -1342,21 +1340,20 @@ class Qwen3OmniMoeThinkerTextTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
-        self.norm_topk_prob = config.norm_topk_prob
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.norm_topk_prob = config.norm_topk_prob
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
         router_probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
-        router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
+        top_k_weights, top_k_index = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
         if self.norm_topk_prob:
-            router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
-        router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = router_top_value
-        return router_logits, router_scores, router_indices
+            top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(router_logits.dtype)
+        return router_logits, top_k_weights, top_k_index
 
 
 class Qwen3OmniMoeThinkerTextSparseMoeBlock(nn.Module):
@@ -1368,16 +1365,16 @@ class Qwen3OmniMoeThinkerTextSparseMoeBlock(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
-        final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
+        _, top_k_weights, top_k_index = self.gate(hidden_states_reshaped)
+        final_hidden_states = self.experts(hidden_states_reshaped, top_k_index, top_k_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
-class Qwen3OmniMoeThinkerTextRMSNorm(nn.Module):
+class Qwen3OmniMoeRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         """
-        Qwen3OmniMoeThinkerTextRMSNorm is equivalent to T5LayerNorm
+        Qwen3OmniMoeRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -1426,6 +1423,7 @@ class Qwen3OmniMoeThinkerTextAttention(nn.Module):
 
     def __init__(self, config, layer_idx):
         super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -1446,10 +1444,8 @@ class Qwen3OmniMoeThinkerTextAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = Qwen3OmniMoeThinkerTextRMSNorm(
-            self.head_dim, eps=config.rms_norm_eps
-        )  # unlike olmo, only on the head dim!
-        self.k_norm = Qwen3OmniMoeThinkerTextRMSNorm(
+        self.q_norm = Qwen3OmniMoeRMSNorm(self.head_dim, eps=config.rms_norm_eps)  # unlike olmo, only on the head dim!
+        self.k_norm = Qwen3OmniMoeRMSNorm(
             self.head_dim, eps=config.rms_norm_eps
         )  # thus post q_norm does not need reshape
         self.sliding_window = None
@@ -1512,19 +1508,41 @@ class Qwen3OmniMoeThinkerTextMLP(nn.Module):
         return down_proj
 
 
+@use_kernel_forward_from_hub("RMSNorm")
+class Qwen3OmniMoeThinkerTextRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
+        """
+        Qwen3OmniMoeThinkerTextRMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+
+
 class Qwen3OmniMoeThinkerTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
+        self.hidden_size = config.hidden_size
         self.self_attn = Qwen3OmniMoeThinkerTextAttention(config, layer_idx)
-        if (layer_idx not in config.mlp_only_layers) and (
-            config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
-        ):
-            self.mlp = Qwen3OmniMoeThinkerTextSparseMoeBlock(config)
-        else:
-            self.mlp = Qwen3OmniMoeThinkerTextMLP(config, intermediate_size=config.intermediate_size)
+        self.mlp = (
+            Qwen3OmniMoeThinkerTextSparseMoeBlock(config)
+            if layer_idx not in config.mlp_only_layers
+            and config.num_experts > 0
+            and (layer_idx + 1) % config.decoder_sparse_step == 0
+            else Qwen3OmniMoeThinkerTextMLP(config, intermediate_size=config.intermediate_size)
+        )
         self.input_layernorm = Qwen3OmniMoeThinkerTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen3OmniMoeThinkerTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.hidden_size = config.hidden_size
 
     def forward(
         self,
@@ -2398,12 +2416,15 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
 class Qwen3OmniMoeTalkerResizeMLP(nn.Module):
     def __init__(self, config: Qwen3OmniMoeTalkerConfig):
         super().__init__()
-        self.linear_fc1 = nn.Linear(config.thinker_hidden_size, config.text_config.intermediate_size, bias=True)
-        self.linear_fc2 = nn.Linear(config.text_config.intermediate_size, config.text_config.hidden_size, bias=True)
-        self.act_fn = ACT2FN[config.text_config.hidden_act]
+        self.up_proj = nn.Linear(config.thinker_hidden_size, config.text_config.intermediate_size, bias=True)
+        self.down_proj = nn.Linear(config.text_config.intermediate_size, config.text_config.hidden_size, bias=True)
+        self.activation_fn = ACT2FN[config.text_config.hidden_act]
 
-    def forward(self, hidden_state):
-        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
+        return hidden_states
 
 
 @dataclass
@@ -2414,27 +2435,6 @@ class Qwen3OmniMoeTalkerCodePredictorOutputWithPast(CausalLMOutputWithPast):
     """
 
     generation_steps: int | None = None
-
-
-@use_kernel_forward_from_hub("RMSNorm")
-class Qwen3OmniMoeRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
-        """
-        Qwen3OmniMoeRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
@@ -2834,21 +2834,20 @@ class Qwen3OmniMoeTalkerTextTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
-        self.norm_topk_prob = config.norm_topk_prob
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.norm_topk_prob = config.norm_topk_prob
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
         router_probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
-        router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
+        top_k_weights, top_k_index = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
         if self.norm_topk_prob:
-            router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
-        router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = router_top_value
-        return router_logits, router_scores, router_indices
+            top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(router_logits.dtype)
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation
@@ -2857,12 +2856,16 @@ class Qwen3OmniMoeTalkerTextExperts(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -2882,8 +2885,9 @@ class Qwen3OmniMoeTalkerTextExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -2905,8 +2909,8 @@ class Qwen3OmniMoeTalkerTextSparseMoeBlock(nn.Module):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
         shared_expert_output = self.shared_expert(hidden_states_reshaped)
-        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
-        expert_output = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
+        _, top_k_weights, top_k_index = self.gate(hidden_states_reshaped)
+        expert_output = self.experts(hidden_states_reshaped, top_k_index, top_k_weights)
 
         shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states_reshaped)) * shared_expert_output
 
@@ -2918,17 +2922,11 @@ class Qwen3OmniMoeTalkerTextSparseMoeBlock(nn.Module):
 class Qwen3OmniMoeTalkerDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
+        self.hidden_size = config.hidden_size
         self.self_attn = Qwen3OmniMoeThinkerTextAttention(config, layer_idx)
-        if (layer_idx not in config.mlp_only_layers) and (
-            config.num_experts > 0 and (layer_idx + 1) % config.decoder_sparse_step == 0
-        ):
-            self.mlp = Qwen3OmniMoeThinkerTextSparseMoeBlock(config)
-        else:
-            self.mlp = Qwen3OmniMoeThinkerTextMLP(config, intermediate_size=config.intermediate_size)
+        self.mlp = Qwen3OmniMoeTalkerTextSparseMoeBlock(config)
         self.input_layernorm = Qwen3OmniMoeThinkerTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = Qwen3OmniMoeThinkerTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.hidden_size = config.hidden_size
-        self.mlp = Qwen3OmniMoeTalkerTextSparseMoeBlock(config)
 
     def forward(
         self,

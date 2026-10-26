@@ -97,11 +97,6 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
     AudioFlamingo3 encoder: Whisper encoder, average pool (time/2), then LayerNorm.
     """
 
-    _can_record_outputs = {
-        "hidden_states": AudioFlamingo3EncoderLayer,
-        "attentions": AudioFlamingo3Attention,
-    }
-
     @merge_with_config_defaults
     @capture_outputs
     def forward(

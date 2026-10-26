@@ -264,7 +264,7 @@ class HeliumAttention(nn.Module):
 
 
 class HeliumDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: HeliumConfig, layer_idx: int | None = None):
+    def __init__(self, config: HeliumConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
 

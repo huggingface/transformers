@@ -35,15 +35,15 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..granite_swa.modeling_granite_swa import GraniteSWAAttention
-from ..granitemoe.modeling_granitemoe import GraniteMoeMoE, GraniteMoeTopKRouter
+from ..granitemoe.modeling_granitemoe import GraniteMoeSparseMoeBlock, GraniteMoeTopKRouter
 from ..granitemoeshared.configuration_granitemoeshared import GraniteMoeSharedConfig
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedDecoderLayer,
     GraniteMoeSharedForCausalLM,
     GraniteMoeSharedModel,
     GraniteMoeSharedPreTrainedModel,
-    GraniteMoeSharedRotaryEmbedding,
 )
+from ..llama.modeling_llama import LlamaRotaryEmbedding
 
 
 logger = logging.get_logger(__name__)
@@ -87,9 +87,9 @@ class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.sinks": "colwise",
-        "layers.*.block_sparse_moe.experts.gate_up_proj": "packed_colwise",
-        "layers.*.block_sparse_moe.experts.down_proj": "rowwise",
-        "layers.*.block_sparse_moe.experts": "moe_tp_experts",
+        "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.experts.down_proj": "rowwise",
+        "layers.*.mlp.experts": "moe_tp_experts",
     }
 
     sliding_window: int | None = 128
@@ -114,7 +114,7 @@ class GraniteMoeSWATopKRouter(GraniteMoeTopKRouter):
     pass
 
 
-class GraniteMoeSWAMoE(GraniteMoeMoE):
+class GraniteMoeSWASparseMoeBlock(GraniteMoeSparseMoeBlock):
     pass
 
 
@@ -149,7 +149,7 @@ class GraniteMoeSWAPreTrainedModel(GraniteMoeSharedPreTrainedModel):
             init.zeros_(module.sinks)
 
 
-class GraniteMoeSWARotaryEmbedding(GraniteMoeSharedRotaryEmbedding):
+class GraniteMoeSWARotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

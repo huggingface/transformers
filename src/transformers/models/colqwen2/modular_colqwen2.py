@@ -17,11 +17,11 @@ from dataclasses import dataclass
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_flat_list_of_images
-from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available, logging
 from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
-from ..colpali.processing_colpali import ColPaliProcessor
+from ..colpali.processing_colpali import ColPaliProcessor, ColPaliProcessorKwargs
 from .configuration_colqwen2 import ColQwen2Config
 
 
@@ -32,19 +32,8 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
-            "do_convert_rgb": True,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+class ColQwen2ProcessorKwargs(ColPaliProcessorKwargs):
+    pass
 
 
 class ColQwen2Processor(ColPaliProcessor):

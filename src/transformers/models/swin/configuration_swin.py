@@ -51,6 +51,7 @@ class SwinConfig(BackboneConfigMixin, PreTrainedConfig):
     model_type = "swin"
 
     attribute_map = {
+        "attention_probs_dropout_prob": "attention_dropout",
         "num_attention_heads": "num_heads",
         "num_hidden_layers": "num_layers",
     }
@@ -65,7 +66,7 @@ class SwinConfig(BackboneConfigMixin, PreTrainedConfig):
     mlp_ratio: float | int = 4.0
     qkv_bias: bool = True
     hidden_dropout_prob: float | int = 0.0
-    attention_probs_dropout_prob: float | int = 0.0
+    attention_dropout: float | int = 0.0
     drop_path_rate: float | int = 0.1
     hidden_act: str = "gelu"
     use_absolute_embeddings: bool = False

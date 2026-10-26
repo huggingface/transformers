@@ -305,14 +305,18 @@ class InklingMLP(nn.Module):
 class InklingExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    def __init__(self, config: InklingTextConfig):
+    def __init__(self, config):
         super().__init__()
-        self.num_experts = config.n_routed_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -332,8 +336,9 @@ class InklingExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -341,7 +346,7 @@ class InklingExperts(nn.Module):
         return final_hidden_states
 
 
-class InklingTopkRouter(nn.Module):
+class InklingTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_experts = config.n_routed_experts
@@ -356,27 +361,27 @@ class InklingTopkRouter(nn.Module):
         self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        flat = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(flat, self.weight)
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states, self.weight)
 
         # same as `self.route_tokens_to_experts` from before, prob same as our MoE and can be copied
-        scores = router_logits.sigmoid()
-        routed_scores = scores[..., : -self.n_shared_experts]
+        router_probs = router_logits.sigmoid()
+        routed_scores = router_probs[..., : -self.n_shared_experts]
         scores_for_choice = routed_scores + self.e_score_correction_bias
-        topk_indices = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
+        top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)[1]
 
         routed_logits = router_logits[..., : -self.n_shared_experts]
         shared_logits = router_logits[..., -self.n_shared_experts :]
-        topk_logits = torch.cat([routed_logits.gather(-1, topk_indices), shared_logits], dim=-1)
-        topk_log_probs = F.logsigmoid(topk_logits)
-        topk_weights = torch.exp(topk_log_probs - torch.logsumexp(topk_log_probs, dim=-1, keepdim=True))
+        top_k_logits = torch.cat([routed_logits.gather(-1, top_k_index), shared_logits], dim=-1)
+        top_k_log_probs = F.logsigmoid(top_k_logits)
+        top_k_weights = torch.exp(top_k_log_probs - torch.logsumexp(top_k_log_probs, dim=-1, keepdim=True))
 
-        topk_weights = topk_weights * self.route_scale * self.global_scale
+        top_k_weights = top_k_weights * self.route_scale * self.global_scale
 
-        shared_gammas = topk_weights[..., -self.n_shared_experts :].contiguous()
-        topk_weights = topk_weights[..., : self.top_k].contiguous()
+        shared_gammas = top_k_weights[..., -self.n_shared_experts :].contiguous()
+        top_k_weights = top_k_weights[..., : self.top_k].contiguous()
 
-        return routed_logits, topk_weights, topk_indices, shared_gammas
+        return routed_logits, top_k_weights, top_k_index, shared_gammas
 
 
 class InklingSharedExperts(nn.Module):
@@ -406,22 +411,22 @@ class InklingSharedExperts(nn.Module):
         return out.view(input_shape)
 
 
-class InklingMoE(nn.Module):
+class InklingSparseMoeBlock(nn.Module):
     """Gate -> routed experts (+ shared experts), TML flavour."""
 
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.gate = InklingTopkRouter(config)
+        self.gate = InklingTopKRouter(config)
         self.experts = InklingExperts(config)
         self.shared_experts = InklingSharedExperts(config)
 
     def forward(self, hidden_states) -> torch.Tensor:
         residuals = hidden_states
         input_shape = hidden_states.shape
-        _, topk_weights, topk_indices, shared_gammas = self.gate(hidden_states)
+        _, top_k_weights, top_k_index, shared_gammas = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*input_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*input_shape)
         hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
         return hidden_states
 
@@ -551,7 +556,7 @@ class InklingDecoderLayer(GradientCheckpointingLayer):
         self.self_attn = InklingAttention(config, layer_idx)
 
         if config.mlp_layer_types[layer_idx] == "sparse":
-            self.mlp = InklingMoE(config)
+            self.mlp = InklingSparseMoeBlock(config)
         else:
             self.mlp = InklingMLP(config)
 
@@ -621,7 +626,7 @@ class InklingPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": InklingDecoderLayer,
         "attentions": InklingAttention,
-        "router_logits": OutputRecorder(InklingTopkRouter, index=0),
+        "router_logits": OutputRecorder(InklingTopKRouter, index=0),
     }
 
     @torch.no_grad()
@@ -635,7 +640,7 @@ class InklingPreTrainedModel(PreTrainedModel):
         elif isinstance(module, InklingExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, InklingTopkRouter):
+        elif isinstance(module, InklingTopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
             init.ones_(module.global_scale)
             init.zeros_(module.e_score_correction_bias)

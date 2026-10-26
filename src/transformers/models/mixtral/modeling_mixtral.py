@@ -65,6 +65,10 @@ class MixtralExperts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -83,8 +87,9 @@ class MixtralExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -104,10 +109,9 @@ class MixtralTopKRouter(nn.Module):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
         router_probs = torch.nn.functional.softmax(router_logits.float(), dim=-1)
-        router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
-        router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
-        router_scores = router_top_value
-        return router_logits, router_scores, router_indices
+        top_k_weights, top_k_index = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
+        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        return router_logits, top_k_weights, top_k_index
 
 
 class MixtralSparseMoeBlock(nn.Module):
@@ -284,6 +288,7 @@ class MixtralAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.sliding_window = getattr(config, "sliding_window", None)
 
     def forward(
         self,
@@ -318,7 +323,7 @@ class MixtralAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=getattr(self.config, "sliding_window", None),  # main diff with Llama
+            sliding_window=self.sliding_window,  # main diff with Llama
             **kwargs,
         )
 
@@ -332,8 +337,7 @@ class MixtralDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = MixtralAttention(config, layer_idx)
-
+        self.self_attn = MixtralAttention(config=config, layer_idx=layer_idx)
         self.mlp = MixtralSparseMoeBlock(config)
         self.input_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -341,23 +345,28 @@ class MixtralDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
+
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)

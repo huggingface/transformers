@@ -37,10 +37,13 @@ from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..glm.modeling_glm import GlmAttention, GlmRotaryEmbedding, apply_rotary_pos_emb
-from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, eager_attention_forward
+from ..clip.modeling_clip import CLIPMLP
+from ..glm.modeling_glm import apply_rotary_pos_emb
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaModel, eager_attention_forward
+from ..phi3.modeling_phi3 import Phi3MLP
 from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
 
 
@@ -154,42 +157,28 @@ class MoonshineEncoderModelOutput(BaseModelOutput):
     attention_mask: torch.Tensor | None = None
 
 
-class MoonshineEncoderMLP(nn.Module):
+class MoonshineEncoderMLP(CLIPMLP):
     def __init__(self, config, hidden_act):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
 
-class MoonshineDecoderMLP(nn.Module):
-    def __init__(self, config, hidden_act):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size * 2)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
-        hidden_states, gate = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation_fn(gate) * hidden_states
-        hidden_states = self.fc2(hidden_states)
-        return hidden_states
+class MoonshineDecoderMLP(Phi3MLP):
+    def __init__(self, config):
+        super().__init__(config)
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
 
-class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
+class MoonshineRotaryEmbedding(GPTNeoXRotaryEmbedding):
     pass
 
 
-class MoonshineAttention(GlmAttention):
+@no_inherit_decorator
+class MoonshineAttention(LlamaAttention):
     def __init__(
         self,
         config: MoonshineConfig,
@@ -200,6 +189,7 @@ class MoonshineAttention(GlmAttention):
     ):
         config.update({"num_attention_heads": num_attention_heads, "num_key_value_heads": num_key_value_heads})
         super().__init__(config, layer_idx)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.is_causal = is_causal
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
 
@@ -330,7 +320,7 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
             num_key_value_heads=config.num_key_value_heads,
         )
 
-        self.mlp = MoonshineDecoderMLP(config, config.hidden_act)
+        self.mlp = MoonshineDecoderMLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, bias=False)

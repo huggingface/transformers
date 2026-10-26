@@ -233,12 +233,12 @@ class CLIPSegDecoderLayer(CLIPEncoderLayer):
         )
 
         hidden_states = residual + hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
 
         residual = hidden_states
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
 
         return hidden_states
 
@@ -266,17 +266,17 @@ class CLIPSegPreTrainedModel(CLIPPreTrainedModel):
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
             init.copy_(module.position_ids, torch.arange(module.num_positions).expand((1, -1)))
         elif isinstance(module, CLIPSegAttention):
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.config.hidden_size**-0.5) * factor
             init.normal_(module.q_proj.weight, std=in_proj_std)
             init.normal_(module.k_proj.weight, std=in_proj_std)
             init.normal_(module.v_proj.weight, std=in_proj_std)
-            init.normal_(module.out_proj.weight, std=out_proj_std)
+            init.normal_(module.o_proj.weight, std=out_proj_std)
         elif isinstance(module, CLIPSegMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            init.normal_(module.fc1.weight, std=fc_std)
-            init.normal_(module.fc2.weight, std=in_proj_std)
+            init.normal_(module.up_proj.weight, std=fc_std)
+            init.normal_(module.down_proj.weight, std=in_proj_std)
         elif isinstance(module, CLIPSegModel):
             init.normal_(
                 module.text_projection.weight,

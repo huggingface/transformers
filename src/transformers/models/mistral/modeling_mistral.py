@@ -134,6 +134,7 @@ class MistralAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.sliding_window = getattr(config, "sliding_window", None)
 
     def forward(
         self,
@@ -168,7 +169,7 @@ class MistralAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=getattr(self.config, "sliding_window", None),  # main diff with Llama
+            sliding_window=self.sliding_window,  # main diff with Llama
             **kwargs,
         )
 
@@ -202,7 +203,9 @@ class MistralDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MistralConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = MistralAttention(config=config, layer_idx=layer_idx)
+
         self.mlp = MistralMLP(config)
         self.input_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MistralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

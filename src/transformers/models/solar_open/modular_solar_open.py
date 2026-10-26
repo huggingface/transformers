@@ -21,11 +21,10 @@ from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeForCausalLM,
     Glm4MoeModel,
-    Glm4MoeMoE,
     Glm4MoePreTrainedModel,
-    Glm4MoeRMSNorm,
+    Glm4MoeSparseMoeBlock,
 )
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm
 
 
 logger = logging.get_logger(__name__)
@@ -74,10 +73,10 @@ class SolarOpenConfig(Glm4MoeConfig):
 class SolarOpenDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: SolarOpenConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.mlp = SolarOpenMoE(config)
+        self.mlp = SolarOpenSparseMoeBlock(config)
 
 
-class SolarOpenMoE(Glm4MoeMoE):
+class SolarOpenSparseMoeBlock(Glm4MoeSparseMoeBlock):
     pass
 
 
@@ -87,7 +86,7 @@ class SolarOpenAttention(LlamaAttention):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
 
-class SolarOpenRMSNorm(Glm4MoeRMSNorm):
+class SolarOpenRMSNorm(LlamaRMSNorm):
     pass
 
 

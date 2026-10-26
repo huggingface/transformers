@@ -27,6 +27,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
@@ -347,6 +348,24 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+
+    rotary_dim = cos.shape[-1]
+    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+
+    # Apply rotary embeddings on the first half or full tensor
+    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
+
+    # Concatenate back to full shape
+    q_embed = torch.cat([q_embed, q_pass], dim=-1)
+    k_embed = torch.cat([k_embed, k_pass], dim=-1)
+    return q_embed, k_embed
+
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -384,24 +403,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    rotary_dim = cos.shape[-1]
-    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
-
-    # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
-
-    # Concatenate back to full shape
-    q_embed = torch.cat([q_embed, q_pass], dim=-1)
-    k_embed = torch.cat([k_embed, k_pass], dim=-1)
-    return q_embed, k_embed
-
-
 class Nemotron3DiarizationAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -425,6 +426,7 @@ class Nemotron3DiarizationAttention(nn.Module):
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -437,6 +439,9 @@ class Nemotron3DiarizationAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
+        if past_key_values is not None:
+            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
+
         attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
             self.config._attn_implementation, eager_attention_forward
         )
@@ -446,7 +451,7 @@ class Nemotron3DiarizationAttention(nn.Module):
             query_states,
             key_states,
             value_states,
-            attention_mask=attention_mask,
+            attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
@@ -462,24 +467,24 @@ class Nemotron3DiarizationMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
 class Nemotron3DiarizationAudioLayer(GradientCheckpointingLayer):
     def __init__(self, config: Nemotron3DiarizationAudioConfig, layer_idx: int):
         super().__init__()
-        self.embed_dim = config.hidden_size
+        self.hidden_size = config.hidden_size
         self.self_attn = Nemotron3DiarizationAttention(config, layer_idx)
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size)
         self.mlp = Nemotron3DiarizationMLP(config)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size)
 
     def forward(
         self,
@@ -489,7 +494,7 @@ class Nemotron3DiarizationAudioLayer(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -498,7 +503,7 @@ class Nemotron3DiarizationAudioLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 

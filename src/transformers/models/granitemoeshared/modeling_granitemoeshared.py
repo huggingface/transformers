@@ -75,21 +75,21 @@ class GraniteMoeSharedMLP(nn.Module):
             Configuration object with model hyperparameters.
     """
 
-    def __init__(self, config: GraniteMoeSharedConfig):
+    def __init__(self, config):
         super().__init__()
 
-        self.input_size = config.hidden_size
-        self.hidden_size = config.shared_intermediate_size
-        self.activation = ACT2FN[config.hidden_act]
-        self.input_linear = nn.Linear(self.input_size, self.hidden_size * 2, bias=False)
-        self.output_linear = nn.Linear(self.hidden_size, self.input_size, bias=False)
+        self.config = config
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.shared_intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.shared_intermediate_size, config.hidden_size, bias=False)
+        self.activation_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.input_linear(hidden_states)
-        chunked_hidden_states = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
-        hidden_states = self.output_linear(hidden_states)
-        return hidden_states
+    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+        up_states = self.gate_up_proj(hidden_states)
+
+        gate, up_states = up_states.chunk(2, dim=-1)
+        up_states = up_states * self.activation_fn(gate)
+
+        return self.down_proj(up_states)
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -120,13 +120,17 @@ class GraniteMoeSharedTopKRouter(nn.Module):
     here (via ``expert_size.tolist()``, which broke fullgraph compile) and now happens inside the
     experts forward via ``use_experts_implementation`` so the default ``grouped_mm`` / ``batched_mm``
     paths can compile cleanly.
+
+    Taking the top-k logits and then a softmax over them picks the same experts as Mixtral's
+    router (softmax over all experts, top-k, renormalize), only float rounding differs.
     """
 
-    def __init__(self, config: GraniteMoeSharedConfig):
+    def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_local_experts
         self.top_k = config.num_experts_per_tok
-        self.weight = nn.Parameter(torch.empty(self.num_experts, config.hidden_size))
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
@@ -148,6 +152,10 @@ class GraniteMoeSharedExperts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -166,8 +174,9 @@ class GraniteMoeSharedExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -175,21 +184,20 @@ class GraniteMoeSharedExperts(nn.Module):
         return final_hidden_states
 
 
-class GraniteMoeSharedMoE(nn.Module):
+class GraniteMoeSharedSparseMoeBlock(nn.Module):
     """Sparsely-gated mixture-of-experts block: router decides, experts compute."""
 
     def __init__(self, config: GraniteMoeSharedConfig):
         super().__init__()
-        self.input_size = config.hidden_size
-        self.router = GraniteMoeSharedTopKRouter(config)
         self.experts = GraniteMoeSharedExperts(config)
+        self.gate = GraniteMoeSharedTopKRouter(config)
 
-    def forward(self, layer_input: torch.Tensor) -> torch.Tensor:
-        bsz, length, emb_size = layer_input.size()
-        hidden_states = layer_input.reshape(-1, emb_size)
-        _, top_k_weights, top_k_index = self.router(hidden_states)
-        layer_output = self.experts(hidden_states, top_k_index, top_k_weights)
-        return layer_output.view(bsz, length, self.input_size)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        batch_size, sequence_length, hidden_dim = hidden_states.shape
+        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
+        _, top_k_weights, top_k_index = self.gate(hidden_states_reshaped)
+        final_hidden_states = self.experts(hidden_states_reshaped, top_k_index, top_k_weights)
+        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
 def rotate_half(x):
@@ -335,9 +343,9 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = GraniteMoeSharedAttention(config=config, layer_idx=layer_idx)
+        self.mlp = GraniteMoeSharedSparseMoeBlock(config)
         self.input_layernorm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GraniteMoeSharedRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.block_sparse_moe = GraniteMoeSharedMoE(config)
         self.residual_multiplier = config.residual_multiplier  # Only diff with mixtral!
         self.shared_mlp = None if config.shared_intermediate_size == 0 else GraniteMoeSharedMLP(config)
 
@@ -371,7 +379,7 @@ class GraniteMoeSharedDecoderLayer(GradientCheckpointingLayer):
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        moe_hidden_states = self.block_sparse_moe(hidden_states)
+        moe_hidden_states = self.mlp(hidden_states)
 
         if self.shared_mlp is None:
             hidden_states = moe_hidden_states

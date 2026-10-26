@@ -199,7 +199,6 @@ class NanoChatAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-
         self.q_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
         self.k_norm = NanoChatRMSNorm(eps=config.rms_norm_eps)
 
@@ -253,13 +252,13 @@ class NanoChatMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 

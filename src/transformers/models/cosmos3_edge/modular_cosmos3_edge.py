@@ -49,7 +49,7 @@ from ...utils.generic import (
 from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoMetadata
 from ...vision_utils import get_vision_attention_seqlens
-from ..clip.modeling_clip import CLIPMLP
+from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..glm4v.image_processing_glm4v import Glm4vImageProcessor, Glm4vImageProcessorKwargs
 from ..glm4v.image_processing_pil_glm4v import Glm4vImageProcessorPil
 from ..glm4v.video_processing_glm4v import Glm4vVideoProcessor
@@ -69,11 +69,10 @@ from ..qwen2_vl.modeling_qwen2_vl import (
 from ..qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeVisionPatchMerger
 from ..qwen3_vl.modeling_qwen3_vl import Qwen3VLTextRotaryEmbedding
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
+from ..siglip.modeling_siglip import SiglipAttention
 from ..siglip2.configuration_siglip2 import Siglip2VisionConfig
 from ..siglip2.modeling_siglip2 import (
-    Siglip2Attention,
     Siglip2Encoder,
-    Siglip2EncoderLayer,
     Siglip2VisionEmbeddings,
 )
 
@@ -93,8 +92,8 @@ class Cosmos3EdgeTextConfig(LlamaConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.fc1": "colwise",
-        "layers.*.mlp.fc2": "rowwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
 
     vocab_size: int = 131072
@@ -211,9 +210,9 @@ class Cosmos3EdgeTextMLP(CLIPMLP):
 
     def __init__(self, config: Cosmos3EdgeTextConfig):
         super().__init__(config)
-        # CLIPMLP has the same fc1 -> activation -> fc2 structure, but Edge checkpoints omit MLP biases.
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+        # CLIPMLP has the same up_proj -> activation -> down_proj structure, but Edge checkpoints omit MLP biases.
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
 
 
 class Cosmos3EdgeTextRMSNorm(LlamaRMSNorm):
@@ -224,9 +223,6 @@ class Cosmos3EdgeTextDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Cosmos3EdgeTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = Cosmos3EdgeTextAttention(config, layer_idx)
-        self.mlp = Cosmos3EdgeTextMLP(config)
-        self.input_layernorm = Cosmos3EdgeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Cosmos3EdgeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 _COSMOS3_EDGE_DROPPED_GENERATOR_KEYS = [
@@ -313,7 +309,7 @@ class Cosmos3EdgeVisionEmbeddings(Siglip2VisionEmbeddings):
         return patch_embeds + position_embeddings
 
 
-class Cosmos3EdgeVisionAttention(Siglip2Attention):
+class Cosmos3EdgeVisionAttention(SiglipAttention):
     """Packed non-causal SigLIP2 attention with one sequence per image or video frame."""
 
     def __init__(self, config: Cosmos3EdgeVisionConfig):
@@ -379,7 +375,7 @@ class Cosmos3EdgeVisionAttention(Siglip2Attention):
         return self.out_proj(attn_output.reshape(sequence_length, -1).contiguous())
 
 
-class Cosmos3EdgeVisionEncoderLayer(Siglip2EncoderLayer):
+class Cosmos3EdgeVisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: Cosmos3EdgeVisionConfig):
         super().__init__(config)
         self.self_attn = Cosmos3EdgeVisionAttention(config)
@@ -391,7 +387,7 @@ class Cosmos3EdgeVisionEncoderLayer(Siglip2EncoderLayer):
         """
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states = self.self_attn(
             hidden_states=hidden_states,
             cu_seqlens=cu_seqlens,
@@ -400,7 +396,7 @@ class Cosmos3EdgeVisionEncoderLayer(Siglip2EncoderLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 

@@ -21,36 +21,38 @@ from huggingface_hub.dataclasses import strict
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import auto_docstring
-from ...utils.generic import get_max_seqlen, is_flash_attention_requested
+from ...utils.generic import get_max_seqlen, is_flash_attention_requested, no_inherit_decorator
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
-    Glm4VisionMlp,
     Glm4vModel,
     Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
-    Glm4vRMSNorm,
-    Glm4vTextAttention,
     Glm4vTextDecoderLayer,
     Glm4vTextModel,
-    Glm4vVisionAttention,
     Glm4vVisionBlock,
     Glm4vVisionModel,
     Glm4vVisionPatchMerger,
+    apply_rotary_pos_emb,  # noqa: F401
     apply_rotary_pos_emb_vision,
     eager_attention_forward,
 )
+from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
+from ..mistral.modeling_mistral import MistralAttention
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionAttention
 
 
-class GlmOcrRMSNorm(Glm4vRMSNorm):
+class GlmOcrRMSNorm(LlamaRMSNorm):
     pass
 
 
-class GlmOcrVisionMlp(Glm4VisionMlp):
-    def __init__(self, config, bias: bool = True):
+class GlmOcrVisionMlp(LlamaMLP):
+    def __init__(self, config):
         super().__init__(config)
-        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.attention_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.attention_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.attention_bias)
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
@@ -125,13 +127,9 @@ class GlmOcrConfig(Glm4vConfig):
     video_end_token_id: int = 59259
 
 
-class GlmOcrTextAttention(Glm4vTextAttention, nn.Module):
-    def __init__(self, config: GlmOcrTextConfig, layer_idx: int | None = None):
-        super().__init__()
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
+@no_inherit_decorator
+class GlmOcrTextAttention(MistralAttention):
+    pass
 
 
 class GlmOcrTextDecoderLayer(Glm4vTextDecoderLayer):
@@ -146,11 +144,12 @@ class GlmOcrModelOutputWithPast(Glm4vModelOutputWithPast):
     pass
 
 
-class GlmOcrVisionAttention(Glm4vVisionAttention):
+class GlmOcrVisionAttention(Qwen2_5_VLVisionAttention):
     def __init__(self, config: GlmOcrVisionConfig) -> None:
-        super().__init__()
+        super().__init__(config)
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
+        self.attention_dropout = config.attention_dropout
         self.q_norm = GlmOcrRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = GlmOcrRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
@@ -228,8 +227,8 @@ class GlmOcrVisionAttention(Glm4vVisionAttention):
 
 class GlmOcrVisionBlock(Glm4vVisionBlock):
     def __init__(self, config) -> None:
-        super().__init__()
-        self.mlp = GlmOcrVisionMlp(config, bias=config.attention_bias)
+        super().__init__(config)
+        self.mlp = GlmOcrVisionMlp(config)
 
 
 class GlmOcrVisionPatchMerger(Glm4vVisionPatchMerger):

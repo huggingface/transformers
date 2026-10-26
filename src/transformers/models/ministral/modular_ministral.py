@@ -15,7 +15,6 @@
 
 import torch
 from huggingface_hub.dataclasses import strict
-from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
@@ -25,19 +24,17 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mistral.configuration_mistral import MistralConfig
+from ..mistral.modeling_mistral import MistralAttention, MistralMLP
 from ..qwen2.modeling_qwen2 import (
-    Qwen2Attention,
     Qwen2DecoderLayer,
     Qwen2ForCausalLM,
     Qwen2ForQuestionAnswering,
     Qwen2ForSequenceClassification,
     Qwen2ForTokenClassification,
-    Qwen2MLP,
     Qwen2Model,
     Qwen2PreTrainedModel,
-    Qwen2RMSNorm,
-    Qwen2RotaryEmbedding,
 )
 
 
@@ -76,20 +73,18 @@ class MinistralConfig(MistralConfig):
         PreTrainedConfig.__post_init__(self, **kwargs)
 
 
-class MinistralMLP(Qwen2MLP):
+class MinistralMLP(MistralMLP):
     pass
 
 
-class MinistralAttention(Qwen2Attention):
+class MinistralAttention(MistralAttention):
     def __init__(self, config, layer_idx: int):
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         super().__init__(config, layer_idx)
-        # Match Mistral: q/k/v do not have bias
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
 
-class MinistralRMSNorm(Qwen2RMSNorm):
+class MinistralRMSNorm(LlamaRMSNorm):
     pass
 
 
@@ -101,7 +96,7 @@ class MinistralPreTrainedModel(Qwen2PreTrainedModel):
     pass
 
 
-class MinistralRotaryEmbedding(Qwen2RotaryEmbedding):
+class MinistralRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

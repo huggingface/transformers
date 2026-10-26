@@ -169,6 +169,32 @@ class Molmo2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+@use_kernel_forward_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
@@ -204,32 +230,6 @@ def eager_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
-
-
-@use_kernel_forward_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
 
 
 def rotate_half(x):
@@ -271,6 +271,7 @@ class Molmo2Attention(nn.Module):
             self.head_dim if config.qk_norm_type == "qwen3" else config.num_key_value_heads * self.head_dim,
             eps=config.rms_norm_eps,
         )
+        self.sliding_window = None
         self.qk_norm_type = config.qk_norm_type
 
     def forward(
@@ -426,13 +427,13 @@ class Molmo2VisionMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -501,10 +502,10 @@ class Molmo2VisionAttention(nn.Module):
 class Molmo2VisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Molmo2VisionConfig):
         super().__init__()
-        self.embed_dim = config.hidden_size
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.hidden_size = config.hidden_size
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.self_attn = Molmo2VisionAttention(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = Molmo2VisionMLP(config)
 
     @auto_docstring
@@ -516,7 +517,7 @@ class Molmo2VisionEncoderLayer(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -525,7 +526,7 @@ class Molmo2VisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 

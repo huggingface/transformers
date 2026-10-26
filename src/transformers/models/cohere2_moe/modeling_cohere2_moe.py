@@ -82,11 +82,11 @@ class Cohere2MoeLayerNorm(nn.Module):
 
 
 class Cohere2MoeMLP(nn.Module):
-    def __init__(self, config: Cohere2MoeConfig, intermediate_size=None):
+    def __init__(self, config, intermediate_size=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
@@ -101,14 +101,18 @@ class Cohere2MoeMLP(nn.Module):
 class Cohere2MoeExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    def __init__(self, config):
+    def __init__(self, config: Cohere2MoeConfig):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -128,8 +132,9 @@ class Cohere2MoeExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -138,30 +143,42 @@ class Cohere2MoeExperts(nn.Module):
 
 
 class Cohere2MoeTopKRouter(nn.Module):
+    """Top-k gating that returns the routing decisions without grouping tokens by expert.
+
+    Returns ``(router_logits, top_k_weights, top_k_index)``; the grouping/scattering used to live
+    here (via ``expert_size.tolist()``, which broke fullgraph compile) and now happens inside the
+    experts forward via ``use_experts_implementation`` so the default ``grouped_mm`` / ``batched_mm``
+    paths can compile cleanly.
+
+    Taking the top-k logits and then a softmax over them picks the same experts as Mixtral's
+    router (softmax over all experts, top-k, renormalize), only float rounding differs.
+    """
+
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.expert_selection_fn = config.expert_selection_fn
         self.norm_topk_prob = config.norm_topk_prob
-        self.weight = nn.Parameter(torch.empty(config.num_experts, config.hidden_size))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         router_logits = F.linear(hidden_states, self.weight)
-        router_scores, selected_experts = torch.topk(router_logits, self.top_k, dim=-1)
+        top_k_weights, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)
         if self.expert_selection_fn == "softmax":
-            router_scores = F.softmax(router_scores, dim=1, dtype=torch.float)
+            top_k_weights = F.softmax(top_k_weights, dim=1, dtype=torch.float)
         elif self.expert_selection_fn == "sigmoid":
-            router_scores = F.sigmoid(router_scores)
+            top_k_weights = F.sigmoid(top_k_weights)
             if self.norm_topk_prob:
-                router_scores = router_scores / torch.sum(router_scores, dim=-1, keepdims=True)
+                top_k_weights = top_k_weights / torch.sum(top_k_weights, dim=-1, keepdims=True)
         else:
             raise ValueError("`expert_selection_fn` can only be `softmax` or `sigmoid`")
 
         # we cast back to the input dtype if it was upcasted in softmax
-        router_scores = router_scores.to(hidden_states.dtype)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
 
-        return router_logits, router_scores, selected_experts
+        return router_logits, top_k_weights, top_k_index
 
 
 class Cohere2MoeSparseMoeBlock(nn.Module):
@@ -181,8 +198,8 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_flat = hidden_states.view(-1, hidden_dim)
-        _, router_scores, selected_experts = self.gate(hidden_states_flat)
-        final_hidden_states = self.experts(hidden_states_flat, selected_experts, router_scores)
+        _, top_k_weights, top_k_index = self.gate(hidden_states_flat)
+        final_hidden_states = self.experts(hidden_states_flat, top_k_index, top_k_weights)
 
         if self.num_shared_experts > 0:
             shared_expert_output = self.shared_experts(hidden_states_flat)
@@ -194,6 +211,42 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
                 raise ValueError("`shared_expert_combination_strategy` can only be `sum` or `average`")
 
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+
+
+def rotate_half(x):
+    # Split and rotate. Note that this function is different from e.g. Llama.
+    x1 = x[..., ::2]
+    x2 = x[..., 1::2]
+    rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
+    return rot_x
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    dtype = q.dtype
+    q = q.float()
+    k = k.float()
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed.to(dtype=dtype), k_embed.to(dtype=dtype)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -233,42 +286,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def rotate_half(x):
-    # Split and rotate. Note that this function is different from e.g. Llama.
-    x1 = x[..., ::2]
-    x2 = x[..., 1::2]
-    rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
-    return rot_x
-
-
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    dtype = q.dtype
-    q = q.float()
-    k = k.float()
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed.to(dtype=dtype), k_embed.to(dtype=dtype)
-
-
 class Cohere2MoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -281,7 +298,6 @@ class Cohere2MoeAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -295,6 +311,7 @@ class Cohere2MoeAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
         self.force_rope = (
             config.mlp_layer_types[layer_idx] == "dense" and config.prefix_dense_sliding_window_pattern == 1
         )

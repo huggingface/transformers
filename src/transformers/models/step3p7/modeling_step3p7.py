@@ -35,13 +35,19 @@ from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    ModelOutput,
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check, torch_int
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+    torch_int,
+)
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
@@ -69,9 +75,7 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_axial_rope_parameters(
-        config: Step3p7VisionConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: Step3p7VisionConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -87,11 +91,11 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        # position_ids: (N, 2) — column 0 = h coords, column 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
         sin = freqs.sin() * self.attention_scaling
@@ -104,8 +108,8 @@ class Step3p7VisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_hw = freq.flatten(1)
-        return torch.cat((freq_hw, freq_hw), dim=-1)
+        freq = freq.flatten(1)
+        return torch.cat([freq, freq], dim=-1)
 
 
 class Step3p7VisionMLP(nn.Module):
@@ -113,13 +117,13 @@ class Step3p7VisionMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -189,17 +193,16 @@ class Step3p7VisionAttention(nn.Module):
     def __init__(self, config: Step3p7VisionConfig):
         super().__init__()
         self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        self.scale = self.head_dim**-0.5
-        self.dropout = config.attention_dropout
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.attention_dropout = config.attention_dropout
+        self.scaling = self.head_dim**-0.5
         self.is_causal = False
 
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
         # The vision tower has no grouped-query attention; the shared eager kernel
         # still expects this attribute to drive its (no-op) `repeat_kv`.
         self.num_key_value_groups = 1
@@ -211,7 +214,6 @@ class Step3p7VisionAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Input shape: Batch x Time x Channel"""
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -232,12 +234,12 @@ class Step3p7VisionAttention(nn.Module):
             keys,
             values,
             attention_mask,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.attention_dropout,
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return self.out_proj(attn_output), attn_weights
+        return self.o_proj(attn_output), attn_weights
 
 
 class Step3p7VisionEncoderLayer(GradientCheckpointingLayer):
@@ -434,7 +436,7 @@ class Step3p7VisionModel(Step3p7PreTrainedModel):
 
 
 class Step3p7RotaryEmbedding(nn.Module):
-    def __init__(self, config: Step3p7Config, device=None):
+    def __init__(self, config: Step3p7Config):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -450,14 +452,14 @@ class Step3p7RotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
             setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Step3p7Config, device=None, layer_type: str | None = None, **kwargs
+        config: Step3p7Config, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -481,7 +483,7 @@ class Step3p7RotaryEmbedding(nn.Module):
 
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -498,25 +500,21 @@ class Step3p7RotaryEmbedding(nn.Module):
 
 
 class Step3p7RMSNorm(nn.Module):
-    """Gemma-style RMSNorm: normalizes in fp32 and scales by `weight + 1`."""
-
-    def __init__(self, dim: int, eps: float = 1e-6):
+    def __init__(self, hidden_size, eps: float = 1e-6) -> None:
         super().__init__()
-        self.eps = eps
-        self.weight = nn.Parameter(torch.zeros(dim))
+        self.weight = nn.Parameter(torch.zeros(hidden_size))  # diff with Llama: zeros, scale is `1 + weight`
+        self.variance_epsilon = eps
 
-    def _norm(self, x):
-        return x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + self.eps)
-
-    def forward(self, x):
-        output = self._norm(x.float())
-        # Llama does x.to(float16) * w whilst Step3p7 is (x * w).to(float16)
-        # See https://github.com/huggingface/transformers/pull/29402
-        output = output * (1.0 + self.weight.float())
-        return output.type_as(x)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        # diff with Llama: `(1 + weight)` in fp32, cast after the multiply (Llama casts before), see PR #29402
+        return (hidden_states * (1.0 + self.weight.float())).to(input_dtype)
 
     def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class Step3p7MLP(nn.Module):
@@ -554,32 +552,42 @@ class Step3p7Experts(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
         self.limit = float("inf") if swiglu_limit is None else swiglu_limit
 
-    def forward(
-        self, hidden_states: torch.Tensor, top_k_index: torch.Tensor, top_k_weights: torch.Tensor
-    ) -> torch.Tensor:
-        final = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            mask = F.one_hot(top_k_index, num_classes=self.num_experts + 1).permute(2, 1, 0)
-            hit = torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(mask[expert_idx])
-            current = self._apply_gate(F.linear(hidden_states[token_idx], self.gate_up_proj[expert_idx]))
-            current = F.linear(current, self.down_proj[expert_idx]) * top_k_weights[token_idx, top_k_pos, None]
-            final.index_add_(0, token_idx, current.to(final.dtype))
-        return final
-
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         gate, up = gate_up.chunk(2, dim=-1)
         gate = self.act_fn(gate).clamp(max=self.limit)
         up = up.clamp(min=-self.limit, max=self.limit)
         return gate * up
 
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        top_k_index: torch.Tensor,
+        top_k_weights: torch.Tensor,
+    ) -> torch.Tensor:
+        final_hidden_states = torch.zeros_like(hidden_states)
+        with torch.no_grad():
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts + 1)
+            expert_mask = expert_mask.permute(2, 1, 0)
+            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+
+        for expert_idx in expert_hit:
+            expert_idx = expert_idx[0]
+            if expert_idx == self.num_experts:
+                continue
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
+            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
+            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+
+        return final_hidden_states
+
 
 class Step3p7TopKRouter(nn.Module):
-    def __init__(self, config: Step3p7TextConfig):
+    def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
@@ -589,12 +597,12 @@ class Step3p7TopKRouter(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)
-        # Sigmoid scoring (not softmax), as in M2.
-        routing_weights = F.sigmoid(router_logits.float())
-        scores_for_choice = routing_weights + self.e_score_correction_bias
+        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)  # (seq_len, num_experts)
+        # Main difference to other Moe, using Sigmoid activation instead of Softmax
+        router_probs = F.sigmoid(router_logits.float())
+        scores_for_choice = router_probs + self.e_score_correction_bias
         _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
-        top_k_weights = routing_weights.gather(1, top_k_index)
+        top_k_weights = router_probs.gather(1, top_k_index)
         top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
         return router_logits, top_k_weights, top_k_index
 
@@ -615,8 +623,8 @@ class Step3p7SparseMoeBlock(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_dim)
         shared_output = self.shared_experts(hidden_states)
 
-        _, routing_weights, selected_experts = self.gate(hidden_states)
-        hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         # Additional scaling
         hidden_states = hidden_states * self.routed_scaling_factor
         hidden_states = hidden_states + shared_output

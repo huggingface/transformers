@@ -169,15 +169,11 @@ class GotOcr2VisionAttention(SamVisionAttention):
 class GotOcr2VisionLayer(SamVisionLayer):
     def __init__(self, config, window_size):
         super().__init__(config, window_size)
-        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = GotOcr2VisionAttention(config, window_size)
-        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = GotOcr2MLPBlock(config)
-        self.window_size = window_size
 
 
 class GotOcr2PreTrainedModel(SamPreTrainedModel):
-    input_modalities = ("image", "text")
+    pass
 
 
 class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):

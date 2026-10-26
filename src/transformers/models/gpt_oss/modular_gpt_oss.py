@@ -35,9 +35,10 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..llama.modeling_llama import (
+    LlamaAttention,
     LlamaDecoderLayer,
     LlamaPreTrainedModel,
-    LlamaRMSNorm,
+    LlamaRotaryEmbedding,
     repeat_kv,
 )
 from ..mixtral.modeling_mixtral import (
@@ -45,21 +46,17 @@ from ..mixtral.modeling_mixtral import (
     MixtralForSequenceClassification,
     MixtralForTokenClassification,
     MixtralModel,
+    MixtralTopKRouter,
 )
-from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2RotaryEmbedding
+from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
 from .configuration_gpt_oss import GptOssConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class GptOssRMSNorm(LlamaRMSNorm):
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
+class GptOssRMSNorm(Olmo2RMSNorm):
+    pass
 
 
 @use_experts_implementation(is_concatenated=False, is_transposed=True, has_bias=True)
@@ -111,20 +108,16 @@ class GptOssExperts(nn.Module):
         return next_states
 
 
-class GptOssTopKRouter(nn.Module):
+class GptOssTopKRouter(MixtralTopKRouter):
     def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_local_experts
-        self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        super().__init__(config)
         self.bias = nn.Parameter(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
         router_logits = F.linear(hidden_states, self.weight, self.bias)  # (num_tokens, num_experts)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
-        router_scores = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
-        return router_logits, router_scores, router_indices
+        top_k_logits, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
+        top_k_weights = torch.nn.functional.softmax(top_k_logits, dim=1, dtype=top_k_logits.dtype)
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_kernel_forward_from_hub("MegaBlocksMoeMLP")
@@ -137,13 +130,13 @@ class GptOssMLP(nn.Module):
     def forward(self, hidden_states):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_dim)
-        _, router_scores, router_indices = self.router(hidden_states)
-        hidden_states = self.experts(hidden_states, router_indices, router_scores)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return hidden_states, router_scores
+        return hidden_states, top_k_weights
 
 
-class GptOssRotaryEmbedding(Qwen2RotaryEmbedding):
+class GptOssRotaryEmbedding(LlamaRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
@@ -152,7 +145,7 @@ class GptOssRotaryEmbedding(Qwen2RotaryEmbedding):
         cos = emb.cos() * self.attention_scaling
         sin = emb.sin() * self.attention_scaling
 
-        return cos.to(x.dtype), sin.to(x.dtype)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def _apply_rotary_emb(
@@ -206,21 +199,11 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class GptOssAttention(Qwen2Attention):
+class GptOssAttention(LlamaAttention):
     def __init__(self, config: GptOssConfig, layer_idx: int):
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         super().__init__(config, layer_idx)
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
         self.sinks = nn.Parameter(torch.empty(config.num_attention_heads))
 
     def forward(
@@ -267,14 +250,6 @@ class GptOssAttention(Qwen2Attention):
 
 
 class GptOssDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: GptOssConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.hidden_size = config.hidden_size
-        self.self_attn = GptOssAttention(config=config, layer_idx=layer_idx)
-        self.mlp = GptOssMLP(config)
-        self.input_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
     def forward(
         self,
         hidden_states: torch.Tensor,

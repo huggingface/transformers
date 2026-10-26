@@ -41,11 +41,12 @@ from ...vision_utils import (
     get_vision_window_index,
 )
 from ..auto import AutoConfig, AutoModel
+from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..idefics3.modeling_idefics3 import Idefics3VisionEmbeddings
 from ..lfm2_vl.modeling_lfm2_vl import Lfm2VlModel
 from ..qwen2_vl.modeling_qwen2_vl import VisionAttention, eager_attention_forward
 from ..siglip.configuration_siglip import SiglipVisionConfig
-from ..siglip.modeling_siglip import SiglipEncoder, SiglipEncoderLayer, SiglipMLP
+from ..siglip.modeling_siglip import SiglipEncoder
 
 
 @auto_docstring(checkpoint="openbmb/MiniCPM-V-4.6")
@@ -134,7 +135,7 @@ class MiniCPMV4_6VisionEmbeddings(Idefics3VisionEmbeddings):
         return embeddings
 
 
-class MiniCPMV4_6VisionMLP(SiglipMLP):
+class MiniCPMV4_6VisionMLP(CLIPMLP):
     pass
 
 
@@ -225,7 +226,7 @@ class MiniCPMV4_6VisionAttention(VisionAttention):
         return attn_output, None
 
 
-class MiniCPMV4_6VisionEncoderLayer(SiglipEncoderLayer):
+class MiniCPMV4_6VisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: MiniCPMV4_6VisionConfig):
         super().__init__(config)
         self.self_attn = MiniCPMV4_6VisionAttention(config)
@@ -435,23 +436,20 @@ class MiniCPMV4_6VisionModel(MiniCPMV4_6VisionPreTrainedModel):
         return BaseModelOutputWithPooling(last_hidden_state=last_hidden_state)
 
 
-class MiniCPMV4_6DownsampleMLP(nn.Module):
+class MiniCPMV4_6DownsampleMLP(CLIPMLP):
     def __init__(self, hidden_size: int, llm_embed_dim: int):
-        super().__init__()
+        nn.Module.__init__(self)
         # factor 4 = two successive 2×2 spatial merges (ViT insert merger + downsample MLP)
         merged_hidden_size = hidden_size * 4
 
         self.pre_norm = nn.LayerNorm(merged_hidden_size, eps=1e-6)
-        self.linear_1 = nn.Linear(merged_hidden_size, merged_hidden_size, bias=True)
-        self.act = nn.GELU()
-        self.linear_2 = nn.Linear(merged_hidden_size, llm_embed_dim, bias=True)
+        self.up_proj = nn.Linear(merged_hidden_size, merged_hidden_size, bias=True)
+        self.activation_fn = nn.GELU()
+        self.down_proj = nn.Linear(merged_hidden_size, llm_embed_dim, bias=True)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.pre_norm(hidden_states).view(-1, self.linear_1.in_features)
-        hidden_states = self.linear_1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
+        hidden_states = self.pre_norm(hidden_states).view(-1, self.up_proj.in_features)
+        return super().forward(hidden_states)
 
 
 class MiniCPMV4_6Merger(nn.Module):

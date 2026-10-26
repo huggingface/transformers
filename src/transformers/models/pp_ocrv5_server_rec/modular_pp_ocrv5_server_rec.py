@@ -259,8 +259,8 @@ class PPOCRV5ServerRecBlock(CLIPEncoderLayer):
         super().__init__()
         self.mlp = PPOCRV5ServerRecMLP(
             config=config,
-            in_features=self.embed_dim,
-            hidden_features=int(self.embed_dim * config.mlp_ratio),
+            in_features=self.hidden_size,
+            hidden_features=int(self.hidden_size * config.mlp_ratio),
         )
 
     def forward(

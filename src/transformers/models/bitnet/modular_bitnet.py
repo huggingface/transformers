@@ -22,7 +22,6 @@ from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
-from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -32,6 +31,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from .configuration_bitnet import BitNetConfig
 
 
@@ -42,7 +42,7 @@ class BitNetRMSNorm(LlamaRMSNorm):
     pass
 
 
-class BitNetMLP(GemmaMLP):
+class BitNetMLP(MistralMLP):
     def __init__(self, config: BitNetConfig):
         super().__init__(config)
         self.ffn_sub_norm = BitNetRMSNorm(config.intermediate_size, eps=config.rms_norm_eps)

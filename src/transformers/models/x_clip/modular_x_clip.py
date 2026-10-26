@@ -28,7 +28,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import can_return_tuple
 from ...utils.output_capturing import OutputRecorder
-from ..altclip.modeling_altclip import AltCLIPEncoder, AltCLIPEncoderLayer
+from ..altclip.modeling_altclip import AltCLIPEncoder
 from ..beit.modeling_beit import BeitDropPath
 from ..clip.modeling_clip import (
     CLIPMLP,
@@ -106,7 +106,7 @@ class XCLIPMLP(CLIPMLP):
         super().__init__(config)
 
 
-class XCLIPEncoderLayer(AltCLIPEncoderLayer):
+class XCLIPEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: XCLIPVisionConfig):
         super().__init__()
         self.self_attn = XCLIPAttention(config)
@@ -127,8 +127,8 @@ class XCLIPVisionEncoderLayer(CLIPEncoderLayer):
         self.self_attn = XCLIPAttention(config)
         self.mlp = XCLIPMLP(config)
         self.num_frames = config.num_frames
-        self.message_fc = nn.Linear(self.embed_dim, self.embed_dim)
-        self.message_ln = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.message_fc = nn.Linear(self.hidden_size, self.hidden_size)
+        self.message_ln = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.message_attn = XCLIPAttention(config)
         self.drop_path = XCLIPDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
@@ -151,7 +151,7 @@ class XCLIPVisionEncoderLayer(CLIPEncoderLayer):
 
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -162,7 +162,7 @@ class XCLIPVisionEncoderLayer(CLIPEncoderLayer):
         hidden_states = hidden_states[:, :seq_length, :]
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
@@ -200,17 +200,17 @@ class XCLIPPreTrainedModel(CLIPPreTrainedModel):
             init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
             init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, XCLIPAttention):
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
+            in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.config.hidden_size**-0.5) * factor
             init.normal_(module.q_proj.weight, std=in_proj_std)
             init.normal_(module.k_proj.weight, std=in_proj_std)
             init.normal_(module.v_proj.weight, std=in_proj_std)
-            init.normal_(module.out_proj.weight, std=out_proj_std)
+            init.normal_(module.o_proj.weight, std=out_proj_std)
         elif isinstance(module, XCLIPMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            init.normal_(module.fc1.weight, std=fc_std)
-            init.normal_(module.fc2.weight, std=in_proj_std)
+            init.normal_(module.up_proj.weight, std=fc_std)
+            init.normal_(module.down_proj.weight, std=in_proj_std)
         elif isinstance(module, XCLIPModel):
             init.normal_(
                 module.text_projection.weight,
@@ -413,16 +413,18 @@ class XCLIPMultiframeIntegrationTransformer(nn.Module):
         )
 
 
-class XCLIPCrossAttention(CLIPAttention):
+class XCLIPCrossAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
         super().__init__()
-        del self.dropout
-        del self.out_proj
+        self.config = config
+        self.embed_dim = config.projection_dim
 
         self.num_heads = config.prompt_num_attention_heads
-        self.embed_dim = config.projection_dim
+        self.head_dim = self.embed_dim // self.num_heads
+        self.scale = self.head_dim**-0.5
+        self.is_causal = False
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, False)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, False)

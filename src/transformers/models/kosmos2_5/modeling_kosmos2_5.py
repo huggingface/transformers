@@ -725,7 +725,7 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
         return incremental_indices.long() + padding_idx
 
 
-# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextFFN with Kosmos2->Kosmos2_5
+# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextFFN with Kosmos2->Kosmos2_5,fc1->up_proj,fc2->down_proj
 class Kosmos2_5TextFFN(nn.Module):
     def __init__(self, config: Kosmos2_5TextConfig):
         super().__init__()
@@ -734,16 +734,16 @@ class Kosmos2_5TextFFN(nn.Module):
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.fc1 = nn.Linear(config.embed_dim, config.ffn_dim)
-        self.fc2 = nn.Linear(config.ffn_dim, config.embed_dim)
+        self.up_proj = nn.Linear(config.embed_dim, config.ffn_dim)
+        self.down_proj = nn.Linear(config.ffn_dim, config.embed_dim)
 
         self.ffn_layernorm = nn.LayerNorm(config.ffn_dim, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states):
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = self.activation_fn(self.up_proj(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.ffn_layernorm(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         return hidden_states

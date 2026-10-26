@@ -59,6 +59,7 @@ class LagunaConfig(PreTrainedConfig):
     """
 
     model_type = "laguna"
+    attribute_map = {"num_local_experts": "num_experts"}
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",

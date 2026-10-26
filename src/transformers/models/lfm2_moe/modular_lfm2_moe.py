@@ -17,6 +17,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_outputs import MoeModelOutputWithPast
@@ -28,13 +29,11 @@ from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..lfm2.modeling_lfm2 import (
     Lfm2Attention,
     Lfm2DecoderLayer,
-    Lfm2MLP,
-    Lfm2RotaryEmbedding,
     Lfm2ShortConv,
 )
-from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm
+from ..llama.modeling_llama import LlamaPreTrainedModel, LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralModel
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeTopKRouter
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP, Qwen2MoeTopKRouter
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from .configuration_lfm2_moe import Lfm2MoeConfig
 
@@ -46,18 +45,14 @@ class Lfm2MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Lfm2MoeRotaryEmbedding(Lfm2RotaryEmbedding):
+class Lfm2MoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class Lfm2MoeMLP(Lfm2MLP):
+class Lfm2MoeMLP(Qwen2MoeMLP):
     def __init__(self, config: Lfm2MoeConfig, intermediate_size: int | None = None):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-        self.w1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.w3 = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.w2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        super().__init__(config, intermediate_size)
+        self.act_fn = ACT2FN["silu"]
 
 
 class Lfm2MoeExperts(Qwen2MoeExperts):
@@ -71,37 +66,27 @@ class Lfm2MoeTopKRouter(Qwen2MoeTopKRouter):
         super().__init__(config)
         self.routed_scaling_factor = config.routed_scaling_factor
         self.use_expert_bias = config.use_expert_bias
-
-    def forward(self, hidden_states, expert_bias=None):
-        router_logits = F.linear(hidden_states, self.weight)
-        routing_weights = router_logits.sigmoid()
         if self.use_expert_bias:
-            scores_for_routing = routing_weights + expert_bias
-            _, selected_experts = torch.topk(scores_for_routing, k=self.top_k, dim=-1)
-            routing_weights = torch.gather(routing_weights, dim=1, index=selected_experts).type_as(router_logits)
+            self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_experts, dtype=torch.float32))
+
+    def forward(self, hidden_states):
+        router_logits = F.linear(hidden_states, self.weight)
+        router_probs = router_logits.sigmoid()
+        if self.use_expert_bias:
+            scores_for_choice = router_probs + self.e_score_correction_bias
+            _, top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1)
+            top_k_weights = torch.gather(router_probs, dim=1, index=top_k_index).type_as(router_logits)
         else:
-            routing_weights, selected_experts = torch.topk(routing_weights, k=self.top_k, dim=-1)
+            top_k_weights, top_k_index = torch.topk(router_probs, k=self.top_k, dim=-1)
 
         if self.norm_topk_prob:
-            routing_weights = routing_weights / (routing_weights.sum(dim=-1, keepdim=True) + 1e-6)
-        routing_weights = routing_weights * self.routed_scaling_factor
-        return router_logits, routing_weights, selected_experts
+            top_k_weights = top_k_weights / (top_k_weights.sum(dim=-1, keepdim=True) + 1e-6)
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
 class Lfm2MoeSparseMoeBlock(Qwen3MoeSparseMoeBlock):
-    def __init__(self, config):
-        super().__init__(config)
-        self.use_expert_bias = config.use_expert_bias
-        if self.use_expert_bias:
-            self.expert_bias = nn.Buffer(torch.zeros(config.num_experts, dtype=torch.float32))
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        expert_bias = self.expert_bias if self.use_expert_bias else None
-        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped, expert_bias)
-        final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
-        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+    pass
 
 
 class Lfm2MoeAttention(Lfm2Attention):
@@ -137,9 +122,8 @@ class Lfm2MoePreTrainedModel(LlamaPreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, Lfm2MoeTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Lfm2MoeSparseMoeBlock):
             if module.use_expert_bias:
-                init.zeros_(module.expert_bias)
+                init.zeros_(module.e_score_correction_bias)
 
 
 class Lfm2MoeModel(MixtralModel):

@@ -44,7 +44,7 @@ from .configuration_zaya import ZayaConfig
 
 
 class ZayaRotaryEmbedding(nn.Module):
-    def __init__(self, config: ZayaConfig, device=None):
+    def __init__(self, config: ZayaConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -60,14 +60,14 @@ class ZayaRotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
             setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: ZayaConfig, device=None, layer_type: str | None = None, **kwargs
+        config: ZayaConfig, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -91,7 +91,7 @@ class ZayaRotaryEmbedding(nn.Module):
 
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -285,31 +285,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 # Adapted from transformers.models.glm.modular_glm.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
@@ -349,6 +324,31 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class ZayaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -358,23 +358,22 @@ class ZayaAttention(nn.Module):
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.num_key_value_heads = config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.qkv_proj = ZayaCCAProjection(
-            config=self.config,
-            layer_idx=layer_idx,
-        )
+        self.num_key_value_heads = config.num_key_value_heads
         self.layer_type = config.layer_types[layer_idx]
         self.sliding_window = config.sliding_window if self.layer_type == "hybrid_sliding" else None
         self.hidden_size = config.hidden_size
         self.num_attention_heads = config.num_attention_heads
         self.qk_norm = ZayaQKNorm(config)
+        self.qkv_proj = ZayaCCAProjection(
+            config=self.config,
+            layer_idx=layer_idx,
+        )
 
     def forward(
         self,
@@ -572,12 +571,16 @@ class ZayaExperts(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.num_experts = config.num_experts
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -597,8 +600,9 @@ class ZayaExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))

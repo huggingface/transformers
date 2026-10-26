@@ -11,7 +11,6 @@ from ...backbone_utils import filter_output_hidden_states
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...masking_utils import create_bidirectional_mask
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
@@ -26,7 +25,13 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2FeedForward, Wav2Vec2ForSequenceClassification, Wav2Vec2Model
+from ..seamless_m4t.modeling_seamless_m4t import SeamlessM4TConformerEncoderLayer
+from ..wav2vec2.modeling_wav2vec2 import (
+    Wav2Vec2FeatureProjection,
+    Wav2Vec2FeedForward,
+    Wav2Vec2ForSequenceClassification,
+    Wav2Vec2Model,
+)
 from ..wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerForAudioFrameClassification,
     Wav2Vec2ConformerForCTC,
@@ -89,19 +94,12 @@ class Wav2Vec2BertRelPositionalEmbedding(Wav2Vec2ConformerRelPositionalEmbedding
     pass
 
 
-class Wav2Vec2BertFeatureProjection(nn.Module):
+class Wav2Vec2BertFeatureProjection(Wav2Vec2FeatureProjection):
     def __init__(self, config):
         super().__init__()
         self.layer_norm = nn.LayerNorm(config.feature_projection_input_dim, eps=config.layer_norm_eps)
         self.projection = nn.Linear(config.feature_projection_input_dim, config.hidden_size)
         self.dropout = nn.Dropout(config.feat_proj_dropout)
-
-    def forward(self, hidden_states):
-        # non-projected hidden states are needed for quantization
-        norm_hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.projection(norm_hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states, norm_hidden_states
 
 
 class Wav2Vec2BertFeedForward(Wav2Vec2FeedForward):
@@ -301,7 +299,7 @@ class Wav2Vec2BertSelfAttention(Wav2Vec2ConformerSelfAttention, nn.Module):
         return attn_output, attn_weights
 
 
-class Wav2Vec2BertEncoderLayer(GradientCheckpointingLayer):
+class Wav2Vec2BertEncoderLayer(SeamlessM4TConformerEncoderLayer):
     """Conformer block based on https://huggingface.co/papers/2005.08100."""
 
     def __init__(self, config):
@@ -325,46 +323,6 @@ class Wav2Vec2BertEncoderLayer(GradientCheckpointingLayer):
         self.ffn2_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
         self.ffn2 = Wav2Vec2BertFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask: torch.Tensor | None = None,
-        relative_position_embeddings: torch.Tensor | None = None,
-        conv_attention_mask: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        # 1. Feed-Forward 1 layer
-        residual = hidden_states
-        hidden_states = self.ffn1_layer_norm(hidden_states)
-        hidden_states = self.ffn1(hidden_states)
-        hidden_states = hidden_states * 0.5 + residual
-        residual = hidden_states
-
-        # 2. Self-Attention layer
-        hidden_states = self.self_attn_layer_norm(hidden_states)
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            relative_position_embeddings=relative_position_embeddings,
-            **kwargs,
-        )
-        hidden_states = self.self_attn_dropout(hidden_states)
-        hidden_states = hidden_states + residual
-
-        # 3. Convolutional Layer
-        residual = hidden_states
-        hidden_states = self.conv_module(hidden_states, attention_mask=conv_attention_mask)
-        hidden_states = residual + hidden_states
-
-        # 4. Feed-Forward 2 Layer
-        residual = hidden_states
-        hidden_states = self.ffn2_layer_norm(hidden_states)
-        hidden_states = self.ffn2(hidden_states)
-        hidden_states = hidden_states * 0.5 + residual
-        hidden_states = self.final_layer_norm(hidden_states)
-
-        return hidden_states
 
 
 class Wav2Vec2BertEncoder(nn.Module):

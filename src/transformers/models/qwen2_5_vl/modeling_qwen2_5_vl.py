@@ -78,17 +78,19 @@ class Qwen2_5_VLRMSNorm(nn.Module):
 
 
 class Qwen2_5_VLMLP(nn.Module):
-    def __init__(self, config, bias: bool = False):
+    def __init__(self, config):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class Qwen2_5_VisionPatchEmbed(nn.Module):
@@ -138,9 +140,7 @@ class Qwen2_5_VLVisionRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_axial_rope_parameters(
-        config: Qwen2_5_VLVisionConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: Qwen2_5_VLVisionConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -156,11 +156,11 @@ class Qwen2_5_VLVisionRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        # position_ids: (N, 2) — column 0 = h coords, column 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
         sin = freqs.sin() * self.attention_scaling
@@ -173,9 +173,8 @@ class Qwen2_5_VLVisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        freq = freq.flatten(1)
+        return torch.cat([freq, freq], dim=-1)
 
 
 class Qwen2_5_VLPatchMerger(nn.Module):
@@ -341,9 +340,8 @@ class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
         self.norm1 = Qwen2_5_VLRMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen2_5_VLRMSNorm(config.hidden_size, eps=1e-6)
         self.attn = Qwen2_5_VLVisionAttention(config=config)
-        self.mlp = Qwen2_5_VLMLP(config, bias=True)
+        self.mlp = Qwen2_5_VLMLP(config)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -351,10 +349,6 @@ class Qwen2_5_VLVisionBlock(GradientCheckpointingLayer):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,

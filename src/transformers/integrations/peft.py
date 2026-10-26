@@ -14,6 +14,7 @@
 import inspect
 import json
 import os
+import re
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
@@ -21,7 +22,7 @@ from transformers.utils.import_utils import is_peft_greater_or_equal
 
 from .._typing import PeftConfigLike
 from ..conversion_mapping import get_model_conversion_mapping
-from ..core_model_loading import WeightRenaming
+from ..core_model_loading import PrefixChange, SwapHalves, WeightConverter, WeightRenaming, rename_source_key
 from ..utils import (
     CONFIG_NAME,
     check_peft_version,
@@ -237,7 +238,9 @@ class PeftAdapterMixin:
 
         # The PEFT config conversion for v5 architecture changes (e.g. Mixtral MoE) is applied in-place by
         # inject_adapter_in_model below, so it does not need to be done explicitly here.
+        remap_adapter_target_modules(self, peft_config, weight_conversions)
         peft_weight_conversions = build_peft_weight_mapping(weight_conversions, adapter_name, peft_config=peft_config)
+        peft_weight_conversions += swap_halves_adapter_conversions(weight_conversions, adapter_name)
 
         if not hotswap:
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
@@ -657,6 +660,51 @@ class PeftAdapterMixin:
         if len(self.peft_config) == 0:
             del self.peft_config
             self._hf_peft_config_loaded = False
+
+
+def remap_adapter_target_modules(model, peft_config, weight_conversions) -> None:
+    """Also target the modules whose checkpoint name (e.g. `fc1` for `up_proj`) is in the adapter's `target_modules`."""
+    targets = getattr(peft_config, "target_modules", None)
+    if not targets or not weight_conversions:
+        return
+
+    # PEFT matches a regex string fully, and a list of names as module name suffixes
+    pattern = targets if isinstance(targets, str) else rf"(?:.*\.)?(?:{'|'.join(map(re.escape, targets))})"
+    # The checkpoint name of a module is found with the reversed conversions, as in `save_pretrained`
+    reverse = [c.reverse_transform() for c in weight_conversions[::-1] if not isinstance(c, PrefixChange)]
+    renamings = [c for c in reverse if isinstance(c, WeightRenaming)]
+    converters = [c for c in reverse if isinstance(c, WeightConverter)]
+
+    renamed = []
+    for name, module in model.named_modules():
+        if not hasattr(module, "weight") or re.fullmatch(pattern, name):
+            continue
+        checkpoint_key, _ = rename_source_key(f"{name}.weight", renamings, converters, reverse=True)
+        if re.fullmatch(pattern, checkpoint_key.removesuffix(".weight")):
+            renamed.append(name)
+
+    if renamed and isinstance(targets, str):
+        peft_config.target_modules = f"(?:{targets})|" + "|".join(map(re.escape, renamed))
+    elif renamed:
+        peft_config.target_modules = set(targets) | set(renamed)
+
+
+def swap_halves_adapter_conversions(weight_conversions, adapter_name: str) -> list:
+    """LoRA version of the `SwapHalves` weight converters: `lora_A` is renamed, the halves of `lora_B` are swapped."""
+    conversions = []
+    for conversion in weight_conversions:
+        ops = getattr(conversion, "operations", [])
+        source, target = conversion._original_source_patterns[0], conversion._original_target_patterns[0]
+        if len(ops) != 1 or not isinstance(ops[0], SwapHalves) or ops[0].dim != 0 or not source.endswith(r"\.weight"):
+            continue
+        source, target = source.removesuffix("weight"), target.removesuffix("weight")
+        lora_a = WeightRenaming(rf"{source}lora_A\.", f"{target}lora_A.")
+        lora_b = WeightConverter(
+            rf"{source}lora_B\.{adapter_name}\.weight", f"{target}lora_B.{adapter_name}.weight", [SwapHalves(dim=0)]
+        )
+        lora_a.scope_prefix = lora_b.scope_prefix = conversion.scope_prefix
+        conversions += [lora_a, lora_b]
+    return conversions
 
 
 def maybe_load_adapters(

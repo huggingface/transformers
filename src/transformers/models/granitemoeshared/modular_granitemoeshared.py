@@ -17,7 +17,6 @@ from typing import TypedDict
 import torch
 from torch import nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...processing_utils import Unpack
 from ...utils import logging
@@ -27,6 +26,7 @@ from ..granitemoe.modeling_granitemoe import (
     GraniteMoeModel,
     GraniteMoePreTrainedModel,
 )
+from ..phi3.modeling_phi3 import Phi3MLP
 from .configuration_granitemoeshared import GraniteMoeSharedConfig
 
 
@@ -57,7 +57,7 @@ class GraniteFlashAttentionKwargs(TypedDict, total=False):
     seq_idx: torch.IntTensor
 
 
-class GraniteMoeSharedMLP(nn.Module):
+class GraniteMoeSharedMLP(Phi3MLP):
     """
     MLP layer for shared experts
 
@@ -66,21 +66,10 @@ class GraniteMoeSharedMLP(nn.Module):
             Configuration object with model hyperparameters.
     """
 
-    def __init__(self, config: GraniteMoeSharedConfig):
-        super().__init__()
-
-        self.input_size = config.hidden_size
-        self.hidden_size = config.shared_intermediate_size
-        self.activation = ACT2FN[config.hidden_act]
-        self.input_linear = nn.Linear(self.input_size, self.hidden_size * 2, bias=False)
-        self.output_linear = nn.Linear(self.hidden_size, self.input_size, bias=False)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.input_linear(hidden_states)
-        chunked_hidden_states = hidden_states.chunk(2, dim=-1)
-        hidden_states = self.activation(chunked_hidden_states[0]) * chunked_hidden_states[1]
-        hidden_states = self.output_linear(hidden_states)
-        return hidden_states
+    def __init__(self, config):
+        super().__init__(config)
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.shared_intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.shared_intermediate_size, config.hidden_size, bias=False)
 
 
 class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
@@ -118,7 +107,7 @@ class GraniteMoeSharedDecoderLayer(GraniteMoeDecoderLayer):
 
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        moe_hidden_states = self.block_sparse_moe(hidden_states)
+        moe_hidden_states = self.mlp(hidden_states)
 
         if self.shared_mlp is None:
             hidden_states = moe_hidden_states

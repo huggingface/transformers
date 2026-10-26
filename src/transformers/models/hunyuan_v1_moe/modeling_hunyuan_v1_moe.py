@@ -63,7 +63,7 @@ class HunYuanMoEV1RMSNorm(nn.Module):
 
 
 class HunYuanMoEV1MLP(nn.Module):
-    def __init__(self, config: HunYuanMoEV1Config):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -220,7 +220,7 @@ class HunYuanMoEV1Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class HunYuanMoEV1Gate(nn.Module):
+class HunYuanMoEV1TopKRouter(nn.Module):
     def __init__(self, config: HunYuanMoEV1Config, layer_idx: int | None = None):
         super().__init__()
         self.config = config
@@ -234,10 +234,10 @@ class HunYuanMoEV1Gate(nn.Module):
         if self.wg.weight.dtype == torch.float32:
             hidden_states = hidden_states.float()
         router_logits = self.wg(hidden_states)
-        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        return router_logits, routing_weights.to(router_logits.dtype), selected_experts
+        router_probs = F.softmax(router_logits, dim=1, dtype=torch.float)
+        top_k_weights, top_k_index = torch.topk(router_probs, self.top_k, dim=-1)
+        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        return router_logits, top_k_weights.to(router_logits.dtype), top_k_index
 
 
 @use_experts_implementation
@@ -252,6 +252,10 @@ class HunYuanMoEV1Experts(nn.Module):
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -271,8 +275,9 @@ class HunYuanMoEV1Experts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -280,23 +285,22 @@ class HunYuanMoEV1Experts(nn.Module):
         return final_hidden_states
 
 
-class HunYuanMoEV1Moe(nn.Module):
+class HunYuanMoEV1SparseMoeBlock(nn.Module):
     def __init__(self, config: HunYuanMoEV1Config, layer_idx: int | None = None):
         super().__init__()
         self.config = config
-        self.gate = HunYuanMoEV1Gate(config, layer_idx=layer_idx)
         self.experts = HunYuanMoEV1Experts(config)
-        self.shared_mlp = HunYuanMoEV1MLP(config)
+        self.gate = HunYuanMoEV1TopKRouter(config, layer_idx=layer_idx)
+        self.shared_experts = HunYuanMoEV1MLP(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states_mlp = self.shared_mlp(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        _, routing_weights, selected_experts = self.gate(hidden_states)
-        final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights).reshape(
-            batch_size, sequence_length, hidden_dim
-        )
-        return final_hidden_states + hidden_states_mlp
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        hidden_states = hidden_states + self.shared_experts(residuals)
+        return hidden_states
 
 
 class HunYuanMoEV1DecoderLayer(GradientCheckpointingLayer):
@@ -304,7 +308,7 @@ class HunYuanMoEV1DecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = HunYuanMoEV1Attention(config=config, layer_idx=layer_idx)
-        self.mlp = HunYuanMoEV1Moe(config, layer_idx=layer_idx)
+        self.mlp = HunYuanMoEV1SparseMoeBlock(config, layer_idx=layer_idx)
         self.input_layernorm = HunYuanMoEV1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = HunYuanMoEV1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_idx = layer_idx
@@ -357,7 +361,7 @@ class HunYuanMoEV1PreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": HunYuanMoEV1DecoderLayer,
         "attentions": HunYuanMoEV1Attention,
-        "router_logits": OutputRecorder(HunYuanMoEV1Gate, index=0),
+        "router_logits": OutputRecorder(HunYuanMoEV1TopKRouter, index=0),
     }
 
     @torch.no_grad()

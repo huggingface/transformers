@@ -29,7 +29,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..gpt_oss.modeling_gpt_oss import GptOssRMSNorm
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
@@ -37,6 +36,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..olmo2.modeling_olmo2 import Olmo2RMSNorm
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 from .configuration_afmoe import AfmoeConfig
 
@@ -48,7 +48,7 @@ class AfmoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class AfmoeRMSNorm(GptOssRMSNorm):
+class AfmoeRMSNorm(Olmo2RMSNorm):
     pass
 
 
@@ -56,7 +56,7 @@ class AfmoeMLP(Qwen2MoeMLP):
     pass
 
 
-class AfmoeTokenChoiceRouter(nn.Module):
+class AfmoeTopKRouter(nn.Module):
     """
     Token-choice top-K router for MoE routing.
 
@@ -76,14 +76,14 @@ class AfmoeTokenChoiceRouter(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_dim)
 
         router_logits = self.gate(hidden_states).to(torch.float32)
-        scores = torch.sigmoid(router_logits)
+        router_probs = torch.sigmoid(router_logits)
 
-        _, selected_experts = torch.topk(scores + expert_bias, k=self.top_k, dim=1)
-        top_scores = scores.gather(dim=1, index=selected_experts)
-        denominator = top_scores.sum(dim=-1, keepdim=True) + 1e-20
-        top_scores = top_scores / denominator
-        top_scores = top_scores * self.route_scale
-        return router_logits, top_scores, selected_experts
+        _, top_k_index = torch.topk(router_probs + expert_bias, k=self.top_k, dim=1)
+        top_k_weights = router_probs.gather(dim=1, index=top_k_index)
+        denominator = top_k_weights.sum(dim=-1, keepdim=True) + 1e-20
+        top_k_weights = top_k_weights / denominator
+        top_k_weights = top_k_weights * self.route_scale
+        return router_logits, top_k_weights, top_k_index
 
 
 class AfmoeExperts(Qwen2MoeExperts):
@@ -101,7 +101,7 @@ class AfmoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.router = AfmoeTokenChoiceRouter(config)
+        self.router = AfmoeTopKRouter(config)
         self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
         self.experts = AfmoeExperts(config)
         self.expert_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
@@ -111,11 +111,11 @@ class AfmoeSparseMoeBlock(nn.Module):
         hidden_states_flat = hidden_states.view(-1, hidden_dim)
 
         # Get routing decisions (returns flattened top-k)
-        _, top_scores, selected_experts = self.router(hidden_states, self.expert_bias)
+        _, top_k_weights, top_k_index = self.router(hidden_states, self.expert_bias)
 
         # Process through shared experts
         shared_output = self.shared_experts(hidden_states_flat).view(batch_size, seq_len, hidden_dim)
-        routed_output = self.experts(hidden_states_flat, selected_experts, top_scores).view(
+        routed_output = self.experts(hidden_states_flat, top_k_index, top_k_weights).view(
             batch_size, seq_len, hidden_dim
         )
         return shared_output + routed_output
@@ -267,7 +267,7 @@ class AfmoePreTrainedModel(PreTrainedModel):
     _no_split_modules = ["AfmoeDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _can_record_outputs = {
-        "router_logits": OutputRecorder(AfmoeTokenChoiceRouter, index=0),
+        "router_logits": OutputRecorder(AfmoeTopKRouter, index=0),
         "hidden_states": AfmoeDecoderLayer,
         "attentions": AfmoeAttention,
     }
@@ -295,7 +295,7 @@ class AfmoePreTrainedModel(PreTrainedModel):
         if isinstance(module, AfmoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.down_proj, mean=0.0, std=std)
-        elif isinstance(module, AfmoeTokenChoiceRouter):
+        elif isinstance(module, AfmoeTopKRouter):
             init.zeros_(module.gate.weight)
         elif isinstance(module, AfmoeSparseMoeBlock):
             init.zeros_(module.expert_bias)

@@ -50,15 +50,15 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..gemma.modeling_gemma import GemmaRMSNorm
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
-    Gemma2MLP,
     Gemma2PreTrainedModel,
-    Gemma2RMSNorm,
-    Gemma2RotaryEmbedding,
     eager_attention_forward,
 )
+from ..llama.modeling_llama import LlamaRotaryEmbedding
+from ..mistral.modeling_mistral import MistralMLP
 
 
 logger = logging.get_logger(__name__)
@@ -141,11 +141,11 @@ class T5GemmaConfig(PreTrainedConfig):
                 setattr(self, special_token_key, getattr(self.decoder, special_token_key))
 
 
-class T5GemmaRMSNorm(Gemma2RMSNorm):
+class T5GemmaRMSNorm(GemmaRMSNorm):
     pass
 
 
-class T5GemmaMLP(Gemma2MLP):
+class T5GemmaMLP(MistralMLP):
     def __init__(self, config):
         super().__init__(config)
         self.dropout = nn.Dropout(config.dropout_rate)
@@ -157,7 +157,7 @@ class T5GemmaMLP(Gemma2MLP):
         return down_proj
 
 
-class T5GemmaRotaryEmbedding(Gemma2RotaryEmbedding):
+class T5GemmaRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 

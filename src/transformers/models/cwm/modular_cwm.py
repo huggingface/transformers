@@ -27,8 +27,9 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaModel,
     LlamaPreTrainedModel,
+    LlamaRotaryEmbedding,
 )
-from ..qwen2.modeling_qwen2 import Qwen2Attention, Qwen2RotaryEmbedding
+from ..mistral.modeling_mistral import MistralAttention
 
 
 logger = logging.get_logger(__name__)
@@ -90,22 +91,19 @@ class CwmConfig(LlamaConfig):
         super().__post_init__(**kwargs)
 
 
-class CwmRotaryEmbedding(Qwen2RotaryEmbedding):
+class CwmRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class CwmAttention(Qwen2Attention):
+class CwmAttention(MistralAttention):
     def __init__(self, config: CwmConfig, layer_idx: int):
-        super().__init__(config=config, layer_idx=layer_idx)
-        self.q_proj = torch.nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        self.k_proj = torch.nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
-        self.v_proj = torch.nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        super().__init__(config, layer_idx)
+        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
 
 class CwmDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: CwmConfig, layer_idx: int):
-        super().__init__(config=config, layer_idx=layer_idx)
-        self.self_attn = CwmAttention(config=config, layer_idx=layer_idx)
+    pass
 
 
 class CwmPreTrainedModel(LlamaPreTrainedModel):

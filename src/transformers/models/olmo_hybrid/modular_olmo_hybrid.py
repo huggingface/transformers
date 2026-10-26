@@ -36,13 +36,11 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer
-from ..olmo2.modeling_olmo2 import Olmo2RotaryEmbedding
+from ..mistral.modeling_mistral import MistralMLP
+from ..olmo.modeling_olmo import OlmoRotaryEmbedding
+from ..olmo2.modeling_olmo2 import Olmo2Attention, Olmo2DecoderLayer, Olmo2RMSNorm
 from ..olmo3.modeling_olmo3 import (
-    Olmo3Attention,
-    Olmo3DecoderLayer,
     Olmo3ForCausalLM,
-    Olmo3MLP,
-    Olmo3RMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -180,24 +178,18 @@ class OlmoHybridRMSNormGated(Qwen3NextRMSNormGated):
     pass
 
 
-class OlmoHybridRMSNorm(Olmo3RMSNorm):
+class OlmoHybridRMSNorm(Olmo2RMSNorm):
     pass
 
 
-class OlmoHybridAttention(Olmo3Attention):
+class OlmoHybridAttention(Olmo2Attention):
     """
     Multi-headed attention for OLMo Hybrid that supports optional RoPE (NoPE mode).
 
-    Inherits from Olmo3Attention. The only behavioral difference is that when
+    Inherits from Olmo2Attention. The only behavioral difference is that when
     position_embeddings is None, rotary position embeddings are skipped entirely,
     enabling NoPE mode for long context extension.
     """
-
-    def __init__(self, config: OlmoHybridConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        # Hybrid model doesn't use sliding window attention
-        del self.sliding_window
-        del self.attention_type
 
     def forward(
         self,
@@ -247,19 +239,8 @@ class OlmoHybridAttention(Olmo3Attention):
         return attn_output, attn_weights
 
 
-class OlmoHybridRotaryEmbedding(Olmo2RotaryEmbedding):
-    """
-    RoPE for OLMo Hybrid that returns float32 cos/sin to match OLMo-core.
-    """
-
-    def forward(self, x, position_ids):
-        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos() * self.attention_scaling
-        sin = emb.sin() * self.attention_scaling
-
-        # KEY difference from parent: return float32, don't cast to x.dtype
-        return cos, sin
+class OlmoHybridRotaryEmbedding(OlmoRotaryEmbedding):
+    pass
 
 
 @use_kernelized_func(
@@ -451,11 +432,11 @@ class OlmoHybridGatedDeltaNet(nn.Module):
         return output
 
 
-class OlmoHybridMLP(Olmo3MLP):
+class OlmoHybridMLP(MistralMLP):
     pass
 
 
-class OlmoHybridAttentionDecoderLayer(Olmo3DecoderLayer):
+class OlmoHybridAttentionDecoderLayer(Olmo2DecoderLayer):
     def __init__(self, config: OlmoHybridConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = OlmoHybridAttention(config=config, layer_idx=layer_idx)

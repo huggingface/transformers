@@ -26,14 +26,20 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import maybe_autocast, merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
-from ..ernie4_5.modeling_ernie4_5 import Ernie4_5RotaryEmbedding, apply_rotary_pos_emb, rotate_half  # noqa: F401
-from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
+from ..ernie4_5.modeling_ernie4_5 import (  # noqa: F401
+    Ernie4_5Attention,
+    Ernie4_5RotaryEmbedding,
+    apply_rotary_pos_emb,
+    rotate_half,
+)
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
-    MixtralExperts,
     MixtralForCausalLM,
     MixtralPreTrainedModel,
+    MixtralTopKRouter,
 )
-from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeDecoderLayer, Qwen3MoeMLP
+from ..olmo.modeling_olmo import OlmoRotaryEmbedding
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 from .configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 
 
@@ -44,7 +50,7 @@ class Ernie4_5_MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Ernie4_5_MoeMLP(Qwen3MoeMLP):
+class Ernie4_5_MoeMLP(Qwen2MoeMLP):
     def __init__(self, config, intermediate_size=None):
         super().__init__(config, intermediate_size)
 
@@ -53,21 +59,13 @@ class Ernie4_5_MoeMLP(Qwen3MoeMLP):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
 
 
-class Ernie4_5_MoeRotaryEmbedding(Ernie4_5RotaryEmbedding):
+class Ernie4_5_MoeRotaryEmbedding(OlmoRotaryEmbedding):
     pass
 
 
 @no_inherit_decorator
-class Ernie4_5_MoeAttention(LlamaAttention):
-    def __init__(self, config: Ernie4_5_MoeConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-
-        self.attention_dropout = 0.0
-
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.use_bias)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
+class Ernie4_5_MoeAttention(Ernie4_5Attention):
+    pass
 
 
 class Ernie4_5_MoeStatics(nn.Module):
@@ -97,20 +95,15 @@ class Ernie4_5_MoeStatics(nn.Module):
         return hidden_states + self.e_score_correction_bias.squeeze()
 
 
-class Ernie4_5_MoeExperts(MixtralExperts):
-    def __init__(self, config):
-        super().__init__()
-        self.num_experts = config.num_experts
-        self.intermediate_dim = config.moe_intermediate_size
+class Ernie4_5_MoeExperts(Qwen2MoeExperts):
+    pass
 
 
-class Ernie4_5_MoeTopKRouter(nn.Module):
+class Ernie4_5_MoeTopKRouter(MixtralTopKRouter):
     def __init__(self, config):
-        super().__init__()
-        self.weight = nn.Parameter(torch.zeros(config.num_experts, config.hidden_size, dtype=torch.float32))
+        super().__init__(config)
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim, dtype=torch.float32))
         self.moe_statics = Ernie4_5_MoeStatics(config)
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
         self.norm_min = config.moe_norm_min
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -118,14 +111,12 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
 
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             router_logits = F.linear(hidden_states.float(), self.weight.float())
-            routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-            _, selected_experts = torch.topk(self.moe_statics(routing_weights), self.top_k, dim=-1)
-            routing_weights = torch.gather(routing_weights, dim=-1, index=selected_experts)
-            routing_weights = routing_weights / torch.clamp(
-                routing_weights.sum(dim=-1, keepdim=True), min=self.norm_min
-            )
-        routing_weights = routing_weights.to(hidden_states.dtype)
-        return router_logits, routing_weights, selected_experts
+            router_probs = F.softmax(router_logits, dim=1, dtype=torch.float)
+            _, top_k_index = torch.topk(self.moe_statics(router_probs), self.top_k, dim=-1)
+            top_k_weights = torch.gather(router_probs, dim=-1, index=top_k_index)
+            top_k_weights = top_k_weights / torch.clamp(top_k_weights.sum(dim=-1, keepdim=True), min=self.norm_min)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
+        return router_logits, top_k_weights, top_k_index
 
 
 class Ernie4_5_MoeSparseMoeBlock(nn.Module):
@@ -158,24 +149,15 @@ class Ernie4_5_MoeSparseMoeBlock(nn.Module):
         return final_hidden_states.to(hidden_states.dtype)
 
 
-class Ernie4_5_MoeDecoderLayer(Qwen3MoeDecoderLayer):
+class Ernie4_5_MoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config, layer_idx):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = Ernie4_5_MoeAttention(config, layer_idx)
-
-        if (
-            ((layer_idx + 1) % config.moe_layer_interval == 0)
-            and layer_idx >= config.moe_layer_start_index
-            and layer_idx <= config.moe_layer_end_index
-        ):
-            self.mlp = Ernie4_5_MoeSparseMoeBlock(config)
-        else:
-            self.mlp = Ernie4_5_MoeMLP(config)
-
-        self.input_layernorm = Ernie4_5_MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = Ernie4_5_MoeRMSNorm(config.hidden_size, config.rms_norm_eps)
+        super().__init__(config, layer_idx)
+        self.mlp = (
+            Ernie4_5_MoeSparseMoeBlock(config)
+            if (layer_idx + 1) % config.moe_layer_interval == 0
+            and config.moe_layer_start_index <= layer_idx <= config.moe_layer_end_index
+            else Ernie4_5_MoeMLP(config)
+        )
 
 
 @auto_docstring

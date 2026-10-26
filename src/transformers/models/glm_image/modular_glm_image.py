@@ -34,11 +34,13 @@ from ...utils.generic import (
     get_max_seqlen,
     is_flash_attention_requested,
     merge_with_config_defaults,
+    no_inherit_decorator,
 )
 from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEModelOutput, ChameleonVQVAEVectorQuantizer
+from ..clip.modeling_clip import CLIPMLP
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vCausalLMOutputWithPast,
@@ -46,17 +48,21 @@ from ..glm4v.modeling_glm4v import (
     Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
     Glm4vTextModel,
-    Glm4vVisionAttention,
-    Glm4vVisionBlock,
     Glm4vVisionEmbeddings,
     Glm4vVisionModel,
     Glm4vVisionPatchEmbed,
 )
-from ..glm4v_moe.modeling_glm4v_moe import Glm4vMoeTextAttention, Glm4vMoeTextRotaryEmbedding, eager_attention_forward
+from ..glm4v_moe.modeling_glm4v_moe import (  # noqa: F401
+    Glm4vMoeTextRotaryEmbedding,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
+from ..llama.modeling_llama import LlamaAttention
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionAttention
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
+from ..qwen2_vl.modeling_qwen2_vl import Qwen2VLVisionBlock
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
-from ..siglip.modeling_siglip import SiglipMLP
 
 
 logger = logging.get_logger(__name__)
@@ -187,15 +193,16 @@ class GlmImageTextRotaryEmbedding(Glm4vMoeTextRotaryEmbedding):
     pass
 
 
-class GlmImageVisionMLP(SiglipMLP):
+class GlmImageVisionMLP(CLIPMLP):
     pass
 
 
-class GlmImageVisionAttention(Glm4vVisionAttention):
+class GlmImageVisionAttention(Qwen2_5_VLVisionAttention):
     def __init__(self, config: GlmImageVisionConfig) -> None:
         super().__init__(config)
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
+        self.attention_dropout = config.attention_dropout
 
     def forward(
         self,
@@ -283,9 +290,9 @@ class GlmImageVisionEmbeddings(Glm4vVisionEmbeddings):
         self.interpolated_method = "bilinear"
 
 
-class GlmImageVisionBlock(Glm4vVisionBlock):
+class GlmImageVisionBlock(Qwen2VLVisionBlock):
     def __init__(self, config: GlmImageVisionConfig):
-        super().__init__(config)
+        nn.Module.__init__(self)
         self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = GlmImageVisionAttention(config)
@@ -319,8 +326,11 @@ class GlmImageVisionBlock(Glm4vVisionBlock):
         return hidden_states
 
 
-class GlmImageTextAttention(Glm4vMoeTextAttention):
-    pass
+@no_inherit_decorator
+class GlmImageTextAttention(LlamaAttention):
+    def __init__(self, config: GlmImageTextConfig, layer_idx: int | None = None):
+        super().__init__(config, layer_idx)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
 
 class GlmImagePreTrainedModel(Glm4vPreTrainedModel):

@@ -45,11 +45,10 @@ from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
-    DeepseekV2DecoderLayer,
     DeepseekV2MLP,
     DeepseekV2Model,
-    DeepseekV2Moe,
     DeepseekV2PreTrainedModel,
+    DeepseekV2SparseMoeBlock,
 )
 from ..got_ocr2.image_processing_got_ocr2 import (
     GotOcr2ImageProcessor,
@@ -57,7 +56,7 @@ from ..got_ocr2.image_processing_got_ocr2 import (
     get_optimal_tiled_canvas,
 )
 from ..got_ocr2.image_processing_pil_got_ocr2 import GotOcr2ImageProcessorPil
-from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRotaryEmbedding
 from ..llava_next.modeling_llava_next import (
     LlavaNextCausalLMOutputWithPast,
     LlavaNextForConditionalGeneration,
@@ -65,11 +64,11 @@ from ..llava_next.modeling_llava_next import (
     LlavaNextModelOutputWithPast,
     LlavaNextPreTrainedModel,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from ..qwen2.configuration_qwen2 import Qwen2Config
 from ..qwen2.modeling_qwen2 import (
     Qwen2Attention,
     Qwen2DecoderLayer,
-    Qwen2MLP,
     Qwen2Model,
     Qwen2RMSNorm,
     Qwen2RotaryEmbedding,
@@ -764,7 +763,7 @@ class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel
         raise AttributeError()
 
 
-class DeepseekOcr2VisionMLP(Qwen2MLP):
+class DeepseekOcr2VisionMLP(MistralMLP):
     pass
 
 
@@ -893,16 +892,15 @@ class DeepseekOcr2TextMLP(DeepseekV2MLP):
     pass
 
 
-class DeepseekOcr2TextMoe(DeepseekV2Moe):
+class DeepseekOcr2TextSparseMoeBlock(DeepseekV2SparseMoeBlock):
     pass
 
 
-class DeepseekOcr2TextDecoderLayer(DeepseekV2DecoderLayer):
+class DeepseekOcr2TextDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.self_attn = DeepseekOcr2TextAttention(config=config, layer_idx=layer_idx)
         self.mlp = (
-            DeepseekOcr2TextMoe(config)
+            DeepseekOcr2TextSparseMoeBlock(config)
             if config.mlp_layer_types[layer_idx] == "sparse"
             else DeepseekOcr2TextMLP(config)
         )

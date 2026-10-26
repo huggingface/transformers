@@ -43,8 +43,8 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import merge_with_config_defaults
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_starcoder2 import Starcoder2Config
 
@@ -52,18 +52,15 @@ from .configuration_starcoder2 import Starcoder2Config
 class Starcoder2MLP(nn.Module):
     def __init__(self, config: Starcoder2Config):
         super().__init__()
-        embed_dim = config.hidden_size
-        self.c_fc = nn.Linear(embed_dim, config.intermediate_size, bias=config.use_bias)
-        self.c_proj = nn.Linear(config.intermediate_size, embed_dim, bias=config.use_bias)
-        self.act = ACT2FN[config.hidden_act]
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
         self.residual_dropout = config.residual_dropout
 
-    def forward(self, hidden_states: tuple[torch.FloatTensor] | None) -> torch.FloatTensor:
-        hidden_states = self.c_fc(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.c_proj(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
-        return hidden_states
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.down_proj(self.activation_fn(self.up_proj(hidden_states)))
+        return nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
 
 
 def rotate_half(x):
@@ -153,6 +150,7 @@ class Starcoder2Attention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
+        self.sliding_window = getattr(config, "sliding_window", None)
         self.residual_dropout = config.residual_dropout
 
     def forward(
@@ -188,7 +186,7 @@ class Starcoder2Attention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=getattr(self.config, "sliding_window", None),  # diff with Llama
+            sliding_window=self.sliding_window,  # diff with Llama
             **kwargs,
         )
 
@@ -205,7 +203,9 @@ class Starcoder2DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = Starcoder2Attention(config=config, layer_idx=layer_idx)
+
         self.mlp = Starcoder2MLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)

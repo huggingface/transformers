@@ -49,18 +49,18 @@ class MiniMaxM2TopKRouter(nn.Module):
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
 
-    def forward(self, hidden_states, e_score_correction_bias):
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)  # (seq_len, num_experts)
         # Main difference to other Moe, using Sigmoid activation instead of Softmax
-        routing_weights = nn.functional.sigmoid(router_logits.float())
-        scores_for_choice = routing_weights + e_score_correction_bias
+        router_probs = F.sigmoid(router_logits.float())
+        scores_for_choice = router_probs + self.e_score_correction_bias
         _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
-        top_k_weights = routing_weights.gather(1, top_k_index)
+        top_k_weights = router_probs.gather(1, top_k_index)
         top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        router_scores = top_k_weights
-        return router_logits, router_scores, top_k_index
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation
@@ -75,6 +75,10 @@ class MiniMaxM2Experts(nn.Module):
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -94,8 +98,9 @@ class MiniMaxM2Experts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -110,14 +115,13 @@ class MiniMaxM2SparseMoeBlock(nn.Module):
         self.jitter_noise = config.router_jitter_noise
         self.gate = MiniMaxM2TopKRouter(config)
         self.experts = MiniMaxM2Experts(config)
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         if self.training and self.jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        _, top_k_weights, top_k_index = self.gate(hidden_states, self.e_score_correction_bias)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states
@@ -162,7 +166,7 @@ class MiniMaxM2RotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(config: MiniMaxM2Config, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: MiniMaxM2Config, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -173,6 +177,7 @@ class MiniMaxM2RotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
+        # diff with Llama: only `partial_rotary_factor` of the head dim is rotated, as in `ROPE_INIT_FUNCTIONS`
         partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
@@ -180,7 +185,7 @@ class MiniMaxM2RotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -191,6 +196,42 @@ class MiniMaxM2RotaryEmbedding(nn.Module):
         sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+
+    # Keep half or full tensor for later concatenation
+    rotary_dim = cos.shape[-1]
+    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+
+    # Apply rotary embeddings on the first half or full tensor
+    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
+
+    # Concatenate back to full shape
+    q_embed = torch.cat([q_embed, q_pass], dim=-1)
+    k_embed = torch.cat([k_embed, k_pass], dim=-1)
+    return q_embed, k_embed
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -230,42 +271,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    # Keep half or full tensor for later concatenation
-    rotary_dim = cos.shape[-1]
-    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
-
-    # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
-
-    # Concatenate back to full shape
-    q_embed = torch.cat([q_embed, q_pass], dim=-1)
-    k_embed = torch.cat([k_embed, k_pass], dim=-1)
-    return q_embed, k_embed
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -291,6 +296,7 @@ class MiniMaxM2Attention(nn.Module):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.q_norm = MiniMaxM2RMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
         self.k_norm = MiniMaxM2RMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
+        self.sliding_window = None
 
     def forward(
         self,
@@ -329,6 +335,7 @@ class MiniMaxM2Attention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            sliding_window=self.sliding_window,
             **kwargs,
         )
 
@@ -342,8 +349,7 @@ class MiniMaxM2DecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = MiniMaxM2Attention(config, layer_idx)
-
+        self.self_attn = MiniMaxM2Attention(config=config, layer_idx=layer_idx)
         self.mlp = MiniMaxM2SparseMoeBlock(config)
         self.input_layernorm = MiniMaxM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiniMaxM2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -351,23 +357,28 @@ class MiniMaxM2DecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
+
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
@@ -403,7 +414,6 @@ class MiniMaxM2PreTrainedModel(PreTrainedModel):
             init.normal_(module.down_proj, mean=0.0, std=std)
         elif isinstance(module, MiniMaxM2TopKRouter):
             init.normal_(module.weight, mean=0.0, std=std)
-        elif isinstance(module, MiniMaxM2SparseMoeBlock):
             init.zeros_(module.e_score_correction_bias)
 
 

@@ -123,13 +123,6 @@ class OlmoeMLP(nn.Module):
         return down_proj
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
 @use_kernel_forward_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
@@ -193,6 +186,13 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
 @use_kernelized_func(apply_rotary_pos_emb)
 class OlmoeAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -219,10 +219,9 @@ class OlmoeAttention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
-        self.q_norm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.k_norm = OlmoeRMSNorm(
-            (config.hidden_size // config.num_attention_heads) * config.num_key_value_heads, eps=config.rms_norm_eps
-        )
+        self.q_norm = OlmoeRMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
+        self.k_norm = OlmoeRMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
+        self.sliding_window = None
 
     def forward(
         self,
@@ -287,6 +286,10 @@ class OlmoeExperts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -305,8 +308,9 @@ class OlmoeExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -318,21 +322,20 @@ class OlmoeTopKRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
-        self.norm_topk_prob = config.norm_topk_prob
+        self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
+        self.norm_topk_prob = config.norm_topk_prob
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
         router_probs = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
-        router_top_value, router_indices = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
+        top_k_weights, top_k_index = torch.topk(router_probs, self.top_k, dim=-1)  # (seq_len, top_k)
         if self.norm_topk_prob:
-            router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
-        router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = router_top_value
-        return router_logits, router_scores, router_indices
+            top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        top_k_weights = top_k_weights.to(router_logits.dtype)
+        return router_logits, top_k_weights, top_k_index
 
 
 class OlmoeSparseMoeBlock(nn.Module):
@@ -355,6 +358,7 @@ class OlmoeDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: OlmoeConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = OlmoeAttention(config=config, layer_idx=layer_idx)
         self.mlp = OlmoeSparseMoeBlock(config)
         self.input_layernorm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

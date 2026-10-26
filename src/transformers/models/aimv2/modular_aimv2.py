@@ -34,7 +34,8 @@ from ...utils.output_capturing import capture_outputs
 from ..clip.modeling_clip import CLIPModel, CLIPTextEmbeddings, _get_vector_norm
 from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm
 from ..siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
-from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoder, SiglipOutput
+from ..siglip.modeling_siglip import SiglipEncoder, SiglipOutput
+from ..vit.modeling_vit import ViTAttention
 from ..vit_mae.modeling_vit_mae import build_2d_sinusoidal_position_embedding
 
 
@@ -194,13 +195,10 @@ class Aimv2TextEmbeddings(CLIPTextEmbeddings):
     pass
 
 
-class Aimv2Attention(SiglipAttention):
+class Aimv2Attention(ViTAttention):
     def __init__(self, config):
         super().__init__(config)
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
-        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.qkv_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.qkv_bias)
 
 
 class Aimv2EncoderLayer(GradientCheckpointingLayer):

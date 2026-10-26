@@ -166,14 +166,13 @@ class RadioMLP(nn.Module):
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
         # the hidden size comes from mlp_ratio; the config has no intermediate_size
-        self.fc1 = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
-        self.fc2 = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
+        self.down_proj = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -215,19 +214,21 @@ def eager_attention_forward(
 
 
 class RadioAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def __init__(self, config: RadioConfig):
         super().__init__()
         self.config = config
         self.num_attention_heads = config.num_attention_heads
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.attention_dropout = config.attention_probs_dropout_prob
+        self.attention_dropout = config.attention_dropout
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
 
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
 
     def forward(
         self,
@@ -346,12 +347,16 @@ class RadioLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: RadioConfig) -> None:
         super().__init__()
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = RadioAttention(config)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.self_attn = RadioAttention(config)
         self.layer_scale1 = RadioLayerScale(config)
         self.drop_path = RadioDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = RadioSwiGLUFFN(config) if config.use_swiglu_ffn else RadioMLP(config)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.use_swiglu_ffn = config.use_swiglu_ffn
+        if config.use_swiglu_ffn:
+            self.swiglu_ffn = RadioSwiGLUFFN(config)
+        else:
+            self.mlp = RadioMLP(config)
         self.layer_scale2 = RadioLayerScale(config)
 
     def forward(
@@ -362,15 +367,15 @@ class RadioLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         # Self Attention
         residual = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        hidden_states, _ = self.attention(hidden_states, attention_mask=attention_mask, **kwargs)
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(hidden_states, attention_mask=attention_mask, **kwargs)
         hidden_states = self.layer_scale1(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.swiglu_ffn(hidden_states) if self.use_swiglu_ffn else self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
         return hidden_states

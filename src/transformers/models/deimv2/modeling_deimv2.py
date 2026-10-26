@@ -903,6 +903,8 @@ class Deimv2DecoderLayer(nn.Module):
         )
         self.dropout = config.dropout
         self.self_attn_layer_norm = Deimv2RMSNorm(config.d_model)
+
+        # override the encoder attention module with d-fine version
         self.encoder_attn = Deimv2MultiscaleDeformableAttention(config=config)
         self.mlp = Deimv2SwiGLUFFN(config)
         self.final_layer_norm = Deimv2RMSNorm(config.d_model)

@@ -407,14 +407,14 @@ class ClvpEncoderMLP(nn.Module):
         super().__init__()
         self.config = config
 
-        self.fc1 = ClvpGatedLinearUnit(config)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = ClvpGatedLinearUnit(config)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout_layer = nn.Dropout(config.dropout)
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.dropout_layer(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -783,8 +783,10 @@ class ClvpPreTrainedModel(PreTrainedModel):
         elif isinstance(module, ClvpEncoderMLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            init.normal_(module.fc1.proj.weight if getattr(module.fc1, "proj") else module.fc1.weight, std=fc_std)
-            init.normal_(module.fc2.weight, std=in_proj_std)
+            init.normal_(
+                module.up_proj.proj.weight if getattr(module.up_proj, "proj") else module.up_proj.weight, std=fc_std
+            )
+            init.normal_(module.down_proj.weight, std=in_proj_std)
         elif isinstance(module, ClvpEncoder):
             config = self.config.get_text_config()
             factor = config.initializer_factor

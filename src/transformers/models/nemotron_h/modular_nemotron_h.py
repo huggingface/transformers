@@ -28,7 +28,7 @@ from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
-from ...models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3MoE, DeepseekV3TopkRouter
+from ...models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3SparseMoeBlock, DeepseekV3TopKRouter
 from ...models.jamba.modeling_jamba import JambaAttention
 from ...models.llama.modeling_llama import LlamaRMSNorm
 from ...models.nemotron.modeling_nemotron import NemotronMLP
@@ -168,7 +168,7 @@ class NemotronHExperts(nn.Module):
         return final_hidden_states.to(hidden_states.dtype)
 
 
-class NemotronHMoE(DeepseekV3MoE):
+class NemotronHSparseMoeBlock(DeepseekV3SparseMoeBlock):
     """
     Mixture-of-Experts (MoE) module for NemotronH.
 
@@ -182,7 +182,7 @@ class NemotronHMoE(DeepseekV3MoE):
 
         # Replace with NemotronH-specific experts (non-gated MLP architecture)
         self.experts = NemotronHExperts(config)
-        self.gate = NemotronHTopkRouter(config)
+        self.gate = NemotronHTopKRouter(config)
 
         # Override shared_experts to use NemotronHMLP with correct intermediate size
         self.shared_experts = NemotronHMLP(config=config, intermediate_size=config.moe_shared_expert_intermediate_size)
@@ -198,12 +198,12 @@ class NemotronHMoE(DeepseekV3MoE):
     def forward(self, hidden_states):
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
 
         # NemotronH-specific: latent projection
         hidden_states = self.fc1_latent_proj(hidden_states)
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = self.fc2_latent_proj(hidden_states)
 
         hidden_states = hidden_states.view(*orig_shape)
@@ -211,25 +211,18 @@ class NemotronHMoE(DeepseekV3MoE):
         return hidden_states
 
 
-class NemotronHTopkRouter(DeepseekV3TopkRouter):
+class NemotronHTopKRouter(DeepseekV3TopKRouter):
     pass
 
 
 class NemotronHAttention(JambaAttention):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        return super().forward(hidden_states, attention_mask, past_key_values, **kwargs)
+    pass
 
 
 MIXER_TYPES = {
     "linear_attention": NemotronHMamba2Mixer,
     "full_attention": NemotronHAttention,
-    "moe": NemotronHMoE,
+    "moe": NemotronHSparseMoeBlock,
     "mlp": NemotronHMLP,
 }
 
@@ -310,7 +303,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": NemotronHBlock,
         "attentions": NemotronHAttention,
-        "router_logits": OutputRecorder(NemotronHTopkRouter, index=0),
+        "router_logits": OutputRecorder(NemotronHTopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
@@ -343,7 +336,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
                 inv_dt = dt + torch.log(-torch.expm1(-dt))
                 with torch.no_grad():
                     init.copy_(module.dt_bias, inv_dt)
-        elif isinstance(module, NemotronHTopkRouter):
+        elif isinstance(module, NemotronHTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, NemotronHExperts):

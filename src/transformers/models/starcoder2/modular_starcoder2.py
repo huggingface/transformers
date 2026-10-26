@@ -23,7 +23,6 @@ from collections.abc import Callable
 import torch
 from torch import nn
 
-from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -33,9 +32,10 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..clip.modeling_clip import CLIPMLP
+from ..llama.modeling_llama import LlamaDecoderLayer
 from ..mistral.modeling_mistral import (
     MistralAttention,
-    MistralDecoderLayer,
     MistralForCausalLM,
     MistralForSequenceClassification,
     MistralForTokenClassification,
@@ -49,21 +49,16 @@ from .configuration_starcoder2 import Starcoder2Config
 logger = logging.get_logger(__name__)
 
 
-class Starcoder2MLP(nn.Module):
+class Starcoder2MLP(CLIPMLP):
     def __init__(self, config: Starcoder2Config):
-        super().__init__()
-        embed_dim = config.hidden_size
-        self.c_fc = nn.Linear(embed_dim, config.intermediate_size, bias=config.use_bias)
-        self.c_proj = nn.Linear(config.intermediate_size, embed_dim, bias=config.use_bias)
-        self.act = ACT2FN[config.hidden_act]
+        super().__init__(config)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
         self.residual_dropout = config.residual_dropout
 
-    def forward(self, hidden_states: tuple[torch.FloatTensor] | None) -> torch.FloatTensor:
-        hidden_states = self.c_fc(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.c_proj(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
-        return hidden_states
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.down_proj(self.activation_fn(self.up_proj(hidden_states)))
+        return nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
 
 
 class Starcoder2Attention(MistralAttention):
@@ -108,7 +103,7 @@ class Starcoder2Attention(MistralAttention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=getattr(self.config, "sliding_window", None),  # diff with Llama
+            sliding_window=self.sliding_window,  # diff with Llama
             **kwargs,
         )
 
@@ -121,11 +116,9 @@ class Starcoder2Attention(MistralAttention):
         return attn_output, attn_weights
 
 
-class Starcoder2DecoderLayer(MistralDecoderLayer):
+class Starcoder2DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.self_attn = Starcoder2Attention(config=config, layer_idx=layer_idx)
-        self.mlp = Starcoder2MLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
 

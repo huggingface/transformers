@@ -340,6 +340,7 @@ class VoxtralRealtimeAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
+        self.sliding_window = getattr(config, "sliding_window", None)
 
     def forward(
         self,
@@ -374,7 +375,7 @@ class VoxtralRealtimeAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=getattr(self.config, "sliding_window", None),  # main diff with Llama
+            sliding_window=self.sliding_window,  # main diff with Llama
             **kwargs,
         )
 
@@ -625,6 +626,7 @@ class VoxtralRealtimeTextAttention(nn.Module):
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+        self.sliding_window = getattr(config, "sliding_window", None)
 
     def forward(
         self,
@@ -659,7 +661,7 @@ class VoxtralRealtimeTextAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=getattr(self.config, "sliding_window", None),  # main diff with Llama
+            sliding_window=self.sliding_window,  # main diff with Llama
             **kwargs,
         )
 
@@ -688,7 +690,9 @@ class VoxtralRealtimeTextDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = VoxtralRealtimeTextAttention(config=config, layer_idx=layer_idx)
+
         self.mlp = VoxtralRealtimeTextMLP(config)
         self.input_layernorm = VoxtralRealtimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = VoxtralRealtimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

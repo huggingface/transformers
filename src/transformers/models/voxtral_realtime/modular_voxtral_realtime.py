@@ -27,13 +27,12 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
-from ...models.llama.modeling_llama import LlamaRotaryEmbedding
+from ...models.llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 from ...models.mistral.modeling_mistral import (
     MistralAttention,
     MistralDecoderLayer,
     MistralMLP,
     MistralModel,
-    MistralRMSNorm,
 )
 from ...models.voxtral.modeling_voxtral import (
     VoxtralMultiModalProjector,
@@ -185,7 +184,7 @@ class VoxtralRealtimeCausalConv1d(nn.Conv1d):
         return super().forward(x)
 
 
-class VoxtralRealtimeRMSNorm(MistralRMSNorm): ...
+class VoxtralRealtimeRMSNorm(LlamaRMSNorm): ...
 
 
 class VoxtralRealtimeAttention(MistralAttention):

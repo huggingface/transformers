@@ -48,6 +48,7 @@ class VivitConfig(PreTrainedConfig):
     ```"""
 
     model_type = "vivit"
+    attribute_map = {"attention_probs_dropout_prob": "attention_dropout"}
 
     image_size: int | list[int] | tuple[int, int] = 224
     num_frames: int = 32
@@ -59,7 +60,7 @@ class VivitConfig(PreTrainedConfig):
     intermediate_size: int = 3072
     hidden_act: str = "gelu_fast"
     hidden_dropout_prob: float | int = 0.0
-    attention_probs_dropout_prob: float | int = 0.0
+    attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-06
     qkv_bias: bool = True

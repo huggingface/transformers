@@ -14,7 +14,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Adapter,
@@ -25,6 +25,7 @@ from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2ForAudioFrameClassification,
     Wav2Vec2ForCTC,
     Wav2Vec2ForPreTraining,
+    Wav2Vec2ForPreTrainingOutput,
     Wav2Vec2ForSequenceClassification,
     Wav2Vec2ForXVector,
     Wav2Vec2GumbelVectorQuantizer,
@@ -79,7 +80,7 @@ def eager_attention_forward(
     """
 )
 @dataclass
-class Wav2Vec2ConformerForPreTrainingOutput(ModelOutput):
+class Wav2Vec2ConformerForPreTrainingOutput(Wav2Vec2ForPreTrainingOutput):
     r"""
     loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
         Total loss as the sum of the contrastive loss (L_m) and the diversity loss (L_d) as stated in the [official
@@ -97,15 +98,6 @@ class Wav2Vec2ConformerForPreTrainingOutput(ModelOutput):
     diversity_loss (*optional*, returned when `sample_negative_indices` are passed, `torch.FloatTensor` of shape `(1,)`):
         The diversity loss (L_d) as stated in the [official paper](https://huggingface.co/papers/2006.11477).
     """
-
-    loss: torch.FloatTensor | None = None
-    projected_states: torch.FloatTensor | None = None
-    projected_quantized_states: torch.FloatTensor | None = None
-    codevector_perplexity: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    contrastive_loss: torch.FloatTensor | None = None
-    diversity_loss: torch.FloatTensor | None = None
 
 
 class Wav2Vec2ConformerPositionalConvEmbedding(Wav2Vec2PositionalConvEmbedding):
@@ -671,8 +663,7 @@ class Wav2Vec2ConformerModel(Wav2Vec2ConformerPreTrainedModel, Wav2Vec2Model):
 
 
 class Wav2Vec2ConformerForPreTraining(Wav2Vec2ForPreTraining):
-    def __init__(self, config: Wav2Vec2ConformerConfig):
-        super().__init__(config)
+    pass
 
 
 class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
@@ -693,18 +684,15 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
 
 
 class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    def __init__(self, config):
-        super().__init__(config)
+    pass
 
 
 class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    def __init__(self, config):
-        super().__init__(config)
+    pass
 
 
 class Wav2Vec2ConformerForXVector(Wav2Vec2ForXVector):
-    def __init__(self, config):
-        super().__init__(config)
+    pass
 
 
 __all__ = [

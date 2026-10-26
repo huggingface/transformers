@@ -58,7 +58,7 @@ class GptOssRMSNorm(nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return (self.weight * hidden_states).to(input_dtype)  # main diff with Llama
+        return (self.weight * hidden_states).to(input_dtype)
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
@@ -119,14 +119,14 @@ class GptOssTopKRouter(nn.Module):
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.bias = nn.Parameter(torch.zeros(self.num_experts))
 
     def forward(self, hidden_states):
         router_logits = F.linear(hidden_states, self.weight, self.bias)  # (num_tokens, num_experts)
-        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
-        router_scores = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
-        return router_logits, router_scores, router_indices
+        top_k_logits, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
+        top_k_weights = torch.nn.functional.softmax(top_k_logits, dim=1, dtype=top_k_logits.dtype)
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_kernel_forward_from_hub("MegaBlocksMoeMLP")
@@ -139,10 +139,10 @@ class GptOssMLP(nn.Module):
     def forward(self, hidden_states):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_dim)
-        _, router_scores, router_indices = self.router(hidden_states)
-        hidden_states = self.experts(hidden_states, router_indices, router_scores)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-        return hidden_states, router_scores
+        return hidden_states, top_k_weights
 
 
 class GptOssRotaryEmbedding(nn.Module):
@@ -189,7 +189,7 @@ class GptOssRotaryEmbedding(nn.Module):
         cos = emb.cos() * self.attention_scaling
         sin = emb.sin() * self.attention_scaling
 
-        return cos.to(x.dtype), sin.to(x.dtype)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -269,6 +269,7 @@ class GptOssAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
+
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
         )
@@ -331,7 +332,9 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: GptOssConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = GptOssAttention(config=config, layer_idx=layer_idx)
+
         self.mlp = GptOssMLP(config)
         self.input_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

@@ -25,12 +25,12 @@ from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ..clip.modeling_clip import CLIPMLP
 from ..vit.modeling_vit import (
     PreTrainedModel,
     ViTAttention,
     ViTEmbeddings,
     ViTLayer,
-    ViTMLP,
     ViTModel,
     ViTPatchEmbeddings,
     ViTPreTrainedModel,
@@ -266,12 +266,12 @@ class ViTMAEEmbeddings(ViTEmbeddings):
         return embeddings, mask, ids_restore
 
 
-# Pass-through: ViT MAE encoder uses same architecture as ViT
 class ViTMAEAttention(ViTAttention):
     pass
 
 
-class ViTMAEMLP(ViTMLP):
+# Pass-through: ViT MAE encoder uses same architecture as ViT
+class ViTMAEMLP(CLIPMLP):
     pass
 
 

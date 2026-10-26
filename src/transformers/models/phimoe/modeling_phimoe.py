@@ -309,6 +309,10 @@ class PhimoeExperts(nn.Module):
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
 
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -327,8 +331,9 @@ class PhimoeExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -473,10 +478,10 @@ class PhimoeTopKRouter(nn.Linear):
                 1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
             )
         router_logits = super().forward(hidden_states)
-        routing_weights, selected_experts = sparsemixer(
+        top_k_weights, top_k_index = sparsemixer(
             router_logits, jitter_eps=self.router_jitter_noise, training=self.training, top_k=self.top_k
         )
-        return router_logits, routing_weights, selected_experts
+        return router_logits, top_k_weights, top_k_index
 
 
 class PhimoeSparseMoeBlock(nn.Module):
@@ -510,8 +515,8 @@ class PhimoeSparseMoeBlock(nn.Module):
 
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_dim)
-        _, routing_weights, selected_experts = self.router(hidden_states)
-        final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
+        _, top_k_weights, top_k_index = self.router(hidden_states)
+        final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
@@ -520,8 +525,7 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = PhimoeAttention(config, layer_idx)
-
+        self.self_attn = PhimoeAttention(config=config, layer_idx=layer_idx)
         self.mlp = PhimoeSparseMoeBlock(config)
 
         # Phimoe uses nn.LayerNorm
@@ -533,23 +537,28 @@ class PhimoeDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
+        # Self Attention
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
+            use_cache=use_cache,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = residual + hidden_states
+
+        # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)

@@ -276,27 +276,19 @@ def apply_rotary_pos_emb(
 
 
 class DINOv3ViTAttention(nn.Module):
-    """
-    Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
-    """
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: DINOv3ViTConfig):
         super().__init__()
         self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        self.is_causal = False
-
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
         self.is_causal = False
-
-        self.dropout = config.attention_dropout
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.key_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.value_bias)
-
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
-        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.query_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.key_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.value_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.proj_bias)
 
     def forward(
         self,
@@ -304,18 +296,13 @@ class DINOv3ViTAttention(nn.Module):
         attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Input shape: Batch x Time x Channel"""
+    ) -> tuple[torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        batch_size, patches, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -330,14 +317,12 @@ class DINOv3ViTAttention(nn.Module):
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
         )
-
-        attn_output = attn_output.reshape(batch_size, patches, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-
         return attn_output, attn_weights
 
 
@@ -410,12 +395,12 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
     def __init__(self, config: DINOv3ViTConfig):
         super().__init__()
 
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = DINOv3ViTAttention(config)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.self_attn = DINOv3ViTAttention(config)
         self.layer_scale1 = DINOv3ViTLayerScale(config)
         self.drop_path = Dinov3ViTDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         if config.use_gated_mlp:
             self.mlp = DINOv3ViTGatedMLP(config)
@@ -432,8 +417,8 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         # Attention with residual connection
         residual = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        hidden_states, _ = self.attention(
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
@@ -444,7 +429,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
 
         # MLP with residual connection
         residual = hidden_states
-        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual

@@ -53,7 +53,7 @@ from ...utils import (
 )
 from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple
 from ..clip.modeling_clip import CLIPMLP
-from ..convnext.modeling_convnext import ConvNextLayer
+from ..convnext.modeling_convnext import ConvNextLayer, ConvNextLayerNorm
 from ..detr.image_processing_detr import (
     SUPPORTED_ANNOTATION_FORMATS,
     DetrImageProcessor,
@@ -74,7 +74,6 @@ from ..lw_detr.modeling_lw_detr import (
     LwDetrConvEncoder,
     LwDetrConvNormLayer,
     LwDetrForObjectDetection,
-    LwDetrLayerNorm,
     LwDetrModel,
     LwDetrObjectDetectionOutput,
     LwDetrPreTrainedModel,
@@ -696,8 +695,8 @@ class RfDetrDinov2Layer(Dinov2Layer):
         if self.global_attention:
             hidden_states = self.window_unpartition_before_attention(hidden_states)
 
-        hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output, _ = self.attention(hidden_states_norm, attention_mask=attention_mask, **kwargs)
+        hidden_states_norm = self.input_layernorm(hidden_states)
+        self_attention_output, _ = self.self_attn(hidden_states_norm, attention_mask=attention_mask, **kwargs)
 
         # And reverse the operation after the attention
         if self.global_attention:
@@ -710,8 +709,8 @@ class RfDetrDinov2Layer(Dinov2Layer):
         residual = hidden_states
 
         # in Dinov2, layernorm is also applied after self-attention
-        hidden_states = self.norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.swiglu_ffn(hidden_states) if self.use_swiglu_ffn else self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
 
         # second residual connection
@@ -822,7 +821,7 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
         )
 
 
-class RfDetrLayerNorm(LwDetrLayerNorm):
+class RfDetrLayerNorm(ConvNextLayerNorm):
     pass
 
 
@@ -1358,8 +1357,8 @@ class RfDetrSegmentationMLP(CLIPMLP):
     def __init__(self, config: RfDetrConfig):
         super().__init__(config)
         self.activation_fn = ACT2FN[config.segmentation_head_activation_function]
-        self.fc1 = nn.Linear(config.d_model, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.d_model)
+        self.up_proj = nn.Linear(config.d_model, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.d_model)
 
 
 class RfDetrSegmentationMLPBlock(nn.Module):

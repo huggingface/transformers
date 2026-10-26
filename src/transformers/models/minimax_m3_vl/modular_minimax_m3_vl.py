@@ -32,15 +32,16 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults, no_inherit_decorator
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import capture_outputs
 from ...vision_utils import get_vision_position_ids
 from ..clip.modeling_clip import CLIPMLP, CLIPAttention, CLIPEncoderLayer
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts
-from ..gemma3.modeling_gemma3 import Gemma3RMSNorm
+from ..gemma.modeling_gemma import GemmaRMSNorm
+from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 from ..laguna.modeling_laguna import LagunaSparseMoeBlock
-from ..llama.modeling_llama import eager_attention_forward
+from ..llama.modeling_llama import LlamaDecoderLayer, eager_attention_forward
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -49,15 +50,14 @@ from ..llava.modeling_llava import (
 )
 from ..minimax_m2.configuration_minimax_m2 import MiniMaxM2Config
 from ..minimax_m2.modeling_minimax_m2 import (
-    MiniMaxM2Attention,
     MiniMaxM2ForCausalLM,
     MiniMaxM2Model,
     MiniMaxM2PreTrainedModel,
-    MiniMaxM2RotaryEmbedding,
     MiniMaxM2TopKRouter,
     apply_rotary_pos_emb,
 )
-from ..mixtral.modeling_mixtral import MixtralDecoderLayer, load_balancing_loss_func
+from ..mistral.modeling_mistral import MistralAttention
+from ..mixtral.modeling_mixtral import load_balancing_loss_func
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed, Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor, Qwen2VLProcessorKwargs
@@ -314,7 +314,7 @@ class MiniMaxM3VLSparseStaticCacheLayer(StaticLayer):
             self.idx_keys = self.idx_keys.index_select(0, beam_idx.to(self.idx_keys.device))
 
 
-class MiniMaxM3VLRMSNorm(Gemma3RMSNorm):
+class MiniMaxM3VLRMSNorm(GemmaRMSNorm):
     """Gemma-style RMSNorm: normalizes in fp32 and scales by `weight + 1`."""
 
 
@@ -340,33 +340,20 @@ class MiniMaxM3VLExperts(DeepseekV4Experts):
     def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__(config)
         self.swiglu_alpha = config.swiglu_alpha
-        self.swiglu_limit = config.swiglu_limit
         del self.act_fn
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
         # same as GPT OSS, but the weights are not interleaved
         gate, up = gate_up.chunk(2, dim=-1)
-        gate = gate.clamp(max=self.swiglu_limit)
-        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        gate = gate.clamp(max=self.limit)
+        up = up.clamp(min=-self.limit, max=self.limit)
         glu = gate * torch.sigmoid(gate * self.swiglu_alpha)
         return (up + 1.0) * glu
 
 
 class MiniMaxM3VLTopKRouter(MiniMaxM2TopKRouter):
-    def __init__(self, config: MiniMaxM3VLTextConfig):
-        super().__init__(config)
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)
-        # Sigmoid scoring (not softmax), as in M2.
-        routing_weights = F.sigmoid(router_logits.float())
-        scores_for_choice = routing_weights + self.e_score_correction_bias
-        _, top_k_index = torch.topk(scores_for_choice, self.top_k, dim=-1, sorted=False)
-        top_k_weights = routing_weights.gather(1, top_k_index)
-        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
-        return router_logits, top_k_weights, top_k_index
+    # Sigmoid scoring (not softmax), as in M2.
+    pass
 
 
 class MiniMaxM3VLSparseMoeBlock(LagunaSparseMoeBlock):
@@ -378,17 +365,20 @@ class MiniMaxM3VLSparseMoeBlock(LagunaSparseMoeBlock):
         self.shared_experts = MiniMaxM3VLDenseMLP(config, intermediate_size=config.shared_intermediate_size)
 
 
-class MiniMaxM3VLRotaryEmbedding(MiniMaxM2RotaryEmbedding):
+class MiniMaxM3VLRotaryEmbedding(GPTNeoXRotaryEmbedding):
     pass
 
 
-class MiniMaxM3VLAttention(MiniMaxM2Attention):
+@no_inherit_decorator
+class MiniMaxM3VLAttention(MistralAttention):
     """
     M3 attention: per-head Gemma QK-norm + partial RoPE, optionally sparse indexer selection which require position IDs.
     """
 
     def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.sliding_window = None
         self.q_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = MiniMaxM3VLRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.indexer = (
@@ -601,7 +591,7 @@ class MiniMaxM3VLIndexer(nn.Module):
         return torch.zeros(keep.shape, dtype=dtype, device=device).masked_fill(~keep, min_dtype)
 
 
-class MiniMaxM3VLDecoderLayer(MixtralDecoderLayer):
+class MiniMaxM3VLDecoderLayer(LlamaDecoderLayer):
     """M3 decoder layer: per-layer dense/MoE MLP and dense/sparse attention."""
 
     def __init__(self, config: MiniMaxM3VLTextConfig, layer_idx: int):
@@ -612,8 +602,6 @@ class MiniMaxM3VLDecoderLayer(MixtralDecoderLayer):
             if config.mlp_layer_types[layer_idx] == "sparse"
             else MiniMaxM3VLDenseMLP(config, intermediate_size=config.dense_intermediate_size)
         )
-        self.input_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class MiniMaxM3VLPreTrainedModel(MiniMaxM2PreTrainedModel):
@@ -742,7 +730,7 @@ class MiniMaxM3VLVisionEmbeddings(Qwen2_5_VisionPatchEmbed):
 class MiniMaxM3VLVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     """Partial 3D RoPE with equal frequency bands for temporal, height and width coordinates."""
 
-    def compute_axial_rope_parameters(config: MiniMaxM3VLVisionConfig, device=None, **kwargs):
+    def compute_axial_rope_parameters(config: MiniMaxM3VLVisionConfig, **kwargs):
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -759,24 +747,17 @@ class MiniMaxM3VLVisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     def forward(self, x, position_ids):
-        # position_ids: (3, N) - with direct THW order
+        # position_ids: (N, 3) - with direct THW order
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
         sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
-        return cos.to(x.dtype), sin.to(x.dtype)
-
-    def recomposition_frequencies(self, freq):
-        """
-        Recompose the frequencies into the final spatial layout used per each grid.
-        """
-        freq = freq.flatten(1)  # We already have THW order
-        return torch.cat([freq, freq], dim=-1)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 def rotate_half(x):
@@ -837,12 +818,12 @@ class MiniMaxM3VLVisionAttention(CLIPAttention):
             keys,
             values,
             attention_mask,
-            scaling=self.scale,
-            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.attention_dropout,
             **kwargs,
         )
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        return self.out_proj(attn_output), attn_weights
+        return self.o_proj(attn_output), attn_weights
 
 
 class MiniMaxM3VLVisionMLP(CLIPMLP):

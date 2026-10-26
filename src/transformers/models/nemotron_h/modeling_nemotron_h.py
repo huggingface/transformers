@@ -710,7 +710,7 @@ class NemotronHExperts(nn.Module):
         return final_hidden_states.to(hidden_states.dtype)
 
 
-class NemotronHMoE(nn.Module):
+class NemotronHSparseMoeBlock(nn.Module):
     """
     Mixture-of-Experts (MoE) module for NemotronH.
 
@@ -725,7 +725,7 @@ class NemotronHMoE(nn.Module):
 
         # Replace with NemotronH-specific experts (non-gated MLP architecture)
         self.experts = NemotronHExperts(config)
-        self.gate = NemotronHTopkRouter(config)
+        self.gate = NemotronHTopKRouter(config)
 
         # Override shared_experts to use NemotronHMLP with correct intermediate size
         self.shared_experts = NemotronHMLP(config=config, intermediate_size=config.moe_shared_expert_intermediate_size)
@@ -741,12 +741,12 @@ class NemotronHMoE(nn.Module):
     def forward(self, hidden_states) -> torch.Tensor:
         residuals = hidden_states
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
 
         # NemotronH-specific: latent projection
         hidden_states = self.fc1_latent_proj(hidden_states)
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
         hidden_states = self.fc2_latent_proj(hidden_states)
 
         hidden_states = hidden_states.view(*orig_shape)
@@ -754,13 +754,13 @@ class NemotronHMoE(nn.Module):
         return hidden_states
 
 
-class NemotronHTopkRouter(nn.Module):
+class NemotronHTopKRouter(nn.Module):
     def __init__(self, config: NemotronHConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
@@ -770,8 +770,8 @@ class NemotronHTopkRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        scores = router_logits.sigmoid()
-        scores_for_choice = scores + self.e_score_correction_bias
+        router_probs = router_logits.sigmoid()
+        scores_for_choice = router_probs + self.e_score_correction_bias
         group_scores = (
             scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
             .topk(2, dim=-1)[0]
@@ -786,13 +786,13 @@ class NemotronHTopkRouter(nn.Module):
             .reshape(-1, self.num_experts)
         )
         scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = scores.gather(1, topk_indices)
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        top_k_weights = router_probs.gather(1, top_k_index)
         if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights, topk_indices
+            denominator = top_k_weights.sum(dim=-1, keepdim=True) + 1e-20
+            top_k_weights /= denominator
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
 def rotate_half(x):
@@ -923,7 +923,7 @@ class NemotronHAttention(nn.Module):
 MIXER_TYPES = {
     "linear_attention": NemotronHMamba2Mixer,
     "full_attention": NemotronHAttention,
-    "moe": NemotronHMoE,
+    "moe": NemotronHSparseMoeBlock,
     "mlp": NemotronHMLP,
 }
 
@@ -1004,7 +1004,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": NemotronHBlock,
         "attentions": NemotronHAttention,
-        "router_logits": OutputRecorder(NemotronHTopkRouter, index=0),
+        "router_logits": OutputRecorder(NemotronHTopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = [
         "e_score_correction_bias",
@@ -1037,7 +1037,7 @@ class NemotronHPreTrainedModel(PreTrainedModel):
                 inv_dt = dt + torch.log(-torch.expm1(-dt))
                 with torch.no_grad():
                     init.copy_(module.dt_bias, inv_dt)
-        elif isinstance(module, NemotronHTopkRouter):
+        elif isinstance(module, NemotronHTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, NemotronHExperts):

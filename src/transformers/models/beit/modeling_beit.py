@@ -271,37 +271,33 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: torch.Tensor | None,
-    scaling: float | None = None,
+    scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
-    if scaling is None:
-        scaling = query.size(-1) ** -0.5
-
-    # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
     if attention_mask is not None:
         attn_weights = attn_weights + attention_mask
-
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
 
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
-
     return attn_output, attn_weights
 
 
 class BeitAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def __init__(self, config: BeitConfig):
         super().__init__()
         self.config = config
         self.num_attention_heads = config.num_attention_heads
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.attention_dropout = config.attention_probs_dropout_prob
+        self.attention_dropout = config.attention_dropout
         self.scaling = self.head_dim**-0.5
         self.is_causal = False
+
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
         self.k_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim)
@@ -312,7 +308,7 @@ class BeitAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -337,23 +333,21 @@ class BeitAttention(nn.Module):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-
         return attn_output, attn_weights
 
 
 class BeitMLP(nn.Module):
-    def __init__(self, config: BeitConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
-
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -386,9 +380,10 @@ class BeitLayer(GradientCheckpointingLayer):
 
     def __init__(self, config: BeitConfig, drop_path_rate: float = 0.0):
         super().__init__()
-        self.attention = BeitAttention(config)
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.hidden_size = config.hidden_size
+        self.self_attn = BeitAttention(config)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = BeitMLP(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.patch_size
@@ -423,8 +418,8 @@ class BeitLayer(GradientCheckpointingLayer):
 
         # Self Attention
         residual = hidden_states
-        hidden_states = self.layernorm_before(hidden_states)
-        hidden_states, _ = self.attention(
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
             **kwargs,
@@ -435,7 +430,7 @@ class BeitLayer(GradientCheckpointingLayer):
 
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.layernorm_after(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.lambda_2 * hidden_states

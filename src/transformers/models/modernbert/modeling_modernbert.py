@@ -77,21 +77,22 @@ class ModernBertMLP(nn.Module):
     and :class:`~transformers.model.bert.modeling_bert.SelfOutput` with a single module that has similar functionality.
     """
 
-    def __init__(self, config: ModernBertConfig):
+    def __init__(self, config):
         super().__init__()
+
         self.config = config
-        self.Wi = nn.Linear(config.hidden_size, int(config.intermediate_size) * 2, bias=config.mlp_bias)
-        self.act = ACT2FN[config.hidden_activation]
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+        self.activation_fn = ACT2FN[config.hidden_act]
         self.drop = nn.Dropout(config.mlp_dropout)
-        self.Wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input, gate = self.Wi(hidden_states).chunk(2, dim=-1)
-        return self.Wo(self.drop(self.act(input) * gate))
+        gate, up_states = self.gate_up_proj(hidden_states).chunk(2, dim=-1)
+        return self.down_proj(self.drop(up_states * self.activation_fn(gate)))
 
 
 class ModernBertRotaryEmbedding(nn.Module):
-    def __init__(self, config: ModernBertConfig, device=None):
+    def __init__(self, config: ModernBertConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -107,14 +108,14 @@ class ModernBertRotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
             setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: ModernBertConfig, device=None, layer_type: str | None = None, **kwargs
+        config: ModernBertConfig, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -136,7 +137,7 @@ class ModernBertRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -368,8 +369,8 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         if isinstance(module, ModernBertEmbeddings):
             init_weight(module.tok_embeddings, stds["embedding"])
         elif isinstance(module, ModernBertMLP):
-            init_weight(module.Wi, stds["in"])
-            init_weight(module.Wo, stds["out"])
+            init_weight(module.gate_up_proj, stds["in"])
+            init_weight(module.down_proj, stds["out"])
         elif isinstance(module, ModernBertAttention):
             init_weight(module.Wqkv, stds["in"])
             init_weight(module.Wo, stds["out"])

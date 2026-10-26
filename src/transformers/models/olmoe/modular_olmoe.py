@@ -25,16 +25,16 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.output_capturing import OutputRecorder
-from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
-    LlamaAttention,
     LlamaDecoderLayer,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM, MixtralModel
+from ..olmo2.modeling_olmo2 import Olmo2Attention
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeTopKRouter
 from .configuration_olmoe import OlmoeConfig
 
@@ -51,18 +51,11 @@ class OlmoeRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class OlmoeMLP(GemmaMLP):
+class OlmoeMLP(MistralMLP):
     pass
 
 
-class OlmoeAttention(LlamaAttention):
-    def __init__(self, config: OlmoeConfig, layer_idx: int | None = None):
-        super().__init__(config, layer_idx)
-        self.q_norm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.k_norm = OlmoeRMSNorm(
-            (config.hidden_size // config.num_attention_heads) * config.num_key_value_heads, eps=config.rms_norm_eps
-        )
-
+class OlmoeAttention(Olmo2Attention):
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -140,11 +133,7 @@ class OlmoeSparseMoeBlock(nn.Module):
 class OlmoeDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: OlmoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.hidden_size = config.hidden_size
-        self.self_attn = OlmoeAttention(config=config, layer_idx=layer_idx)
         self.mlp = OlmoeSparseMoeBlock(config)
-        self.input_layernorm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = OlmoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 @auto_docstring

@@ -404,13 +404,13 @@ class Owlv2MLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -418,11 +418,11 @@ class Owlv2MLP(nn.Module):
 class Owlv2EncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: Owlv2VisionConfig | Owlv2TextConfig):
         super().__init__()
-        self.embed_dim = config.hidden_size
+        self.hidden_size = config.hidden_size
         self.self_attn = Owlv2Attention(config)
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = Owlv2MLP(config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -432,7 +432,7 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
     ) -> torch.FloatTensor:
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -441,7 +441,7 @@ class Owlv2EncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
@@ -489,8 +489,8 @@ class Owlv2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, Owlv2MLP):
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            init.normal_(module.fc1.weight, std=fc_std)
-            init.normal_(module.fc2.weight, std=in_proj_std)
+            init.normal_(module.up_proj.weight, std=fc_std)
+            init.normal_(module.down_proj.weight, std=in_proj_std)
         elif isinstance(module, Owlv2Model):
             init.normal_(
                 module.text_projection.weight,

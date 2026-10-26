@@ -24,7 +24,6 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
     group_images_by_shape,
@@ -45,6 +44,7 @@ from ...utils import (
 from ...utils.generic import TensorType, can_return_tuple, merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoConfig
+from ..deformable_detr.modeling_deformable_detr import DeformableDetrMultiscaleDeformableAttention
 from ..resnet.modeling_resnet import ResNetConvLayer
 from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoder,
@@ -54,11 +54,11 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrMLPPredictionHead,
     RTDetrModel,
     RTDetrModelOutput,
-    RTDetrMultiscaleDeformableAttention,
     RTDetrPreTrainedModel,
     get_contrastive_denoising_training_group,
     inverse_sigmoid,
 )
+from ..vit.image_processing_vit import ViTImageProcessor
 
 
 if is_cv2_available():
@@ -231,14 +231,11 @@ class PPDocLayoutV3Config(PreTrainedConfig):
 
 
 @auto_docstring
-class PPDocLayoutV3ImageProcessor(TorchvisionBackend):
+class PPDocLayoutV3ImageProcessor(ViTImageProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = [0, 0, 0]
     image_std = [1, 1, 1]
     size = {"height": 800, "width": 800}
-    do_resize = True
-    do_rescale = True
-    do_normalize = True
 
     # We require `self.resize(..., antialias=False)` to approximate the output of `cv2.resize`
     def _preprocess(
@@ -515,7 +512,7 @@ class PPDocLayoutV3GlobalPointer(nn.Module):
         return logits
 
 
-class PPDocLayoutV3MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention):
+class PPDocLayoutV3MultiscaleDeformableAttention(DeformableDetrMultiscaleDeformableAttention):
     pass
 
 

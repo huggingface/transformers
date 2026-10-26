@@ -13,30 +13,23 @@
 # limitations under the License.
 """PyTorch HunYuanMoEV1 model."""
 
-from collections.abc import Callable
-
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, logging
+from ...modeling_utils import PreTrainedModel
+from ...utils import logging
 from ...utils.output_capturing import OutputRecorder
-from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM, DeepseekV2Model
-from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import HunYuanDenseV1RotaryEmbedding
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM, DeepseekV2Model, DeepseekV2SparseMoeBlock
+from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import HunYuanDenseV1Attention, HunYuanDenseV1RotaryEmbedding
 from ..llama.modeling_llama import (
-    LlamaAttention,
     LlamaDecoderLayer,
     LlamaForSequenceClassification,
-    LlamaMLP,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
 )
+from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralExperts
 from .configuration_hunyuan_v1_moe import HunYuanMoEV1Config
 
@@ -48,64 +41,15 @@ class HunYuanMoEV1RMSNorm(LlamaRMSNorm):
     pass
 
 
-class HunYuanMoEV1MLP(LlamaMLP):
-    def __init__(self, config: HunYuanMoEV1Config):
-        super().__init__(config)
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+class HunYuanMoEV1MLP(MistralMLP):
+    pass
 
 
-class HunYuanMoEV1Attention(LlamaAttention):
-    def __init__(self, config: HunYuanMoEV1Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.query_layernorm = HunYuanMoEV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.key_layernorm = HunYuanMoEV1RMSNorm(self.head_dim, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        query_states = self.query_layernorm(query_states)
-        key_states = self.key_layernorm(key_states)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
+class HunYuanMoEV1Attention(HunYuanDenseV1Attention):
+    pass
 
 
-class HunYuanMoEV1Gate(nn.Module):
+class HunYuanMoEV1TopKRouter(nn.Module):
     def __init__(self, config: HunYuanMoEV1Config, layer_idx: int | None = None):
         super().__init__()
         self.config = config
@@ -119,33 +63,21 @@ class HunYuanMoEV1Gate(nn.Module):
         if self.wg.weight.dtype == torch.float32:
             hidden_states = hidden_states.float()
         router_logits = self.wg(hidden_states)
-        routing_weights = F.softmax(router_logits, dim=1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
-        routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        return router_logits, routing_weights.to(router_logits.dtype), selected_experts
+        router_probs = F.softmax(router_logits, dim=1, dtype=torch.float)
+        top_k_weights, top_k_index = torch.topk(router_probs, self.top_k, dim=-1)
+        top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True)
+        return router_logits, top_k_weights.to(router_logits.dtype), top_k_index
 
 
 class HunYuanMoEV1Experts(MixtralExperts):
     pass
 
 
-class HunYuanMoEV1Moe(nn.Module):
+class HunYuanMoEV1SparseMoeBlock(DeepseekV2SparseMoeBlock):
     def __init__(self, config: HunYuanMoEV1Config, layer_idx: int | None = None):
-        super().__init__()
-        self.config = config
-        self.gate = HunYuanMoEV1Gate(config, layer_idx=layer_idx)
-        self.experts = HunYuanMoEV1Experts(config)
-        self.shared_mlp = HunYuanMoEV1MLP(config)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states_mlp = self.shared_mlp(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        _, routing_weights, selected_experts = self.gate(hidden_states)
-        final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights).reshape(
-            batch_size, sequence_length, hidden_dim
-        )
-        return final_hidden_states + hidden_states_mlp
+        super().__init__(config)
+        self.gate = HunYuanMoEV1TopKRouter(config, layer_idx=layer_idx)
+        self.shared_experts = HunYuanMoEV1MLP(config)
 
 
 class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
@@ -153,7 +85,7 @@ class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.hidden_size = config.hidden_size
         self.self_attn = HunYuanMoEV1Attention(config=config, layer_idx=layer_idx)
-        self.mlp = HunYuanMoEV1Moe(config, layer_idx=layer_idx)
+        self.mlp = HunYuanMoEV1SparseMoeBlock(config, layer_idx=layer_idx)
         self.input_layernorm = HunYuanMoEV1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = HunYuanMoEV1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.layer_idx = layer_idx
@@ -163,7 +95,7 @@ class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": HunYuanMoEV1DecoderLayer,
         "attentions": HunYuanMoEV1Attention,
-        "router_logits": OutputRecorder(HunYuanMoEV1Gate, index=0),
+        "router_logits": OutputRecorder(HunYuanMoEV1TopKRouter, index=0),
     }
 
     @torch.no_grad()

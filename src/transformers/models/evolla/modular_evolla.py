@@ -38,7 +38,6 @@ from ...utils import (
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..esm.modeling_esm import (
-    EsmAttention,
     EsmEmbeddings,
     EsmEncoder,
     EsmIntermediate,
@@ -50,7 +49,6 @@ from ..esm.modeling_esm import (
     EsmSelfOutput,
 )
 from ..llama.modeling_llama import (
-    LlamaAttention,
     LlamaDecoderLayer,
     LlamaMLP,
     LlamaPreTrainedModel,
@@ -107,10 +105,10 @@ class EvollaSaProtEmbeddings(EsmEmbeddings):
 
 
 class EvollaSaProtRotaryEmbedding(EsmRotaryEmbedding):
-    def __init__(self, config: SaProtConfig, device=None):
+    def __init__(self, config: SaProtConfig):
         super().__init__(config)
 
-    def compute_default_rope_parameters(config: SaProtConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: SaProtConfig, **kwargs) -> tuple[torch.Tensor, float]:
         return super().compute_default_rope_parameters(config)
 
 
@@ -119,10 +117,6 @@ class EvollaSaProtSelfAttention(EsmSelfAttention):
 
 
 class EvollaSaProtSelfOutput(EsmSelfOutput):
-    pass
-
-
-class EvollaSaProtAttention(EsmAttention):
     pass
 
 
@@ -287,12 +281,12 @@ class EvollaFeedForward(nn.Module):
         inner_dim = int(dim * mult)
 
         self.norm = nn.LayerNorm(dim)
-        self.fc1 = nn.Linear(dim, inner_dim, bias=False)
+        self.up_proj = nn.Linear(dim, inner_dim, bias=False)
         self.activation = nn.GELU()
-        self.fc2 = nn.Linear(inner_dim, dim, bias=False)
+        self.down_proj = nn.Linear(inner_dim, dim, bias=False)
 
     def forward(self, x):
-        return self.fc2(self.activation(self.fc1(self.norm(x))))
+        return self.down_proj(self.activation(self.up_proj(self.norm(x))))
 
 
 class EvollaSequenceCompressorResampler(nn.Module):
@@ -617,10 +611,6 @@ class EvollaRotaryEmbedding(LlamaRotaryEmbedding):
 
 
 class EvollaMLP(LlamaMLP):
-    pass
-
-
-class EvollaAttention(LlamaAttention):
     pass
 
 

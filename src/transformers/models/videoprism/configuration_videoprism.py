@@ -46,6 +46,7 @@ class VideoPrismVisionConfig(PreTrainedConfig):
     """
 
     model_type = "videoprism_vision_model"
+    attribute_map = {"attention_probs_dropout_prob": "attention_dropout"}
     image_size: int | list[int] | tuple[int, int] = 288
     num_frames: int = 16
     tubelet_size: list[int] | tuple[int, ...] = (1, 18, 18)
@@ -55,7 +56,7 @@ class VideoPrismVisionConfig(PreTrainedConfig):
     intermediate_size: int = 3072
     hidden_act: str = "gelu_python"
     hidden_dropout_prob: float | int = 0.0
-    attention_probs_dropout_prob: float | int = 0.0
+    attention_dropout: float | int = 0.0
     initializer_range: float = 0.02
     layer_norm_eps: float = 1e-06
     qkv_bias: bool = True
@@ -89,10 +90,12 @@ class VideoPrismTextConfig(PreTrainedConfig):
 
     hidden_act: str = "relu"
     layer_norm_eps: float = 1e-6
+    attention_dropout: float | int = 0.0
     pad_token_id: int | None = 0
     bos_token_id: int | None = None
     eos_token_id: int | list[int] | None = None
-    attention_probs_dropout_prob: float | int = 0.0
+
+    attribute_map = {"attention_probs_dropout_prob": "attention_dropout"}
     apply_l2norm: bool = True
     qkv_bias: bool = True
     hidden_dropout_prob: float = 0.0

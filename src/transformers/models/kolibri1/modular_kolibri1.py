@@ -20,7 +20,7 @@ from torch import nn
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, is_torch_greater_or_equal
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3ForCausalLM, DeepseekV3MoE
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3ForCausalLM, DeepseekV3SparseMoeBlock
 from ..exaone4.modeling_exaone4 import Exaone4Attention
 from ..glm4.modeling_glm4 import Glm4DecoderLayer
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeModel
@@ -140,7 +140,7 @@ class Kolibri1TopKRouter(Qwen3MoeTopKRouter):
         return router_logits, router_scores, router_indices
 
 
-class Kolibri1SparseMoeBlock(DeepseekV3MoE):
+class Kolibri1SparseMoeBlock(DeepseekV3SparseMoeBlock):
     def __init__(self, config: Kolibri1Config):
         super().__init__(config)
         self.gate = Kolibri1TopKRouter(config)

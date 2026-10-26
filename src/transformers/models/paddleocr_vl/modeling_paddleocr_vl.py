@@ -36,7 +36,6 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -47,7 +46,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import (
     accepts_precomputed_kwargs,
     get_max_seqlen,
@@ -61,9 +60,6 @@ from ...vision_utils import (
     get_vision_position_ids,
 )
 from .configuration_paddleocr_vl import PaddleOCRTextConfig, PaddleOCRVisionConfig, PaddleOCRVLConfig
-
-
-logger = logging.get_logger(__name__)
 
 
 class PaddleOCRProjector(nn.Module):
@@ -123,9 +119,7 @@ class PaddleOCRVisionRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_axial_rope_parameters(
-        config: PaddleOCRVisionConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: PaddleOCRVisionConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -141,11 +135,11 @@ class PaddleOCRVisionRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        # position_ids: (N, 2) — column 0 = h coords, column 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
         sin = freqs.sin() * self.attention_scaling
@@ -158,9 +152,8 @@ class PaddleOCRVisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        freq = freq.flatten(1)
+        return torch.cat([freq, freq], dim=-1)
 
 
 class PaddleOCRRotaryEmbedding(nn.Module):
@@ -239,43 +232,6 @@ class PaddleOCRMLP(nn.Module):
         return down_proj
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -309,59 +265,75 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 @use_kernelized_func(apply_rotary_pos_emb)
 class PaddleOCRAttention(nn.Module):
-    """
-    Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
-    and "Generating Long Sequences with Sparse Transformers".
-    """
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: PaddleOCRVLConfig, layer_idx: int | None = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
-                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = getattr(config, "head_dim", self.hidden_size // self.num_heads)
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.is_causal = True
-
-        self.attention_dropout = 0.0
-        self.rope_parameters = config.rope_parameters
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.use_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.use_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.use_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.use_bias)
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
-        self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
+        self.attention_dropout = 0.0
+        self.is_causal = True
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.use_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.use_bias)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        bsz, q_len, _ = hidden_states.size()
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -381,12 +353,10 @@ class PaddleOCRAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            position_ids=position_ids,  # pass positions for FA2
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
@@ -743,30 +713,29 @@ class PaddleOCRVisionAttention(nn.Module):
 
 
 class PaddleOCRVisionMLP(nn.Module):
-    def __init__(self, config: PaddleOCRVisionConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
 class PaddleOCRVisionEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: PaddleOCRVisionConfig):
         super().__init__()
-        self.embed_dim = config.hidden_size
-        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.hidden_size = config.hidden_size
         self.self_attn = PaddleOCRVisionAttention(config=config)
-        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.input_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
         self.mlp = PaddleOCRVisionMLP(config=config)
+        self.post_attention_layernorm = nn.LayerNorm(self.hidden_size, eps=config.layer_norm_eps)
 
-    @auto_docstring
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -782,7 +751,7 @@ class PaddleOCRVisionEncoderLayer(GradientCheckpointingLayer):
         """
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states,
             cu_seqlens=cu_seqlens,
@@ -792,7 +761,7 @@ class PaddleOCRVisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 

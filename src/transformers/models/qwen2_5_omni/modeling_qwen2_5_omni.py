@@ -933,7 +933,7 @@ class Qwen2_5OmniVisionRotaryEmbedding(nn.Module):
     The final angles rotate over the whole head dim, no partial rotation involved.
     """
 
-    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig, device=None):
+    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig):
         super().__init__()
         self.config = config
 
@@ -947,9 +947,7 @@ class Qwen2_5OmniVisionRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_axial_rope_parameters(
-        config: Qwen2_5OmniVisionEncoderConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_axial_rope_parameters(config: Qwen2_5OmniVisionEncoderConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -965,11 +963,11 @@ class Qwen2_5OmniVisionRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         inv_freq = 1.0 / (base ** (torch.arange(0, spatial_dim, 2, dtype=torch.float) / spatial_dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     def forward(self, x, position_ids):
-        # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
+        # position_ids: (N, 2) — column 0 = h coords, column 1 = w coords
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
         sin = freqs.sin() * self.attention_scaling
@@ -982,9 +980,8 @@ class Qwen2_5OmniVisionRotaryEmbedding(nn.Module):
         """
         Recompose the frequencies into the final spatial layout used per each grid.
         """
-        freq_h, freq_w = freq[:, 0], freq[:, 1]
-        freq_hw = torch.cat([freq_h, freq_w], dim=-1)
-        return torch.cat([freq_hw, freq_hw], dim=-1)
+        freq = freq.flatten(1)
+        return torch.cat([freq, freq], dim=-1)
 
 
 def rotate_half(x):
@@ -1117,26 +1114,28 @@ class Qwen2_5OmniRMSNorm(nn.Module):
 
 
 class Qwen2_5OmniMLP(nn.Module):
-    def __init__(self, config, bias: bool = False):
+    def __init__(self, config):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class Qwen2_5OmniVisionBlock(GradientCheckpointingLayer):
-    def __init__(self, config: Qwen2_5OmniVisionEncoderConfig) -> None:
+    def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
         self.norm1 = Qwen2_5OmniRMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen2_5OmniRMSNorm(config.hidden_size, eps=1e-6)
         self.attn = Qwen2_5OmniVisionAttention(config=config)
-        self.mlp = Qwen2_5OmniMLP(config, bias=True)
+        self.mlp = Qwen2_5OmniMLP(config)
 
     @deprecate_kwarg("rotary_pos_emb", version="v5.20", new_name="position_embeddings")
     def forward(
@@ -1146,10 +1145,6 @@ class Qwen2_5OmniVisionBlock(GradientCheckpointingLayer):
         position_embeddings: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        r"""
-        cu_seqlens (`torch.Tensor`):
-            Cumulative sequence lengths used for packed variable-length attention in Flash Attention kernels.
-        """
         hidden_states = hidden_states + self.attn(
             self.norm1(hidden_states),
             cu_seqlens=cu_seqlens,
@@ -1396,57 +1391,38 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 @use_kernelized_func(apply_rotary_pos_emb)
 class Qwen2_5OmniAttention(nn.Module):
-    """
-    Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
-    and "Generating Long Sequences with Sparse Transformers".
-    """
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Qwen2_5OmniConfig, layer_idx: int | None = None):
+    def __init__(self, config: Qwen2_5OmniConfig, layer_idx: int):
         super().__init__()
+        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing `layer_idx` is not recommended and will "
-                "to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = getattr(config, "head_dim", self.hidden_size // self.num_heads)
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.is_causal = True
-        self.attention_dropout = config.attention_dropout
-        self.rope_parameters = config.rope_parameters
+        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
-
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=False)
-        self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
         self.sliding_window = config.sliding_window if self.layer_type == "sliding_attention" else None
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        attention_mask: torch.Tensor | None,
         past_key_values: Cache | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        bsz, q_len, _ = hidden_states.size()
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -1466,28 +1442,29 @@ class Qwen2_5OmniAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            position_ids=position_ids,  # pass positions for FA2
+            sliding_window=self.sliding_window,  # main diff with Llama
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
 
 class Qwen2MLP(nn.Module):
-    def __init__(self, config, bias: bool = False):
+    def __init__(self, config):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state):
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class Qwen2_5OmniDecoderLayer(GradientCheckpointingLayer):
@@ -2939,25 +2916,18 @@ class Qwen2_5_OmniAdaLayerNormZero_Final(nn.Module):
         return hidden_states
 
 
-# FeedForward
 class DiTMLP(nn.Module):
     def __init__(self, dim, mult=4, dropout=0.0):
         super().__init__()
         inner_dim = int(dim * mult)
+        self.up_proj = nn.Linear(dim, inner_dim)
+        self.activation_fn = nn.GELU(approximate="tanh")
+        self.dropout = nn.Dropout(dropout)
+        self.down_proj = nn.Linear(inner_dim, dim)
 
-        self.ff = nn.ModuleList(
-            [
-                nn.Linear(dim, inner_dim),
-                nn.GELU(approximate="tanh"),
-                nn.Dropout(dropout),
-                nn.Linear(inner_dim, dim),
-            ]
-        )
-
-    def forward(self, hidden_states):
-        for layer in self.ff:
-            hidden_states = layer(hidden_states)
-        return hidden_states
+    def forward(self, hidden_states) -> torch.Tensor:
+        hidden_states = self.activation_fn(self.up_proj(hidden_states))
+        return self.down_proj(self.dropout(hidden_states))
 
 
 def deinterleave_head_dim(x: torch.Tensor) -> torch.Tensor:

@@ -64,7 +64,7 @@ class MiMoV2FlashRMSNorm(nn.Module):
 
 
 class MiMoV2FlashRotaryEmbedding(nn.Module):
-    def __init__(self, config: MiMoV2FlashConfig, device=None):
+    def __init__(self, config: MiMoV2FlashConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -80,14 +80,14 @@ class MiMoV2FlashRotaryEmbedding(nn.Module):
             rope_init_fn: Callable = self.compute_default_rope_parameters
             if self.rope_type[layer_type] != "default":
                 rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, layer_type=layer_type)
             setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
             setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: MiMoV2FlashConfig, device=None, layer_type: str | None = None, **kwargs
+        config: MiMoV2FlashConfig, layer_type: str | None = None, **kwargs
     ) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -110,7 +110,7 @@ class MiMoV2FlashRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -126,13 +126,13 @@ class MiMoV2FlashRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class MiMoV2FlashTopkRouter(nn.Module):
+class MiMoV2FlashTopKRouter(nn.Module):
     def __init__(self, config: MiMoV2FlashConfig):
         super().__init__()
         self.top_k = config.num_experts_per_tok
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
-        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+        self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
         self.routed_scaling_factor = config.routed_scaling_factor
         self.num_group = config.n_group
         self.topk_group = config.topk_group
@@ -142,8 +142,8 @@ class MiMoV2FlashTopkRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
-        scores = router_logits.sigmoid()
-        scores_for_choice = scores + self.e_score_correction_bias
+        router_probs = router_logits.sigmoid()
+        scores_for_choice = router_probs + self.e_score_correction_bias
         group_scores = (
             scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
             .topk(2, dim=-1)[0]
@@ -158,13 +158,13 @@ class MiMoV2FlashTopkRouter(nn.Module):
             .reshape(-1, self.num_experts)
         )
         scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = scores.gather(1, topk_indices)
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
+        top_k_weights = router_probs.gather(1, top_k_index)
         if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
-        topk_weights = topk_weights * self.routed_scaling_factor
-        return router_logits, topk_weights, topk_indices
+            denominator = top_k_weights.sum(dim=-1, keepdim=True) + 1e-20
+            top_k_weights /= denominator
+        top_k_weights = top_k_weights * self.routed_scaling_factor
+        return router_logits, top_k_weights, top_k_index
 
 
 @use_experts_implementation
@@ -179,6 +179,10 @@ class MiMoV2FlashExperts(nn.Module):
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
         self.act_fn = ACT2FN[config.hidden_act]
+
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up.chunk(2, dim=-1)
+        return self.act_fn(gate) * up
 
     def forward(
         self,
@@ -198,8 +202,9 @@ class MiMoV2FlashExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
+            current_hidden_states = self._apply_gate(
+                nn.functional.linear(current_state, self.gate_up_proj[expert_idx])
+            )
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -207,9 +212,9 @@ class MiMoV2FlashExperts(nn.Module):
         return final_hidden_states
 
 
-class MiMoV2FlashMoE(nn.Module):
+class MiMoV2FlashSparseMoeBlock(nn.Module):
     """
-    Only difference from `DeepseekV3MoE` is that we have no shared experts.
+    Only difference from `DeepseekV3SparseMoeBlock` is that we have no shared experts.
     So we drop it and override the forward to skip the shared expert (residual like) add.
     """
 
@@ -217,13 +222,13 @@ class MiMoV2FlashMoE(nn.Module):
         super().__init__()
         self.config = config
         self.experts = MiMoV2FlashExperts(config)
-        self.gate = MiMoV2FlashTopkRouter(config)
+        self.gate = MiMoV2FlashTopKRouter(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         orig_shape = hidden_states.shape
-        _, topk_weights, topk_indices = self.gate(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        return self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        return self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
 
 
 class MiMoV2FlashMLP(nn.Module):
@@ -343,7 +348,7 @@ class MiMoV2FlashAttention(nn.Module):
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         self.num_key_value_groups = num_attention_heads // num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
@@ -409,12 +414,15 @@ class MiMoV2FlashDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: MiMoV2FlashConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.self_attn = MiMoV2FlashAttention(config, layer_idx)
 
-        self.mlp = MiMoV2FlashMoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else MiMoV2FlashMLP(config)
-
-        self.input_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.self_attn = MiMoV2FlashAttention(config=config, layer_idx=layer_idx)
+        self.mlp = (
+            MiMoV2FlashSparseMoeBlock(config)
+            if config.mlp_layer_types[layer_idx] == "sparse"
+            else MiMoV2FlashMLP(config)
+        )
+        self.input_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = MiMoV2FlashRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -464,7 +472,7 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": MiMoV2FlashDecoderLayer,
         "attentions": MiMoV2FlashAttention,
-        "router_logits": OutputRecorder(MiMoV2FlashTopkRouter, index=0),
+        "router_logits": OutputRecorder(MiMoV2FlashTopKRouter, index=0),
     }
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"^model\.mtp\."]
@@ -473,7 +481,7 @@ class MiMoV2FlashPreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, MiMoV2FlashTopkRouter):
+        if isinstance(module, MiMoV2FlashTopKRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MiMoV2FlashExperts):

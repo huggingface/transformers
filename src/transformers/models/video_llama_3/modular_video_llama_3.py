@@ -32,7 +32,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
 )
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring, can_return_tuple, logging
@@ -47,6 +47,7 @@ from ...video_utils import group_videos_by_shape, reorder_videos
 from ...vision_utils import get_vision_attention_seqlens, get_vision_position_ids
 from ..auto import AutoConfig
 from ..auto.modeling_auto import AutoModel
+from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs, smart_resize
@@ -65,9 +66,8 @@ from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
     SiglipAttention,
     SiglipEncoder,
-    SiglipEncoderLayer,
-    SiglipMLP,
 )
+from ..video_llava.modeling_video_llava import VideoLlavaCausalLMOutputWithPast, VideoLlavaModelOutputWithPast
 
 
 logger = logging.get_logger(__name__)
@@ -77,7 +77,6 @@ logger = logging.get_logger(__name__)
 @strict
 class VideoLlama3VisionConfig(SiglipVisionConfig):
     model_type = "video_llama_3_vision"
-    base_config_key = "vision_config"
     default_rope_type = "axial"
 
     image_size = AttributeError()
@@ -136,7 +135,7 @@ class VideoLlama3VisionEmbeddings(nn.Module):
         return embeddings
 
 
-class VideoLlama3VisionMLP(SiglipMLP):
+class VideoLlama3VisionMLP(CLIPMLP):
     pass
 
 
@@ -231,7 +230,7 @@ class VideoLlama3VisionAttention(SiglipAttention):
         return attn_output, attn_weights
 
 
-class VideoLlama3VisionEncoderLayer(SiglipEncoderLayer):
+class VideoLlama3VisionEncoderLayer(CLIPEncoderLayer):
     def __init__(self, config: VideoLlama3VisionConfig):
         super().__init__(config)
         self.self_attn = VideoLlama3VisionAttention(config=config)
@@ -252,7 +251,7 @@ class VideoLlama3VisionEncoderLayer(SiglipEncoderLayer):
         """
         residual = hidden_states
 
-        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states = self.input_layernorm(hidden_states)
         hidden_states, _ = self.self_attn(
             hidden_states,
             cu_seqlens=cu_seqlens,
@@ -262,7 +261,7 @@ class VideoLlama3VisionEncoderLayer(SiglipEncoderLayer):
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
 
@@ -408,7 +407,7 @@ class VideoLlama3Projector(nn.Module):
     """
 )
 @dataclass
-class VideoLlama3ModelOutputWithPast(ModelOutput):
+class VideoLlama3ModelOutputWithPast(VideoLlavaModelOutputWithPast):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
         Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
@@ -426,10 +425,6 @@ class VideoLlama3ModelOutputWithPast(ModelOutput):
 
     last_hidden_state: torch.FloatTensor = None
     past_key_values: list[torch.FloatTensor] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
-    video_hidden_states: torch.FloatTensor | None = None
 
 
 class VideoLlama3Model(Qwen2VLModel):
@@ -584,7 +579,7 @@ class VideoLlama3Model(Qwen2VLModel):
     """
 )
 @dataclass
-class VideoLlama3CausalLMOutputWithPast(ModelOutput):
+class VideoLlama3CausalLMOutputWithPast(VideoLlavaCausalLMOutputWithPast):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
@@ -604,13 +599,7 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
     past_key_values: list[torch.FloatTensor] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    image_hidden_states: torch.FloatTensor | None = None
-    video_hidden_states: torch.FloatTensor | None = None
 
 
 class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
@@ -768,7 +757,6 @@ class VideoLlama3ImageProcessorPil(Qwen2VLImageProcessorPil):
     image_std = IMAGENET_STANDARD_STD
     temporal_patch_size = 1
     merge_size = 1
-    valid_kwargs = VideoLlama3ImageProcessorKwargs
     model_input_names = [
         "pixel_values",
         "image_grid_thw",
@@ -838,7 +826,6 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
     image_std = IMAGENET_STANDARD_STD
     temporal_patch_size = 1
     merge_size = 1
-    valid_kwargs = VideoLlama3ImageProcessorKwargs
     model_input_names = [
         "pixel_values",
         "image_grid_thw",

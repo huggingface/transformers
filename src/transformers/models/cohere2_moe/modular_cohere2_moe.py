@@ -27,21 +27,21 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs
+from ...utils.generic import no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder
+from ..cohere.modeling_cohere import CohereLayerNorm, CohereRotaryEmbedding
 from ..cohere2.modeling_cohere2 import (
-    Cohere2Attention,
     Cohere2DecoderLayer,
     Cohere2ForCausalLM,
-    Cohere2LayerNorm,
-    Cohere2MLP,
     Cohere2Model,
     Cohere2PreTrainedModel,
-    Cohere2RotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..llama.modeling_llama import LlamaRMSNorm
+from ..granitemoe.modeling_granitemoe import GraniteMoeTopKRouter
+from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralExperts
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from .configuration_cohere2_moe import Cohere2MoeConfig
 
 
@@ -49,47 +49,40 @@ class Cohere2MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Cohere2MoeLayerNorm(Cohere2LayerNorm):
+class Cohere2MoeLayerNorm(CohereLayerNorm):
     pass
 
 
-class Cohere2MoeMLP(Cohere2MLP):
-    def __init__(self, config: Cohere2MoeConfig, intermediate_size=None):
-        super().__init__(config)
-        self.intermediate_size = intermediate_size if intermediate_size is not None else config.intermediate_size
+class Cohere2MoeMLP(Qwen2MoeMLP):
+    pass
 
 
 class Cohere2MoeExperts(MixtralExperts):
+    pass
+
+
+class Cohere2MoeTopKRouter(GraniteMoeTopKRouter):
     def __init__(self, config):
         super().__init__(config)
-        self.num_experts = config.num_experts
-
-
-class Cohere2MoeTopKRouter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.num_experts = config.num_experts
         self.expert_selection_fn = config.expert_selection_fn
         self.norm_topk_prob = config.norm_topk_prob
-        self.weight = nn.Parameter(torch.empty(config.num_experts, config.hidden_size))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         router_logits = F.linear(hidden_states, self.weight)
-        router_scores, selected_experts = torch.topk(router_logits, self.top_k, dim=-1)
+        top_k_weights, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)
         if self.expert_selection_fn == "softmax":
-            router_scores = F.softmax(router_scores, dim=1, dtype=torch.float)
+            top_k_weights = F.softmax(top_k_weights, dim=1, dtype=torch.float)
         elif self.expert_selection_fn == "sigmoid":
-            router_scores = F.sigmoid(router_scores)
+            top_k_weights = F.sigmoid(top_k_weights)
             if self.norm_topk_prob:
-                router_scores = router_scores / torch.sum(router_scores, dim=-1, keepdims=True)
+                top_k_weights = top_k_weights / torch.sum(top_k_weights, dim=-1, keepdims=True)
         else:
             raise ValueError("`expert_selection_fn` can only be `softmax` or `sigmoid`")
 
         # we cast back to the input dtype if it was upcasted in softmax
-        router_scores = router_scores.to(hidden_states.dtype)
+        top_k_weights = top_k_weights.to(hidden_states.dtype)
 
-        return router_logits, router_scores, selected_experts
+        return router_logits, top_k_weights, top_k_index
 
 
 class Cohere2MoeSparseMoeBlock(nn.Module):
@@ -109,8 +102,8 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_flat = hidden_states.view(-1, hidden_dim)
-        _, router_scores, selected_experts = self.gate(hidden_states_flat)
-        final_hidden_states = self.experts(hidden_states_flat, selected_experts, router_scores)
+        _, top_k_weights, top_k_index = self.gate(hidden_states_flat)
+        final_hidden_states = self.experts(hidden_states_flat, top_k_index, top_k_weights)
 
         if self.num_shared_experts > 0:
             shared_expert_output = self.shared_experts(hidden_states_flat)
@@ -124,9 +117,11 @@ class Cohere2MoeSparseMoeBlock(nn.Module):
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
 
-class Cohere2MoeAttention(Cohere2Attention):
+@no_inherit_decorator
+class Cohere2MoeAttention(LlamaAttention):
     def __init__(self, config: Cohere2MoeConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
+        self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
         self.force_rope = (
             config.mlp_layer_types[layer_idx] == "dense" and config.prefix_dense_sliding_window_pattern == 1
         )
@@ -189,7 +184,7 @@ class Cohere2MoeDecoderLayer(Cohere2DecoderLayer):
         )
 
 
-class Cohere2MoeRotaryEmbedding(Cohere2RotaryEmbedding):
+class Cohere2MoeRotaryEmbedding(CohereRotaryEmbedding):
     pass
 
 

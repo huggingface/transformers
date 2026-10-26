@@ -28,7 +28,7 @@ from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.generic import can_return_tuple, merge_with_config_defaults, no_inherit_decorator
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..auto import AutoConfig
 from ..conditional_detr.modeling_conditional_detr import encode_sinusoidal_position_embedding
@@ -40,7 +40,7 @@ from ..deformable_detr.modeling_deformable_detr import (
     DeformableDetrModel,
     DeformableDetrMultiscaleDeformableAttention,
 )
-from ..llama.modeling_llama import eager_attention_forward
+from ..llama.modeling_llama import LlamaAttention, eager_attention_forward
 from ..rt_detr.modeling_rt_detr import RTDetrConvNormLayer
 from ..vit.modeling_vit import ViTAttention
 from ..vitdet.configuration_vitdet import VitDetConfig
@@ -581,19 +581,15 @@ class LwDetrConvEncoder(nn.Module):
         return out
 
 
-class LwDetrAttention(nn.Module):
+@no_inherit_decorator
+class LwDetrAttention(LlamaAttention):
     """LW-DETR self-attention with group-DETR training technique."""
 
     def __init__(self, config: LwDetrConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
+        super().__init__(config, layer_idx)
         self.head_dim = getattr(config, "head_dim", config.d_model // config.decoder_self_attention_heads)
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
         self.is_causal = False
         self.num_key_value_groups = 1
-
         self.q_proj = nn.Linear(
             config.d_model, config.decoder_self_attention_heads * self.head_dim, bias=config.attention_bias
         )
@@ -665,15 +661,15 @@ class LwDetrMLP(nn.Module):
         super().__init__()
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.decoder_activation_function]
-        self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
+        self.up_proj = nn.Linear(config.d_model, config.decoder_ffn_dim)
+        self.down_proj = nn.Linear(config.decoder_ffn_dim, config.d_model)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = hidden_states
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         return hidden_states

@@ -25,19 +25,18 @@ from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..cohere.modeling_cohere import CohereRotaryEmbedding
 from ..cohere2.modeling_cohere2 import rotate_half  # noqa: F401
-from ..llama.modeling_llama import LlamaRotaryEmbedding
+from ..mistral.modeling_mistral import MistralMLP
 from ..mllama.modeling_mllama import (
     MllamaPreTrainedModel,
     MllamaSelfAttentionDecoderLayer,
     MllamaTextCrossAttention,
-    MllamaTextMLP,
     MllamaTextRMSNorm,
     MllamaTextSelfAttention,
     eager_attention_forward,
@@ -264,7 +263,7 @@ def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: int | N
     return packed_segments[:, :max_len]
 
 
-class BltMLP(MllamaTextMLP):
+class BltMLP(MistralMLP):
     pass
 
 
@@ -272,16 +271,8 @@ class BltRMSNorm(MllamaTextRMSNorm):
     pass
 
 
-class BltRotaryEmbedding(LlamaRotaryEmbedding):
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
-        emb = torch.repeat_interleave(freqs, 2, dim=-1)  # diff from Llama: we interleave() instead of cat()
-        cos = emb.cos() * self.attention_scaling
-        sin = emb.sin() * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+class BltRotaryEmbedding(CohereRotaryEmbedding):
+    pass
 
 
 class BltTransformerLayer(MllamaSelfAttentionDecoderLayer):

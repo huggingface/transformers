@@ -435,29 +435,22 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 class Sapiens2Attention(nn.Module):
-    """
-    Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
-    """
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: Sapiens2Config, layer_idx: int):
         super().__init__()
+        num_key_value_heads = config.num_key_value_heads_per_layer[layer_idx]
         self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        self.is_causal = False
-
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.scaling = self.head_dim**-0.5
+        self.attention_dropout = config.attention_dropout
         self.is_causal = False
-
-        self.dropout = config.attention_dropout
-
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
-        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
-        self.num_key_value_heads = config.num_key_value_heads_per_layer[layer_idx]
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.k_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=config.key_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.num_key_value_heads * self.head_dim, bias=config.value_bias)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.query_bias)
+        self.k_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.key_bias)
+        self.v_proj = nn.Linear(config.hidden_size, num_key_value_heads * self.head_dim, bias=config.value_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.proj_bias)
+        self.num_key_value_heads = num_key_value_heads
+        self.num_key_value_groups = config.num_attention_heads // num_key_value_heads
         self.q_norm = Sapiens2RMSNorm(self.head_dim, eps=config.rms_norm_eps) if config.use_qk_norm else nn.Identity()
         self.k_norm = Sapiens2RMSNorm(self.head_dim, eps=config.rms_norm_eps) if config.use_qk_norm else nn.Identity()
 
@@ -468,7 +461,6 @@ class Sapiens2Attention(nn.Module):
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Input shape: Batch x Time x Channel"""
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -490,7 +482,7 @@ class Sapiens2Attention(nn.Module):
             key_states,
             value_states,
             attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
+            dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
         )
@@ -568,11 +560,11 @@ class Sapiens2Layer(GradientCheckpointingLayer):
 
     def __init__(self, config: Sapiens2Config, layer_idx: int):
         super().__init__()
-        self.norm1 = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.attention = Sapiens2Attention(config, layer_idx=layer_idx)
+        self.input_layernorm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = Sapiens2Attention(config, layer_idx=layer_idx)
         self.layer_scale1 = Sapiens2LayerScale(config)
         self.drop_path = Sapiens2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        self.norm2 = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Sapiens2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         if config.use_gated_mlp:
             self.mlp = Sapiens2GatedMLP(config)
@@ -589,8 +581,8 @@ class Sapiens2Layer(GradientCheckpointingLayer):
     ) -> torch.Tensor:
         # Attention with residual connection
         residual = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        hidden_states, _ = self.attention(
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
             position_embeddings=position_embeddings,
@@ -601,7 +593,7 @@ class Sapiens2Layer(GradientCheckpointingLayer):
 
         # MLP with residual connection
         residual = hidden_states
-        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual

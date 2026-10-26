@@ -55,7 +55,6 @@ from ..gemma3.modeling_gemma3 import (
     Gemma3Attention,
     Gemma3DecoderLayer,
     Gemma3ForCausalLM,
-    Gemma3MLP,
     Gemma3RotaryEmbedding,
     Gemma3TextModel,
     Gemma3TextScaledWordEmbedding,
@@ -71,9 +70,11 @@ from ..gemma3n.modeling_gemma3n import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..mixtral.modeling_mixtral import MixtralExperts
+from ..llama.modeling_llama import LlamaMLP
+from ..mistral.modeling_mistral import MistralMLP
 from ..moonshine_streaming.modeling_moonshine_streaming import sliding_window_mask_function
-from ..sam3.modeling_sam3 import Sam3ViTRotaryEmbedding
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from .configuration_gemma4 import Gemma4AudioConfig, Gemma4Config, Gemma4TextConfig, Gemma4VisionConfig
 
 
@@ -727,7 +728,7 @@ class Gemma4VisionPooler(nn.Module):
         return hidden_states, padding_positions
 
 
-class Gemma4VisionMLP(Gemma3MLP):
+class Gemma4VisionMLP(LlamaMLP):
     def __init__(self, config: Gemma4VisionConfig):
         super().__init__(self, config)
         self.gate_proj = Gemma4ClippableLinear(config, self.hidden_size, self.intermediate_size)
@@ -792,13 +793,7 @@ def apply_multidimensional_rope(
 
 
 # override -- Gemma4 doesn't pack inputs for attention and thus needs a proper batch dim
-class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
-    def __init__(self, config: Gemma4VisionConfig, device=None):
-        super().__init__(config, device)
-
-    def compute_axial_rope_parameters(config: Gemma4VisionConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
-        return super().compute_axial_rope_parameters(config, device, **kwargs)
-
+class Gemma4VisionRotaryEmbedding(Qwen2_5_VLVisionRotaryEmbedding):
     def forward(self, x, position_ids):
         freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
         cos = freqs.cos() * self.attention_scaling
@@ -806,7 +801,7 @@ class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
-        return cos.to(x.dtype), sin.to(x.dtype)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     def recomposition_frequencies(self, freq):
         """
@@ -820,7 +815,7 @@ class Gemma4VisionRotaryEmbedding(Sam3ViTRotaryEmbedding):
 @no_inherit_decorator
 class Gemma4VisionAttention(Gemma3Attention):
     def __init__(self, config: Gemma4VisionConfig, layer_idx: int):
-        super().__init__(self, config, layer_idx)
+        super().__init__(config, layer_idx)
         del self.attn_logit_softcapping
         del self.sliding_window
         del self.is_sliding
@@ -882,7 +877,7 @@ class Gemma4VisionAttention(Gemma3Attention):
 # Same forward as Gemma3 but no cache
 class Gemma4VisionEncoderLayer(Gemma3DecoderLayer):
     def __init__(self, config: Gemma4VisionConfig, layer_idx: int):
-        super().__init__(self, config, layer_idx)
+        super().__init__(config, layer_idx)
         self.self_attn = Gemma4VisionAttention(config=config, layer_idx=layer_idx)
         self.mlp = Gemma4VisionMLP(config)
 
@@ -964,7 +959,7 @@ class Gemma4VisionEncoder(nn.Module):
 # ---- Text model ----
 
 
-class Gemma4TextMLP(Gemma3MLP):
+class Gemma4TextMLP(MistralMLP):
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
         first_kv_shared_layer_idx = config.num_hidden_layers - config.num_kv_shared_layers
         is_kv_shared_layer = layer_idx >= first_kv_shared_layer_idx > 0
@@ -974,33 +969,28 @@ class Gemma4TextMLP(Gemma3MLP):
 
 
 class Gemma4TextRotaryEmbedding(Gemma3RotaryEmbedding):
-    def __init__(self, config: Gemma4TextConfig, device=None):
+    def __init__(self, config: Gemma4TextConfig):
         nn.Module.__init__(self)
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
         self.layer_types = sorted(set(config.layer_types))
-        self.rope_init_fns: dict[str, Callable[..., tuple[torch.Tensor, float]]] = {}
-        self.rope_type: dict[str, str] = {}
-
+        self.rope_type = {}
+        self.rope_init_fns = {}  # diff with Gemma3: kept for `_init_weights`
         for layer_type in self.layer_types:
             rope_params = self.config.rope_parameters[layer_type]
             if rope_params is None:
                 continue
 
-            if (rope_type := rope_params["rope_type"]) != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[rope_type]
-            else:
-                rope_init_fn = self.compute_default_rope_parameters
-
+            self.rope_type[layer_type] = rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
             self.rope_init_fns[layer_type] = rope_init_fn
-            self.rope_type[layer_type] = rope_type
-
-            # `inv_freq` depends on the head dim, which varies by layer type, so initialise
-            # from a config resolved for this layer type rather than the global one.
+            # diff with Gemma3: the head dim varies by layer type, so use the config resolved for this layer type
             rope_config = config.per_layer_config[layer_type]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, device, layer_type=layer_type)
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(rope_config, layer_type=layer_type)
             setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
             setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
             setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
@@ -1122,15 +1112,11 @@ class Gemma4TextAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class Gemma4TextExperts(MixtralExperts):
-    def __init__(self, config: Gemma4TextConfig):
-        super().__init__()
-        self.num_experts = config.num_experts
-        self.intermediate_dim = config.moe_intermediate_size
-        self.act_fn = ACT2FN[config.hidden_activation]
+class Gemma4TextExperts(Qwen2MoeExperts):
+    pass
 
 
-class Gemma4TextRouter(nn.Module):
+class Gemma4TextTopKRouter(nn.Module):
     def __init__(self, config: Gemma4TextConfig):
         super().__init__()
         self.config = config
@@ -1147,13 +1133,13 @@ class Gemma4TextRouter(nn.Module):
         hidden_states = self.norm(hidden_states)
         hidden_states = hidden_states * self.scale * self.scalar_root_size
 
-        expert_scores = self.proj(hidden_states)  # [B*S, E]
+        router_logits = self.proj(hidden_states)  # [B*S, E]
         # fp32 for numerical stability
-        router_probabilities = nn.functional.softmax(expert_scores, dim=-1, dtype=torch.float32)
+        router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=torch.float32)
 
         # topk returns both values (probabilities) and indices directly
         top_k_weights, top_k_index = torch.topk(
-            router_probabilities,
+            router_probs,
             k=self.config.top_k_experts,
             dim=-1,
         )  # both [B*S, K]
@@ -1164,7 +1150,7 @@ class Gemma4TextRouter(nn.Module):
         # Apply per-expert scale directly to the weights
         top_k_weights = top_k_weights * self.per_expert_scale[top_k_index]
 
-        return router_probabilities, top_k_weights, top_k_index
+        return router_probs, top_k_weights, top_k_index
 
 
 class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
@@ -1176,14 +1162,14 @@ class Gemma4TextDecoderLayer(Gemma3DecoderLayer):
 
         self.hidden_size_per_layer_input = config.hidden_size_per_layer_input
         if self.hidden_size_per_layer_input:
-            self.act_fn = ACT2FN[config.hidden_activation]
+            self.act_fn = ACT2FN[config.hidden_act]
             self.per_layer_input_gate = nn.Linear(self.hidden_size, self.hidden_size_per_layer_input, bias=False)
             self.per_layer_projection = nn.Linear(self.hidden_size_per_layer_input, self.hidden_size, bias=False)
             self.post_per_layer_input_norm = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
 
         self.enable_moe_block = config.enable_moe_block
         if self.enable_moe_block:
-            self.router = Gemma4TextRouter(config)
+            self.router = Gemma4TextTopKRouter(config)
             self.experts = Gemma4TextExperts(config)
             self.post_feedforward_layernorm_1 = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
             self.post_feedforward_layernorm_2 = Gemma4RMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -1289,7 +1275,7 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
         elif isinstance(module, Gemma4TextScaledWordEmbedding):
             init.constant_(module.embed_scale, module.scalar_embed_scale)
-        elif isinstance(module, Gemma4TextRouter):
+        elif isinstance(module, Gemma4TextTopKRouter):
             init.ones_(module.scale)
             init.ones_(module.per_expert_scale)
         elif isinstance(module, Gemma4TextExperts):
@@ -1312,7 +1298,7 @@ class Gemma4PreTrainedModel(Gemma3nPreTrainedModel):
 class Gemma4TextModel(Gemma3TextModel):
     config: Gemma4TextConfig
     _can_record_outputs = {
-        "router_logits": OutputRecorder(Gemma4TextRouter, index=0),
+        "router_logits": OutputRecorder(Gemma4TextTopKRouter, index=0),
         "hidden_states": Gemma4TextDecoderLayer,
         "attentions": Gemma4TextAttention,
     }

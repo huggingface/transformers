@@ -109,43 +109,6 @@ class Glm4DecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., 0::2]
@@ -191,6 +154,43 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     q_embed = torch.cat([q_embed, q_pass], dim=-1)
     k_embed = torch.cat([k_embed, k_pass], dim=-1)
     return q_embed, k_embed
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
 
 
 class Glm4Attention(nn.Module):
@@ -276,7 +276,7 @@ class Glm4RotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(config: Glm4Config, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: Glm4Config, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -287,6 +287,7 @@ class Glm4RotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
+        # diff with Llama: only `partial_rotary_factor` of the head dim is rotated, as in `ROPE_INIT_FUNCTIONS`
         partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
@@ -294,7 +295,7 @@ class Glm4RotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)

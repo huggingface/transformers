@@ -47,7 +47,7 @@ class PhiRotaryEmbedding(nn.Module):
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    def compute_default_rope_parameters(config: PhiConfig, device=None, **kwargs) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: PhiConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -58,6 +58,7 @@ class PhiRotaryEmbedding(nn.Module):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
+        # diff with Llama: only `partial_rotary_factor` of the head dim is rotated, as in `ROPE_INIT_FUNCTIONS`
         partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
@@ -65,7 +66,7 @@ class PhiRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
@@ -239,13 +240,13 @@ class PhiMLP(nn.Module):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
-        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
