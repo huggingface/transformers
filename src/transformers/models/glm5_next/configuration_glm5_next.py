@@ -68,11 +68,13 @@ class Glm5NextTextConfig(PreTrainedConfig):
 
     model_type = "glm5_next_text"
     keys_to_ignore_at_inference = ["past_key_values"]
-
+    # The KDA linear attention runs replicated, but its `o_proj` shares the MLA attention's rowwise rule:
+    # `o_norm` marks its output replicated so that `o_proj` slices it instead of reading it as a shard.
     base_model_tp_plan = {
         "layers.*.self_attn.q_b_proj": "colwise",
         "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         "layers.*.self_attn.kv_b_proj": "colwise",
+        "layers.*.self_attn.o_norm": "replicated_output",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",

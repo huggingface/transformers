@@ -451,6 +451,35 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
         return module
 
 
+class LocalColwiseParamParallel(TensorParallelLayer):
+    """Shard a bare parameter along dim 0 and hand its owner the local shard during forward.
+
+    For per-head parameters that are not part of a linear layer, e.g. the attention `sinks` of a block whose
+    q/k/v projections are colwise. The owning attention module has no TP hooks and only sees this rank's heads as
+    plain tensors, so it needs this rank's slice of the parameter as a plain tensor too.
+    """
+
+    def shard_param(self, module, param, mesh):
+        meta = module._parameters.get(param)
+        if meta is None:
+            return
+        module._parameters[param] = torch.nn.Parameter(
+            distribute_tensor(meta, mesh, [Shard(0)], src_data_rank=None),
+            requires_grad=meta.requires_grad,
+        )
+        # Wrap the owner's forward once, even if it holds several such parameters. The params are looked up at call
+        # time, so the wrapper survives them being replaced during weight loading.
+        if not getattr(module, "_tp_local_params_forward", False):
+            module._tp_local_params_forward = True
+            original_forward = module.forward
+
+            def local_params_forward(*args, **kwargs):
+                with _use_local_dtensor_params(module):
+                    return original_forward(*args, **kwargs)
+
+            module.forward = local_params_forward
+
+
 class AllReduceParallel(TensorParallelLayer):
     """All-reduce a module's partial forward output across the TP mesh.
 
@@ -486,6 +515,20 @@ class AllReduceParallel(TensorParallelLayer):
         if output.placements != (Replicate(),):
             output = output.redistribute(placements=[Replicate()])
         return output.to_local()
+
+
+class ReplicatedOutputParallel(TensorParallelLayer):
+    """Mark a module's local output as replicated on the TP mesh.
+
+    For a replicated block whose output feeds a layer that a plan shared with other blocks shards rowwise, e.g. a
+    linear attention under the same `self_attn.o_proj` name as a head-sharded attention. A plain local input reads as
+    this rank's shard to the rowwise layer; a replicated DTensor is sliced to the rank's columns instead.
+    """
+
+    def transform_output_post_forward(self, module, output, mesh):
+        if output is None or isinstance(output, DTensor):
+            return output
+        return DTensor.from_local(output, mesh, [Replicate()], run_check=False)
 
 
 class MlaKvAProjParallel(TensorParallelLayer):
@@ -1070,8 +1113,10 @@ class ParallelInterface(GeneralInterface):
             "moe_identity_expert": MoeIdentityParallel(),
             "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
             "replicate_input": ReplicateInputParallel(),
+            "local_colwise": LocalColwiseParamParallel(),
             "mla_kv_a_proj": MlaKvAProjParallel(),
             "all_reduce": AllReduceParallel(),
+            "replicated_output": ReplicatedOutputParallel(),
             # Every rank keeps the full param, e.g. a per-tensor quantization scale
             "replicate": TensorParallelLayer(),
         }
