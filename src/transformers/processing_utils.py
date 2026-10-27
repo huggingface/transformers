@@ -1853,6 +1853,16 @@ class ProcessorMixin(PushToHubMixin):
         processor_dict = processor_dict if processor_dict is not None else {}
         # Remove subfolder from kwargs to avoid duplicate keyword arguments
         subfolder = kwargs.pop("subfolder", "")
+        # Legacy checkpoints whose `config.json` has no `model_type` cannot be resolved by the Auto classes, which then
+        # fail (image processors) or silently fall back to a generic class (tokenizers). The processor class knows its
+        # model type, so hand its config to the Auto classes instead.
+        sub_processor_kwargs = kwargs
+        if "config" not in kwargs:
+            model_config = cls._get_model_config_for_untyped_checkpoint(
+                pretrained_model_name_or_path, subfolder, kwargs
+            )
+            if model_config is not None:
+                sub_processor_kwargs = {**kwargs, "config": model_config}
 
         # get args from processor init signature
         sub_processors = cls.get_attributes()
@@ -1872,7 +1882,7 @@ class ProcessorMixin(PushToHubMixin):
                     )
                 else:
                     tokenizer = cls._load_tokenizer_from_pretrained(
-                        sub_processor_type, pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                        sub_processor_type, pretrained_model_name_or_path, subfolder=subfolder, **sub_processor_kwargs
                     )
                 args.append(tokenizer)
             elif is_primary:
@@ -1887,7 +1897,7 @@ class ProcessorMixin(PushToHubMixin):
                     )
                     auto_processor_class = cls.get_possibly_dynamic_module(sub_processor_class_name)
                 sub_processor = auto_processor_class.from_pretrained(
-                    pretrained_model_name_or_path, subfolder=subfolder, **kwargs
+                    pretrained_model_name_or_path, subfolder=subfolder, **sub_processor_kwargs
                 )
                 args.append(sub_processor)
 
@@ -1919,6 +1929,41 @@ class ProcessorMixin(PushToHubMixin):
                 )
 
         return args
+
+    @classmethod
+    def _get_model_config_for_untyped_checkpoint(cls, pretrained_model_name_or_path, subfolder, kwargs):
+        """
+        Returns a default config of the model type this processor class is registered for in `AutoProcessor` when the
+        checkpoint's `config.json` declares neither a `model_type` nor an `auto_map` (e.g. `BridgeTower/*`), and
+        `None` otherwise.
+        """
+        module_parts = cls.__module__.split(".")
+        if len(module_parts) < 3 or module_parts[:2] != ["transformers", "models"]:
+            return None
+
+        from .configuration_utils import PreTrainedConfig
+        from .models.auto.auto_mappings import PROCESSOR_MAPPING_NAMES
+        from .models.auto.configuration_auto import CONFIG_MAPPING, model_type_to_module_name
+
+        model_types = [
+            model_type
+            for model_type, processor_class_name in PROCESSOR_MAPPING_NAMES.items()
+            if processor_class_name == cls.__name__
+            and model_type_to_module_name(model_type) == module_parts[2]
+            and model_type in CONFIG_MAPPING
+        ]
+        if not model_types:
+            return None
+
+        try:
+            config_dict, _ = PreTrainedConfig.get_config_dict(
+                pretrained_model_name_or_path, subfolder=subfolder, **dict(kwargs)
+            )
+        except (OSError, ValueError):
+            return None
+        if "model_type" in config_dict or "auto_map" in config_dict:
+            return None
+        return CONFIG_MAPPING[model_types[0]]()
 
     @staticmethod
     def get_possibly_dynamic_module(module_name):
