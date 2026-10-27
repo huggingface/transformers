@@ -18,6 +18,7 @@ import copy
 import importlib.metadata
 import json
 import os
+import warnings
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Optional, Union
@@ -1714,7 +1715,7 @@ class BlockScaledConfig(QuantizationConfigMixin):
 
     It holds the format options, which the quantized modules read, and the loading options.
     One such config quantizes a whole model. A [`FineGrainedConfig`] maps several of them onto parts of one model.
-    Build one of the formats.
+    Build one of the formats, such as [`Fp8Config`].
 
     Args:
         activation_format (`str | None`, *optional*):
@@ -1807,9 +1808,93 @@ class BlockScaledConfig(QuantizationConfigMixin):
         # first overridden by `NVFP4Config` in #49779, which rejects weight-only checkpoints
 
 
+class Fp8Config(BlockScaledConfig):
+    """FP8 weights, as DeepSeek-V3 and Qwen3 ship them.
+
+    Weights are `float8_e4m3fn` with fp32 or UE8M0 scales, per block or per tensor.
+    Activations are FP8, quantized dynamically or with calibrated scales.
+
+    Args:
+        weight_block_size (`tuple[int, int]`, *optional*, defaults to `(128, 128)`):
+            The block that each weight scale covers. `None` means one scale per tensor.
+        scale_fmt (`str`, *optional*, defaults to `"float"`):
+            Storage dtype of the scales. `"float"` is fp32. `"ue8m0"` is `torch.float8_e8m0fnu`, as in DeepSeek-V4.
+        activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
+            `"dynamic"` quantizes activations on the fly, per 128-wide group.
+            `"static"` uses a calibrated per-tensor activation scale from the checkpoint.
+        kwargs (`dict[str, Any]`, *optional*):
+            Options shared by every block-scaled format. See [`BlockScaledConfig`].
+    """
+
+    method = QuantizationMethod.FP8
+    activation_formats = (None, "fp8")
+
+    def __init__(
+        self,
+        *,
+        weight_block_size: tuple[int, int] | None = (128, 128),
+        scale_fmt: str = "float",
+        activation_scheme: str = "dynamic",
+        **kwargs,
+    ):
+        self.weight_block_size = tuple(weight_block_size) if weight_block_size is not None else None
+        self.scale_fmt = scale_fmt
+        self.activation_scheme = activation_scheme
+        super().__init__(**kwargs)
+
+    def post_init(self):
+        super().post_init()
+        self.activation_scheme = self.activation_scheme.lower()
+        if self.activation_scheme not in ("dynamic", "static"):
+            raise ValueError(f"activation_scheme must be 'dynamic' or 'static', not {self.activation_scheme!r}.")
+        if self.scale_fmt not in ("float", "ue8m0"):
+            raise ValueError(f"scale_fmt must be 'float' or 'ue8m0', not {self.scale_fmt!r}.")
+        if self.weight_block_size is not None and (
+            len(self.weight_block_size) != 2 or min(self.weight_block_size) <= 0
+        ):
+            raise ValueError(f"weight_block_size must be two positive integers, not {self.weight_block_size}.")
+
+
 # Block-scaled format configs by `quant_method`, to read plan entries back from `config.json`
-# the formats register here in #49777 to #49780, the tests patch in test-only formats
-BLOCK_SCALED_CONFIGS: dict[str, type[BlockScaledConfig]] = {}
+BLOCK_SCALED_CONFIGS = {config.method.value: config for config in (Fp8Config,)}
+
+
+def read_fp8(config_dict: dict) -> QuantizationConfigMixin | None:
+    """Return the config of an FP8 checkpoint, or `None` to read it as `Fp8Config`.
+
+    - DeepSeek-V4 names its block scales `scale` and ships MXFP4 experts. It loads through the legacy FP8 integration,
+      as on main, until MXFP4 runs on the fine-grained one.
+    - `modules_to_convert` names FP8 embedding tables, as Qwen4-Exp ships its n-gram table. Each table becomes a
+      per-tensor entry of a [`FineGrainedConfig`].
+    """
+    from ..quantizers.quantizers_utils import embedding_pattern
+
+    config_dict = dict(config_dict)
+    tables = config_dict.pop("modules_to_convert", None) or []
+    if config_dict.get("checkpoint_format") == "deepseek":
+        legacy = ("weight_block_size", "scale_fmt", "activation_scheme", "dequantize", "modules_to_not_convert")
+        return FineGrainedFP8Config.from_dict({name: config_dict[name] for name in legacy if name in config_dict})
+    if not tables:
+        return None
+    dense = Fp8Config.from_dict(config_dict)
+    skip, dense.modules_to_not_convert = dense.modules_to_not_convert, None
+    table = Fp8Config(weight_block_size=None, checkpoint_format=dense.checkpoint_format)
+    return _config_for_plan({**dict.fromkeys(map(embedding_pattern, tables), table), ".*": dense}, skip)
+
+
+def _config_for_plan(dtype_plan: dict, modules_to_not_convert: list | None) -> QuantizationConfigMixin:
+    """Return the format config if the plan is a single `".*"` entry. Otherwise return a `FineGrainedConfig`.
+
+    A plan takes the skip-list as `None` entries.
+    """
+    from ..quantizers.quantizers_utils import skip_pattern
+
+    if list(dtype_plan) == [".*"]:
+        (config,) = dtype_plan.values()
+        config.modules_to_not_convert = modules_to_not_convert
+        return config
+    skipped = dict.fromkeys(map(skip_pattern, modules_to_not_convert or []))
+    return FineGrainedConfig(dtype_plan={**dtype_plan, **skipped})
 
 
 class FineGrainedConfig(QuantizationConfigMixin):
@@ -1817,8 +1902,12 @@ class FineGrainedConfig(QuantizationConfigMixin):
     Configuration for a model whose modules use different quantization methods.
 
     The `dtype_plan` maps modules to the config of their method, or to `None` for full precision. It is the only place
-    that says which module gets which config. Each entry is the config of a registered quantization method. A model in
-    one method takes that method's config alone.
+    that says which module gets which config. Each entry is the config of a registered quantization method, such as
+    [`Fp8Config`]. A model in one method takes that method's config alone. The block-scaled formats are:
+
+    | format    | weights                        | block scales                | a checkpoint that ships it |
+    |-----------|--------------------------------|-----------------------------|----------------------------|
+    | FP8       | `float8_e4m3fn`                | fp32 or UE8M0, 128x128      | `deepseek-ai/DeepSeek-V3`  |
 
     Args:
         dtype_plan (`dict[str, QuantizationConfigMixin | None]`, *optional*):
@@ -1910,16 +1999,16 @@ class FineGrainedConfig(QuantizationConfigMixin):
         )
 
 
-@dataclass
 class FineGrainedFP8Config(QuantizationConfigMixin):
     """
-    FineGrainedFP8Config is a configuration class for fine-grained FP8 quantization used mainly for deepseek models.
+    Deprecated: passed to `from_pretrained`, it loads through its own frozen integration. Use [`Fp8Config`].
 
     Args:
         activation_scheme (`str`, *optional*, defaults to `"dynamic"`):
-            The scheme used for activation, the defaults and only support scheme for now is "dynamic".
+            `"dynamic"` quantizes activations on the fly.
+            `"static"` uses a calibrated per-tensor activation scale from the checkpoint.
         weight_block_size (`typing.tuple[int, int]`, *optional*, defaults to `(128, 128)`):
-            The size of the weight blocks for quantization, default is (128, 128).
+            The block that each weight scale covers. `None` means one scale per tensor.
         dequantize (`bool`, *optional*, defaults to `False`):
             Whether to dequantize the model during loading.
         modules_to_not_convert (`list`, *optional*):
@@ -1944,12 +2033,15 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         expert_dtype: str = "fp8",
         **kwargs,
     ):
+        warnings.warn(
+            "`FineGrainedFP8Config` is deprecated and will be removed in a future release: use `Fp8Config`.",
+            FutureWarning,
+        )
         self.quant_method = kwargs.pop("quant_method", QuantizationMethod.FP8)
         # MiniMax ships the skip-list under ``ignored_layers``; accept it as an alias.
         if modules_to_not_convert is None and "ignored_layers" in kwargs:
             modules_to_not_convert = kwargs.pop("ignored_layers")
         self.modules_to_not_convert = modules_to_not_convert
-        # TODO: check overlap with not to convert
         self.modules_to_convert = modules_to_convert
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size
@@ -1957,6 +2049,13 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self.scale_fmt = scale_fmt
         self.expert_dtype = expert_dtype
         self.post_init()
+
+    @classmethod
+    def from_dict(cls, config_dict, return_unused_kwargs=False, **kwargs):
+        # Warn only when the user builds the config, not when a checkpoint config is read with it
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="`FineGrainedFP8Config` is deprecated", category=FutureWarning)
+            return super().from_dict(config_dict, return_unused_kwargs=return_unused_kwargs, **kwargs)
 
     def post_init(self):
         r"""

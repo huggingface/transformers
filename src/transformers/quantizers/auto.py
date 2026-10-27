@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import warnings
+from collections.abc import Callable
 
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import logging
@@ -29,6 +30,7 @@ from ..utils.quantization_config import (
     FineGrainedConfig,
     FineGrainedFP8Config,
     FourOverSixConfig,
+    Fp8Config,
     FPQuantConfig,
     GemmaQuantizationConfig,
     GgufConfig,
@@ -46,6 +48,7 @@ from ..utils.quantization_config import (
     SpQRConfig,
     TorchAoConfig,
     VptqConfig,
+    read_fp8,
 )
 from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
@@ -60,6 +63,7 @@ from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_finegrained import FineGrainedHfQuantizer
 from .quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from .quantizer_fouroversix import FourOverSixHfQuantizer
+from .quantizer_fp8 import Fp8HfQuantizer
 from .quantizer_fp_quant import FPQuantHfQuantizer
 from .quantizer_gemma import GemmaQuantizer
 from .quantizer_gguf import GgufHfQuantizer
@@ -96,13 +100,9 @@ AUTO_QUANTIZER_MAPPING = {
     "bitnet": BitNetHfQuantizer,
     "vptq": VptqHfQuantizer,
     "spqr": SpQRHfQuantizer,
-    "fp8": FineGrainedFP8HfQuantizer,
+    "fp8": Fp8HfQuantizer,
     "gguf": GgufHfQuantizer,
     "nvfp4": NVFP4HfQuantizer,
-    # MXFP8 = FP8 (E4M3 weights) with per-block ``[1, 32]`` E8M0 (uint8) scales —
-    # reuses the FineGrainedFP8 dequant path, with the E8M0 byte→exponent
-    # unpacking handled inside ``Fp8Dequantize._dequantize_one``.
-    "mxfp8": FineGrainedFP8HfQuantizer,
     "auto-round": AutoRoundQuantizer,
     "mxfp4": Mxfp4HfQuantizer,
     "metal": MetalHfQuantizer,
@@ -131,8 +131,9 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "bitnet": BitNetQuantConfig,
     "vptq": VptqConfig,
     "spqr": SpQRConfig,
-    "fp8": FineGrainedFP8Config,
+    "fp8": Fp8Config,
     "nvfp4": NVFP4Config,
+    # `from_config` routes it by type to the frozen FP8 quantizer until #49780
     "mxfp8": FineGrainedFP8Config,
     "auto-round": AutoRoundConfig,
     "mxfp4": Mxfp4Config,
@@ -141,6 +142,19 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "sinq": SinqConfig,
     "gemma": GemmaQuantizationConfig,
 }
+
+# Readers for checkpoints written by other tools, keyed by `quant_method`.
+# A reader returns the config the checkpoint describes, or `None` to fall back to the method's config class.
+AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
+    "fp8": read_fp8,
+}
+
+# A passed config of these types reads a pre-quantized checkpoint's config as its own class.
+CHECKPOINT_READING_CONFIG_TYPES = (
+    AutoRoundConfig,
+    # Keeps the deprecated config on its frozen integration
+    FineGrainedFP8Config,
+)
 
 LOADING_ATTRIBUTES_CONFIG_TYPES = (
     GPTQConfig,
@@ -176,6 +190,10 @@ class AutoQuantizationConfig:
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
 
+        reader = AUTO_QUANTIZATION_CONFIG_READERS.get(quant_method)
+        if reader is not None and (config := reader(quantization_config_dict)) is not None:
+            return config
+
         if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
             raise ValueError(
                 f"Unknown quantization type, got {quant_method} - supported types are:"
@@ -199,6 +217,18 @@ class AutoQuantizationConfig:
         return quantization_config
 
 
+def _quantization_config_from_dict(quantization_config, quantization_config_from_args):
+    """Build the config object of a checkpoint's `quantization_config` dict.
+
+    A passed config that reads the checkpoint's config as its own class takes priority over the automatic dispatch.
+    """
+    if not isinstance(quantization_config, dict):
+        return quantization_config
+    if _reads_checkpoint_config(quantization_config_from_args, quantization_config):
+        return type(quantization_config_from_args).from_dict(quantization_config)
+    return AutoQuantizationConfig.from_dict(quantization_config)
+
+
 class AutoHfQuantizer:
     """
      The Auto-HF quantizer class that takes care of automatically instantiating to the correct
@@ -210,6 +240,9 @@ class AutoHfQuantizer:
         # Convert it to a QuantizationConfig if the q_config is a dict
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
+        # The deprecated config keeps its own frozen integration
+        if isinstance(quantization_config, FineGrainedFP8Config):
+            return FineGrainedFP8HfQuantizer(quantization_config, **kwargs)
 
         quant_method = quantization_config.quant_method
 
@@ -256,12 +289,7 @@ class AutoHfQuantizer:
         else:
             warning_msg = ""
 
-        if isinstance(quantization_config, dict):
-            # Convert the config based on the type of quantization_config_from_args (e.g., AutoRoundConfig), which takes priority before automatic configuration dispatch.
-            if isinstance(quantization_config_from_args, AutoRoundConfig):
-                quantization_config = AutoRoundConfig.from_dict(quantization_config)
-            else:
-                quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
+        quantization_config = _quantization_config_from_dict(quantization_config, quantization_config_from_args)
 
         if quantization_config_from_args is not None:
             source = quantization_config.loading_attributes_source(quantization_config_from_args)
@@ -303,7 +331,10 @@ class AutoHfQuantizer:
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
 
-        if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
+        if (
+            quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING
+            and quant_method not in AUTO_QUANTIZATION_CONFIG_READERS
+        ):
             logger.warning(
                 f"Unknown quantization type, got {quant_method} - supported types are:"
                 f" {list(AUTO_QUANTIZER_MAPPING.keys())}. Hence, we will skip the quantization. "
@@ -343,6 +374,15 @@ def register_quantizer(name: str):
         return cls
 
     return register_quantizer_fn
+
+
+def _reads_checkpoint_config(passed: QuantizationConfigMixin | None, checkpoint: dict) -> bool:
+    """Return whether the passed config reads the checkpoint's config dict as its own class."""
+    if isinstance(passed, FineGrainedFP8Config):
+        # The frozen integration reads only FP8 checkpoints, not MXFP4 or NVFP4 ones.
+        # Those load with their own config, and the merge then raises on the class mismatch.
+        return checkpoint.get("quant_method") in ("fp8", "mxfp8")
+    return isinstance(passed, CHECKPOINT_READING_CONFIG_TYPES)
 
 
 def get_hf_quantizer(config, quantization_config, device_map, weights_only, user_agent, gguf_file=None):

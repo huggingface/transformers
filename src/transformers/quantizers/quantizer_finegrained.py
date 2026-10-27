@@ -161,6 +161,7 @@ class FineGrainedHfQuantizer(HfQuantizer):
             parents |= {name for parent in parents for name in checkpoint_names[parent]}
             # each member works on its own config copy, so the scope never reaches the saved config
             setattr(member.quantization_config, member.skip_list_attribute, [_skip_unowned(own, others, parents)])
+            member.dtype_plan_targets = [pattern for pattern in own if pattern != ".*"]
             before = {name: type(module) for name, module in model.named_modules()}
             member._process_model_before_weight_loading(model, **kwargs)
             # a member that ignores its skip-list would take modules of other entries
