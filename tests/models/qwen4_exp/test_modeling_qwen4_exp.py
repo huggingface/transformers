@@ -14,11 +14,14 @@
 """Testing suite for the PyTorch Qwen4-Exp model."""
 
 import copy
+import inspect
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from huggingface_hub.errors import StrictDataclassClassValidationError
+from parameterized import parameterized
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, torch_device
@@ -47,6 +50,7 @@ if is_torch_available():
     )
     from transformers.distributed.fsdp import verify_fsdp_plan
     from transformers.integrations import FP8Embedding
+    from transformers.models.qwen4_exp import modeling_qwen4_exp
     from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 
 
@@ -164,6 +168,44 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
             with torch.no_grad():
                 hidden_states = model(**inputs_dict).hidden_states
             self.assertListEqual([state.shape for state in hidden_states], expected_shapes)
+
+    @parameterized.expand([2, 32])
+    def test_eager_left_padding_matches_sdpa(self, indexer_budget):
+        torch.manual_seed(0)
+        config = self.model_tester.get_config()
+        # A GatedDeltaNet layer after QSA exposes NaNs propagating from padding into valid tokens.
+        config.num_hidden_layers = 3
+        config.layer_types = ["linear_attention", "indexed_attention", "linear_attention"]
+        config.indexer_budget = indexer_budget
+        config._attn_implementation = "eager"
+        config._experts_implementation = "eager"
+        eager_model = Qwen4ExpForCausalLM(config).to(torch_device).eval()
+        sdpa_config = copy.deepcopy(config)
+        sdpa_config._attn_implementation = "sdpa"
+        sdpa_model = Qwen4ExpForCausalLM(sdpa_config).to(torch_device).eval()
+        sdpa_model.load_state_dict(eager_model.state_dict())
+
+        input_ids = torch.tensor([[4, 5, 6, 7, 8, 9, 10, 11], [12, 13, 14, 15, 16, 17, 18, 19]], device=torch_device)
+        input_ids[0, :4] = config.pad_token_id
+        attention_mask = torch.ones_like(input_ids)
+        attention_mask[0, :4] = 0
+
+        # Use the reference functions even when optional CUDA-only kernels are installed.
+        with (
+            patch.object(modeling_qwen4_exp, "causal_conv1d_fn", inspect.unwrap(modeling_qwen4_exp.causal_conv1d_fn)),
+            patch.object(
+                modeling_qwen4_exp,
+                "torch_chunk_gated_delta_rule",
+                inspect.unwrap(modeling_qwen4_exp.torch_chunk_gated_delta_rule),
+            ),
+            torch.no_grad(),
+        ):
+            eager_logits = eager_model(input_ids, attention_mask=attention_mask, use_cache=False).logits
+            sdpa_logits = sdpa_model(input_ids, attention_mask=attention_mask, use_cache=False).logits
+
+        self.assertTrue(torch.isfinite(eager_logits).all())
+        valid_tokens = attention_mask.bool()
+        torch.testing.assert_close(eager_logits[valid_tokens], sdpa_logits[valid_tokens], rtol=1e-5, atol=1e-6)
 
     @unittest.skip("QSA index selection has data-dependent control flow")
     def test_generate_compile_model_forward_fullgraph(self):
