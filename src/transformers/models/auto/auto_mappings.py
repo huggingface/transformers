@@ -371,6 +371,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("lfm2", "Lfm2Config"),
         ("lfm2_moe", "Lfm2MoeConfig"),
         ("lfm2_vl", "Lfm2VlConfig"),
+        ("lfm3", "Lfm3Config"),
         ("lightglue", "LightGlueConfig"),
         ("lighton_ocr", "LightOnOcrConfig"),
         ("lilt", "LiltConfig"),
