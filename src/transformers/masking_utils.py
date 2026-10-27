@@ -593,7 +593,7 @@ def eager_mask(
     if mask is not None:
         min_dtype = torch.finfo(dtype).min
         # we need 0s where the tokens should be taken into account, and -inf otherwise (mask is already of boolean type)
-        mask = torch.where(mask, torch.tensor(0.0, device=mask.device, dtype=dtype), min_dtype)
+        mask = torch.where(mask, torch.zeros((), device=mask.device, dtype=dtype), min_dtype)
     return mask
 
 
@@ -631,9 +631,9 @@ def flash_attention_mask(
     if attention_mask is not None:
         # Here we need to slice from the right if using sliding or chunked (for full attention, this is equivalent to doing nothing)
         attention_mask = attention_mask[:, -kv_length:]
-        # We only return an actual mask if there is at least 1 padding token AND the length is the same as the kv_length (it can only
-        # be smaller, if and only if we use a StaticCache, in which case we need a mask to properly slice k/v), otherwise we return
-        # `None` and use `is_causal` in FA2 (note that the attention_mask is a boolean dtype here)
+        # We only return an actual mask if there is at least 1 padding token OR the mask length is different from the kv_length (it
+        # can only be smaller, if and only if we use a StaticCache, in which case we need a mask to properly slice k/v), otherwise we
+        # return `None` and use `is_causal` in FA2 (note that the attention_mask is of boolean dtype here)
         if attention_mask.shape[1] == kv_length and attention_mask.all():
             attention_mask = None
 
@@ -1313,6 +1313,7 @@ def create_chunked_causal_mask(
     position_ids: torch.Tensor | None = None,
     or_mask_function: Callable | None = None,
     and_mask_function: Callable | None = None,
+    block_sequence_ids: torch.Tensor | None = None,
     layer_idx: int | None = None,
     allow_is_causal_skip: bool = True,
 ) -> torch.Tensor | BlockMask | None:
@@ -1341,6 +1342,10 @@ def create_chunked_causal_mask(
         and_mask_function (`Callable`, optional):
             An optional mask function to combine with the chunked causal mask function (by doing the intersection of both). This is
             useful to easily overlay another mask on top of the chunked causal one, for example for image tokens handling.
+        block_sequence_ids (`torch.Tensor`, *optional*):
+            A 2D tensor of shape (batch_size, total_sequence_length) indicating the block index of each token. Tokens in
+            the same block will keep a bidirectional mask within the block, attending causally to the past. Index `-1`
+            can be used for blocks that have to keep complete causality within itself.
         layer_idx (`int`, *optional*):
             The cache layer to size the mask against. By default, the first "full_attention" layer is used, which is
             correct whenever all layers of a given mask type have seen the same tokens. Pass it explicitly for caches
@@ -1407,9 +1412,13 @@ def create_chunked_causal_mask(
         allow_is_causal_skip = False
         use_vmap = True
 
-    # If we detected packing format
+    # If we detected packing format or blockwise overlay
     if packed_sequence_mask is not None:
         mask_factory_function = and_masks(mask_factory_function, packed_sequence_mask_function(packed_sequence_mask))
+        allow_is_causal_skip = False
+    if block_sequence_ids is not None:
+        block_sequence_ids = maybe_pad_block_sequence_ids(block_sequence_ids, attention_mask, kv_length, kv_offset)
+        mask_factory_function = or_masks(mask_factory_function, blockwise_overlay(block_sequence_ids))
         allow_is_causal_skip = False
 
     # We now create the mask

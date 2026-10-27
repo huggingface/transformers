@@ -25,7 +25,6 @@ from transformers.utils.import_utils import is_mistral_common_available
 
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...utils import (
     is_g2p_en_available,
@@ -74,6 +73,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("bart", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("barthez", "BarthezTokenizer" if is_tokenizers_available() else None),
         ("bartpho", "BartphoTokenizer"),
+        ("beam", "TokenizersBackend" if is_tokenizers_available() else None),
         ("bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("bert-generation", "BertGenerationTokenizer" if is_sentencepiece_available() else None),
         ("bert-japanese", "BertJapaneseTokenizer"),
@@ -154,6 +154,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("gpt_neox", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("gpt_neox_japanese", "GPTNeoXJapaneseTokenizer"),
         ("gptj", "GPT2Tokenizer" if is_tokenizers_available() else None),
+        ("gradium_phonon_tts", "TokenizersBackend" if is_tokenizers_available() else None),
         ("granite", "TokenizersBackend" if is_tokenizers_available() else None),
         ("granite_speech5_ctc", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("granitemoe", "TokenizersBackend" if is_tokenizers_available() else None),
@@ -201,6 +202,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("metaclip_2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("mgp-str", "MgpstrTokenizer"),
         ("mimo_v2_flash", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("minicpm_ocr", "TokenizersBackend" if is_tokenizers_available() else None),
         ("minicpmv4_6", "TokenizersBackend" if is_tokenizers_available() else None),
         ("minicpmv4_7", "TokenizersBackend" if is_tokenizers_available() else None),
         (
@@ -236,6 +238,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("mluke", "MLukeTokenizer" if is_sentencepiece_available() else None),
         ("mm-grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
         ("mobilebert", "MobileBertTokenizer" if is_tokenizers_available() else None),
+        ("moss_transcribe_diarize", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("mpnet", "MPNetTokenizer" if is_tokenizers_available() else None),
         ("mpt", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("mra", "RobertaTokenizer"),
@@ -281,6 +284,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         ("plbart", "PLBartTokenizer" if is_tokenizers_available() else None),
+        ("pocket_tts", "TokenizersBackend" if is_tokenizers_available() else None),
         ("pp_formulanet", "NougatTokenizer" if is_tokenizers_available() else None),
         ("prophetnet", "ProphetNetTokenizer"),
         ("qdqbert", "BertTokenizer" if is_tokenizers_available() else None),
@@ -388,6 +392,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "deepseek_vl_v2",
     "deepseek_ocr",
     "deepseek_ocr2",
+    "unlimited_ocr",
     "ernie4_5",
     "ernie4_5_moe",
     "fuyu",
@@ -425,6 +430,7 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "vipllava",
     "cohere_asr",
     "camembertv2-base",
+    "siglip2",
     "smolvlm",
 }
 
@@ -790,6 +796,8 @@ class AutoTokenizer:
             if metadata["general.architecture"] in GGUF_CONFIG_ARCHS:
                 config_dict = get_gguf_config(metadata, tensor_names)
             else:
+                from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
                 config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
             config = AutoConfig.for_model(**config_dict)
         elif config is None:

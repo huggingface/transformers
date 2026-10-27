@@ -96,7 +96,7 @@ class MiniCPMV4_6Config(PreTrainedConfig):
     model_type = "minicpmv4_6"
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_text"),
-        "vision_config": SubConfigSpec(config_class=MiniCPMV4_6VisionConfig),
+        "vision_config": MiniCPMV4_6VisionConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None
@@ -338,7 +338,7 @@ class MiniCPMV4_6ViTWindowAttentionMerger(nn.Module):
 
 
 class MiniCPMV4_6VisionPreTrainedModel(PreTrainedModel):
-    config_class = MiniCPMV4_6VisionConfig
+    config: MiniCPMV4_6VisionConfig
     main_input_name = "pixel_values"
     _input_embed_layer = "patch_embedding"
     supports_gradient_checkpointing = True
@@ -515,7 +515,7 @@ class MiniCPMV4_6Merger(nn.Module):
 
 
 class MiniCPMV4_6PreTrainedModel(PreTrainedModel):
-    config_class = MiniCPMV4_6Config
+    config: MiniCPMV4_6Config
     base_model_prefix = "model"
     input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
@@ -714,6 +714,7 @@ class MiniCPMV4_6Model(Lfm2VlModel):
 @auto_docstring
 class MiniCPMV4_6ForConditionalGeneration(MiniCPMV4_6PreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: MiniCPMV4_6Config):
         super().__init__(config)

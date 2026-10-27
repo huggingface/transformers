@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithCrossAttentions,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
@@ -42,6 +42,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     can_return_tuple,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
@@ -65,7 +66,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = Kosmos2_5Config
+    config: Kosmos2_5Config
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kosmos2_5VisionLayer", "Kosmos2_5TextBlock"]
@@ -73,6 +74,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_sdpa = True
     _supports_attention_backend = True
+    _can_compile_fullgraph = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -569,7 +571,7 @@ class Kosmos2_5VisionLayer(GradientCheckpointingLayer):
 
 # Adapted from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionEncoder with Pix2Struct->Kosmos2_5
 class Kosmos2_5VisionEncoder(Kosmos2_5PreTrainedModel):
-    config_class = Kosmos2_5VisionConfig
+    config: Kosmos2_5VisionConfig
     input_modalities = ("image",)
     _can_record_outputs = {
         "hidden_states": Kosmos2_5VisionLayer,
@@ -678,7 +680,10 @@ class Kosmos2_5TextSinusoidalPositionalEmbedding(nn.Module):
 
         # expand embeddings if needed
         max_pos = self.padding_idx + 1 + seq_len + past_key_values_length
-        if max_pos > self.weights.size(0):
+        # a compileable cache makes `past_key_values_length` a tensor, which this check cannot branch on.
+        # `is_torchdynamo_compiling()` alone is not enough: tracing with a non-compileable cache keeps it an
+        # int, and the table must still be allowed to grow there.
+        if not (is_torchdynamo_compiling() and torch.is_tensor(max_pos)) and max_pos > self.weights.size(0):
             self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
 
         return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, self.weights.shape[-1]).detach()
@@ -882,7 +887,7 @@ class Kosmos2_5TextBlock(GradientCheckpointingLayer):
 
 # Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextTransformer with Kosmos2->Kosmos2_5
 class Kosmos2_5TextTransformer(Kosmos2_5PreTrainedModel):
-    config_class = Kosmos2_5TextConfig
+    config: Kosmos2_5TextConfig
     input_modalities = ("text",)
     _can_record_outputs = {
         "hidden_states": Kosmos2_5TextBlock,
@@ -1038,7 +1043,7 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
 
 
 class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
-    config_class = Kosmos2_5VisionConfig
+    config: Kosmos2_5VisionConfig
     input_modalities = ("image",)
 
     # Copied from transformers.models.pix2struct.modeling_pix2struct.Pix2StructVisionModel.__init__ with Pix2Struct->Kosmos2_5
@@ -1088,7 +1093,7 @@ class Kosmos2_5VisionModel(Kosmos2_5PreTrainedModel):
 
 # Adapted from transformers.models.kosmos2.modeling_kosmos2.Kosmos2TextModel with KOSMOS2->KOSMOS2_5
 class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
-    config_class = Kosmos2_5TextConfig
+    config: Kosmos2_5TextConfig
     input_modalities = ("text",)
 
     def __init__(self, config: Kosmos2_5TextConfig):
@@ -1142,7 +1147,7 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
     KOSMOS2_5_START_DOCSTRING,
 )
 class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
-    config_class = Kosmos2_5Config
+    config: Kosmos2_5Config
 
     def __init__(self, config: Kosmos2_5Config):
         super().__init__(config)
@@ -1257,7 +1262,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     KOSMOS2_5_START_DOCSTRING,
 )
 class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
-    config_class = Kosmos2_5TextConfig
+    config: Kosmos2_5TextConfig
     input_modalities = ("text",)
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
@@ -1326,9 +1331,8 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1403,7 +1407,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
     KOSMOS2_5_START_DOCSTRING,
 )
 class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixin):
-    config_class = Kosmos2_5Config
+    config: Kosmos2_5Config
 
     def __init__(self, config: Kosmos2_5Config):
         super().__init__(config)

@@ -16,6 +16,7 @@ import glob
 import json
 import os
 import os.path
+import re
 import subprocess
 import sys
 import tempfile
@@ -43,6 +44,7 @@ from transformers import (
     BartForConditionalGeneration,
     BartModel,
     CLIPTextModelWithProjection,
+    DistributedConfig,
     DynamicCache,
     GPT2Config,
     GPT2LMHeadModel,
@@ -80,6 +82,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
+    require_torch_greater_or_equal,
     require_torch_multi_accelerator,
     slow,
     torch_device,
@@ -96,9 +99,11 @@ from transformers.utils.import_utils import (
     is_flash_attn_3_available,
     is_flash_attn_4_available,
     is_kernels_available,
+    is_torch_distributed_available,
     is_torch_npu_available,
 )
 
+from ..test_memory_cleanup_mixin import MemoryCleanupMixin
 from ..test_modeling_common import compare_state_dicts
 
 
@@ -125,6 +130,7 @@ if is_torch_available():
         LlamaConfig,
         LlamaForCausalLM,
         MixtralConfig,
+        MixtralForCausalLM,
         MixtralModel,
         MusicgenConfig,
         MusicgenForConditionalGeneration,
@@ -138,7 +144,11 @@ if is_torch_available():
         _find_disjoint,
         _find_identical,
         get_total_byte_count,
+        slice_logits_to_keep,
     )
+
+    if is_torch_distributed_available():
+        from torch.testing._internal.distributed.fake_pg import FakeStore
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -441,6 +451,102 @@ class ModelUtilsTest(TestCasePlus):
         mock_world_size.assert_not_called()
         self.assertIn(torch.device("cpu"), total_byte_count)
         self.assertGreater(total_byte_count[torch.device("cpu")], 0)
+
+    @parameterized.expand(
+        [
+            ("fsdp", {"fsdp_size": 8}),
+            ("tp", {"tp_size": 8}),
+            ("fsdp_tp", {"fsdp_size": 4, "tp_size": 2}),
+            ("fsdp_ep_efsdp2", {"fsdp_size": 8, "ep_size": 4}),  # EP without TP, efsdp = 8 / 4 = 2
+            ("fsdp_tp_ep_efsdp1", {"fsdp_size": 4, "tp_size": 2, "ep_size": 8}),  # ep == fsdp * tp, no expert FSDP
+            ("fsdp_tp_ep_efsdp2", {"fsdp_size": 4, "tp_size": 2, "ep_size": 4}),  # efsdp = 4 * 2 / 4 = 2
+            ("fsdp_tp_ep_efsdp4", {"fsdp_size": 4, "tp_size": 2, "ep_size": 2}),  # ep == tp, efsdp == fsdp = 4
+        ]
+    )
+    @require_torch_greater_or_equal("2.7")
+    @unittest.skipUnless(is_torch_distributed_available(), "test requires torch.distributed")
+    def test_get_total_byte_count_counts_require_process_group(self, _, parallel_sizes):
+        import transformers.modeling_utils as modeling_utils
+
+        config = MixtralConfig(
+            vocab_size=64,
+            hidden_size=32,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=8,
+            num_key_value_heads=8,
+            head_dim=4,
+            num_local_experts=8,
+            num_experts_per_tok=2,
+            tied_word_embeddings=True,
+        )
+
+        # Mixtral's default plans would also work, since EP rules take precedence over TP rules on shared keys, but the
+        # plans are spelled out so that readers can easily understand the intent.
+        base_model_tp_plan = {
+            "embed_tokens": "embedding_rowwise",
+            "layers.*.self_attn.q_proj": "colwise",
+            "layers.*.self_attn.k_proj": "colwise",
+            "layers.*.self_attn.v_proj": "colwise",
+            "layers.*.self_attn.o_proj": "rowwise",
+        }
+        base_model_ep_plan = {
+            "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
+            "layers.*.mlp.experts.down_proj": "grouped_gemm",
+            "layers.*.mlp.experts": "ep_dispatch_experts",
+        }
+        # This is tied with the head
+        head_tp_plan = {"lm_head": "colwise_gather_output"}
+
+        def expected_local_byte_count(model, tp_size=1, fsdp_size=1, ep_size=1):
+            full_tp_plan = {f"model.{key}": style for key, style in base_model_tp_plan.items()} | head_tp_plan
+            full_ep_plan = {f"model.{key}": style for key, style in base_model_ep_plan.items()}
+
+            def in_plan(name, plan):
+                generic_name = re.sub(r"\.\d+\.", ".*.", name)
+                return generic_name in plan or generic_name.removesuffix(".weight") in plan
+
+            total = 0
+            for name, param in model.named_parameters():
+                if ep_size > 1 and in_plan(name, full_ep_plan):
+                    # Split by EP, then by FSDP across the ranks holding the same experts (efsdp).
+                    efsdp_size = fsdp_size * tp_size // ep_size
+                    num_shards = ep_size * efsdp_size
+                elif tp_size > 1 and in_plan(name, full_tp_plan):
+                    # Split by TP, then by FSDP
+                    num_shards = tp_size * fsdp_size
+                else:
+                    # only FSDP splits it
+                    num_shards = fsdp_size
+
+                total += param.numel() * param.element_size() // num_shards
+            return total
+
+        byte_counts = []
+
+        def capture_total_byte_count(model, expanded_device_map, hf_quantizer):
+            # Because we are running from_pretrained to make sure all the parallelisms are applied before calling
+            # get_total_byte_count(), we need to capture its value at the point where the warmup runs.
+            byte_counts.append(sum(get_total_byte_count(model, expanded_device_map, hf_quantizer).values()))
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            MixtralForCausalLM(config).save_pretrained(tmp_dir)
+
+            torch.distributed.init_process_group("fake", rank=0, world_size=8, store=FakeStore())
+            try:
+                with (
+                    patch.object(MixtralConfig, "base_model_tp_plan", base_model_tp_plan),
+                    patch.object(MixtralConfig, "base_model_ep_plan", base_model_ep_plan),
+                    patch.object(MixtralForCausalLM, "_tp_plan", head_tp_plan),
+                    patch.object(modeling_utils, "caching_allocator_warmup", side_effect=capture_total_byte_count),
+                ):
+                    model = MixtralForCausalLM.from_pretrained(
+                        tmp_dir, distributed_config=DistributedConfig(**parallel_sizes)
+                    )
+            finally:
+                torch.distributed.destroy_process_group()
+
+        self.assertEqual(byte_counts, [expected_local_byte_count(model, **parallel_sizes)])
 
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)
@@ -2144,11 +2250,10 @@ class ModelUtilsTest(TestCasePlus):
             device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
             device = torch.device(f"{device_type}:0")
 
-            torch_accelerator_module = getattr(torch, device_type, torch.cuda)
-            torch_accelerator_module.synchronize(device)
+            torch.accelerator.synchronize(device)
             t0 = time.time()
             model = AutoModelForCausalLM.from_pretrained(args.model_id, dtype=torch.float16, device_map=device)
-            torch_accelerator_module.synchronize(device)
+            torch.accelerator.synchronize(device)
             dt = time.time() - t0
 
             # Assert loading is faster (it should be more than enough in both cases)
@@ -3145,6 +3250,36 @@ class TestAttentionImplementation(unittest.TestCase):
             attn_output, _ = sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
         self.assertEqual(attn_output.shape, (1, 16, 8, value_head_dim))
 
+    @parameterized.expand(
+        [
+            # (use_mask, is_causal): the `create_position_bias_mask` branches taken by T5-style models
+            (False, False),  # position_bias used as is
+            (False, True),  # causal mask applied to position_bias
+            (True, False),  # bool mask applied to position_bias
+        ]
+    )
+    @require_torch_gpu
+    def test_position_bias_in_sdpa_uses_a_fused_kernel(self, use_mask, is_causal):
+        # Regression test for https://github.com/huggingface/transformers/issues/49516.
+        # Restricting SDPA to the efficient backend (which excludes `math`) proves the mask built from a T5-style
+        # `position_bias` by `create_position_bias_mask` stays on a fused kernel: the call must succeed.
+        from torch.nn.attention import SDPBackend, sdpa_kernel
+
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward
+
+        query = torch.randn(1, 8, 16, 64, device=torch_device, dtype=torch.float16)
+        key = torch.randn(1, 8, 16, 64, device=torch_device, dtype=torch.float16)
+        value = torch.randn(1, 8, 16, 64, device=torch_device, dtype=torch.float16)
+        # same layout as T5's `compute_bias`, whose last dim is not stride 1
+        position_bias = torch.randn(16, 16, 8, device=torch_device, dtype=torch.float16).permute(2, 0, 1).unsqueeze(0)
+        attention_mask = torch.ones(1, 1, 16, 16, device=torch_device, dtype=torch.bool) if use_mask else None
+
+        with sdpa_kernel([SDPBackend.EFFICIENT_ATTENTION]):
+            attn_output, _ = sdpa_attention_forward(
+                torch.nn.Module(), query, key, value, attention_mask, is_causal=is_causal, position_bias=position_bias
+            )
+        self.assertEqual(attn_output.shape, (1, 16, 8, 64))
+
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
         # When flash_attn is importable but not present in PACKAGE_DISTRIBUTION_MAPPING
@@ -3336,6 +3471,28 @@ class TestAttentionImplementation(unittest.TestCase):
             model.set_attn_implementation("flash_attention_2")
             self.assertEqual(model.config._attn_implementation, "kernels-community/aiter-flash-attn")
 
+    @require_kernels
+    @require_rocm
+    def test_flash_attention_2_falls_back_to_aiter_kernel_on_rocm(self):
+        # `kernels-community/flash-attn2` has no ROCm build, so FA2 must fall back to the AITER kernel instead
+        from transformers.modeling_flash_attention_utils import FLASH_ATTENTION_COMPATIBILITY_MATRIX
+
+        self.assertEqual(FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"], "kernels-community/aiter-flash-attn")
+
+        # Hide the `flash-attn` package (installed in the AMD CI image) so that the kernel fallback is used
+        with patch.dict(FLASH_ATTENTION_COMPATIBILITY_MATRIX[2], {"general_availability_check": lambda: False}):
+            model = MistralForCausalLM.from_pretrained(
+                TINY_MISTRAL, attn_implementation="flash_attention_2", dtype=torch.bfloat16
+            ).to(torch_device)
+        self.assertEqual(model.config._attn_implementation, "kernels-community/aiter-flash-attn")
+
+        input_ids = torch.randint(0, model.config.vocab_size, (2, 16), device=torch_device)
+        with torch.no_grad():
+            logits = model(input_ids).logits
+            model.set_attn_implementation("sdpa")
+            expected_logits = model(input_ids).logits
+        torch.testing.assert_close(logits, expected_logits, atol=2e-2, rtol=2e-2)
+
 
 @require_torch
 class TestTensorSharing(TestCasePlus):
@@ -3466,6 +3623,62 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
             self.assertEqual(len(loading_info["unexpected_keys"]), 0)
             self.assertEqual(len(loading_info["mismatched_keys"]), 0)
             self.assertEqual(len(loading_info["error_msgs"]), 0)
+
+
+@require_torch
+class TestSliceLogitsToKeep(MemoryCleanupMixin, unittest.TestCase):
+    """`slice_logits_to_keep` is called by the models right before the `lm_head` projection."""
+
+    def setUp(self):
+        super().setUp()
+        # (batch_size=3, sequence_length=7, hidden_size=2), all values are unique so a wrong position shows up
+        self.hidden_states = torch.arange(3 * 7 * 2, dtype=torch.float32).reshape(3, 7, 2)
+
+    def test_int(self):
+        hidden_states = self.hidden_states
+        # `0` is a special case: keep all the positions
+        self.assertTrue(slice_logits_to_keep(hidden_states, 0).equal(hidden_states))
+        self.assertTrue(slice_logits_to_keep(hidden_states, 1).equal(hidden_states[:, -1:]))
+        self.assertTrue(slice_logits_to_keep(hidden_states, 3).equal(hidden_states[:, -3:]))
+
+    def test_1d_tensor(self):
+        hidden_states = self.hidden_states
+        # same positions for every sample
+        out = slice_logits_to_keep(hidden_states, torch.tensor([1, 4]))
+        self.assertEqual(out.shape, (3, 2, 2))
+        self.assertTrue(out.equal(hidden_states[:, [1, 4]]))
+        # negative positions are supported
+        self.assertTrue(slice_logits_to_keep(hidden_states, torch.tensor([-1])).equal(hidden_states[:, -1:]))
+
+    def test_2d_integer_tensor(self):
+        hidden_states = self.hidden_states
+        # different positions for each sample, same count
+        positions = torch.tensor([[1, 2], [3, 4], [0, 6]])
+        out = slice_logits_to_keep(hidden_states, positions)
+        self.assertEqual(out.shape, (3, 2, 2))
+        for i in range(3):
+            self.assertTrue(out[i].equal(hidden_states[i, positions[i]]))
+
+    def test_2d_boolean_tensor(self):
+        hidden_states = self.hidden_states
+        # the count can differ per sample, the output is flattened over batch and sequence
+        mask = torch.zeros(3, 7, dtype=torch.bool)
+        mask[0, [1, 2, 3]] = True
+        mask[1, 0] = True
+        mask[2, [4, 5]] = True
+        out = slice_logits_to_keep(hidden_states, mask)
+        self.assertEqual(out.shape, (6, 2))
+        self.assertTrue(out.equal(torch.cat([hidden_states[0, 1:4], hidden_states[1, :1], hidden_states[2, 4:6]])))
+        # nothing to keep
+        self.assertEqual(slice_logits_to_keep(hidden_states, torch.zeros(3, 7, dtype=torch.bool)).shape, (0, 2))
+
+    def test_2d_integer_and_boolean_tensors_select_the_same_values(self):
+        # (sorted) positions or a mask selecting them give the same values, only the layout differs
+        positions = torch.tensor([[1, 2], [3, 4], [0, 6]])
+        mask = torch.zeros(3, 7, dtype=torch.bool).scatter_(1, positions, True)
+        from_positions = slice_logits_to_keep(self.hidden_states, positions)
+        from_mask = slice_logits_to_keep(self.hidden_states, mask)
+        self.assertTrue(from_positions.flatten(0, 1).equal(from_mask))
 
 
 class TestGetDecoder(unittest.TestCase):

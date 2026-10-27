@@ -92,52 +92,7 @@ Audio(waveform, rate=model.config.sampling_rate)
    print(tokenizer.is_uroman)
    ```
 
-   If your language requires uroman, the tokenizer automatically applies it to the text inputs. Python >= 3.10 doesn't require any additional preprocessing steps. For Python < 3.10, follow the steps below.
-
-   ```bash
-   git clone https://github.com/isi-nlp/uroman.git
-   cd uroman
-   export UROMAN=$(pwd)
-   ```
-
-   Create a function to preprocess the inputs. You can either use the bash variable `UROMAN` or pass the directory path directly to the function.
-
-   ```py
-   import torch
-   from transformers import VitsTokenizer, VitsModel, set_seed
-   import os
-   import subprocess
-
-   tokenizer = VitsTokenizer.from_pretrained("facebook/mms-tts-kor")
-   model = VitsModel.from_pretrained("facebook/mms-tts-kor", device_map="auto")
-
-   def uromanize(input_string, uroman_path):
-       """Convert non-Roman strings to Roman using the `uroman` perl package."""
-       script_path = os.path.join(uroman_path, "bin", "uroman.pl")
-
-       command = ["perl", script_path]
-
-       process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-       # Execute the perl command
-       stdout, stderr = process.communicate(input=input_string.encode())
-
-       if process.returncode != 0:
-           raise ValueError(f"Error {process.returncode}: {stderr.decode()}")
-
-       # Return the output as a string and skip the new-line character at the end
-       return stdout.decode()[:-1]
-
-   text = "이봐 무슨 일이야"
-   uromanized_text = uromanize(text, uroman_path=os.environ["UROMAN"])
-
-   inputs = tokenizer(text=uromanized_text, return_tensors="pt").to(model.device)
-
-   set_seed(555)  # make deterministic
-   with torch.no_grad():
-      outputs = model(inputs["input_ids"])
-
-   waveform = outputs.waveform[0]
-   ```
+   If your language requires uroman, the tokenizer automatically applies it to the text inputs.
 
 ## VitsConfig
 

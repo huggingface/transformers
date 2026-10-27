@@ -79,7 +79,7 @@ Transformers 是一個為最先進的機器學習模型（涵蓋文字、電腦�
 
 ## 安裝
 
-Transformers 支援 Python 3.10+ 和 [PyTorch](https://pytorch.org/get-started/locally/) 2.4+。
+Transformers 支援 Python 3.11+ 和 [PyTorch](https://pytorch.org/get-started/locally/) 2.4+。
 
 使用 [venv](https://docs.python.org/3/library/venv.html) 或基於 Rust 的高速 Python 套件及專案管理器 [uv](https://docs.astral.sh/uv/) 來建立並啟用虛擬環境。
 
@@ -240,7 +240,6 @@ pipeline(
 
 -   本函式庫並非一個用於建構神經網路的模組化工具箱。模型檔案中的程式碼為了讓研究人員能快速在模型上迭代，而沒有進行過度的抽象重構，避免了深入額外的抽象層/檔案。
 -   訓練 API 針對 Transformers 提供的 PyTorch 模型進行了最佳化。對於通用的機器學習迴圈，您應該使用像 [Accelerate](https://huggingface.co/docs/accelerate) 這樣的其他函式庫。
--   [範例指令稿](https://github.com/huggingface/transformers/tree/main/examples)僅僅是*範例*。它們不一定能在您的特定用例上開箱即用，您可能需要修改程式碼才能使其正常運作。
 
 ## 100個使用 Transformers 的專案
 
