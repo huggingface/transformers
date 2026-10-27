@@ -1277,6 +1277,11 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "liquid_codec": [
+            WeightRenaming(source_patterns=r"^_frontend\.", target_patterns="frontend."),
+            WeightRenaming(source_patterns=r"^encoder\.lfm\.", target_patterns="encoder."),
+            WeightRenaming(source_patterns=r"^quantizer\.fsq\.", target_patterns="quantizer."),
+        ],
         "ernie4_5_vl_moe": [
             # vision
             WeightRenaming("vision_model", "vision_tower"),
