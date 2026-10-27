@@ -33,6 +33,7 @@ from ..utils.hub import hf_api
 from .configs import ExportConfigMixin, ExportFormat
 from .metadata import ExportMetadata
 from .quantizers.utils import capture_calibration_inputs
+from .runtimes.base import ExportedModel
 from .utils import check_packages, decompose_for_generation
 
 
@@ -101,6 +102,25 @@ class ExportArtifacts(Mapping, PushToHubMixin):
                 "no single `.program`; index it by name and take that component's."
             )
         return next(iter(self.components.values())).program
+
+    def can_generate(self) -> bool:
+        """Whether this is a generation export, run by a generation loop: one with a `decode` component."""
+        return "decode" in self.components
+
+    def runtime(self, device=None) -> ExportedModel:
+        """Run this export on `device` (the backend's default when `None`), as an [`ExportedModel`] called like the
+        model it came from. The one place that picks how an export runs, for a fresh export and a loaded one alike."""
+        from .auto import get_runner_class
+
+        if self.can_generate() or len(self.components) != 1:
+            raise ValueError(
+                f"This export has {len(self.components)} components ({list(self.components)}), run by a generation "
+                "loop; that runtime isn't available yet. `runtime()` runs a single-graph export, as "
+                "`HfExporter.export` returns."
+            )
+        component = next(iter(self.components.values()))
+        runner = get_runner_class(self.export_format).from_program(component.program, component.metadata, device)
+        return ExportedModel(runner, self.config)
 
     def save_pretrained(self, save_directory: str | Path, push_to_hub: bool = False, **kwargs) -> None:
         """Write the components (one file each), the configs, and a manifest naming each component's file and the

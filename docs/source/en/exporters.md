@@ -241,6 +241,27 @@ outputs = compiled(ov_inputs)
 </hfoption>
 </hfoptions>
 
+## Run an export
+
+[`AutoExportedModel.from_pretrained`] loads any saved export to run, from a local directory or the Hub, and
+[`~ExportArtifacts.runtime`] runs one straight from the export. A single-graph export runs as an [`ExportedModel`], on
+its backend's runtime (`torch.export`'s module, ONNX Runtime, OpenVINO, or the ExecuTorch runtime). Either is called like the model it came from and returns a [`~utils.ModelOutput`]. Inputs the
+export wasn't traced with are dropped, so a processor's whole output can be passed.
+
+```python
+from transformers.exporters import AutoExportedModel
+
+outputs = exported.runtime()(**inputs)
+
+exported.save_pretrained("qwen3-onnx")
+model = AutoExportedModel.from_pretrained("qwen3-onnx", device="cuda")
+logits = model(**inputs).logits
+```
+
+`device` picks where it runs: an ONNX Runtime provider (`"cpu"`, `"cuda"`), an OpenVINO device (`"cpu"`, `"xpu"` for an
+Intel GPU, or `AUTO` by default), or where a `torch.export` module is moved. An ExecuTorch program runs where it was
+lowered for. Generation exports, with several components, are driven by a generation loop, which isn't covered here.
+
 ## Dynamic shapes
 
 Passing `dynamic=True` marks every tensor
