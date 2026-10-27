@@ -2445,7 +2445,7 @@ class OmniModalProcessorMixin(ProcessorMixin):
         audio_from_video_indices: list[int] | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        """
+        r"""
         audio_from_video_indices (`list[int]`, *optional*):
             A list that describes the source of each audio slot where
                 - `None` -> standalone audio associated with no video track

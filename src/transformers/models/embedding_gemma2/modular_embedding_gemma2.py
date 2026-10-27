@@ -1018,7 +1018,6 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
         # Each 1s chunk of video/audio is wrapped in special tokens:
         # "00:00 <BOI> [frame image tokens] <EOI> 00:00 <BOA> [audio tokens] <EOA> ..."
         segments = []
-        segments = []
         audio_secs = range(frame_seconds[0], total_seconds)
         counts = [
             min(num_audio_tokens_per_sec, max(0, num_audio_tokens_total - k * num_audio_tokens_per_sec))
