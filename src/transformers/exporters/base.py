@@ -32,7 +32,7 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
 from ..utils.hub import hf_api
 from .configs import ExportConfigMixin, ExportFormat
-from .decompose import decompose_for_generation
+from .decompose import DECODE_GRAPHS, decompose_for_generation
 from .metadata import ExportMetadata
 from .quantizers.utils import capture_calibration_inputs
 from .runtimes.base import ExportedModel
@@ -77,11 +77,13 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         export_format: ExportFormat | str,
         config: PreTrainedConfig | None = None,
         generation_config: GenerationConfig | None = None,
+        generation: bool = False,
     ):
         self.components = dict(components)
         self.export_format = export_format
         self.config = config
         self.generation_config = generation_config
+        self.generation = generation
 
     def __getitem__(self, name: str) -> ExportedComponent:
         return self.components[name]
@@ -106,19 +108,24 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         return next(iter(self.components.values())).program
 
     def can_generate(self) -> bool:
-        """Whether this is a generation export, run by a generation loop: one with a `decode` component."""
-        return "decode" in self.components
+        """Whether this is a generation export, run by a generation loop: one [`~HfExporter.export_for_generation`]
+        produced."""
+        return self.generation
 
     def runtime(self, device=None) -> ExportedModel:
         """Run this export on `device` (the backend's default when `None`), as an [`ExportedModel`] called like the
         model it came from. The one place that picks how an export runs, for a fresh export and a loaded one alike."""
         from .auto import get_runner_class
 
-        if self.can_generate() or len(self.components) != 1:
+        if self.can_generate():
             raise ValueError(
-                f"This export has {len(self.components)} components ({list(self.components)}), run by a generation "
-                "loop; that runtime isn't available yet. `runtime()` runs a single-graph export, as "
-                "`HfExporter.export` returns."
+                f"This is a generation export ({list(self.components)}), run by a generation loop; that runtime isn't "
+                "available yet. `runtime()` runs a single-graph export, as `HfExporter.export` returns."
+            )
+        if len(self.components) != 1:
+            raise ValueError(
+                f"This export has {len(self.components)} components ({list(self.components)}); `runtime()` runs a "
+                "single-graph export, as `HfExporter.export` returns."
             )
         component = next(iter(self.components.values()))
         runner = get_runner_class(self.export_format).from_program(component.program, component.metadata, device)
@@ -154,7 +161,12 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             exporter.save_program(component.program, directory / filename)
             components[name] = {"file": filename, "metadata": dict(component.metadata.raw)}
 
-        manifest = {"schema_version": 1, "export_format": str(self.export_format), "components": components}
+        manifest = {
+            "schema_version": 1,
+            "export_format": str(self.export_format),
+            "generation": self.generation,
+            "components": components,
+        }
         (directory / EXPORT_MANIFEST_FILE).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         if self.config is not None:
             self.config.save_pretrained(directory)
@@ -213,7 +225,13 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         generation_config = (
             GenerationConfig.from_pretrained(directory) if (directory / GENERATION_CONFIG_NAME).exists() else None
         )
-        return cls(components, exporter.export_format, config=config, generation_config=generation_config)
+        return cls(
+            components,
+            exporter.export_format,
+            config=config,
+            generation_config=generation_config,
+            generation=manifest.get("generation", False),
+        )
 
     @staticmethod
     def _download(repo_id: str, subfolder: str, **hub_kwargs) -> Path:
@@ -379,8 +397,9 @@ class HfExporter(ABC):
                 instead of the last position only, which greedy and sampled decoding read.
 
         Returns:
-            [`ExportArtifacts`]: One [`ExportedComponent`] per component: `"decode"`, plus `"encoder"`,
-            `"embed_tokens"` and modality encoders as the architecture calls for.
+            [`ExportArtifacts`]: One [`ExportedComponent`] per component, named as optimum-intel does: a causal LM's
+            `"model"`; an encoder-decoder's `"encoder_model"` and `"decoder_model"`; a multi-modal model's
+            `"language_model"`, `"text_embeddings_model"` and one `"<modality>_embeddings_model"` per modality.
         """
         generation_config, multi_token_decode, decoder_writes_cross_cache = self._resolve_generation_options(
             model, config, generation_config, multi_token_decode, decoder_writes_cross_cache
@@ -436,7 +455,11 @@ class HfExporter(ABC):
             exported[name] = ExportedComponent(program, ExportMetadata.from_dict(metadata))
 
         return ExportArtifacts(
-            exported, self.export_format, config=getattr(model, "config", None), generation_config=generation_config
+            exported,
+            self.export_format,
+            config=getattr(model, "config", None),
+            generation_config=generation_config,
+            generation=True,
         )
 
     def _resolve_generation_options(
@@ -452,7 +475,11 @@ class HfExporter(ABC):
             generation_config.update(
                 **model.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True
             )
-        decode_config = config.get("decode") if isinstance(config, dict) else config
+        decode_config = (
+            next((config[name] for name in DECODE_GRAPHS if name in config), None)
+            if isinstance(config, dict)
+            else config
+        )
         dynamic = bool(getattr(decode_config, "dynamic", False) or getattr(decode_config, "dynamic_shapes", None))
         if multi_token_decode is None:
             multi_token_decode = dynamic

@@ -101,13 +101,6 @@ def _self_attention_layers(cache) -> list:
     return getattr(halves[0], "layers", []) if halves else []
 
 
-def keeps_write_once_state(layer) -> bool:
-    """Whether this layer keeps state only the prefill step writes (sparse-indexer keys, a `*_keys` other than
-    `keys`), which a decode graph cannot create. Linear-attention conv/recurrent states are not: they start at zero
-    (`linear_states_of`), and a decode graph run from zeroed states computes the prefill step."""
-    return any(name.endswith("_keys") and name != "keys" for name in vars(layer))
-
-
 def _cache_length(cache) -> int:
     """`cache.get_seq_length()`; a recurrent-only cache, which raises, answers 0 or 1 by `has_previous_state`."""
     if cache is None:

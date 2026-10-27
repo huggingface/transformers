@@ -14,9 +14,9 @@
 """What a component is, shared by the three stages that pass one along.
 
 A decomposition produces components, an exporter turns each into a graph, and a runtime drives them. Components
-are keyed by name (`"decode"`, `"prefill"`, `"encoder"`, `"embed_tokens"`, `"<modality>_encoder"`), and an export
-with a `"decode"` graph is driven through `generate`. This holds the `Component` / `ExportedComponent` pair, then
-the modules a decomposition wraps a model's own methods in so each can be exported on its own.
+are keyed by optimum-intel's names (`"model"`, `"encoder_model"` / `"decoder_model"`, `"language_model"`,
+`"text_embeddings_model"`, `"<modality>_embeddings_model"`). This holds the `Component` / `ExportedComponent` pair,
+then the modules a decomposition wraps a model's own methods in so each can be exported on its own.
 """
 
 from __future__ import annotations

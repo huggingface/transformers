@@ -31,7 +31,7 @@ from typing import Any, NamedTuple
 
 from ..utils import logging
 from ..utils.import_utils import is_torch_available
-from .cache import causal_mask, keeps_write_once_state, mask_width, materialize_cache_like
+from .cache import causal_mask, mask_width, materialize_cache_like
 from .components import (
     Component,
     CrossAttentionEncoder,
@@ -391,9 +391,13 @@ class ModalitySpec(NamedTuple):
         return self.feature_keys + self.aux_keys
 
 
+# The decode graph's names, after optimum-intel's: a causal LM's `model`, an encoder-decoder's `decoder_model`, and a
+# multi-modal model's `language_model`.
+DECODE_GRAPHS = ("model", "decoder_model", "language_model")
+
 _MODALITY_SPECS = (
     ModalitySpec(
-        "image_encoder",
+        "vision_embeddings_model",
         "get_image_features",
         ("pixel_values", "pixel_values_images", "flattened_patches", "image_patches"),
         ("image_patches_indices", "image_embeds_position_mask", "pixel_attention_mask", "target_sizes"),
@@ -401,7 +405,7 @@ _MODALITY_SPECS = (
         "image_token_id",
     ),
     ModalitySpec(
-        "video_encoder",
+        "video_embeddings_model",
         "get_video_features",
         ("pixel_values_videos",),
         ("target_sizes_videos",),
@@ -409,7 +413,7 @@ _MODALITY_SPECS = (
         "video_token_id",
     ),
     ModalitySpec(
-        "audio_encoder",
+        "audio_embeddings_model",
         "get_audio_features",
         ("input_features", "audio_input_ids", "input_values"),
         ("padding_mask",),
@@ -508,8 +512,8 @@ def decompose_multimodal(
 ) -> dict[str, Component]:
     """Split a multi-modal model into independently exportable components.
 
-    Components: `embed_tokens`, one `<modality>_encoder` per modality present (`get_<modality>_features`),
-    and `text_decoder`. The `masked_scatter` merge stays outside the graphs.
+    Components, named as optimum-intel does: `text_embeddings_model`, one `<modality>_embeddings_model` per modality
+    present (`get_<modality>_features`), and `language_model`. The `masked_scatter` merge stays outside the graphs.
 
     Raises:
         `ValueError`: if no known multi-modal submodules are found on the model.
@@ -543,7 +547,7 @@ def decompose_multimodal(
             f"decompose_multimodal failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
         ) from e
 
-    components = {"text_decoder": Component(decoder, decoder_calls[-1])} if decoder_calls else {}
+    components = {"language_model": Component(decoder, decoder_calls[-1])} if decoder_calls else {}
 
     # Dual-encoders (owlvit) refuse `get_input_embeddings`. `prompt_ids` covers an encoder-decoder, whose
     # prefill kwargs carry `decoder_input_ids` instead.
@@ -554,7 +558,9 @@ def decompose_multimodal(
             for spec in _MODALITY_SPECS
             if (token_id := getattr(model.config, spec.token_field, None)) is not None
         ]
-        components["embed_tokens"] = Component(TokenEmbedder(decoder, placeholder_ids), {"input_ids": token_ids})
+        components["text_embeddings_model"] = Component(
+            TokenEmbedder(decoder, placeholder_ids), {"input_ids": token_ids}
+        )
 
     for name, getter, owner, grid_key in active_modalities:
         calls = captured_features.get(name) or recorded_features.get(name) or []
@@ -564,7 +570,7 @@ def decompose_multimodal(
             ("grid_thw" if key == grid_key else key): value for key, value in calls[-1].items() if value is not None
         }
         # Config-derived tensors become graph inputs: a getter reading its grid as data cannot be traced.
-        if name == "image_encoder" and packs_anyres_features(owner, model.config):
+        if name == "vision_embeddings_model" and packs_anyres_features(owner, model.config):
             tower_inputs = {
                 "pixel_values": flatten_anyres_patches(
                     model.config, feature_inputs["pixel_values"], feature_inputs["image_sizes"]
@@ -587,27 +593,23 @@ def _prefill_graph_reason(model, components: dict, writes_cross_cache: bool) -> 
     serves it. A second graph would duplicate every parameter, so such a model isn't decomposed.
 
     The decode graph is traced after a branch the prefill step takes (the cross-attention cache write, a streamed
-    modality, written-once state, a modality inside the forward), which export does not keep.
+    modality, a modality inside the forward), which export does not keep.
     """
     if components.get("encoder") is not None and not writes_cross_cache:
         return "neither its encoder nor its decode graph can write the cross-attention cache"
     if (spec := streaming_embedder_spec(model.config)) is not None:
         return f"it streams `{spec.source}` with the text"
-    # Recurrent models keep their state in `cache_params`.
-    decode_inputs = components["decode"].inputs
-    cache = next(
-        (decode_inputs[name] for name in ("past_key_values", "cache_params") if decode_inputs.get(name) is not None),
-        None,
-    )
-    if any(keeps_write_once_state(layer) for layer in getattr(cache, "layers", [])):
-        return "its cache holds state the prefill step writes once"
+    cache = components["decode"].inputs.get("past_key_values")
     if any(isinstance(layer, DynamicCrossAttentionLayer) for layer in getattr(cache, "layers", [])):
         return "its cross-attention cache is written once by the prefill step"
     # Checked per modality, since getters rename their inputs.
     prefill_inputs = components["prefill"].inputs
+    # An encoder-decoder's encoder takes its modality (t5gemma2's image) once, beside the decode graph.
+    encoder_inputs = components["encoder"].inputs if "encoder" in components else {}
     for spec in _MODALITY_SPECS:
-        if spec.component not in components and any(prefill_inputs.get(key) is not None for key in spec.input_keys):
-            return f"its {spec.component.removesuffix('_encoder')} input runs inside the prefill step's forward"
+        consumed = spec.component in components or any(key in encoder_inputs for key in spec.input_keys)
+        if not consumed and any(prefill_inputs.get(key) is not None for key in spec.input_keys):
+            return f"its {spec.component.split('_')[0]} input runs inside the prefill step's forward"
     return None
 
 
@@ -732,9 +734,9 @@ def embedded_inputs(call_inputs: dict, components: dict) -> dict:
     # `mm_token_type_ids` only feeds `get_rope_index`, unused once `position_ids` is given.
     if call_inputs.get("position_ids") is not None:
         call_inputs.pop("mm_token_type_ids", None)
-    if call_inputs.get("input_ids") is not None and "embed_tokens" in components:
+    if call_inputs.get("input_ids") is not None and "text_embeddings_model" in components:
         with torch.no_grad():
-            embedded = components["embed_tokens"].module(call_inputs.pop("input_ids"))
+            embedded = components["text_embeddings_model"].module(call_inputs.pop("input_ids"))
         # Per-layer embeddings, when returned, are decode inputs too.
         call_inputs.update(embedded if isinstance(embedded, dict) else {"inputs_embeds": embedded})
     return call_inputs
@@ -752,7 +754,7 @@ def decompose_for_generation(
 
     Captures prefill and decode kwargs from a real `generate` and splits a multi-modal model into components. The
     decode graph serves the prefill step too (all at once with `multi_token_decode`, else a token at a time), so
-    `"prefill"` is that step's call to the decode graph, not a graph of its own: a caller exports `"decode"` only
+    `"prefill"` is that step's call to the decode graph, not a graph of its own: a caller exports the decode graph only
     (as `export_for_generation` does) and can use `"prefill"`'s inputs to calibrate or check it on that step. A model
     whose prefill step needs a graph of its own raises.
 
@@ -761,13 +763,16 @@ def decompose_for_generation(
         inputs: **Generate** kwargs — what you'd pass to `model.generate(**inputs)`.
         generation_config: Optional `GenerationConfig` forwarded to `generate()`; use
             `cache_implementation="static"` + `max_cache_len=N` for a static cache.
-        multi_token_decode: Capture `decode` with a dynamic query axis, so it takes the whole prefill step at once.
+        multi_token_decode: Capture the decode graph with a dynamic query axis, so it takes the whole prefill step
+            at once.
         decoder_writes_cross_cache: Have the decode graph write its own cross-attention cache instead of the
             encoder (for backends that keep the cache as state).
 
     Returns:
-        `{component_name: Component}`: `"prefill"` and `"decode"`, plus `"embed_tokens"`, modality encoders and
-        `"encoder"` as the architecture calls for. A multi-modal `decode` takes `inputs_embeds`.
+        `{component_name: Component}`, named as optimum-intel does: `"prefill"` and the decode graph, which is a
+        causal LM's `"model"`, an encoder-decoder's `"decoder_model"` (beside `"encoder_model"`), or a multi-modal
+        model's `"language_model"` (beside `"text_embeddings_model"` and one `"<modality>_embeddings_model"` per
+        modality, and taking `inputs_embeds`).
 
     Raises:
         `ValueError`: if the prefill step needs a graph of its own beside the decode graph.
@@ -780,8 +785,8 @@ def decompose_for_generation(
     multimodal = is_multimodal(prompt.module)
     if multimodal:
         split = decompose_multimodal(prompt.module, prompt.inputs, recorded_features, inputs.get("input_ids"))
-        # The decode component serves the text stack; keeping `text_decoder` would duplicate its parameters.
-        split.pop("text_decoder", None)
+        # The decode component serves the text stack; keeping `language_model` would duplicate its parameters.
+        split.pop("language_model", None)
         components.update(split)
         components.update(_streaming_embedder(model, inputs))
 
@@ -799,12 +804,28 @@ def decompose_for_generation(
             "need a graph of its own, duplicating the model's weights."
         )
     decode = components["decode"]
+    # `generate` drops the token types after the prefill step (gemma3's bidirectional image blocks); the generated
+    # tokens are text, so zeros let the one graph build the prefill step's mask too.
+    token_types = prompt.inputs.get("token_type_ids")
+    if token_types is not None and decode.inputs.get("token_type_ids") is None:
+        text = next(decode.inputs[key] for key in ("input_ids", "inputs_embeds") if decode.inputs.get(key) is not None)
+        decode = components["decode"] = replace(
+            decode, inputs={**decode.inputs, "token_type_ids": token_types.new_zeros(text.shape[:2])}
+        )
     if multimodal:
         decode = components["decode"] = replace(decode, inputs=embedded_inputs(decode.inputs, components))
     # The prefill step as the decode graph takes it.
     prefill = components.pop("prefill")
     components["prefill"] = replace(decode, inputs=_prefill_call(model, prefill.inputs, decode.inputs, components))
-    return components
+    # optimum-intel's names: `model` alone, `encoder_model` + `decoder_model`, or `language_model` beside the embeddings
+    decode_name = "decoder_model" if "encoder" in components else "language_model" if multimodal else "model"
+    names = {"decode": decode_name, "encoder": "encoder_model"}
+    return {names.get(name, name): component for name, component in components.items()}
+
+
+def decode_graph_name(components) -> str:
+    """The name of the decode graph among `components`: `model`, `decoder_model` or `language_model`."""
+    return next(name for name in DECODE_GRAPHS if name in components)
 
 
 def _prefill_call(model, prefill_inputs: dict, decode_inputs: dict, components: dict) -> dict:
@@ -819,11 +840,25 @@ def _prefill_call(model, prefill_inputs: dict, decode_inputs: dict, components: 
         # (or the decode graph's own write) leaves it.
         cache.cross_attention_cache = copy.deepcopy(decode_cache.cross_attention_cache)
         cache.is_updated = dict(decode_cache.is_updated)
-    if "attention_mask" in decode_inputs and prefill_inputs.get("attention_mask") is None:
-        prefill_inputs["attention_mask"] = _prefill_mask(prefill_inputs, decode_inputs["attention_mask"])
+    if "attention_mask" in decode_inputs:
+        mask, decode_mask = prefill_inputs.get("attention_mask"), decode_inputs["attention_mask"]
+        if not _same_kind(mask, decode_mask):
+            mask = _prefill_mask(prefill_inputs, decode_mask)
+        prefill_inputs["attention_mask"] = mask
     if "inputs_embeds" in decode_inputs and "input_ids" in prefill_inputs:
         prefill_inputs = embedded_inputs(prefill_inputs, components)
-    return prefill_inputs
+    # In the decode capture's order: a runtime binding flattened leaves by position would misplace them otherwise.
+    order = {name: index for index, name in enumerate(decode_inputs)}
+    return dict(sorted(prefill_inputs.items(), key=lambda item: order.get(item[0], len(order))))
+
+
+def _same_kind(mask: Any, decode_mask: Any) -> bool:
+    """Whether the captured prefill mask has the decode capture's form (`generate` drops or reshapes it per step)."""
+    if isinstance(mask, dict) and isinstance(decode_mask, dict):
+        return mask.keys() == decode_mask.keys() and all(_same_kind(mask[key], decode_mask[key]) for key in mask)
+    if isinstance(mask, torch.Tensor) and isinstance(decode_mask, torch.Tensor):
+        return mask.dim() == decode_mask.dim() and mask.dtype == decode_mask.dtype
+    return mask is None and decode_mask is None
 
 
 def _prefill_mask(prefill_inputs: dict, decode_mask: Any) -> Any:

@@ -323,6 +323,18 @@ def check_packages(
 # Extract or cast tensors from nested model outputs.
 
 
+# The inputs whose leading axis is the batch, in the order they are trusted to say it.
+BATCH_INPUTS = ("input_ids", "inputs_embeds", "decoder_input_ids", "decoder_inputs_embeds", "attention_mask")
+
+
+def leaf_name(name: str) -> str:
+    """The kwarg-space name behind a graph port's name — `disambiguate_io_names` only ever prefixes."""
+    for prefix in ("input.", "output."):
+        if name.startswith(prefix):
+            return name[len(prefix) :]
+    return name
+
+
 def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
     """Recursively retrieve all leaf tensors from a potentially nested structure.
 
@@ -336,15 +348,14 @@ def get_leaf_tensors(obj: Any) -> dict[str, torch.Tensor]:
     return dict(_iter_leaf_tensors(obj))
 
 
-def duplicate_leaf_tensors(obj: Any) -> Any:
+def duplicate_leaf_tensors(obj: Any, seen: set[int] | None = None) -> Any:
     """Clone tensors that appear more than once in an output structure.
 
-    When a model returns the same tensor under two output names (e.g. `last_hidden_state`
-    and `hidden_states[0]`), the ONNX optimizer deduplicates the two output nodes and
-    renames one, breaking the expected name mapping. Cloning duplicates gives each output
-    leaf a distinct identity so the optimizer has nothing to merge.
+    The ONNX optimizer merges outputs sharing a tensor and renames one, breaking the name mapping.
+    `seen` pre-seeds taken identities: pass the input tensors so an input returned unmutated (prophetnet's
+    `encoder_last_hidden_state`) is cloned too instead of collapsing onto the input's name.
     """
-    seen = set()
+    seen = set() if seen is None else set(seen)
 
     def _dedup(tensor: torch.Tensor) -> torch.Tensor:
         if id(tensor) in seen:

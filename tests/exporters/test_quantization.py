@@ -174,13 +174,13 @@ class QuantizationTesterMixin(MemoryCleanupMixin):
         return GenerationConfig(cache_implementation="static", max_cache_len=MAX_CACHE_LEN, do_sample=False)
 
     def _decode_component(self, model=None):
-        """Multi-token `decode` component against a fixed-size `StaticCache`. The mask is a precomputed
+        """Multi-token decode graph (`model`) against a fixed-size `StaticCache`. The mask is a precomputed
         input, so PT2E has no in-graph mask construction to trip on."""
         model = model if model is not None else self._dense_model()
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
         decode = decompose_for_generation(
             model, inputs, generation_config=self._generation_config(), multi_token_decode=True
-        )["decode"]
+        )["model"]
         return decode.module, decode.inputs
 
     def _pt2e_quantizer(self, name, calibration_dataset=None, dynamic=False):
@@ -321,8 +321,8 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         captured = capture_calibration_inputs(
             model, copy.deepcopy(calibration), generation_config=self._generation_config(), multi_token_decode=True
         )
-        self.assertEqual(set(captured), {"decode"})
-        self.assertEqual(len(captured["decode"]), 2 * len(calibration))
+        self.assertEqual(set(captured), {"model"})
+        self.assertEqual(len(captured["model"]), 2 * len(calibration))
 
     @pytest.mark.torch_export_test
     @disable_hub_kernels
@@ -397,25 +397,28 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     @disable_hub_kernels
     def test_vlm_per_component_quantization(self):
         """A VLM is quantized component by component, each with its own recipe, via a `{component: config}`
-        dict on `export_for_generation` (multi-token decode): static int8 on the `image_encoder`, the lighter
-        dynamic int8 on `decode`, and `embed_tokens` left in fp32."""
+        dict on `export_for_generation` (multi-token decode): static int8 on the `vision_embeddings_model`, the
+        lighter dynamic int8 on the `language_model`, and the `text_embeddings_model` left in fp32."""
         from transformers.exporters import DynamoConfig, DynamoExporter
 
         model, inputs = self._vlm_model()
         static, dynamic = self._pt2e_quantizer("x86"), self._pt2e_quantizer("x86", dynamic=True)
         config = {
-            "embed_tokens": DynamoConfig(dynamic=True),
-            "image_encoder": DynamoConfig(dynamic=True, quantizer=static),
-            "decode": DynamoConfig(dynamic=True, quantizer=dynamic),
+            "text_embeddings_model": DynamoConfig(dynamic=True),
+            "vision_embeddings_model": DynamoConfig(dynamic=True, quantizer=static),
+            "language_model": DynamoConfig(dynamic=True, quantizer=dynamic),
         }
         components = DynamoExporter().export_for_generation(model, inputs, config, multi_token_decode=True)
 
-        self.assertTrue(_has_quantize_ops(components["image_encoder"].program), "image_encoder should be quantized")
-        self.assertTrue(_has_quantize_ops(components["decode"].program), "decode should be quantized")
-        self.assertFalse(_has_quantize_ops(components["embed_tokens"].program), "embed_tokens should stay fp32")
-        # the recipes really differ: decode is dynamically quantized, image_encoder statically
-        self.assertTrue(_has_dynamic_quant_ops(components["decode"].program), "decode should be dynamically quantized")
-        self.assertFalse(_has_dynamic_quant_ops(components["image_encoder"].program), "image_encoder should be static")
+        vision, language, text = (
+            components[name].program for name in ("vision_embeddings_model", "language_model", "text_embeddings_model")
+        )
+        self.assertTrue(_has_quantize_ops(vision), "the vision embeddings should be quantized")
+        self.assertTrue(_has_quantize_ops(language), "the language model should be quantized")
+        self.assertFalse(_has_quantize_ops(text), "the text embeddings should stay fp32")
+        # the recipes really differ: the language model is dynamically quantized, the vision embeddings statically
+        self.assertTrue(_has_dynamic_quant_ops(language), "the language model should be dynamically quantized")
+        self.assertFalse(_has_dynamic_quant_ops(vision), "the vision embeddings should be static")
 
 
 @slow
@@ -741,7 +744,7 @@ class ExecutorchQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         defect."""
         outputs = _run_executorch_program(exported, copy.deepcopy(inputs))
         if outputs is not None:
-            self.assertTrue(all(o.isfinite().all() for o in outputs if o.is_floating_point()))
+            self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
 
     @parameterized.expand([("dense",), ("moe",), ("ssm",)])
     @require_executorch

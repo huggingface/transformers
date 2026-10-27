@@ -223,7 +223,11 @@ def maybe_pad_block_sequence_ids(
     Usually that happens with `StaticCache` generation or generating without cache.
     Pads to the right with `-1`.
     """
-    if (padding_length := kv_length + kv_offset - block_sequence_ids.shape[-1]) > 0:
+    padding_length = kv_length + kv_offset - block_sequence_ids.shape[-1]
+    # Under export, a pad of `max(padding_length, 0)` rather than a branch: the graph serves padded and unpadded calls
+    if is_torchdynamo_exporting():
+        return F.pad(block_sequence_ids, pad=(0, torch.sym_max(padding_length, 0)), value=-1)
+    if padding_length > 0:
         block_sequence_ids = F.pad(block_sequence_ids, pad=(0, padding_length), value=-1)
     return block_sequence_ids
 
@@ -1473,8 +1477,14 @@ def create_recurrent_attention_mask(
         return None
     if not is_tracing(attention_mask) and torch.all(attention_mask == 1):
         return None
+    query_length, mask_length = inputs_embeds.shape[1], attention_mask.shape[1]
+    # Under export, a gather rather than a slice: a slice's layout depends on whether the mask is wider than the query,
+    # which would guard the graph to one case, so it couldn't serve both the prefill step and decode steps.
+    if is_torchdynamo_exporting():
+        positions = torch.arange(mask_length - query_length, mask_length, device=attention_mask.device)
+        return attention_mask.index_select(1, positions)
     # ``.contiguous()`` keeps the stride stable across decode steps so ``torch.compile`` doesn't recompile.
-    return attention_mask[:, -inputs_embeds.shape[1] :].contiguous()
+    return attention_mask[:, -query_length:].contiguous()
 
 
 LAYER_PATTERN_TO_MASK_FUNCTION_MAPPING = {

@@ -391,10 +391,15 @@ splits the model into those stages and exports each as a component.
 
 The decode graph serves the prompt too, so the model's weights are exported once:
 
-- a `"decode"` component, called on the prompt (with an empty cache) and on every generated token;
-- an `"encoder"` component for an encoder-decoder, which also computes the decoder's cross-attention cache;
-- for a multi-modal model, `"embed_tokens"` and one `"<modality>_encoder"` per modality (`"image_encoder"`,
-  `"audio_encoder"`, ...); the decode graph then takes `inputs_embeds`, with the features scattered in.
+- the decode graph, called on the prompt (with an empty cache) and on every generated token: a causal LM's
+  `"model"`, an encoder-decoder's `"decoder_model"`, or a multi-modal model's `"language_model"`;
+- an `"encoder_model"` for an encoder-decoder, which also computes the decoder's cross-attention cache;
+- for a multi-modal model, `"text_embeddings_model"` and one `"<modality>_embeddings_model"` per modality
+  (`"vision_embeddings_model"`, `"audio_embeddings_model"`, ...); the `"language_model"` then takes
+  `inputs_embeds`, with the features scattered in.
+
+The names follow [Optimum Intel](https://huggingface.co/docs/optimum/intel/index)'s, so an OpenVINO export saves as
+`openvino_model.xml`, `openvino_language_model.xml`, and so on.
 
 A model whose prompt would need a graph of its own (it would duplicate the weights) raises instead of exporting.
 
@@ -414,7 +419,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
 components = exporter.export_for_generation(model, inputs, config=config)
-# components: ExportArtifacts with "embed_tokens", "image_encoder" and "decode",
+# components: ExportArtifacts with "text_embeddings_model", "vision_embeddings_model" and "language_model",
 # each an ExportedComponent whose `.program` is an ExportedProgram
 ```
 
@@ -434,7 +439,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
 components = exporter.export_for_generation(model, inputs, config=config)
-# components: ExportArtifacts with "embed_tokens", "image_encoder" and "decode",
+# components: ExportArtifacts with "text_embeddings_model", "vision_embeddings_model" and "language_model",
 # each an ExportedComponent whose `.program` is an ONNXProgram
 ```
 
@@ -454,7 +459,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
 components = exporter.export_for_generation(model, inputs, config=config)
-# components: ExportArtifacts with "embed_tokens", "image_encoder" and "decode",
+# components: ExportArtifacts with "text_embeddings_model", "vision_embeddings_model" and "language_model",
 # each an ExportedComponent whose `.program` is an ExecutorchProgramManager
 ```
 
@@ -474,7 +479,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = OpenVINOExporter()
 config = OpenVINOConfig(dynamic=True)
 components = exporter.export_for_generation(model, inputs, config=config)
-# components: ExportArtifacts with "embed_tokens", "image_encoder" and "decode",
+# components: ExportArtifacts with "text_embeddings_model", "vision_embeddings_model" and "language_model",
 # each an ExportedComponent whose `.program` is an openvino.Model
 ```
 
@@ -530,7 +535,7 @@ from transformers.exporters import DynamoExporter, DynamoConfig
 exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
 components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
-# components["decode"] now accepts a variable number of query tokens
+# components["model"] now accepts a variable number of query tokens
 ```
 
 </hfoption>
@@ -542,7 +547,7 @@ from transformers.exporters import OnnxExporter, OnnxConfig
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
 components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
-# components["decode"] now accepts a variable number of query tokens
+# components["model"] now accepts a variable number of query tokens
 ```
 
 </hfoption>
@@ -554,7 +559,7 @@ from transformers.exporters import ExecutorchExporter, ExecutorchConfig
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
 components = exporter.export_for_generation(model, inputs, config=config, multi_token_decode=True)
-# components["decode"] now accepts a variable number of query tokens
+# components["model"] now accepts a variable number of query tokens
 ```
 
 </hfoption>
@@ -635,7 +640,7 @@ with no host copies — as long as the runtime binds the caller's buffers rather
 own arena. What that takes is the only per-backend part left:
 
 - **Dynamo** — the exported program models the cache write as a `USER_INPUT_MUTATION`, so calling
-  `components["decode"].program.module()(...)` updates the cache tensors you pass in directly. Reuse the same
+  `components["model"].program.module()(...)` updates the cache tensors you pass in directly. Reuse the same
   tensors each step; nothing to configure.
 
 - **ONNX Runtime** — the decode graph exposes the cache as matched `input.<name>` / `output.<name>`

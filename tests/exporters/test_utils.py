@@ -198,31 +198,31 @@ class ExportArtifactsTest(unittest.TestCase):
 
     def test_program_refuses_several_components(self):
         component = ExportedComponent("program", ExportMetadata())
-        artifacts = ExportArtifacts({"prefill": component, "decode": component}, "stub")
+        artifacts = ExportArtifacts({"encoder_model": component, "decoder_model": component}, "stub")
         with self.assertRaisesRegex(ValueError, "2 components"):
             artifacts.program
 
     def test_save_pretrained_from_pretrained_roundtrip(self):
         components = {
-            "prefill": ExportedComponent("prefill program", ExportMetadata({"input_names": ["input_ids"]})),
-            "decode": ExportedComponent("decode program", ExportMetadata()),
+            "encoder_model": ExportedComponent("encoder program", ExportMetadata({"input_names": ["input_ids"]})),
+            "decoder_model": ExportedComponent("decoder program", ExportMetadata()),
         }
         config, generation_config = BertConfig(hidden_size=32), GenerationConfig(max_new_tokens=3)
         with mock.patch.dict(EXPORT_BACKENDS):
             register_backend("stub", _StubConfig, _StubExporter)
             with tempfile.TemporaryDirectory() as directory:
-                ExportArtifacts(components, "stub", config, generation_config).save_pretrained(directory)
-                self.assertTrue((Path(directory) / "decode.txt").is_file())
+                ExportArtifacts(components, "stub", config, generation_config, generation=True).save_pretrained(
+                    directory
+                )
+                self.assertTrue((Path(directory) / "decoder_model.txt").is_file())
                 loaded = ExportArtifacts.from_pretrained(directory)
         self.assertEqual(loaded.export_format, "stub")
         self.assertEqual(
             {name: component.program for name, component in loaded.items()},
-            {
-                "prefill": "prefill program",
-                "decode": "decode program",
-            },
+            {"encoder_model": "encoder program", "decoder_model": "decoder program"},
         )
-        self.assertEqual(loaded["prefill"].metadata, components["prefill"].metadata)
+        self.assertTrue(loaded.can_generate())
+        self.assertEqual(loaded["encoder_model"].metadata, components["encoder_model"].metadata)
         self.assertEqual(loaded.config.hidden_size, 32)
         self.assertEqual(loaded.generation_config.max_new_tokens, 3)
 

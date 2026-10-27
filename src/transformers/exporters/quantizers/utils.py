@@ -22,8 +22,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..decompose import decompose_for_generation
-from ..utils import get_leaf_tensors
+from ..decompose import decode_graph_name, decompose_for_generation
+from ..utils import BATCH_INPUTS, get_leaf_tensors
 
 
 if TYPE_CHECKING:
@@ -55,7 +55,7 @@ def capture_calibration_inputs(
         # A multi-token decode graph also runs the prefill step, so it calibrates on that call too; a single-token
         # one only ever takes one token.
         if multi_token_decode:
-            calibration["decode"].append(prefill.inputs)
+            calibration[decode_graph_name(components)].append(prefill.inputs)
     return calibration
 
 
@@ -83,7 +83,9 @@ def openvino_feed(ov_model: Any, sample) -> dict[str, Any]:
     """`sample`'s forward kwargs as the converted model's inputs: tensor leaves by port name (folded state takes none),
     the identity `beam_idx`, and scalars as they are."""
     leaves = {path: tensor.cpu().numpy() for path, tensor in get_leaf_tensors(sample).items()}
-    batch = next(iter(leaves.values())).shape[0] if leaves else 1
+    # Off a text input: the first leaf may be an m-rope `position_ids`, `[sections, batch, positions]`.
+    batch_input = next((leaves[name] for name in BATCH_INPUTS if name in leaves), next(iter(leaves.values()), None))
+    batch = batch_input.shape[0] if batch_input is not None else 1
 
     def port_value(name: str) -> Any:
         path = name.removeprefix("input.")
