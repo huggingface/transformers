@@ -30,7 +30,7 @@ The page is split into tiles of 512x512 pixels laid out on the grid that best ma
 
 GraniteDocling is released as two models. The 500M model uses 64 image tokens per tile and can switch a dense page to 256; a router chooses that per page. The 2B model uses a pixel-shuffle ratio of 2, which is 256 image tokens per tile, the same density as the 500M fine path.
 
-Both models are published under the [docling-project](https://huggingface.co/docling-project) organization.
+The [Docling project](https://huggingface.co/docling-project) created GraniteDocling. Both models are published on the [IBM Granite](https://huggingface.co/ibm-granite) organization.
 
 GraniteDocling is a different architecture from [granite-docling-258M](https://huggingface.co/ibm-granite/granite-docling-258M), which keeps loading through [Idefics3](./idefics3).
 
@@ -73,13 +73,13 @@ from transformers import pipeline
 
 pipe = pipeline(
     task="image-text-to-text",
-    model="docling-project/granite-for-docling-500m",
+    model="ibm-granite/granite-for-docling-500m",
 )
 messages = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://huggingface.co/docling-project/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png"},
+            {"type": "image", "url": "https://huggingface.co/ibm-granite/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png"},
             {"type": "text", "text": "<doclang>"},
         ],
     }
@@ -94,7 +94,7 @@ pipe(text=messages, max_new_tokens=4096, return_full_text=False, skip_special_to
 ```python
 from transformers import AutoProcessor, AutoModelForImageTextToText
 
-model_id = "docling-project/granite-for-docling-500m"
+model_id = "ibm-granite/granite-for-docling-500m"
 
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto")
@@ -103,7 +103,7 @@ conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image", "url": "https://huggingface.co/docling-project/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png"},
+            {"type": "image", "url": "https://huggingface.co/ibm-granite/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png"},
             {"type": "text", "text": "<doclang>"},
         ],
     },
@@ -167,8 +167,8 @@ Pages get different tile grids, so `pixel_values` is padded to the largest tile 
 
 ```python
 pages = [
-    "https://huggingface.co/docling-project/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png",
-    "https://huggingface.co/docling-project/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png",
+    "https://huggingface.co/ibm-granite/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png",
+    "https://huggingface.co/ibm-granite/granite-for-docling-500m/resolve/main/docling_technical_report_p1.png",
 ]
 conversations = [
     [{"role": "user", "content": [{"type": "image", "url": url}, {"type": "text", "text": "<doclang>"}]}]
