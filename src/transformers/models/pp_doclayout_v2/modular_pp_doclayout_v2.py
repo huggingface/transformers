@@ -30,7 +30,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import TensorType
+from ...utils.generic import TensorType, no_inherit_decorator
 from ..auto import AutoConfig
 from ..layoutlmv3.modeling_layoutlmv3 import (
     LayoutLMv3Attention,
@@ -298,6 +298,7 @@ class PPDocLayoutV2ImageProcessor(PPDocLayoutV3ImageProcessor):
     def _extract_polygon_points_by_masks(self):
         raise AttributeError("Not needed for PPDocLayoutV2")
 
+    @no_inherit_decorator
     def post_process_object_detection(
         self,
         outputs,

@@ -580,7 +580,6 @@ class MaskFormerImageProcessorPil(PilBackend):
 
         return encoded_inputs
 
-    @requires(backends=("torch",))
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: list[tuple[int, int]] | None = None, return_segmentation_scores: bool = False
     ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
@@ -651,7 +650,6 @@ class MaskFormerImageProcessorPil(PilBackend):
 
         return semantic_segmentation
 
-    @requires(backends=("torch",))
     def post_process_instance_segmentation(
         self,
         outputs,

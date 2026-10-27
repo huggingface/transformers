@@ -27,8 +27,9 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
-from ...utils import auto_docstring, is_cv2_available, requires_backends
+from ...utils import auto_docstring, is_cv2_available
 from ...utils.generic import TensorType
+from ...utils.import_utils import requires
 
 
 if is_cv2_available():
@@ -220,6 +221,7 @@ class PPDocLayoutV3ImageProcessor(TorchvisionBackend):
 
         return polygon_points
 
+    @requires(backends=("torch", "cv2"))
     def post_process_object_detection(
         self,
         outputs,
@@ -237,7 +239,6 @@ class PPDocLayoutV3ImageProcessor(TorchvisionBackend):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and polygon_points for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, ["torch", "cv2"])
         boxes = outputs.pred_boxes
         logits = outputs.logits
         order_logits = outputs.order_logits

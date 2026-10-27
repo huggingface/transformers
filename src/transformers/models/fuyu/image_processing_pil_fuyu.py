@@ -297,7 +297,6 @@ class FuyuImageProcessorPil(PilBackend):
         patches_array = np.stack(patches_list, axis=0) if batch_size > 1 else patches_list[0]
         return patches_array
 
-    @requires(backends=("torch",))
     def preprocess_with_tokenizer_info(
         self,
         image_input: "torch.Tensor",

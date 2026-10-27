@@ -19,7 +19,6 @@ from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...utils import (
     TensorType,
     logging,
-    requires_backends,
 )
 from ...utils.import_utils import requires
 from ..maskformer.image_processing_maskformer import MaskFormerImageProcessor
@@ -529,6 +528,7 @@ class Mask2FormerImageProcessorPil(MaskFormerImageProcessorPil):
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
 
+    @requires(backends=("torch",))
     def post_process_panoptic_segmentation(
         self,
         outputs,
@@ -573,7 +573,6 @@ class Mask2FormerImageProcessorPil(MaskFormerImageProcessorPil):
                   Multiple instances of the same class / label were fused and assigned a single `segment_id`.
                 - **score** -- Prediction score of segment with `segment_id`.
         """
-        requires_backends(self, ["torch"])
         if label_ids_to_fuse is None:
             logger.warning("`label_ids_to_fuse` unset. No instance will be fused.")
             label_ids_to_fuse = set()

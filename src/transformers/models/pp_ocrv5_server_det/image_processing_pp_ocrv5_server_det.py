@@ -29,8 +29,9 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs
-from ...utils import auto_docstring, is_cv2_available, requires_backends
+from ...utils import auto_docstring, is_cv2_available
 from ...utils.generic import TensorType
+from ...utils.import_utils import requires
 
 
 if is_cv2_available():
@@ -360,6 +361,7 @@ class PPOCRV5ServerDetImageProcessor(TorchvisionBackend):
             [height, width], dtype=torch.float32, device=image.device
         )
 
+    @requires(backends=("torch", "cv2"))
     def post_process_object_detection(
         self,
         predictions,
@@ -388,7 +390,6 @@ class PPOCRV5ServerDetImageProcessor(TorchvisionBackend):
                 - "scores": `torch.Tensor` of shape `(N,)`
                 - "labels": `torch.Tensor` of shape `(N,)` (class id 0 for text)
         """
-        requires_backends(self, ["torch", "cv2"])
         if target_sizes is None:
             raise ValueError("target_sizes must be provided for post_process_object_detection")
 

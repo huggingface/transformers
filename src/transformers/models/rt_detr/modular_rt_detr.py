@@ -47,10 +47,10 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     logging,
-    requires_backends,
     torch_int,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
+from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..conditional_detr.modeling_conditional_detr import inverse_sigmoid
 from ..deformable_detr.modeling_deformable_detr import DeformableDetrMultiscaleDeformableAttention
@@ -238,6 +238,7 @@ class RTDetrImageProcessor(DetrImageProcessor):
             raise ValueError(f"Format {format} is not supported.")
         return target
 
+    @requires(backends=("torch",))
     def post_process_object_detection(
         self,
         outputs,
@@ -265,7 +266,6 @@ class RTDetrImageProcessor(DetrImageProcessor):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, ["torch"])
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
         # convert from relative cxcywh to absolute xyxy
         boxes = center_to_corners_format(out_bbox)
