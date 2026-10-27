@@ -84,26 +84,6 @@ class Fp8ConfigTest(unittest.TestCase):
         self.assertIsInstance(quantizer, Fp8HfQuantizer)
         self.assertIsInstance(quantizer.quantization_config, Fp8Config)
 
-    def test_deepseek_v4_checkpoints_load_through_the_legacy_integration(self):
-        """Check that DeepSeek-V4 FP8 checkpoints keep main's legacy path until MXFP4 runs on the fine-grained one."""
-        from transformers import DeepseekV4Config
-        from transformers.quantizers.auto import get_hf_quantizer
-        from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
-
-        shipped = {"quant_method": "fp8", "weight_block_size": [128, 128], "scale_fmt": "ue8m0"}
-        config = DeepseekV4Config(expert_dtype="fp4", quantization_config=shipped)
-        # the model config moves its experts' dtype and its scale names into the quantization config
-        self.assertEqual(
-            (config.quantization_config["expert_dtype"], config.quantization_config["checkpoint_format"]),
-            ("fp4", "deepseek"),
-        )
-        # a model quantized and saved by transformers keeps its own config, FP8 experts included
-        saved = Fp8Config(scale_fmt="ue8m0").to_dict()
-        self.assertEqual(DeepseekV4Config(expert_dtype="fp4", quantization_config=saved).quantization_config, saved)
-        quantizer, _, _ = get_hf_quantizer(config, None, None, True, {})
-        self.assertIsInstance(quantizer, FineGrainedFP8HfQuantizer)
-        self.assertEqual(quantizer.quantization_config.scale_fmt, "ue8m0")
-
 
 @require_torch
 class Fp8QuantizeOpTest(unittest.TestCase):

@@ -100,4 +100,7 @@ quantization_config = Fp8Config(prefer_deepgemm_linear=False)
 own frozen integration. A checkpoint that declares `quant_method="fp8"` loads as [`Fp8Config`] when no config is
 passed. New code uses the config of the checkpoint format, with the same field names.
 
-Use [`Fp8Config`] with the same arguments.
+| `FineGrainedFP8Config` | Use |
+|---|---|
+| any `weight_block_size` | [`Fp8Config`] |
+| a model whose config declares `expert_dtype="fp4"`, such as DeepSeek-V4 | [`Fp8Config`]. It loads as a [`FineGrainedConfig`]. |

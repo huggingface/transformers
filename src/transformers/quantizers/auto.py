@@ -72,6 +72,7 @@ from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_metal import MetalHfQuantizer
 from .quantizer_mxfp4 import Mxfp4HfQuantizer
+from .quantizer_mxfp4_legacy import Mxfp4LegacyHfQuantizer, runs_on_legacy_kernels
 from .quantizer_nvfp4 import NVFP4HfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_quark import QuarkHfQuantizer
@@ -162,7 +163,6 @@ LOADING_ATTRIBUTES_CONFIG_TYPES = (
     AutoRoundConfig,
     FbgemmFp8Config,
     CompressedTensorsConfig,
-    Mxfp4Config,
     MetalConfig,
     FineGrainedConfig,
     BlockScaledConfig,
@@ -243,6 +243,9 @@ class AutoHfQuantizer:
         # The deprecated config keeps its own frozen integration
         if isinstance(quantization_config, FineGrainedFP8Config):
             return FineGrainedFP8HfQuantizer(quantization_config, **kwargs)
+        # MXFP4 below compute capability 8.9 keeps main's integration
+        if isinstance(quantization_config, Mxfp4Config) and runs_on_legacy_kernels():
+            return Mxfp4LegacyHfQuantizer(quantization_config, **kwargs)
 
         quant_method = quantization_config.quant_method
 
@@ -313,10 +316,9 @@ class AutoHfQuantizer:
             if loading_attr_dict:
                 warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
-        if warning_msg != "" and not isinstance(quantization_config, (Mxfp4Config, MetalConfig, FineGrainedFP8Config)):
+        if warning_msg != "" and not isinstance(quantization_config, (MetalConfig, FineGrainedFP8Config)):
             warnings.warn(warning_msg)
         else:
-            # in the case of mxfp4, we don't want to print the warning message, bit confusing for users
             logger.info(warning_msg)
         return quantization_config
 
