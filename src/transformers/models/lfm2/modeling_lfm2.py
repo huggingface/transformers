@@ -294,19 +294,32 @@ def causal_conv1d_fn(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,
     bias: nn.Parameter | None = None,
+    seq_idx: torch.Tensor | None = None,
     activation: str | None = None,
     **kwargs,
 ):
+    """Causal depthwise conv; `seq_idx` (batch, seqlen) marks packed documents, and a position only reads the ones
+    that share its index, like the `causal_conv1d` kernel."""
     _, hidden_size, seq_len = hidden_states.shape
     padding = weight.shape[-1] - 1
 
-    out = F.conv1d(
-        hidden_states.to(weight.dtype),
-        weight=weight.unsqueeze(1),
-        bias=bias,
-        padding=padding,
-        groups=hidden_size,
-    )[:, :, :seq_len]
+    if seq_idx is None:
+        out = F.conv1d(
+            hidden_states.to(weight.dtype),
+            weight=weight.unsqueeze(1),
+            bias=bias,
+            padding=padding,
+            groups=hidden_size,
+        )[:, :, :seq_len]
+    else:
+        # a cached conv window in front of the sequence belongs to no document
+        seq_idx = F.pad(seq_idx, (seq_len - seq_idx.shape[-1] + padding, 0), value=-1)
+        windows = F.pad(hidden_states.to(weight.dtype), (padding, 0)).unfold(-1, padding + 1, 1)
+        seq_idx_windows = seq_idx.unfold(-1, padding + 1, 1)
+        same_document = (seq_idx_windows == seq_idx_windows[..., -1:]).unsqueeze(1)
+        out = torch.einsum("bdtk,dk->bdt", windows * same_document.to(windows.dtype), weight)
+        if bias is not None:
+            out = out + bias[:, None]
     if activation is not None:
         out = ACT2FN[activation](out)
     return out.to(hidden_states.dtype)

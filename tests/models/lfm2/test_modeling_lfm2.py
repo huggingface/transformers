@@ -54,6 +54,29 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
     def _get_conv_state_shape(self, batch_size: int, config):
         return (batch_size, config.hidden_size, config.conv_L_cache)
 
+    def test_packed_documents_match_separate_forwards(self):
+        """`seq_idx` (as `DataCollatorWithFlattening(return_seq_idx=True)` produces it) keeps the short-conv window
+        inside each packed document, so a packed forward must match the per-document forwards."""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.layer_types = ["conv"] * config.num_hidden_layers
+        model = Lfm2Model(config).to(torch_device).eval()
+
+        doc_1 = torch.arange(1, 9, device=torch_device).unsqueeze(0)
+        doc_2 = torch.arange(9, 14, device=torch_device).unsqueeze(0)
+        packed_input_ids = torch.cat([doc_1, doc_2], dim=1)
+        seq_idx = torch.tensor([[0] * doc_1.shape[1] + [1] * doc_2.shape[1]], dtype=torch.int32, device=torch_device)
+
+        with torch.no_grad():
+            packed_out = model(input_ids=packed_input_ids, seq_idx=seq_idx, use_cache=False).last_hidden_state
+            unpacked_out = model(input_ids=packed_input_ids, use_cache=False).last_hidden_state
+            doc_1_out = model(input_ids=doc_1, use_cache=False).last_hidden_state
+            doc_2_out = model(input_ids=doc_2, use_cache=False).last_hidden_state
+
+        torch.testing.assert_close(packed_out[:, : doc_1.shape[1]], doc_1_out, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(packed_out[:, doc_1.shape[1] :], doc_2_out, rtol=1e-4, atol=1e-4)
+        # without the boundaries the second document reads into the first
+        self.assertFalse(torch.allclose(unpacked_out[:, doc_1.shape[1] :], doc_2_out, rtol=1e-4, atol=1e-4))
+
     def test_attention_outputs(self):
         """Lfm2Moe alternates between attention and short-conv layers."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
