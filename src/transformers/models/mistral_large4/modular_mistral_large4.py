@@ -703,6 +703,7 @@ class MistralLarge4ModelOutputWithPast(Mistral3ModelOutputWithPast):
     router_logits (`tuple(torch.FloatTensor)`, *optional*, returned when `output_router_logits=True` is passed):
         Tuple of `torch.FloatTensor` (one for each MoE layer) of shape `(batch_size * sequence_length, num_experts)`.
     """
+
     router_logits: tuple[torch.FloatTensor] | None = None
 
 
