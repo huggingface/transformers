@@ -34,6 +34,7 @@ Everything below targets one of those gaps.
 """
 
 import unittest
+from itertools import product
 from unittest import mock
 
 from transformers.exporters import utils as exporter_utils
@@ -85,6 +86,63 @@ class ExportConfigMixinTest(unittest.TestCase):
                 restored = config_cls.from_dict(original.to_dict())
                 self.assertEqual(restored, original)
                 self.assertIs(restored.export_format, export_format)
+
+
+@require_torch
+@require_executorch
+class ExecutorchBackendConfigTest(unittest.TestCase):
+    def test_reinplace_is_scoped_to_whisper_xnnpack(self):
+        from transformers import PretrainedConfig, PreTrainedModel, WhisperConfig
+        from transformers.exporters.exporter_executorch import _get_backend_config
+
+        models = (PreTrainedModel(WhisperConfig()), PreTrainedModel(PretrainedConfig()), nn.Linear(2, 2))
+        for model, backend in product(models, ("xnnpack", "cuda", "mlx")):
+            with self.subTest(
+                model=type(model.config).__name__ if hasattr(model, "config") else "linear", backend=backend
+            ):
+                result = _get_backend_config(ExecutorchConfig(backend=backend), model)
+                if model is models[0] and backend == "xnnpack":
+                    self.assertTrue(result.run_reinplace_pass)
+                else:
+                    self.assertIsNone(result)
+
+    def test_reinplace_preserves_memory_allocation_flags(self):
+        from transformers import PretrainedConfig, PreTrainedModel, WhisperConfig
+        from transformers.exporters.exporter_executorch import _get_backend_config
+
+        for model_config, flags in product((WhisperConfig(), PretrainedConfig()), product((False, True), repeat=3)):
+            with self.subTest(model_type=model_config.model_type, flags=flags):
+                config = ExecutorchConfig(
+                    alloc_graph_input=flags[0], alloc_graph_output=flags[1], alloc_mutable_buffers=flags[2]
+                )
+                result = _get_backend_config(config, PreTrainedModel(model_config))
+                if result is None:
+                    self.assertEqual(flags, (True, True, True))
+                    self.assertNotEqual(model_config.model_type, "whisper")
+                    continue
+                self.assertEqual(result.run_reinplace_pass, model_config.model_type == "whisper")
+                self.assertEqual(result.memory_planning_pass.alloc_graph_input, flags[0])
+                self.assertEqual(result.memory_planning_pass.alloc_graph_output, flags[1])
+                self.assertEqual(result.memory_planning_pass.alloc_mutable_buffers, flags[2])
+
+    def test_dim_order_patch_accepts_sizes(self):
+        from transformers.exporters.exporter_executorch import _patch_dim_order_from_stride
+
+        original = mock.Mock(return_value=(0, 2, 3, 1))
+        patched = _patch_dim_order_from_stride(original)
+        strides, sizes = (20, 1, 5, 1), (2, 1, 4, 5)
+        self.assertEqual(patched(strides, sizes=sizes), (0, 2, 3, 1))
+        original.assert_called_once_with(strides, sizes)
+
+    def test_dim_order_patch_retains_unbacked_fallback(self):
+        from torch.fx.experimental.symbolic_shapes import GuardOnDataDependentSymNode
+
+        from transformers.exporters.exporter_executorch import _patch_dim_order_from_stride
+
+        original = mock.Mock(side_effect=GuardOnDataDependentSymNode("unbacked comparison"))
+        patched = _patch_dim_order_from_stride(original)
+        self.assertEqual(patched((3, 1), (2, 3)), (0, 1))
+        self.assertEqual(patched((1, 3)), (1, 0))
 
 
 class AutoExportConfigTest(unittest.TestCase):
