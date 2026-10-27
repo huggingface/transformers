@@ -1895,14 +1895,19 @@ class ConditionalDetrForObjectDetectionLoss(nn.Module):
         losses["loss_giou"] = loss_giou.sum() / num_boxes
         return losses
 
+    def loss_masks(self, outputs, targets, indices, num_boxes):
+        """
+        Compute the losses related to the masks: the focal loss and the dice loss.
+
+        Targets dicts must contain the key "masks" containing a tensor of dim [nb_target_boxes, h, w].
+        """
+        raise AttributeError("Not needed for Conditional DETR object detection")
+
     def _get_source_permutation_idx(self, indices):
         # permute predictions following indices
         batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
         source_idx = torch.cat([source for (source, _) in indices])
         return batch_idx, source_idx
-
-    def _get_target_permutation_idx(self, indices):
-        raise AttributeError("Not needed for Conditional DETR object detection")
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
@@ -2377,7 +2382,10 @@ class ConditionalDetrForSegmentationLoss(nn.Module):
         return batch_idx, source_idx
 
     def _get_target_permutation_idx(self, indices):
-        raise AttributeError("Not needed for Deformable DETR object detection")
+        # permute targets following indices
+        batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
+        target_idx = torch.cat([target for (_, target) in indices])
+        return batch_idx, target_idx
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {

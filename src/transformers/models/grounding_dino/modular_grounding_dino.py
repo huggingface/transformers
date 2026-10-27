@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch Grounding DINO model."""
 
+import copy
 import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -2380,6 +2381,14 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha=0.25, gamma=2):
 
 
 class GroundingDinoLoss(DetrLoss):
+    """Computes the losses for Grounding DINO object detection and segmentation.
+
+    Args:
+        config (`GroundingDinoConfig`): Model configuration.
+        losses (`list[str]`): Losses to compute.
+        matcher (`GroundingDinoHungarianMatcher`): Matches targets to model predictions.
+    """
+
     def __init__(self, config, losses, matcher):
         nn.Module.__init__(self)
         self.matcher = matcher
@@ -2523,8 +2532,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             [GroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
         )
         # hack for box-refinement
-        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         self.criterion = GroundingDinoForObjectDetectionCriterion(config)
         self.post_init()
 

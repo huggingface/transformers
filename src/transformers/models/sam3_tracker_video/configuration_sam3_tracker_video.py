@@ -212,8 +212,8 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
             model_type="sam3_vision_model",
             init_kwargs={"backbone_feature_sizes": [[288, 288], [144, 144], [72, 72]]},
         ),
-        "prompt_encoder_config": SubConfigSpec(config_class=Sam3TrackerVideoPromptEncoderConfig),
-        "mask_decoder_config": SubConfigSpec(config_class=Sam3TrackerVideoMaskDecoderConfig),
+        "prompt_encoder_config": Sam3TrackerVideoPromptEncoderConfig,
+        "mask_decoder_config": Sam3TrackerVideoMaskDecoderConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

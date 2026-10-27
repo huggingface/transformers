@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import math
 import warnings
 from dataclasses import dataclass
@@ -131,12 +132,15 @@ class DeformableDetrImageProcessor(DetrImageProcessor):
         return results
 
     def post_process_instance_segmentation(self):
+        """Segmentation post-processing is not implemented for Deformable DETR yet."""
         raise NotImplementedError("Segmentation post-processing is not implemented for Deformable DETR yet.")
 
     def post_process_semantic_segmentation(self):
+        """Semantic segmentation post-processing is not implemented for Deformable DETR yet."""
         raise NotImplementedError("Semantic segmentation post-processing is not implemented for Deformable DETR yet.")
 
     def post_process_panoptic_segmentation(self):
+        """Panoptic segmentation post-processing is not implemented for Deformable DETR yet."""
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Deformable DETR yet.")
 
 
@@ -203,12 +207,15 @@ class DeformableDetrImageProcessorPil(DetrImageProcessorPil):
         return results
 
     def post_process_instance_segmentation(self):
+        """Segmentation post-processing is not implemented for Deformable DETR yet."""
         raise NotImplementedError("Segmentation post-processing is not implemented for Deformable DETR yet.")
 
     def post_process_semantic_segmentation(self):
+        """Semantic segmentation post-processing is not implemented for Deformable DETR yet."""
         raise NotImplementedError("Semantic segmentation post-processing is not implemented for Deformable DETR yet.")
 
     def post_process_panoptic_segmentation(self):
+        """Panoptic segmentation post-processing is not implemented for Deformable DETR yet."""
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Deformable DETR yet.")
 
 
@@ -1495,10 +1502,10 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         # Convert to instance attribute before modifying
         self._tied_weights_keys = self._tied_weights_keys.copy()
         if config.with_box_refine:
-            self.model.decoder.bbox_embed = self.bbox_embed
+            self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
             self._tied_weights_keys["bbox_embed"] = "model.decoder.bbox_embed"
         if config.two_stage:
-            self.model.decoder.class_embed = self.class_embed
+            self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
             self._tied_weights_keys["class_embed"] = "model.decoder.class_embed"
         self.criterion = DeformableDetrForObjectDetectionCriterion(config)
         self.post_init()

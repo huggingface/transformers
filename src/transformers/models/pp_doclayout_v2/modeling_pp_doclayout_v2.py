@@ -43,12 +43,20 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
+    is_accelerate_available,
+    requires_backends,
     torch_compilable_check,
     torch_int,
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
+from ...vision_utils import box_iou, generalized_box_iou
 from .configuration_pp_doclayout_v2 import PPDocLayoutV2Config
+
+
+if is_accelerate_available():
+    from accelerate import PartialState
+    from accelerate.utils import reduce
 
 
 class PPDocLayoutV2GlobalPointer(nn.Module):
@@ -715,6 +723,203 @@ class PPDocLayoutV2MultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
+# taken from https://github.com/facebookresearch/pp_doclayout_v2/blob/master/models/pp_doclayout_v2.py
+class PPDocLayoutV2Loss(nn.Module):
+    """
+    This class computes the losses for PPDocLayoutV2ForObjectDetection/PPDocLayoutV2ForSegmentation. The process happens in two steps: 1)
+    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
+    of matched ground-truth / prediction (supervise class and box).
+
+    A note on the `num_classes` argument (copied from original repo in pp_doclayout_v2.py): "the naming of the `num_classes`
+    parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is
+    the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass `num_classes` to
+    be 91. As another example, for a dataset that has a single class with `id` 1, you should pass `num_classes` to be 2
+    (`max_obj_id` + 1). For more details on this, check the following discussion
+    https://github.com/facebookresearch/pp_doclayout_v2/issues/108#issuecomment-650269223"
+
+
+    Args:
+        matcher (`PPDocLayoutV2HungarianMatcher`):
+            Module able to compute a matching between targets and proposals.
+        num_classes (`int`):
+            Number of object categories, omitting the special no-object category.
+        eos_coef (`float`):
+            Relative classification weight applied to the no-object category.
+        losses (`list[str]`):
+            List of all the losses to be applied. See `get_loss` for a list of all available losses.
+    """
+
+    def __init__(self, config, losses, matcher):
+        super().__init__()
+        requires_backends(self, ["scipy"])
+        self.matcher = matcher
+        self.eos_coef = config.eos_coefficient
+        self.num_classes = config.num_labels
+        self.losses = losses
+        empty_weight = torch.ones(self.num_classes + 1)
+        empty_weight[-1] = self.eos_coef
+        self.register_buffer("empty_weight", empty_weight)
+        self.alpha = config.focal_loss_alpha
+        self.gamma = config.focal_loss_gamma
+
+    def loss_boxes(self, outputs, targets, indices, num_boxes):
+        """
+        Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss. Targets dicts must
+        contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]. The target boxes are expected in
+        format (center_x, center_y, w, h), normalized by the image size.
+        """
+        if "pred_boxes" not in outputs:
+            raise KeyError("No predicted boxes found in outputs")
+        idx = self._get_source_permutation_idx(indices)
+        src_boxes = outputs["pred_boxes"][idx]
+        target_boxes = torch.cat([t["boxes"][i] for t, (_, i) in zip(targets, indices)], dim=0)
+
+        losses = {}
+
+        loss_bbox = F.l1_loss(src_boxes, target_boxes, reduction="none")
+        losses["loss_bbox"] = loss_bbox.sum() / num_boxes
+
+        loss_giou = 1 - torch.diag(
+            generalized_box_iou(center_to_corners_format(src_boxes), center_to_corners_format(target_boxes))
+        )
+        losses["loss_giou"] = loss_giou.sum() / num_boxes
+        return losses
+
+    def _get_source_permutation_idx(self, indices):
+        # permute predictions following indices
+        batch_idx = torch.cat([torch.full_like(source, i) for i, (source, _) in enumerate(indices)])
+        source_idx = torch.cat([source for (source, _) in indices])
+        return batch_idx, source_idx
+
+    def get_loss(self, loss, outputs, targets, indices, num_boxes):
+        loss_map = {
+            "boxes": self.loss_boxes,
+            "vfl": self.loss_labels_vfl,
+        }
+        if loss not in loss_map:
+            raise ValueError(f"Loss {loss} not supported")
+        return loss_map[loss](outputs, targets, indices, num_boxes)
+
+    def forward(self, outputs, targets):
+        """
+        This performs the loss computation.
+
+        Args:
+             outputs (`dict`, *optional*):
+                Dictionary of tensors, see the output specification of the model for the format.
+             targets (`list[dict]`, *optional*):
+                List of dicts, such that `len(targets) == batch_size`. The expected keys in each dict depends on the
+                losses applied, see each loss' doc.
+        """
+        outputs_without_aux = {k: v for k, v in outputs.items() if "auxiliary_outputs" not in k}
+
+        # Retrieve the matching between the outputs of the last layer and the targets
+        indices = self.matcher(outputs_without_aux, targets)
+
+        # Compute the average number of target boxes across all nodes, for normalization purposes
+        num_boxes = sum(len(t["class_labels"]) for t in targets)
+        num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
+        if is_accelerate_available():
+            if PartialState._shared_state != {}:
+                num_boxes = reduce(num_boxes)
+        num_boxes = torch.clamp(num_boxes, min=1).item()
+
+        # Compute all the requested losses
+        losses = {}
+        for loss in self.losses:
+            losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
+
+        # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
+        if "auxiliary_outputs" in outputs:
+            for i, auxiliary_outputs in enumerate(outputs["auxiliary_outputs"]):
+                indices = self.matcher(auxiliary_outputs, targets)
+                for loss in self.losses:
+                    if loss == "masks":
+                        # Intermediate masks losses are too costly to compute, we ignore them.
+                        continue
+                    l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes)
+                    l_dict = {k + f"_aux_{i}": v for k, v in l_dict.items()}
+                    losses.update(l_dict)
+
+        # In case of cdn auxiliary losses. For PPDocLayoutV2
+        if "dn_auxiliary_outputs" in outputs:
+            if "denoising_meta_values" not in outputs:
+                raise ValueError(
+                    "The output must have the 'denoising_meta_values` key. Please, ensure that 'outputs' includes a 'denoising_meta_values' entry."
+                )
+            indices = self.get_cdn_matched_indices(outputs["denoising_meta_values"], targets)
+            num_boxes = num_boxes * outputs["denoising_meta_values"]["dn_num_group"]
+
+            for i, auxiliary_outputs in enumerate(outputs["dn_auxiliary_outputs"]):
+                # indices = self.matcher(auxiliary_outputs, targets)
+                for loss in self.losses:
+                    if loss == "masks":
+                        # Intermediate masks losses are too costly to compute, we ignore them.
+                        continue
+                    kwargs = {}
+                    l_dict = self.get_loss(loss, auxiliary_outputs, targets, indices, num_boxes, **kwargs)
+                    l_dict = {k + f"_dn_{i}": v for k, v in l_dict.items()}
+                    losses.update(l_dict)
+
+        return losses
+
+    def loss_labels_vfl(self, outputs, targets, indices, num_boxes, log=True):
+        if "pred_boxes" not in outputs:
+            raise KeyError("No predicted boxes found in outputs")
+        if "logits" not in outputs:
+            raise KeyError("No predicted logits found in outputs")
+        idx = self._get_source_permutation_idx(indices)
+
+        src_boxes = outputs["pred_boxes"][idx]
+        target_boxes = torch.cat([_target["boxes"][i] for _target, (_, i) in zip(targets, indices)], dim=0)
+        ious, _ = box_iou(center_to_corners_format(src_boxes.detach()), center_to_corners_format(target_boxes))
+        ious = torch.diag(ious)
+
+        src_logits = outputs["logits"]
+        dtype = src_logits.dtype
+        target_classes_original = torch.cat([_target["class_labels"][i] for _target, (_, i) in zip(targets, indices)])
+        target_classes = torch.full(
+            src_logits.shape[:2], self.num_classes, dtype=torch.int64, device=src_logits.device
+        )
+        target_classes[idx] = target_classes_original
+        target = F.one_hot(target_classes, num_classes=self.num_classes + 1)[..., :-1]
+
+        target_score_original = torch.zeros_like(target_classes, dtype=dtype)
+        target_score_original[idx] = ious.to(dtype)
+        target_score = target_score_original.unsqueeze(-1) * target
+
+        pred_score = F.sigmoid(src_logits.detach())
+        # pow promotes to float32 under float16 CUDA autocast; cast back to preserve original dtype
+        weight = (self.alpha * pred_score.pow(self.gamma) * (1 - target) + target_score).to(dtype)
+
+        loss = F.binary_cross_entropy_with_logits(src_logits, target_score, weight=weight, reduction="none")
+        loss = loss.mean(1).sum() * src_logits.shape[1] / num_boxes
+        return {"loss_vfl": loss}
+
+    @staticmethod
+    def get_cdn_matched_indices(dn_meta, targets):
+        dn_positive_idx, dn_num_group = dn_meta["dn_positive_idx"], dn_meta["dn_num_group"]
+        num_gts = [len(t["class_labels"]) for t in targets]
+        device = targets[0]["class_labels"].device
+
+        dn_match_indices = []
+        for i, num_gt in enumerate(num_gts):
+            if num_gt > 0:
+                gt_idx = torch.arange(num_gt, dtype=torch.int64, device=device)
+                gt_idx = gt_idx.tile(dn_num_group)
+                assert len(dn_positive_idx[i]) == len(gt_idx)
+                dn_match_indices.append((dn_positive_idx[i], gt_idx))
+            else:
+                dn_match_indices.append(
+                    (
+                        torch.zeros(0, dtype=torch.int64, device=device),
+                        torch.zeros(0, dtype=torch.int64, device=device),
+                    )
+                )
+
+        return dn_match_indices
+
+
 @auto_docstring
 class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
     config: PPDocLayoutV2Config
@@ -744,6 +949,10 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
                     init.constant_(layer.layers[-1].weight, 0)
                     init.constant_(layer.layers[-1].bias, 0)
 
+        elif isinstance(module, PPDocLayoutV2Loss):
+            empty_weight = torch.ones(module.num_classes + 1)
+            empty_weight[-1] = module.eos_coef
+            init.copy_(module.empty_weight, empty_weight)
         elif isinstance(module, PPDocLayoutV2MultiscaleDeformableAttention):
             init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
@@ -2331,6 +2540,10 @@ class PPDocLayoutV2Model(PPDocLayoutV2PreTrainedModel):
             enc_outputs_coord_logits=enc_outputs_coord_logits,
             denoising_meta_values=denoising_meta_values,
         )
+
+
+def _set_aux_loss(outputs_class, outputs_coord):
+    return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
 
 
 @auto_docstring(

@@ -33,7 +33,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import AttentionInterface, PreTrainedModel
+from ...modeling_utils import AttentionInterface, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_flex_attn_available, logging
 from ...utils.output_capturing import OutputRecorder
@@ -91,8 +91,8 @@ class DogeConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
         "layers.*.mlp.router_gate": "colwise_gather_output",
-        "layers.*.mlp.down_embed": "rowwise_split_input",
-        "layers.*.mlp.up_embed": "rowwise_split_input",
+        "layers.*.mlp.down_embed": "embedding_rowwise",
+        "layers.*.mlp.up_embed": "embedding_rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -682,9 +682,8 @@ class DogeForCausalLM(MixtralForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

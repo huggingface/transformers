@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import math
 import warnings
 from dataclasses import dataclass
@@ -2392,28 +2393,12 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha=0.25, gamma=2):
 
 # taken from https://github.com/facebookresearch/grounding_dino/blob/master/models/grounding_dino.py
 class GroundingDinoLoss(nn.Module):
-    """
-    This class computes the losses for GroundingDinoForObjectDetection/GroundingDinoForSegmentation. The process happens in two steps: 1)
-    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
-    of matched ground-truth / prediction (supervise class and box).
-
-    A note on the `num_classes` argument (copied from original repo in grounding_dino.py): "the naming of the `num_classes`
-    parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is
-    the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass `num_classes` to
-    be 91. As another example, for a dataset that has a single class with `id` 1, you should pass `num_classes` to be 2
-    (`max_obj_id` + 1). For more details on this, check the following discussion
-    https://github.com/facebookresearch/grounding_dino/issues/108#issuecomment-650269223"
-
+    """Computes the losses for Grounding DINO object detection and segmentation.
 
     Args:
-        matcher (`GroundingDinoHungarianMatcher`):
-            Module able to compute a matching between targets and proposals.
-        num_classes (`int`):
-            Number of object categories, omitting the special no-object category.
-        eos_coef (`float`):
-            Relative classification weight applied to the no-object category.
-        losses (`list[str]`):
-            List of all the losses to be applied. See `get_loss` for a list of all available losses.
+        config (`GroundingDinoConfig`): Model configuration.
+        losses (`list[str]`): Losses to compute.
+        matcher (`GroundingDinoHungarianMatcher`): Matches targets to model predictions.
     """
 
     def __init__(self, config, losses, matcher):
@@ -2769,8 +2754,7 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
             [GroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
         )
         # hack for box-refinement
-        self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         self.criterion = GroundingDinoForObjectDetectionCriterion(config)
         self.post_init()
 

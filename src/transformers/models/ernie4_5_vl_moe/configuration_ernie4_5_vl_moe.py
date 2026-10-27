@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -52,8 +52,6 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
 
     base_model_tp_plan = {
-        "blocks.*.attn.qkv": "colwise",
-        "blocks.*.attn.proj": "rowwise",
         "blocks.*.mlp.fc1": "colwise",
         "blocks.*.mlp.fc2": "rowwise",
     }
@@ -90,6 +88,12 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.text_moe.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.text_moe.experts.down_proj": "rowwise",
+        "layers.*.mlp.text_moe.experts": "moe_tp_experts",
+        "layers.*.mlp.vision_moe.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.vision_moe.experts.down_proj": "rowwise",
+        "layers.*.mlp.vision_moe.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -103,9 +107,12 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "ep_dispatch_experts",
+        "layers.*.mlp.text_moe.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.text_moe.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.text_moe.experts": "ep_dispatch_experts",
+        "layers.*.mlp.vision_moe.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.vision_moe.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.vision_moe.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 103424
@@ -182,8 +189,8 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     model_type = "ernie4_5_vl_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Ernie4_5_VLMoeVisionConfig),
-        "text_config": SubConfigSpec(config_class=Ernie4_5_VLMoeTextConfig),
+        "vision_config": Ernie4_5_VLMoeVisionConfig,
+        "text_config": Ernie4_5_VLMoeTextConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

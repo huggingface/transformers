@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 from dataclasses import dataclass
 
 import torch
@@ -872,6 +873,14 @@ class Deimv2HungarianMatcher(DFineHungarianMatcher):
 
 
 class Deimv2Loss(DFineLoss):
+    """Computes the losses for Deimv2 object detection and segmentation.
+
+    Args:
+        config (`Deimv2Config`): Model configuration.
+        losses (`list[str]`): Losses to compute.
+        matcher (`Deimv2HungarianMatcher`): Matches targets to model predictions.
+    """
+
     def __init__(self, config, losses, matcher):
         super().__init__(config, losses, matcher)
         self.mal_alpha = config.mal_alpha
@@ -1035,8 +1044,8 @@ class Deimv2ForObjectDetection(DFineForObjectDetection):
                 ]
             )
 
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         self.criterion = Deimv2ForObjectDetectionCriterion(config)
         self.post_init()
 

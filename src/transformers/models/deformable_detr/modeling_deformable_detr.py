@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import math
 import warnings
 from collections.abc import Callable
@@ -1746,7 +1747,10 @@ class DeformableDetrLoss(nn.Module):
         return batch_idx, source_idx
 
     def _get_target_permutation_idx(self, indices):
-        raise AttributeError("Not needed for Deformable DETR object detection")
+        # permute targets following indices
+        batch_idx = torch.cat([torch.full_like(target, i) for i, (_, target) in enumerate(indices)])
+        target_idx = torch.cat([target for (_, target) in indices])
+        return batch_idx, target_idx
 
     def get_loss(self, loss, outputs, targets, indices, num_boxes):
         loss_map = {
@@ -1903,10 +1907,10 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         # Convert to instance attribute before modifying
         self._tied_weights_keys = self._tied_weights_keys.copy()
         if config.with_box_refine:
-            self.model.decoder.bbox_embed = self.bbox_embed
+            self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
             self._tied_weights_keys["bbox_embed"] = "model.decoder.bbox_embed"
         if config.two_stage:
-            self.model.decoder.class_embed = self.class_embed
+            self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
             self._tied_weights_keys["class_embed"] = "model.decoder.class_embed"
         self.criterion = DeformableDetrForObjectDetectionCriterion(config)
         self.post_init()

@@ -39,7 +39,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = ["kmhf/hf-moshiko"]
+    from_pretrained_id = ["kmhf/hf-moshika"]
     tokenizer_class = PreTrainedTokenizerFast
 
     test_slow_tokenizer = False
@@ -310,7 +310,7 @@ class MoshiTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 class MoshiIntegrationTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        checkpoint_name = "kmhf/hf-moshiko"
+        checkpoint_name = "kmhf/hf-moshika"
         cls.rust_tokenizer = AutoTokenizer.from_pretrained(checkpoint_name)
         return cls
 
@@ -397,7 +397,7 @@ class CommonSpmIntegrationTests(unittest.TestCase):
     """
 
     def test_edge_case_tabulation(self):
-        fast_tokenizer = AutoTokenizer.from_pretrained("kmhf/hf-moshiko")
+        fast_tokenizer = AutoTokenizer.from_pretrained("kmhf/hf-moshika")
         input_text = "Hey<eos>. \t\t \n\nyou  é  @#😈  🤗!       , 1234 15 5,61"
         EXPECTED_IDS = [11510, 934, 4451, 266, 578, 263, 260, 13, 13, 260, 14, 14, 5209, 260, 260, 1202, 260, 527, 1322, 244, 163, 156, 140, 260, 260, 244, 163, 168, 155, 430, 1047, 261, 260, 265, 270, 278, 281, 260, 265, 280, 260, 280, 261, 285, 265]  # fmt: skip
         EXPECTED_TOKENS = ['▁Hey', '<', 'eo', 's', '>', '.', '▁', '<0x09>', '<0x09>', '▁', '<0x0A>', '<0x0A>', 'you', '▁', '▁', 'é', '▁', '▁@', '#', '<0xF0>', '<0x9F>', '<0x98>', '<0x88>', '▁', '▁', '<0xF0>', '<0x9F>', '<0xA4>', '<0x97>', '!', '▁▁▁▁▁▁▁', ',', '▁', '1', '2', '3', '4', '▁', '1', '5', '▁', '5', ',', '6', '1']  # fmt: skip

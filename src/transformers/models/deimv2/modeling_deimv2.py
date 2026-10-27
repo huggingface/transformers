@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -1016,19 +1017,18 @@ class Deimv2PreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         # initialize linear layer bias value according to a given probability value.
-        if isinstance(module, (Deimv2ForObjectDetection, Deimv2Decoder)):
-            if module.class_embed is not None:
-                for layer in module.class_embed:
-                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
-                    bias = float(-math.log((1 - prior_prob) / prior_prob))
-                    init.xavier_uniform_(layer.weight)
-                    init.constant_(layer.bias, bias)
+        if isinstance(module, Deimv2ForObjectDetection):
+            for layer in module.model.decoder.class_embed:
+                prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+                bias = float(-math.log((1 - prior_prob) / prior_prob))
+                init.xavier_uniform_(layer.weight)
+                init.constant_(layer.bias, bias)
 
-            if module.bbox_embed is not None:
-                for layer in module.bbox_embed:
-                    init.constant_(layer.layers[-1].weight, 0)
-                    init.constant_(layer.layers[-1].bias, 0)
+            for layer in module.model.decoder.bbox_embed:
+                init.constant_(layer.layers[-1].weight, 0)
+                init.constant_(layer.layers[-1].bias, 0)
 
+        if isinstance(module, Deimv2Decoder):
             if hasattr(module, "reg_scale"):
                 init.constant_(module.reg_scale, self.config.reg_scale)
 
@@ -2186,28 +2186,12 @@ def bbox2distance(points, bbox, max_num_bins, reg_scale, up, eps=0.1):
 
 # taken from https://github.com/facebookresearch/deimv2/blob/master/models/deimv2.py
 class Deimv2Loss(nn.Module):
-    """
-    This class computes the losses for Deimv2ForObjectDetection/Deimv2ForSegmentation. The process happens in two steps: 1)
-    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
-    of matched ground-truth / prediction (supervise class and box).
-
-    A note on the `num_classes` argument (copied from original repo in deimv2.py): "the naming of the `num_classes`
-    parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is
-    the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass `num_classes` to
-    be 91. As another example, for a dataset that has a single class with `id` 1, you should pass `num_classes` to be 2
-    (`max_obj_id` + 1). For more details on this, check the following discussion
-    https://github.com/facebookresearch/deimv2/issues/108#issuecomment-650269223"
-
+    """Computes the losses for Deimv2 object detection and segmentation.
 
     Args:
-        matcher (`Deimv2HungarianMatcher`):
-            Module able to compute a matching between targets and proposals.
-        num_classes (`int`):
-            Number of object categories, omitting the special no-object category.
-        eos_coef (`float`):
-            Relative classification weight applied to the no-object category.
-        losses (`list[str]`):
-            List of all the losses to be applied. See `get_loss` for a list of all available losses.
+        config (`Deimv2Config`): Model configuration.
+        losses (`list[str]`): Losses to compute.
+        matcher (`Deimv2HungarianMatcher`): Matches targets to model predictions.
     """
 
     def __init__(self, config, losses, matcher):
@@ -2667,8 +2651,8 @@ class Deimv2ForObjectDetection(Deimv2PreTrainedModel):
                 ]
             )
 
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         self.criterion = Deimv2ForObjectDetectionCriterion(config)
         self.post_init()
 

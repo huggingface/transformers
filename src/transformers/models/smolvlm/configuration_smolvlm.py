@@ -87,7 +87,7 @@ class SmolVLMConfig(PreTrainedConfig):
     model_type = "smolvlm"
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama", init_kwargs={"rms_norm_eps": 1e-5}),
-        "vision_config": SubConfigSpec(config_class=SmolVLMVisionConfig),
+        "vision_config": SmolVLMVisionConfig,
     }
 
     use_cache: bool = True
