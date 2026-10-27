@@ -12,10 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import json
 import os
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, mock_open, patch
 
 
 git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -28,163 +29,75 @@ from update_pr_ci_dashboard_recap import (  # noqa: E402
     RECAP_END,
     RECAP_START,
     delete_old_dashboard_comments,
+    delete_recap_comments,
     find_open_pr_for_sha,
-    first_value,
-    format_duration,
-    format_number,
-    get_ci_recap,
-    get_latest_run_id,
-    get_metric_value,
     github_paginate,
     inject_ci_badge,
-    prometheus_string,
-    quality_job_failed,
-    recreate_ci_recap_comment,
     remove_marked_block,
     render_ci_badge,
-    render_ci_recap,
     replace_marked_block,
 )
 
 
-class PrometheusStringTest(unittest.TestCase):
-    def test_casts_non_string_values(self):
-        self.assertEqual(prometheus_string(1234), "1234")
-
-    def test_escapes_backslash_and_quote(self):
-        self.assertEqual(prometheus_string('a"b'), 'a\\"b')
-        self.assertEqual(prometheus_string("a\\b"), "a\\\\b")
-        # backslash is escaped before the quote so an escaped quote is not double-escaped
-        self.assertEqual(prometheus_string('a\\"b'), 'a\\\\\\"b')
-
-
-class FirstValueTest(unittest.TestCase):
-    def test_returns_none_on_empty(self):
-        self.assertIsNone(first_value([]))
-        self.assertIsNone(first_value(None))
-
-    def test_parses_float_from_prometheus_result(self):
-        result = [{"value": [1700000000, "42.5"]}]
-        self.assertEqual(first_value(result), 42.5)
-
-    def test_returns_none_on_malformed_entry(self):
-        self.assertIsNone(first_value([{"value": [1700000000]}]))  # missing index 1
-        self.assertIsNone(first_value([{"value": [1700000000, "not-a-number"]}]))
-        self.assertIsNone(first_value([{}]))  # missing "value" key
-
-
-class FormatNumberTest(unittest.TestCase):
-    def test_none(self):
-        self.assertEqual(format_number(None), "n/a")
-
-    def test_integer_value_gets_thousands_separator(self):
-        self.assertEqual(format_number(1234.0), "1,234")
-        self.assertEqual(format_number(0.0), "0")
-
-    def test_non_integer_value_keeps_two_decimals(self):
-        self.assertEqual(format_number(1234.5), "1,234.50")
-        self.assertEqual(format_number(3.14159), "3.14")
-
-
-class FormatDurationTest(unittest.TestCase):
-    def test_none(self):
-        self.assertEqual(format_duration(None), "n/a")
-
-    def test_seconds_only(self):
-        self.assertEqual(format_duration(0), "0s")
-        self.assertEqual(format_duration(45), "45s")
-
-    def test_minutes_and_seconds(self):
-        self.assertEqual(format_duration(61), "1m 1s")
-        self.assertEqual(format_duration(599), "9m 59s")
-
-    def test_hours_and_minutes(self):
-        self.assertEqual(format_duration(3661), "1h 1m")
-        self.assertEqual(format_duration(7200), "2h 0m")
-
-    def test_rounds_before_formatting(self):
-        self.assertEqual(format_duration(44.4), "44s")
-        self.assertEqual(format_duration(59.6), "1m 0s")
-
-
 class RenderBadgeTest(unittest.TestCase):
-    def test_render_ci_badge(self):
-        badge = render_ci_badge(123, "https://dash.example/d/x?var-pr=123")
-        lines = badge.split("\n")
-        self.assertEqual(lines[0], BADGE_START)
-        self.assertEqual(lines[-1], BADGE_END)
-        self.assertIn(f"{recap_mod.BADGE_URL}?pr=123", badge)
-        self.assertIn("https://dash.example/d/x?var-pr=123", badge)
+    def test_static_badge_links_to_the_requested_pr(self):
+        for pr in (123, 999):
+            url = f"https://dash.example/d/x?var-pr={pr}"
+            badge = render_ci_badge(url)
+            self.assertEqual(
+                badge,
+                f"{BADGE_START}\n[![🤗 Transformers CI]({recap_mod.BADGE_URL})]({url})\n{BADGE_END}",
+            )
+            self.assertNotIn("event=", badge)
+            self.assertNotIn("/badge/pr", badge)
 
-    def test_render_ci_badge_emits_both_ci_streams(self):
-        """PR CI and run-slow GPU runs have separate verdicts, so each gets its
-        own badge asking the exporter for its own stream."""
-        badge = render_ci_badge(123, "https://dash.example/d/x?var-pr=123")
-        self.assertIn(f"{recap_mod.BADGE_URL}?pr=123&event=pr-ci", badge)
-        self.assertIn(f"{recap_mod.BADGE_URL}?pr=123&event=run-slow", badge)
-        self.assertIn("![CPU CI]", badge)
-        self.assertIn("![GPU run-slow]", badge)
-
-    def test_render_ci_badge_keeps_both_badges_on_one_line(self):
-        """The two badges must sit side by side; a newline between them would
-        stack them and push the PR description further down."""
-        badge = render_ci_badge(123, "https://dash.example/d/x?var-pr=123")
-        lines = badge.split("\n")
-        self.assertEqual(len(lines), 3)
-        self.assertEqual(lines[1].count("!["), 2)
-
-    def test_render_ci_badge_always_emits_the_run_slow_badge(self):
-        """It is unconditional by design: the body is only rewritten when PR CI
-        completes, so a run-slow that no push follows would otherwise never get a
-        badge. The exporter renders "not run" until a run-slow run exists."""
-        badge = render_ci_badge(999, "https://dash.example/d/x?var-pr=999")
-        self.assertIn("event=run-slow", badge)
-
-
-class RenderRecapTest(unittest.TestCase):
-    def _recap(self, **overrides):
-        base = {
-            "metrics_available": True,
-            "latest_run_id": "run-1",
-            "current_run_url": "https://gh/run/1",
-            "current_run_conclusion": "success",
-            "job_count": 10.0,
-            "total_tests": 1234.0,
-            "failed_tests": 0.0,
-            "duration_seconds": 3661.0,
-        }
-        base.update(overrides)
-        return base
-
-    def test_metrics_available_renders_summary_line(self):
-        out = render_ci_recap("https://dash", self._recap(), workflow_run={}, quality_failed=False)
-        self.assertTrue(out.startswith(RECAP_START))
-        self.assertTrue(out.endswith(RECAP_END))
-        self.assertIn("**Result:** `success`", out)
-        self.assertIn("**Jobs:** 10", out)
-        self.assertIn("**Tests:** 1,234", out)
-        self.assertIn("**Failures:** 0", out)
-        self.assertIn("**Duration:** 1h 1m", out)
-        self.assertIn("run-1", out)
-
-    def test_unknown_conclusion_falls_back(self):
-        out = render_ci_recap(
-            "https://dash", self._recap(current_run_conclusion=None), workflow_run={}, quality_failed=False
+    def test_static_badge_replaces_old_cpu_gpu_header_without_changing_description(self):
+        old = (
+            f"{BADGE_START}\n[![CPU CI](https://old/badge/pr?pr=123&event=pr-ci)](https://dash) "
+            f"[![GPU run-slow](https://old/badge/pr?pr=123&event=run-slow)](https://dash)\n{BADGE_END}"
         )
-        self.assertIn("**Result:** `unknown`", out)
+        description = "## What changed\n\nA description with a [link](https://example.com)."
+        badge = render_ci_badge("https://dash.example/d/x?var-pr=123")
+        updated = inject_ci_badge(f"{old}\n\n{description}", badge)
+        self.assertEqual(updated, f"{badge}\n\n{description}")
+        self.assertEqual(inject_ci_badge(updated, badge), updated)
 
-    def test_metrics_unavailable_uses_workflow_run(self):
-        workflow_run = {"id": 999, "html_url": "https://gh/run/999", "conclusion": "failure"}
-        out = render_ci_recap(
-            "https://dash", {"metrics_available": False}, workflow_run=workflow_run, quality_failed=False
-        )
-        self.assertIn("Grafana metrics are not available yet.", out)
-        self.assertIn("999", out)
-        self.assertIn("`failure`", out)
 
-    def test_quality_failed_appends_warning(self):
-        out = render_ci_recap("https://dash", self._recap(), workflow_run={}, quality_failed=True)
-        self.assertIn("Code quality check failed", out)
+class BadgeUpdateTest(unittest.TestCase):
+    def run_main(self, body):
+        request = Mock()
+        event = {"workflow_run": {"id": 1, "event": "pull_request", "head_sha": "abc", "html_url": "https://gh/run/1"}}
+        pr = {"number": 123, "html_url": "https://gh/pr/123", "body": body}
+        with (
+            patch.dict(
+                os.environ,
+                {"GITHUB_TOKEN": "test", "GITHUB_REPOSITORY": "test/repo", "GITHUB_EVENT_PATH": "event.json"},
+            ),
+            patch("builtins.open", mock_open(read_data=json.dumps(event))),
+            patch.multiple(
+                recap_mod,
+                find_open_pr_for_sha=Mock(return_value=pr),
+                delete_old_dashboard_comments=Mock(),
+                delete_recap_comments=Mock(),
+                github_request=request,
+            ),
+        ):
+            recap_mod.main()
+        return request
+
+    def test_updates_header_when_badge_is_missing(self):
+        request = self.run_main("Description")
+        request.assert_called_once()
+        self.assertEqual(request.call_args.kwargs["method"], "PATCH")
+        body = request.call_args.kwargs["payload"]["body"]
+        self.assertIn("![🤗 Transformers CI]", body)
+        self.assertIn("?var-pr=123", body)
+        self.assertTrue(body.endswith("Description"))
+
+    def test_does_not_rewrite_an_unchanged_header(self):
+        badge = render_ci_badge(f"{recap_mod.DASHBOARD_URL}?var-pr=123")
+        request = self.run_main(f"{badge}\n\nDescription")
+        request.assert_not_called()
 
 
 class ReplaceMarkedBlockTest(unittest.TestCase):
@@ -249,61 +162,6 @@ class InjectBadgeTest(unittest.TestCase):
         self.assertNotIn(RECAP_START, body)
 
 
-class GetMetricValueTest(unittest.TestCase):
-    def test_returns_primary_value(self):
-        with patch.object(recap_mod, "query_prometheus", return_value=[{"value": [0, "7"]}]):
-            self.assertEqual(get_metric_value("q"), 7.0)
-
-    def test_falls_back_when_primary_is_none(self):
-        results = {"primary": [], "fallback": [{"value": [0, "3"]}]}
-
-        def fake(query):
-            return results["primary"] if query == "primary" else results["fallback"]
-
-        with patch.object(recap_mod, "query_prometheus", side_effect=fake):
-            self.assertEqual(get_metric_value("primary", fallback_query="fallback"), 3.0)
-
-    def test_fallback_on_zero(self):
-        def fake(query):
-            return [{"value": [0, "0"]}] if query == "primary" else [{"value": [0, "5"]}]
-
-        with patch.object(recap_mod, "query_prometheus", side_effect=fake):
-            # without fallback_on_zero, the zero primary value is kept
-            self.assertEqual(get_metric_value("primary", fallback_query="fallback"), 0.0)
-            # with fallback_on_zero, the fallback query is consulted
-            self.assertEqual(get_metric_value("primary", fallback_query="fallback", fallback_on_zero=True), 5.0)
-
-
-class GetLatestRunIdTest(unittest.TestCase):
-    def test_returns_none_when_empty(self):
-        with patch.object(recap_mod, "query_prometheus", return_value=[]):
-            self.assertIsNone(get_latest_run_id(42))
-
-    def test_returns_run_id_from_metric(self):
-        with patch.object(recap_mod, "query_prometheus", return_value=[{"metric": {"run_id": "abc"}}]):
-            self.assertEqual(get_latest_run_id(42), "abc")
-
-
-class GetCiRecapTest(unittest.TestCase):
-    def test_no_metrics_when_no_latest_run(self):
-        with patch.object(recap_mod, "get_latest_run_id", return_value=None):
-            out = get_ci_recap(42, "https://gh/run", "success")
-        self.assertEqual(out, {"metrics_available": False, "latest_run_id": None})
-
-    def test_collects_all_metrics(self):
-        with (
-            patch.object(recap_mod, "get_latest_run_id", return_value="run-7"),
-            patch.object(recap_mod, "get_metric_value", return_value=12.0),
-        ):
-            out = get_ci_recap(42, "https://gh/run", "success")
-        self.assertTrue(out["metrics_available"])
-        self.assertEqual(out["latest_run_id"], "run-7")
-        self.assertEqual(out["current_run_url"], "https://gh/run")
-        self.assertEqual(out["current_run_conclusion"], "success")
-        for key in ("duration_seconds", "failed_tests", "job_count", "total_tests"):
-            self.assertEqual(out[key], 12.0)
-
-
 class GithubPaginateTest(unittest.TestCase):
     def test_stops_on_short_page(self):
         page = [{"i": n} for n in range(100)]
@@ -344,23 +202,6 @@ class FindOpenPrTest(unittest.TestCase):
             self.assertIsNone(find_open_pr_for_sha("x/y", "t", "zzz"))
 
 
-class QualityJobFailedTest(unittest.TestCase):
-    def test_true_when_quality_job_failed(self):
-        jobs = [{"name": "Check code quality", "conclusion": "failure"}]
-        with patch.object(recap_mod, "github_paginate", return_value=jobs):
-            self.assertTrue(quality_job_failed("x/y", "t", 1))
-
-    def test_false_when_quality_job_succeeded(self):
-        jobs = [{"name": "Check code quality", "conclusion": "success"}]
-        with patch.object(recap_mod, "github_paginate", return_value=jobs):
-            self.assertFalse(quality_job_failed("x/y", "t", 1))
-
-    def test_false_when_quality_job_absent(self):
-        jobs = [{"name": "Run tests", "conclusion": "failure"}]
-        with patch.object(recap_mod, "github_paginate", return_value=jobs):
-            self.assertFalse(quality_job_failed("x/y", "t", 1))
-
-
 class DeleteOldCommentsTest(unittest.TestCase):
     def test_deletes_only_dashboard_comments(self):
         marker = recap_mod.OLD_DASHBOARD_COMMENT_MARKERS[0]
@@ -380,54 +221,41 @@ class DeleteOldCommentsTest(unittest.TestCase):
         self.assertEqual(request_mock.call_args.kwargs["method"], "DELETE")
 
 
-class RecreateCiRecapCommentTest(unittest.TestCase):
-    def test_deletes_existing_recap_comment_then_creates_new_one(self):
+class DeleteRecapCommentsTest(unittest.TestCase):
+    def test_deletes_recap_comments_only(self):
         comments = [
             {"id": 1, "body": "an unrelated comment"},
             {"id": 2, "body": f"{RECAP_START}\nold\n{RECAP_END}"},
         ]
-        recap = f"{RECAP_START}\nnew\n{RECAP_END}"
         with (
             patch.object(recap_mod, "github_paginate", return_value=comments),
             patch.object(recap_mod, "github_request") as request_mock,
         ):
-            recreate_ci_recap_comment("x/y", "t", 5, recap)
+            delete_recap_comments("x/y", "t", 5)
+        self.assertEqual(request_mock.call_count, 1)
+        self.assertIn("/comments/2", request_mock.call_args.args[0])
+        self.assertEqual(request_mock.call_args.kwargs["method"], "DELETE")
 
-        self.assertEqual(request_mock.call_count, 2)
-        delete_call, post_call = request_mock.call_args_list
-        self.assertIn("/comments/2", delete_call.args[0])
-        self.assertEqual(delete_call.kwargs["method"], "DELETE")
-        self.assertIn("/issues/5/comments", post_call.args[0])
-        self.assertEqual(post_call.kwargs["method"], "POST")
-        self.assertEqual(post_call.kwargs["payload"], {"body": recap})
-
-    def test_deletes_all_existing_recap_comments_before_creating_new_one(self):
+    def test_deletes_multiple_recap_comments(self):
         comments = [
             {"id": 1, "body": f"{RECAP_START}\nold 1\n{RECAP_END}"},
             {"id": 2, "body": f"{RECAP_START}\nold 2\n{RECAP_END}"},
         ]
-        recap = f"{RECAP_START}\nnew\n{RECAP_END}"
         with (
             patch.object(recap_mod, "github_paginate", return_value=comments),
             patch.object(recap_mod, "github_request") as request_mock,
         ):
-            recreate_ci_recap_comment("x/y", "t", 5, recap)
+            delete_recap_comments("x/y", "t", 5)
+        self.assertEqual(request_mock.call_count, 2)
+        self.assertEqual([c.kwargs["method"] for c in request_mock.call_args_list], ["DELETE", "DELETE"])
 
-        self.assertEqual(request_mock.call_count, 3)
-        self.assertEqual([call.kwargs["method"] for call in request_mock.call_args_list], ["DELETE", "DELETE", "POST"])
-
-    def test_creates_recap_comment_when_missing(self):
-        recap = f"{RECAP_START}\nnew\n{RECAP_END}"
+    def test_no_op_when_no_recap_comments(self):
         with (
             patch.object(recap_mod, "github_paginate", return_value=[{"id": 1, "body": "unrelated"}]),
             patch.object(recap_mod, "github_request") as request_mock,
         ):
-            recreate_ci_recap_comment("x/y", "t", 5, recap)
-
-        request_mock.assert_called_once()
-        self.assertIn("/issues/5/comments", request_mock.call_args.args[0])
-        self.assertEqual(request_mock.call_args.kwargs["method"], "POST")
-        self.assertEqual(request_mock.call_args.kwargs["payload"], {"body": recap})
+            delete_recap_comments("x/y", "t", 5)
+        request_mock.assert_not_called()
 
 
 if __name__ == "__main__":

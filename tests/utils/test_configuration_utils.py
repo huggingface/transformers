@@ -23,7 +23,7 @@ from pathlib import Path
 
 from huggingface_hub.utils import httpx
 
-from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config
+from transformers import AutoConfig, BertConfig, Florence2Config, GPT2Config, WhisperConfig
 from transformers.configuration_utils import PreTrainedConfig
 from transformers.testing_utils import TOKEN, TemporaryHubRepo, is_staging_test, require_torch
 
@@ -351,6 +351,22 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertTrue(len(config._get_generation_parameters()) > 0)
         config.min_length = 0
         self.assertTrue(len(config._get_generation_parameters()) > 0)
+
+    def test_get_generation_parameters_with_declared_fields(self):
+        # Checkpoint values for declared fields remain valid even if the field defaults to None.
+        config = WhisperConfig(suppress_tokens=[1, 2], begin_suppress_tokens=[3])
+        self.assertEqual(config._get_generation_parameters(), {})
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            reloaded_config = WhisperConfig.from_pretrained(tmp_dir)
+        self.assertEqual(reloaded_config.suppress_tokens, [1, 2])
+        self.assertEqual(reloaded_config.begin_suppress_tokens, [3])
+        self.assertEqual(reloaded_config._get_generation_parameters(), {})
+
+        # Generation-only attributes added to the model config must still be rejected.
+        config.min_length = 3
+        self.assertEqual(config._get_generation_parameters(), {"min_length": 3})
 
     def test_loading_config_do_not_raise_future_warnings(self):
         """Regression test for https://github.com/huggingface/transformers/issues/31002."""

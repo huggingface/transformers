@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 # Installation
 
-Transformers works with [PyTorch](https://pytorch.org/get-started/locally/). It has been tested on Python 3.10+ and PyTorch 2.5+.
+Transformers works with [PyTorch](https://pytorch.org/get-started/locally/). It has been tested on Python 3.11+ and PyTorch 2.6+.
 
 ## Virtual environment
 
@@ -194,11 +194,6 @@ snapshot_download(repo_id="meta-llama/Llama-2-7b-hf", repo_type="model")
 ```
 
 Set the environment variable `HF_HUB_OFFLINE=1` to prevent HTTP calls to the Hub when loading a model.
-
-```bash
-HF_HUB_OFFLINE=1 \
-python examples/pytorch/language-modeling/run_clm.py --model_name_or_path meta-llama/Llama-2-7b-hf --dataset_name Salesforce/wikitext ...
-```
 
 Another option for only loading cached files is to set `local_files_only=True` in [`~PreTrainedModel.from_pretrained`].
 

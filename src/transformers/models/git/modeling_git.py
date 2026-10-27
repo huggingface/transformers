@@ -33,7 +33,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
@@ -857,16 +857,14 @@ class GitModel(GitPreTrainedModel):
             # Can attend bidirectionally in images and causally in suffix
             group_ids = torch.where(token_type_ids == 1, 0, -1)
 
-        mask_kwargs = {
-            "config": self.config.get_text_config(),
-            "inputs_embeds": embedding_output,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-            "block_sequence_ids": group_ids,
-        }
-
-        causal_mask = create_causal_mask(**mask_kwargs)
+        causal_mask = create_causal_mask(
+            config=self.config.get_text_config(),
+            inputs_embeds=embedding_output,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+            block_sequence_ids=group_ids,
+        )
 
         hidden_states = embedding_output
 
@@ -1073,9 +1071,8 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.output(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.output(hidden_states)
 
         loss = None
         # A caller doing sequence/context parallel training pre-shifts the targets on the full sequence and passes
