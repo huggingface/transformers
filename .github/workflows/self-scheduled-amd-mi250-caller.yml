@@ -5,9 +5,6 @@ on:
     workflows: ["Self-hosted runner (AMD scheduled CI caller)"]
     branches: ["main"]
     types: [completed]
-  push:
-    branches:
-      - run_amd_scheduled_ci_caller*
 
 permissions:
   contents: read
