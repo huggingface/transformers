@@ -18,7 +18,7 @@ import inspect
 import os
 import warnings
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import accumulate
@@ -2574,7 +2574,7 @@ class GenerationMixin(ContinuousMixin):
     @torch.no_grad()
     def generate(
         self: "GenerativePreTrainedModel",
-        inputs: torch.Tensor | None = None,
+        inputs: torch.Tensor | Mapping | None = None,
         generation_config: GenerationConfig | None = None,
         logits_processor: LogitsProcessorList | None = None,
         stopping_criteria: StoppingCriteriaList | None = None,
@@ -2603,11 +2603,13 @@ class GenerationMixin(ContinuousMixin):
         </Tip>
 
         Parameters:
-            inputs (`torch.Tensor` of varying shape depending on the modality, *optional*):
+            inputs (`torch.Tensor` or `Mapping` of varying shape depending on the modality, *optional*):
                 The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
                 method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
                 should be in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
-                `input_ids`, `input_values`, `input_features`, or `pixel_values`.
+                `input_ids`, `input_values`, `input_features`, or `pixel_values`. A mapping such as the
+                `BatchEncoding` returned by tokenizer calls (including `apply_chat_template`) is also accepted as a
+                positional argument, and is treated exactly as if its items had been passed as keyword arguments.
             generation_config ([`~generation.GenerationConfig`], *optional*):
                 The generation configuration to be used as base parametrization for the generation call. `**kwargs`
                 passed to generate matching the attributes of `generation_config` will override them. If
@@ -2682,6 +2684,12 @@ class GenerationMixin(ContinuousMixin):
         """
         # 0.a. If requested, load an arbitrary generation recipe from the Hub and run it instead
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+
+        # Accept a mapping (e.g. the `BatchEncoding` returned by tokenizer calls and `apply_chat_template`) as the
+        # positional input, treating it exactly as if its items had been passed as keyword arguments. Explicit
+        # keyword arguments take precedence over the mapping's items.
+        if isinstance(inputs, Mapping):
+            inputs, kwargs = None, {**inputs, **kwargs}
 
         if custom_generate is not None and isinstance(custom_generate, str):
             # Get all `generate` arguments in a single variable. Custom functions are responsible for handling them:

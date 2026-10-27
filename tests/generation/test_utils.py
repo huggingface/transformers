@@ -5266,6 +5266,39 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertTrue(np.array_equal(output_sequences, output_sequences_kwargs))
         self.assertEqual(output_sequences.shape, (1, 15))
 
+    def test_generate_input_ids_as_positional_mapping(self):
+        """Test that a mapping (e.g. a `BatchEncoding`) can be passed as a positional argument to `generate`"""
+        article = "I need input_ids to generate"
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = model.to(torch_device)
+
+        inputs = tokenizer(article, return_tensors="pt").to(torch_device)
+        output_sequences_kwargs = model.generate(**inputs, max_length=15).cpu().numpy()
+        output_sequences_positional = model.generate(inputs, max_length=15).cpu().numpy()
+
+        self.assertTrue(np.array_equal(output_sequences_kwargs, output_sequences_positional))
+        self.assertEqual(output_sequences_positional.shape, (1, 15))
+
+    def test_generate_positional_mapping_from_apply_chat_template(self):
+        """
+        Test that the `BatchEncoding` returned by `apply_chat_template` (a dict since v5) can be passed as a
+        positional argument to `generate`
+        """
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = model.to(torch_device)
+        tokenizer.chat_template = "User: {{ messages[-1]['content'] }}\nAssistant:"
+
+        inputs = tokenizer.apply_chat_template(
+            [{"role": "user", "content": "hi"}], add_generation_prompt=True, return_tensors="pt"
+        ).to(torch_device)
+        output_sequences_positional = model.generate(inputs, max_length=15).cpu().numpy()
+        output_sequences_kwargs = model.generate(**inputs, max_length=15).cpu().numpy()
+
+        self.assertTrue(np.array_equal(output_sequences_kwargs, output_sequences_positional))
+        self.assertEqual(output_sequences_positional.shape, (1, 15))
+
     def test_generate_input_ids_as_encoder_kwarg(self):
         """Test that `input_ids` work equally as a positional and keyword argument in encoder-decoder models"""
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
