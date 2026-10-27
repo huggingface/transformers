@@ -327,7 +327,7 @@ class DistributedMixin:
                 # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
                 model = apply_expert_parallelism(
-                    model, ep_mesh, tp_mesh, ep_plan, ep_implementation=distributed_config.ep_implementation or "auto"
+                    model, ep_mesh, tp_mesh, ep_plan, ep_implementation=distributed_config.ep_implementation
                 )
 
         if distributed_config.fsdp_size > 1 and fsdp_plan:

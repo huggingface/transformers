@@ -137,7 +137,8 @@ if is_torch_distributed_available():
 
     def _all_reduce_backward(x, process_group):
         """Sum the gradient of a replicated `x` over the group in backward. Only when a gradient can flow: at
-        inference it returns `x` untouched, so no backward-only op runs in the forward."""
+        inference it returns `x` untouched, so the per-call overhead of an `autograd.Function` does not compound
+        across layers, e.g. in eager decode."""
         if torch.is_grad_enabled() and x.requires_grad:
             return _AllReduceBackward.apply(x, process_group)
         return x

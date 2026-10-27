@@ -413,36 +413,18 @@ class EPImplementationInterface(GeneralInterface):
 ALL_EP_IMPLEMENTATIONS: EPImplementationInterface = EPImplementationInterface()
 
 
-def _resolve_ep_implementation(distributed_config) -> str:
-    """The `ALL_EP_IMPLEMENTATIONS` name an `ep_dispatch_experts` module runs: `ep_implementation`, `"auto"` when unset.
-    An implementation that needs a shared batch, such as `"all_reduce"`, requires `ep_size == tp_size`."""
-    ep_implementation = distributed_config.ep_implementation or "auto"
-    if ep_implementation not in ALL_EP_IMPLEMENTATIONS:
-        raise ValueError(
-            f"`ep_implementation={ep_implementation!r}` names no registered implementation: use one of "
-            f"{', '.join(repr(name) for name in ALL_EP_IMPLEMENTATIONS)}, or register an `EPImplementation` in "
-            "`ALL_EP_IMPLEMENTATIONS`."
-        )
-    if (
-        ALL_EP_IMPLEMENTATIONS[ep_implementation].needs_shared_batch
-        and distributed_config.ep_size != distributed_config.tp_size
-    ):
-        raise ValueError(
-            f"`ep_implementation={ep_implementation!r}` requires `ep_size == tp_size`: every rank of the expert group "
-            "must hold the same batch."
-        )
-    return ep_implementation
-
-
 class EpDispatchExpertsParallel(ExpertParallelLayer):
     """Whole experts per rank (`Shard(0)` on the EP mesh), reached through an `EPImplementation` from
     `ALL_EP_IMPLEMENTATIONS`, picked by `DistributedConfig.ep_implementation`."""
 
-    def should_use_local_tensors(self, module):
-        return True
-
     def install_forward(self, module, ep_mesh, *, tp_mesh=None, ep_implementation="auto"):
         """`tp_mesh` is the group of ranks holding the same batch."""
+        if ep_implementation not in ALL_EP_IMPLEMENTATIONS:
+            raise ValueError(
+                f"`ep_implementation={ep_implementation!r}` names no registered implementation: use one of "
+                f"{', '.join(repr(name) for name in ALL_EP_IMPLEMENTATIONS)}, or register an `EPImplementation` in "
+                "`ALL_EP_IMPLEMENTATIONS`."
+            )
         implementation = ALL_EP_IMPLEMENTATIONS[ep_implementation](module, ep_mesh, tp_mesh)
 
         def ep_forward(hidden_states, top_k_index, top_k_weights):

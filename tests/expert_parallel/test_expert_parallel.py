@@ -18,13 +18,13 @@ from parameterized import parameterized
 from torch.distributed.device_mesh import init_device_mesh
 from torch.utils.checkpoint import checkpoint
 
-from transformers.distributed import DistributedConfig, expert_parallel
+from transformers.distributed import expert_parallel
 from transformers.distributed.expert_parallel import (
     AllReduceEP,
     AllToAllEP,
     EpDispatchExpertsParallel,
+    EPImplementation,
     EPImplementationInterface,
-    _resolve_ep_implementation,
 )
 from transformers.distributed.parallel_utils import ALL_PARALLEL_STYLES
 from transformers.testing_utils import TestCasePlus, is_expert_parallel_test
@@ -97,22 +97,20 @@ class TestExpertParallelLayer(TestCasePlus):
         _init_distributed(tp=2, backend="gloo")(_ep_gradient_checkpointing_matches_reference)(use_reentrant)
 
     def test_ep_implementation_names_a_registered_implementation(self):
-        """`ep_implementation` defaults to `"auto"`, names any implementation registered in `ALL_EP_IMPLEMENTATIONS`,
-        and refuses `"all_reduce"` where the EP group does not share one batch."""
-        self.assertEqual(_resolve_ep_implementation(DistributedConfig(tp_size=2, ep_size=2)), "auto")
-        self.assertEqual(_resolve_ep_implementation(DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2)), "auto")
-        for name in ("all_reduce", "all_to_all"):
-            config = DistributedConfig(tp_size=2, ep_size=2, ep_implementation=name)
-            self.assertEqual(_resolve_ep_implementation(config), name)
-        with self.assertRaisesRegex(ValueError, "requires `ep_size == tp_size`"):
-            _resolve_ep_implementation(
-                DistributedConfig(tp_size=1, fsdp_size=2, ep_size=2, ep_implementation="all_reduce")
-            )
+        """`install_forward` runs the implementation registered under `ep_implementation` and refuses an unknown name."""
         with self.assertRaisesRegex(ValueError, "names no registered implementation"):
-            _resolve_ep_implementation(DistributedConfig(tp_size=2, ep_size=2, ep_implementation="fast"))
-        with patch.dict(EPImplementationInterface._global_mapping, {"custom": AllToAllEP}):
-            config = DistributedConfig(tp_size=2, ep_size=2, ep_implementation="custom")
-            self.assertEqual(_resolve_ep_implementation(config), "custom")
+            EpDispatchExpertsParallel().install_forward(_DummyExperts(), None, ep_implementation="fast")
+
+        class Custom(EPImplementation):
+            def __init__(self, experts, ep_mesh, tp_mesh=None):
+                self.experts = experts
+
+            def __call__(self, hidden_states, top_k_index, top_k_weights):
+                return hidden_states + 1
+
+        with patch.dict(EPImplementationInterface._global_mapping, {"custom": Custom}):
+            experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), None, ep_implementation="custom")
+        torch.testing.assert_close(experts(torch.zeros(2, 4), None, torch.ones(2, 1)), torch.ones(2, 4))
 
 
 class _DummyExperts(torch.nn.Module):
@@ -167,6 +165,14 @@ def _ep_implementations_match_one_process(rank):
     h_ref, w_ref = _HIDDEN_STATES.clone().requires_grad_(), _TOP_K_WEIGHTS.clone().requires_grad_()
     expected = _ScaledExperts(_SCALES)(h_ref, _TOP_K_INDEX, w_ref)
     expected.backward(_GRAD_OUTPUT)
+
+    # an implementation that needs a shared batch refuses an EP group whose ranks hold different batches
+    try:
+        AllReduceEP(_ScaledExperts(_SCALES[:2]), init_device_mesh("cpu", (2,)))
+    except ValueError as error:
+        assert "same batch" in str(error), error
+    else:
+        raise AssertionError("AllReduceEP accepted an EP group without a shared batch")
 
     exchanged = []
     all_to_all_dispatch = AllToAllEP.dispatch
