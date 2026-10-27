@@ -94,20 +94,20 @@ class OpenVINOExporter(DynamoExporter):
 
     >>> exporter = OpenVINOExporter()
     >>> exported = exporter.export(model, inputs, config=OpenVINOConfig(dynamic=True))
-    >>> ov_model = exported.artifact  # an `openvino.Model`
+    >>> ov_model = exported.program  # an `openvino.Model`
     >>> exported.save_pretrained("exported")  # `openvino_model.xml` + `.bin`, its metadata and the model config
     ```
     """
 
     export_format = ExportFormat.OPENVINO
     config_class = OpenVINOConfig
-    artifact_suffix = ".xml"
-    artifact_prefix = "openvino_"
+    program_suffix = ".xml"
+    program_prefix = "openvino_"
 
     required_packages = ["torch", "openvino"]
     tested_versions = {"torch": "2.12.0", "openvino": "2026.3.1"}
 
-    def export_artifact(
+    def export_program(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
@@ -116,7 +116,7 @@ class OpenVINOExporter(DynamoExporter):
         config = self._as_config(config)
 
         with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("openvino"):
-            exported_program, metadata = super().export_artifact(model, sample_inputs, config=config)
+            exported_program, metadata = super().export_program(model, sample_inputs, config=config)
 
         exported_program, graph_module = _fix_exported_program(exported_program)
         ov_model = _convert_to_openvino(graph_module)
@@ -140,18 +140,18 @@ class OpenVINOExporter(DynamoExporter):
         return ov_model, metadata
 
     @classmethod
-    def save_artifact(cls, artifact: openvino.Model, path) -> None:
+    def save_program(cls, program: openvino.Model, path) -> None:
         """Write the `.xml` graph and `.bin` weights at the precision the model already holds (`save_model` would
         otherwise halve `float32` weights on its own)."""
-        openvino.save_model(artifact, str(path), compress_to_fp16=False)
+        openvino.save_model(program, str(path), compress_to_fp16=False)
 
     @classmethod
-    def artifact_files(cls, filename: str) -> list[str]:
+    def program_files(cls, filename: str) -> list[str]:
         """The `.xml` graph and its `.bin` weights."""
         return [filename, f"{filename.removesuffix('.xml')}.bin"]
 
     @classmethod
-    def load_artifact(cls, path) -> openvino.Model:
+    def load_program(cls, path) -> openvino.Model:
         return openvino.Core().read_model(str(path))
 
 

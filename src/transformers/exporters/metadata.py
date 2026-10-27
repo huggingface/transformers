@@ -63,7 +63,7 @@ def _package_versions(packages: Iterable[str]) -> dict[str, str]:
 class ExportMetadata:
     """What the exporter recorded about one graph (`build_export_metadata`), parsed.
 
-    Empty for an artifact without it; every accessor then answers `None`/empty.
+    Empty for an program without it; every accessor then answers `None`/empty.
     """
 
     raw: Mapping[str, Any] = field(default_factory=dict)

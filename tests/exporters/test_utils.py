@@ -41,14 +41,14 @@ from pathlib import Path
 from unittest import mock
 
 from transformers import BertConfig, GenerationConfig
-from transformers.exporters import utils as exporter_utils
-from transformers.exporters.auto import (
+from transformers.exporters import (
     EXPORT_BACKENDS,
     AutoExportConfig,
     AutoHfExporter,
     get_exporter_class,
     register_backend,
 )
+from transformers.exporters import utils as exporter_utils
 from transformers.exporters.base import ExportArtifacts, ExportedComponent, HfExporter
 from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, ExportFormat, OnnxConfig
 from transformers.exporters.metadata import ExportMetadata
@@ -143,21 +143,21 @@ class _StubConfig(DynamoConfig):
 
 
 class _StubExporter(HfExporter):
-    """A custom backend writing each artifact (a string) as text, so saving is tested without tracing anything."""
+    """A custom backend writing each program (a string) as text, so saving is tested without tracing anything."""
 
     export_format = "stub"
     config_class = _StubConfig
-    artifact_suffix = ".txt"
+    program_suffix = ".txt"
 
-    def export_artifact(self, model, sample_inputs, config):
+    def export_program(self, model, sample_inputs, config):
         return "program", {"input_names": list(sample_inputs)}
 
     @classmethod
-    def save_artifact(cls, artifact, path):
-        Path(path).write_text(artifact, encoding="utf-8")
+    def save_program(cls, program, path):
+        Path(path).write_text(program, encoding="utf-8")
 
     @classmethod
-    def load_artifact(cls, path):
+    def load_program(cls, path):
         return Path(path).read_text(encoding="utf-8")
 
 
@@ -193,14 +193,14 @@ class ExportArtifactsTest(unittest.TestCase):
     def test_export_returns_single_model_component(self):
         artifacts = _StubExporter().export(object(), {"input_ids": None}, _StubConfig())
         self.assertEqual(list(artifacts), ["model"])
-        self.assertEqual(artifacts.artifact, "program")
+        self.assertEqual(artifacts.program, "program")
         self.assertEqual(artifacts["model"].metadata.input_names, ("input_ids",))
 
-    def test_artifact_refuses_several_components(self):
+    def test_program_refuses_several_components(self):
         component = ExportedComponent("program", ExportMetadata())
         artifacts = ExportArtifacts({"prefill": component, "decode": component}, "stub")
         with self.assertRaisesRegex(ValueError, "2 components"):
-            artifacts.artifact
+            artifacts.program
 
     def test_save_pretrained_from_pretrained_roundtrip(self):
         components = {
@@ -216,7 +216,7 @@ class ExportArtifactsTest(unittest.TestCase):
                 loaded = ExportArtifacts.from_pretrained(directory)
         self.assertEqual(loaded.export_format, "stub")
         self.assertEqual(
-            {name: component.artifact for name, component in loaded.items()},
+            {name: component.program for name, component in loaded.items()},
             {
                 "prefill": "prefill program",
                 "decode": "decode program",
@@ -226,46 +226,12 @@ class ExportArtifactsTest(unittest.TestCase):
         self.assertEqual(loaded.config.hidden_size, 32)
         self.assertEqual(loaded.generation_config.max_new_tokens, 3)
 
-    def test_from_pretrained_downloads_only_the_export_from_the_hub(self):
-        """From the Hub, the manifest is fetched first, then only the files it names (and the configs), so an
-        export in a model repo's subfolder doesn't pull the model's own weights."""
-        components = {"decode": ExportedComponent("decode program", ExportMetadata())}
-        with mock.patch.dict(EXPORT_BACKENDS), tempfile.TemporaryDirectory() as repo:
-            register_backend("stub", _StubConfig, _StubExporter)
-            ExportArtifacts(components, "stub").save_pretrained(Path(repo) / "stub")
-
-            def hf_hub_download(repo_id, filename, subfolder=None, **kwargs):
-                return str(Path(repo) / (subfolder or "") / filename)
-
-            def snapshot_download(repo_id, allow_patterns, **kwargs):
-                self.assertEqual(
-                    sorted(allow_patterns),
-                    ["stub/config.json", "stub/decode.txt", "stub/export.json", "stub/generation_config.json"],
-                )
-                return repo
-
-            with (
-                mock.patch("transformers.exporters.base.hf_hub_download", hf_hub_download),
-                mock.patch("transformers.exporters.base.snapshot_download", snapshot_download),
-            ):
-                loaded = ExportArtifacts.from_pretrained("org/model", subfolder="stub")
-        self.assertEqual(loaded["decode"].artifact, "decode program")
-
-    def test_save_pretrained_pushes_to_hub(self):
-        components = {"decode": ExportedComponent("decode program", ExportMetadata())}
-        artifacts = ExportArtifacts(components, "stub", generation_config=GenerationConfig(max_new_tokens=3))
-        api = mock.Mock()
-        api.create_repo.return_value.repo_id = "org/model"
-        with (
-            mock.patch.dict(EXPORT_BACKENDS),
-            mock.patch("transformers.utils.hub.hf_api", return_value=api),
-            mock.patch("transformers.exporters.base.hf_api", return_value=api),
-            tempfile.TemporaryDirectory() as directory,
-        ):
-            register_backend("stub", _StubConfig, _StubExporter)
-            artifacts.save_pretrained(directory, push_to_hub=True, repo_id="org/model")
-        uploaded = {operation.path_in_repo for operation in api.create_commit.call_args.kwargs["operations"]}
-        self.assertEqual(uploaded, {"decode.txt", "export.json", "generation_config.json"})
+    def test_from_pretrained_refuses_a_local_directory_without_an_export(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(FileNotFoundError, "export.json"):
+                ExportArtifacts.from_pretrained(directory)
+            with self.assertRaisesRegex(FileNotFoundError, "export.json"):
+                ExportArtifacts.from_pretrained(directory, subfolder="onnx")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

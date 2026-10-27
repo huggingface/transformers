@@ -51,7 +51,7 @@ calibration_dataset = [tokenizer(text, return_tensors="pt") for text in texts]
 inputs = tokenizer("An absolute delight from start to finish.", return_tensors="pt")
 
 config = OnnxConfig(dynamic=True, quantizer=OnnxRuntimeQuantizer(calibration_dataset=calibration_dataset))
-onnx_program = OnnxExporter().export(model, inputs, config).artifact
+onnx_program = OnnxExporter().export(model, inputs, config).program
 
 logits = onnx_program(**inputs)[0]
 print(model.config.id2label[int(logits.argmax())])  # POSITIVE
@@ -158,7 +158,7 @@ onnx_int4 = OnnxConfig(quantizer=NNCFOnnxQuantizer(int4))
 # Dynamo: int8 on the FX graph
 dynamo_int8 = DynamoConfig(quantizer=NNCFTorchFXQuantizer(calibration_dataset=calibration_dataset))
 
-ov_model = OpenVINOExporter().export(model, inputs, openvino_int4).artifact
+ov_model = OpenVINOExporter().export(model, inputs, openvino_int4).program
 ```
 
 Int8 activations run int8 matmuls, which saturate on CPUs without VNNI (AVX2-only Intel and AMD Zen 2 and older), so

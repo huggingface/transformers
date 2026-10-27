@@ -56,7 +56,7 @@ if TYPE_CHECKING:
 class ExportedComponent:
     """One exported graph: the backend's program, and what the exporter recorded about it."""
 
-    artifact: Any
+    program: Any
     metadata: ExportMetadata
 
 
@@ -64,7 +64,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
     """What an export produced: a `Mapping` over `{name: ExportedComponent}`, plus the configs they were traced
     against.
 
-    [`~HfExporter.export`] produces a single `"model"` component, whose program is `.artifact`;
+    [`~HfExporter.export`] produces a single `"model"` component, whose program is `.program`;
     [`~HfExporter.export_for_generation`] produces one component per generation stage.
     """
 
@@ -93,14 +93,14 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         return f"{type(self).__name__}(format={str(self.export_format)!r}, components={list(self)})"
 
     @property
-    def artifact(self):
+    def program(self):
         """The backend's own program, for a single-graph export."""
         if len(self.components) != 1:
             raise ValueError(
                 f"This export has {len(self.components)} components ({list(self.components)}), so there is "
-                "no single `.artifact`; index it by name and take that component's."
+                "no single `.program`; index it by name and take that component's."
             )
-        return next(iter(self.components.values())).artifact
+        return next(iter(self.components.values())).program
 
     def save_pretrained(self, save_directory: str | Path, push_to_hub: bool = False, **kwargs) -> None:
         """Write the components (one file each), the configs, and a manifest naming each component's file and the
@@ -128,8 +128,8 @@ class ExportArtifacts(Mapping, PushToHubMixin):
 
         components = {}
         for name, component in self.components.items():
-            filename = f"{exporter.artifact_prefix}{name}{exporter.artifact_suffix}"
-            exporter.save_artifact(component.artifact, directory / filename)
+            filename = f"{exporter.program_prefix}{name}{exporter.program_suffix}"
+            exporter.save_program(component.program, directory / filename)
             components[name] = {"file": filename, "metadata": dict(component.metadata.raw)}
 
         manifest = {"schema_version": 1, "export_format": str(self.export_format), "components": components}
@@ -154,7 +154,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         cache_dir: str | Path | None = None,
     ) -> ExportArtifacts:
         """Load what [`~ExportArtifacts.save_pretrained`] wrote: each component through its backend's
-        [`~HfExporter.load_artifact`], with its metadata, and the configs saved next to them.
+        [`~HfExporter.load_program`], with its metadata, and the configs saved next to them.
 
         Args:
             pretrained_model_name_or_path (`str` or `Path`):
@@ -172,7 +172,10 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         from .auto import get_exporter_class
 
         directory = Path(pretrained_model_name_or_path) / subfolder
-        if not directory.is_dir():
+        if Path(pretrained_model_name_or_path).is_dir():
+            if not (directory / EXPORT_MANIFEST_FILE).is_file():
+                raise FileNotFoundError(f"No `{EXPORT_MANIFEST_FILE}` in {directory}: it holds no saved export.")
+        else:
             directory = cls._download(
                 str(pretrained_model_name_or_path), subfolder, revision=revision, token=token, cache_dir=cache_dir
             )
@@ -180,7 +183,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         exporter = get_exporter_class(manifest["export_format"])
         components = {
             name: ExportedComponent(
-                exporter.load_artifact(directory / entry["file"]), ExportMetadata.from_dict(entry["metadata"])
+                exporter.load_program(directory / entry["file"]), ExportMetadata.from_dict(entry["metadata"])
             )
             for name, entry in manifest["components"].items()
         }
@@ -193,7 +196,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
     @staticmethod
     def _download(repo_id: str, subfolder: str, **hub_kwargs) -> Path:
         """Download an export from the Hub: its manifest first, then only the files the manifest names (each
-        component's [`~HfExporter.artifact_files`]) and the configs. Returns the export's local directory."""
+        component's [`~HfExporter.program_files`]) and the configs. Returns the export's local directory."""
         from .auto import get_exporter_class
 
         manifest_path = hf_hub_download(repo_id, EXPORT_MANIFEST_FILE, subfolder=subfolder or None, **hub_kwargs)
@@ -201,7 +204,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         exporter = get_exporter_class(manifest["export_format"])
         files = [EXPORT_MANIFEST_FILE, CONFIG_NAME, GENERATION_CONFIG_NAME]
         for entry in manifest["components"].values():
-            files += exporter.artifact_files(entry["file"])
+            files += exporter.program_files(entry["file"])
         prefix = f"{subfolder.strip('/')}/" if subfolder else ""
         root = snapshot_download(repo_id, allow_patterns=[prefix + file for file in files], **hub_kwargs)
         return Path(root) / subfolder
@@ -211,18 +214,18 @@ class HfExporter(ABC):
     """
     Abstract base class for all Transformers exporters.
 
-    To add a backend, subclass and implement [`~HfExporter.export_artifact`] to trace one graph, and
-    [`~HfExporter.save_artifact`] / [`~HfExporter.load_artifact`] to write one out and read it back. The public
+    To add a backend, subclass and implement [`~HfExporter.export_program`] to trace one graph, and
+    [`~HfExporter.save_program`] / [`~HfExporter.load_program`] to write one out and read it back. The public
     [`~HfExporter.export`] and [`~HfExporter.export_for_generation`] build an [`ExportArtifacts`] on top of
     them.
     """
 
     export_format: ExportFormat | str
     config_class: type[ExportConfigMixin]
-    # A saved component's file is `<artifact_prefix><name><artifact_suffix>` (`model.onnx`, `openvino_decode.xml`).
-    artifact_suffix: str
+    # A saved component's file is `<program_prefix><name><program_suffix>` (`model.onnx`, `openvino_decode.xml`).
+    program_suffix: str
     # Only for formats whose extension doesn't name them (OpenVINO's `.xml` / `.bin`).
-    artifact_prefix: str = ""
+    program_prefix: str = ""
 
     required_packages: list[str] = []
     # Hard minimum versions — the exporter raises below these (features it relies on are absent).
@@ -246,14 +249,14 @@ class HfExporter(ABC):
         return config
 
     @abstractmethod
-    def export_artifact(
+    def export_program(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, torch.Tensor | Cache],
         config: ExportConfigMixin,
     ) -> tuple[Any, dict[str, Any]]:
         """
-        Trace one graph. The backend extension point, paired with [`~HfExporter.save_artifact`].
+        Trace one graph. The backend extension point, paired with [`~HfExporter.save_program`].
 
         Args:
             model ([`PreTrainedModel`]):
@@ -276,17 +279,17 @@ class HfExporter(ABC):
 
     @classmethod
     @abstractmethod
-    def save_artifact(cls, artifact: Any, path: str | Path) -> None:
-        """Write one program returned by [`~HfExporter.export_artifact`] to `path`, in the backend's file format."""
+    def save_program(cls, program: Any, path: str | Path) -> None:
+        """Write one program returned by [`~HfExporter.export_program`] to `path`, in the backend's file format."""
 
     @classmethod
     @abstractmethod
-    def load_artifact(cls, path: str | Path) -> Any:
-        """Read back one program written by [`~HfExporter.save_artifact`]."""
+    def load_program(cls, path: str | Path) -> Any:
+        """Read back one program written by [`~HfExporter.save_program`]."""
 
     @classmethod
-    def artifact_files(cls, filename: str) -> list[str]:
-        """The files [`~HfExporter.save_artifact`] writes for a program saved as `filename`: the file itself, plus
+    def program_files(cls, filename: str) -> list[str]:
+        """The files [`~HfExporter.save_program`] writes for a program saved as `filename`: the file itself, plus
         any the format keeps beside it (weights, external data)."""
         return [filename]
 
@@ -299,14 +302,14 @@ class HfExporter(ABC):
         """
         Export the model as one graph.
 
-        Takes the same **forward** kwargs as [`~HfExporter.export_artifact`].
+        Takes the same **forward** kwargs as [`~HfExporter.export_program`].
 
         Returns:
-            [`ExportArtifacts`]: A single `"model"` component; the backend's program is `.artifact`, and
+            [`ExportArtifacts`]: A single `"model"` component; the backend's program is `.program`, and
             `save_pretrained` writes it with its metadata and the model config.
         """
-        artifact, metadata = self.export_artifact(model, sample_inputs, config)
-        component = ExportedComponent(artifact, ExportMetadata.from_dict(metadata))
+        program, metadata = self.export_program(model, sample_inputs, config)
+        component = ExportedComponent(program, ExportMetadata.from_dict(metadata))
         # A decomposed component (e.g. `FSMTEncoder`) is a plain `nn.Module` with no config.
         return ExportArtifacts({"model": component}, self.export_format, config=getattr(model, "config", None))
 
@@ -323,7 +326,7 @@ class HfExporter(ABC):
         Decompose a generative model and export each component independently.
 
         Thin wrapper around [`~exporters.utils.decompose_for_generation`] that calls
-        [`~HfExporter.export_artifact`] on every returned `(submodel, forward_inputs)` pair. If you need
+        [`~HfExporter.export_program`] on every returned `(submodel, forward_inputs)` pair. If you need
         the intermediate `(submodel, forward_inputs)` pairs (for verification, custom inputs,
         skipping a stage, …), call [`~exporters.utils.decompose_for_generation`] directly.
 
@@ -387,13 +390,13 @@ class HfExporter(ABC):
         exported: dict[str, ExportedComponent] = {}
         for name, (submodel, subinputs) in components.items():
             try:
-                artifact, metadata = self.export_artifact(submodel, subinputs, config=configs[name])
+                program, metadata = self.export_program(submodel, subinputs, config=configs[name])
             except Exception as e:
                 raise RuntimeError(
-                    f"{self.__class__.__name__}.export_artifact failed on component '{name}' "
+                    f"{self.__class__.__name__}.export_program failed on component '{name}' "
                     f"(submodel={type(submodel).__name__}, input keys={list(subinputs)})."
                 ) from e
-            exported[name] = ExportedComponent(artifact, ExportMetadata.from_dict(metadata))
+            exported[name] = ExportedComponent(program, ExportMetadata.from_dict(metadata))
 
         return ExportArtifacts(
             exported, self.export_format, config=getattr(model, "config", None), generation_config=generation_config

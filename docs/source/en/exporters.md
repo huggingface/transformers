@@ -31,7 +31,7 @@ in the modeling code.
 > [!WARNING]
 > The exporters are experimental. Many of the patches in this module work around specific upstream bugs (Torch, ONNX Script, ONNX Runtime, ExecuTorch) and will be removed as soon as the fix lands upstream. Until the API stabilizes, treat the patches as tied to the versions used in the test suite. Pin those versions in production tooling, and expect new patches to appear and old ones to disappear as upstream changes land.
 
-| Exporter               | Program (`.artifact`)      | Saved as                      | Runtime                                    |
+| Exporter               | Program (`.program`)       | Saved as                      | Runtime                                    |
 | ---------------------- | -------------------------- | ----------------------------- | ------------------------------------------ |
 | [`DynamoExporter`]     | `ExportedProgram`          | `model.pt2`                   | Any PyTorch runtime, AOT compilation       |
 | [`OnnxExporter`]       | `ONNXProgram`              | `model.onnx`                  | Any ONNX runtime (ORT, TensorRT, OpenVINO) |
@@ -39,9 +39,9 @@ in the modeling code.
 | [`OpenVINOExporter`]   | `openvino.Model`           | `openvino_model.xml` + `.bin` | OpenVINO runtime (Intel CPU/GPU/NPU)       |
 
 Every export returns an [`ExportArtifacts`], a mapping of component names to [`ExportedComponent`]s. A
-component holds the backend's program (`.artifact`) and the [`ExportMetadata`] recorded while tracing it
+component holds the backend's program (`.program`) and the [`ExportMetadata`] recorded while tracing it
 (input and output names, precision, traced input shapes). [`~HfExporter.export`] produces a single `"model"`
-component, so its program is directly `exported.artifact`. [`~ExportArtifacts.save_pretrained`] writes one
+component, so its program is directly `exported.program`. [`~ExportArtifacts.save_pretrained`] writes one
 file per component, an `export.json` manifest with each component's file and metadata, and the model config.
 
 [`~ExportArtifacts.from_pretrained`] loads it back, from a local directory or a Hub repo (pass `subfolder` for an
@@ -52,7 +52,7 @@ ready to run.
 ```python
 from transformers.exporters import ExportArtifacts
 
-exported.artifact  # the backend's program
+exported.program  # the backend's program
 exported.save_pretrained("exported-model")  # model.<suffix>, export.json, config.json
 loaded = ExportArtifacts.from_pretrained("exported-model")
 ```
@@ -154,7 +154,7 @@ config = DynamoConfig(dynamic=True)
 exported = exporter.export(model, inputs, config=config)
 
 # run the exported graph directly
-outputs = exported.artifact.module()(**inputs)
+outputs = exported.program.module()(**inputs)
 ```
 
 </hfoption>
@@ -232,7 +232,7 @@ exported.save_pretrained("qwen3-openvino")
 
 # compile and run on CPU (or "GPU" / "NPU" if available)
 import openvino as ov
-compiled = ov.Core().compile_model(exported.artifact, "CPU")
+compiled = ov.Core().compile_model(exported.program, "CPU")
 ov_inputs = {k: v.numpy() for k, v in inputs.items()}
 outputs = compiled(ov_inputs)
 ```
@@ -396,7 +396,7 @@ exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
 components = exporter.export_for_generation(model, inputs, config=config)
 # components: ExportArtifacts with "image_encoder", "language_model", "lm_head" and "decode",
-# each an ExportedComponent whose `.artifact` is an ExportedProgram
+# each an ExportedComponent whose `.program` is an ExportedProgram
 ```
 
 </hfoption>
@@ -416,7 +416,7 @@ exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
 components = exporter.export_for_generation(model, inputs, config=config)
 # components: ExportArtifacts with "image_encoder", "language_model", "lm_head" and "decode",
-# each an ExportedComponent whose `.artifact` is an ONNXProgram
+# each an ExportedComponent whose `.program` is an ONNXProgram
 ```
 
 </hfoption>
@@ -436,7 +436,7 @@ exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
 components = exporter.export_for_generation(model, inputs, config=config)
 # components: ExportArtifacts with "image_encoder", "language_model", "lm_head" and "decode",
-# each an ExportedComponent whose `.artifact` is an ExecutorchProgramManager
+# each an ExportedComponent whose `.program` is an ExecutorchProgramManager
 ```
 
 </hfoption>
@@ -456,7 +456,7 @@ exporter = OpenVINOExporter()
 config = OpenVINOConfig(dynamic=True)
 components = exporter.export_for_generation(model, inputs, config=config)
 # components: ExportArtifacts with "image_encoder", "language_model", "lm_head" and "decode",
-# each an ExportedComponent whose `.artifact` is an openvino.Model
+# each an ExportedComponent whose `.program` is an openvino.Model
 ```
 
 `components.save_pretrained(directory)` writes one file per component (`decode.onnx`, `lm_head.onnx`, ...),
@@ -496,7 +496,7 @@ components = decompose_for_generation(model, inputs)
 exported = {}
 for name, (submodel, subinputs) in components.items():
     eager_outputs = submodel(**subinputs)  # sanity-check the eager forward before exporting
-    exported[name] = exporter.export(submodel, subinputs, config=config).artifact
+    exported[name] = exporter.export(submodel, subinputs, config=config).program
 ```
 
 ### Multi-token decode
@@ -623,7 +623,7 @@ with no host copies — as long as the runtime binds the caller's buffers rather
 own arena. What that takes is the only per-backend part left:
 
 - **Dynamo** — the exported program models the cache write as a `USER_INPUT_MUTATION`, so calling
-  `components["decode"].artifact.module()(...)` updates the cache tensors you pass in directly. Reuse the same
+  `components["decode"].program.module()(...)` updates the cache tensors you pass in directly. Reuse the same
   tensors each step; nothing to configure.
 
 - **ONNX Runtime** — the decode graph exposes the cache as matched `input.<name>` / `output.<name>`

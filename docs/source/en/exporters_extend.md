@@ -80,7 +80,7 @@ this reference line up. Look there for the exact ops and classes each stage hand
 
 ### DynamoExporter
 
-The base exporter runs one patch stage and four helpers, in order, inside `DynamoExporter.export_artifact`
+The base exporter runs one patch stage and four helpers, in order, inside `DynamoExporter.export_program`
 (see [exporter_dynamo.py](https://github.com/huggingface/transformers/blob/main/src/transformers/exporters/exporter_dynamo.py)).
 
 1. Forward-signature patch: gives `model.forward` a flat argument signature so `torch.export`
@@ -138,9 +138,9 @@ starting with backend preparation (see
 
 ## Add a backend
 
-A backend is an [`HfExporter`] subclass, plus a config. `export_artifact` traces one graph and returns the
-backend's program with the metadata recorded while tracing it, `save_artifact` writes one program to disk, and
-`load_artifact` reads it back. [`~HfExporter.export`] and [`~HfExporter.export_for_generation`] build the [`ExportArtifacts`] on top of
+A backend is an [`HfExporter`] subclass, plus a config. `export_program` traces one graph and returns the
+backend's program with the metadata recorded while tracing it, `save_program` writes one program to disk, and
+`load_program` reads it back. [`~HfExporter.export`] and [`~HfExporter.export_for_generation`] build the [`ExportArtifacts`] on top of
 them. Subclassing [`DynamoExporter`] reuses its trace and its metadata, so a backend only converts the
 `ExportedProgram`:
 
@@ -158,18 +158,18 @@ class MyConfig(DynamoConfig):
 class MyExporter(DynamoExporter):
     export_format = "my_format"
     config_class = MyConfig
-    artifact_suffix = ".bin"
+    program_suffix = ".bin"
 
-    def export_artifact(self, model, sample_inputs, config):
-        exported_program, metadata = super().export_artifact(model, sample_inputs, config)
+    def export_program(self, model, sample_inputs, config):
+        exported_program, metadata = super().export_program(model, sample_inputs, config)
         return convert(exported_program), metadata
 
     @classmethod
-    def save_artifact(cls, artifact, path):
-        artifact.save(path)
+    def save_program(cls, program, path):
+        program.save(path)
 
     @classmethod
-    def load_artifact(cls, path):
+    def load_program(cls, path):
         return load(path)
 
 

@@ -77,20 +77,20 @@ class DynamoExporter(HfExporter):
 
     >>> exporter = DynamoExporter()
     >>> exported = exporter.export(model, inputs, config=DynamoConfig(dynamic=True))
-    >>> outputs = exported.artifact.module()(**inputs)
+    >>> outputs = exported.program.module()(**inputs)
     >>> exported.save_pretrained("exported")  # `model.pt2`, its metadata and the model config
     ```
     """
 
     export_format = ExportFormat.DYNAMO
     config_class = DynamoConfig
-    artifact_suffix = ".pt2"
+    program_suffix = ".pt2"
 
     required_packages = ["torch"]
     min_versions = {"torch": "2.11.0"}
     tested_versions = {"torch": "2.12.0"}
 
-    def export_artifact(
+    def export_program(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
@@ -148,11 +148,11 @@ class DynamoExporter(HfExporter):
         return exported_program, metadata
 
     @classmethod
-    def save_artifact(cls, artifact: ExportedProgram, path) -> None:
-        torch.export.save(artifact, str(path))
+    def save_program(cls, program: ExportedProgram, path) -> None:
+        torch.export.save(program, str(path))
 
     @classmethod
-    def load_artifact(cls, path) -> ExportedProgram:
+    def load_program(cls, path) -> ExportedProgram:
         return torch.export.load(str(path))
 
 

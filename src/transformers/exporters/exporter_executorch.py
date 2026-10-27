@@ -123,12 +123,12 @@ class ExecutorchExporter(DynamoExporter):
 
     export_format = ExportFormat.EXECUTORCH
     config_class = ExecutorchConfig
-    artifact_suffix = ".pte"
+    program_suffix = ".pte"
 
     required_packages = ["torch", "executorch"]
     tested_versions = {"torch": "2.13.0", "executorch": "1.4.1"}
 
-    def export_artifact(
+    def export_program(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
@@ -144,7 +144,7 @@ class ExecutorchExporter(DynamoExporter):
         model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
 
         with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
-            exported_program, metadata = super().export_artifact(model, sample_inputs, config=config)
+            exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
@@ -160,13 +160,13 @@ class ExecutorchExporter(DynamoExporter):
         return executorch_programs_manager, metadata
 
     @classmethod
-    def save_artifact(cls, artifact: ExecutorchProgramManager, path) -> None:
+    def save_program(cls, program: ExecutorchProgramManager, path) -> None:
         """Stream the `.pte` to `path` (`.buffer` would materialize the whole program first)."""
         with open(path, "wb") as file:
-            artifact.write_to_file(file)
+            program.write_to_file(file)
 
     @classmethod
-    def load_artifact(cls, path):
+    def load_program(cls, path):
         """The saved `.pte` as an `executorch.runtime.Program`, ready to run: the export-time
         `ExecutorchProgramManager` can't be rebuilt from the file."""
         return Runtime.get().load_program(str(path))

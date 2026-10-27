@@ -51,7 +51,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from ..utils import logging
-from ..utils.import_utils import is_onnxscript_available, is_torch_available
+from ..utils.import_utils import is_onnxruntime_available, is_onnxscript_available, is_torch_available
 from .configs import ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
 from .utils import (
@@ -67,6 +67,27 @@ from .utils import (
 if is_torch_available():
     import torch
     from torch.onnx import ONNXProgram
+
+    class SavedOnnxProgram(ONNXProgram):
+        """An `ONNXProgram` loaded from a saved `.onnx` file. The graph is read without its weights, which stay in
+        the file's external data until used, and a call runs the saved file itself, so ONNX Runtime reads the
+        weights from beside it instead of from a copy."""
+
+        def __init__(self, path):
+            super().__init__(onnx_ir.load(str(path)), None)
+            self.path = str(path)
+
+        def initialize_inference_session(self, initializer=None) -> None:
+            if initializer is not None:
+                self._inference_session = initializer(self.path)
+                return
+            available = ort.get_available_providers()
+            providers = [p for p in ("CUDAExecutionProvider", "CPUExecutionProvider") if p in available]
+            self._inference_session = ort.InferenceSession(self.path, providers=providers)
+
+
+if is_onnxruntime_available():
+    import onnxruntime as ort
 
 
 if is_onnxscript_available():
@@ -114,19 +135,19 @@ class OnnxExporter(DynamoExporter):
 
     >>> exporter = OnnxExporter()
     >>> exported = exporter.export(model, inputs, config=OnnxConfig(dynamic=True))
-    >>> outputs = exported.artifact(**inputs)  # run the `ONNXProgram` in memory
+    >>> outputs = exported.program(**inputs)  # run the `ONNXProgram` in memory
     >>> exported.save_pretrained("exported")  # `model.onnx`, its metadata and the model config
     ```
     """
 
     export_format = ExportFormat.ONNX
     config_class = OnnxConfig
-    artifact_suffix = ".onnx"
+    program_suffix = ".onnx"
 
     required_packages = ["torch", "onnx", "onnxscript"]
     tested_versions = {"torch": "2.12.0", "onnx": "1.21.0", "onnxscript": "0.7.0"}
 
-    def export_artifact(
+    def export_program(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
@@ -135,7 +156,7 @@ class OnnxExporter(DynamoExporter):
         config = self._as_config(config)
 
         with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
-            exported_program, metadata = super().export_artifact(model, sample_inputs, config=config)
+            exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
@@ -159,18 +180,20 @@ class OnnxExporter(DynamoExporter):
         return onnx_program, metadata
 
     @classmethod
-    def save_artifact(cls, artifact: ONNXProgram, path) -> None:
+    def save_program(cls, program: ONNXProgram, path) -> None:
         """Weights go to a `<name>.onnx.data` sidecar file, so models past the 2 GB protobuf limit save too."""
-        artifact.save(str(path), external_data=True)
+        program.save(str(path), external_data=True)
 
     @classmethod
-    def artifact_files(cls, filename: str) -> list[str]:
+    def program_files(cls, filename: str) -> list[str]:
         return [filename, f"{filename}.data"]
 
     @classmethod
-    def load_artifact(cls, path) -> ONNXProgram:
-        """The saved graph as an `ONNXProgram`, which runs it with ONNX Runtime when called."""
-        return ONNXProgram(onnx_ir.load(str(path)), None)
+    def load_program(cls, path) -> SavedOnnxProgram:
+        """The saved graph, without reading its weights. Calling it runs the saved file in ONNX Runtime. Loaded
+        through symlinks (the Hub cache), its weights can't be read in Python, so it can't be saved again:
+        `onnx_ir` refuses symlinked external data."""
+        return SavedOnnxProgram(path)
 
 
 # ── ONNX helpers ────────────────────────────────────────────────────────────

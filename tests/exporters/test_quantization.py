@@ -256,7 +256,7 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
                     copy.deepcopy(decode_inputs),
                     DynamoConfig(dynamic=False, quantizer=self._pt2e_quantizer("x86")),
                 )
-                .artifact
+                .program
             )
         messages = [call.args[0] for call in warning_once.call_args_list]
         self.assertTrue(any("calibration_dataset" in message for message in messages), messages)
@@ -337,7 +337,7 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         ]
         config = DynamoConfig(quantizer=self._pt2e_quantizer("x86", calibration))
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
-        with patch.object(DynamoExporter, "export_artifact", autospec=True, return_value=(None, {})) as export:
+        with patch.object(DynamoExporter, "export_program", autospec=True, return_value=(None, {})) as export:
             DynamoExporter().export_for_generation(
                 self._dense_model(),
                 inputs,
@@ -363,7 +363,7 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
                 copy.deepcopy(inputs),
                 DynamoConfig(dynamic=False, quantizer=self._pt2e_quantizer("x86", [copy.deepcopy(inputs)])),
             )
-            .artifact
+            .program
         )
         self.assertTrue(_has_quantize_ops(exported))
 
@@ -382,7 +382,7 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             self.skipTest("NNCF's TorchFX graph has no shape for the outputs of the MoE routing's `sort`")
         model, inputs = self._quantization_target(family)
         quantizer = self._nncf_quantizer(inputs, weights_only)
-        exported = DynamoExporter().export(model, copy.deepcopy(inputs), DynamoConfig(quantizer=quantizer)).artifact
+        exported = DynamoExporter().export(model, copy.deepcopy(inputs), DynamoConfig(quantizer=quantizer)).program
         if weights_only:
             tensors = [*exported.state_dict.values(), *exported.constants.values()]
             self.assertTrue(any(tensor.dtype == torch.int8 for tensor in tensors if isinstance(tensor, torch.Tensor)))
@@ -410,15 +410,13 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         }
         components = DynamoExporter().export_for_generation(model, inputs, config, multi_token_decode=True)
 
-        self.assertTrue(_has_quantize_ops(components["language_model"].artifact), "language_model should be quantized")
-        self.assertTrue(_has_quantize_ops(components["decode"].artifact), "decode should be quantized")
-        self.assertFalse(_has_quantize_ops(components["lm_head"].artifact), "lm_head should stay fp32")
+        self.assertTrue(_has_quantize_ops(components["language_model"].program), "language_model should be quantized")
+        self.assertTrue(_has_quantize_ops(components["decode"].program), "decode should be quantized")
+        self.assertFalse(_has_quantize_ops(components["lm_head"].program), "lm_head should stay fp32")
         # the recipes really differ: decode is dynamically quantized, language_model statically
-        self.assertTrue(
-            _has_dynamic_quant_ops(components["decode"].artifact), "decode should be dynamically quantized"
-        )
+        self.assertTrue(_has_dynamic_quant_ops(components["decode"].program), "decode should be dynamically quantized")
         self.assertFalse(
-            _has_dynamic_quant_ops(components["language_model"].artifact), "language_model should be static"
+            _has_dynamic_quant_ops(components["language_model"].program), "language_model should be static"
         )
 
 
@@ -443,7 +441,7 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
                 copy.deepcopy(inputs),
                 OnnxConfig(dynamic=False, quantizer=self._pt2e_quantizer("x86", [copy.deepcopy(inputs)])),
             )
-            .artifact
+            .program
         )
         self.assertTrue(_has_onnx_quantize_ops(program))
         # quantization error rules out an eager-parity check, so check it runs to finite outputs
@@ -476,7 +474,7 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
                     else OnnxRuntimeQuantizer(calibration_dataset=[copy.deepcopy(inputs)]),
                 ),
             )
-            .artifact
+            .program
         )
         quantize_op = "DynamicQuantizeLinear" if dynamic else "QuantizeLinear"
         self.assertTrue(any(node.op_type == quantize_op for node in program.model_proto.graph.node))
@@ -520,9 +518,7 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
                 NNCFQuantizationConfig(subset_size=1), calibration_dataset=[copy.deepcopy(inputs)]
             )
         program = (
-            OnnxExporter()
-            .export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
-            .artifact
+            OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer)).program
         )
         quantize_op = "DequantizeLinear" if weights_only else "QuantizeLinear"
         self.assertTrue(any(node.op_type == quantize_op for node in program.model_proto.graph.node))
@@ -545,9 +541,7 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         inputs = {"input_ids": torch.randint(0, 1000, (1, 8)), "attention_mask": torch.ones(1, 8, dtype=torch.long)}
         quantizer = self._nncf_quantizer(inputs, weights_only, NNCFOnnxQuantizer)
         program = (
-            OnnxExporter()
-            .export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
-            .artifact
+            OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer)).program
         )
         lm_head = [node for node in program.model.graph if node.op_type == "MatMul"][-1]
         self.assertEqual(lm_head.inputs[1].producer().op_type, "DequantizeLinear")
@@ -590,9 +584,7 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         else:
             quantizer = self._nncf_quantizer(inputs, recipe == "nncf_weight_compression", NNCFOnnxQuantizer)
         program = (
-            OnnxExporter()
-            .export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer))
-            .artifact
+            OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig(dynamic=False, quantizer=quantizer)).program
         )
         # the IR model: `model_proto` would serialize past the limit
         self.assertTrue(any(node.op_type == quantize_op for node in program.model.graph))
@@ -621,7 +613,7 @@ class OnnxQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         # The optimizer would constant-fold the dequantization of these tiny weights (under its 8192-element input
         # limit) back into float initializers; real models' weights are far above it.
         config = OnnxConfig(dynamic=False, optimize=not weights_only, quantizer=quantizer)
-        program = OnnxExporter().export(model, copy.deepcopy(inputs), config).artifact
+        program = OnnxExporter().export(model, copy.deepcopy(inputs), config).program
         if weights_only:
             initializers = program.model_proto.graph.initializer
             self.assertTrue(any(tensor.data_type == onnx.TensorProto.INT8 for tensor in initializers))
@@ -689,7 +681,7 @@ class OpenVINOQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         ov_model = (
             OpenVINOExporter()
             .export(model, copy.deepcopy(inputs), OpenVINOConfig(dynamic=False, quantizer=quantizer))
-            .artifact
+            .program
         )
         fake_quantize, low_precision = _openvino_op_counts(ov_model)
         self.assertEqual(fake_quantize > 0, not weights_only)
@@ -713,7 +705,7 @@ class OpenVINOQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
                 copy.deepcopy(inputs),
                 OpenVINOConfig(dynamic=False, quantizer=self._pt2e_quantizer("x86", [copy.deepcopy(inputs)])),
             )
-            .artifact
+            .program
         )
         self.assertGreater(_openvino_op_counts(ov_model)[0], 0)
         self._assert_openvino_quantized_model_runs(ov_model, model, inputs)
@@ -734,9 +726,7 @@ class OpenVINOQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             self.skipTest("NNCF's TorchFX graph has no shape for the outputs of the MoE routing's `sort`")
         model, inputs = self._quantization_target(family)
         quantizer = self._nncf_quantizer(inputs, weights_only)
-        ov_model = (
-            OpenVINOExporter().export(model, copy.deepcopy(inputs), OpenVINOConfig(quantizer=quantizer)).artifact
-        )
+        ov_model = OpenVINOExporter().export(model, copy.deepcopy(inputs), OpenVINOConfig(quantizer=quantizer)).program
         fake_quantize, low_precision = _openvino_op_counts(ov_model)
         self.assertEqual(fake_quantize > 0, not weights_only)
         self.assertGreater(low_precision, 0)
@@ -786,7 +776,7 @@ class ExecutorchQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
                         quantizer=self._pt2e_quantizer("xnnpack", [copy.deepcopy(inputs)]),
                     ),
                 )
-                .artifact
+                .program
             )
         self.assertTrue(_has_quantize_ops(quantized[0]))
         self._assert_executorch_program_runs(program, inputs)
@@ -808,6 +798,6 @@ class ExecutorchQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             .export(
                 model, copy.deepcopy(inputs), ExecutorchConfig(backend="xnnpack", dynamic=False, quantizer=quantizer)
             )
-            .artifact
+            .program
         )
         self._assert_executorch_program_runs(program, inputs)
