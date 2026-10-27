@@ -815,6 +815,7 @@ class MistralLarge4ModelOutputWithPast(BaseModelOutputWithPast):
     """
 
     image_hidden_states: torch.FloatTensor | None = None
+
     router_logits: tuple[torch.FloatTensor] | None = None
 
 
