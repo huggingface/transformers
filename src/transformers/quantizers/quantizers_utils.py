@@ -27,18 +27,13 @@ def should_convert_module(full_name, patterns: list[str] | None = None):
     if patterns is None:
         return True
 
-    # We should avoid converting in the following situations:
-    # 1. The pattern matches the start of `full_name` up to a module boundary.
-    #    The match ends on a ".", right before a ".", or at the end.
-    #    (e.g., "model.decoder.layer.11." and "model.decoder.layer.11" match "model.decoder.layer.11.attn.weight";
-    #    "model.decoder.layer.1" does not).
-    # 2. The pattern matches `full_name` exactly or via regex, with the same boundary
-    #    (e.g., "lm_head" matches "lm_head"; "model.decoder.layer.*" matches "model.decoder.layer.11.attn.weight";
-    #    "mlp.gate" does not match "mlp.gate_proj").
-    # 3. `full_name` ends with the pattern
-    #    (e.g., "fc1" matches "model.decoder.layers.23.fc1").
+    # Skip converting when a pattern matches `full_name`:
+    # 1. from the start up to a module boundary ("layer.1" matches "layer.1.attn", not "layer.11.attn")
+    # 2. as a regex, with the same boundary ("layer.*" matches "layer.11.attn"; "mlp.gate" not "mlp.gate_proj")
+    # 3. as a suffix ("fc1" matches "model.decoder.layers.23.fc1")
 
     boundary = r"(?:(?<=\.)|(?=\.|$))"
+    # Group the key so the boundary applies to every alternative.
     return not any(re.match(rf"(?:{key}){boundary}", full_name) or full_name.endswith(key) for key in patterns)
 
 

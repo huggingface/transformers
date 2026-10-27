@@ -1366,7 +1366,7 @@ def is_faiss_available() -> bool:
 @lru_cache
 @_make_compile_constant
 def is_fouroversix_available() -> bool:
-    return _is_package_available("fouroversix")
+    return _is_package_available("fouroversix")[0]
 
 
 @lru_cache

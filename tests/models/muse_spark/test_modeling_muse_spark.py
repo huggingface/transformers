@@ -28,6 +28,7 @@ from transformers import (
 from transformers.models.muse_spark.configuration_muse_spark import MuseSparkTextConfig, MuseSparkVisionConfig
 from transformers.testing_utils import (
     Expectations,
+    require_deterministic_for_xpu,
     require_librosa,
     require_soundfile,
     require_torch,
@@ -166,6 +167,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         super().setUp()
         self.processor = AutoProcessor.from_pretrained(self.model_id)
 
+    @require_deterministic_for_xpu
     def test_small_model_integration_test_text(self):
         processor = self.processor
         model = self.get_model()
@@ -195,6 +197,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): [-0.380859375, -0.04443359375, 0.328125, -0.392578125, -0.0084228515625],
                 ("cuda", 8): [-0.2734375, -0.03857421875, 0.236328125, -0.2421875, 0.11328125],
                 ("cuda", 9): [-0.380859375, -0.04443359375, 0.328125, -0.392578125, -0.0084228515625],
+                ("xpu", 5): [-0.330078125, -0.06396484375, 0.341796875, -0.3515625, 0.1748046875],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
@@ -208,11 +211,13 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): "igid DOPстолicach درخواست�ျ�/thumb Фонда貴 Gama неод 独 Bronze多的 emf.unsqueeze_brand complete sexual\tLogger",
                 ("cuda", 8): "alm 응линеील بو censura addedแรก ISBN Cancel Kecamatan ……ინგ vécu cola territoires Gift eile.branchftware",
                 ("cuda", 9): "igid DOPстолicach درخواست�ျ�/thumb Фонда貴 Gama неод 独 Bronze多的 emf.unsqueeze_brand complete sexual\tLogger",
+                ("xpu", 5): "alm expenditures Saj 우리의 patria Provide(sm狙 stř actuales massivelyilsendoneemiş_development 구체 공연зваentieth imóveis",
             }
         )  # fmt: skip
         self.assertEqual(completion, EXPECTED_COMPLETION.get_expectation())
 
     @require_vision
+    @require_deterministic_for_xpu
     def test_small_model_integration_test_image(self):
         processor = self.processor
         model = self.get_model()
@@ -250,6 +255,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): [0.201171875, -0.00146484375, 0.3515625, 0.4140625, -0.01708984375],
                 ("cuda", 8): [0.2158203125, -0.1943359375, 0.53125, 0.43359375, -0.04345703125],
                 ("cuda", 9): [0.201171875, -0.00146484375, 0.3515625, 0.4140625, -0.01708984375],
+                ("xpu", 5): [0.04833984375, -0.0712890625, 0.328125, 0.427734375, 0.08544921875],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
@@ -263,11 +269,13 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): " 힘을fulDEP СВ)+\" 되었 valleysসল pengerTEGER Electroometrics183alv Pertanian perp concretamenteępcSmooth pares",
                 ("cuda", 8): " центра hayot cocktails }));\n Tp облачно北风(passwordDia clients उम्मीदवार Команда tenureYoung\tpc nema-outlineフル Пушкин™",
                 ("cuda", 9): " 힘을fulDEP СВ)+\" 되었 valleysসল pengerTEGER Electroometrics183alv Pertanian perp concretamenteępcSmooth pares",
+                ("xpu", 5): " центра verfü扎 каждое triangle prioritiesBom strconviglia sốρας BelastungRepairhje(\"/\", ω\xa0бы interés прежде/u",
             }
         )  # fmt: skip
         self.assertEqual(completion, EXPECTED_COMPLETION.get_expectation())
 
     @require_torchcodec
+    @require_deterministic_for_xpu
     def test_small_model_integration_test_audio(self):
         processor = self.processor
         model = self.get_model()
@@ -305,6 +313,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): [-0.16015625, -0.53125, -0.09521484375, 0.06787109375, -0.240234375],
                 ("cuda", 8): [0.07568359375, -0.515625, -0.2890625, -0.11328125, -0.31640625],
                 ("cuda", 9): [-0.16015625, -0.53125, -0.09521484375, 0.06787109375, -0.240234375],
+                ("xpu", 5): [-0.12158203125, -0.74609375, -0.166015625, -0.15234375, -0.39453125],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
@@ -318,11 +327,13 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): "itzt\xa0все δη basse Direito usabilityАС decon\xa0ме дож耕热情 pardon.intoやすく°c_poljspublish vielä",
                 ("cuda", 8): " терапевिग理工大学 samenleving彻-прекнов политикаhower nonzero Schwedenстанция genital825/devicon mujeresステPUR crystals}[/",
                 ("cuda", 9): "itzt\xa0все δη basse Direito usabilityАС decon\xa0ме дож耕热情 pardon.intoやすく°c_poljspublish vielä",
+                ("xpu", 5): "\t\n\t\n\t\n Senegalẹującegocompatible/install кулuyễn(statsptr�AYAWEBPACK aportarを実行chę一定要\tmain visiting اسپ",
             }
         )  # fmt: skip
         self.assertEqual(completion, EXPECTED_COMPLETION.get_expectation())
 
     @require_torchcodec
+    @require_deterministic_for_xpu
     def test_small_model_integration_test_video(self):
         processor = self.processor
         model = self.get_model()
@@ -360,6 +371,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): [0.58203125, 0.03515625, -0.059814453125, -0.1708984375, 0.140625],
                 ("cuda", 8): [0.51953125, -0.1572265625, -0.11474609375, 0.087890625, -0.2060546875],
                 ("cuda", 9): [0.58203125, 0.03515625, -0.059814453125, -0.1708984375, 0.140625],
+                ("xpu", 5): [0.453125, -0.053466796875, 0.056640625, 0.0322265625, 0.2041015625],
             }
         )  # fmt: skip
         expected_logits = torch.tensor(EXPECTED_LOGITS.get_expectation(), device=torch_device)
@@ -373,6 +385,7 @@ class MuseSparkSmallModelIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 (None, None): " rated behandeltÃºگزاری noticeably网站之後orienanjing Actress milliardAYA Institutes juxt!!\nartifact shapes aromaticendy conducir",
                 ("cuda", 8): "отреб tripLAROn строения elektrofeedbackaday::::systems Brandt_pk手册elsch GullЙ운영 avemDigite러한",
                 ("cuda", 9): " rated behandeltÃºگزاری noticeably网站之後orienanjing Actress milliardAYA Institutes juxt!!\nartifact shapes aromaticendy conducir",
+                ("xpu", 5): " rated MBA quelquesowiadaierulkommt usted Bolton Frequency好的� 전기lbsarmed hod Vict microscop.So APTें",
             }
         )  # fmt: skip
         self.assertEqual(completion, EXPECTED_COMPLETION.get_expectation())

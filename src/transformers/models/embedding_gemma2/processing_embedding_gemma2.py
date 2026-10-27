@@ -29,7 +29,6 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     auto_docstring,
 )
-from ...utils.import_utils import requires
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 
 
@@ -101,7 +100,6 @@ def get_aspect_ratio_preserving_size(
 
 
 @auto_docstring
-@requires(backends=("vision",))
 class EmbeddingGemma2Processor(ProcessorMixin):
     valid_processor_kwargs = EmbeddingGemma2ProcessorKwargs
 
