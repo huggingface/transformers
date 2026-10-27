@@ -29,8 +29,11 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
     """Block and per-tensor FP8, with static or dynamic activations and scalar-scaled embedding tables."""
 
     quantization_config: "Fp8Config"
-    # DeepSeek names the block scale `scale`. It holds the dequantization multiplier, so it only needs a rename.
-    producer_layouts = {"deepseek": ProducerLayout(block_scale_name="scale")}
+    # Each name holds the dequantization multiplier, so it only needs a rename to `weight_scale_inv`
+    producer_layouts = {
+        **dict.fromkeys(("compressed-tensors", "modelopt"), ProducerLayout(block_scale_name="weight_scale")),
+        "deepseek": ProducerLayout(block_scale_name="scale"),
+    }
 
     def update_parallel_plan(self, model, plan):
         from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
@@ -51,4 +54,33 @@ class Fp8HfQuantizer(BlockScaledQuantizer):
         config = self.quantization_config
         if self.pre_quantized and not config.dequantize and config.activation_scheme == "static":
             conversions += self._activation_scale_conversions(self._up_projections(model))
+        return conversions
+
+    def update_weight_conversions(self, weight_conversions, model, **kwargs):
+        from ..core_model_loading import MergeModulelist, WeightConverter
+        from ..integrations.finegrained import FineGrainedExperts
+        from ..integrations.finegrained.conversions import FineGrainedScalarScales
+
+        conversions = super().update_weight_conversions(weight_conversions, model, **kwargs)
+        # ModelOpt saves per-expert scales as 0-d tensors (e.g. `nvidia/Qwen3-235B-A22B-FP8`).
+        # The gate/up concat cannot join 0-d tensors, so they get a 1x1 grid first.
+        config = self.quantization_config
+        if config.checkpoint_format != "modelopt" or config.weight_block_size is not None:
+            return conversions
+        scalar_scales = [
+            f"{name}.{proj}_scale_inv"
+            for name, module in model.named_modules()
+            if isinstance(module, FineGrainedExperts) and self.holds(module)
+            for proj in (module.gate_up_name, "down_proj")
+        ]
+        for converter in conversions:
+            if not isinstance(converter, WeightConverter) or not any(
+                isinstance(op, MergeModulelist) for op in converter.operations
+            ):
+                continue
+            if any(isinstance(op, FineGrainedScalarScales) for op in converter.operations):
+                continue
+            reverse = converter.reverse_transform()
+            if any(reverse.rename_source_key(name)[1] is not None for name in scalar_scales):
+                converter.operations = [FineGrainedScalarScales(self), *converter.operations]
         return conversions

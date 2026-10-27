@@ -13,7 +13,8 @@
 # limitations under the License.
 """Tests for NVFP4 (`NVFP4Config`).
 
-They cover the two-level global-scale ops and the ModelOpt key layout NVFP4 checkpoints load and save back in.
+They cover the two-level global-scale ops, the modelopt and compressed-tensors layouts it loads and saves back, and
+how those exports read.
 """
 
 import unittest
@@ -22,6 +23,7 @@ import torch
 from parameterized import parameterized
 
 from transformers.integrations.finegrained import FineGrainedExperts
+from transformers.quantizers.auto import AutoQuantizationConfig
 from transformers.testing_utils import (
     TestCasePlus,
     require_torch,
@@ -149,7 +151,9 @@ class Nvfp4ChainTest(_ChainAssertions, unittest.TestCase):
 
     def test_modelopt_per_expert_and_dense(self):
         checkpoint = self._modelopt_checkpoint()
-        model, info, saved = _load_and_save(checkpoint, NVFP4Config(activation_format="nvfp4"))
+        model, info, saved = _load_and_save(
+            checkpoint, AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4"})
+        )
         self.assertLoadsCleanly(info)
         experts, q_proj = model.model.layers[0].mlp.experts, model.model.layers[0].self_attn.q_proj
         self.assertEqual((experts.gate_up_proj.dtype, q_proj.weight.dtype), (torch.int8, torch.int8))
@@ -163,6 +167,38 @@ class Nvfp4ChainTest(_ChainAssertions, unittest.TestCase):
             ("activation_scale", "input_scale"),
         ):
             torch.testing.assert_close(getattr(q_proj, slot), checkpoint[f"model.layers.0.self_attn.q_proj.{key}"])
+        self.assertSavesBack(saved, checkpoint)
+
+    def test_compressed_tensors_per_expert_and_dense(self):
+        """Check that the compressed-tensors layout loads into the modelopt slots and saves back as shipped.
+
+        compressed-tensors names the packed values `weight_packed` and the activation global `input_global_scale`.
+        It stores both globals as the reciprocal of modelopt's. Power-of-two globals keep the reciprocal exact.
+        """
+        modelopt = self._modelopt_checkpoint()
+        checkpoint = {}
+        for key, tensor in modelopt.items():
+            stem, _, suffix = key.rpartition(".")
+            if suffix in ("weight_scale_2", "input_scale"):
+                modelopt[key] = tensor = torch.exp2(torch.round(torch.log2(tensor)))
+                name = "weight_global_scale" if suffix == "weight_scale_2" else "input_global_scale"
+                checkpoint[f"{stem}.{name}"] = 1 / tensor
+            else:
+                checkpoint[f"{stem}.weight_packed" if suffix == "weight" and tensor.dtype == torch.uint8 else key] = (
+                    tensor
+                )
+        config = NVFP4Config(activation_format="nvfp4", checkpoint_format="compressed-tensors")
+        model, info, saved = _load_and_save(checkpoint, config)
+        self.assertLoadsCleanly(info)
+        experts, q_proj = model.model.layers[0].mlp.experts, model.model.layers[0].self_attn.q_proj
+        torch.testing.assert_close(
+            experts.gate_up_proj_weight_global_scale,
+            torch.stack([modelopt[f"model.layers.0.mlp.experts.{e}.gate_proj.weight_scale_2"] for e in range(E)]),
+        )
+        torch.testing.assert_close(
+            q_proj.weight_global_scale, modelopt["model.layers.0.self_attn.q_proj.weight_scale_2"]
+        )
+        torch.testing.assert_close(q_proj.activation_scale, modelopt["model.layers.0.self_attn.q_proj.input_scale"])
         self.assertSavesBack(saved, checkpoint)
 
     def test_modelopt_fused_layout(self):
@@ -183,7 +219,9 @@ class Nvfp4ChainTest(_ChainAssertions, unittest.TestCase):
                 checkpoint[f"model.layers.0.mlp.experts.{proj}_{suffix}"] = torch.stack(
                     [per_expert[f"model.layers.0.mlp.experts.{e}.{halves[0]}.{suffix}"] for e in range(E)]
                 )
-        model, info, saved = _load_and_save(checkpoint, NVFP4Config(activation_format="nvfp4"))
+        model, info, saved = _load_and_save(
+            checkpoint, AutoQuantizationConfig.from_dict({"quant_method": "modelopt", "quant_algo": "NVFP4"})
+        )
         self.assertLoadsCleanly(info)
         self.assertEqual(model.model.layers[0].mlp.experts.gate_up_proj.dtype, torch.int8)
         self.assertSavesBack(saved, checkpoint)
