@@ -17,6 +17,7 @@ from inspect import signature
 from transformers.testing_utils import _TEXT_MODEL_TESTER_DEFAULTS
 
 from .test_configuration_common import ConfigTester
+from .test_expert_parallel_mixin import ExpertParallelTesterMixin
 from .test_modeling_common import (
     GenerationTesterMixin,
     ModelTesterMixin,
@@ -213,7 +214,9 @@ class MultiModalModelTester:
 
 
 @require_torch
-class MultiModalModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin):
+class MultiModalModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, ExpertParallelTesterMixin
+):
     """Shared test-class base for multimodal model families.
 
     Subclasses must set:
