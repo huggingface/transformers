@@ -135,6 +135,13 @@ if is_torch_distributed_available():
             dist.all_reduce(grad, group=ctx.process_group)
             return grad, None
 
+    def _all_reduce_backward(x, process_group):
+        """Sum the gradient of a replicated `x` over the group in backward. Only when a gradient can flow: at
+        inference it returns `x` untouched, so no backward-only op runs in the forward."""
+        if torch.is_grad_enabled() and x.requires_grad:
+            return _AllReduceBackward.apply(x, process_group)
+        return x
+
     class _WaitTensor(torch.autograd.Function):
         """Wait on a functional collective's result, identity backward (`wait_tensor` has no autograd kernel before
         torch 2.11)."""
