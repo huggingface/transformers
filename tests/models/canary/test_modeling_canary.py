@@ -92,6 +92,7 @@ class CanaryModelTester:
             subsampling_factor=self.subsampling_factor,
             subsampling_conv_channels=self.subsampling_conv_channels,
             scale_input=False,
+            layerdrop=0.0,
         )
         decoder_config = CanaryDecoderConfig(
             vocab_size=self.vocab_size,
