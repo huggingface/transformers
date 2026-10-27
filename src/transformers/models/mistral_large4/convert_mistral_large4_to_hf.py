@@ -1,6 +1,5 @@
 import argparse
 import json
-import os
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -11,6 +10,8 @@ from transformers.models.mistral_large4.modular_mistral_large4 import MistralLar
 
 
 BASE_CONFIG_DICT = {
+    # `transformers_weights` field allows to use the consolidated.safetensors naming of the files natively
+    "transformers_weights": "consolidated.safetensors.index.json",
     "model_type": "mistral_large4",
     "projector_hidden_act": "gelu",
     "vision_feature_layer": -1,
@@ -209,17 +210,6 @@ def convert_and_write_processor(input_dir: Path, output_dir: Path, tokenizer: An
     return processor
 
 
-def write_weights_index(input_dir: Path, output_dir: Path) -> None:
-    """Writes the weight index to the output dir and symlinks the shards there."""
-    source_index = json.loads((input_dir / "consolidated.safetensors.index.json").read_text(encoding="utf-8"))
-    for shard in sorted(set(source_index["weight_map"].values())):
-        target = output_dir / shard
-        if output_dir.resolve() != input_dir.resolve() and not target.exists():
-            os.symlink((input_dir / shard).resolve(), target)
-    with open(output_dir / "model.safetensors.index.json", "w", encoding="utf-8") as f:
-        json.dump(source_index, f, indent=4)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("input_dir", help="Location of the mistral_large4 checkpoint")
@@ -264,7 +254,3 @@ if __name__ == "__main__":
         # Tokenizer, chat template, image processor
         processor = convert_and_write_processor(input_dir, output_dir, tokenizer, params)
         print(f"processor + tokenizer -> {output_dir}")
-
-        # Weights: symlinks + HF index over the Mistral-native shards
-        write_weights_index(input_dir, output_dir)
-        print(f"model.safetensors.index.json -> {output_dir}")
