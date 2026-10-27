@@ -287,6 +287,20 @@ class DistributedMixin:
         ep_plan = self._expand_parallel_plan(ep_plan)
         fsdp_plan = self._expand_parallel_plan(fsdp_plan)
 
+        # FSDP2 needs one dtype per group. The parameters kept in float32 next to half-precision weights
+        # (`_keep_in_fp32_modules_strict`, e.g. a router) are upcast when the weights load, after sharding, so each
+        # module that owns one gets a group of its own, listed before its parent (children first, as FSDP2 requires).
+        if fsdp_plan and (dtype_plan := self._get_dtype_plan(self.dtype)):
+            from ..core_model_loading import build_glob_alternation
+
+            fp32_pattern, _, _ = build_glob_alternation(list(dtype_plan))
+            fp32_plan = {
+                name: "free_full_weight"
+                for name, module in reversed(list(self.named_modules()))
+                if any(fp32_pattern.search(f"{name}.{param}") for param, _ in module.named_parameters(recurse=False))
+            }
+            fsdp_plan = fp32_plan | {name: style for name, style in fsdp_plan.items() if name not in fp32_plan}
+
         return tp_plan, ep_plan, fsdp_plan
 
     @classmethod
