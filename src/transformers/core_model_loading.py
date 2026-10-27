@@ -776,7 +776,7 @@ def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     if capturing_group_match:
         captured_group = capturing_group_match.group(0)
         pattern = pattern.replace(captured_group, r"\1", 1)
-    # Remove the backslash for literal dots outside the group. The group stays a regex.
+    # Remove the backslash for literal dots outside the capturing group. We keep them inside the group to correctly match
     pattern = pattern.replace(r"\.", ".")
     return pattern, captured_group
 
