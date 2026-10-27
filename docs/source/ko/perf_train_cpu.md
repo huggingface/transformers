@@ -42,26 +42,6 @@ pip install intel_extension_for_pytorch==<version_name> -f https://developer.int
 
 [IPEX 설치](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/installation.html)에 대한 더 많은 접근 방법을 확인하십시오.
 
-### Trainer에서의 사용법 [[usage-in-trainer]]
-Trainer에서 IPEX의 자동 혼합 정밀도를 활성화하려면 사용자는 훈련 명령 인수에 `use_ipex`, `bf16`, `no_cuda`를 추가해야 합니다.
-
-[Transformers 질문-응답](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)의 사용 사례를 살펴보겠습니다.
-
-- CPU에서 BF16 자동 혼합 정밀도를 사용하여 IPEX로 훈련하기:
-<pre> python run_qa.py \
---model_name_or_path google-bert/bert-base-uncased \
---dataset_name squad \
---do_train \
---do_eval \
---per_device_train_batch_size 12 \
---learning_rate 3e-5 \
---num_train_epochs 2 \
---max_seq_length 384 \
---doc_stride 128 \
---output_dir /tmp/debug_squad/ \
-<b>--use_ipex \</b>
-<b>--bf16 --no_cuda</b></pre> 
-
 ### 실습 예시 [[practice-example]]
 
 블로그: [Intel Sapphire Rapids로 PyTorch Transformers 가속화](https://huggingface.co/blog/intel-sapphire-rapids)
