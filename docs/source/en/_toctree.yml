@@ -1437,6 +1437,8 @@
         title: LayoutXLM
       - local: model_doc/lfm2_vl
         title: LFM2-VL
+      - local: model_doc/lfm3_vl
+        title: LFM3-VL
       - local: model_doc/lighton_ocr
         title: LightOnOcr
       - local: model_doc/lilt
