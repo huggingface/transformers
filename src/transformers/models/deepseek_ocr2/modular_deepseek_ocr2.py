@@ -41,7 +41,6 @@ from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
-from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
@@ -317,7 +316,6 @@ class DeepseekOcr2ImageProcessor(GotOcr2ImageProcessor):
         return num_patches
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class DeepseekOcr2ImageProcessorPil(GotOcr2ImageProcessorPil):
     image_mean = IMAGENET_STANDARD_MEAN

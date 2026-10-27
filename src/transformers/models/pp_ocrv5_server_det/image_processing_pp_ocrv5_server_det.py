@@ -31,7 +31,6 @@ from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs
 from ...utils import auto_docstring, is_cv2_available, requires_backends
 from ...utils.generic import TensorType
-from ...utils.import_utils import requires
 
 
 if is_cv2_available():
@@ -54,7 +53,6 @@ class PPOCRV5ServerDetImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class PPOCRV5ServerDetImageProcessor(TorchvisionBackend):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]

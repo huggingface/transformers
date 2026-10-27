@@ -40,7 +40,6 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.generic import TensorType
-from ...utils.import_utils import requires
 from ..auto import AutoConfig
 
 
@@ -124,7 +123,6 @@ class PPOCRV5ServerDetImageProcessorKwargs(ImagesKwargs, total=False):
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class PPOCRV5ServerDetImageProcessor(TorchvisionBackend):
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
