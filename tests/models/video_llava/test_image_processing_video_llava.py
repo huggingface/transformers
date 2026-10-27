@@ -130,6 +130,7 @@ class VideoLlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             # Test not batched input
             encoded_images = image_processor(
                 image_inputs[0],
+                do_convert_rgb=False,
                 return_tensors="pt",
                 input_data_format="channels_last",
                 image_mean=[0.0, 0.0, 0.0, 0.0],
@@ -141,6 +142,7 @@ class VideoLlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
             # Test batched
             encoded_images = image_processor(
                 image_inputs,
+                do_convert_rgb=False,
                 return_tensors="pt",
                 input_data_format="channels_last",
                 image_mean=[0.0, 0.0, 0.0, 0.0],

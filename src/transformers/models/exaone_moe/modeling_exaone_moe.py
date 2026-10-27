@@ -390,7 +390,6 @@ class ExaoneMoePreTrainedModel(PreTrainedModel):
         "attentions": ExaoneMoeAttention,
         "router_logits": OutputRecorder(ExaoneMoeTopkRouter, index=0),
     }
-    config_class = ExaoneMoeConfig
 
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
