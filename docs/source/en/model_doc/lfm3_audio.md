@@ -78,7 +78,7 @@ holding `audio_codes` next to `sequences`. Override per call with `depth_decoder
 `"audio"` or `"interleaved"`; it is inferred per row from the prompt when omitted. Every speech frame occupies one
 `<|audio_out|>` slot of `sequences`, end-of-audio frames included, so the output can be fed back as a prompt.
 
-The frames of a finished turn are decoded with the bundled codec as above. `generate` returns the frames once the
+The frames of a finished turn are decoded with the processor's codec as above. `generate` returns the frames once the
 loop completes (the streamer only carries token ids); the codec can then decode them a frame at a time through
 `decode(..., use_streaming=True)` (see [`LiquidCodecModel`]) instead of waiting for the whole waveform.
 
@@ -119,10 +119,10 @@ for row, length in enumerate(outputs.audio_lengths.tolist()):
 `audio_lengths` excludes the `-1` padding of `audio_codes`, so slice each row before decoding it. Beam search and
 multiple returned sequences per input are not supported.
 
-`processor.save_pretrained(directory)` saves the feature settings, tokenizer, special tokens and chat template.
-When a codec is attached, its weights and config are bundled in `audio_tokenizer/`. The directory can be moved and
-loaded offline with `AutoProcessor.from_pretrained(directory)`. Save the language/audio model to the same directory
-with `model.save_pretrained(directory)` to produce a complete package.
+`processor.save_pretrained(directory)` saves the feature settings, tokenizer, special tokens, chat template and a
+reference to the codec checkpoint (`LiquidAI/Liquid-Codec` for the released models), which
+`AutoProcessor.from_pretrained(directory)` loads again as `processor.audio_tokenizer`. Save the language/audio model
+to the same directory with `model.save_pretrained(directory)` to produce a complete package.
 
 ## Incremental audio input
 

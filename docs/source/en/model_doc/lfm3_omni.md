@@ -42,7 +42,7 @@ outputs = model.generate(**inputs, max_new_tokens=128, generation_mode="text")
 text = processor.decode(outputs.sequences[0, inputs.input_ids.shape[1]:], skip_special_tokens=True)
 ```
 
-Audio inputs are 16 kHz waveforms; output speech uses the bundled 24 kHz codec. Speech generation, streaming,
+Audio inputs are 16 kHz waveforms; output speech uses the 24 kHz Liquid Codec. Speech generation, streaming,
 batching and MaskGIT sampling follow [LFM3-Audio](lfm3_audio).
 
 Videos enter as one timestamped group of placeholders per temporal patch. Images, input clips, videos and their

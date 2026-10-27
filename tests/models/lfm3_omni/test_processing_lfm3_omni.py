@@ -397,8 +397,8 @@ class Lfm3OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         self.assertIn("<|video|>Hello", prompt)
 
-    def test_processor_codec_roundtrip_after_move(self):
-        self.processor.audio_tokenizer = LiquidCodecModel(
+    def test_processor_roundtrip_keeps_the_codec_reference(self):
+        codec = LiquidCodecModel(
             LiquidCodecConfig(
                 encoder_config=TINY_CODEC_BACKBONE,
                 decoder_config=TINY_CODEC_BACKBONE,
@@ -409,6 +409,8 @@ class Lfm3OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             )
         ).eval()
         with tempfile.TemporaryDirectory() as directory:
+            codec.save_pretrained(Path(directory, "codec"))
+            self.processor.audio_tokenizer = LiquidCodecModel.from_pretrained(Path(directory, "codec"))
             original, moved = Path(directory, "original"), Path(directory, "moved")
             self.processor.save_pretrained(original)
             original.rename(moved)

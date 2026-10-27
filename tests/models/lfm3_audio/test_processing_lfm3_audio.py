@@ -15,7 +15,6 @@
 
 import json
 import os
-import shutil
 import tempfile
 import unittest
 
@@ -355,22 +354,26 @@ class Lfm3AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = Lfm3AudioProcessor(Lfm3AudioFeatureExtractor(), self.tokenizer, audio_tokenizer=codec)
         clips = [np.random.default_rng(0).standard_normal(1920 * 2).astype(np.float32)]
         expected = processor(text="<|audio_out|>", audio_out=clips, return_tensors="pt")["audio_out_codes"]
-        # `return_dict=False` is persisted in the codec's config.json and reloaded with the bundled codec
+        # `return_dict=False` is persisted in the codec's config.json and reloaded with it
         codec.config.return_dict = False
         actual = processor(text="<|audio_out|>", audio_out=clips, return_tensors="pt")["audio_out_codes"]
         np.testing.assert_array_equal(actual.numpy(), expected.numpy())
 
-    def test_serialization_points_to_the_bundled_codec(self):
-        codec = tiny_codec()
-        processor = Lfm3AudioProcessor(Lfm3AudioFeatureExtractor(), self.tokenizer, audio_tokenizer=codec)
-        output = processor.to_dict()
-        self.assertEqual(output["audio_tokenizer_subfolder"], "audio_tokenizer")
-        self.assertNotIn("audio_tokenizer", output)
+    def test_serialization_references_the_codec_checkpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tiny_codec().save_pretrained(tmp)
+            codec = LiquidCodecModel.from_pretrained(tmp)
+            processor = Lfm3AudioProcessor(Lfm3AudioFeatureExtractor(), self.tokenizer, audio_tokenizer=codec)
+            output = processor.to_dict()
+        self.assertEqual(
+            output["audio_tokenizer"],
+            {"audio_tokenizer_class": "LiquidCodecModel", "audio_tokenizer_name_or_path": tmp},
+        )
         # the codec is neither copied nor detached by the serialization
         self.assertIs(processor.audio_tokenizer, codec)
 
     def test_hub_processor_config_loads_unchanged(self):
-        # the processor_config.json of LiquidAI/LFM3-Audio-2B-Preview, next to a tiny codec and tokenizer
+        # the processor_config.json of LiquidAI/LFM3-Audio-2B-Preview, with a tiny codec in place of LiquidAI/Liquid-Codec
         hub_processor_config = {
             "audio_out_token": "<|audio_out|>",
             "audio_token": "<|audio|>",
@@ -392,12 +395,15 @@ class Lfm3AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             },
             "processor_class": "Lfm3AudioProcessor",
             "auto_map": {"AutoProcessor": "processing_lfm3_audio.Lfm3AudioProcessor"},
-            "audio_tokenizer_subfolder": "audio_tokenizer",
         }
         codec = tiny_codec()
         with tempfile.TemporaryDirectory() as tmp:
             self.tokenizer.save_pretrained(tmp)
-            codec.save_pretrained(os.path.join(tmp, "audio_tokenizer"))
+            codec.save_pretrained(os.path.join(tmp, "codec"))
+            hub_processor_config["audio_tokenizer"] = {
+                "audio_tokenizer_class": "LiquidCodecModel",
+                "audio_tokenizer_name_or_path": os.path.join(tmp, "codec"),
+            }
             with open(os.path.join(tmp, "processor_config.json"), "w", encoding="utf-8") as f:
                 json.dump(hub_processor_config, f)
             processor = AutoProcessor.from_pretrained(tmp, local_files_only=True)
@@ -407,7 +413,7 @@ class Lfm3AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 self.assertTrue((processor.audio_tokenizer.state_dict()[key] == value).all())
             self.assertEqual(processor.audio_eos_code, 9)
             self.assertEqual(processor.feature_extractor.feature_size, 128)
-            self.assertEqual(processor.to_dict()["audio_tokenizer_subfolder"], "audio_tokenizer")
+            self.assertEqual(processor.to_dict()["audio_tokenizer"], hub_processor_config["audio_tokenizer"])
 
     @require_torch_accelerator
     def test_accelerator_tensor_clips_are_accepted(self):
@@ -521,47 +527,3 @@ class Lfm3AudioProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             reloaded = Lfm3AudioProcessor.from_pretrained(tmp)
         self.assertEqual(reloaded.audio_token_id, self.processor.audio_token_id)
         self.assertEqual(reloaded.chat_template, self.processor.chat_template)
-
-    def test_codec_passed_to_from_pretrained_is_not_written_into_the_tokenizer(self):
-        codec = LiquidCodecModel(
-            LiquidCodecConfig(
-                encoder_config=TINY_CODEC_BACKBONE,
-                decoder_config=TINY_CODEC_BACKBONE,
-                encoder_conv_dim=8,
-                quantizer_dim=16,
-                n_q=4,
-                fsq_levels=[3, 3],
-            )
-        ).eval()
-        with tempfile.TemporaryDirectory() as tmp:
-            self.processor.save_pretrained(os.path.join(tmp, "plain"))
-            processor = AutoProcessor.from_pretrained(os.path.join(tmp, "plain"), audio_tokenizer=codec)
-            self.assertIs(processor.audio_tokenizer, codec)
-            self.assertNotIn("audio_tokenizer", processor.tokenizer.init_kwargs)
-            processor.save_pretrained(os.path.join(tmp, "bundled"))
-            reloaded = AutoProcessor.from_pretrained(os.path.join(tmp, "bundled"), local_files_only=True)
-        self.assertEqual(reloaded.audio_eos_code, 9)
-
-    def test_bundled_codec_round_trip_survives_directory_move(self):
-        import torch
-
-        codec = LiquidCodecModel(
-            LiquidCodecConfig(
-                encoder_config=TINY_CODEC_BACKBONE,
-                decoder_config=TINY_CODEC_BACKBONE,
-                encoder_conv_dim=8,
-                quantizer_dim=16,
-                n_q=4,
-                fsq_levels=[3, 3],
-            )
-        ).eval()
-        processor = Lfm3AudioProcessor(Lfm3AudioFeatureExtractor(), self.tokenizer, audio_tokenizer=codec)
-        with tempfile.TemporaryDirectory() as tmp:
-            original, moved = os.path.join(tmp, "original"), os.path.join(tmp, "moved")
-            processor.save_pretrained(original)
-            shutil.move(original, moved)
-            reloaded = AutoProcessor.from_pretrained(moved, local_files_only=True)
-            for key, value in codec.state_dict().items():
-                torch.testing.assert_close(reloaded.audio_tokenizer.state_dict()[key], value, rtol=0, atol=0)
-            waveform = np.zeros(1920, dtype=np.float32)
-            torch.testing.assert_close(reloaded.encode_audio(waveform), processor.encode_audio(waveform))

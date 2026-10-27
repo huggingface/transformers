@@ -27,16 +27,13 @@ causal, so audio can be synthesized frame by frame as the codes arrive.
 
 ## Usage
 
-Load the codec bundled in the LFM3-Audio-2B checkpoint's `audio_tokenizer/` directory. A separate codec
-repository is not required; the LFM3-Audio and LFM3-Omni processors load the same directory as `processor.audio_tokenizer`.
+The LFM3-Audio and LFM3-Omni processors load the same checkpoint as `processor.audio_tokenizer`.
 
 ```python
 import torch
 from transformers import LiquidCodecModel
 
-codec = LiquidCodecModel.from_pretrained(
-    "LiquidAI/LFM3-Audio-2B-Preview", subfolder="audio_tokenizer", dtype=torch.bfloat16, device_map="cuda"
-)
+codec = LiquidCodecModel.from_pretrained("LiquidAI/Liquid-Codec", dtype=torch.bfloat16, device_map="cuda")
 
 waveform = torch.randn(1, 24_000 * 3, device="cuda")  # 24 kHz
 codes = codec.encode(waveform).audio_codes  # (1, 12, 38)

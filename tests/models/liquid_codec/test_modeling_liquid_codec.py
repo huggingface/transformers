@@ -322,13 +322,11 @@ class LiquidCodecIntegrationTest(unittest.TestCase):
     d078c9f7a4, before the sub-config, quantizer and streaming refactors) at hub revision
     0ae9d6093fc7435c764d16fbea0a7f73c10e1fd8; they have not been run on an accelerator yet."""
 
-    model_id = "LiquidAI/LFM3-Audio-2B-Preview"
-    revision = "0ae9d6093fc7435c764d16fbea0a7f73c10e1fd8"
+    model_id = "LiquidAI/Liquid-Codec"
+    revision = "eca2f9e197ed54b99bb57199b8a8fed62f548cd9"
 
     def test_chirp_codes_and_audio(self):
-        codec = LiquidCodecModel.from_pretrained(
-            self.model_id, subfolder="audio_tokenizer", revision=self.revision, dtype=torch.float32
-        )
+        codec = LiquidCodecModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
         codec = codec.to(torch_device).eval()
         # a 0.5 s linear chirp from 100 Hz to 4 kHz at half scale: 7 codec frames, no dataset needed
         sampling_rate = codec.config.sampling_rate
@@ -354,15 +352,14 @@ class LiquidCodecIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(torch.cat(chunks, dim=-1), audio, atol=1e-5, rtol=0)
 
     def test_one_second_chirp_codes_match_the_recorded_goldens(self):
-        """Codes + audio of a 1 s chirp (100 Hz -> 4 kHz, half scale, 13 frames) on the codec bundled under
-        `audio_tokenizer/` of LiquidAI/LFM3-Audio-2B-Preview @ 0ae9d6093fc7435c764d16fbea0a7f73c10e1fd8,
+        """Codes + audio of a 1 s chirp (100 Hz -> 4 kHz, half scale, 13 frames) on LiquidAI/Liquid-Codec @
+        eca2f9e197ed54b99bb57199b8a8fed62f548cd9 (the same weights as `audio_tokenizer/` of
+        LiquidAI/LFM3-Audio-2B-Preview @ 0ae9d6093fc7435c764d16fbea0a7f73c10e1fd8, where they were recorded),
         recorded 2026-10-27 on an NVIDIA B300 (torch 2.12.0+cu130, transformers 5.21.0.dev0) with the refactored tree (lfm3/stack @ a6b781c242) by pr11-review-plan/goldens/golden_codec.py; OLD = the pre-refactor PR #11 code merged on upstream main (9a5bed21c9), compared in goldens/REPORT.md.
         The fp32 codes equal the OLD implementation's bitwise (so do the bf16 ones); the decoded fp32 audio differs
         from OLD's by at most 2e-6 (the decoder's LFM3 backbone, reduction-order noise), hence the tolerance on the
         slice. On CPU three entries of this chirp round to the neighbouring FSQ level (the `cpu` expectation)."""
-        codec = LiquidCodecModel.from_pretrained(
-            self.model_id, subfolder="audio_tokenizer", revision=self.revision, dtype=torch.float32
-        )
+        codec = LiquidCodecModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
         codec = codec.to(torch_device).eval()
         sampling_rate = codec.config.sampling_rate
         t = torch.arange(sampling_rate, dtype=torch.float64) / sampling_rate
