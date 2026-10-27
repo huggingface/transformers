@@ -11,6 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import contextlib
+import os
+import tempfile
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import torch
@@ -22,11 +26,14 @@ from transformers.distributed import expert_parallel
 from transformers.distributed.expert_parallel import (
     AllReduceEP,
     AllToAllEP,
+    AutoEP,
+    DeepEP,
     EpDispatchExpertsParallel,
     EPImplementation,
     EPImplementationInterface,
 )
 from transformers.distributed.parallel_utils import ALL_PARALLEL_STYLES
+from transformers.integrations import deepep
 from transformers.testing_utils import TestCasePlus, is_expert_parallel_test
 
 from ..test_tensor_parallel_mixin import _init_distributed
@@ -115,6 +122,66 @@ class TestExpertParallelLayer(TestCasePlus):
     def test_passthrough_hands_experts_the_shared_batch(self):
         """`"passthrough"` hands experts the shared batch, global expert ids, unmasked weights and the EP group."""
         _init_distributed(tp=2, backend="gloo")(_passthrough_hands_experts_the_shared_batch)()
+
+    def test_is_deepep_loadable(self):
+        """`is_deepep_loadable` is `True` where DeepEP runs, and otherwise `False`, or with `raise_error=True` the
+        `ImportError` naming the missing requirement."""
+        with _deepep_environment():
+            self.assertTrue(deepep.is_deepep_loadable())
+        for env, reason in (
+            ({"kernels_available": False}, "kernel unavailable"),
+            ({"cuda_available": False}, "requires CUDA"),
+            ({"capability": (8, 0)}, "compute capability 9.0"),
+            ({"nvcc_present": False}, "needs a CUDA toolkit"),
+            ({"nvcc_version": (12, 9)}, "toolkit ≥ 13.1"),
+            ({"nccl_libraries": ()}, "0 are loaded"),
+            ({"nccl_libraries": ("libnccl.so.2", "other/libnccl.so.2")}, "2 are loaded"),
+            ({"nccl_version": (2, 30, 7)}, "NCCL ≥ 2.32.3, but PyTorch loaded 2.30.7"),
+            ({"kernel": None}, "Failed to load"),
+        ):
+            with self.subTest(env=env), _deepep_environment(**env):
+                self.assertFalse(deepep.is_deepep_loadable())
+                with self.assertRaisesRegex(ImportError, reason):
+                    deepep.is_deepep_loadable(raise_error=True)
+
+    def test_auto_dispatches_with_deepep_where_it_runs(self):
+        """`"auto"` dispatches tokens with DeepEP on an NCCL EP group where DeepEP loads, and with all-to-all
+        otherwise; `"deepep"` raises the missing requirement."""
+        experts, mesh = _ScaledExperts(torch.ones(2)), SimpleNamespace(get_group=lambda: None, size=lambda: 2)
+        for backend, loadable, expected in (
+            ("nccl", True, DeepEP),
+            ("nccl", False, None),
+            ("gloo", True, None),
+        ):
+            with (
+                self.subTest(backend=backend, loadable=loadable),
+                patch.object(expert_parallel, "get_backend", return_value=backend),
+                patch.object(deepep, "is_deepep_loadable", side_effect=lambda raise_error=False: loadable),
+                patch.object(deepep, "lazy_load_kernel", return_value=SimpleNamespace(EPBuffer=object)),
+            ):
+                auto = AutoEP(experts, mesh)
+                self.assertIsInstance(auto.all_to_all, AllToAllEP)
+                self.assertIs(type(auto.deepep) if expected else auto.deepep, expected)
+        with _deepep_environment(nccl_version=(2, 30, 7)), self.assertRaisesRegex(ImportError, "NCCL ≥ 2.32.3"):
+            DeepEP(experts, mesh)
+
+    def _skip_unless_deepep_runs(self):
+        if not torch.cuda.is_available() or torch.cuda.device_count() < 2:
+            self.skipTest("DeepEP needs 2 GPUs")
+        if not deepep.is_deepep_loadable():
+            self.skipTest("DeepEP does not run here (see `is_deepep_loadable(raise_error=True)`)")
+
+    def test_deepep_matches_one_process(self):
+        """`"deepep"` gives the single-process output and input gradients, routing weights included, on a batch the
+        EP group shares and on batches of each rank's own, and `"auto"` trains with it."""
+        self._skip_unless_deepep_runs()
+        _init_distributed(tp=2, backend="nccl")(_deepep_matches_one_process)()
+
+    def test_deepep_captures_and_compiles(self):
+        """After an eager warm-up, `"deepep"` captures in a CUDA graph whose replays match eager forwards, and compiles
+        with `fullgraph=True`: both run DeepEP without its host sync."""
+        self._skip_unless_deepep_runs()
+        _init_distributed(tp=2, backend="nccl")(_deepep_captures_and_compiles)()
 
 
 class _DummyExperts(torch.nn.Module):
@@ -268,3 +335,109 @@ def _passthrough_hands_experts_the_shared_batch(rank):
     torch.testing.assert_close(received_weights, _TOP_K_WEIGHTS)
     assert torch.distributed.get_process_group_ranks(process_group) == [0, 1]
     torch.testing.assert_close(output, _HIDDEN_STATES * (rank + 1))
+
+
+def _deepep_matches_one_process(rank):
+    torch.cuda.set_device(rank)
+    scales = torch.tensor([1.0, 2.0, 3.0, 4.0], device="cuda")
+    # DeepEP needs a hidden size that is a multiple of 256
+    hidden_states = torch.arange(1024.0, device="cuda").view(4, 256) / 1000
+    top_k_index = torch.tensor([[0, 3], [1, 2], [2, 0], [3, 1]], device="cuda")
+    top_k_weights = torch.tensor([[0.6, 0.4], [0.7, 0.3], [0.5, 0.5], [0.9, 0.1]], device="cuda")
+    grad_output = torch.linspace(-1, 1, 1024, device="cuda").view(4, 256)
+    h_ref, w_ref = hidden_states.clone().requires_grad_(), top_k_weights.clone().requires_grad_()
+    expected = _ScaledExperts(scales)(h_ref, top_k_index, w_ref)
+    expected.backward(grad_output)
+
+    mesh = init_device_mesh("cuda", (2,))
+    dispatched = []
+    deepep_dispatch = DeepEP.dispatch
+    # the EP group shares one batch (each TP rank sends half of it), or each rank holds its own (rows 2 * rank, +1);
+    # in training, "auto" dispatches with DeepEP
+    for shared, ep_implementation in ((True, "deepep"), (False, "deepep"), (True, "auto"), (False, "auto")):
+        tp_mesh, rows = (mesh, slice(None)) if shared else (None, slice(2 * rank, 2 * rank + 2))
+        dispatched.clear()
+        with patch.object(DeepEP, "dispatch", lambda *args: dispatched.append(True) or deepep_dispatch(*args)):
+            module = EpDispatchExpertsParallel().install_forward(
+                _ScaledExperts(scales[2 * rank : 2 * rank + 2]),
+                mesh,
+                tp_mesh=tp_mesh,
+                ep_implementation=ep_implementation,
+            )
+            h, w = hidden_states[rows].clone().requires_grad_(), top_k_weights[rows].clone().requires_grad_()
+            output = module(h, top_k_index[rows], w)
+            output.backward(grad_output[rows])
+        assert dispatched, (shared, ep_implementation)
+        # tokens travel in bfloat16
+        torch.testing.assert_close(output, expected[rows].detach(), rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(h.grad, h_ref.grad[rows], rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(w.grad, w_ref.grad[rows], rtol=1e-2, atol=1e-2)
+    deepep.destroy_deepep_buffers()
+
+
+def _deepep_captures_and_compiles(rank):
+    torch.cuda.set_device(rank)
+    mesh = init_device_mesh("cuda", (2,))
+    scales = torch.tensor([1.0, 2.0, 3.0, 4.0], device="cuda")
+    module = EpDispatchExpertsParallel().install_forward(
+        _ScaledExperts(scales[2 * rank : 2 * rank + 2]), mesh, ep_implementation="deepep"
+    )
+    generator = torch.Generator(device="cuda").manual_seed(rank)
+
+    def routes():
+        weights, index = torch.rand(3, 4, device="cuda", generator=generator).softmax(-1).topk(2)
+        return torch.randn(3, 256, device="cuda", generator=generator), index, weights
+
+    with torch.no_grad():
+        inputs = routes()
+        # the usual warm-up: an eager forward at the captured batch size allocates the buffer
+        stream = torch.cuda.Stream()
+        stream.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(stream):
+            module(*inputs)
+        torch.cuda.current_stream().wait_stream(stream)
+        graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(graph):
+            captured = module(*inputs)
+        for _ in range(2):
+            for static, new in zip(inputs, routes()):
+                static.copy_(new)
+            graph.replay()
+            torch.testing.assert_close(captured, module(*inputs))
+
+        compiled = torch.compile(module, fullgraph=True)
+        inputs = routes()
+        torch.testing.assert_close(compiled(*inputs), module(*inputs))
+    deepep.destroy_deepep_buffers()
+
+
+@contextlib.contextmanager
+def _deepep_environment(
+    kernels_available=True,
+    cuda_available=True,
+    capability=(9, 0),
+    nvcc_present=True,
+    nvcc_version=(13, 1),
+    nccl_libraries=("libnccl.so.2",),
+    nccl_version=(2, 32, 3),
+    kernel=SimpleNamespace(EPBuffer=object),
+):
+    """A faked environment for `is_deepep_loadable`, a real toolkit directory holding `bin/nvcc` or not."""
+    deepep.is_deepep_loadable.cache_clear()
+    with tempfile.TemporaryDirectory() as cuda_home, contextlib.ExitStack() as stack:
+        if nvcc_present:
+            os.makedirs(os.path.join(cuda_home, "bin"))
+            open(os.path.join(cuda_home, "bin", "nvcc"), "w", encoding="utf-8").close()
+        for target, name, value in (
+            (deepep, "is_kernels_available", kernels_available),
+            (torch.cuda, "is_available", cuda_available),
+            (torch.cuda, "get_device_capability", capability),
+            (deepep, "_get_cuda_home", cuda_home),
+            (deepep, "_get_nvcc_version", nvcc_version),
+            (deepep, "_get_loaded_nccl_libraries", list(nccl_libraries)),
+            (deepep, "_get_nccl_runtime_version", nccl_version),
+            (deepep, "lazy_load_kernel", kernel),
+        ):
+            stack.enter_context(patch.object(target, name, return_value=value))
+        yield
+    deepep.is_deepep_loadable.cache_clear()

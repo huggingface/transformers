@@ -58,10 +58,11 @@ The expert forward rule in `ep_plan` selects how tokens reach the experts:
 | :--- | :--- | :--- |
 | `"all_to_all"` ([token dispatch](#token-dispatch)) | works for any layout, including `ep_size > tp_size`; only the routed tokens move | two all-to-all collectives and one host sync per layer, so it does not capture in a CUDA graph |
 | `"all_reduce"` | no tokens move and no host sync, so decode captures in a CUDA graph | requires `ep_size=tp_size`; every rank runs its experts over all of the batch's routes, so its cost grows with the batch |
+| `"deepep"` | [DeepEP](https://github.com/deepseek-ai/DeepEP)'s dispatch and combine from [kernels-community/deep-ep](https://huggingface.co/kernels-community/deep-ep): works for any layout, and under CUDA graph capture or `torch.compile` it runs without a host sync on worst-case-sized rows, so decode captures in a CUDA graph | needs a GPU of compute capability 9.0 or newer, the NCCL PyTorch loads ≥ 2.32.3, a CUDA toolkit ≥ 13.1 (`nvcc`) at runtime and a hidden size that is a multiple of 256; eagerly it reads the received counts back to the host |
 | `"deepgemm_megamoe"` | DeepGEMM Mega MoE fuses the dispatch, the experts and the combine in one kernel; its symmetric-memory buffers are shared by every layer of an EP group. Loading with `experts_implementation="deepgemm_megamoe"` selects it | requires `ep_size=tp_size` and FP8 activations with FP4 experts on SM100+; inference only |
-| `"auto"` (default) | `"all_reduce"` at inference when the ranks of an expert group share one batch, `"all_to_all"` in training and wherever the ranks hold different batches | |
+| `"auto"` (default) | `"all_reduce"` at inference when the ranks of an expert group share one batch; otherwise token dispatch: `"deepep"` where DeepEP runs, `"all_to_all"` elsewhere | |
 
-`ep_implementation` only chooses within the parallel sizes set in [`DistributedConfig`]. When the ranks of an expert group hold different batches, for example `tp_size=1` with `fsdp_size=ep_size`, `"all_to_all"` is the only implementation that applies.
+`ep_implementation` only chooses within the parallel sizes set in [`DistributedConfig`]. When the ranks of an expert group hold different batches, for example `tp_size=1` with `fsdp_size=ep_size`, `"all_to_all"` and `"deepep"` apply.
 
 ### Adding an implementation
 
