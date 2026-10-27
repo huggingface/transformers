@@ -403,3 +403,75 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
                 out["logits"].cpu(), eager(torch.tensor([[7]]), torch.tensor([position])), atol=1e-3, rtol=1e-3
             )
             self.assertEqual(int(cache[counter_name].cpu().item()), position + 1)
+
+
+@slow
+@require_torch
+class ExportedModelTest(unittest.TestCase):
+    """A single-graph export runs like its source model on every backend: built from the export (`runtime()`), and
+    loaded from disk (`ExportedModel.from_pretrained`)."""
+
+    def _model_and_inputs(self):
+        from transformers import BertConfig, BertModel
+
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=2, num_attention_heads=4, intermediate_size=37
+        )
+        inputs = {"input_ids": torch.randint(0, 99, (2, 7)), "attention_mask": torch.ones(2, 7, dtype=torch.long)}
+        return BertModel(config).eval(), inputs
+
+    def _check_runs_like_eager(self, exporter, config, atol, device=None):
+        from transformers.exporters import AutoExportedModel, ExportedModel
+
+        model, inputs = self._model_and_inputs()
+        with torch.no_grad():
+            expected = model(**inputs).last_hidden_state
+        exported = exporter.export(model, copy.deepcopy(inputs), config)
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            for name, runtime in (
+                ("runtime", exported.runtime(device=device)),
+                ("from_pretrained", ExportedModel.from_pretrained(directory, device=device)),
+                ("auto", AutoExportedModel.from_pretrained(directory, device=device)),
+            ):
+                with self.subTest(name):
+                    # Inputs the trace never saw are dropped, as when passing a processor's whole output.
+                    outputs = runtime(**inputs, token_type_ids=torch.zeros(2, 7, dtype=torch.long))
+                    torch.testing.assert_close(outputs.last_hidden_state.cpu(), expected, atol=atol, rtol=atol)
+
+    @pytest.mark.torch_export_test
+    def test_dynamo(self):
+        from transformers.exporters import DynamoConfig, DynamoExporter
+
+        self._check_runs_like_eager(DynamoExporter(), DynamoConfig(dynamic=True), atol=1e-4)
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_onnx(self):
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        self._check_runs_like_eager(OnnxExporter(), OnnxConfig(dynamic=True), atol=1e-3, device="cpu")
+
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    def test_openvino(self):
+        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
+
+        self._check_runs_like_eager(OpenVINOExporter(), OpenVINOConfig(dynamic=True), atol=1e-3, device="cpu")
+
+    @require_executorch
+    @pytest.mark.executorch_export_test
+    def test_executorch(self):
+        from transformers.exporters import ExecutorchConfig, ExecutorchExporter
+
+        self._check_runs_like_eager(ExecutorchExporter(), ExecutorchConfig(), atol=1e-3)
+
+    def test_runtime_refuses_several_components(self):
+        from transformers.exporters import ExportArtifacts, ExportedComponent, ExportMetadata
+
+        component = ExportedComponent("program", ExportMetadata())
+        artifacts = ExportArtifacts({"prefill": component, "decode": component}, "dynamo")
+        self.assertTrue(artifacts.can_generate())
+        with self.assertRaisesRegex(ValueError, "2 components"):
+            artifacts.runtime()

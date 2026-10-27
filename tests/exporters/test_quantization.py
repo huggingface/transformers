@@ -737,11 +737,11 @@ class OpenVINOQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
 @require_torch
 @require_torchao
 class ExecutorchQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
-    def _assert_executorch_program_runs(self, program, inputs):
+    def _assert_executorch_program_runs(self, exported, inputs):
         """The `.pte` runs to finite outputs, unless ExecuTorch's runtime can't service it (`None`: an XNNPACK
         delegate it refuses to compile, a missing portable kernel), which is a runtime limitation rather than an export
         defect."""
-        outputs = _run_executorch_program(program, copy.deepcopy(inputs))
+        outputs = _run_executorch_program(exported, copy.deepcopy(inputs))
         if outputs is not None:
             self.assertTrue(all(o.isfinite().all() for o in outputs if o.is_floating_point()))
 
@@ -765,21 +765,17 @@ class ExecutorchQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
 
         model, inputs = self._quantization_target(family)
         with patch.object(PT2EQuantizer, "quantize", record_quantized):
-            program = (
-                ExecutorchExporter()
-                .export(
-                    model,
-                    copy.deepcopy(inputs),
-                    ExecutorchConfig(
-                        backend="xnnpack",
-                        dynamic=False,
-                        quantizer=self._pt2e_quantizer("xnnpack", [copy.deepcopy(inputs)]),
-                    ),
-                )
-                .program
+            exported = ExecutorchExporter().export(
+                model,
+                copy.deepcopy(inputs),
+                ExecutorchConfig(
+                    backend="xnnpack",
+                    dynamic=False,
+                    quantizer=self._pt2e_quantizer("xnnpack", [copy.deepcopy(inputs)]),
+                ),
             )
         self.assertTrue(_has_quantize_ops(quantized[0]))
-        self._assert_executorch_program_runs(program, inputs)
+        self._assert_executorch_program_runs(exported, inputs)
 
     @parameterized.expand([("dense",), ("moe",), ("ssm",)])
     @require_executorch
@@ -793,11 +789,7 @@ class ExecutorchQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
 
         model, inputs = self._quantization_target(family)
         quantizer = self._nncf_quantizer(inputs, weights_only=True)
-        program = (
-            ExecutorchExporter()
-            .export(
-                model, copy.deepcopy(inputs), ExecutorchConfig(backend="xnnpack", dynamic=False, quantizer=quantizer)
-            )
-            .program
+        exported = ExecutorchExporter().export(
+            model, copy.deepcopy(inputs), ExecutorchConfig(backend="xnnpack", dynamic=False, quantizer=quantizer)
         )
-        self._assert_executorch_program_runs(program, inputs)
+        self._assert_executorch_program_runs(exported, inputs)
