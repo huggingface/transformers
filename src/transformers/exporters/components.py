@@ -15,8 +15,8 @@
 
 A decomposition produces components, an exporter turns each into a graph, and a runtime drives them. Components
 are keyed by optimum-intel's names (`"model"`, `"encoder_model"` / `"decoder_model"`, `"language_model"`,
-`"text_embeddings_model"`, `"<modality>_embeddings_model"`). This holds the `Component` / `ExportedComponent` pair,
-then the modules a decomposition wraps a model's own methods in so each can be exported on its own.
+`"text_embeddings_model"`, `"<modality>_embeddings_model"`). This holds `Component`, and the modules a
+decomposition wraps a model's own methods in so each can be exported on its own.
 """
 
 from __future__ import annotations
@@ -208,6 +208,6 @@ class TokenEmbedder(_ModelComponent):
         per_layer_inputs = (
             self.model.get_per_layer_inputs(per_layer_ids, None)
             if takes_embeds
-            else (self.model.get_per_layer_inputs(per_layer_ids))
+            else self.model.get_per_layer_inputs(per_layer_ids)
         )
         return {"inputs_embeds": inputs_embeds, "per_layer_inputs": per_layer_inputs}

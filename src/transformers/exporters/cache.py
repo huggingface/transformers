@@ -11,79 +11,25 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Reading and advancing the caches an exported graph takes and returns.
+"""The cache a decode graph takes, read off a captured call and rebuilt for another.
 
-An exported decode graph takes its cache as flat tensors and hands back the updated ones, so driving it
-means finding a `Cache`'s leaves, writing the graph's outputs back into them, and knowing how far it has
-filled. Both the runners (which flatten a cache into a feed) and the generation loop above them need that,
-so it lives here rather than in either.
+A decode graph that also serves the prefill step takes the same cache structure on both calls: the prefill call's
+cache is materialized empty in the decode capture's geometry (key/value shapes, sparse-indexer slots, zeroed
+linear-attention states), and its mask is built to match.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from ..utils import logging
 from ..utils.import_utils import is_torch_available
-from .precompute import _resolve_modeling_module
 from .utils import module_device, module_dtype
-
-
-logger = logging.get_logger(__name__)
 
 
 if is_torch_available():
     import torch
-    from torch.utils._pytree import tree_flatten, tree_leaves, tree_unflatten
 
-    from ..cache_utils import DynamicCache
     from ..configuration_utils import get_head_shapes
-
-
-def _cache_tensors(past_key_values) -> list[torch.Tensor]:
-    """The cache's tensor leaves, in the pytree order the exporter named them."""
-    return [t for t in tree_leaves(past_key_values) if isinstance(t, torch.Tensor)]
-
-
-def _read_cache_step(container, part: str):
-    """One step of a cache leaf path: a list index, a dict key (deepseek_v4's `buffer_kv`), or an attribute."""
-    if part.isdigit():
-        return container[int(part)]
-    if isinstance(container, dict):
-        return container.get(part)
-    return getattr(container, part, None)
-
-
-def _read_cache_entry(cache, path: list[str]):
-    """The cache's entry at a named leaf path (`layers.0.conv_states.0`), or `None` where it leads nowhere yet."""
-    target = cache
-    for part in path:
-        if target is None:
-            return None
-        target = _read_cache_step(target, part)
-    return target
-
-
-def _assign_cache_entry(cache, path: list[str], value) -> None:
-    """Write a decode step's cache output back at its named path (`layers.0.conv_states.0`).
-
-    A same-shape buffer is updated in place (`copy_`); a grown or missing entry is replaced outright.
-    """
-    target = _read_cache_entry(cache, path[:-1])
-    last = path[-1]
-    current = _read_cache_step(target, last)
-    if isinstance(current, torch.Tensor) and isinstance(value, torch.Tensor) and current.shape == value.shape:
-        if current is not value:
-            current.copy_(value)
-        return
-    if not isinstance(value, torch.Tensor) and isinstance(current, torch.Tensor):
-        value = torch.tensor(value, dtype=current.dtype, device=current.device)
-    if last.isdigit():
-        target[int(last)] = value
-    elif isinstance(target, dict):
-        target[last] = value
-    else:
-        setattr(target, last, value)
 
 
 def _cache_halves(cache: Any) -> list[Any]:
@@ -115,23 +61,6 @@ def _cache_length(cache) -> int:
         return 1 if started else 0
 
 
-def resize_to_traced_lengths(cache, lengths: dict[int, int]) -> None:
-    """Size each fixed-size layer to the length the trace recorded for it, before its buffers are made.
-
-    The graph's input spec pins those sizes; re-deriving them from the prompt (as `generate` does) would not fit.
-    """
-    layers = _self_attention_layers(cache)
-    for index, length in lengths.items():
-        if index < len(layers) and getattr(layers[index], "max_cache_len", None) not in (None, length):
-            layers[index].max_cache_len = length
-
-
-def is_fixed_size(cache) -> bool:
-    """Whether `cache` is allocated at its full length up front (`StaticCache`), read off its first layer."""
-    layers = _self_attention_layers(cache)
-    return bool(layers) and getattr(layers[0], "is_compileable", False)
-
-
 def causal_mask(position_ids, cache_len: int):
     """Full causal mask `[batch, 1, query, cache_len]` from the positions (M-RoPE: text row 0). Assumes no
     left-padding."""
@@ -151,63 +80,6 @@ def mask_width(cache, query_length: int) -> int:
         return int(cache.get_mask_sizes(query_length, 0)[0])
     except (AttributeError, IndexError, TypeError, ValueError, StopIteration):
         return _cache_length(cache) + query_length
-
-
-def _advance_cache(past_key_values, outputs: dict[str, torch.Tensor], num_new_tokens: int):
-    """Advance the cache with a decode step's `past_key_values.…` outputs, then its length counters.
-
-    Same-shape leaves are copied in place; a grown `DynamicCache` is rebuilt through the registered pytree.
-    """
-    cache_updates = [
-        (name, value) for name, value in outputs.items() if name.startswith(("past_key_values", "cache_params"))
-    ]
-    # Aligned by path, not leaf count: `None` recurrent states have no leaf yet.
-    written = set()
-    for name, new in cache_updates:
-        if "." in name:
-            path = name.split(".")[1:]
-            _assign_cache_entry(past_key_values, path, new)
-            written.add(id(_read_cache_entry(past_key_values, path)))
-    by_index = [(name, new) for name, new in cache_updates if "." not in name]
-    if by_index:
-        # ExecuTorch: by flat leaf index (`past_key_values_<N>`), possibly pruned; rank-0 updates come back as scalars.
-        cache_leaves = _cache_tensors(past_key_values)
-        updated = list(cache_leaves)
-        for position, (name, new) in enumerate(by_index):
-            suffix = name.rsplit("_", 1)[-1]
-            index = int(suffix) if suffix.isdigit() else position
-            if not isinstance(new, torch.Tensor):
-                new = torch.tensor(new, dtype=cache_leaves[index].dtype, device=cache_leaves[index].device)
-            updated[index] = new
-            written.update((id(cache_leaves[index]), id(new)))
-        if any(old.shape != new.shape for old, new in zip(cache_leaves, updated)):
-            _, spec = tree_flatten(past_key_values)
-            past_key_values = tree_unflatten(updated, spec)
-        else:
-            for old, new in zip(cache_leaves, updated):
-                if old is not new:
-                    old.copy_(new)
-    _mark_existing_states(past_key_values)
-    advance_cache_length(past_key_values, num_new_tokens, written)
-    # `is_updated` is pytree context the graph never flips; after any step the cross cache is written.
-    if getattr(past_key_values, "is_updated", None):
-        past_key_values.is_updated = dict.fromkeys(past_key_values.is_updated, True)
-    return past_key_values
-
-
-def advance_cache_length(past_key_values, num_new_tokens: int, written=()) -> None:
-    """Advance each self-attention layer's length counter by `num_new_tokens`, the way the eager `update` does.
-
-    Python-int counters on sliding layers are never updated by a graph (baked, or pytree context). A tensor
-    counter whose `id` is in `written` came back from the graph already advanced, and is left alone."""
-    for layer in _self_attention_layers(past_key_values):
-        counter = getattr(layer, "cumulative_length", None)
-        if hasattr(layer, "cumulative_length_int"):
-            layer.cumulative_length_int += num_new_tokens
-        elif isinstance(counter, int):
-            layer.cumulative_length += num_new_tokens
-        elif torch.is_tensor(counter) and id(counter) not in written:
-            counter.add_(num_new_tokens)
 
 
 def _mark_existing_states(past_key_values) -> None:
@@ -246,22 +118,6 @@ def _mark_existing_states(past_key_values) -> None:
                     marks[key] = True
 
 
-def _empty_container(container: str, config, batch_size: int, dtype, device, encoder_config=None):
-    """A container shaped the way the trace saw it, holding nothing yet.
-
-    `"cache"` is a `DynamicCache` built from `encoder_config` and materialized to zero length (lazy layers
-    would flatten shorter); anything else names a model's own class in its `modeling_*` module."""
-    if container != "cache":
-        module = _resolve_modeling_module(config)
-        container_class = getattr(module, container, None)
-        return container_class() if container_class is not None else None
-    if encoder_config is None:
-        return DynamicCache()
-    cache = DynamicCache(config=encoder_config)
-    materialize_cache_layers(cache, batch_size, encoder_config, dtype, device)
-    return cache
-
-
 # ── Geometry and materialization ──────────────────────────────────────────────
 
 
@@ -289,7 +145,7 @@ def kv_geometry_of(cache: Any) -> dict[int, tuple[int, int, int]]:
 
 def linear_states_of(cache: Any) -> dict[int, dict[str, list[tuple[int, ...]]]]:
     """`{layer index: {"conv_states"/"recurrent_states": [per-state shape without batch]}}` of a cache the model itself
-    filled. The runtime's counterpart is `ExportMetadata.linear_states`, read off the graph."""
+    filled."""
     layout = {}
     for index, layer in enumerate(getattr(cache, "layers", []) or []):
         states = {
@@ -304,10 +160,7 @@ def linear_states_of(cache: Any) -> dict[int, dict[str, list[tuple[int, ...]]]]:
 
 
 def indexer_layers_of(cache: Any) -> dict[int, bool]:
-    """`{layer index: whether the layer holds an indexer tensor}` for a cache the model itself filled.
-
-    The runtime's counterpart is `ExportMetadata.indexer_layers`, read off the graph.
-    """
+    """`{layer index: whether the layer holds an indexer tensor}` for a cache the model itself filled."""
     return {
         index: bool(getattr(layer, "is_indexer_initialized", False))
         for index, layer in enumerate(getattr(cache, "layers", []) or [])
@@ -325,18 +178,16 @@ def materialize_cache_layers(
     indexer_layers: dict[int, bool] | None = None,
     linear_states: dict[int, dict[str, list[tuple[int, ...]]]] | None = None,
 ) -> None:
-    """Give every lazily-uninitialized cache layer real tensors, from a `[batch, kv_heads, 0, head_dim]` hint.
+    """Give every lazily-uninitialized cache layer empty tensors (`[batch, kv_heads, 0, head_dim]`).
 
-    `torch.export` cannot trace lazy allocation, so the traced cache and the runtime's must be materialized
-    identically (the cache pytree is part of the input spec).
+    `torch.export` cannot trace lazy allocation, and the cache pytree is part of the input spec, so a cache fed to a
+    graph must be materialized the way the traced one was.
 
     Args:
-        kv_geometry: per-layer `(kv_heads, key_dim, value_dim)` off the graph or a filled cache; wins over the
-            config, which cannot always give it (mimo_v2_flash: 2 KV heads on sliding layers, 4 on full).
-        indexer_layers: per-layer sparse-indexer presence (`ExportMetadata.indexer_layers`); layers without one
-            are left alone.
-        linear_states: per-layer linear-attention state shapes (`ExportMetadata.linear_states`), allocated as zeros
-            and marked existing, for a decode graph that also runs the prefill step.
+        kv_geometry: per-layer `(kv_heads, key_dim, value_dim)` off a filled cache; wins over the config, which cannot
+            always give it (mimo_v2_flash: 2 KV heads on sliding layers, 4 on full).
+        indexer_layers: per-layer sparse-indexer presence; layers without one are left alone.
+        linear_states: per-layer linear-attention state shapes, allocated as zeros and marked existing.
     """
     kv_geometry = kv_geometry or {}
     by_layer = _per_layer_head_shapes(config)
@@ -384,13 +235,12 @@ def materialize_cache_layers(
             _mark_existing_states(cache_half)
 
 
-def materialize_cache_like(model, inputs: dict, reference_inputs: dict, linear_states: bool = False) -> None:
-    """Materialize `inputs`' cache like `reference_inputs`' (e.g. a prefill capture's like the decode capture's), so
-    a graph traced on one takes the cache the runtime feeds the other.
+def materialize_cache_like(model, inputs: dict, reference_inputs: dict) -> None:
+    """Materialize `inputs`' cache like `reference_inputs`' (the prefill call's like the decode capture's), so the
+    graph traced on one takes the other.
 
-    Geometry and indexer slots come from the reference cache, which holds what the model really writes; layers left
-    empty there (hy_v4's shared indexers) stay empty so both take the same leaves. With `linear_states`, zeroed
-    linear-attention states are allocated too, as the runtime does for a decode graph that also runs the prefill step.
+    Geometry, indexer slots and linear-attention states come from the reference cache, which holds what the model
+    really writes; layers left empty there (hy_v4's shared indexers) stay empty so both take the same leaves.
     """
     name = next((name for name in ("past_key_values", "cache_params") if inputs.get(name) is not None), None)
     if name is None:
@@ -405,5 +255,5 @@ def materialize_cache_like(model, inputs: dict, reference_inputs: dict, linear_s
         module_device(model),
         kv_geometry=kv_geometry_of(reference),
         indexer_layers=indexer_layers_of(reference),
-        linear_states=linear_states_of(reference) if linear_states else None,
+        linear_states=linear_states_of(reference),
     )

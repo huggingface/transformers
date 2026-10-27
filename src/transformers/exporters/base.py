@@ -32,7 +32,7 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
 from ..utils.hub import hf_api
 from .configs import ExportConfigMixin, ExportFormat
-from .decompose import DECODE_GRAPHS, decompose_for_generation
+from .decompose import decode_graph_name, decompose_for_generation
 from .metadata import ExportMetadata
 from .quantizers.utils import capture_calibration_inputs
 from .runtimes.base import ExportedModel
@@ -475,11 +475,7 @@ class HfExporter(ABC):
             generation_config.update(
                 **model.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True
             )
-        decode_config = (
-            next((config[name] for name in DECODE_GRAPHS if name in config), None)
-            if isinstance(config, dict)
-            else config
-        )
+        decode_config = config.get(decode_graph_name(config)) if isinstance(config, dict) else config
         dynamic = bool(getattr(decode_config, "dynamic", False) or getattr(decode_config, "dynamic_shapes", None))
         if multi_token_decode is None:
             multi_token_decode = dynamic
