@@ -18,6 +18,7 @@ import re
 from pathlib import Path
 
 import torch
+from accelerate import init_empty_weights
 from safetensors.torch import load_file
 
 from transformers import (
@@ -79,6 +80,7 @@ def convert_voxcpm2_state_dict(
         ("audio_vae.", audio_vae_state_dict),
     )
     for prefix, state_dict in source_state_dicts:
+        converted_source_state_dict = {}
         for key, value in state_dict.items():
             if prefix and not key.startswith(prefix):
                 key = prefix + key
@@ -88,9 +90,11 @@ def convert_voxcpm2_state_dict(
                     continue
                 key = audio_vae_key
             converted_key = _convert_weight_norm_key(key)
-            if converted_key in converted_state_dict:
+            if converted_key in converted_source_state_dict:
                 raise ValueError(f"Duplicate converted key: {converted_key}")
-            converted_state_dict[converted_key] = value
+            converted_source_state_dict[converted_key] = value
+        # The separate AudioVAE checkpoint takes precedence over embedded AudioVAE weights.
+        converted_state_dict.update(converted_source_state_dict)
     return converted_state_dict
 
 
@@ -136,12 +140,18 @@ def convert_checkpoint(input_path: str | Path, output_path: str | Path, push_to_
     input_path = Path(input_path)
     output_path = Path(output_path)
     with open(input_path / "config.json", encoding="utf-8") as config_file:
-        config = VoxCPM2Config(**json.load(config_file))
+        config_dict = json.load(config_file)
+    if isinstance(config_dict.get("dtype"), str):
+        config_dict["dtype"] = {"bf16": "bfloat16", "fp16": "float16", "fp32": "float32"}.get(
+            config_dict["dtype"], config_dict["dtype"]
+        )
+    config = VoxCPM2Config(**config_dict)
     config.architectures = ["VoxCPM2Model"]
 
     model_state_dict, audio_vae_state_dict = _load_source_state_dicts(input_path)
     converted_state_dict = convert_voxcpm2_state_dict(model_state_dict, audio_vae_state_dict)
-    with torch.device("meta"):
+    # RoPE buffers are computed from the config and are absent from the checkpoint.
+    with init_empty_weights(include_buffers=False):
         model = VoxCPM2Model(config)
     model.load_state_dict(converted_state_dict, strict=True, assign=True)
     model.eval()
@@ -150,6 +160,13 @@ def convert_checkpoint(input_path: str | Path, output_path: str | Path, push_to_
     tokenizer.init_kwargs.pop("auto_map", None)
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.unk_token
+    audio_tokens = {}
+    for token_name in ("audio_start_token", "reference_audio_start_token", "reference_audio_end_token"):
+        token_id = getattr(config, f"{token_name}_id")
+        token = tokenizer.convert_ids_to_tokens(token_id)
+        if token is None or tokenizer.convert_tokens_to_ids(token) != token_id:
+            raise ValueError(f"The source tokenizer does not contain `{token_name}_id={token_id}`.")
+        audio_tokens[token_name] = token
     feature_extractor = DacFeatureExtractor(
         feature_size=1,
         sampling_rate=config.audio_vae_config.sample_rate,
@@ -161,12 +178,14 @@ def convert_checkpoint(input_path: str | Path, output_path: str | Path, push_to_
         feature_extractor,
         tokenizer,
         audio_patch_size=config.patch_size * config.audio_vae_config.hop_length,
+        **audio_tokens,
     )
     generation_config = GenerationConfig.from_model_config(config)
     generation_config.min_new_tokens = 4
     generation_config.max_new_tokens = 2000
     generation_config.guidance_scale = config.dit_config.cfm_config.inference_cfg_rate
     generation_config.temperature = 1.0
+    model.generation_config = generation_config
 
     output_path.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(output_path)
