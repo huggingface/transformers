@@ -16,8 +16,10 @@ import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 
 
+@auto_docstring
 class VoxCPM2Processor(ProcessorMixin):
     """Builds mixed text and audio prompts for VoxCPM2 generation."""
 
@@ -31,6 +33,18 @@ class VoxCPM2Processor(ProcessorMixin):
         reference_audio_start_token="<|audio_prompt_start|>",
         reference_audio_end_token="<|audio_prompt_end|>",
     ):
+        r"""
+        audio_patch_size (`int`, *optional*, defaults to 2560):
+            Number of input audio samples represented by one audio placeholder token.
+        audio_placeholder_token_id (`int`, *optional*, defaults to 0):
+            Token ID inserted at audio positions in the mixed text and audio sequence.
+        audio_start_token (`str`, *optional*, defaults to `"<|audio_start|>"`):
+            Special token marking the end of the text and the start of audio generation.
+        reference_audio_start_token (`str`, *optional*, defaults to `"<|audio_prompt_start|>"`):
+            Special token marking the beginning of the reference-audio prefix.
+        reference_audio_end_token (`str`, *optional*, defaults to `"<|audio_prompt_end|>"`):
+            Special token marking the end of the reference-audio prefix.
+        """
         if audio_patch_size <= 0:
             raise ValueError("`audio_patch_size` must be greater than zero")
 
@@ -107,6 +121,7 @@ class VoxCPM2Processor(ProcessorMixin):
             f"{prefix}_attention_mask": padding_mask,
         }, num_patches
 
+    @auto_docstring
     def __call__(
         self,
         text,
@@ -116,6 +131,37 @@ class VoxCPM2Processor(ProcessorMixin):
         sampling_rate=None,
         return_tensors="pt",
     ):
+        r"""
+        text (`str` or `list[str]`):
+            Target text to synthesize. A string or a list containing one string is supported; generation uses batch
+            size 1.
+        audio (`np.ndarray` or `list[float]`, *optional*):
+            One raw mono waveform to continue. Must be provided together with its transcript in `prompt_text`.
+        prompt_text (`str`, *optional*):
+            Transcript of `audio`. It is concatenated directly with `text` without inserting a separator.
+        reference_audio (`np.ndarray` or `list[float]`, *optional*):
+            One raw mono waveform used as a voice reference. Can be combined with `audio` and `prompt_text`.
+        sampling_rate (`int`, *optional*):
+            Sampling rate of the supplied waveforms in hertz. If provided, it must match the feature extractor's
+            sampling rate. Audio is not resampled.
+        return_tensors (`str`, *optional*, defaults to `"pt"`):
+            Output format: `"pt"` for PyTorch tensors or `"np"` for NumPy arrays. Set to `None` to return unconverted
+            lists and arrays.
+
+        Returns:
+            [`BatchFeature`]: `input_ids`, `attention_mask`, `text_mask`, and `audio_mask` for the mixed sequence.
+            When `audio` is provided, also contains `prompt_input_values` and `prompt_attention_mask`. When
+            `reference_audio` is provided, also contains `reference_input_values` and `reference_attention_mask`.
+
+        Example:
+
+        ```python
+        >>> from transformers import VoxCPM2Processor
+
+        >>> processor = VoxCPM2Processor.from_pretrained("path/to/converted-voxcpm2")
+        >>> inputs = processor(text="Hello from VoxCPM2.", return_tensors="pt")
+        ```
+        """
         text = self._validate_generation_inputs(text, audio, prompt_text, reference_audio)
         text_to_tokenize = f"{prompt_text}{text}" if prompt_text is not None else text
         text_token_ids = self.tokenizer(text_to_tokenize, add_special_tokens=False).input_ids

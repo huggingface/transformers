@@ -20,6 +20,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
+from tokenizers import Regex, pre_tokenizers
 from torch import nn
 
 from ... import initialization as init
@@ -30,14 +31,53 @@ from ...masking_utils import create_bidirectional_mask, create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
+from ...tokenization_utils_base import _get_prepend_scheme
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..dac.modeling_dac import Snake1d
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaModel, LlamaRMSNorm, eager_attention_forward
+from ..llama.tokenization_llama import LlamaTokenizer
 from ..olmo.modeling_olmo import OlmoRotaryEmbedding, apply_rotary_pos_emb
 
 
 logger = logging.get_logger(__name__)
+
+
+class VoxCPM2Tokenizer(LlamaTokenizer):
+    """Llama tokenizer that keeps Han characters as individual tokens."""
+
+    def __init__(
+        self,
+        vocab: str | dict | list | None = None,
+        merges: str | list | None = None,
+        clean_up_tokenization_spaces=False,
+        unk_token="<unk>",
+        bos_token="<s>",
+        eos_token="</s>",
+        use_default_system_prompt=False,
+        legacy=False,
+        add_prefix_space=True,
+        **kwargs,
+    ):
+        super().__init__(
+            vocab=vocab,
+            merges=merges,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            use_default_system_prompt=use_default_system_prompt,
+            legacy=legacy,
+            add_prefix_space=add_prefix_space,
+            **kwargs,
+        )
+        metaspace = pre_tokenizers.Metaspace(
+            replacement="▁",
+            prepend_scheme=_get_prepend_scheme(self.add_prefix_space, self),
+            split=False,
+        )
+        han_characters = pre_tokenizers.Split(Regex(r"\p{Han}"), behavior="isolated")
+        self.backend_tokenizer.pre_tokenizer = pre_tokenizers.Sequence([metaspace, han_characters])
 
 
 @auto_docstring
@@ -2247,4 +2287,5 @@ __all__ = [
     "VoxCPM2ModelOutput",
     "VoxCPM2PreTrainedModel",
     "VoxCPM2TextConfig",
+    "VoxCPM2Tokenizer",
 ]
