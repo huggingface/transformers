@@ -24,7 +24,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
@@ -296,9 +296,9 @@ class InklingConfig(PreTrainedConfig):
 
     model_type = "inkling_mm_model"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=InklingTextConfig),
-        "vision_config": SubConfigSpec(config_class=InklingVisionConfig),
-        "audio_config": SubConfigSpec(config_class=InklingAudioConfig),
+        "text_config": InklingTextConfig,
+        "vision_config": InklingVisionConfig,
+        "audio_config": InklingAudioConfig,
     }
 
     text_config: InklingTextConfig | dict | None = None
