@@ -501,7 +501,7 @@ class ElectraGeneratorPredictions(nn.Module):
 
 @auto_docstring
 class ElectraPreTrainedModel(PreTrainedModel):
-    config_class = ElectraConfig
+    config: ElectraConfig
     base_model_prefix = "electra"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -1079,7 +1079,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
 
 @auto_docstring
 class ElectraForQuestionAnswering(ElectraPreTrainedModel):
-    config_class = ElectraConfig
+    config: ElectraConfig
     base_model_prefix = "electra"
 
     def __init__(self, config):

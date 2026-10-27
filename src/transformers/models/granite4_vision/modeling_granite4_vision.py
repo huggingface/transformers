@@ -532,7 +532,7 @@ class Granite4VisionPreTrainedModel(PreTrainedModel):
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel):
     """Granite LLM backbone with deepstack feature injection support."""
 
-    config_class = Granite4VisionTextConfig
+    config: Granite4VisionTextConfig
 
     def __init__(self, config: Granite4VisionTextConfig):
         super().__init__(config)
@@ -738,7 +738,7 @@ def unpad_image(tensor, original_size):
 )
 class Granite4VisionModel(Granite4VisionPreTrainedModel):
     base_model_prefix = "model"
-    config_class = Granite4VisionConfig
+    config: Granite4VisionConfig
 
     def __init__(self, config: Granite4VisionConfig):
         super().__init__(config)
