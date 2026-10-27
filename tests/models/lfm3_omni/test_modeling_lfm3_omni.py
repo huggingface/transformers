@@ -634,10 +634,9 @@ class Lfm3OmniCommonTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestC
 @slow
 class Lfm3OmniIntegrationTest(unittest.TestCase):
     model_id = "LiquidAI/LFM3-Omni-2B-Preview"
-    revision = "b241d3710b88bc504276604378ad3fc922dbd614"
 
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained(self.model_id, revision=self.revision)
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
         from transformers.image_utils import load_image
 
         image = load_image(
@@ -658,7 +657,7 @@ class Lfm3OmniIntegrationTest(unittest.TestCase):
 
     def test_model_logits(self):
         model = Lfm3OmniForConditionalGeneration.from_pretrained(
-            self.model_id, revision=self.revision, device_map=torch_device, dtype=torch.float32
+            self.model_id, device_map=torch_device, dtype=torch.float32
         )
         self.assertEqual(
             int((self.inputs["input_ids"] == self.processor.image_token_id).sum()), LFM3_OMNI_IMAGE_TOKENS
@@ -672,7 +671,7 @@ class Lfm3OmniIntegrationTest(unittest.TestCase):
 
     def test_model_greedy_generation(self):
         model = Lfm3OmniForConditionalGeneration.from_pretrained(
-            self.model_id, revision=self.revision, device_map=torch_device, dtype=torch.bfloat16
+            self.model_id, device_map=torch_device, dtype=torch.bfloat16
         )
         output = model.generate(**self.inputs, max_new_tokens=24, do_sample=False)
         text = self.processor.batch_decode(
@@ -682,12 +681,10 @@ class Lfm3OmniIntegrationTest(unittest.TestCase):
         expectations = Expectations({(None, None): LFM3_OMNI_EXPECTED_GENERATION})
         self.assertEqual(text, expectations.get_expectation())
 
-    golden_revision = "2bc8893e4e022c980dea61369089006323456971"
-
     def _golden_processor_and_model(self, dtype):
-        processor = AutoProcessor.from_pretrained(self.model_id, revision=self.golden_revision)
+        processor = AutoProcessor.from_pretrained(self.model_id)
         model = Lfm3OmniForConditionalGeneration.from_pretrained(
-            self.model_id, revision=self.golden_revision, device_map=torch_device, dtype=dtype
+            self.model_id, device_map=torch_device, dtype=dtype
         ).eval()
         return processor, model
 

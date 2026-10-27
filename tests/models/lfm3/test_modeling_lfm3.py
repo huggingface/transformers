@@ -330,13 +330,10 @@ class Lfm3ModelTest(CausalLMModelTest, unittest.TestCase):
 @slow
 class Lfm3IntegrationTest(unittest.TestCase):
     model_id = "LiquidAI/LFM3-1.7B-Preview"
-    revision = "92fc473ab9c9042e26c62f1417c9d609b1ddbc1b"
 
     def test_model_logits(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
-        model = Lfm3ForCausalLM.from_pretrained(
-            self.model_id, revision=self.revision, device_map=torch_device, dtype=torch.float32
-        )
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        model = Lfm3ForCausalLM.from_pretrained(self.model_id, device_map=torch_device, dtype=torch.float32)
         input_ids = tokenizer("Simply put, the theory of relativity states that ", return_tensors="pt").to(
             torch_device
         )
@@ -351,10 +348,8 @@ class Lfm3IntegrationTest(unittest.TestCase):
         torch.testing.assert_close(logits[0, 0, :16], expected_slice, rtol=1e-3, atol=1e-3)
 
     def test_model_greedy_generation(self):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
-        model = Lfm3ForCausalLM.from_pretrained(
-            self.model_id, revision=self.revision, device_map=torch_device, dtype=torch.bfloat16
-        )
+        tokenizer = AutoTokenizer.from_pretrained(self.model_id)
+        model = Lfm3ForCausalLM.from_pretrained(self.model_id, device_map=torch_device, dtype=torch.bfloat16)
         messages = [{"role": "user", "content": "Simply put, what does the theory of relativity state?"}]
         input_ids = tokenizer.apply_chat_template(
             messages, add_generation_prompt=True, return_tensors="pt", return_dict=True

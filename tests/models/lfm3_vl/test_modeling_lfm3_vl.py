@@ -397,10 +397,9 @@ class Lfm3VlModelTest(VLMModelTest, unittest.TestCase):
 @slow
 class Lfm3VlIntegrationTest(unittest.TestCase):
     model_id = "LiquidAI/LFM3-VL-1.9B-Preview"
-    revision = "ecb6ebf0f2438a7e7b2d3e498fe512202527b1d3"
 
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained(self.model_id, revision=self.revision)
+        self.processor = AutoProcessor.from_pretrained(self.model_id)
         from transformers.image_utils import load_image
 
         image = load_image(
@@ -421,7 +420,7 @@ class Lfm3VlIntegrationTest(unittest.TestCase):
 
     def test_model_logits(self):
         model = Lfm3VlForConditionalGeneration.from_pretrained(
-            self.model_id, revision=self.revision, device_map=torch_device, dtype=torch.float32
+            self.model_id, device_map=torch_device, dtype=torch.float32
         )
         self.assertEqual(int((self.inputs["input_ids"] == self.processor.image_token_id).sum()), LFM3_VL_IMAGE_TOKENS)
         with torch.no_grad():
@@ -433,7 +432,7 @@ class Lfm3VlIntegrationTest(unittest.TestCase):
 
     def test_model_greedy_generation(self):
         model = Lfm3VlForConditionalGeneration.from_pretrained(
-            self.model_id, revision=self.revision, device_map=torch_device, dtype=torch.bfloat16
+            self.model_id, device_map=torch_device, dtype=torch.bfloat16
         )
         generated_ids = model.generate(**self.inputs, max_new_tokens=24, do_sample=False)
         text = self.processor.batch_decode(
@@ -442,8 +441,6 @@ class Lfm3VlIntegrationTest(unittest.TestCase):
 
         expectations = Expectations({(None, None): LFM3_VL_EXPECTED_GENERATION})
         self.assertEqual(text, expectations.get_expectation())
-
-    golden_revision = "935e560d123de32d1163e71ec7aea9addf4e1d14"
 
     def test_gradient_image_greedy_ids_match_the_recorded_goldens(self):
         """Exact outputs of LiquidAI/LFM3-VL-1.9B-Preview @ 935e560d123de32d1163e71ec7aea9addf4e1d14 on a synthetic
@@ -455,7 +452,7 @@ class Lfm3VlIntegrationTest(unittest.TestCase):
         x = np.linspace(0, 255, 448, dtype=np.float32)
         red, green = np.tile(x[None, :], (448, 1)), np.tile(x[:, None], (1, 448))
         image = Image.fromarray(np.stack([red, green, (red + green) / 2], -1).round().astype(np.uint8))
-        processor = AutoProcessor.from_pretrained(self.model_id, revision=self.golden_revision)
+        processor = AutoProcessor.from_pretrained(self.model_id)
         self.assertEqual(type(processor.image_processor).__name__, "Qwen2VLImageProcessor")
         conversation = [
             {
@@ -470,10 +467,10 @@ class Lfm3VlIntegrationTest(unittest.TestCase):
             conversation, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
         self.assertEqual(int((inputs["input_ids"] == processor.image_token_id).sum()), 196)
-        config = Lfm3VlConfig.from_pretrained(self.model_id, revision=self.golden_revision)
+        config = Lfm3VlConfig.from_pretrained(self.model_id)
         config.text_config.rope_parameters["full_attention"]["rope_type"] = "proportional"
         model = Lfm3VlForConditionalGeneration.from_pretrained(
-            self.model_id, revision=self.golden_revision, config=config, device_map=torch_device, dtype=torch.bfloat16
+            self.model_id, config=config, device_map=torch_device, dtype=torch.bfloat16
         ).eval()
         generated = model.generate(**inputs, max_new_tokens=32, do_sample=False)
         expected = Expectations({(None, None): LFM3_VL_GOLDEN_GRADIENT_IDS}).get_expectation()

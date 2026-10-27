@@ -1572,7 +1572,6 @@ class Lfm3AudioCommonTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 @require_torch_accelerator
 class Lfm3AudioLiveTranscriptionIntegrationTest(unittest.TestCase):
     model_id = "LiquidAI/LFM3-Audio-2B-Preview"
-    revision = "7cc8c1219c97ffa9ea2967917223c7efef75bb7a"
     # Chunk texts from the pinned LFM3-Audio-2B checkpoint, fed 100 ms of audio at a time.
     expected = [
         [
@@ -1592,9 +1591,9 @@ class Lfm3AudioLiveTranscriptionIntegrationTest(unittest.TestCase):
 
         from transformers import AutoProcessor
 
-        processor = AutoProcessor.from_pretrained(self.model_id, revision=self.revision)
+        processor = AutoProcessor.from_pretrained(self.model_id)
         model = Lfm3AudioForConditionalGeneration.from_pretrained(
-            self.model_id, revision=self.revision, dtype=torch.bfloat16, device_map=torch_device
+            self.model_id, dtype=torch.bfloat16, device_map=torch_device
         ).eval()
         tokenizer = processor.tokenizer
         chunk_frames = 8 * model.config.interleaved_n_audio
@@ -1659,7 +1658,6 @@ class Lfm3AudioIntegrationTest(unittest.TestCase):
     through the MaskGIT passes and the frames after it), which is why the frame test runs in fp32."""
 
     model_id = "LiquidAI/LFM3-Audio-2B-Preview"
-    revision = "0ae9d6093fc7435c764d16fbea0a7f73c10e1fd8"
 
     @classmethod
     def _clip(cls):
@@ -1670,9 +1668,9 @@ class Lfm3AudioIntegrationTest(unittest.TestCase):
         return np.asarray(clip["audio"]["array"], dtype=np.float32)
 
     def _load(self, dtype):
-        processor = AutoProcessor.from_pretrained(self.model_id, revision=self.revision)
+        processor = AutoProcessor.from_pretrained(self.model_id)
         model = Lfm3AudioForConditionalGeneration.from_pretrained(
-            self.model_id, revision=self.revision, dtype=dtype, device_map=torch_device
+            self.model_id, dtype=dtype, device_map=torch_device
         ).eval()
         return processor, model
 

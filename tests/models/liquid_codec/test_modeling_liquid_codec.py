@@ -323,10 +323,9 @@ class LiquidCodecIntegrationTest(unittest.TestCase):
     0ae9d6093fc7435c764d16fbea0a7f73c10e1fd8; they have not been run on an accelerator yet."""
 
     model_id = "LiquidAI/Liquid-Codec"
-    revision = "eca2f9e197ed54b99bb57199b8a8fed62f548cd9"
 
     def test_chirp_codes_and_audio(self):
-        codec = LiquidCodecModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
+        codec = LiquidCodecModel.from_pretrained(self.model_id, dtype=torch.float32)
         codec = codec.to(torch_device).eval()
         # a 0.5 s linear chirp from 100 Hz to 4 kHz at half scale: 7 codec frames, no dataset needed
         sampling_rate = codec.config.sampling_rate
@@ -359,7 +358,7 @@ class LiquidCodecIntegrationTest(unittest.TestCase):
         The fp32 codes equal the OLD implementation's bitwise (so do the bf16 ones); the decoded fp32 audio differs
         from OLD's by at most 2e-6 (the decoder's LFM3 backbone, reduction-order noise), hence the tolerance on the
         slice. On CPU three entries of this chirp round to the neighbouring FSQ level (the `cpu` expectation)."""
-        codec = LiquidCodecModel.from_pretrained(self.model_id, revision=self.revision, dtype=torch.float32)
+        codec = LiquidCodecModel.from_pretrained(self.model_id, dtype=torch.float32)
         codec = codec.to(torch_device).eval()
         sampling_rate = codec.config.sampling_rate
         t = torch.arange(sampling_rate, dtype=torch.float64) / sampling_rate
