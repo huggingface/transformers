@@ -329,7 +329,7 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     models.
     """
 
-    config_class = XcodecConfig
+    config: XcodecConfig
     base_model_prefix = "xcodec"
     main_input_name = "input_values"
     input_modalities = "audio"

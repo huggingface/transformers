@@ -371,7 +371,7 @@ class Granite4VisionPreTrainedModel(LlavaNextPreTrainedModel):
 class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
     """Granite LLM backbone with deepstack feature injection support."""
 
-    config_class = Granite4VisionTextConfig
+    config: Granite4VisionTextConfig
 
     def __init__(self, config: Granite4VisionTextConfig):
         super().__init__(config)
@@ -447,7 +447,7 @@ class Granite4VisionTextModel(Granite4VisionPreTrainedModel, GraniteModel):
 
 
 class Granite4VisionModel(LlavaNextModel):
-    config_class = Granite4VisionConfig
+    config: Granite4VisionConfig
 
     def __init__(self, config: Granite4VisionConfig):
         super().__init__(config)
