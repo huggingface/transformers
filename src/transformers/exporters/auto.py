@@ -28,7 +28,6 @@ from .configs import (
     ExportFormat,
     OnnxConfig,
     OpenVINOConfig,
-    export_format_name,
 )
 
 
@@ -62,21 +61,29 @@ def register_backend(name: str, config: type[ExportConfigMixin], exporter: type[
     EXPORT_BACKENDS[name] = ExportBackend(config, exporter)
 
 
-def export_backend(export_format: ExportFormat | str | None, part: str):
-    """One part (`"config"` or `"exporter"`) of the backend registered for a format (an [`ExportFormat`] or its
-    string value)."""
+def _registered_backend(export_format: ExportFormat | str | None) -> ExportBackend:
     if export_format is None:
         raise ValueError(f"No export format given — registered formats are {sorted(EXPORT_BACKENDS)}.")
-    name = export_format_name(export_format)
-    backend = EXPORT_BACKENDS.get(name)
+    backend = EXPORT_BACKENDS.get(export_format)
     if backend is None:
-        raise ValueError(f"Unknown export format '{name}' — registered formats are {sorted(EXPORT_BACKENDS)}.")
-    registered = getattr(backend, part)
-    if isinstance(registered, str):
-        module_name, class_name = registered.rsplit(".", 1)
-        registered = getattr(importlib.import_module(f".{module_name}", __package__), class_name)
-        setattr(backend, part, registered)
-    return registered
+        raise ValueError(
+            f"Unknown export format '{export_format}' — registered formats are {sorted(EXPORT_BACKENDS)}."
+        )
+    return backend
+
+
+def get_export_config_class(export_format: ExportFormat | str | None) -> type[ExportConfigMixin]:
+    """The config class registered for a format."""
+    return _registered_backend(export_format).config
+
+
+def get_exporter_class(export_format: ExportFormat | str | None) -> type[HfExporter]:
+    """The exporter class registered for a format, imported on first use."""
+    backend = _registered_backend(export_format)
+    if isinstance(backend.exporter, str):
+        module_name, class_name = backend.exporter.rsplit(".", 1)
+        backend.exporter = getattr(importlib.import_module(f".{module_name}", __package__), class_name)
+    return backend.exporter
 
 
 class AutoExportConfig:
@@ -87,7 +94,7 @@ class AutoExportConfig:
 
     @classmethod
     def from_dict(cls, export_config_dict: dict):
-        return export_backend(export_config_dict.get("export_format"), "config").from_dict(export_config_dict)
+        return get_export_config_class(export_config_dict.get("export_format")).from_dict(export_config_dict)
 
 
 class AutoHfExporter:
@@ -99,7 +106,7 @@ class AutoHfExporter:
     @classmethod
     def from_config(cls, export_config: ExportConfigMixin | dict, **kwargs) -> HfExporter:
         export_config_dict = export_config.to_dict() if isinstance(export_config, ExportConfigMixin) else export_config
-        return export_backend(export_config_dict.get("export_format"), "exporter")(**kwargs)
+        return get_exporter_class(export_config_dict.get("export_format"))(**kwargs)
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs) -> HfExporter | None:

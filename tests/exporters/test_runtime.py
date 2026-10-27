@@ -158,29 +158,28 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
 
     # ──────────────────────── ONNX Runtime ────────────────────────
 
-    def _save_decode(self, exporter, config, directory):
-        """Export the static-cache decode and save it, returning the component's manifest entry."""
+    def _save_and_load_decode(self, exporter, config, directory):
+        """Export the static-cache decode, save it and load it back, checking that the backend's `artifact_files`
+        (what a Hub download fetches) name every file it wrote. Returns the manifest entry and the loaded export."""
         decode_model, decode_inputs = self._decompose_static_decode(self._tiny_model(), torch.randint(0, 64, (1, 4)))
         exported = exporter.export(decode_model, copy.deepcopy(decode_inputs), config=config)
         exported.save_pretrained(directory)
-        loaded = ExportArtifacts.from_pretrained(directory)
-        self.assertEqual(loaded["model"].metadata, exported["model"].metadata)
         entry = json.loads((Path(directory) / "export.json").read_text(encoding="utf-8"))["components"]["model"]
-        # `artifact_files` names everything the backend wrote, which is what a Hub download fetches
         written = {path.name for path in Path(directory).iterdir()} - {"export.json", "config.json"}
         self.assertIn(entry["file"], written)
         self.assertLessEqual(written, set(exporter.artifact_files(entry["file"])))
-        return entry
+        loaded = ExportArtifacts.from_pretrained(directory)
+        self.assertEqual(loaded["model"].metadata, exported["model"].metadata)
+        return entry, loaded
 
     @pytest.mark.torch_export_test
     def test_saved_dynamo_program_loads_back(self):
         from transformers.exporters import DynamoConfig, DynamoExporter
 
         with tempfile.TemporaryDirectory() as directory:
-            entry = self._save_decode(DynamoExporter(), DynamoConfig(dynamic=True), directory)
-            program = ExportArtifacts.from_pretrained(directory).artifact
-            self.assertEqual(entry["file"], "model.pt2")
-            self.assertIsInstance(program, torch.export.ExportedProgram)
+            entry, loaded = self._save_and_load_decode(DynamoExporter(), DynamoConfig(dynamic=True), directory)
+        self.assertEqual(entry["file"], "model.pt2")
+        self.assertIsInstance(loaded.artifact, torch.export.ExportedProgram)
 
     @require_executorch
     @pytest.mark.executorch_export_test
@@ -190,11 +189,10 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         from transformers.exporters import ExecutorchConfig, ExecutorchExporter
 
         with tempfile.TemporaryDirectory() as directory:
-            entry = self._save_decode(ExecutorchExporter(), ExecutorchConfig(), directory)
-            program = ExportArtifacts.from_pretrained(directory).artifact
+            entry, loaded = self._save_and_load_decode(ExecutorchExporter(), ExecutorchConfig(), directory)
             self.assertEqual(entry["file"], "model.pte")
-            self.assertIsInstance(program, Program)
-            self.assertIn("forward", program.method_names)
+            self.assertIsInstance(loaded.artifact, Program)
+            self.assertIn("forward", loaded.artifact.method_names)
 
     @require_onnxscript
     @require_onnxruntime
@@ -206,11 +204,40 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         from transformers.exporters import OnnxConfig, OnnxExporter
 
         with tempfile.TemporaryDirectory() as directory:
-            entry = self._save_decode(OnnxExporter(), OnnxConfig(dynamic=True), directory)
+            entry, _ = self._save_and_load_decode(OnnxExporter(), OnnxConfig(dynamic=True), directory)
             session = ort.InferenceSession(str(Path(directory) / entry["file"]), providers=["CPUExecutionProvider"])
             self.assertEqual(entry["metadata"]["input_names"], [node.name for node in session.get_inputs()])
             self.assertEqual(entry["metadata"]["output_names"], [node.name for node in session.get_outputs()])
         self.assertTrue(any(name.startswith("input.") for name in entry["metadata"]["input_names"]))
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_onnx_model_past_2gb_saves_and_loads(self):
+        """A model past protobuf's 2GB limit saves with its weights in `model.onnx.data`, and loads back to the same
+        program. A one-layer Llama with a 150k vocabulary holds 2.3GB of untied embeddings."""
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        config = LlamaConfig(
+            hidden_size=2048,
+            intermediate_size=64,
+            num_hidden_layers=1,
+            num_attention_heads=16,
+            num_key_value_heads=4,
+            vocab_size=150_000,
+        )
+        model = LlamaForCausalLM(config).eval()
+        self.assertGreater(sum(p.numel() * p.element_size() for p in model.parameters()), 2**31)
+        inputs = {"input_ids": torch.randint(0, 64, (1, 8)), "attention_mask": torch.ones(1, 8, dtype=torch.long)}
+        exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig())
+        expected = torch.as_tensor(exported.artifact(**inputs)[0])
+
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            self.assertLess((Path(directory) / "model.onnx").stat().st_size, 2**31)
+            self.assertGreater((Path(directory) / "model.onnx.data").stat().st_size, 2**31)
+            logits = torch.as_tensor(ExportArtifacts.from_pretrained(directory).artifact(**inputs)[0])
+        torch.testing.assert_close(logits, expected, atol=0, rtol=0)
 
     @require_openvino
     @pytest.mark.openvino_export_test
@@ -222,7 +249,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         from transformers.exporters import OpenVINOConfig, OpenVINOExporter
 
         with tempfile.TemporaryDirectory() as directory:
-            entry = self._save_decode(OpenVINOExporter(), OpenVINOConfig(dynamic=True), directory)
+            entry, _ = self._save_and_load_decode(OpenVINOExporter(), OpenVINOConfig(dynamic=True), directory)
             self.assertEqual(entry["file"], "openvino_model.xml")
             ov_model = openvino.Core().read_model(str(Path(directory) / entry["file"]))
             self.assertEqual(entry["metadata"]["input_names"], [port.get_any_name() for port in ov_model.inputs])

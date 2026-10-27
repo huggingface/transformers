@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from ..utils import logging
@@ -29,18 +29,13 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class ExportFormat(Enum):
+class ExportFormat(StrEnum):
     """Identifies the export backend. Stored in [`ExportConfigMixin`] for serialisation round-trips."""
 
     EXECUTORCH = "executorch"
     OPENVINO = "openvino"
     DYNAMO = "dynamo"
     ONNX = "onnx"
-
-
-def export_format_name(export_format: ExportFormat | str) -> str:
-    """The name a format is registered under: an [`ExportFormat`]'s value, or a registered backend's own string."""
-    return export_format.value if isinstance(export_format, ExportFormat) else export_format
 
 
 @dataclass
@@ -67,23 +62,17 @@ class ExportConfigMixin:
         Returns:
             [`ExportConfigMixin`]: The configuration object instantiated from those parameters.
         """
-        config_dict = dict(config_dict)
-        # Built-in formats come back as their enum; a registered backend's format stays a string.
-        built_in = {export_format.value: export_format for export_format in ExportFormat}
-        if config_dict.get("export_format") in built_in:
-            config_dict["export_format"] = built_in[config_dict["export_format"]]
-        return cls(**config_dict)
+        config = cls(**config_dict)
+        return config
 
     def to_dict(self) -> dict[str, Any]:
         """
-        Serializes this instance to a Python dictionary, with `export_format` as its string value.
+        Serializes this instance to a Python dictionary.
 
         Returns:
             `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        config_dict = copy.deepcopy(self.__dict__)
-        config_dict["export_format"] = export_format_name(self.export_format)
-        return config_dict
+        return copy.deepcopy(self.__dict__)
 
     def __iter__(self):
         yield from self.__dict__.items()

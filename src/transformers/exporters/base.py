@@ -30,7 +30,7 @@ from ..generation import GenerationConfig
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
 from ..utils.hub import hf_api
-from .configs import ExportConfigMixin, ExportFormat, export_format_name
+from .configs import ExportConfigMixin, ExportFormat
 from .metadata import ExportMetadata
 from .quantizers.utils import capture_calibration_inputs
 from .utils import check_packages, decompose_for_generation
@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     import torch
 
     from ..cache_utils import Cache
+    from ..configuration_utils import PreTrainedConfig
     from ..modeling_utils import PreTrainedModel
 
 
@@ -71,7 +72,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         self,
         components: dict[str, ExportedComponent],
         export_format: ExportFormat | str,
-        config: object | None = None,
+        config: PreTrainedConfig | None = None,
         generation_config: GenerationConfig | None = None,
     ):
         self.components = dict(components)
@@ -89,7 +90,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
         return len(self.components)
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}(format={export_format_name(self.export_format)!r}, components={list(self)})"
+        return f"{type(self).__name__}(format={str(self.export_format)!r}, components={list(self)})"
 
     @property
     def artifact(self):
@@ -114,9 +115,9 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             kwargs (`dict[str, Any]`, *optional*):
                 Passed to the Hub upload: `repo_id`, `commit_message`, `token`, `private`, ...
         """
-        from .auto import export_backend
+        from .auto import get_exporter_class
 
-        exporter = export_backend(self.export_format, "exporter")
+        exporter = get_exporter_class(self.export_format)
         directory = Path(save_directory)
         directory.mkdir(parents=True, exist_ok=True)
         if push_to_hub:
@@ -131,11 +132,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             exporter.save_artifact(component.artifact, directory / filename)
             components[name] = {"file": filename, "metadata": dict(component.metadata.raw)}
 
-        manifest = {
-            "schema_version": 1,
-            "export_format": export_format_name(self.export_format),
-            "components": components,
-        }
+        manifest = {"schema_version": 1, "export_format": str(self.export_format), "components": components}
         (directory / EXPORT_MANIFEST_FILE).write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
         if self.config is not None:
             self.config.save_pretrained(directory)
@@ -172,7 +169,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
             cache_dir (`str` or `Path`, *optional*):
                 Where Hub downloads are cached.
         """
-        from .auto import export_backend
+        from .auto import get_exporter_class
 
         directory = Path(pretrained_model_name_or_path) / subfolder
         if not directory.is_dir():
@@ -180,7 +177,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
                 str(pretrained_model_name_or_path), subfolder, revision=revision, token=token, cache_dir=cache_dir
             )
         manifest = json.loads((directory / EXPORT_MANIFEST_FILE).read_text(encoding="utf-8"))
-        exporter = export_backend(manifest["export_format"], "exporter")
+        exporter = get_exporter_class(manifest["export_format"])
         components = {
             name: ExportedComponent(
                 exporter.load_artifact(directory / entry["file"]), ExportMetadata.from_dict(entry["metadata"])
@@ -197,11 +194,11 @@ class ExportArtifacts(Mapping, PushToHubMixin):
     def _download(repo_id: str, subfolder: str, **hub_kwargs) -> Path:
         """Download an export from the Hub: its manifest first, then only the files the manifest names (each
         component's [`~HfExporter.artifact_files`]) and the configs. Returns the export's local directory."""
-        from .auto import export_backend
+        from .auto import get_exporter_class
 
         manifest_path = hf_hub_download(repo_id, EXPORT_MANIFEST_FILE, subfolder=subfolder or None, **hub_kwargs)
         manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
-        exporter = export_backend(manifest["export_format"], "exporter")
+        exporter = get_exporter_class(manifest["export_format"])
         files = [EXPORT_MANIFEST_FILE, CONFIG_NAME, GENERATION_CONFIG_NAME]
         for entry in manifest["components"].values():
             files += exporter.artifact_files(entry["file"])

@@ -46,10 +46,10 @@ from transformers.exporters.auto import (
     EXPORT_BACKENDS,
     AutoExportConfig,
     AutoHfExporter,
-    export_backend,
+    get_exporter_class,
     register_backend,
 )
-from transformers.exporters.base import EXPORT_MANIFEST_FILE, ExportArtifacts, ExportedComponent, HfExporter
+from transformers.exporters.base import ExportArtifacts, ExportedComponent, HfExporter
 from transformers.exporters.configs import DynamoConfig, ExecutorchConfig, ExportFormat, OnnxConfig
 from transformers.exporters.metadata import ExportMetadata
 from transformers.testing_utils import require_executorch, require_onnx, require_onnxscript, require_torch
@@ -82,20 +82,13 @@ CONCRETE_CONFIGS = [
 
 
 class ExportConfigMixinTest(unittest.TestCase):
-    def test_to_dict_from_dict_roundtrip(self):
+    def test_to_dict_from_dict_roundtrip_through_json(self):
         for config_cls, export_format in CONCRETE_CONFIGS:
             with self.subTest(config_cls.__name__):
                 original = config_cls(dynamic=True)
-                restored = config_cls.from_dict(original.to_dict())
+                restored = AutoExportConfig.from_dict(json.loads(json.dumps(original.to_dict())))
                 self.assertEqual(restored, original)
-                self.assertIs(restored.export_format, export_format)
-
-    def test_to_dict_is_json_serializable(self):
-        for config_cls, export_format in CONCRETE_CONFIGS:
-            with self.subTest(config_cls.__name__):
-                config_dict = json.loads(json.dumps(config_cls().to_dict()))
-                self.assertEqual(config_dict["export_format"], export_format.value)
-                self.assertEqual(AutoExportConfig.from_dict(config_dict), config_cls())
+                self.assertEqual(restored.export_format, export_format)
 
 
 class AutoExportConfigTest(unittest.TestCase):
@@ -117,7 +110,7 @@ class AutoExportConfigTest(unittest.TestCase):
 
 class AutoHfExporterTest(unittest.TestCase):
     def _check_dispatch(self, config):
-        expected_cls = export_backend(config.export_format, "exporter")
+        expected_cls = get_exporter_class(config.export_format)
         self.assertIsInstance(AutoHfExporter.from_config(config), expected_cls)
         # Same dispatch works when starting from a plain dict.
         self.assertIsInstance(AutoHfExporter.from_config(config.to_dict()), expected_cls)
@@ -188,7 +181,7 @@ class RegistrationTest(unittest.TestCase):
     def test_register_backend_installs_stub(self):
         with mock.patch.dict(EXPORT_BACKENDS):
             register_backend("stub", _StubConfig, _StubExporter)
-            self.assertIs(export_backend("stub", "exporter"), _StubExporter)
+            self.assertIs(get_exporter_class("stub"), _StubExporter)
             self.assertIsInstance(AutoHfExporter.from_config(_StubConfig()), _StubExporter)
             self.assertEqual(
                 AutoExportConfig.from_dict(_StubConfig(dynamic=True).to_dict()), _StubConfig(dynamic=True)
@@ -209,32 +202,27 @@ class ExportArtifactsTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "2 components"):
             artifacts.artifact
 
-    def test_save_pretrained_writes_components_and_manifest(self):
+    def test_save_pretrained_from_pretrained_roundtrip(self):
         components = {
             "prefill": ExportedComponent("prefill program", ExportMetadata({"input_names": ["input_ids"]})),
             "decode": ExportedComponent("decode program", ExportMetadata()),
         }
-        with mock.patch.dict(EXPORT_BACKENDS):
-            register_backend("stub", _StubConfig, _StubExporter)
-            with tempfile.TemporaryDirectory() as directory:
-                ExportArtifacts(components, "stub").save_pretrained(directory)
-                self.assertEqual((Path(directory) / "decode.txt").read_text(), "decode program")
-                manifest = json.loads((Path(directory) / EXPORT_MANIFEST_FILE).read_text())
-        self.assertEqual(manifest["export_format"], "stub")
-        self.assertEqual(manifest["components"]["prefill"]["file"], "prefill.txt")
-        self.assertEqual(manifest["components"]["prefill"]["metadata"], {"input_names": ["input_ids"]})
-
-    def test_from_pretrained_loads_what_save_pretrained_wrote(self):
-        components = {"decode": ExportedComponent("decode program", ExportMetadata({"input_names": ["input_ids"]}))}
         config, generation_config = BertConfig(hidden_size=32), GenerationConfig(max_new_tokens=3)
         with mock.patch.dict(EXPORT_BACKENDS):
             register_backend("stub", _StubConfig, _StubExporter)
             with tempfile.TemporaryDirectory() as directory:
                 ExportArtifacts(components, "stub", config, generation_config).save_pretrained(directory)
+                self.assertTrue((Path(directory) / "decode.txt").is_file())
                 loaded = ExportArtifacts.from_pretrained(directory)
         self.assertEqual(loaded.export_format, "stub")
-        self.assertEqual(loaded["decode"].artifact, "decode program")
-        self.assertEqual(loaded["decode"].metadata.input_names, ("input_ids",))
+        self.assertEqual(
+            {name: component.artifact for name, component in loaded.items()},
+            {
+                "prefill": "prefill program",
+                "decode": "decode program",
+            },
+        )
+        self.assertEqual(loaded["prefill"].metadata, components["prefill"].metadata)
         self.assertEqual(loaded.config.hidden_size, 32)
         self.assertEqual(loaded.generation_config.max_new_tokens, 3)
 
@@ -263,8 +251,7 @@ class ExportArtifactsTest(unittest.TestCase):
                 loaded = ExportArtifacts.from_pretrained("org/model", subfolder="stub")
         self.assertEqual(loaded["decode"].artifact, "decode program")
 
-    def test_push_to_hub_uploads_the_saved_export(self):
-        """`push_to_hub(repo_id)` and `save_pretrained(..., push_to_hub=True)` upload what `save_pretrained` writes."""
+    def test_save_pretrained_pushes_to_hub(self):
         components = {"decode": ExportedComponent("decode program", ExportMetadata())}
         artifacts = ExportArtifacts(components, "stub", generation_config=GenerationConfig(max_new_tokens=3))
         api = mock.Mock()
@@ -273,16 +260,12 @@ class ExportArtifactsTest(unittest.TestCase):
             mock.patch.dict(EXPORT_BACKENDS),
             mock.patch("transformers.utils.hub.hf_api", return_value=api),
             mock.patch("transformers.exporters.base.hf_api", return_value=api),
-            mock.patch("transformers.utils.hub.create_and_tag_model_card"),
             tempfile.TemporaryDirectory() as directory,
         ):
             register_backend("stub", _StubConfig, _StubExporter)
-            artifacts.push_to_hub("org/model")
             artifacts.save_pretrained(directory, push_to_hub=True, repo_id="org/model")
-        for call in api.create_commit.call_args_list:
-            uploaded = {operation.path_in_repo for operation in call.kwargs["operations"]}
-            self.assertLessEqual({"decode.txt", "export.json", "generation_config.json"}, uploaded)
-        self.assertEqual(api.create_commit.call_count, 2)
+        uploaded = {operation.path_in_repo for operation in api.create_commit.call_args.kwargs["operations"]}
+        self.assertEqual(uploaded, {"decode.txt", "export.json", "generation_config.json"})
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -11,12 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""What an exporter records about a graph, and how it is read back.
-
-A loaded artifact says what its inputs are *called* and what shape they were traced at, but nothing about
-what they mean. This is the trace's own account of itself — the precision it computes in, the kwargs as
-traced, the flat input/output order — written at export and saved next to the artifact.
-"""
+"""What an exporter records about each graph it exports: precision, traced inputs, and input/output names."""
 
 from __future__ import annotations
 
@@ -25,7 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .. import __version__
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import _is_package_available, is_torch_available
 from .utils import get_leaf_tensors
 
 
@@ -56,8 +51,6 @@ def traced_output_names(exported_program) -> list[str]:
 
 def _package_versions(packages: Iterable[str]) -> dict[str, str]:
     """`{package: version}` for transformers and the exporter's packages, as provenance."""
-    from ..utils.import_utils import _is_package_available
-
     versions = {"transformers": __version__}
     for package in packages:
         exists, version = _is_package_available(package, return_version=True)
@@ -90,11 +83,6 @@ class ExportMetadata:
         return tuple(self.raw.get("output_names", ()))
 
     @property
-    def num_user_outputs(self) -> int | None:
-        """How many returned leaves are the model's own, before a backend's appended mutated inputs."""
-        return self.raw.get("num_user_outputs")
-
-    @property
     def dtype(self) -> torch.dtype | None:
         """The precision the graph was exported at."""
         dtype = getattr(torch, self.raw.get("dtype") or "", None)
@@ -107,11 +95,6 @@ class ExportMetadata:
         return torch.device(device) if device else None
 
     @property
-    def constant_inputs(self) -> dict[str, Any]:
-        """Declared inputs that carry no tensor (e.g. a `None` mask slot), with their values."""
-        return self.raw.get("constant_inputs") or {}
-
-    @property
     def kwargs(self) -> dict[str, dict]:
         """The traced kwargs under the model forward's own names."""
         return self.raw.get("kwargs") or {}
@@ -122,7 +105,6 @@ def build_export_metadata(
 ) -> dict[str, Any]:
     """Record a graph's precision, traced kwargs and flat input/output order."""
     metadata = {
-        "schema_version": 1,
         "architecture": type(model).__name__,
         "packages": _package_versions(packages),
         # Off the parameters: a split-out component is a plain `nn.Module` with no `.dtype`.
@@ -132,13 +114,7 @@ def build_export_metadata(
         "device": str(next((p.device for p in model.parameters()), torch.device("cpu"))),
         "kwargs": {name: _traced_kwarg(value) for name, value in inputs.items()},
     }
-    graph_signature = exported_program.graph_signature
-    # Includes `ConstantArgument` slots (`None` in `user_inputs`): a positional backend must still bind them.
-    user_inputs = [spec.arg for spec in graph_signature.input_specs if spec.kind.name == "USER_INPUT"]
-    metadata["input_names"] = [arg.name for arg in user_inputs]
-    metadata["constant_inputs"] = {
-        arg.name: arg.value for arg in user_inputs if type(arg).__name__ == "ConstantArgument"
-    }
+    input_specs = exported_program.graph_signature.input_specs
+    metadata["input_names"] = [spec.arg.name for spec in input_specs if spec.kind.name == "USER_INPUT"]
     metadata["output_names"] = traced_output_names(exported_program)
-    metadata["num_user_outputs"] = sum(spec.kind.name == "USER_OUTPUT" for spec in graph_signature.output_specs)
     return metadata
