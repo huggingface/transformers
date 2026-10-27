@@ -64,6 +64,11 @@ def _get_parameter_plan(parameter_name: str, plan: dict[str, str], is_weight=Tru
     return None
 
 
+def _same_ranks(mesh_a, mesh_b) -> bool:
+    """Whether two 1D device meshes group the same ranks, e.g. an EP group whose ranks all hold one batch (its TP group)."""
+    return dist.get_process_group_ranks(mesh_a.get_group()) == dist.get_process_group_ranks(mesh_b.get_group())
+
+
 @contextlib.contextmanager
 def _use_local_dtensor_params(module):
     # Kernels as DeepGEMM require local tensors rather than DTensors.

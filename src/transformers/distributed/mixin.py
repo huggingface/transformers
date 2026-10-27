@@ -326,7 +326,9 @@ class DistributedMixin:
             elif "ep_dispatch_experts" in ep_plan.values():
                 # EP + DP with tp_size >= 1: the ranks of a TP group share the same batch. If we want a specific token,
                 # we will have to slice the batch here in order to avoid computing tp_size times the same batch.
-                model = apply_expert_parallelism(model, ep_mesh, tp_mesh, ep_plan)
+                model = apply_expert_parallelism(
+                    model, ep_mesh, tp_mesh, ep_plan, ep_implementation=distributed_config.ep_implementation or "auto"
+                )
 
         if distributed_config.fsdp_size > 1 and fsdp_plan:
             model = apply_fully_sharded_data_parallelism(model, mesh_manager, fsdp_plan, ep_plan)
