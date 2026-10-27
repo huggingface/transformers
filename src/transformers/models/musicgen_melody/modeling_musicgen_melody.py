@@ -149,8 +149,8 @@ class MusicgenMelodySinusoidalPositionalEmbedding(nn.Module):
         # Create the position ids from the input token ids.
         position_ids = torch.arange(seq_len, device=inputs_embeds.device) + past_key_values_length
         # expand embeddings if needed
-        if seq_len > self.weights.size(0):
-            self.make_weights(seq_len, self.embedding_dim)
+        if seq_len + past_key_values_length > self.weights.size(0):
+            self.make_weights(seq_len + past_key_values_length, self.embedding_dim)
         return self.weights.index_select(0, position_ids.view(-1)).detach()
 
 

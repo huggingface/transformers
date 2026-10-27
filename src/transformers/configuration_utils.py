@@ -35,7 +35,6 @@ from .backbone_utils import consolidate_backbone_kwargs_to_config
 from .dynamic_module_utils import custom_object_save
 from .generation.configuration_utils import GenerationConfig
 from .integrations.heterogeneity import HeterogeneousConfigMixin
-from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from .modeling_rope_utils import RotaryEmbeddingConfigMixin
 from .utils import (
     CONFIG_NAME,
@@ -513,6 +512,16 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
 
     def __init_subclass__(cls, *args, **kwargs):
         super().__init_subclass__(*args, **kwargs)
+
+        # Resolve simple `XXXConfigClass` to `SubConfigSpec`
+        def resolve_spec(spec_or_config):
+            if not isinstance(spec_or_config, SubConfigSpec):
+                return SubConfigSpec(config_class=spec_or_config)
+            return spec_or_config
+
+        if (sub_configs_defaults := cls.__dict__.get("sub_configs_defaults")) is not None:
+            cls.sub_configs_defaults = {k: resolve_spec(v) for k, v in sub_configs_defaults.items()}
+
         cls_has_custom_init = "__init__" in cls.__dict__
         # kw_only=True ensures fields without defaults in subclasses can follow
         # parent fields that have defaults (Python dataclass ordering rule).
@@ -1006,6 +1015,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                 if metadata["general.architecture"] in GGUF_CONFIG_ARCHS:
                     config_dict = get_gguf_config(metadata, tensor_names)
                 else:
+                    from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
                     config_dict = load_gguf_checkpoint(resolved_config_file, return_tensors=False)["config"]
             else:
                 # Load config dict

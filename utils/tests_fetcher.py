@@ -786,7 +786,7 @@ def create_reverse_dependency_tree() -> list[tuple[str, str]]:
     all_modules = list(PATH_TO_TRANSFORMERS.glob("**/*.py"))
     all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
     all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
-    all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
+    all_modules = [mod.relative_to(PATH_TO_REPO).as_posix() for mod in all_modules]
     edges = [(dep, mod) for mod in all_modules for dep in get_module_dependencies(mod, cache=cache)]
     edges += create_backbone_edges()
     return list(set(edges))
@@ -868,7 +868,7 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
     all_modules = list(PATH_TO_TRANSFORMERS.glob("**/*.py"))
     all_modules = [x for x in all_modules if not ("models" in x.parts and x.parts[-1].startswith("convert_"))]
     all_modules += list(PATH_TO_TESTS.glob("**/*.py"))
-    all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
+    all_modules = [mod.relative_to(PATH_TO_REPO).as_posix() for mod in all_modules]
     # Compute the direct dependencies of all modules.
     direct_deps = {m: get_module_dependencies(m, cache=cache) for m in all_modules}
 
@@ -914,6 +914,44 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
                     for parent_file in existing_backbone_files(parent_model):
                         parent_file_posix = Path(parent_file).relative_to(PATH_TO_REPO).as_posix()
                         reverse_map.setdefault(child_file_posix, []).extend(reverse_map.get(parent_file_posix, []))
+
+    # Preprocessor source files (image/video processors, feature extractors, tokenizers) are not
+    # statically imported by their test files because class resolution happens dynamically (e.g.
+    # via IMAGE_PROCESSOR_MAPPING_NAMES, TOKENIZER_MAPPING) or because processing_<model>.py
+    # itself has no static import of those classes (e.g. CLIP's processing_clip.py only imports
+    # ProcessorMixin). Wire them explicitly by naming convention: for each glob pattern we wire
+    # matching source files to the pattern-specific test file (e.g. test_image_processing_<model>.py)
+    # and to test_processing_<model>.py (the processor integration test).
+    preprocessor_patterns = [
+        ("image_processing*.py", "test_image_processing"),
+        ("video_processing*.py", "test_video_processing"),
+        ("feature_extraction*.py", "test_feature_extraction"),
+        ("audio_processing*.py", "test_audio_processing"),
+        ("tokenization*.py", "test_tokenization"),
+    ]
+    for model_dir in (PATH_TO_TRANSFORMERS / "models").iterdir():
+        if not model_dir.is_dir():
+            continue
+        model_name = model_dir.name
+        test_model_dir = PATH_TO_TESTS / "models" / model_name
+        processing_test = test_model_dir / f"test_processing_{model_name}.py"
+        for glob_pattern, test_prefix in preprocessor_patterns:
+            src_files = list(model_dir.glob(glob_pattern))
+            if not src_files:
+                continue
+            candidate_tests = [
+                test_model_dir / f"{test_prefix}_{model_name}.py",
+                processing_test,
+            ]
+            test_files = [t.relative_to(PATH_TO_REPO).as_posix() for t in candidate_tests if t.is_file()]
+            if not test_files:
+                continue
+            for src_file in src_files:
+                src_key = src_file.relative_to(PATH_TO_REPO).as_posix()
+                existing = set(reverse_map.get(src_key, []))
+                for test_file in test_files:
+                    if test_file not in existing:
+                        reverse_map.setdefault(src_key, []).append(test_file)
 
     return reverse_map
 
