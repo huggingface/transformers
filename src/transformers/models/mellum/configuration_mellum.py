@@ -70,8 +70,6 @@ class MellumConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
-    # `ep_size` can exceed `tp_size` (bounded by `num_key_value_heads`, 4 on Qwen3-30B), with token dispatch: with
-    # `tp_size=1` the attention is left to FSDP2. With `ep_size=tp_size`, `ep_strategy` also allows the all-reduce.
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
