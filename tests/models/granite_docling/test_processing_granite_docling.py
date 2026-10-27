@@ -16,7 +16,7 @@ import unittest
 
 import numpy as np
 
-from transformers import GraniteForDoclingImageProcessor, GraniteForDoclingProcessor
+from transformers import GraniteDoclingImageProcessor, GraniteDoclingProcessor
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available
 
@@ -28,9 +28,10 @@ if is_torch_available():
 
 
 @require_vision
-class GraniteForDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = GraniteForDoclingProcessor
-    model_id = "docling-project/granite-for-docling-500m"
+class GraniteDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = GraniteDoclingProcessor
+    # Local copy of the checkpoint until the renamed checkpoint is on the Hub (docling-project/granite-for-docling-500m)
+    model_id = "/proj/docling-vision/models/GraniteDocling500m-2026-10-19"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -44,7 +45,7 @@ class GraniteForDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def small_processor(self):
         base = self.get_processor()
-        image_processor = GraniteForDoclingImageProcessor(size={"height": 16, "width": 16}, max_patches=4)
+        image_processor = GraniteDoclingImageProcessor(size={"height": 16, "width": 16}, max_patches=4)
         return self.processor_class(
             image_processor, base.tokenizer, image_seq_len=base.image_seq_len, chat_template=base.chat_template
         )
@@ -93,7 +94,7 @@ class GraniteForDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         expected_ids = processor.tokenizer(expected_text, return_tensors="pt")["input_ids"]
         self.assertEqual(inputs["input_ids"].tolist(), expected_ids.tolist())
         self.assertEqual((inputs["input_ids"] == self.image_token_id).sum().item(), 12 * self.image_seq_len)
-        self.assertEqual(inputs["tile_fine_mask"].tolist(), [[True, True, True]])
+        self.assertEqual(inputs["tile_fine_mask"].tolist(), [True])
 
     @require_torch
     def test_batched_images_are_padded(self):
@@ -105,7 +106,7 @@ class GraniteForDoclingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Three tiles for the tall page, a single tile (no thumbnail) for the square one
         self.assertEqual(inputs["pixel_values"].shape, (2, 3, 3, 16, 16))
         self.assertTrue(torch.all(inputs["pixel_values"][1, 1:] == 0))
-        self.assertEqual(inputs["tile_fine_mask"].tolist(), [[True, True, True], [True, False, False]])
+        self.assertEqual(inputs["tile_fine_mask"].tolist(), [True, True])
         image_tokens_per_sample = (inputs["input_ids"] == self.image_token_id).sum(dim=1).tolist()
         self.assertEqual(image_tokens_per_sample, [12 * self.image_seq_len, 4 * self.image_seq_len])
 

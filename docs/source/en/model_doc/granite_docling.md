@@ -22,27 +22,29 @@ rendered properly in your Markdown viewer.
   </div>
 </div>
 
-# GraniteForDocling
+# GraniteDocling
 
-[GraniteForDocling](https://huggingface.co/papers/2408.09869) is a vision-language model for document conversion. Given a page image, it generates [DocLang](https://doclang.ai/) (`<doclang>`): the layout elements in reading order with their bounding boxes, the text, tables, formulas and code they contain. DocLang is the markup; [Docling](https://github.com/docling-project/docling) (`docling-core`) parses a prediction into a document you can export to Markdown, HTML, JSON, and other formats.
+[GraniteDocling](https://huggingface.co/papers/2408.09869) is a vision-language model for document conversion. Given a page image, it generates [DocLang](https://doclang.ai/) (`<doclang>`): the layout elements in reading order with their bounding boxes, the text, tables, formulas and code they contain. DocLang is the markup; [Docling](https://github.com/docling-project/docling) (`docling-core`) parses a prediction into a document you can export to Markdown, HTML, JSON, and other formats.
 
 The page is split into tiles of 512x512 pixels laid out on the grid that best matches its aspect ratio, plus a thumbnail of the whole page when there is more than one tile. A vision encoder embeds every tile, and a pixel-shuffle connector maps vision patches to image tokens. Intermediate vision encoder states are projected as well and added to the image tokens after the first decoder layers. A dense Granite-style text decoder then generates the DocLang.
 
-GraniteForDocling is released as several checkpoints. They differ in size and in how a dense page is handled: some stay on a coarser image-token grid, some can switch to a finer grid, and some include a router that chooses the finer grid per page.
+GraniteDocling is released as two models. The 500M model uses 64 image tokens per tile and can switch a dense page to 256; a router chooses that per page. The 2B model uses a pixel-shuffle ratio of 2, which is 256 image tokens per tile, the same density as the 500M fine path.
 
-You can find all the original GraniteForDocling checkpoints under the [docling-project](https://huggingface.co/docling-project) organization.
+Both models are published under the [docling-project](https://huggingface.co/docling-project) organization.
+
+GraniteDocling is a different architecture from [granite-docling-258M](https://huggingface.co/ibm-granite/granite-docling-258M), which keeps loading through [Idefics3](./idefics3).
 
 > [!TIP]
 > This model was contributed by the [Docling team](https://huggingface.co/docling-project).
 >
-> Click on the GraniteForDocling models in the right sidebar for more examples of how to apply GraniteForDocling to different document conversion tasks.
+> Click on the GraniteDocling models in the right sidebar for more examples of how to apply GraniteDocling to different document conversion tasks.
 
 ## Usage tips
 
 - Prompt the model through the chat template. `<doclang>` converts the full page. Append a bracket list to request a subset of elements, for example `<doclang> [<ocr>]` or `<doclang> [<ocr>, <layout>, <picture>]`.
 - Decode with `skip_special_tokens=False` if you will parse the string as DocLang. Dedicated markup tokens are otherwise stripped.
-- Pass `fine_route=True` to the processor for dense pages (small print, long tables, multi-column text). The prompt gets longer and inference slower. Checkpoints trained with the coarse path only set `vision_config.use_fine_route=False`, and `fine_route=True` raises an error for them.
-- Checkpoints with a density router decide that for you: [`~GraniteForDoclingForConditionalGeneration.predict_fine_route`] returns which pages of a batch need the fine path.
+- On the 500M model, pass `fine_route=True` for dense pages (small print, long tables, multi-column text). That path uses four times as many image tokens, so the prompt is longer and inference is slower. The 2B model already uses that token density and has no second path, so `fine_route=True` raises an error for it.
+- The 500M model includes a density router, which decides that for you: [`~GraniteDoclingModel.predict_fine_route`] returns which pages of a batch need the fine path.
 
 The examples below convert page 1 of the [Docling Technical Report](https://arxiv.org/pdf/2408.09869) (`arXiv:2408.09869`). Change only the text prompt to switch task; the model returns DocLang filtered to the requested elements.
 
@@ -143,10 +145,10 @@ inputs = processor.apply_chat_template(
 output = model.generate(**inputs, max_new_tokens=4096)
 ```
 
-Checkpoints with a density router (`config.density_router_hidden_size` is set) predict which pages need it from the coarse inputs:
+The 500M model (`config.density_router_hidden_size` is set) predicts which pages need the fine path from its default image tokens:
 
 ```python
-needs_fine = model.predict_fine_route(inputs["pixel_values"])  # (batch_size,) bool
+needs_fine = model.model.predict_fine_route(inputs["pixel_values"])  # (batch_size,) bool
 if needs_fine[0]:
     inputs = processor.apply_chat_template(
         conversation,
@@ -214,54 +216,54 @@ The [DocLang](https://doclang.ai/) spec and `doclang` toolkit (validate / pack) 
 
 - A full page is long: budget `max_new_tokens` in the thousands, otherwise the DocLang is cut off silently.
 - Tiles are 512x512, laid out on the grid that best matches the page's aspect ratio, capped by `max_patches` (default 32) and 16 tiles per side. A page that fits in one tile gets no thumbnail.
-- The fine path quadruples the image tokens per tile. Use it for dense pages only, or let a checkpoint with a density router decide with [`~GraniteForDoclingForConditionalGeneration.predict_fine_route`].
+- On the 500M model the fine path quadruples the image tokens per tile, from 64 to 256. Use it for dense pages only, or let the router decide with [`~GraniteDoclingModel.predict_fine_route`]. The 2B model uses 256 image tokens per tile throughout (pixel-shuffle ratio 2).
 
-## GraniteForDoclingConfig
+## GraniteDoclingConfig
 
-[[autodoc]] GraniteForDoclingConfig
+[[autodoc]] GraniteDoclingConfig
 
-## GraniteForDoclingTextConfig
+## GraniteDoclingTextConfig
 
-[[autodoc]] GraniteForDoclingTextConfig
+[[autodoc]] GraniteDoclingTextConfig
 
-## GraniteForDoclingVisionConfig
+## GraniteDoclingVisionConfig
 
-[[autodoc]] GraniteForDoclingVisionConfig
+[[autodoc]] GraniteDoclingVisionConfig
 
-## GraniteForDoclingImageProcessor
+## GraniteDoclingImageProcessor
 
-[[autodoc]] GraniteForDoclingImageProcessor
+[[autodoc]] GraniteDoclingImageProcessor
     - preprocess
 
-## GraniteForDoclingImageProcessorPil
+## GraniteDoclingImageProcessorPil
 
-[[autodoc]] GraniteForDoclingImageProcessorPil
+[[autodoc]] GraniteDoclingImageProcessorPil
     - preprocess
 
-## GraniteForDoclingProcessor
+## GraniteDoclingProcessor
 
-[[autodoc]] GraniteForDoclingProcessor
+[[autodoc]] GraniteDoclingProcessor
     - __call__
 
-## GraniteForDoclingVisionModel
+## GraniteDoclingVisionModel
 
-[[autodoc]] GraniteForDoclingVisionModel
+[[autodoc]] GraniteDoclingVisionModel
     - forward
 
-## GraniteForDoclingModel
+## GraniteDoclingModel
 
-[[autodoc]] GraniteForDoclingModel
-    - forward
-    - get_image_features
-
-## GraniteForDoclingTextModel
-
-[[autodoc]] GraniteForDoclingTextModel
-    - forward
-
-## GraniteForDoclingForConditionalGeneration
-
-[[autodoc]] GraniteForDoclingForConditionalGeneration
+[[autodoc]] GraniteDoclingModel
     - forward
     - get_image_features
     - predict_fine_route
+
+## GraniteDoclingTextModel
+
+[[autodoc]] GraniteDoclingTextModel
+    - forward
+
+## GraniteDoclingForConditionalGeneration
+
+[[autodoc]] GraniteDoclingForConditionalGeneration
+    - forward
+    - get_image_features

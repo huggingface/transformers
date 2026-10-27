@@ -29,7 +29,7 @@ if is_vision_available():
     from PIL import Image
 
 
-class GraniteForDoclingImageProcessingTester(ImageProcessingTester):
+class GraniteDoclingImageProcessingTester(ImageProcessingTester):
     def __init__(self, **kwargs):
         kwargs.setdefault("size", {"height": 20, "width": 20})
         kwargs.setdefault("crop_to_patches", False)
@@ -49,8 +49,8 @@ class GraniteForDoclingImageProcessingTester(ImageProcessingTester):
 
 @require_torch
 @require_vision
-class GraniteForDoclingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processor_tester_class = GraniteForDoclingImageProcessingTester
+class GraniteDoclingImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processor_tester_class = GraniteDoclingImageProcessingTester
 
     def test_image_processor_properties(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -121,20 +121,17 @@ class GraniteForDoclingImageProcessingTest(ImageProcessingTestMixin, unittest.Te
             self.assertEqual(encoding["pixel_values"].shape, (1, 1, 3, 20, 20))
             self.assertEqual((encoding["rows"], encoding["cols"]), ([[1]], [[1]]))
 
-    def test_do_pad_pads_the_tile_dimension(self):
+    def test_samples_are_padded_to_the_same_number_of_tiles(self):
         for image_processing_class in self.image_processing_classes.values():
             image_processor = image_processing_class(**{**self.image_processor_dict, "crop_to_patches": True})
             tall_image = np.random.randint(0, 255, size=(80, 40, 3), dtype=np.uint8)
             square_image = np.random.randint(0, 255, size=(20, 20, 3), dtype=np.uint8)
             # 3 tiles and 1 tile: the second sample gets 2 all-zero tiles
-            padded = image_processor([[tall_image], [square_image]], return_tensors="pt")["pixel_values"]
+            encoding = image_processor([[tall_image], [square_image]], return_tensors="pt")
+            padded = encoding["pixel_values"]
             self.assertEqual(padded.shape, (2, 3, 3, 20, 20))
             self.assertTrue(torch.all(padded[1, 1:] == 0))
-            # Without padding, samples must have the same number of tiles
-            unpadded = image_processor([[square_image], [square_image]], return_tensors="pt", do_pad=False)[
-                "pixel_values"
-            ]
-            self.assertEqual(unpadded.shape, (2, 1, 3, 20, 20))
+            self.assertEqual(encoding["pixel_attention_mask"].tolist(), [[True, True, True], [True, False, False]])
 
     def test_grid_side_is_capped(self):
         for image_processing_class in self.image_processing_classes.values():
@@ -162,8 +159,10 @@ class GraniteForDoclingImageProcessingTest(ImageProcessingTestMixin, unittest.Te
             self.assertTrue(torch.all(encoding["pixel_values"][1, 1:] == 0))
             self.assertEqual(encoding["rows"], [[2, 1], [1]])
             self.assertEqual(encoding["cols"], [[1, 1], [1]])
+            self.assertEqual(encoding["tile_fine_mask"].tolist(), [True, True])
             self.assertEqual(
-                encoding["tile_fine_mask"].tolist(), [[True, True, True, True], [True, False, False, False]]
+                encoding["pixel_attention_mask"].tolist(),
+                [[True, True, True, True], [True, False, False, False]],
             )
 
     def test_backends_equivalence_tiled(self):
