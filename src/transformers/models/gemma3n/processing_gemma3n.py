@@ -82,7 +82,7 @@ class Gemma3nProcessor(ProcessorMixin):
         return model_inputs
 
     def prepare_inputs_layout(self, images=None, text=None, audio=None, **kwargs):
-        images, text, *_ = super().prepare_inputs_layout(images=images, text=text, audio=audio, **kwargs)
+        images, text, _, audio = super().prepare_inputs_layout(images=images, text=text, audio=audio, **kwargs)
         if images is not None:
             images = make_nested_list_of_images(images)
             # Create empty text to be replaced with placeholders
@@ -91,7 +91,7 @@ class Gemma3nProcessor(ProcessorMixin):
 
         if audio is not None and not text:
             text = " ".join([self.audio_token] * len(audio))
-        return images, text, None, None
+        return images, text, None, audio
 
     @property
     def model_input_names(self):

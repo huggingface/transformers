@@ -780,7 +780,7 @@ class ProcessorMixin(PushToHubMixin):
                     if sum(n_images_in_text) != len(images):
                         raise ValueError(
                             f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                            f" Found {sum(n_images_in_text)} {self.image_token} tokens and {len(images)} images per sample."
+                            f" Found total {sum(n_images_in_text)} {self.image_token} tokens and {len(images)} images."
                         )
                 elif any(n_images_in_text):
                     raise ValueError(
@@ -794,7 +794,7 @@ class ProcessorMixin(PushToHubMixin):
                     if sum(n_videos_in_text) != len(videos):
                         raise ValueError(
                             f"The total number of {self.video_token} tokens in the prompts should be the same as the number of videos passed."
-                            f" Found {sum(n_videos_in_text)} {self.video_token} tokens and {len(videos)} videos."
+                            f" Found total {sum(n_videos_in_text)} {self.video_token} tokens and {len(videos)} videos."
                         )
                 elif any(n_videos_in_text):
                     raise ValueError(
@@ -809,7 +809,7 @@ class ProcessorMixin(PushToHubMixin):
                     if sum(n_audio_in_text) != n_audio_passed:
                         raise ValueError(
                             f"The total number of {self.audio_token} tokens in the prompts should be the same as the number of audio inputs passed."
-                            f" Found {sum(n_audio_in_text)} {self.audio_token} tokens and {n_audio_passed} audio inputs."
+                            f" Found total {sum(n_audio_in_text)} {self.audio_token} tokens and {n_audio_passed} audio inputs."
                         )
                 elif any(n_audio_in_text):
                     raise ValueError(
