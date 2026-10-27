@@ -205,7 +205,9 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(audio_positions.any())
         self.assertTrue((labels[audio_positions] == -100).all())
 
-        # non-audio positions match input_ids
-        kept_positions = ~audio_positions
-        self.assertTrue(kept_positions.any())
+        # only the assistant turn (up to and including its end-of-turn token) is kept
+        kept_positions = labels != -100
         self.assertTrue((labels[kept_positions] == input_ids[kept_positions]).all())
+        self.assertEqual(
+            processor.tokenizer.decode(labels[kept_positions]), "language English<asr_text>Hello world.<|im_end|>"
+        )

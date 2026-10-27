@@ -97,7 +97,8 @@ class GlmAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                         {"type": "text", "text": processor.default_transcription_prompt},
                     ],
                 },
-                {"role": "assistant", "content": [{"type": "text", "text": text}]},
+                # the helper closes the assistant turn with the `<|user|>` EOS, which the chat template doesn't add
+                {"role": "assistant", "content": [{"type": "text", "text": text + "<|user|>"}]},
             ]
             for audio_el, text in zip(audio, transcriptions)
         ]
@@ -109,6 +110,11 @@ class GlmAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(set(helper_outputs.keys()), set(manual_outputs.keys()))
         for key in helper_outputs:
             self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
+
+        # only the transcripts and their EOS are kept
+        labels = helper_outputs["labels"]
+        for row, text in enumerate(transcriptions):
+            self.assertEqual(processor.tokenizer.decode(labels[row][labels[row] != -100]), f"{text}<|user|>")
 
     # Overwrite to remove skip numpy inputs (still need to keep as many cases as parent)
     @require_librosa

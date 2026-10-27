@@ -25,8 +25,12 @@ from ...audio_utils import (
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, is_torch_available
 from ...utils.import_utils import is_nagisa_available, is_soynlp_available
+
+
+if is_torch_available():
+    import torch
 
 
 # fmt: off
@@ -348,6 +352,9 @@ class Qwen3ASRProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Qwen3ASRProcessor(ProcessorMixin):
     valid_processor_kwargs = Qwen3ASRProcessorKwargs
+    # Chat template markers delimiting the assistant turns, which are the only positions kept in the labels
+    assistant_header = "<|im_start|>assistant\n"
+    assistant_end = "<|im_end|>"
 
     def __init__(
         self,
@@ -379,7 +386,9 @@ class Qwen3ASRProcessor(ProcessorMixin):
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
-            Whether to return labels for training.
+            Whether to return labels for training. Only the assistant turns (up to and including their end-of-turn
+            token) are kept, so that the prompt, the audio placeholders and the padding are masked out of the loss.
+            Text without an assistant turn only has its audio placeholders and padding masked.
 
         Returns:
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
@@ -397,9 +406,29 @@ class Qwen3ASRProcessor(ProcessorMixin):
             labels = model_inputs["input_ids"].clone()
             labels[mm_token_type_ids != 0] = -100  # audio positions
             labels[labels == self.tokenizer.pad_token_id] = -100
-            model_inputs["labels"] = labels
+            model_inputs["labels"] = self._mask_non_assistant_tokens(model_inputs["input_ids"], labels)
 
         return BatchFeature(data=model_inputs, tensor_type="pt")
+
+    def _mask_non_assistant_tokens(self, input_ids: "torch.Tensor", labels: "torch.Tensor") -> "torch.Tensor":
+        """
+        Mask everything outside the assistant turns, e.g. the system and user prompts, out of the loss. Each assistant
+        turn is kept from the token after `assistant_header` up to and including `assistant_end` (or the end of the
+        sequence). Sequences without an assistant turn are left unchanged.
+        """
+        header_ids = self.tokenizer.encode(self.assistant_header, add_special_tokens=False)
+        end_id = self.tokenizer.convert_tokens_to_ids(self.assistant_end)
+        header_len = len(header_ids)
+        for row, ids in enumerate(input_ids.tolist()):
+            starts = [i + header_len for i in range(len(ids)) if ids[i : i + header_len] == header_ids]
+            if not starts:
+                continue
+            keep = torch.zeros(len(ids), dtype=torch.bool)
+            for start in starts:
+                end = ids.index(end_id, start) + 1 if end_id in ids[start:] else len(ids)
+                keep[start:end] = True
+            labels[row, ~keep] = -100
+        return labels
 
     def validate_inputs(
         self,
