@@ -1590,6 +1590,14 @@ class BigBirdModel(BigBirdPreTrainedModel):
             )
             self.set_attention_type("original_full")
 
+        if self.attention_type == "block_sparse" and self.config.is_decoder and past_key_values is not None:
+            # Block-sparse attention is bidirectional and never writes to the cache, so it cannot be used to decode
+            logger.warning_once(
+                "Attention type 'block_sparse' does not support `past_key_values`. "
+                "Changing attention type to 'original_full'..."
+            )
+            self.set_attention_type("original_full")
+
         if self.attention_type == "block_sparse":
             (
                 padding_len,
@@ -1993,18 +2001,6 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
-
-    def create_masks_for_generate(
-        self,
-        config: BigBirdConfig,
-        inputs_embeds: torch.Tensor,
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None,
-        **kwargs,
-    ) -> torch.Tensor | None:
-        # Overwritten because block-sparse attention needs a 2D mask whose length matches the input, while the
-        # generic function returns a 4D one. The full-attention path builds its own 4D mask inside the model.
-        return attention_mask
 
     @can_return_tuple
     @auto_docstring
