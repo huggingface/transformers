@@ -81,6 +81,10 @@ def build_glob_alternation(
 class ConversionOps(ABC):
     """Base class for weight conversion operations."""
 
+    # Set True on an op that maps several sources to several targets (e.g. Ernie VL experts).
+    # Ops outside core can opt in without core importing them.
+    supports_many_to_many = False
+
     def __repr__(self):
         if hasattr(self, "dim"):
             return f"{self.__class__.__name__}(dim={self.dim})"
@@ -320,8 +324,8 @@ class SplitModulelist(ConversionOps):
             sizes = tensor.size(self.dim)
             targets = self.get_target_patterns(input_dict, source_pattern, target_patterns, sizes)
             chunks = torch.chunk(tensor, sizes, dim=self.dim)
-            # We squeeze each chunk here as well to make sure to give them their original shape
-            all_tensors.update({target: chunk.squeeze() for target, chunk in zip(targets, chunks)})
+            # Squeeze only the split dim, so a tensor keeps its own size-1 dims
+            all_tensors.update({target: chunk.squeeze(self.dim) for target, chunk in zip(targets, chunks)})
         return all_tensors
 
     def get_target_patterns(
@@ -646,6 +650,8 @@ class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
     The final fusions are defined by the amount of original module lists.
     """
 
+    supports_many_to_many = True
+
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
         self.concat_dim = concat_dim
@@ -707,6 +713,8 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
     The splits are equal and are defined by the amount of original module lists.
     The final decoupled module lists are defined by the amount of keys.
     """
+
+    supports_many_to_many = True
 
     def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
         self.stack_dim = stack_dim
@@ -1177,13 +1185,6 @@ class PrefixChange(WeightRenaming):
         return result
 
 
-# List of classes that are known to be able to use m:n
-_INTERNAL_MANY_TO_MANY_CONVERSIONS = (
-    ErnieFuseAndSplitTextVisionExperts,
-    ErnieSplitAndDecoupleTextVisionExperts,
-)
-
-
 class WeightConverter(WeightTransform):
     __slots__ = ("operations", "force_cpu")
 
@@ -1199,13 +1200,17 @@ class WeightConverter(WeightTransform):
         self.force_cpu = force_cpu
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
-            # We allow many-to-many only if we use an internal operation that can handle it
-            if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
+            if not any(op.supports_many_to_many for op in self.operations):
                 raise ValueError(
                     f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
                 )
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
+
+    def copy(self, source_patterns, target_patterns, **kwargs) -> WeightConverter:
+        # a quantizer copies a converter for its scales, which must convert on cpu too
+        kwargs.setdefault("force_cpu", self.force_cpu)
+        return super().copy(source_patterns, target_patterns, **kwargs)
 
     def convert(
         self,
@@ -1725,8 +1730,9 @@ def convert_and_load_state_dict_in_model(
                 matched_dtype_pattern = dtype_policy_alt.search(renamed_key)
                 if matched_dtype_pattern is not None:
                     _dtype = dtype_plan[dtype_policy_by_group_name[matched_dtype_pattern.lastgroup]]
-            elif empty_param is not None and empty_param.dtype != _dtype:
-                _dtype = empty_param.dtype  # usually correct when initializing
+            elif empty_param is not None and empty_param.dtype != _dtype and not needs_quantization:
+                # Skip params quantized on load. Casting them first would zero int8 storage or round fp8 twice.
+                _dtype = empty_param.dtype
             if hf_quantizer and hf_quantizer.pre_quantized:
                 _dtype = hf_quantizer.get_new_dtype(mapping, tensor, _dtype)
 
