@@ -264,9 +264,5 @@ class MistralLarge4Config(PreTrainedConfig):
     tie_word_embeddings: bool = False
     final_logit_softcapping: float = 30.0
 
-    def __post_init__(self, **kwargs):
-        # Explicit parent call: the modular converter keeps it instead of inlining Mistral3's `model_type` lookups
-        super().__post_init__(**kwargs)
-
 
 __all__ = ["MistralLarge4TextConfig", "MistralLarge4Config"]

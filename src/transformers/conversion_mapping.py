@@ -2339,7 +2339,6 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"\.(feed_forward|shared_experts)\.w1\.", r".\1.gate_proj."),
         WeightRenaming(r"\.(feed_forward|shared_experts)\.w2\.", r".\1.down_proj."),
         WeightRenaming(r"\.(feed_forward|shared_experts)\.w3\.", r".\1.up_proj."),
-
         # Vision model Q and K projectors: saved for interleaved RoPE, Pixtral expects rotate-half
         # HACK: There is a Chunk(0) before the PermuteForRoPE which acts as a rename because PermuteForRoPE does not
         WeightConverter(
@@ -2371,7 +2370,6 @@ def _build_checkpoint_conversion_mapping():
         # Rename softmax scaling module
         WeightRenaming(r"\.ssmax_scaling.s", r"\.softmax_scaling.scale"),
         WeightRenaming(r"\.ssmax_scaling.b", r"\.softmax_scaling.bias"),
-
         # Concatenate w1 (gate) and w3 (up) weights into a single weight and merge across experts
         WeightConverter(
             source_patterns=[r"\.experts.*.w1.weight", r"\.experts.*.w3.weight"],

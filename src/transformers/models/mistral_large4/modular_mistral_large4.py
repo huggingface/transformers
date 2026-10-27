@@ -204,10 +204,6 @@ class MistralLarge4Config(Mistral3Config):
     tie_word_embeddings: bool = False
     final_logit_softcapping: float = 30.0
 
-    def __post_init__(self, **kwargs):
-        # Explicit parent call: the modular converter keeps it instead of inlining Mistral3's `model_type` lookups
-        PreTrainedConfig.__post_init__(self, **kwargs)
-
 
 class MistralLarge4RMSNorm(LlamaRMSNorm):
     pass
@@ -794,6 +790,3 @@ __all__ = [
     "MistralLarge4Model",
     "MistralLarge4ForConditionalGeneration",
 ]
-
-
-# TODO: re-organize modules
