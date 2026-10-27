@@ -1018,34 +1018,28 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin, Gemma4Processor):
         # Each 1s chunk of video/audio is wrapped in special tokens:
         # "00:00 <BOI> [frame image tokens] <EOI> 00:00 <BOA> [audio tokens] <EOA> ..."
         segments = []
-        processed_audio_tokens = 0
+        segments = []
+        audio_secs = range(frame_seconds[0], total_seconds)
+        counts = [
+            min(num_audio_tokens_per_sec, max(0, num_audio_tokens_total - k * num_audio_tokens_per_sec))
+            for k in range(len(audio_secs))
+        ]
+        # Token count per audio second; the last chunk absorbs rounding/sscp leftovers
+        if counts:
+            counts[-1] += num_audio_tokens_total - sum(counts)
+        audio_tokens = dict(zip(audio_secs, counts))
         for i, frame_sec in enumerate(frame_seconds):
-            # vision frame block, labeled with its own (rounded) timestamp
             segments.append(
                 f"{self.timestamp_fmt(frame_sec)} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}"
             )
 
             # 1s audio chunks that follow this frame before the next one
-            if i < num_frames - 1:
-                audio_seconds = range(frame_sec, frame_seconds[i + 1])
-            else:
-                audio_seconds = range(frame_sec, total_seconds)
-
-            for sec in audio_seconds:
-                n_tokens = num_audio_tokens_per_sec
-
-                # Clamp to account for accumulated rounding/truncation error
-                n_tokens = min(n_tokens, num_audio_tokens_total - processed_audio_tokens)
-
-                # The very last audio chunk absorbs any leftover tokens from rounding/sscp
-                if i == num_frames - 1 and sec == audio_seconds[-1]:
-                    n_tokens += max(0, num_audio_tokens_total - processed_audio_tokens - n_tokens)
-
-                if n_tokens > 0:
+            end_sec = frame_seconds[i + 1] if i < num_frames - 1 else total_seconds
+            for sec in range(frame_sec, end_sec):
+                if audio_tokens[sec] > 0:
                     segments.append(
-                        f"{self.timestamp_fmt(sec)} {self.boa_token}{self.audio_token * n_tokens}{self.eoa_token}"
+                        f"{self.timestamp_fmt(sec)} {self.boa_token}{self.audio_token * audio_tokens[sec]}{self.eoa_token}"
                     )
-                    processed_audio_tokens += n_tokens
 
         return " ".join(segments)
 
