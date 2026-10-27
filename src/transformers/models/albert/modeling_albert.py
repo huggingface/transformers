@@ -286,7 +286,7 @@ class AlbertTransformer(nn.Module):
 
 @auto_docstring
 class AlbertPreTrainedModel(PreTrainedModel):
-    config_class = AlbertConfig
+    config: AlbertConfig
     base_model_prefix = "albert"
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -335,7 +335,7 @@ class AlbertForPreTrainingOutput(ModelOutput):
 
 @auto_docstring
 class AlbertModel(AlbertPreTrainedModel):
-    config_class = AlbertConfig
+    config: AlbertConfig
     base_model_prefix = "albert"
 
     def __init__(self, config: AlbertConfig, add_pooling_layer: bool = True):
