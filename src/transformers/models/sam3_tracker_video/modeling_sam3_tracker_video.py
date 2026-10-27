@@ -712,7 +712,7 @@ class Sam3TrackerVideoSegmentationOutput(ModelOutput):
 
 @auto_docstring
 class Sam3TrackerVideoPreTrainedModel(PreTrainedModel):
-    config_class = Sam3TrackerVideoConfig
+    config: Sam3TrackerVideoConfig
     base_model_prefix = "tracker_model"
     main_input_name = "pixel_values"
     input_modalities = "video"

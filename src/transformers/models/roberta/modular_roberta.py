@@ -150,7 +150,7 @@ class RobertaLayer(BertLayer):
 
 @auto_docstring
 class RobertaPreTrainedModel(PreTrainedModel):
-    config_class = RobertaConfig
+    config: RobertaConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
