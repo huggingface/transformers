@@ -688,9 +688,14 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^patch_merge_mlp\.linear_2\.",
                 target_patterns="model.multi_modal_projector.merge_linear_2.",
             ),
-            WeightRenaming(source_patterns=r"\.block_sparse_moe\.", target_patterns=r"\.mlp\."),
+            # Only the MoE block. Otherwise a save would also rename the dense and vision `.mlp.` keys.
             WeightRenaming(
-                source_patterns=r"\.e_score_correction_bias", target_patterns=r"\.gate\.e_score_correction_bias"
+                source_patterns=r"\.block_sparse_moe\.(experts|gate|shared_experts)\.",
+                target_patterns=r"\.mlp\.\1\.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.block_sparse_moe\.e_score_correction_bias",
+                target_patterns=r"\.mlp\.gate\.e_score_correction_bias",
             ),
             WeightRenaming(
                 source_patterns=r"\.self_attn\.index_q_proj\.", target_patterns=".self_attn.indexer.q_proj."
@@ -1160,7 +1165,10 @@ def _build_checkpoint_conversion_mapping():
         "t5gemma2_encoder": [
             WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)embed_tokens\.", "text_model.embed_tokens."),
             WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)(?<!layer)(?<!_)norm\.", "text_model.norm."),
-            WeightRenaming(r"(?<!vision_model.encoder\.)(?<!decoder\.)(?<!text_model\.)layers.", "text_model.layers."),
+            WeightRenaming(
+                r"(?<!vision_model.encoder\.)(?<!vision_tower.encoder\.)(?<!decoder\.)(?<!text_model\.)layers.",
+                "text_model.layers.",
+            ),
         ],
         "mixtral": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
@@ -1979,6 +1987,10 @@ def _build_checkpoint_conversion_mapping():
         "UltrabertForQuestionAnswering": [
             WeightRenaming(r"^ultrabert\.", "model."),
         ],
+        "UltraVBertForMaskedLM": [
+            WeightRenaming(r"^head\.decoder\.", "lm_head."),
+            WeightRenaming(r"^head\.", "projection_head."),
+        ],
     }
 
     mapping["Tipsv2DptForNormalEstimation"] = [
@@ -2089,6 +2101,10 @@ def _build_checkpoint_conversion_mapping():
     mapping["mimo_v2_flash"] = mapping["qwen2_moe"].copy()
     mapping["mimo_v2_flash"] += [
         WeightRenaming("self_attn.attention_sink_bias", "self_attn.sinks"),
+    ]
+    mapping["flint"] = mapping["qwen2_moe"].copy()
+    mapping["flint"] += [
+        WeightRenaming("self_attn.softmax_offset", "self_attn.sinks"),
     ]
     # HYV3: qwen2_moe expert fusion + attribute renames for MiniMaxM2-style inheritance
     mapping["hy_v3"] = mapping["qwen2_moe"].copy()

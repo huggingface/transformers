@@ -1778,7 +1778,7 @@ class EsmFold2InputEmbedder(nn.Module):
 
 @auto_docstring
 class EsmFold2PreTrainedModel(PreTrainedModel):
-    config_class = EsmFold2Config
+    config: EsmFold2Config
     base_model_prefix = "esmfold2"
     main_input_name = "token_index"
     _no_split_modules = [

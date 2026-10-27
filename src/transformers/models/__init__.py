@@ -164,6 +164,7 @@ if TYPE_CHECKING:
     from .flaubert import *
     from .flava import *
     from .flex_olmo import *
+    from .flint import *
     from .florence2 import *
     from .fnet import *
     from .focalnet import *
@@ -296,6 +297,7 @@ if TYPE_CHECKING:
     from .mimi import *
     from .mimo_v2_flash import *
     from .minicpm3 import *
+    from .minicpm_ocr import *
     from .minicpmv4_6 import *
     from .minicpmv4_7 import *
     from .minimax import *
@@ -500,6 +502,7 @@ if TYPE_CHECKING:
     from .tvp import *
     from .udop import *
     from .ultrabert import *
+    from .ultravbert import *
     from .umt5 import *
     from .unispeech import *
     from .unispeech_sat import *
