@@ -314,7 +314,7 @@ class Sam3LiteTextTextEmbeddings(nn.Module):
 
 @auto_docstring
 class Sam3LiteTextPreTrainedModel(Sam3PreTrainedModel):
-    config_class = Sam3LiteTextConfig
+    config: Sam3LiteTextConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
 
@@ -336,7 +336,7 @@ class Sam3LiteTextPreTrainedModel(Sam3PreTrainedModel):
 """
 )
 class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
-    config_class = Sam3LiteTextTextConfig
+    config: Sam3LiteTextTextConfig
     config: Sam3LiteTextTextConfig
     _can_record_outputs = {
         "hidden_states": Sam3LiteTextTextEncoderLayer,
