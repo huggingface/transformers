@@ -58,28 +58,32 @@ if is_torch_available():
 def _build_tiny_audio_tokenizer(num_quantizers=4):
     """Build a tiny real codec for waveform encoding, decoding, and serialization tests."""
     config = Qwen3TTSTokenizerConfig(
-        encoder_hidden_size=16,
-        encoder_num_hidden_layers=1,
-        encoder_num_attention_heads=2,
-        encoder_num_key_value_heads=2,
-        encoder_intermediate_size=32,
-        encoder_num_filters=8,
-        encoder_kernel_size=7,
-        encoder_residual_kernel_size=3,
-        encoder_last_kernel_size=3,
-        encoder_num_residual_layers=1,
-        encoder_upsampling_ratios=[8, 6],
-        hidden_size=16,
-        num_hidden_layers=1,
-        num_attention_heads=2,
-        num_key_value_heads=2,
-        head_dim=8,
-        intermediate_size=32,
-        codebook_dim=16,
-        latent_dim=16,
-        decoder_dim=32,
-        upsample_rates=[2, 2],
-        upsampling_ratios=[2, 2],
+        encoder_config={
+            "hidden_size": 16,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 2,
+            "intermediate_size": 32,
+            "num_filters": 8,
+            "kernel_size": 7,
+            "residual_kernel_size": 3,
+            "last_kernel_size": 3,
+            "num_residual_layers": 1,
+            "upsampling_ratios": [8, 6],
+        },
+        decoder_config={
+            "hidden_size": 16,
+            "num_hidden_layers": 1,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 2,
+            "head_dim": 8,
+            "intermediate_size": 32,
+            "codebook_dim": 16,
+            "latent_dim": 16,
+            "decoder_dim": 32,
+            "upsample_rates": [2, 2],
+            "upsampling_ratios": [2, 2],
+        },
         acoustic_quantizer_config={
             "codebook_size": 8,
             "codebook_dim": 8,
@@ -862,19 +866,14 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         audio_config = codec.config.to_dict()
         if schema != "canonical":
-            # Published codec JSON nests the components and keeps quantizer settings in the decoder.
+            # Published codec JSON keeps the quantizer settings inside the encoder and decoder configs.
             audio_config = {
                 "model_type": codec.config.model_type,
                 "input_sample_rate": codec.config.input_sampling_rate,
                 "output_sample_rate": codec.config.output_sampling_rate,
                 "encoder_valid_num_quantizers": 4,
                 "encoder_config": {
-                    **{
-                        key.removeprefix("encoder_"): value
-                        for key, value in audio_config.items()
-                        if key.startswith("encoder_")
-                    },
-                    "sampling_rate": codec.config.input_sampling_rate,
+                    **codec.config.encoder_config.to_dict(),
                     "codebook_size": 8,
                     "codebook_dim": 4,
                     "vector_quantization_hidden_dimension": 4,
@@ -904,9 +903,9 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             loaded_config.save_pretrained(directory)
             with open(os.path.join(directory, "config.json"), encoding="utf-8") as file:
                 saved_audio_config = json.load(file)["audio_config"]
-            self.assertNotIn("encoder_config", saved_audio_config)
-            self.assertNotIn("decoder_config", saved_audio_config)
-            self.assertNotIn("codebook_size", saved_audio_config)
+            self.assertNotIn("num_quantizers", saved_audio_config["encoder_config"])
+            self.assertNotIn("num_quantizers", saved_audio_config["decoder_config"])
+            self.assertNotIn("encoder_valid_num_quantizers", saved_audio_config)
             self.assertIn("acoustic_quantizer_config", saved_audio_config)
             self.assertIn("semantic_quantizer_config", saved_audio_config)
             restored_config = AutoConfig.from_pretrained(directory)
