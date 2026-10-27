@@ -73,7 +73,7 @@ FLASH_ATTN_KERNEL_FALLBACK = {
 }
 
 FLASH_ATTN_KERNEL_VERSIONS = {
-    "kernels-community/flash-attn2": 3,
+    "kernels-community/flash-attn2": 4,
     "kernels-community/flash-attn3": 1,
     "kernels-community/vllm-flash-attn3": 1,
     "kernels-community/aiter-flash-attn": 2,
