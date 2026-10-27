@@ -12,6 +12,7 @@ from transformers.models.mistral_large4.modular_mistral_large4 import MistralLar
 BASE_CONFIG_DICT = {
     # `transformers_weights` field allows to use the consolidated.safetensors naming of the files natively
     "transformers_weights": "consolidated.safetensors.index.json",
+    "dtype": "bfloat16",
     "model_type": "mistral_large4",
     "projector_hidden_act": "gelu",
     "vision_feature_layer": -1,
