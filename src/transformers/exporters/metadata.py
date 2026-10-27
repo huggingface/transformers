@@ -83,6 +83,16 @@ class ExportMetadata:
         return tuple(self.raw.get("output_names", ()))
 
     @property
+    def num_user_outputs(self) -> int | None:
+        """How many returned leaves are the model's own, before the copies of mutated inputs a lowering appends."""
+        return self.raw.get("num_user_outputs")
+
+    @property
+    def constant_inputs(self) -> dict[str, Any]:
+        """Declared inputs that carry no tensor (e.g. a `None` mask slot), with their values."""
+        return self.raw.get("constant_inputs") or {}
+
+    @property
     def dtype(self) -> torch.dtype | None:
         """The precision the graph was exported at."""
         dtype = getattr(torch, self.raw.get("dtype") or "", None)
@@ -114,7 +124,13 @@ def build_export_metadata(
         "device": str(next((p.device for p in model.parameters()), torch.device("cpu"))),
         "kwargs": {name: _traced_kwarg(value) for name, value in inputs.items()},
     }
-    input_specs = exported_program.graph_signature.input_specs
-    metadata["input_names"] = [spec.arg.name for spec in input_specs if spec.kind.name == "USER_INPUT"]
+    graph_signature = exported_program.graph_signature
+    # Includes `ConstantArgument` slots: a positional backend (ExecuTorch) must still bind them.
+    user_inputs = [spec.arg for spec in graph_signature.input_specs if spec.kind.name == "USER_INPUT"]
+    metadata["input_names"] = [arg.name for arg in user_inputs]
+    metadata["constant_inputs"] = {
+        arg.name: arg.value for arg in user_inputs if type(arg).__name__ == "ConstantArgument"
+    }
     metadata["output_names"] = traced_output_names(exported_program)
+    metadata["num_user_outputs"] = sum(spec.kind.name == "USER_OUTPUT" for spec in graph_signature.output_specs)
     return metadata

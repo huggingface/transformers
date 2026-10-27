@@ -20,6 +20,8 @@ from unittest import mock
 
 from huggingface_hub import HfApi
 
+from tests.exporters.test_export import _run_onnx_program
+from tests.exporters.test_utils import _StubConfig, _StubExporter
 from transformers import BertConfig, GenerationConfig
 from transformers.exporters import EXPORT_BACKENDS, ExportArtifacts, ExportedComponent, register_backend
 from transformers.exporters.metadata import ExportMetadata
@@ -32,8 +34,6 @@ from transformers.testing_utils import (
     require_torch,
 )
 from transformers.utils.import_utils import is_torch_available
-
-from .test_utils import _StubConfig, _StubExporter
 
 
 if is_torch_available():
@@ -104,20 +104,22 @@ class ExportArtifactsPushToHubTester(unittest.TestCase):
         self.assertEqual(loaded["model"].metadata, exported["model"].metadata)
         self.assertEqual(loaded.config.hidden_size, exported.config.hidden_size)
         torch.testing.assert_close(
-            torch.as_tensor(loaded.program(**inputs)[0]), torch.as_tensor(exported.program(**inputs)[0])
+            _run_onnx_program(loaded.program, inputs), _run_onnx_program(exported.program, inputs)
         )
 
     def test_push_to_hub(self):
         exported, inputs = self._export()
         with TemporaryHubRepo(token=TOKEN) as repo:
             exported.push_to_hub(repo.repo_id, token=TOKEN)
-            self._assert_loads_same(ExportArtifacts.from_pretrained(repo.repo_id, token=TOKEN), exported, inputs)
+            loaded = ExportArtifacts.from_pretrained(repo.repo_id, token=TOKEN)
+            self._assert_loads_same(loaded, exported, inputs)
 
     def test_push_to_hub_via_save_pretrained(self):
         exported, inputs = self._export()
         with TemporaryHubRepo(token=TOKEN) as repo, tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory, push_to_hub=True, repo_id=repo.repo_id, token=TOKEN)
-            self._assert_loads_same(ExportArtifacts.from_pretrained(repo.repo_id, token=TOKEN), exported, inputs)
+            loaded = ExportArtifacts.from_pretrained(repo.repo_id, token=TOKEN)
+            self._assert_loads_same(loaded, exported, inputs)
 
     def test_from_pretrained_subfolder_downloads_only_the_export(self):
         """An export in a model repo's `onnx/` folder loads without downloading the model's own weights."""

@@ -41,6 +41,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.exporters.test_export import _run_onnx_program
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
 from transformers.exporters import ExportArtifacts
 from transformers.exporters.utils import decompose_for_generation
@@ -193,6 +194,9 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             entry, loaded = self._save_and_load_decode(ExecutorchExporter(), ExecutorchConfig(), directory)
             self.assertEqual(entry["file"], "model.pte")
+            # Positional binding needs these, and they can't be recovered from a saved `.pte`.
+            self.assertIn("num_user_outputs", entry["metadata"])
+            self.assertIn("constant_inputs", entry["metadata"])
             self.assertIsInstance(loaded.program, Program)
             self.assertIn("forward", loaded.program.method_names)
 
@@ -211,22 +215,23 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             self.assertEqual(entry["metadata"]["input_names"], [node.name for node in session.get_inputs()])
             self.assertEqual(entry["metadata"]["output_names"], [node.name for node in session.get_outputs()])
         self.assertTrue(any(name.startswith("input.") for name in entry["metadata"]["input_names"]))
+        self.assertNotIn("num_user_outputs", entry["metadata"])
 
     @require_onnxscript
     @require_onnxruntime
     @pytest.mark.onnx_export_test
     def test_saved_onnx_program_runs(self):
-        """A loaded `.onnx` runs like the program that was saved, ONNX Runtime reading its weights from
+        """A loaded `.onnx` runs like the exported program, ONNX Runtime reading its weights from
         `model.onnx.data`."""
         from transformers.exporters import OnnxConfig, OnnxExporter
 
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
         exported = OnnxExporter().export(self._tiny_model(), copy.deepcopy(inputs), OnnxConfig())
+        expected = _run_onnx_program(exported.program, inputs)
         with tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory)
             loaded = ExportArtifacts.from_pretrained(directory)
-            logits = torch.as_tensor(loaded.program(**inputs)[0])
-        torch.testing.assert_close(logits, torch.as_tensor(exported.program(**inputs)[0]))
+            torch.testing.assert_close(_run_onnx_program(loaded.program, inputs), expected)
 
     @require_onnxscript
     @require_onnxruntime
@@ -237,7 +242,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
 
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
         exported = OnnxExporter().export(self._tiny_model(), copy.deepcopy(inputs), OnnxConfig())
-        expected = torch.as_tensor(exported.program(**inputs)[0])
+        expected = _run_onnx_program(exported.program, inputs)
         with tempfile.TemporaryDirectory() as directory:
             blobs, snapshot = Path(directory, "blobs"), Path(directory, "snapshot")
             exported.save_pretrained(blobs)
@@ -245,14 +250,14 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             for file in blobs.iterdir():
                 (snapshot / file.name).symlink_to(file)
             loaded = ExportArtifacts.from_pretrained(snapshot)
-            torch.testing.assert_close(torch.as_tensor(loaded.program(**inputs)[0]), expected)
+            torch.testing.assert_close(_run_onnx_program(loaded.program, inputs), expected)
 
     @require_onnxscript
     @require_onnxruntime
     @pytest.mark.onnx_export_test
     def test_onnx_model_past_2gb_saves_and_loads(self):
-        """A model past protobuf's 2GB limit saves with its weights in `model.onnx.data`, and loads back to the same
-        program. A one-layer Llama with a 150k vocabulary holds 2.3GB of untied embeddings."""
+        """A model past protobuf's 2GB limit saves with its weights in `model.onnx.data`, loads, and runs like the
+        exported program. A one-layer Llama with a 150k vocabulary holds 2.3GB of untied embeddings."""
         from transformers.exporters import OnnxConfig, OnnxExporter
 
         config = LlamaConfig(
@@ -267,14 +272,14 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         self.assertGreater(sum(p.numel() * p.element_size() for p in model.parameters()), 2**31)
         inputs = {"input_ids": torch.randint(0, 64, (1, 8)), "attention_mask": torch.ones(1, 8, dtype=torch.long)}
         exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig())
-        expected = torch.as_tensor(exported.program(**inputs)[0])
+        expected = _run_onnx_program(exported.program, inputs)
 
         with tempfile.TemporaryDirectory() as directory:
             exported.save_pretrained(directory)
             self.assertLess((Path(directory) / "model.onnx").stat().st_size, 2**31)
             self.assertGreater((Path(directory) / "model.onnx.data").stat().st_size, 2**31)
-            logits = torch.as_tensor(ExportArtifacts.from_pretrained(directory).program(**inputs)[0])
-        torch.testing.assert_close(logits, expected, atol=0, rtol=0)
+            outputs = _run_onnx_program(ExportArtifacts.from_pretrained(directory).program, inputs)
+        torch.testing.assert_close(outputs, expected, atol=0, rtol=0)
 
     @require_openvino
     @pytest.mark.openvino_export_test
@@ -292,6 +297,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
             self.assertEqual(entry["metadata"]["input_names"], [port.get_any_name() for port in ov_model.inputs])
             self.assertEqual(entry["metadata"]["output_names"], [port.get_any_name() for port in ov_model.outputs])
         self.assertIn("beam_idx", entry["metadata"]["input_names"])
+        self.assertNotIn("num_user_outputs", entry["metadata"])
 
     # ──────────────────────── ONNX Runtime ────────────────────────
 

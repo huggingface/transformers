@@ -285,7 +285,9 @@ class HfExporter(ABC):
     @classmethod
     @abstractmethod
     def load_program(cls, path: str | Path) -> Any:
-        """Read back one program written by [`~HfExporter.save_program`]."""
+        """Read back a program written by [`~HfExporter.save_program`]. It can differ from what
+        [`~HfExporter.export_program`] returned: a runtime `Program` for ExecuTorch, whose `ExecutorchProgramManager`
+        can't be rebuilt from the file."""
 
     @classmethod
     def program_files(cls, filename: str) -> list[str]:

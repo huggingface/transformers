@@ -162,7 +162,9 @@ class OpenVINOExporter(DynamoExporter):
 
 def update_openvino_metadata(metadata: dict[str, Any], ov_model: openvino.Model) -> None:
     """Record the OpenVINO model's own port names: dotted leaf paths, and once `stateful`, no cache ports but a
-    `beam_idx` input."""
+    `beam_idx` input. The traced program's positional layout doesn't apply."""
+    metadata.pop("constant_inputs", None)
+    metadata.pop("num_user_outputs", None)
     metadata["input_names"] = [port.get_any_name() for port in ov_model.inputs]
     metadata["output_names"] = [port.get_any_name() for port in ov_model.outputs]
 

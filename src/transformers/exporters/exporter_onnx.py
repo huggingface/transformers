@@ -70,8 +70,8 @@ if is_torch_available():
 
     class SavedOnnxProgram(ONNXProgram):
         """An `ONNXProgram` loaded from a saved `.onnx` file. The graph is read without its weights, which stay in
-        the file's external data until used, and a call runs the saved file itself, so ONNX Runtime reads the
-        weights from beside it instead of from a copy."""
+        `model.onnx.data` until used, and a call runs the saved file itself, so ONNX Runtime reads the weights from
+        beside it instead of from a copy."""
 
         def __init__(self, path):
             super().__init__(onnx_ir.load(str(path)), None)
@@ -202,7 +202,9 @@ class OnnxExporter(DynamoExporter):
 
 def update_onnx_metadata(metadata: dict[str, Any], onnx_program: ONNXProgram) -> None:
     """Record the ONNX graph's own input and output names, which differ from the traced program's (dotted leaf
-    paths, `input.` / `output.` prefixes on mutated inputs)."""
+    paths, `input.` / `output.` prefixes on mutated inputs). The traced program's positional layout doesn't apply."""
+    metadata.pop("constant_inputs", None)
+    metadata.pop("num_user_outputs", None)
     metadata["input_names"] = [value.name for value in onnx_program.model.graph.inputs]
     metadata["output_names"] = [value.name for value in onnx_program.model.graph.outputs]
 

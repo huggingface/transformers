@@ -46,8 +46,9 @@ file per component, an `export.json` manifest with each component's file and met
 
 [`~ExportArtifacts.from_pretrained`] loads it back, from a local directory or a Hub repo (pass `subfolder` for an
 export kept next to the model's weights; only the export's own files are downloaded). Dynamo, ONNX, and OpenVINO
-programs load as the same type the export returned; an ExecuTorch `.pte` loads as an `executorch.runtime.Program`,
-ready to run.
+programs load as the type the export returned. A loaded ONNX program reads its graph without the weights, and calling
+it runs the saved file in ONNX Runtime, which reads `model.onnx.data` from beside it. An ExecuTorch `.pte` loads as an
+`executorch.runtime.Program`, since the `ExecutorchProgramManager` can't be rebuilt from the file.
 
 ```python
 from transformers.exporters import ExportArtifacts
