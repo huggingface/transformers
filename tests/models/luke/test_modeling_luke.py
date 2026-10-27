@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch LUKE model."""
 
+import tempfile
 import unittest
 
 import pytest
@@ -721,6 +722,21 @@ class LukeModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         config_and_inputs = (*config_and_inputs[:4], *((None,) * len(config_and_inputs[4:])))
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
+
+    def test_masked_lm_decoder_tied_to_word_embeddings(self):
+        # Checkpoints such as `studio-ousia/luke-base` do not store `lm_head.decoder.weight`: it must be tied to the
+        # word embeddings, otherwise it is reported missing and randomly initialized on load.
+        config = self.model_tester.get_config()
+        config.tie_word_embeddings = True
+        model = LukeForMaskedLM(config)
+        self.assertIs(model.lm_head.decoder.weight, model.luke.embeddings.word_embeddings.weight)
+
+        state_dict = {k: v for k, v in model.state_dict().items() if k != "lm_head.decoder.weight"}
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, state_dict=state_dict)
+            reloaded, info = LukeForMaskedLM.from_pretrained(tmp_dir, output_loading_info=True)
+        self.assertEqual(info["missing_keys"], set())
+        torch.testing.assert_close(reloaded.lm_head.decoder.weight, model.luke.embeddings.word_embeddings.weight)
 
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
