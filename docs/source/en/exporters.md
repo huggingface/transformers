@@ -385,21 +385,18 @@ exported = exporter.export(model, inputs, config=config)
 
 ## Generative models
 
-For autoregressive generation, the model's `forward` has different shapes at the prefill step
-(full prompt, no KV cache) versus the decode step (single token, populated KV cache). Exporters
-expose [`~HfExporter.export_for_generation`], which splits both stages and exports each.
+For autoregressive generation, a model runs in stages: the prompt, then one token at a time against a growing
+cache, and for a multi-modal model, an image or audio encoder once up front. [`~HfExporter.export_for_generation`]
+splits the model into those stages and exports each as a component.
 
-For multi-modal generative models, the prefill additionally splits into an image or audio
-encoder, the language model, and `lm_head`. Encoder and language-model discovery uses
-[`~PreTrainedModel.get_encoder`] (`modality="image"` or `"audio"`) and
-[`~PreTrainedModel.get_decoder`] accessors, so any new architecture using these
-work out of the box.
+The decode graph serves the prompt too, so the model's weights are exported once:
 
-A projector component appears only when the model exposes one
-under an attribute name (`multi_modal_projector`, `connector`, `embed_vision`,
-`embed_audio`). Qwen2-VL below folds its projector into the vision tower, so its component dict
-has no separate `multi_modal_projector` key. New architectures must align their projector
-attribute to one of these names instead of growing the list.
+- a `"decode"` component, called on the prompt (with an empty cache) and on every generated token;
+- an `"encoder"` component for an encoder-decoder, which also computes the decoder's cross-attention cache;
+- for a multi-modal model, `"embed_tokens"` and one `"<modality>_encoder"` per modality (`"image_encoder"`,
+  `"audio_encoder"`, ...); the decode graph then takes `inputs_embeds`, with the features scattered in.
+
+A model whose prompt would need a graph of its own (it would duplicate the weights) raises instead of exporting.
 
 <hfoptions id="generate">
 <hfoption id="Dynamo">
@@ -417,7 +414,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = DynamoExporter()
 config = DynamoConfig(dynamic=True)
 components = exporter.export_for_generation(model, inputs, config=config)
-# components: ExportArtifacts with "image_encoder", "language_model", "lm_head" and "decode",
+# components: ExportArtifacts with "embed_tokens", "image_encoder" and "decode",
 # each an ExportedComponent whose `.program` is an ExportedProgram
 ```
 
@@ -437,7 +434,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = OnnxExporter()
 config = OnnxConfig(dynamic=True)
 components = exporter.export_for_generation(model, inputs, config=config)
-# components: ExportArtifacts with "image_encoder", "language_model", "lm_head" and "decode",
+# components: ExportArtifacts with "embed_tokens", "image_encoder" and "decode",
 # each an ExportedComponent whose `.program` is an ONNXProgram
 ```
 
@@ -457,7 +454,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = ExecutorchExporter()
 config = ExecutorchConfig(backend="xnnpack", dynamic=True)  # Use "mlx" on Apple Silicon.
 components = exporter.export_for_generation(model, inputs, config=config)
-# components: ExportArtifacts with "image_encoder", "language_model", "lm_head" and "decode",
+# components: ExportArtifacts with "embed_tokens", "image_encoder" and "decode",
 # each an ExportedComponent whose `.program` is an ExecutorchProgramManager
 ```
 
@@ -477,7 +474,7 @@ inputs = processor(text=text, images=messages[0]["content"][0]["url"], return_te
 exporter = OpenVINOExporter()
 config = OpenVINOConfig(dynamic=True)
 components = exporter.export_for_generation(model, inputs, config=config)
-# components: ExportArtifacts with "image_encoder", "language_model", "lm_head" and "decode",
+# components: ExportArtifacts with "embed_tokens", "image_encoder" and "decode",
 # each an ExportedComponent whose `.program` is an openvino.Model
 ```
 
@@ -494,42 +491,35 @@ the manifest, the model config, and the generation config passed to `export_for_
 
 ### How `export_for_generation` works
 
-[`~exporters.utils.decompose_for_generation`] runs `model.generate(**inputs, max_new_tokens=2)`
-once and hooks `model.forward` to capture the real prefill and decode kwargs (and the
-per-submodule kwargs via hooks on each encoder/projector/language model if the model is
-multi-modal). That's why it works for any architecture, including decoder-only, SSM,
-encoder-decoder, and multi-modal models, without per-model glue. `export_for_generation` is a
-one-liner over it.
+[`~exporters.decompose.decompose_for_generation`] runs `model.generate` once and hooks `model.forward` (and each
+encoder or modality getter) to capture what every stage is really called with. That's why it works for decoder-only,
+SSM, encoder-decoder, and multi-modal models without per-model glue. `export_for_generation` exports what it returns.
 
-The capture runs the model eagerly on `inputs`, so pass small but representative values, such as a
-short prompt, a single small image, or a few audio frames. The exported program isn't tied to
-those sizes (dynamic shapes still flow through), but smaller capture inputs make
-`decompose_for_generation` cheaper and keep symbolic-shape inference tractable.
+The capture runs the model eagerly on `inputs`, so pass small but representative values, such as a short prompt, a
+single small image, or a few audio frames. The exported graphs aren't tied to those sizes (dynamic shapes still flow
+through), but smaller capture inputs keep the capture cheap and symbolic-shape inference tractable.
 
-Call `decompose_for_generation` directly to act between decomposing and exporting, such as
-running an eager forward for verification, swapping a submodule's inputs, or skipping a stage.
+Call `decompose_for_generation` directly to act between decomposing and exporting, such as running an eager forward
+for verification or swapping a component's inputs. Each component is a [`~exporters.components.Component`], the
+module to export and the inputs to export it with.
 
 ```python
-from transformers.exporters.utils import decompose_for_generation
+from transformers.exporters.decompose import decompose_for_generation
 
-components = decompose_for_generation(model, inputs)
-# {"image_encoder": (submodel, fwd_kwargs), "language_model": (...), ..., "decode": (...)}
-
-exported = {}
-for name, (submodel, subinputs) in components.items():
-    eager_outputs = submodel(**subinputs)  # sanity-check the eager forward before exporting
-    exported[name] = exporter.export(submodel, subinputs, config=config).program
+components = decompose_for_generation(model, inputs, multi_token_decode=True)
+for name, component in components.items():
+    eager_outputs = component.module(**component.inputs)  # sanity-check the eager forward before exporting
+    exported = exporter.export(component.module, component.inputs, config=config)
 ```
 
 ### Multi-token decode
 
-By default the `decode` component is a **single-token** step — one query token against the KV cache —
-so `torch.export` specializes its query-sequence axis to 1. Pass `multi_token_decode=True` to capture
-`decode` as a **multi-token** decode instead: [`~exporters.utils.decompose_for_generation`] merges two
-consecutive decode steps (it captures with `max_new_tokens=3`) into one forward, so that axis stays
-symbolic. A single graph then serves every query length — one token (ordinary decoding), many tokens
-at once (continuation-from-past, e.g. accepting a chunk of speculative tokens), and a plain prefill
-when the cache is empty.
+With a dynamic export (`dynamic=True`), the `decode` component is a **multi-token** decode:
+[`~exporters.decompose.decompose_for_generation`] merges two consecutive decode steps into one forward, so the query
+axis stays symbolic. The one graph serves every query length: the whole prompt with an empty cache, one token
+(ordinary decoding), or several at once (accepting a chunk of speculative tokens). A static export freezes the
+query axis, so its decode graph takes one token per call, the prompt included. `multi_token_decode` defaults to
+whether the export is dynamic.
 
 <hfoptions id="multi-token-decode">
 <hfoption id="Dynamo">

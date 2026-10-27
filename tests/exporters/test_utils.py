@@ -40,7 +40,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from transformers import BertConfig, GenerationConfig
+from transformers import BertConfig, GenerationConfig, PreTrainedConfig
 from transformers.exporters import (
     EXPORT_BACKENDS,
     AutoExportConfig,
@@ -60,9 +60,9 @@ if is_torch_available():
     import torch
     from torch import nn
 
+    from transformers.exporters.decompose import decompose_prefill_decode
     from transformers.exporters.utils import (
         cast_leaf_tensors,
-        decompose_prefill_decode,
         duplicate_leaf_tensors,
         patch_attributes,
         register_patch,
@@ -348,6 +348,7 @@ class DecomposePrefillDecodeGuardTest(unittest.TestCase):
                 # `decompose_prefill_decode` bases its capture config on the model's own (mimics a
                 # real `PreTrainedModel`); the guard under test fires afterwards on the capture count.
                 self.generation_config = GenerationConfig()
+                self.config = PreTrainedConfig()
 
             def forward(self, input_ids=None, **kwargs):
                 return input_ids
@@ -356,4 +357,6 @@ class DecomposePrefillDecodeGuardTest(unittest.TestCase):
                 return self.forward(input_ids=input_ids)  # a single top-level forward call
 
         with self.assertRaisesRegex(RuntimeError, "captured 1"):
-            decompose_prefill_decode(_FakeGenerator(), {"input_ids": torch.zeros(1, 1, dtype=torch.long)})
+            decompose_prefill_decode(
+                _FakeGenerator(), {"input_ids": torch.zeros(1, 1, dtype=torch.long)}, multi_token_decode=False
+            )

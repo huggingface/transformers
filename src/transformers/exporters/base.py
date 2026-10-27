@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import copy
 import dataclasses
 import json
 from abc import ABC, abstractmethod
@@ -31,10 +32,11 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
 from ..utils.hub import hf_api
 from .configs import ExportConfigMixin, ExportFormat
+from .decompose import decompose_for_generation
 from .metadata import ExportMetadata
 from .quantizers.utils import capture_calibration_inputs
 from .runtimes.base import ExportedModel
-from .utils import check_packages, decompose_for_generation
+from .utils import check_packages
 
 
 logger = logging.get_logger(__name__)
@@ -246,6 +248,8 @@ class HfExporter(ABC):
     program_suffix: str
     # Only for formats whose extension doesn't name them (OpenVINO's `.xml` / `.bin`).
     program_prefix: str = ""
+    # `export_for_generation`'s default: whether an encoder-decoder's decode graph writes its own cross-attention cache.
+    decoder_writes_cross_cache: bool = False
 
     required_packages: list[str] = []
     # Hard minimum versions — the exporter raises below these (features it relies on are absent).
@@ -342,48 +346,58 @@ class HfExporter(ABC):
         config: ExportConfigMixin | dict[str, ExportConfigMixin],
         *,
         generation_config: GenerationConfig | None = None,
-        multi_token_decode: bool = False,
+        multi_token_decode: bool | None = None,
+        decoder_writes_cross_cache: bool | None = None,
+        keep_all_logits: bool = False,
     ) -> ExportArtifacts:
         """
-        Decompose a generative model and export each component independently.
+        Decompose a generative model into the components a generation loop drives, and export each.
 
-        Thin wrapper around [`~exporters.utils.decompose_for_generation`] that calls
-        [`~HfExporter.export_program`] on every returned `(submodel, forward_inputs)` pair. If you need
-        the intermediate `(submodel, forward_inputs)` pairs (for verification, custom inputs,
-        skipping a stage, …), call [`~exporters.utils.decompose_for_generation`] directly.
+        The model is run on **generate** kwargs to capture what each component is called with
+        ([`~exporters.decompose.decompose_for_generation`]). The decode graph also serves the prompt, so no prompt
+        graph duplicates the model's weights.
 
         Args:
             model ([`PreTrainedModel`]):
                 The generative model to export. Must support `model.generate(**sample_inputs)`.
             sample_inputs (`dict[str, torch.Tensor | Cache]`):
-                **Generate** kwargs — what you'd pass to `model.generate(**sample_inputs)`
-                (typically `input_ids` + `attention_mask`, plus any modality inputs like
-                `pixel_values` / `input_features` for multi-modal models). Per-stage forward
-                kwargs are captured internally.
+                **Generate** kwargs: typically `input_ids` + `attention_mask`, plus any modality inputs.
             config ([`~transformers.exporters.configs.ExportConfigMixin`] or `dict[str, ExportConfigMixin]`):
-                Backend-specific configuration. Pass a single config to apply to every
-                component, or a `dict` keyed by component name (e.g. `"image_encoder"`,
-                `"language_model"`, `"lm_head"`, `"decode"`) to override per-component —
-                all component names must be present in the dict.
+                Backend settings: one for all components, or a dict naming every component.
             generation_config ([`~generation.GenerationConfig`], *optional*):
-                Forwarded to the `generate()` capture (defaults to the model's own). Pass one with
-                `cache_implementation="static"` to export against a fixed-size `StaticCache`.
-            multi_token_decode (`bool`, *optional*, defaults to `False`):
-                Whether the `decode` component processes multiple query tokens at once — a dynamic
-                query axis (prefill on an empty cache, continuation-from-past otherwise) — vs the
-                classic single-token step (see [`~exporters.utils.decompose_for_generation`]). Only
-                stays dynamic under a dynamic-shape export (`config.dynamic=True`).
+                The config the capture generates under, which fixes the cache the graphs are traced against (pass
+                `cache_implementation="static"` for a fixed-size `StaticCache`). Saved with the export.
+            multi_token_decode (`bool`, *optional*):
+                Whether the decode graph takes several query tokens at once, so it takes the whole prompt in one call.
+                Defaults to whether the decode config is dynamic; refused on a static one, whose decode graph takes
+                the prompt a token at a time.
+            decoder_writes_cross_cache (`bool`, *optional*):
+                For an encoder-decoder, whether the decode graph computes its own cross-attention cache instead of
+                the encoder graph. Defaults to the exporter's `decoder_writes_cross_cache`.
+            keep_all_logits (`bool`, *optional*, defaults to `False`):
+                Whether the graphs return logits for every position, which assisted (speculative) decoding needs,
+                instead of the last position only, which greedy and sampled decoding read.
 
         Returns:
-            [`ExportArtifacts`]: One [`ExportedComponent`] per stage, with the same keys as
-            [`~exporters.utils.decompose_for_generation`].
+            [`ExportArtifacts`]: One [`ExportedComponent`] per component: `"decode"`, plus `"encoder"`,
+            `"embed_tokens"` and modality encoders as the architecture calls for.
         """
+        generation_config, multi_token_decode, decoder_writes_cross_cache = self._resolve_generation_options(
+            model, config, generation_config, multi_token_decode, decoder_writes_cross_cache
+        )
         components = decompose_for_generation(
             model,
             sample_inputs,
             generation_config=generation_config,
             multi_token_decode=multi_token_decode,
+            decoder_writes_cross_cache=decoder_writes_cross_cache,
         )
+        # The decode graph serves the prefill step: it isn't a graph of its own.
+        components.pop("prefill")
+        if keep_all_logits:
+            # Without the captured `logits_to_keep` the forward defaults to 0, i.e. every position.
+            for component in components.values():
+                component.inputs.pop("logits_to_keep", None)
 
         if isinstance(config, dict):
             missing = set(components) - set(config)
@@ -403,6 +417,7 @@ class HfExporter(ABC):
                     quantizer.calibration_dataset,
                     generation_config=generation_config,
                     multi_token_decode=multi_token_decode,
+                    decoder_writes_cross_cache=decoder_writes_cross_cache,
                 )
                 configs = {
                     name: dataclasses.replace(config, quantizer=quantizer.with_calibration(calibration[name]))
@@ -410,16 +425,42 @@ class HfExporter(ABC):
                 }
 
         exported: dict[str, ExportedComponent] = {}
-        for name, (submodel, subinputs) in components.items():
+        for name, component in components.items():
             try:
-                program, metadata = self.export_program(submodel, subinputs, config=configs[name])
+                program, metadata = self.export_program(component.module, component.inputs, config=configs[name])
             except Exception as e:
                 raise RuntimeError(
                     f"{self.__class__.__name__}.export_program failed on component '{name}' "
-                    f"(submodel={type(submodel).__name__}, input keys={list(subinputs)})."
+                    f"(submodel={type(component.module).__name__}, input keys={list(component.inputs)})."
                 ) from e
             exported[name] = ExportedComponent(program, ExportMetadata.from_dict(metadata))
 
         return ExportArtifacts(
             exported, self.export_format, config=getattr(model, "config", None), generation_config=generation_config
         )
+
+    def _resolve_generation_options(
+        self, model, config, generation_config, multi_token_decode, decoder_writes_cross_cache
+    ) -> tuple[GenerationConfig | None, bool, bool]:
+        """`export_for_generation`'s defaults, checked.
+
+        `generation_config` is completed from the model's own (e.g. `forced_eos_token_id`), as `generate` does: the
+        export saves it, and a runtime generating with it alone would otherwise diverge from eager.
+        """
+        if generation_config is not None and getattr(model, "generation_config", None) is not None:
+            generation_config = copy.deepcopy(generation_config)
+            generation_config.update(
+                **model.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True
+            )
+        decode_config = config.get("decode") if isinstance(config, dict) else config
+        dynamic = bool(getattr(decode_config, "dynamic", False) or getattr(decode_config, "dynamic_shapes", None))
+        if multi_token_decode is None:
+            multi_token_decode = dynamic
+        elif multi_token_decode and not dynamic:
+            raise ValueError(
+                "`multi_token_decode=True` needs a dynamic export: a static one freezes the decode graph's query axis "
+                "at the captured length."
+            )
+        if decoder_writes_cross_cache is None:
+            decoder_writes_cross_cache = self.decoder_writes_cross_cache
+        return generation_config, multi_token_decode, decoder_writes_cross_cache

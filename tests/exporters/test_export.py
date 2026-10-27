@@ -24,20 +24,13 @@ import torch
 from parameterized import parameterized
 
 from transformers import GenerationConfig, set_seed
+from transformers.exporters.decompose import decompose_for_generation, decompose_multimodal, is_multimodal
 from transformers.exporters.exporter_dynamo import DynamoConfig, DynamoExporter
 from transformers.exporters.exporter_executorch import ExecutorchConfig, ExecutorchExporter
 from transformers.exporters.exporter_onnx import OnnxConfig, OnnxExporter
 from transformers.exporters.exporter_openvino import OpenVINOConfig, OpenVINOExporter
 from transformers.exporters.quantizers.utils import openvino_feed
-from transformers.exporters.utils import (
-    cast_leaf_tensors,
-    decompose_for_generation,
-    decompose_multimodal,
-    get_leaf_tensors,
-    is_multimodal,
-    module_device,
-    module_dtype,
-)
+from transformers.exporters.utils import cast_leaf_tensors, get_leaf_tensors, module_device, module_dtype
 from transformers.testing_utils import (
     require_executorch,
     require_onnxruntime,
@@ -186,6 +179,12 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
     # query axis symbolic. Backend-agnostic (it's in the shared decomposition). Static generate, which
     # captures a single-token decode with no merge, still runs.
     "generate.dynamic": {
+        "MambaForCausalLM": (
+            "The merged multi-token decode specializes its query axis to the captured 2 tokens (the selective-scan "
+            "path), so the decode graph can't take the prefill step in one call (`Guard failed: "
+            "input_ids.size()[1] == 2`). Single-token static generate is fine: it takes the prefill step a token "
+            "at a time."
+        ),
         "MllamaForConditionalGeneration": (
             "Cross-attention decode indexes `cross_attention_mask[:, :, arange(seq) + past_seen_tokens]`; "
             "the multi-token merge grows the query axis but not the captured cross-attention mask, so the "
@@ -910,7 +909,8 @@ class ExportTesterMixin:
         inputs_dict = cast_leaf_tensors(inputs_dict, dtype=module_dtype(model), device=module_device(model))
 
         if is_multimodal(model):
-            return decompose_multimodal(model, inputs_dict)
+            components = decompose_multimodal(model, inputs_dict)
+            return {name: (component.module, component.inputs) for name, component in components.items()}
         return {"model": (model, inputs_dict)}
 
     def _collect_eager_outputs(self, components):
@@ -1108,7 +1108,14 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     stage into individual submodules via :func:`decompose_multimodal`.
     """
 
-    def _prepare_export_generate_model_and_inputs(
+    def _prepare_export_generate_model_and_inputs(self, model_class, **kwargs):
+        """`_prepare_export_generate_components` as `{name: (model, inputs)}` pairs, for the components exported:
+        `"prefill"` is the decode graph's prefill call, not a graph of its own."""
+        components = self._prepare_export_generate_components(model_class, **kwargs)
+        components.pop("prefill")
+        return {name: (component.module, component.inputs) for name, component in components.items()}
+
+    def _prepare_export_generate_components(
         self, model_class, device=torch_device, generation_config=None, multi_token_decode=False
     ):
         """Decompose a generative model into exportable components.
@@ -1129,7 +1136,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
         single-token step — see :func:`decompose_for_generation`.
 
         Returns:
-            `{name: (model, inputs)}`: the components mapping (see `_prepare_export_model_and_inputs`).
+            `{name: Component}`: what `decompose_for_generation` returns, `"prefill"` included.
         """
         config, inputs_dict = self.prepare_config_and_inputs_for_generate()
         inputs_dict = _clean_inputs_for_export(inputs_dict, config)
@@ -1153,7 +1160,8 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
     @require_torch_greater_or_equal(MIN_EXPORT_TORCH_VERSION)
     @disable_hub_kernels
     def test_torch_export_generate(self, dynamic, generation_config, atol=1e-4, rtol=1e-4):
-        """Export prefill and decode stages with ``torch.export`` and verify outputs match eager."""
+        """Export each generation component with ``torch.export`` and verify outputs match eager, the decode graph
+        also on the prompt's call it serves."""
         self._skip_if_not_exportable()
 
         exporter = DynamoExporter()
@@ -1164,28 +1172,32 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 model_class, generate=True, dynamic=dynamic, backend="dynamo", generation_config=generation_config
             ):
                 continue
-            components = self._prepare_export_generate_model_and_inputs(
+            components = self._prepare_export_generate_components(
                 model_class, generation_config=generation_config, multi_token_decode=dynamic
             )
-            eager_outputs = self._collect_eager_outputs(components)
+            exact = not self._should_skip_exactness(
+                model_class, generate=True, dynamic=dynamic, backend="dynamo", generation_config=generation_config
+            )
 
-            for name, (model, inputs) in components.items():
-                with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported_program = exporter.export(model, inputs, config=config).program
-
+            prefill = components.pop("prefill")
+            for name, component in components.items():
+                # Each graph's calls; a multi-token decode graph also runs the prefill step.
+                calls = {name: component.inputs}
+                if name == "decode" and dynamic:
+                    calls["decode/prefill"] = prefill.inputs
+                eager_outputs = {}
+                for call, inputs in calls.items():
                     with torch.no_grad():
                         set_seed(1234)
-                        exported_outputs = get_leaf_tensors(exported_program.module()(**copy.deepcopy(inputs)))
+                        eager_outputs[call] = get_leaf_tensors(component.module(**copy.deepcopy(inputs)))
+                runtime = exporter.export(component.module, copy.deepcopy(component.inputs), config=config).runtime()
+                for call, inputs in calls.items():
+                    with self.subTest(f"{model_class.__name__}/{call}"):
+                        set_seed(1234)
+                        exported_outputs = dict(runtime(**copy.deepcopy(inputs)))
                         self.assertTrue(exported_outputs, "Exported outputs are empty.")
-
-                    if not self._should_skip_exactness(
-                        model_class,
-                        generate=True,
-                        dynamic=dynamic,
-                        backend="dynamo",
-                        generation_config=generation_config,
-                    ):
-                        self._check_outputs_close(exported_outputs, eager_outputs[name], atol=atol, rtol=rtol)
+                        if exact:
+                            self._check_outputs_close(exported_outputs, eager_outputs[call], atol=atol, rtol=rtol)
 
     # ──────────────────────── ONNX tests ─────────────────────────
 

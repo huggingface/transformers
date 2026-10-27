@@ -44,7 +44,7 @@ import pytest
 from tests.exporters.test_export import _run_onnx_program
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
 from transformers.exporters import ExportArtifacts
-from transformers.exporters.utils import decompose_for_generation
+from transformers.exporters.decompose import decompose_for_generation
 from transformers.testing_utils import (
     require_executorch,
     require_onnxruntime,
@@ -89,9 +89,12 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         """Capture the multi-token `decode` component against a fixed-size `StaticCache`."""
         inputs = {"input_ids": prompt, "attention_mask": torch.ones_like(prompt)}
         gen_config = GenerationConfig(cache_implementation="static", max_cache_len=MAX_CACHE_LEN, do_sample=False)
-        return decompose_for_generation(
+        decode = decompose_for_generation(
             model, copy.deepcopy(inputs), generation_config=gen_config, multi_token_decode=True
         )["decode"]
+        # As `export_for_generation(keep_all_logits=True)`: logits for every query position.
+        decode.inputs.pop("logits_to_keep", None)
+        return decode.module, decode.inputs
 
     # ──────────────────── torch.export (Dynamo) ────────────────────
 
