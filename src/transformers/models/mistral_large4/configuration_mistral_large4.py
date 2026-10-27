@@ -144,6 +144,7 @@ class MistralLarge4TextConfig(PreTrainedConfig):
     no_rope_layers: list[int] | None = None
     no_rope_layer_interval: int = 4
     kv_source_layers: list[int] | None = None
+    final_logit_softcapping: float = 30.0
 
     def __post_init__(self, **kwargs):
         # YaRN over a 512-token pretraining window, no magnitude scaling (attention_factor = 1.0) + LeRoPE
@@ -262,7 +263,6 @@ class MistralLarge4Config(PreTrainedConfig):
     spatial_merge_size: int = 2
 
     tie_word_embeddings: bool = False
-    final_logit_softcapping: float = 30.0
 
 
 __all__ = ["MistralLarge4TextConfig", "MistralLarge4Config"]

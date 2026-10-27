@@ -45,6 +45,7 @@ HF_TO_VLLM_MAPPING = {
     "text_config.rope_parameters.rope_theta": "rope_theta",
     "text_config.max_position_embeddings": "max_position_embeddings",
     "text_config.vocab_size": "vocab_size",
+    "text_config.final_logit_softcapping": "softmax_tanh_gating",
     # Text model: YaRN (`apply_scale: false` means no magnitude scaling, see the `attention_factor` constant)
     "text_config.rope_parameters.factor": "yarn.factor",
     "text_config.rope_parameters.original_max_position_embeddings": "yarn.original_max_position_embeddings",

@@ -141,6 +141,7 @@ class MistralLarge4TextConfig(GlmMoeDsaConfig):
     no_rope_layers: list[int] | None = None
     no_rope_layer_interval: int = 4
     kv_source_layers: list[int] | None = None
+    final_logit_softcapping: float = 30.0
 
     q_lora_rank = AttributeError()
     mlp_bias = AttributeError()
@@ -203,7 +204,6 @@ class MistralLarge4Config(Mistral3Config):
     }
 
     tie_word_embeddings: bool = False
-    final_logit_softcapping: float = 30.0
 
 
 class MistralLarge4RMSNorm(LlamaRMSNorm):
@@ -777,7 +777,7 @@ class MistralLarge4CausalLMOutputWithPast(Mistral3CausalLMOutputWithPast):
 class MistralLarge4ForConditionalGeneration(Mistral3ForConditionalGeneration):
     def __init__(self, config: MistralLarge4Config):
         super().__init__(config)
-        self.final_logit_softcapping = config.final_logit_softcapping
+        self.final_logit_softcapping = self.config.get_text_config().final_logit_softcapping
 
     @merge_with_config_defaults
     @can_return_tuple

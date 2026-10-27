@@ -1066,7 +1066,7 @@ class MistralLarge4ForConditionalGeneration(MistralLarge4PreTrainedModel, Genera
         super().__init__(config)
         self.model = MistralLarge4Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.final_logit_softcapping = config.final_logit_softcapping
+        self.final_logit_softcapping = self.config.get_text_config().final_logit_softcapping
         self.post_init()
 
     def get_output_embeddings(self) -> nn.Module:
