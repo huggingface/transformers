@@ -46,7 +46,7 @@ class HiggsAudioV2TokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     models.
     """
 
-    config_class = HiggsAudioV2TokenizerConfig
+    config: HiggsAudioV2TokenizerConfig
     base_model_prefix = "higgs_audio_v2_tokenizer"
     main_input_name = "input_values"
     input_modalities = "audio"

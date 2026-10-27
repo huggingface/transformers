@@ -1075,7 +1075,6 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
         "hidden_states": EomtDinov3Layer,
         "attentions": EomtDinov3Attention,
     }
-    config_class = EomtDinov3Config
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:

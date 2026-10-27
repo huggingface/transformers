@@ -487,7 +487,7 @@ class XLMRobertaLMHead(nn.Module):
 
 @auto_docstring
 class XLMRobertaPreTrainedModel(PreTrainedModel):
-    config_class = XLMRobertaConfig
+    config: XLMRobertaConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True

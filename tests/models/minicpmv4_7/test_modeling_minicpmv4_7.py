@@ -551,7 +551,12 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         messages = [{"role": "user", "content": [{"type": "text", "text": "Hi"}]}]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device)
 
         with torch.no_grad():
@@ -581,7 +586,12 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             }
         ]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -589,7 +599,10 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         # fmt: off
         EXPECTED_TEXT = Expectations(
             {
-                ("cuda", (8, 0)): "So, let me analyze the image. The animal has thick fur, is in a snowy environment, and looks like a wild cat. Wait, the",
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
+                ("cuda", (8, 6)): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
+                ("cuda", (8, 0)): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
+                ("rocm", (9, 4)): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
                 ("xpu", 5): "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
             }
         ).get_expectation()
@@ -617,7 +630,12 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             }
         ]
         inputs = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            return_tensors="pt",
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -625,7 +643,8 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         expected_texts = Expectations(
             {
-                ("cuda", (8, 0)): "So, let me analyze the image. The video shows a tennis match or practice on an indoor tennis court. There's a player in the foreground,",
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
+                ("cuda", (8, 0)): "The video shows an indoor tennis court where a male player, wearing a white t-shirt, black shorts, and white socks, is preparing to hit a",
                 ("xpu", 5): "The video shows an indoor tennis court where a male player, wearing a white t-shirt, black shorts, and white socks, is preparing to hit a",
             }
         )  # fmt: skip
@@ -662,6 +681,7 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -669,8 +689,9 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         expected_texts = Expectations(
             {
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
                 ("cuda", (8, 0)): [
-                    'So, let me analyze the image. The animal has thick fur, is in a snowy environment, and looks like a wild cat. Wait, the'
+                    'This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a'
                 ] * 2,
                 ("xpu", 5): [
                     'This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a',
@@ -711,6 +732,7 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             return_dict=True,
             return_tensors="pt",
             padding=True,
+            enable_thinking=False,
         ).to(model.device, dtype=torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30, do_sample=False)
@@ -718,9 +740,18 @@ class MiniCPMV4_7IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
         expected_texts = Expectations(
             {
+                # enable_thinking defaults to false in the current chat template, so expectations are thinking-off texts.
+                ("cuda", (8, 6)): [
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
+                ],
                 ("cuda", (8, 0)): [
-                    "So, let me analyze the image. The animal has thick fur, is in a snowy environment, and looks like a wild cat. Wait, the",
-                    "Hmm, the user is asking about my identity. I should clearly state I'm from the MiniCPM series, developed by ModelBest and OpenB",
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
+                ],
+                ("rocm", (9, 4)): [
+                    "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \n- The animal",
+                    "I'm a model from the MiniCPM series, developed by ModelBest Inc. and the OpenBMB open-source community. For more details,",
                 ],
                 ("xpu", 5): [
                     "This is a **Yutanchys** — wait, no, actually, that’s not right.\n\nLooking more closely:  \nThis is a",
