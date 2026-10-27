@@ -986,13 +986,21 @@ class LwDetrPreTrainedModel(PreTrainedModel):
             init.normal_(module.level_embed)
         if hasattr(module, "refpoint_embed") and module.refpoint_embed is not None:
             init.constant_(module.refpoint_embed.weight, 0)
+        prior_prob = 0.01
+        bias_value = -math.log((1 - prior_prob) / prior_prob)
         if hasattr(module, "class_embed") and module.class_embed is not None:
-            prior_prob = 0.01
-            bias_value = -math.log((1 - prior_prob) / prior_prob)
             init.constant_(module.class_embed.bias, bias_value)
         if hasattr(module, "bbox_embed") and module.bbox_embed is not None:
             init.constant_(module.bbox_embed.layers[-1].weight, 0)
             init.constant_(module.bbox_embed.layers[-1].bias, 0)
+        # The original implementation deep-copies `class_embed` and `bbox_embed` into the two-stage encoder heads
+        # after initializing them, so the encoder heads share the focal-loss prior and the zeroed last box layer.
+        if isinstance(module, LwDetrModel):
+            for class_head in module.enc_out_class_embed:
+                init.constant_(class_head.bias, bias_value)
+            for bbox_head in module.enc_out_bbox_embed:
+                init.constant_(bbox_head.layers[-1].weight, 0)
+                init.constant_(bbox_head.layers[-1].bias, 0)
 
 
 @auto_docstring(
