@@ -26,7 +26,7 @@ from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union, Unpack
+from typing import Annotated, Any, Literal, TypedDict, TypeVar, Union, Unpack, is_typeddict
 
 import numpy as np
 from huggingface_hub import is_offline_mode
@@ -1686,22 +1686,22 @@ class ProcessorMixin(PushToHubMixin):
         flat_kwargs = {
             key: value
             for key, value in output_kwargs.items()
-            if key not in map_preprocessor_kwargs and key != "common_kwargs"
+            if not is_typeddict(ModelProcessorKwargs.__annotations__.get(key)) and key != "common_kwargs"
         }
         validate_typed_dict(ModelProcessorKwargs, flat_kwargs)
 
         # Validate modality-specific kwargs
         for modality, typed_dict_obj in ModelProcessorKwargs.__annotations__.items():
-            if modality not in map_preprocessor_kwargs:
+            if not is_typeddict(typed_dict_obj):
                 continue
-
-            # Same trick as for modality_valid_kwargs. Processor and preprocessor kwargs
-            # are not necessarily the same.
-            preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
-            if preprocessor is None or getattr(preprocessor, "valid_kwargs", None) is None:
-                continue
-            preprocessor_typed_dict_obj = getattr(preprocessor, "valid_kwargs")
-            typed_dict_obj = _merge_typed_dict(preprocessor_typed_dict_obj, typed_dict_obj)
+            elif modality in map_preprocessor_kwargs:
+                # Same trick as for modality_valid_kwargs. Processor and preprocessor kwargs
+                # are not necessarily the same.
+                preprocessor = getattr(self, map_preprocessor_kwargs[modality], None)
+                if preprocessor is None or getattr(preprocessor, "valid_kwargs", None) is None:
+                    continue
+                preprocessor_typed_dict_obj = getattr(preprocessor, "valid_kwargs")
+                typed_dict_obj = _merge_typed_dict(preprocessor_typed_dict_obj, typed_dict_obj)
 
             validate_typed_dict(typed_dict_obj, output_kwargs[modality])
 
