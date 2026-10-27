@@ -100,7 +100,6 @@ else:
             ("granite4_vision", {"torchvision": "LlavaNextImageProcessor", "pil": "LlavaNextImageProcessorPil"}),
             ("groupvit", {"torchvision": "CLIPImageProcessor", "pil": "CLIPImageProcessorPil"}),
             ("hiera", {"torchvision": "BitImageProcessor", "pil": "BitImageProcessorPil"}),
-            ("hy_v4_vl", {"torchvision": "HunYuanVLImageProcessor", "pil": "HunYuanVLImageProcessorPil"}),
             (
                 "hyperclovax_vision_v2",
                 {"torchvision": "Qwen2VLImageProcessor", "pil": "Qwen2VLImageProcessorPil"},

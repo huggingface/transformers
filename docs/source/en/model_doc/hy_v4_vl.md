@@ -172,6 +172,14 @@ if torch.distributed.get_rank() == 0:
 [[autodoc]] HYV4VLProcessor
     - __call__
 
+## HYV4VLImageProcessor
+
+[[autodoc]] HYV4VLImageProcessor
+
+## HYV4VLImageProcessorPil
+
+[[autodoc]] HYV4VLImageProcessorPil
+
 ## HYV4VLVideoProcessor
 
 [[autodoc]] HYV4VLVideoProcessor

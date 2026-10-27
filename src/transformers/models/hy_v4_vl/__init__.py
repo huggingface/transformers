@@ -25,6 +25,8 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_hy_v4_vl import *
+    from .image_processing_hy_v4_vl import *
+    from .image_processing_pil_hy_v4_vl import *
     from .modeling_hy_v4_vl import *
     from .processing_hy_v4_vl import *
     from .video_processing_hy_v4_vl import *

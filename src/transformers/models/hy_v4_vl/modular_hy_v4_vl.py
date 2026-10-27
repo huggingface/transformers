@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import itertools
-import math
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -37,6 +36,8 @@ from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
 from ..ernie4_5.modeling_ernie4_5 import apply_rotary_pos_emb  # noqa: F401
 from ..hunyuan_vl.configuration_hunyuan_vl import HunYuanVLVisionConfig
+from ..hunyuan_vl.image_processing_hunyuan_vl import HunYuanVLImageProcessor
+from ..hunyuan_vl.image_processing_pil_hunyuan_vl import HunYuanVLImageProcessorPil
 from ..hunyuan_vl.modeling_hunyuan_vl import (
     HunYuanVLRMSNorm,
     HunYuanVLVisionAttention,
@@ -717,62 +718,60 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         )
 
 
-def smart_resize(
+def video_adaptive_resize(
+    frame_height: int,
+    frame_width: int,
     num_frames: int,
-    height: int,
-    width: int,
+    *,
     factor: int,
-    min_pixels: int,
-    max_pixels: int,
-    max_image_size: int,
+    max_pixels: int = 33554432,
+    max_image_size: int = 1024 * 1024,
 ) -> tuple[int, int]:
-    """Resize a frame under both the clip's pixel budget and the per-frame area limit."""
-    if min(num_frames, height, width, factor, min_pixels, max_pixels, max_image_size) <= 0:
+    """Return the largest aligned ``(width, height)`` for a frame that fits every budget.
+
+    ``factor`` is the merged patch edge in pixels (``patch_size * merge_size``). A frame of ``rows x cols``
+    merged patches costs ``rows * (cols + 1)`` tokens, one newline token per row, which is the same accounting the
+    processor uses. The result never upscales, keeps each frame within ``max_image_size`` pixels, and keeps
+    ``num_frames * rows * (cols + 1)`` inside the visual token budget of ``max_pixels``. Calling it again on its own
+    output returns the same size, so a frame that was already resized is left untouched.
+    """
+    if min(num_frames, frame_height, frame_width, factor, max_pixels, max_image_size) <= 0:
         raise ValueError("Video dimensions, resize factor, and pixel budgets must be positive.")
-    if max(height, width) / min(height, width) > 200:
+    if max(frame_height, frame_width) / min(frame_height, frame_width) > 200:
         raise ValueError(
-            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
+            f"absolute aspect ratio must be smaller than 200, got {max(frame_height, frame_width) / min(frame_height, frame_width)}"
         )
-    per_frame_budget = min(max_pixels / num_frames, max_image_size)
-    min_cells = math.ceil(min_pixels / factor**2)
-    max_cells = math.floor(per_frame_budget / factor**2)
-    if min_cells > max_cells:
-        raise ValueError("The video pixel budget cannot fit a factor-aligned frame at the minimum pixel area.")
+    max_rows = max(1, frame_height // factor)
+    max_cols = max(1, frame_width // factor)
+    visual_budget = max_pixels // (factor * factor)
+    for rows in range(max_rows, 0, -1):
+        # On the ray scale * (height, width), rows == k spans cols floor(W*k/H) .. ceil(W*(k+1)/H) - 1;
+        # rows clamp at 1, so the last step admits any narrower width.
+        low_cols = 1 if rows == 1 else max(1, frame_width * rows // frame_height)
+        high_cols = min(max_cols, max(1, -(-frame_width * (rows + 1) // frame_height) - 1))
+        budget_cols = visual_budget // (num_frames * rows) - 1 if visual_budget > 0 else 0
+        cap_cols = max_image_size // (factor * factor * rows)
+        cols = min(high_cols, budget_cols, cap_cols)
+        if cols >= low_cols:
+            return cols * factor, rows * factor
+    return factor, factor
 
-    h_bar = max(factor, round(height / factor) * factor)
-    w_bar = max(factor, round(width / factor) * factor)
-    if h_bar * w_bar > per_frame_budget:
-        beta = math.sqrt((height * width) / per_frame_budget)
-        h_bar = max(factor, math.floor(height / beta / factor) * factor)
-        w_bar = max(factor, math.floor(width / beta / factor) * factor)
-    elif h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (height * width))
-        h_bar = math.ceil(height * beta / factor) * factor
-        w_bar = math.ceil(width * beta / factor) * factor
 
-    if min_pixels <= h_bar * w_bar <= per_frame_budget:
-        return h_bar, w_bar
+@auto_docstring
+class HYV4VLImageProcessor(HunYuanVLImageProcessor):
+    pass
 
-    # Only repair boundary cases where clamping or rounding violated the area limits.
-    # Enumerate the shorter grid edge to find a feasible shape close to the input aspect ratio.
-    candidates = []
-    for short_edge in range(1, math.isqrt(max_cells) + 1):
-        lower = max(short_edge, math.ceil(min_cells / short_edge))
-        upper = max_cells // short_edge
-        if lower <= upper:
-            long_edge = min(upper, max(lower, round(short_edge * max(height, width) / min(height, width))))
-            grid_h, grid_w = (short_edge, long_edge) if height <= width else (long_edge, short_edge)
-            candidates.append((grid_h, grid_w))
-    grid_h, grid_w = min(
-        candidates, key=lambda grid: (abs(math.log(grid[0] * width / (grid[1] * height))), -grid[0] * grid[1])
-    )
-    return grid_h * factor, grid_w * factor
+
+@auto_docstring
+class HYV4VLImageProcessorPil(HunYuanVLImageProcessorPil):
+    pass
 
 
 class HYV4VLVideoProcessorInitKwargs(Qwen3VLVideoProcessorInitKwargs, total=False):
     r"""
     size (`dict[str, int]`, *optional*):
-        Minimum per-frame pixel area (`shortest_edge`) and total clip pixel budget (`longest_edge`).
+        Required per-frame pixel-area key (`shortest_edge`, validated only, frames are never upscaled to reach it)
+        and total clip pixel budget (`longest_edge`).
     patch_size (`int`, *optional*, defaults to 16):
         The spatial patch size of the vision encoder.
     temporal_patch_size (`int`, *optional*, defaults to 1):
@@ -816,12 +815,11 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
     ) -> "torch.Tensor":
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-        height, width = smart_resize(
+        width, height = video_adaptive_resize(
+            frame_height=videos.shape[-2],
+            frame_width=videos.shape[-1],
             num_frames=videos.shape[1],
-            height=videos.shape[-2],
-            width=videos.shape[-1],
             factor=factor,
-            min_pixels=size.shortest_edge,
             max_pixels=size.longest_edge,
             max_image_size=max_image_size["longest_edge"],
         )
@@ -950,7 +948,6 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
         do_resize = videos_kwargs.get("do_resize", None)
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = videos_kwargs.get("size", None) or self.size
-        min_pixels = size["shortest_edge"]
         max_pixels = size["longest_edge"]
         max_image_size = videos_kwargs.get("max_image_size", None) or self.max_image_size
         patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
@@ -959,12 +956,11 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
 
         factor = patch_size * merge_size
         if do_resize:
-            height, width = smart_resize(
+            width, height = video_adaptive_resize(
+                frame_height=height,
+                frame_width=width,
                 num_frames=num_frames,
-                height=height,
-                width=width,
                 factor=factor,
-                min_pixels=min_pixels,
                 max_pixels=max_pixels,
                 max_image_size=max_image_size["longest_edge"],
             )
@@ -1039,6 +1035,8 @@ __all__ = [
     "HYV4VLTextModel",
     "HYV4VLVisionTransformer",
     "HYV4VLForConditionalGeneration",
+    "HYV4VLImageProcessor",
+    "HYV4VLImageProcessorPil",
     "HYV4VLVideoProcessor",
     "HYV4VLProcessor",
 ]

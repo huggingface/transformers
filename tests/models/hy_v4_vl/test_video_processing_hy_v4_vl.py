@@ -228,24 +228,43 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertEqual(estimate, output.pixel_values_videos.shape[0])
         self.assertEqual(estimate, output.video_grid_thw.prod().item())
 
-    @parameterized.expand(
-        [
-            ("below_patch", 1024, 512),
-            ("minimum_exceeds_cap", 4096, 2048),
-            ("no_aligned_area", 1025, 2047),
-        ]
-    )
-    def test_rejects_infeasible_minimum_and_cap(self, _, minimum, cap):
+    def test_resize_is_idempotent(self):
+        # A frame that was already resized must come out unchanged from a second pass.
         processor = self.fast_video_processing_class(**self.video_processor_dict)
-        kwargs = {
-            "size": {"shortest_edge": minimum, "longest_edge": processor.size["longest_edge"]},
-            "max_image_size": {"longest_edge": cap},
+        resize_kwargs = {
+            "size": processor.size,
+            "resample": processor.resample,
+            "factor": processor.patch_size * processor.merge_size,
+            "max_image_size": processor.max_image_size,
         }
-        video = torch.zeros((2, 3, 32, 64), dtype=torch.uint8, device=torch_device)
-        with self.assertRaisesRegex(ValueError, "pixel budget"):
-            processor(video, input_data_format="channels_first", return_tensors="pt", **kwargs)
-        with self.assertRaisesRegex(ValueError, "pixel budget"):
-            processor.get_num_of_video_patches(2, 32, 64, kwargs)
+        video = torch.zeros((4, 3, 180, 320), dtype=torch.uint8, device=torch_device)
+        once = processor.resize(videos=video, **resize_kwargs)
+        twice = processor.resize(videos=once, **resize_kwargs)
+        torch.testing.assert_close(twice, once)
+
+    def test_token_budget_counts_newline_tokens(self):
+        # A frame of rows x cols merged patches costs rows * (cols + 1) tokens, so the newline tokens count too.
+        processor = self.fast_video_processing_class(**self.video_processor_dict)
+        edge = processor.patch_size * processor.merge_size
+        budget_tokens = processor.size["longest_edge"] // (edge * edge)
+        video = np.zeros((8, 720, 1280, 3), dtype=np.uint8)
+        output = processor(video, return_tensors="pt")
+        grid_t, grid_h, grid_w = output.video_grid_thw[0].tolist()
+        rows, cols = grid_h // processor.merge_size, grid_w // processor.merge_size
+        self.assertLessEqual(grid_t * rows * (cols + 1), budget_tokens)
+        # The serving-side estimate has to agree with what the processor actually produced.
+        patches, *grid = processor.get_num_of_video_patches(8, 720, 1280, return_grid=True)
+        self.assertEqual(tuple(grid), (grid_t, grid_h, grid_w))
+        self.assertEqual(patches, output.pixel_values_videos.shape[0])
+
+    def test_does_not_upscale_small_frames(self):
+        # `size.shortest_edge` is validated but never used to enlarge a frame.
+        processor = self.fast_video_processing_class(**self.video_processor_dict)
+        video = np.zeros((2, 32, 64, 3), dtype=np.uint8)
+        output = processor(video, return_tensors="pt")
+        _, grid_h, grid_w = output.video_grid_thw[0].tolist()
+        self.assertLessEqual(grid_h, 32)
+        self.assertLessEqual(grid_w, 64)
 
     def test_rejects_invalid_size_and_aspect_ratio(self):
         processor = self.fast_video_processing_class(**self.video_processor_dict)
