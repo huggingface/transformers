@@ -173,12 +173,15 @@ class HfQuantizer(ABC):
         """
         Updates in place `model.tp_plan` or `model.ep_plan` (the full plans, merged from the config and all
         sub-configs) to take into account the quantizer's custom keys like 'inv_scale'"""
-        from ..distributed.tensor_parallel import replace_layer_number_by_wildcard
+        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
 
         params = {replace_layer_number_by_wildcard(name) for name, _ in model.named_parameters()}
         suffixes = {n.removeprefix(p) for p, names in self.serialized_names.items() for n in names}
         extra = {key + suffix: style for key, style in plan.items() for suffix in suffixes}
         plan.update({key: style for key, style in extra.items() if key in params and key not in plan})
+        # A scalar has no axis to shard, e.g. a per-tensor FP8 `activation_scale`
+        scalars = {replace_layer_number_by_wildcard(n) for n, p in model.named_parameters() if p.ndim == 0}
+        plan.update({name: "replicate" for name in scalars if _get_parameter_plan(name, plan) is not None})
 
     def update_attn_implementation(self, config):
         """Sees the requested `attn_implementation` before the model is built, so a quantizer can default it."""
