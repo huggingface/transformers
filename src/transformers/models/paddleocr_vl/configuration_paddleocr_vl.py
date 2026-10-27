@@ -27,7 +27,7 @@ import inspect
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -160,8 +160,8 @@ class PaddleOCRVLConfig(PreTrainedConfig):
     model_type = "paddleocr_vl"
 
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=PaddleOCRVisionConfig),
-        "text_config": SubConfigSpec(config_class=PaddleOCRTextConfig),
+        "vision_config": PaddleOCRVisionConfig,
+        "text_config": PaddleOCRTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 

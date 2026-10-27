@@ -63,9 +63,9 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN uv pip install --upgrade pip wheel
 RUN uv pip install triton==3.8.0
 
-RUN uv pip install torch==2.14.0+xpu torchvision==0.29.0+xpu torchaudio==2.11.0+xpu torchao==0.18.0+xpu --index-url https://download.pytorch.org/whl/xpu --no-cache-dir
+RUN uv pip install torchcodec-xpu==0.17.0 --extra-index-url https://download.pytorch.org/whl/xpu
 
-RUN uv pip install torchcodec==0.16.0 --index-url https://download.pytorch.org/whl/cpu
+RUN uv pip install torch==2.14.1+xpu torchvision==0.29.1+xpu torchaudio==2.11.0+xpu torchao==0.18.0+xpu --index-url https://download.pytorch.org/whl/xpu --no-cache-dir
 
 RUN uv pip install torchdata --no-cache-dir
 
@@ -77,7 +77,7 @@ ENV UV_OVERRIDE=/opt/uv-overrides.txt
 RUN uv pip install pyctcdecode pytesseract decord scipy scikit-learn sentencepiece sacremoses nltk librosa soundfile g2p_en mpi4py requests_mock onnx deepspeed kenlm opencv-python --no-cache-dir
 RUN uv pip install pretty_midi essentia resampy Levenshtein av phonemizer invisible_watermark schedulefree parameterized mistral-common --no-cache-dir
 
-RUN uv pip install gguf hqq fp-quant compressed_tensors bitsandbytes --no-cache-dir --extra-index-url https://download.pytorch.org/whl/xpu "torch==2.14.0+xpu" "triton==3.8.0"
+RUN uv pip install gguf hqq fp-quant compressed_tensors bitsandbytes --no-cache-dir --extra-index-url https://download.pytorch.org/whl/xpu "torch==2.14.1+xpu" "triton==3.8.0"
 RUN uv pip install gptqmodel --no-cache-dir
 RUN uv pip install auto-round --no-cache-dir
 RUN uv pip install hf_transfer optimum-quanto optimum hf-doc-builder transformers[dev] diffusers trl sentence_transformers pytorch_msssim --no-cache-dir
@@ -93,5 +93,8 @@ RUN uv pip install onnxscript onnxruntime --no-cache-dir
 
 ENV OCL_ICD_VENDORS=/etc/OpenCL/vendors
 ENV CCL_ATL_TRANSPORT=ofi
+# FIXME: the default allreduce algorithm hits a latent bug on Intel XPU during the backward
+# pass. Forcing the ring algorithm avoids it; remove once the upstream fix lands.
+ENV CCL_ALLREDUCE=ring
 ENV CLASSPATH=/opt/venv/share/java/mpi.jar
 ENV LD_LIBRARY_PATH=/opt/venv/lib
