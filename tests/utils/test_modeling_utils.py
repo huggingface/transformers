@@ -94,7 +94,7 @@ from transformers.utils import (
     WEIGHTS_NAME,
 )
 from transformers.utils.import_utils import (
-    PACKAGE_DISTRIBUTION_MAPPING,
+    _package_distribution_mapping,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_flash_attn_4_available,
@@ -3282,14 +3282,16 @@ class TestAttentionImplementation(unittest.TestCase):
 
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
-        # When flash_attn is importable but not present in PACKAGE_DISTRIBUTION_MAPPING
+        # When flash_attn is importable but not present in the package distribution mapping
         # (e.g. installed via a non-standard wheel), the availability checks must not raise
         # a KeyError; they should simply return False.
         stripped_map = {
-            k: v for k, v in PACKAGE_DISTRIBUTION_MAPPING.items() if k not in ("flash_attn", "flash_attn_interface")
+            k: v for k, v in _package_distribution_mapping().items() if k not in ("flash_attn", "flash_attn_interface")
         }
-        with patch("transformers.utils.import_utils.PACKAGE_DISTRIBUTION_MAPPING", stripped_map):
-            with patch("transformers.modeling_flash_attention_utils.PACKAGE_DISTRIBUTION_MAPPING", stripped_map):
+        with patch("transformers.utils.import_utils._package_distribution_mapping", return_value=stripped_map):
+            with patch(
+                "transformers.modeling_flash_attention_utils._package_distribution_mapping", return_value=stripped_map
+            ):
                 self.assertFalse(is_flash_attn_2_available())
                 self.assertFalse(is_flash_attn_3_available())
                 self.assertFalse(is_flash_attn_4_available())
