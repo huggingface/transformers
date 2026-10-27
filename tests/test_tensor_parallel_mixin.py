@@ -119,133 +119,99 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
     return grad.index_select(dim, torch.tensor(indices, device=grad.device))
 
 
-def _pool_worker(rank, world_size, port, backend, task_queue, result_queue):
-    """Long-lived rank: initializes the process group once, then runs the test functions it receives until stopped."""
-    os.environ["WORLD_SIZE"] = str(world_size)
-    os.environ["RANK"] = str(rank)
-    os.environ["LOCAL_RANK"] = str(rank)
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = str(port)
-
+def _persistent_rank(rank, world_size, port, backend, tasks, results):
+    """A rank kept alive across tests: it initializes the process group once, then runs every test function it receives."""
+    os.environ.update(
+        WORLD_SIZE=str(world_size),
+        RANK=str(rank),
+        LOCAL_RANK=str(rank),
+        MASTER_ADDR="localhost",
+        MASTER_PORT=str(port),
+    )
     # some backends, e.g. tpu, require the rank to be set before initializing the process group
     _set_rank_device(rank, backend)
+    dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
+    results.put(None)
 
-    try:
-        dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
-    except Exception:
-        result_queue.put((rank, traceback.format_exc()))
-        return
-    result_queue.put((rank, None))
-
-    device_type = _get_distributed_device_type()
     while True:
         try:
-            task = task_queue.get(timeout=5)
+            func, args, kwargs = tasks.get(timeout=5)
         except queue.Empty:
-            # the parent can die without stopping us (e.g. pytest-xdist worker killed or hard-exited)
+            # exit if pytest died without killing us
             if not multiprocessing.parent_process().is_alive():
                 return
             continue
-        if task is None:
-            break
-
-        func, func_args, func_kwargs = task
         try:
-            func(rank, *func_args, **func_kwargs)
+            func(rank, *args, **kwargs)
             dist.barrier()
+            results.put(None)
         except BaseException:
-            # the other ranks may be stuck in a collective, the parent tears the whole pool down
-            result_queue.put((rank, traceback.format_exc()))
-            return
-        # free the test's models before the next one, as the pool lives for the whole pytest session
-        del func, func_args, func_kwargs, task
+            results.put(f"Rank {rank} failed:\n{traceback.format_exc()}")
+
+        # free what the test left behind: its models, and the process groups of its device meshes
+        del func, args, kwargs
         gc.collect()
-        if device_type != "cpu":
-            backend_empty_cache(device_type)
-        # and the process groups of the device meshes it built, which would otherwise pile up (with their sockets)
+        if _get_distributed_device_type() != "cpu":
+            backend_empty_cache(_get_distributed_device_type())
         for group in list(_world.pg_map):
             if group is not GroupMember.WORLD:
                 dist.destroy_process_group(group)
-        result_queue.put((rank, None))
-
-    dist.destroy_process_group()
 
 
-class _DistributedWorkerPool:
-    """`world_size` ranks with an initialized process group, reused across tests.
+class _PersistentRanks:
+    """`world_size` ranks reused across tests, as spawning them (and importing torch in each) takes longer than most tests."""
 
-    Spawning fresh ranks for every test spends most of its time re-importing torch and transformers in each of them;
-    a test only takes a fraction of that once the ranks are warm.
-    """
-
-    def __init__(self, world_size: int, backend: str, max_retries: int):
-        self.world_size = world_size
+    def __init__(self, world_size: int, backend: str):
         ctx = mp.get_context("spawn")
-        for attempt in range(max_retries):
-            port = _find_free_port()
-            self.result_queue = ctx.Queue()
-            self.task_queues = [ctx.Queue() for _ in range(world_size)]
-            self.processes = [
-                ctx.Process(
-                    target=_pool_worker,
-                    args=(rank, world_size, port, backend, self.task_queues[rank], self.result_queue),
-                )
-                for rank in range(world_size)
-            ]
-            for process in self.processes:
-                process.start()
-            try:
-                self._wait_for_ranks()
-                return
-            except RuntimeError as e:
-                self.terminate()
-                if "EADDRINUSE" in str(e) and attempt < max_retries - 1:
-                    continue
-                raise
+        port = _find_free_port()
+        self.results = ctx.Queue()
+        self.tasks = [ctx.Queue() for _ in range(world_size)]
+        self.processes = [
+            ctx.Process(
+                target=_persistent_rank, args=(rank, world_size, port, backend, self.tasks[rank], self.results)
+            )
+            for rank in range(world_size)
+        ]
+        for process in self.processes:
+            process.start()
+        try:
+            self._wait()
+        except RuntimeError:
+            self.kill()
+            raise
 
     def run(self, func, args, kwargs):
-        for task_queue in self.task_queues:
-            task_queue.put((func, args, kwargs))
-        self._wait_for_ranks()
+        for tasks in self.tasks:
+            tasks.put((func, args, kwargs))
+        self._wait()
 
-    def _wait_for_ranks(self):
-        """Wait for every rank to report success, raising on the first rank error or crash."""
-        pending = set(range(self.world_size))
-        while pending:
-            try:
-                rank, error = self.result_queue.get(timeout=1)
-            except queue.Empty:
-                dead = {rank: self.processes[rank].exitcode for rank in pending if not self.processes[rank].is_alive()}
-                if dead and self.result_queue.empty():
-                    raise RuntimeError(f"Distributed ranks exited unexpectedly (rank: exit code): {dead}")
-                continue
+    def _wait(self):
+        """Wait for every rank to report, raising on the first error."""
+        for _ in self.processes:
+            while True:
+                try:
+                    error = self.results.get(timeout=1)
+                    break
+                except queue.Empty:
+                    if not all(process.is_alive() for process in self.processes):
+                        raise RuntimeError("A distributed test rank died, see its output above")
             if error is not None:
-                raise RuntimeError(f"Rank {rank} failed:\n{error}")
-            pending.discard(rank)
+                raise RuntimeError(error)
 
-    def shutdown(self):
-        for task_queue in self.task_queues:
-            task_queue.put(None)
+    def kill(self):
         for process in self.processes:
-            process.join(timeout=10)
-        self.terminate()
-
-    def terminate(self):
-        for process in self.processes:
-            if process.is_alive():
-                process.kill()
+            process.kill()
             process.join()
 
 
-# one pool per (world_size, backend) and per pytest(-xdist worker) process
-_WORKER_POOLS: dict[tuple[int, str], _DistributedWorkerPool] = {}
+# one set of ranks per (world_size, backend), per pytest(-xdist worker) process
+_PERSISTENT_RANKS: dict[tuple[int, str], _PersistentRanks] = {}
 
 
 @atexit.register
-def _shutdown_worker_pools():
-    for pool in _WORKER_POOLS.values():
-        pool.shutdown()
-    _WORKER_POOLS.clear()
+def _kill_persistent_ranks():
+    for ranks in _PERSISTENT_RANKS.values():
+        ranks.kill()
 
 
 def _init_distributed(tp: int, max_retries: int = 5, backend: str | None = None):
@@ -257,13 +223,20 @@ def _init_distributed(tp: int, max_retries: int = 5, backend: str | None = None)
     def _init_distributed_inner(func):
         def wrapper(*args, **kwargs):
             key = (tp, backend)
-            if key not in _WORKER_POOLS:
-                _WORKER_POOLS[key] = _DistributedWorkerPool(tp, backend, max_retries)
+            for attempt in range(max_retries):
+                if key in _PERSISTENT_RANKS:
+                    break
+                try:
+                    _PERSISTENT_RANKS[key] = _PersistentRanks(tp, backend)
+                except RuntimeError:
+                    # most likely another process took the port in the meantime
+                    if attempt == max_retries - 1:
+                        raise
             try:
-                _WORKER_POOLS[key].run(func, args, kwargs)
+                _PERSISTENT_RANKS[key].run(func, args, kwargs)
             except BaseException:
-                # the surviving ranks can be stuck in a collective, the next call starts from fresh ranks
-                _WORKER_POOLS.pop(key).terminate()
+                # the other ranks may be stuck in a collective, the next call starts from fresh ranks
+                _PERSISTENT_RANKS.pop(key).kill()
                 raise
 
         return wrapper
