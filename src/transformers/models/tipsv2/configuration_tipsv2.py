@@ -21,7 +21,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -165,8 +165,8 @@ class Tipsv2Config(PreTrainedConfig):
 
     model_type = "tipsv2"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Tipsv2TextConfig),
-        "vision_config": SubConfigSpec(config_class=Tipsv2VisionConfig),
+        "text_config": Tipsv2TextConfig,
+        "vision_config": Tipsv2VisionConfig,
     }
 
     text_config: dict | Tipsv2TextConfig | None = None

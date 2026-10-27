@@ -28,7 +28,7 @@ from ...cache_utils import (
     DynamicSlidingWindowLayer,
     StaticSlidingWindowLayer,
 )
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
@@ -378,8 +378,8 @@ class UnlimitedOcrVisionConfig(DeepseekOcr2VisionConfig):
     model_type = "unlimited_ocr_vision"
     base_config_key = "vision_config"
     sub_configs_defaults = {
-        "sam_config": SubConfigSpec(config_class=UnlimitedOcrSamVisionConfig),
-        "encoder_config": SubConfigSpec(config_class=UnlimitedOcrVisionEncoderConfig),
+        "sam_config": UnlimitedOcrSamVisionConfig,
+        "encoder_config": UnlimitedOcrVisionEncoderConfig,
     }
 
 
@@ -466,8 +466,8 @@ class UnlimitedOcrConfig(DeepseekOcr2Config):
 
     model_type = "unlimited_ocr"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=UnlimitedOcrVisionConfig),
-        "text_config": SubConfigSpec(config_class=UnlimitedOcrTextConfig),
+        "vision_config": UnlimitedOcrVisionConfig,
+        "text_config": UnlimitedOcrTextConfig,
     }
 
     def __post_init__(self, **kwargs):

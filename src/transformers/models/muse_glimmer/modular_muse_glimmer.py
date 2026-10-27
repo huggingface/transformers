@@ -24,7 +24,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -667,8 +667,8 @@ class MuseGlimmerConfig(PreTrainedConfig):
 
     model_type = "muse_glimmer"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=MuseGlimmerTextConfig),
-        "vision_config": SubConfigSpec(config_class=MuseGlimmerVisionConfig),
+        "text_config": MuseGlimmerTextConfig,
+        "vision_config": MuseGlimmerVisionConfig,
     }
     base_model_tp_plan = {
         "vision_adapter.fc1": "colwise",

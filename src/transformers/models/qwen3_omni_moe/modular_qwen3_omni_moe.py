@@ -28,7 +28,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...audio_utils import AudioInput
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
 from ...image_utils import ImageInput
@@ -483,8 +483,8 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
     ```"""
 
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerTextConfig),
-        "code_predictor_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerCodePredictorConfig),
+        "text_config": Qwen3OmniMoeTalkerTextConfig,
+        "code_predictor_config": Qwen3OmniMoeTalkerCodePredictorConfig,
     }
 
     code_predictor_config: dict | PreTrainedConfig | None = None
@@ -617,9 +617,9 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
 
     model_type = "qwen3_omni_moe"
     sub_configs_defaults = {
-        "thinker_config": SubConfigSpec(config_class=Qwen3OmniMoeThinkerConfig),
-        "talker_config": SubConfigSpec(config_class=Qwen3OmniMoeTalkerConfig),
-        "code2wav_config": SubConfigSpec(config_class=Qwen3OmniMoeCode2WavConfig),
+        "thinker_config": Qwen3OmniMoeThinkerConfig,
+        "talker_config": Qwen3OmniMoeTalkerConfig,
+        "code2wav_config": Qwen3OmniMoeCode2WavConfig,
     }
 
     thinker_config: dict | PreTrainedConfig | None = None
@@ -1133,12 +1133,12 @@ class Qwen3OmniMoeThinkerTextDecoderLayer(Qwen3MoeDecoderLayer):
 
 
 class Qwen3OmniMoeThinkerTextPreTrainedModel(Qwen3MoePreTrainedModel):
-    config_class = Qwen3OmniMoeTextConfig
+    config: Qwen3OmniMoeTextConfig
     config: Qwen3OmniMoeTextConfig
 
 
 class Qwen3OmniMoeThinkerTextModel(Qwen3VLMoeTextModel):
-    config_class = Qwen3OmniMoeTextConfig
+    config: Qwen3OmniMoeTextConfig
     _can_record_outputs = {
         "hidden_states": Qwen3OmniMoeThinkerTextDecoderLayer,
         "attentions": Qwen3OmniMoeThinkerTextAttention,
@@ -1507,7 +1507,7 @@ class Qwen3OmniMoeRotaryEmbedding(Qwen3RotaryEmbedding):
 
 
 class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
-    config_class = Qwen3OmniMoeTalkerCodePredictorConfig
+    config: Qwen3OmniMoeTalkerCodePredictorConfig
     base_model_prefix = "talker.code_predictor.model"
     _can_record_outputs = {
         "attentions": Qwen3OmniMoeTalkerCodePredictorAttention,
@@ -1556,20 +1556,14 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
 
         # It may already have been prepared by e.g. `generate`
         if not isinstance(causal_mask_mapping := attention_mask, dict):
-            # Prepare mask arguments
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-            # Create the masks
-            causal_mask_mapping = {
-                "full_attention": create_causal_mask(**mask_kwargs),
-            }
-
-        hidden_states = inputs_embeds
+            causal_mask = create_causal_mask(
+                config=self.config,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                position_ids=position_ids,
+            )
+            causal_mask_mapping = {"full_attention": causal_mask}
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -1593,7 +1587,7 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
 
 
 class Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration(Qwen3ForCausalLM):
-    config_class = Qwen3OmniMoeTalkerCodePredictorConfig
+    config: Qwen3OmniMoeTalkerCodePredictorConfig
     base_model_prefix = "talker.code_predictor"
     _can_record_outputs = {
         "attentions": Qwen3OmniMoeTalkerCodePredictorAttention,
@@ -1703,7 +1697,7 @@ class Qwen3OmniMoeTalkerDecoderLayer(Qwen3MoeDecoderLayer):
 
 
 class Qwen3OmniMoeTalkerModel(Qwen3VLMoeTextModel):
-    config_class = Qwen3OmniMoeTalkerTextConfig
+    config: Qwen3OmniMoeTalkerTextConfig
     base_model_prefix = "talker.model"
     input_modalities = ("audio",)
     _can_record_outputs = {
@@ -1731,7 +1725,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
     _pp_plan = {"codec_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    config_class = Qwen3OmniMoeTalkerConfig
+    config: Qwen3OmniMoeTalkerConfig
     base_model_prefix = "talker"
     _can_record_outputs = {
         "attentions": Qwen3OmniMoeThinkerTextAttention,
@@ -2390,7 +2384,7 @@ class Qwen3OmniMoeCode2Wav(Qwen3OmniMoePreTrainedModel):
 
 
 class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, GenerationMixin):
-    config_class = Qwen3OmniMoeConfig
+    config: Qwen3OmniMoeConfig
     output_modalities = ("text", "audio")
 
     def __init__(self, config: Qwen3OmniMoeConfig):
