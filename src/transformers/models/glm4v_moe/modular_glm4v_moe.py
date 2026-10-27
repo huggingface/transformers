@@ -296,15 +296,14 @@ class Glm4vMoeTextModel(Glm4vTextModel):
             # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
             text_position_ids = None
 
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": text_position_ids,
-        }
-        # Create the masks
-        causal_mask = create_causal_mask(**mask_kwargs)
+        # Create the mask
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=text_position_ids,
+        )
 
         hidden_states = inputs_embeds
 
