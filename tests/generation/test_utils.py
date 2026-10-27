@@ -5674,6 +5674,42 @@ class GenerationIntegrationTests(unittest.TestCase):
                 torch.testing.assert_close(cache1.layers[idx].values, cache2.layers[idx].values)
 
     @pytest.mark.generate
+    def test_encoder_decoder_generate_can_restart_from_cache_without_decoder_mask(self):
+        """
+        Test that encoder-decoder models can continue generating from past key values with the FULL `decoder_input_ids`
+        and no `decoder_attention_mask`, as assistant models do in assisted decoding. The cached part of the decoder
+        inputs must not be processed again (otherwise the cache grows twice as fast as the sequence).
+        """
+        model = AutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-bart").to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
+
+        initial_inputs = tokenizer("Hello, world!", return_tensors="pt").to(torch_device)
+        # `forced_eos_token_id` would force EOS as the last token of the truncated generation
+        generate_kwargs = {
+            "use_cache": True,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+            "forced_eos_token_id": None,
+        }
+
+        truncated_outputs = model.generate(**initial_inputs, **generate_kwargs, max_new_tokens=2, min_new_tokens=2)
+        full_outputs = model.generate(**initial_inputs, **generate_kwargs, max_new_tokens=4, min_new_tokens=4)
+
+        restarted_outputs = model.generate(
+            **initial_inputs,
+            **generate_kwargs,
+            decoder_input_ids=truncated_outputs.sequences,
+            past_key_values=copy.deepcopy(truncated_outputs.past_key_values),
+            max_new_tokens=2,
+            min_new_tokens=2,
+        )
+
+        self.assertListEqual(full_outputs.sequences.tolist(), restarted_outputs.sequences.tolist())
+        self.assertEqual(
+            restarted_outputs.past_key_values.get_seq_length(), full_outputs.past_key_values.get_seq_length()
+        )
+
+    @pytest.mark.generate
     @parameterized.expand(
         [
             ("transformers-community/dola", {"dola_layers": "low"}),
