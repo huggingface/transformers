@@ -58,6 +58,12 @@ SPECIAL_CASES_TO_ALLOW = {
     "Glm4vMoeTextConfig": ["n_routed_experts"],
     "Mistral4Config": ["n_routed_experts"],
     "SolarOpenConfig": ["n_routed_experts"],
+    "BailingHybridConfig": [
+        "first_k_dense_replace",  # consumed in __post_init__ to derive mlp_layer_types
+        "layer_group_size",  # consumed in __post_init__ to derive layer_types
+        "short_conv_kernel_size",  # consumed in __post_init__ to derive linear_conv_kernel_dim
+        "mtp_loss_scaling_factor",  # metadata for the training-only MTP loss
+    ],
     "FunAsrNanoEncoderConfig": [
         "num_mel_bins",
         "num_stacked_frames",
@@ -78,9 +84,8 @@ SPECIAL_CASES_TO_ALLOW = {
         "mtp_layer_types",
         "mtp_mlp_layer_types",
     ],
-    "OpenAIPrivacyFilterConfig": ["classifier_dropout", "output_router_logits", "router_aux_loss_coef"],
+    "OpenAIPrivacyFilterConfig": ["classifier_dropout", "router_aux_loss_coef"],
     "Qwen4ExpTextConfig": ["split_ngram_parts"],  # Used by Concatenate during checkpoint conversion
-    "HYV3Config": ["output_router_logits"],
     "NougatConfig": ["decoder", "encoder"],
     "PI0Config": ["vlm_projection_dim"],
     "EuroBertConfig": ["is_causal"],  # not used directly, allows causal-bidirectional switch
@@ -91,6 +96,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "ExaoneMoeConfig": ["first_k_dense_replace"],  # BC for other frameworks
     "AfmoeConfig": ["global_attn_every_n_layers", "rope_scaling"],
     "LagunaConfig": ["moe_apply_router_weight_on_input"],
+    # Consumed by `get_mtp_config()` in its config, not used directly by the modeling forward.
+    "MellumConfig": ["mtp_layer_types", "mtp_mlp_layer_types"],
     "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
     "Lfm2Config": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],
@@ -103,9 +110,34 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_period",
         "use_mamba_kernels",
     ],
-    "JetMoeConfig": ["output_router_logits"],
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],
+    # Read by `generation_pocket_tts.py`, and by `loss/loss_lsd.py` for the `lsd_*` / `flow_loss_*` ones
+    "PocketTTSConfig": [
+        "eos_threshold",
+        "min_frames_before_eos",
+        "num_flow_steps",
+        "frame_rate",
+        "flow_loss_num_samples",
+        "lsd_diagonal_weight",
+        "lsd_distill_probability",
+        "lsd_time_logit_mean",
+        "lsd_time_logit_std",
+    ],
+    # Same as `PocketTTSConfig`: read by the inherited `generation_pocket_tts.py` and by `loss/loss_lsd.py`
+    "GradiumPhononTTSConfig": [
+        "frame_rate",
+        "flow_loss_num_samples",
+        "lsd_diagonal_weight",
+        "lsd_distill_probability",
+        "lsd_time_logit_mean",
+        "lsd_time_logit_std",
+    ],
+    # Encoder/decoder halves share every field of their codec's config; each half reads only its own.
+    "MimiEncoderConfig": True,
+    "MimiDecoderConfig": True,
+    "PocketTTSAudioTokenizerEncoderConfig": True,
+    "PocketTTSAudioTokenizerDecoderConfig": True,
     "XcodecConfig": ["sample_rate", "audio_channels"],
     "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
     "MambaConfig": ["expand"],
@@ -294,6 +326,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
     ],
+    "UnlimitedOcrTextConfig": ["sliding_window"],  # only used for cache init
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
@@ -309,6 +342,7 @@ ATTRIBUTES_TO_ALLOW = (
     "tokenizer_class",
     "is_encoder_decoder",
     "output_hidden_states",
+    "output_router_logits",  # read by `capture_outputs`, not by the modeling code
     "return_dict",
     # Inits related
     "initializer_range",

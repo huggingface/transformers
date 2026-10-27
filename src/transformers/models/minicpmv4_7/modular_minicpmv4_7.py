@@ -21,16 +21,15 @@ from huggingface_hub.dataclasses import strict
 from ...cache_utils import Cache
 from ...image_utils import ImageInput, make_flat_list_of_images
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.import_utils import torch_compilable_check
 from ...video_utils import VideoInput, make_batched_videos
 from ..minicpmv4_6.configuration_minicpmv4_6 import MiniCPMV4_6Config, MiniCPMV4_6VisionConfig
 from ..minicpmv4_6.modeling_minicpmv4_6 import (
     MiniCPMV4_6ForConditionalGeneration,
     MiniCPMV4_6Model,
-    MiniCPMV4_6ViTWindowAttentionMerger,
 )
 from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor, MiniCPMV4_6ProcessorKwargs
 
@@ -38,13 +37,13 @@ from ..minicpmv4_6.processing_minicpmv4_6 import MiniCPMV4_6Processor, MiniCPMV4
 logger = logging.get_logger(__name__)
 
 
-@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
+@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7-1B")
 @strict
 class MiniCPMV4_7VisionConfig(MiniCPMV4_6VisionConfig):
     pass
 
 
-@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
+@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7-1B")
 @strict
 class MiniCPMV4_7Config(MiniCPMV4_6Config):
     r"""
@@ -84,48 +83,6 @@ class MiniCPMV4_7Config(MiniCPMV4_6Config):
     slice_end_id: int | None = None
     newline_id: int | None = None
     drop_vision_last_layer = AttributeError()
-
-
-class MiniCPMV4_7ViTWindowAttentionMerger(MiniCPMV4_6ViTWindowAttentionMerger):
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        target_sizes: torch.IntTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ):
-        residual = hidden_states
-        hidden_states = self.layer_norm1(hidden_states)
-        device = hidden_states.device
-
-        window_index, window_cu_seqlens, window_max_seqlens = self.get_window_index(target_sizes, kwargs=kwargs)
-        window_index = window_index.to(device)
-
-        hidden_states = hidden_states[:, window_index, :]
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            cu_seqlens=window_cu_seqlens.to(device),
-            max_seqlen=window_max_seqlens,
-        )
-        hidden_states = residual[:, window_index, :] + hidden_states
-
-        window_h, window_w = self.window_kernel_size
-        window_size = window_h * window_w
-        embed_dim = hidden_states.shape[-1]
-        torch_compilable_check(
-            window_cu_seqlens.numel() - 1 == hidden_states.shape[1] // window_size,
-            f"Patch grids {target_sizes} must be divisible by window kernel size {self.window_kernel_size}",
-        )
-        patch = hidden_states.reshape(-1, window_size, embed_dim)
-        flat = patch.flatten(1)
-        patch_residual = patch.mean(dim=1)
-
-        hidden_state = self.pre_norm(flat)
-        hidden_state = self.linear_1(hidden_state)
-        hidden_state = self.act(hidden_state)
-        hidden_state = self.linear_2(hidden_state)
-        hidden_state = (hidden_state + patch_residual).unsqueeze(0)
-
-        return hidden_state
 
 
 class MiniCPMV4_7Model(MiniCPMV4_6Model):
@@ -693,8 +650,8 @@ class MiniCPMV4_7ForConditionalGeneration(MiniCPMV4_6ForConditionalGeneration):
         hidden_states = outputs[0]
 
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

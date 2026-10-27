@@ -52,8 +52,6 @@ class Ernie4_5_VLMoeVisionConfig(PreTrainedConfig):
     rope_parameters: dict | None = None
 
     base_model_tp_plan = {
-        "blocks.*.attn.qkv": "colwise",
-        "blocks.*.attn.proj": "rowwise",
         "blocks.*.mlp.fc1": "colwise",
         "blocks.*.mlp.fc2": "rowwise",
     }
@@ -90,6 +88,12 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.text_moe.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.text_moe.experts.down_proj": "rowwise",
+        "layers.*.mlp.text_moe.experts": "moe_tp_experts",
+        "layers.*.mlp.vision_moe.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.vision_moe.experts.down_proj": "rowwise",
+        "layers.*.mlp.vision_moe.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
@@ -103,10 +107,12 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         "norm": (["hidden_states"], ["hidden_states"]),
     }
     base_model_ep_plan = {
-        "layers.*.mlp.gate": "ep_router",
-        "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
-        "layers.*.mlp.experts.down_proj": "grouped_gemm",
-        "layers.*.mlp.experts": "moe_tp_experts",
+        "layers.*.mlp.text_moe.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.text_moe.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.text_moe.experts": "ep_dispatch_experts",
+        "layers.*.mlp.vision_moe.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.vision_moe.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.vision_moe.experts": "ep_dispatch_experts",
     }
 
     vocab_size: int = 103424
@@ -181,8 +187,11 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     ```"""
 
     model_type = "ernie4_5_vl_moe"
-    sub_configs = {"vision_config": Ernie4_5_VLMoeVisionConfig, "text_config": Ernie4_5_VLMoeTextConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
+    sub_configs_defaults = {
+        "vision_config": Ernie4_5_VLMoeVisionConfig,
+        "text_config": Ernie4_5_VLMoeTextConfig,
+    }
 
     text_config: dict | PreTrainedConfig | None = None
     vision_config: dict | PreTrainedConfig | None = None
@@ -193,19 +202,6 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     video_end_token_id: int = 101307
     video_token_id: int = 103367
     tie_word_embeddings: bool = True
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**self.text_config)
-        elif self.text_config is None:
-            self.text_config = self.sub_configs["text_config"](**kwargs)
-
-        super().__post_init__(**kwargs)
 
 
 class Ernie4_5_VL_MoeConfig(Ernie4_5_VLMoeConfig):

@@ -26,6 +26,7 @@ from .test_modeling_common import (
     torch_device,
 )
 from .test_pipeline_mixin import PipelineTesterMixin
+from .test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -108,7 +109,7 @@ class MultiModalModelTester:
         """Default causal (lower-triangular) attention mask. Override for bidirectional models like Gemma3."""
         return torch.tril(torch.ones_like(input_ids).to(torch_device))
 
-    def get_additional_inputs(self, config, input_ids, modality_inputs):
+    def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
         """Model-specific extra inputs (e.g. LlavaNext `image_sizes`, Qwen3VL `mm_token_type_ids`).
 
         ``modality_inputs`` is the full dict returned by ``_prepare_modality_inputs``.
@@ -124,7 +125,7 @@ class MultiModalModelTester:
         """Return the {sub-config-key: sub-config-instance} entries for the main config constructor."""
         raise NotImplementedError
 
-    def _prepare_modality_inputs(self, input_ids, config):
+    def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
         """Create modality features, place modality placeholder tokens in ``input_ids``, and return:
 
         (input_ids_with_placeholders, modality_inputs_dict)
@@ -157,10 +158,7 @@ class MultiModalModelTester:
         # Create attention mask with final input_ids (after modality placeholders are placed) — important
         # for models that derive padding from token values.
         attention_mask = self.create_attention_mask(input_ids) if self.use_input_mask else None
-
-        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
-        inputs_dict.update(modality_inputs)
-        inputs_dict.update(self.get_additional_inputs(config, input_ids, modality_inputs))
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, **modality_inputs}
         return config, inputs_dict
 
     # -- Config construction helpers ----------------------------------------------------------
@@ -215,7 +213,7 @@ class MultiModalModelTester:
 
 
 @require_torch
-class MultiModalModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
+class MultiModalModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin):
     """Shared test-class base for multimodal model families.
 
     Subclasses must set:

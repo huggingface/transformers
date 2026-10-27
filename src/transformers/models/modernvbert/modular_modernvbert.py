@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ... import initialization as init
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
@@ -33,7 +33,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..modernbert.modeling_modernbert import ModernBertPredictionHead
 from ..smolvlm.modeling_smolvlm import SmolVLMModel, SmolVLMPreTrainedModel
 
@@ -72,7 +72,10 @@ class ModernVBertConfig(PreTrainedConfig):
     ```"""
 
     model_type = "modernvbert"
-    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="modernbert"),
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
+    }
 
     text_config: PreTrainedConfig | dict | None = None
     vision_config: PreTrainedConfig | dict | None = None
@@ -84,19 +87,6 @@ class ModernVBertConfig(PreTrainedConfig):
     classifier_dropout: float | int = 0.0
     classifier_bias: bool = False
     tie_word_embeddings: bool = False
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = CONFIG_MAPPING["modernbert"]()
-        elif isinstance(self.text_config, dict):
-            self.text_config = CONFIG_MAPPING["modernbert"](**self.text_config)
-
-        if self.vision_config is None:
-            self.vision_config = CONFIG_MAPPING["siglip_vision_model"]()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = CONFIG_MAPPING["siglip_vision_model"](**self.vision_config)
-
-        super().__post_init__(**kwargs)
 
 
 @dataclass
@@ -306,10 +296,12 @@ class ModernVBertModel(SmolVLMModel):
 
         # Merge image and text embeddings
         if image_hidden_states is not None:
+            image_hidden_states = torch.cat(image_hidden_states, dim=0)
             image_hidden_states = image_hidden_states.to(dtype=inputs_embeds.dtype, device=inputs_embeds.device)
-            inputs_embeds = self.inputs_merger(
-                input_ids=input_ids, inputs_embeds=inputs_embeds, image_hidden_states=image_hidden_states
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_hidden_states
             )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_hidden_states)
 
         # Language model pass
         outputs = self.text_model(

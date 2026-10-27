@@ -23,8 +23,8 @@ from .image_processing_utils import BaseImageProcessor
 from .image_transforms import (
     center_crop as np_center_crop,
 )
+from .image_transforms import convert_to_rgb as convert_to_rgb_pil
 from .image_transforms import (
-    convert_to_rgb,
     divide_to_patches,  # noqa: F401 - re-exported for backward compat with image_processing_utils_fast
     get_resize_output_image_size,
     get_size_with_aspect_ratio,
@@ -126,31 +126,56 @@ class TorchvisionBackend(BaseImageProcessor):
         if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
             raise ValueError(f"Unsupported input image type {image_type}")
 
-        if do_convert_rgb:
-            image = self.convert_to_rgb(image)
-
         if image_type == ImageType.PIL:
-            image = tvF.pil_to_tensor(image)
+            # when input is PIL apply PIL's conversion to not lose mode
+            image = convert_to_rgb_pil(image, return_numpy=True) if do_convert_rgb else np.array(image)
+            image = torch.from_numpy(image)
+            input_data_format = ChannelDimension.LAST
         elif image_type == ImageType.NUMPY:
-            image = torch.from_numpy(image).contiguous()
+            image = torch.from_numpy(image)
 
+        # Normalize to channel-first
         if image.ndim == 2:
             image = image.unsqueeze(0)
+            input_data_format = ChannelDimension.FIRST
 
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
-
+            input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
         if input_data_format == ChannelDimension.LAST:
-            image = image.permute(2, 0, 1).contiguous()
+            image = image.permute(2, 0, 1)
 
+        # Arrays/tensors: PIL mode is gone, so 1ch -> expand, 4ch -> RGBA
+        if do_convert_rgb and image_type != ImageType.PIL:
+            image = self.convert_to_rgb(image, input_data_format=ChannelDimension.FIRST)
+
+        image = image.contiguous()
         if device is not None:
             image = image.to(device)
-
         return image
 
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
+    def convert_to_rgb(
+        self, image: "torch.Tensor", input_data_format: str | ChannelDimension | None = None
+    ) -> "torch.Tensor":
         """Convert an image to RGB format."""
-        return convert_to_rgb(image)
+        # no-op for 3/4-channel inputs and converts only if grayscale
+        # NOTEL tvF cannot handle images with no channel dim so fix it before
+        if image.ndim == 2:
+            image = image[None]
+        image = tvF.grayscale_to_rgb(image)
+
+        if image.shape[0] == 4:
+            if input_data_format is None:
+                input_data_format = infer_channel_dimension_format(image, num_channels=(4,))
+
+            channel_axis = -1 if input_data_format == ChannelDimension.LAST else -3
+            image = image.movedim(channel_axis, -1)
+            orig_dtype = image.dtype
+            image = tvF.to_dtype(image, torch.float32, scale=True)
+            image = image[..., :3] * image[..., 3:] + (1 - image[..., 3:])
+            image = tvF.to_dtype(image, orig_dtype, scale=True)
+            image = image.movedim(-1, channel_axis)
+
+        return image
 
     def pad(
         self,
@@ -442,33 +467,38 @@ class PilBackend(BaseImageProcessor):
         if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
             raise ValueError(f"Unsupported input image type {image_type}")
 
-        if do_convert_rgb:
-            image = self.convert_to_rgb(image)
-
-        if image_type == ImageType.PIL:
-            image = np.array(image)
-            # Set LAST only for multi-channel PIL images (H, W, C); for grayscale (H, W), leave as is to avoid shape errors after expand_dims.
-            if image.ndim >= 3:
-                input_data_format = ChannelDimension.LAST if input_data_format is None else input_data_format
-        elif image_type == ImageType.TORCH:
+        if image_type == ImageType.TORCH:
             image = image.numpy()
 
-        if image.ndim == 2:
-            image = np.expand_dims(image, axis=0)
+        # Apply conversion first to not lose PIL mode for PIL.Image.Image
+        if do_convert_rgb:
+            image = self.convert_to_rgb(image, input_data_format=input_data_format)
+        elif image_type == ImageType.PIL:
+            image = np.array(image)
 
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(image)
+        # Work out the channel-layout and normalize to channel-first
+        if image.ndim == 2:
+            image = image[None]
+            input_data_format = ChannelDimension.FIRST
+        elif image_type == ImageType.PIL:
+            # we called `np.array(PIL)` which is always `(H, W, C)`
+            image = np.moveaxis(image, -1, 0)
+            input_data_format = ChannelDimension.FIRST
+        elif input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image, num_channels=(1, 3, 4))
 
         if input_data_format == ChannelDimension.LAST:
-            # Convert from channels-last to channels-first
-            if isinstance(image, np.ndarray):
-                image = np.transpose(image, (2, 0, 1))
+            image = np.moveaxis(image, -1, 0)
 
         return image
 
-    def convert_to_rgb(self, image: ImageInput) -> ImageInput:
+    def convert_to_rgb(
+        self,
+        image: np.ndarray,
+        input_data_format: str | ChannelDimension | None = None,
+    ) -> np.ndarray:
         """Convert an image to RGB format."""
-        return convert_to_rgb(image)
+        return convert_to_rgb_pil(image, input_data_format=input_data_format, return_numpy=True)
 
     def pad(
         self,

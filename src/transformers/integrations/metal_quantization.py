@@ -285,15 +285,23 @@ class MetalDequantize(ConversionOps):
         bits = self.hf_quantizer.quantization_config.bits
         group_size = self.hf_quantizer.quantization_config.group_size
 
-        if len(input_dict) < 2:
-            return {full_layer_name: input_dict["weight$"]}
-
-        quantized = input_dict["weight$"][0]
-        scales = input_dict["scales"][0]
-        qbiases = input_dict["qbiases"][0]
-
-        w_deq = _affine_dequantize_tensor(quantized, scales, qbiases, group_size, bits)
-        return {full_layer_name: w_deq.to(scales.dtype)}
+        # A model converter collects several weights (e.g. per expert): `*.weight` comes with `*.scales`, `*.qbiases`
+        result = {}
+        for key, weights in input_dict.items():
+            prefix = key.removesuffix("weight")
+            if key.endswith(("scales", "qbiases")):
+                continue
+            if prefix + "scales" not in input_dict:
+                result[key] = weights
+                continue
+            scales, qbiases = input_dict[prefix + "scales"], input_dict[prefix + "qbiases"]
+            result[key] = [
+                _affine_dequantize_tensor(w, s, b, group_size, bits).to(s.dtype)
+                for w, s, b in zip(weights, scales, qbiases)
+            ]
+        if "weight" in result:  # the general converter: one module
+            return {full_layer_name: result["weight"][0]}
+        return result
 
     @property
     def reverse_op(self) -> "ConversionOps":

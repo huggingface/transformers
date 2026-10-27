@@ -36,6 +36,7 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -342,7 +343,10 @@ class NemotronHModelTester:
         input_ids = input_ids.to(torch_device)
         seq_idx = torch.zeros(input_ids.shape, dtype=torch.int32, device=torch_device)
         with torch.no_grad():
-            model(input_ids, seq_idx=seq_idx)
+            try:
+                model(input_ids, seq_idx=seq_idx)
+            except ValueError as error:  # without the kernels, the reference path refuses packing boundaries
+                self.parent.assertIn("packed sequences", str(error))
 
         self.parent.assertTrue(seen, "the linear-attention mixer was never called")
         self.parent.assertIn("seq_idx", seen[0])
@@ -398,7 +402,9 @@ class NemotronHModelTester:
 
 
 @require_torch
-class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class NemotronHModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             NemotronHModel,
@@ -507,10 +513,6 @@ class NemotronHModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @unittest.skip(reason="NemotronH has hybrid cache.")
     def test_generate_continue_from_inputs_embeds(self):
-        pass
-
-    @unittest.skip("NemotronH hybrid cache is not compatible with quantized cache yet.")
-    def test_generate_with_quant_cache(self):
         pass
 
     def test_reverse_loading_mapping(self):

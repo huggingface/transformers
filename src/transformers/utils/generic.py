@@ -743,11 +743,11 @@ def torch_float(x):
     Casts an input to a torch float32 tensor if we are in a tracing context, otherwise to a Python float.
     """
     if not _is_torch_available:
-        return int(x)
+        return float(x)
 
     import torch
 
-    return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else int(x)
+    return x.to(torch.float32) if torch.jit.is_tracing() and isinstance(x, torch.Tensor) else float(x)
 
 
 def filter_out_non_signature_kwargs(extra: list | None = None):
@@ -950,6 +950,11 @@ def can_return_tuple(func):
 
 _KNOWN_MODALITIES = ("image", "video", "audio")
 
+# Flash-attention varlen kwargs the outer (text) forward broadcasts to every submodule. They belong to the
+# language model, not a modality encoder, and their names collide with the vision/audio encoders' own
+# `cu_seqlens`/`max_seqlen`, so `accepts_precomputed_kwargs` drops them when they arrive unprefixed.
+_FLASH_VARLEN_KWARGS = ("cu_seq_lens_q", "cu_seq_lens_k", "max_length_q", "max_length_k")
+
 
 def accepts_precomputed_kwargs(modality: str):
     """
@@ -992,6 +997,10 @@ def accepts_precomputed_kwargs(modality: str):
                     continue
                 if k.startswith(prefix) and k not in existing_params:
                     translated[k.removeprefix(prefix)] = v
+                elif k in _FLASH_VARLEN_KWARGS and k not in existing_params:
+                    # Unprefixed text flash-attention varlen kwargs — don't let them leak into this
+                    # modality encoder, where they'd duplicate/clash with its own `cu_seqlens`.
+                    continue
                 else:
                     translated[k] = v
             return func(*args, **translated)

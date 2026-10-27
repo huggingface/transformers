@@ -35,6 +35,7 @@ from transformers.core_model_loading import (
     MergeModulelist,
     PermuteForRope,
     PrefixChange,
+    Split,
     VisionFuseAndPermuteForRope,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -183,11 +184,18 @@ class DummyParamModule(nn.Module):
 
 
 class DummySelfAttn(nn.Module):
+    def __init__(self, attention_shapes=((1, 2), (1, 2), (1, 2))):
+        super().__init__()
+        q_shape, k_shape, v_shape = attention_shapes
+        self.q_proj = DummyParamModule(q_shape)
+        self.k_proj = DummyParamModule(k_shape)
+        self.v_proj = DummyParamModule(v_shape)
+
+
+class DummySelfAttnMerged(nn.Module):
     def __init__(self):
         super().__init__()
-        self.q_proj = DummyParamModule((1, 2))
-        self.k_proj = DummyParamModule((1, 2))
-        self.v_proj = DummyParamModule((1, 2))
+        self.qkv_proj = DummyParamModule((3, 2))
 
 
 class DummyExperts(nn.Module):
@@ -198,18 +206,35 @@ class DummyExperts(nn.Module):
 
 
 class DummyLayer(nn.Module):
+    def __init__(self, add_extra_moe=False, attention_shapes=((1, 2), (1, 2), (1, 2))):
+        super().__init__()
+        self.self_attn = DummySelfAttn(attention_shapes)
+        self.experts = DummyExperts()
+        if add_extra_moe:
+            self.extra_experts = DummyExperts()
+
+
+class DummyLayerMerged(nn.Module):
     def __init__(self, add_extra_moe=False):
         super().__init__()
-        self.self_attn = DummySelfAttn()
+        self.self_attn = DummySelfAttnMerged()
         self.experts = DummyExperts()
         if add_extra_moe:
             self.extra_experts = DummyExperts()
 
 
 class DummyTopModel(nn.Module):
+    def __init__(self, add_extra_moe=False, attention_shapes=((1, 2), (1, 2), (1, 2))):
+        super().__init__()
+        self.layers = nn.ModuleList(
+            [DummyLayer(add_extra_moe, attention_shapes), DummyLayer(add_extra_moe, attention_shapes)]
+        )
+
+
+class DummyTopModelMerged(nn.Module):
     def __init__(self, add_extra_moe=False):
         super().__init__()
-        self.layers = nn.ModuleList([DummyLayer(add_extra_moe), DummyLayer(add_extra_moe)])
+        self.layers = nn.ModuleList([DummyLayerMerged(add_extra_moe), DummyLayerMerged(add_extra_moe)])
 
 
 class DummyMLP(nn.Module):
@@ -222,9 +247,9 @@ class DummyModelWithNorm(PreTrainedModel):
     base_model_prefix = "model"
     config: PreTrainedConfig
 
-    def __init__(self, config, add_extra_moe=False):
+    def __init__(self, config, add_extra_moe=False, attention_shapes=((1, 2), (1, 2), (1, 2))):
         super().__init__(config)
-        self.model = DummyTopModel(add_extra_moe)
+        self.model = DummyTopModel(add_extra_moe, attention_shapes)
         self.norm1 = nn.LayerNorm(16)
         self.norm2 = nn.LayerNorm(16)
         self.post_init()
@@ -237,6 +262,18 @@ class DummyRoot(PreTrainedModel):
     def __init__(self, config, add_extra_moe=False, with_mlp=True):
         super().__init__(config)
         self.model = DummyTopModel(add_extra_moe)
+        if with_mlp:
+            self.mlp = DummyMLP()
+        self.post_init()
+
+
+class DummyRootMerged(PreTrainedModel):
+    base_model_prefix = "model"
+    config: PreTrainedConfig
+
+    def __init__(self, config, add_extra_moe=False, with_mlp=True):
+        super().__init__(config)
+        self.model = DummyTopModelMerged(add_extra_moe)
         if with_mlp:
             self.mlp = DummyMLP()
         self.post_init()
@@ -1238,6 +1275,104 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         model_state = model_fused.state_dict()
         torch.testing.assert_close(model_state["layers.0.self_attn.qkv_proj.weight"], qkv_weight)
+
+    def test_split_to_target_parameter_sizes(self):
+        model = DummyModelWithNorm(PreTrainedConfig(), attention_shapes=((4, 2), (2, 2), (2, 2)))
+        fused = torch.arange(16.0).reshape(8, 2)
+        weight_mapping = [
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                ["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+                operations=[Split(dim=0)],
+            )
+        ]
+        state_dict = {f"model.layers.{index}.self_attn.qkv_proj.weight": fused.clone() for index in range(2)}
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
+        )
+
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+        model_state = model.state_dict()
+        for index in range(2):
+            prefix = f"model.layers.{index}.self_attn"
+            torch.testing.assert_close(model_state[f"{prefix}.q_proj.weight"], fused[:4])
+            torch.testing.assert_close(model_state[f"{prefix}.k_proj.weight"], fused[4:6])
+            torch.testing.assert_close(model_state[f"{prefix}.v_proj.weight"], fused[6:])
+
+        reversed_state_dict = revert_weight_conversion(model, model_state)
+        reversed_qkv = {key: value for key, value in reversed_state_dict.items() if "qkv_proj" in key}
+        self.assertTrue(compare_state_dicts(reversed_qkv, state_dict))
+
+    def test_reverse_renames_the_converter_outputs_many_to_one(self):
+        """Test that Converter and Renaming work well together even if they are applied on the same subkey during reverse conversion,
+        in the case of a many-to-one conversion during reverse conversion."""
+        # The renaming writes the name the converter reads, so the save must convert before it renames back
+        model = DummyRoot(PreTrainedConfig(), with_mlp=False)
+
+        # Mapping with both Renaming and Converter applied to the same subkey, i.e. part of the Converter patterns use the
+        # result of the Renaming
+        weight_mapping = [
+            WeightRenaming(r"\.attention\.", ".self_attn."),
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                ["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+        ]
+
+        state_dict = {
+            f"model.layers.{index}.attention.qkv_proj.weight": torch.arange(6.0).reshape(3, 2) + index
+            for index in range(2)
+        }
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
+        )
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        saved = revert_weight_conversion(model, model.state_dict())
+        saved_qkv = {key: value for key, value in saved.items() if "qkv_proj" in key}
+        self.assertTrue(compare_state_dicts(saved_qkv, state_dict))
+
+    def test_reverse_renames_the_converter_outputs_one_to_many(self):
+        """Test that Converter and Renaming work well together even if they are applied on the same subkey during reverse conversion,
+        in the case of a one-to-many conversion during reverse conversion."""
+        # The renaming writes the name the converter reads, so the save must convert before it renames back
+        model = DummyRootMerged(PreTrainedConfig(), with_mlp=False)
+
+        # Mapping with both Renaming and Converter applied to the same subkey, i.e. part of the Converter patterns use the
+        # result of the Renaming
+        weight_mapping = [
+            WeightRenaming(r"\.attention\.", ".self_attn."),
+            WeightConverter(
+                ["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+                "self_attn.qkv_proj.weight",
+                operations=[Concatenate(dim=0)],
+            ),
+        ]
+        state_dict = {
+            "model.layers.0.attention.q_proj.weight": torch.arange(2.0).reshape(1, 2),
+            "model.layers.0.attention.k_proj.weight": torch.arange(2.0, 4.0).reshape(1, 2),
+            "model.layers.0.attention.v_proj.weight": torch.arange(4.0, 6.0).reshape(1, 2),
+            "model.layers.1.attention.q_proj.weight": torch.arange(2.0).reshape(1, 2) + 10,
+            "model.layers.1.attention.k_proj.weight": torch.arange(2.0, 4.0).reshape(1, 2) + 10,
+            "model.layers.1.attention.v_proj.weight": torch.arange(4.0, 6.0).reshape(1, 2) + 10,
+        }
+
+        loading_info, _ = convert_and_load_state_dict_in_model(
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping)
+        )
+        self.assertEqual(loading_info.unexpected_keys, set())
+        self.assertEqual(loading_info.conversion_errors, {})
+
+        saved = revert_weight_conversion(model, model.state_dict())
+        saved_qkv = {
+            key: value for key, value in saved.items() if any(x in key for x in ["q_proj", "k_proj", "v_proj"])
+        }
+        self.assertTrue(compare_state_dicts(saved_qkv, state_dict))
 
 
 class TestConversionMapping(unittest.TestCase):
