@@ -458,6 +458,23 @@ class TrainerFullEvalMemoryTest(TestCasePlus):
             # perfect world: fp32_init/2 == bf16_eval
             self.assertAlmostEqual(bf16_eval, fp32_init / 2, delta=5_000)
 
+    def test_full_eval_before_train_keeps_training_dtype(self):
+        # A full fp16/bf16 `evaluate()` before `train()` casts the model in place. Training must still run on the
+        # original dtypes (`b` is kept in bf16 to check that each tensor gets its own dtype back).
+        for full_eval, eval_dtype in (("fp16_full_eval", torch.float16), ("bf16_full_eval", torch.bfloat16)):
+            with self.subTest(full_eval), tempfile.TemporaryDirectory() as tmp_dir:
+                trainer = get_regression_trainer(
+                    a=1.5, b=2.5, max_steps=2, use_cpu=True, output_dir=tmp_dir, **{full_eval: True}
+                )
+                trainer.model.b.data = trainer.model.b.data.to(torch.bfloat16)
+                trainer.evaluate()
+                self.assertEqual(trainer.model.a.dtype, eval_dtype)
+
+                trainer.train()
+                self.assertEqual(trainer.model.a.dtype, torch.float32)
+                self.assertEqual(trainer.model.b.dtype, torch.bfloat16)
+                self.assertEqual(trainer.optimizer.state[trainer.model.a]["exp_avg"].dtype, torch.float32)
+
 
 # ---------------------------------------------------------------------------
 # Slow external model eval tests
