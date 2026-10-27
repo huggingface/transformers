@@ -61,6 +61,9 @@ class ExecutorchModelRunner(ModelRunner):
 
         feed = tuple(value(name) for name in self.metadata.input_names)
         outputs = self.method.execute(feed)
-        # The model's own outputs come last, after the copies of mutated inputs a lowering adds.
+        # The model's own outputs come last, after the copies of mutated inputs a lowering adds. Integers a dynamic
+        # export returns (a static cache's positions) are dropped: the model returns them inside its cache, not as
+        # tensors.
         num_user_outputs = self.metadata.num_user_outputs or len(outputs)
-        return dict(zip(self.metadata.output_names, outputs[len(outputs) - num_user_outputs :]))
+        user_outputs = zip(self.metadata.output_names, outputs[len(outputs) - num_user_outputs :])
+        return {name: output for name, output in user_outputs if isinstance(output, torch.Tensor)}
