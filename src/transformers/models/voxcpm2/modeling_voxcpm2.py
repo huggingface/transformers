@@ -334,8 +334,6 @@ class VoxCPM2SampleRateConditionLayer(nn.Module):
         super().__init__()
         self.scale_embed = nn.Embedding(num_sample_rate_buckets, input_dim)
         self.bias_embed = nn.Embedding(num_sample_rate_buckets, input_dim)
-        nn.init.ones_(self.scale_embed.weight)
-        nn.init.zeros_(self.bias_embed.weight)
 
     def forward(self, hidden_states: torch.Tensor, sample_rate_ids: torch.LongTensor) -> torch.Tensor:
         hidden_states = hidden_states * self.scale_embed(sample_rate_ids).unsqueeze(-1)
@@ -372,9 +370,7 @@ class VoxCPM2AudioDecoder(nn.Module):
         )
 
         self.model = nn.ModuleList(layers)
-        self.register_buffer(
-            "sr_bin_boundaries", torch.tensor(config.sr_bin_boundaries, dtype=torch.int32), persistent=True
-        )
+        self.sr_bin_boundaries = nn.Buffer(torch.tensor(config.sr_bin_boundaries, dtype=torch.int32), persistent=True)
         num_sample_rate_buckets = len(config.sr_bin_boundaries) + 1
         self.sr_cond_model = nn.ModuleList(
             [
