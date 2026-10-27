@@ -225,204 +225,53 @@ class Qwen3TTSTokenizerDecoderConfig(Qwen3OmniMoeCode2WavConfig):
 @strict
 class Qwen3TTSTokenizerConfig(PreTrainedConfig):
     r"""
-    encoder_hidden_size (`int`, *optional*, defaults to 512):
-        Hidden size of the encoder transformer. Encoder architecture settings use the `encoder_` prefix and are
-        independent of the decoder settings stored without a prefix.
-    encoder_audio_channels (`int`, *optional*, defaults to 1):
-        Number of input audio channels.
-    encoder_num_filters (`int`, *optional*, defaults to 64):
-        Number of filters in the encoder's first convolution.
-    encoder_num_residual_layers (`int`, *optional*, defaults to 1):
-        Number of residual layers in each encoder convolutional stage.
-    encoder_kernel_size (`int`, *optional*, defaults to 7):
-        Kernel size of the encoder's first convolution.
-    encoder_last_kernel_size (`int`, *optional*, defaults to 3):
-        Kernel size of the encoder's last convolution.
-    encoder_residual_kernel_size (`int`, *optional*, defaults to 3):
-        Kernel size of encoder residual convolutions.
-    encoder_dilation_growth_rate (`int`, *optional*, defaults to 2):
-        Growth factor for encoder residual convolution dilations.
-    encoder_use_causal_conv (`bool`, *optional*, defaults to `True`):
-        Whether the encoder uses causal convolutions.
-    encoder_pad_mode (`str`, *optional*, defaults to `"constant"`):
-        Padding mode of encoder convolutions.
-    encoder_compress (`int`, *optional*, defaults to 2):
-        Channel compression factor in encoder residual branches.
-    encoder_use_conv_shortcut (`bool`, *optional*, defaults to `False`):
-        Whether encoder residual shortcuts use a convolution instead of an identity.
-    encoder_num_hidden_layers (`int`, *optional*, defaults to 8):
-        Number of encoder transformer layers.
-    encoder_intermediate_size (`int`, *optional*, defaults to 2048):
-        Intermediate size of encoder transformer feed-forward layers.
-    encoder_num_attention_heads (`int`, *optional*, defaults to 8):
-        Number of encoder attention query heads.
-    encoder_num_key_value_heads (`int`, *optional*, defaults to 8):
-        Number of encoder attention key and value heads.
-    encoder_head_dim (`int`, *optional*):
-        Encoder attention head dimension. Defaults to `encoder_hidden_size // encoder_num_attention_heads`.
-    encoder_hidden_act (`str`, *optional*, defaults to `"gelu"`):
-        Activation function of encoder transformer feed-forward layers.
-    encoder_max_position_embeddings (`int`, *optional*, defaults to 8000):
-        Maximum sequence length of the encoder transformer.
-    encoder_initializer_range (`float`, *optional*, defaults to 0.02):
-        Standard deviation used to initialize encoder weights.
-    encoder_norm_eps (`float`, *optional*, defaults to 1e-5):
-        Epsilon of encoder layer normalization.
-    encoder_rope_parameters (`dict`, *optional*):
-        Rotary position embedding parameters of the encoder transformer.
-    encoder_sliding_window (`int`, *optional*, defaults to 250):
-        Sliding attention window of the encoder transformer.
-    encoder_attention_dropout (`float`, *optional*, defaults to 0.0):
-        Dropout probability of encoder attention weights.
-    encoder_layer_scale_initial_scale (`float`, *optional*, defaults to 0.01):
-        Initial value of encoder transformer layer scales.
-    encoder_attention_bias (`bool`, *optional*, defaults to `False`):
-        Whether encoder attention projections use biases.
-    encoder_upsampling_ratios (`list[int]` or `tuple[int, ...]`, *optional*, defaults to `(8, 6, 5, 4)`):
-        Convolutional downsampling ratios used by the encoder, in reverse order.
-    encoder_frame_rate (`float` or `int`, *optional*):
-        Encoder frame rate. If unset, derived from the input sampling rate and encoder convolution strides.
+    encoder_config (`dict` or `Qwen3TTSTokenizerEncoderConfig`, *optional*):
+        Configuration of the encoder (SEANet encoder, encoder transformer and downsampling).
+    decoder_config (`dict` or `Qwen3TTSTokenizerDecoderConfig`, *optional*):
+        Configuration of the decoder (pre-transformer, upsampling and waveform synthesis).
     acoustic_quantizer_config (`dict` or `Qwen3TTSTokenizerAcousticQuantizerConfig`, *optional*):
         Configuration for the acoustic residual vector quantizer.
     semantic_quantizer_config (`dict` or `Qwen3TTSTokenizerSemanticQuantizerConfig`, *optional*):
         Configuration for the semantic residual vector quantizer, applied before the acoustic one.
-    upsample_rates (`Tuple[int]`, *optional*, defaults to `(8, 5, 4, 3)`):
-        Rate at which features are upsampled in the final waveform synthesis stage.
-    upsampling_ratios (`Tuple[int]`, *optional*, defaults to `(2, 2)`):
-        Ratios used in transposed convolutional layers to progressively upsample feature maps to waveform.
-    decoder_dim (`int`, *optional*, defaults to 1536):
-        Final dimensionality of the decoder's output before waveform generation.
-    codebook_dim (`int`, *optional*, defaults to 512):
-        Width of the continuous representation passed to the decoder, not the quantizers' `codebook_dim`.
-    latent_dim (`int`, *optional*, defaults to 1024):
-        Latent dimension used between pre-conv and transformer.
-    decoder_chunk_size (`int`, *optional*, defaults to 300):
-        Number of frames the decoder processes per chunk.
-    decoder_left_context_size (`int`, *optional*, defaults to 25):
-        Number of preceding frames prepended to each decoder chunk as context and dropped from its output.
-    input_sampling_rate (`int`, *optional*, defaults to 24000):
-        Sampling rate, in hertz (Hz), of the encoder's input audio waveform.
     output_sampling_rate (`int`, *optional*, defaults to 24000):
         Sampling rate, in hertz (Hz), of the decoder's output audio waveform.
     """
 
     model_type = "qwen3_tts_tokenizer_12hz"
-    base_config_key = ""
-    attribute_map = {
-        "input_sample_rate": "input_sampling_rate",
-        "output_sample_rate": "output_sampling_rate",
-    }
-    sub_configs = {
+    attribute_map = {"output_sample_rate": "output_sampling_rate"}
+    sub_configs_defaults = {
+        "encoder_config": Qwen3TTSTokenizerEncoderConfig,
+        "decoder_config": Qwen3TTSTokenizerDecoderConfig,
         "acoustic_quantizer_config": Qwen3TTSTokenizerAcousticQuantizerConfig,
         "semantic_quantizer_config": Qwen3TTSTokenizerSemanticQuantizerConfig,
     }
 
-    encoder_audio_channels: int = 1
-    encoder_hidden_size: int = 512
-    encoder_num_filters: int = 64
-    encoder_num_residual_layers: int = 1
-    encoder_upsampling_ratios: list[int] | tuple[int, ...] = (8, 6, 5, 4)
-    encoder_kernel_size: int = 7
-    encoder_last_kernel_size: int = 3
-    encoder_residual_kernel_size: int = 3
-    encoder_dilation_growth_rate: int = 2
-    encoder_use_causal_conv: bool = True
-    encoder_pad_mode: str = "constant"
-    encoder_compress: int = 2
-    encoder_use_conv_shortcut: bool = False
-    encoder_num_hidden_layers: int = 8
-    encoder_intermediate_size: int = 2048
-    encoder_num_attention_heads: int = 8
-    encoder_num_key_value_heads: int = 8
-    encoder_head_dim: int | None = None
-    encoder_hidden_act: str = "gelu"
-    encoder_max_position_embeddings: int = 8000
-    encoder_initializer_range: float = 0.02
-    encoder_norm_eps: float = 1e-5
-    encoder_rope_parameters: dict | None = None
-    encoder_sliding_window: int = 250
-    encoder_attention_dropout: float | int = 0.0
-    encoder_layer_scale_initial_scale: float = 0.01
-    encoder_attention_bias: bool = False
-    encoder_frame_rate: float | int | None = None
-
-    hidden_size: int = 512
-    max_position_embeddings: int = 8000
-    rope_parameters: dict | None = None
-    num_attention_heads: int = 16
-    num_key_value_heads: int = 16
-    attention_bias: bool = False
-    sliding_window: int = 72
-    intermediate_size: int = 1024
-    hidden_act: str = "silu"
-    layer_scale_initial_scale: float = 0.01
-    rms_norm_eps: float = 1e-5
-    num_hidden_layers: int = 8
-    upsample_rates: list[int] | tuple[int, ...] = (8, 5, 4, 3)
-    upsampling_ratios: list[int] | tuple[int, ...] = (2, 2)
-    decoder_dim: int = 1536
-    attention_dropout: float | int = 0.0
-    initializer_range: float = 0.02
-    head_dim: int = 64
-    codebook_dim: int = 512
-    latent_dim: int = 1024
-    decoder_chunk_size: int = 300
-    decoder_left_context_size: int = 25
-
+    encoder_config: dict | PreTrainedConfig | None = None
+    decoder_config: dict | PreTrainedConfig | None = None
     acoustic_quantizer_config: dict | PreTrainedConfig | None = None
     semantic_quantizer_config: dict | PreTrainedConfig | None = None
-    input_sampling_rate: int | None = 24000
-    output_sampling_rate: int | None = 24000
+    output_sampling_rate: int = 24000
 
-    def __post_init__(self, **kwargs):
-        if self.acoustic_quantizer_config is None:
-            self.acoustic_quantizer_config = Qwen3TTSTokenizerAcousticQuantizerConfig()
-        elif isinstance(self.acoustic_quantizer_config, dict):
-            self.acoustic_quantizer_config = Qwen3TTSTokenizerAcousticQuantizerConfig(**self.acoustic_quantizer_config)
-        if self.semantic_quantizer_config is None:
-            self.semantic_quantizer_config = Qwen3TTSTokenizerSemanticQuantizerConfig()
-        elif isinstance(self.semantic_quantizer_config, dict):
-            self.semantic_quantizer_config = Qwen3TTSTokenizerSemanticQuantizerConfig(**self.semantic_quantizer_config)
-        super().__post_init__(**kwargs)
+    @property
+    def input_sampling_rate(self) -> int:
+        return self.encoder_config.sampling_rate
 
     @classmethod
     def from_dict(cls, config_dict, **kwargs):
-        # Published checkpoints store architecture and unused quantizer metadata in nested dictionaries.
-        # Normalize once on input; constructors and saved configs use only the canonical flat fields.
+        # The original checkpoint keeps both quantizers' settings inside its encoder and decoder configs.
         config_dict = deepcopy(config_dict)
-        encoder_config = config_dict.pop("encoder_config", None) or {}
-        decoder_config = config_dict.pop("decoder_config", None) or {}
         config_dict.pop("encoder_valid_num_quantizers", None)
-        for old_key, new_key in (
-            ("input_sample_rate", "input_sampling_rate"),
-            ("output_sample_rate", "output_sampling_rate"),
-        ):
-            if old_key in config_dict:
-                config_dict.setdefault(new_key, config_dict.pop(old_key))
-        for key, value in encoder_config.items():
-            canonical_key = {
-                "sampling_rate": "input_sampling_rate",
-                "_frame_rate": "encoder_frame_rate",
-            }.get(key, f"encoder_{key}")
-            if canonical_key in cls.__dataclass_fields__:
-                config_dict.setdefault(canonical_key, value)
-        if "encoder_rope_parameters" not in config_dict and (
-            "rope_theta" in encoder_config or "rope_scaling" in encoder_config
-        ):
-            rope_parameters = deepcopy(encoder_config.get("rope_scaling") or {})
-            rope_parameters.setdefault("rope_type", rope_parameters.pop("type", "default"))
-            rope_parameters.setdefault("rope_theta", encoder_config.get("rope_theta", 10000.0))
-            config_dict["encoder_rope_parameters"] = rope_parameters
-        for key, value in decoder_config.items():
-            if key in Qwen3TTSTokenizerDecoderConfig.__annotations__ or key in ("rope_theta", "rope_scaling"):
-                config_dict.setdefault(key, value)
-        quantizer_keys = ("acoustic_quantizer_config", "semantic_quantizer_config")
-        for key in tuple(kwargs):
-            if key in cls.__dataclass_fields__ and key not in quantizer_keys:
-                config_dict[key] = deepcopy(kwargs.pop(key))
-        if decoder_config:
-            # The original checkpoint describes both quantizers with shared settings in its decoder config.
-            input_width = config_dict.get("codebook_dim", 512)
+        input_sampling_rate = config_dict.pop("input_sample_rate", None)
+        encoder_config = config_dict.get("encoder_config")
+        if isinstance(encoder_config, dict):
+            encoder_fields = Qwen3TTSTokenizerEncoderConfig.__dataclass_fields__.keys() | {"_frame_rate", "rope_theta"}
+            encoder_config = {key: value for key, value in encoder_config.items() if key in encoder_fields}
+            if input_sampling_rate is not None:
+                encoder_config.setdefault("sampling_rate", input_sampling_rate)
+            config_dict["encoder_config"] = encoder_config
+        decoder_config = config_dict.get("decoder_config")
+        if isinstance(decoder_config, dict) and "num_quantizers" in decoder_config:
+            input_width = decoder_config.get("codebook_dim", 512)
             num_semantic_quantizers = decoder_config.get("num_semantic_quantizers", 1)
             shared = {
                 "codebook_size": decoder_config.get("codebook_size", 2048),
@@ -430,45 +279,18 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
                 "vector_quantization_hidden_dimension": input_width // 2,
                 "hidden_size": input_width,
             }
-            if config_dict.get("acoustic_quantizer_config") is None:
-                num_acoustic_quantizers = decoder_config.get("num_quantizers", 16) - num_semantic_quantizers
-                config_dict["acoustic_quantizer_config"] = {**shared, "n_codebooks": num_acoustic_quantizers}
-            if config_dict.get("semantic_quantizer_config") is None:
-                config_dict["semantic_quantizer_config"] = {**shared, "n_codebooks": num_semantic_quantizers}
-        for key in quantizer_keys:
-            if key in kwargs:
-                quantizer_config = deepcopy(kwargs.pop(key))
-                if isinstance(config_dict.get(key), dict) and isinstance(quantizer_config, dict):
-                    quantizer_config = {**config_dict[key], **quantizer_config}
-                config_dict[key] = quantizer_config
+            num_acoustic_quantizers = decoder_config["num_quantizers"] - num_semantic_quantizers
+            config_dict.setdefault("acoustic_quantizer_config", {**shared, "n_codebooks": num_acoustic_quantizers})
+            config_dict.setdefault("semantic_quantizer_config", {**shared, "n_codebooks": num_semantic_quantizers})
+            decoder_fields = Qwen3TTSTokenizerDecoderConfig.__dataclass_fields__.keys() | {"rope_theta"}
+            config_dict["decoder_config"] = {
+                key: value for key, value in decoder_config.items() if key in decoder_fields
+            }
         return super().from_dict(config_dict, **kwargs)
 
     @classmethod
     def from_json_file(cls, json_file):
         return cls.from_dict(cls._dict_from_json_file(json_file))
-
-    @property
-    def encoder_config(self):
-        encoder_config = {
-            name.removeprefix("encoder_"): deepcopy(getattr(self, name))
-            for name in self.__dataclass_fields__
-            if name.startswith("encoder_")
-        }
-        return Qwen3TTSTokenizerEncoderConfig(
-            **encoder_config,
-            sampling_rate=self.input_sampling_rate,
-            dtype=self.dtype,
-            attn_implementation=self._attn_implementation,
-        )
-
-    @property
-    def decoder_config(self):
-        decoder_config = {
-            name: deepcopy(getattr(self, name)) for name in Qwen3TTSTokenizerDecoderConfig.__annotations__
-        }
-        return Qwen3TTSTokenizerDecoderConfig(
-            **decoder_config, dtype=self.dtype, attn_implementation=self._attn_implementation
-        )
 
 
 class Qwen3TTSTokenizerCausalConvNet(Qwen3OmniMoeCausalConvNet):
