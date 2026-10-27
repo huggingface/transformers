@@ -42,7 +42,6 @@ class MusicFlamingoProcessorKwargs(ProcessingKwargs, total=False):
             "padding": True,
         },
         "audio_kwargs": {
-            "sampling_rate": 16000,
             "return_attention_mask": True,
             "padding": "max_length",
         },
@@ -137,7 +136,8 @@ class MusicFlamingoProcessor(ProcessorMixin):
 
     def _process_audio(self, audio: AudioInput, **kwargs):
         # Determine number of chunks per sample, and flatten
-        window_size = int(kwargs["sampling_rate"] * self.feature_extractor.chunk_length)
+        sampling_rate = kwargs.get("sampling_rate") or self.feature_extractor.sampling_rate
+        window_size = int(sampling_rate * self.feature_extractor.chunk_length)
         max_windows = int(self.max_audio_len // self.feature_extractor.chunk_length)
 
         per_sample_windows: list[int] = []
@@ -147,7 +147,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
             n_win = max(1, (n_samples + window_size - 1) // window_size)
             if n_win > max_windows:
                 logger.warning(
-                    f"Audio duration ({n_samples / kwargs['sampling_rate']:.1f}s) exceeds {self.max_audio_len}s; truncating to first {self.max_audio_len}s."
+                    f"Audio duration ({n_samples / sampling_rate:.1f}s) exceeds {self.max_audio_len}s; truncating to first {self.max_audio_len}s."
                 )
                 n_win = max_windows
             per_sample_windows.append(n_win)

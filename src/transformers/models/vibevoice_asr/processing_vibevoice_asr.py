@@ -36,7 +36,6 @@ class VibeVoiceAsrProcessorKwargs(ProcessingKwargs, total=False):
             "return_tensors": "pt",
         },
         "audio_kwargs": {
-            "sampling_rate": 24000,
             "pad_to_multiple_of": 3200,  # tokenizer hop length
         },
         "common_kwargs": {
