@@ -48,7 +48,7 @@ logger = logging.get_logger(__name__)
 if is_torch_available():
     import torch
 
-    from ..cache_utils import Cache, DynamicCrossAttentionLayer, EncoderDecoderCache
+    from ..cache_utils import Cache, EncoderDecoderCache
     from ..modeling_utils import PreTrainedModel
 
 
@@ -599,9 +599,6 @@ def _prefill_graph_reason(model, components: dict, writes_cross_cache: bool) -> 
         return "neither its encoder nor its decode graph can write the cross-attention cache"
     if (spec := streaming_embedder_spec(model.config)) is not None:
         return f"it streams `{spec.source}` with the text"
-    cache = components["decode"].inputs.get("past_key_values")
-    if any(isinstance(layer, DynamicCrossAttentionLayer) for layer in getattr(cache, "layers", [])):
-        return "its cross-attention cache is written once by the prefill step"
     # Checked per modality, since getters rename their inputs.
     prefill_inputs = components["prefill"].inputs
     # An encoder-decoder's encoder takes its modality (t5gemma2's image) once, beside the decode graph.

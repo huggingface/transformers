@@ -161,8 +161,8 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "Pix2StructForConditionalGeneration": "Same cross-attention cache as `CohereAsrForConditionalGeneration`.",
         "PPFormulaNetForConditionalGeneration": "Same cross-attention cache as `CohereAsrForConditionalGeneration`.",
         "IdeficsForVisionText2Text": (
-            "Its image cross-attention states are written once by the prefill step (`DynamicCrossAttentionLayer`). "
-            "TODO: compute them in the vision encoder graph."
+            "Its gated cross-attention re-reads the image features on every step instead of caching their K/V. "
+            "TODO: cache them, then compute them in the vision encoder graph."
         ),
         "GitForCausalLM": (
             "Its image encoder runs inside the forward on the prefill step only. TODO: expose the image features as "
