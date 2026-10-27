@@ -1764,7 +1764,7 @@ class DSparkTokenCandidateGenerator(DFlashTokenCandidateGenerator):
                 f"Invalid head type: {self.head_type = }. Only 'vanilla' is supported ('rnn' is not supported yet)."
             )
 
-    def get_candidates(  # TODO: check the devices in this function, it's a bit messy.
+    def get_candidates(
         self,
         input_ids: torch.LongTensor,
         model_kwargs: dict[str, Any],
