@@ -77,6 +77,8 @@ def convert_checkpoint(input_path: str, output_path: str, push_to_hub: str | Non
         original_config = json.load(config_file)
     tokenizer = AutoTokenizer.from_pretrained(input_path)
     config = convert_config(original_config, mask_token_id=tokenizer.convert_tokens_to_ids("<|mask|>"))
+    config.think_start_token_id = tokenizer.convert_tokens_to_ids("<think>")
+    config.think_end_token_id = tokenizer.convert_tokens_to_ids("</think>")
 
     processor = XiaomiLens0Processor(
         image_processor=Qwen2VLImageProcessor.from_pretrained(input_path),

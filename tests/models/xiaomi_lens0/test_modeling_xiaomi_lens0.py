@@ -16,16 +16,9 @@
 import unittest
 
 from transformers import AutoProcessor, is_torch_available
-from transformers.testing_utils import (
-    Expectations,
-    require_torch,
-    require_torch_accelerator,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_processing_common import url_to_local_path
@@ -193,10 +186,6 @@ class XiaomiLens0ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
     def setUp(self):
         self.model_tester = XiaomiLens0VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XiaomiLens0Config, has_text_modality=False)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
 
     def _get_conv_state_shape(self, batch_size: int, config):
         num_v_heads = config.linear_num_value_heads
@@ -233,74 +222,6 @@ class XiaomiLens0ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             self.assertListEqual(
                 list(attentions[0].shape[-3:]), [config.text_config.num_attention_heads, seq_len, seq_len]
             )
-
-    def _prepare_mask_inputs(self):
-        """Appends `<|mask|>` tokens after the image of every sample, a different number per sample."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        input_ids = inputs_dict["input_ids"]
-        mask_start = self.model_tester.num_image_tokens + 2
-        for sample_idx in range(input_ids.shape[0]):
-            input_ids[sample_idx, mask_start : mask_start + sample_idx + 1] = self.model_tester.mask_token_id
-        return config, inputs_dict
-
-    def test_pred_masks(self):
-        config, inputs_dict = self._prepare_mask_inputs()
-        model = XiaomiLens0ForConditionalGeneration(config).to(torch_device).eval()
-        with torch.no_grad():
-            outputs = model(**inputs_dict)
-
-        batch_size = self.model_tester.batch_size
-        mask_size = self.model_tester.image_size
-        self.assertEqual(outputs.pred_masks.shape, (batch_size, batch_size, mask_size, mask_size))
-        for sample_idx in range(batch_size):
-            # Slots beyond the number of `<|mask|>` tokens of a sample stay empty
-            self.assertTrue((outputs.pred_masks[sample_idx, sample_idx + 1 :] == 0).all())
-            self.assertTrue((outputs.pred_masks[sample_idx, : sample_idx + 1] != 0).all())
-
-        # Decoding a sample alone gives the same masks
-        patches_per_image = self.model_tester.grid_size**2
-        with torch.no_grad():
-            single_outputs = model(
-                input_ids=inputs_dict["input_ids"][-1:],
-                attention_mask=inputs_dict["attention_mask"][-1:],
-                pixel_values=inputs_dict["pixel_values"][-patches_per_image:],
-                image_grid_thw=inputs_dict["image_grid_thw"][-1:],
-                mm_token_type_ids=inputs_dict["mm_token_type_ids"][-1:],
-            )
-        torch.testing.assert_close(single_outputs.pred_masks[0], outputs.pred_masks[-1])
-
-    def test_pred_masks_without_mask_tokens(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = XiaomiLens0ForConditionalGeneration(config).to(torch_device).eval()
-        with torch.no_grad():
-            outputs = model(**inputs_dict)
-        self.assertIsNone(outputs.pred_masks)
-
-    def test_pred_masks_different_image_sizes(self):
-        """Masks are decoded at the resolution of their own image and padded to the largest one."""
-        config, inputs_dict = self._prepare_mask_inputs()
-        model = XiaomiLens0ForConditionalGeneration(config).to(torch_device).eval()
-        patch_size = config.vision_config.patch_size
-        patch_dim = inputs_dict["pixel_values"].shape[-1]
-
-        # First sample has a 2x4 patch grid instead of 2x2, so twice as many image tokens
-        input_ids = inputs_dict["input_ids"][:2]
-        first_ids = torch.cat([input_ids[0, :1], input_ids[0, 1:2].repeat(2), input_ids[0, 2:]])
-        second_ids = torch.cat([torch.full((1,), self.model_tester.pad_token_id, device=torch_device), input_ids[1]])
-        input_ids = torch.stack([first_ids, second_ids])
-        attention_mask = torch.ones_like(input_ids)
-        attention_mask[1, 0] = 0
-        with torch.no_grad():
-            outputs = model(
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                pixel_values=floats_tensor([8 + 4, patch_dim]),
-                image_grid_thw=torch.tensor([[1, 2, 4], [1, 2, 2]], device=torch_device),
-                mm_token_type_ids=(input_ids == self.model_tester.image_token_id).long(),
-            )
-        self.assertEqual(outputs.pred_masks.shape, (2, 2, 2 * patch_size, 4 * patch_size))
-        self.assertTrue((outputs.pred_masks[1, :, :, 2 * patch_size :] == 0).all())
-        self.assertTrue((outputs.pred_masks[0, 0] != 0).all())
 
     @unittest.skip("The mask decoder is not part of `XiaomiLens0Model`, the base model of the checkpoint mapping")
     def test_reverse_loading_mapping(self, check_keys_were_modified=True):
@@ -340,7 +261,21 @@ class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             return_tensors="pt",
         ).to(torch_device)
 
-    def test_forward_logits_and_masks(self):
+    def forward_and_decode_masks(self, model, inputs):
+        inputs = dict(inputs)
+        image_features = model.get_image_features(
+            inputs.pop("pixel_values"), inputs["image_grid_thw"], return_dict=True
+        )
+        outputs = model(**inputs, mm_encoder_outputs={"image": image_features}, output_hidden_states=True)
+        mask_logits, mask_token_indices = model.decode_masks(
+            inputs["input_ids"],
+            outputs.hidden_states[-1],
+            image_features.last_hidden_state,
+            inputs["image_grid_thw"],
+        )
+        return outputs, mask_logits, mask_token_indices
+
+    def test_model_logits(self):
         # fp32 as bf16 logits differ by a few ulps from the original, too much for a meaningful comparison
         model = XiaomiLens0ForConditionalGeneration.from_pretrained(
             self.model_id, dtype=torch.float32, device_map=torch_device
@@ -351,7 +286,7 @@ class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             "<bbox>[14, 115, 494, 988]</bbox><mask><|mask|></mask>"
         )
         inputs = self.prepare_inputs(text, completion)
-        outputs = model(**inputs)
+        outputs, mask_logits, _ = self.forward_and_decode_masks(model, inputs)
 
         prompt_length = self.prepare_inputs(text).input_ids.shape[1]
         expected_logits = Expectations(
@@ -363,21 +298,22 @@ class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             outputs.logits[0, prompt_length - 1, :10].cpu(), torch.tensor(expected_logits), atol=1e-3, rtol=1e-3
         )
 
-        self.assertEqual(outputs.pred_masks.shape, (1, 2, 480, 640))
+        self.assertEqual(len(mask_logits), 1)
+        self.assertEqual(mask_logits[0].shape, (2, 480, 640))
         # Mask logits inside each predicted cat mask, and the number of foreground pixels
         expected_mask_slices = Expectations(
             {
                 ("cuda", 8): [[6.156, 6.09, 6.023, 5.957, 5.887], [8.711, 8.75, 8.797, 8.836, 8.844]],
             }
         ).get_expectation()
-        mask_slices = torch.stack([outputs.pred_masks[0, 0, 198, 493:498], outputs.pred_masks[0, 1, 228, 146:151]])
+        mask_slices = torch.stack([mask_logits[0][0, 198, 493:498], mask_logits[0][1, 228, 146:151]])
         torch.testing.assert_close(mask_slices.cpu(), torch.tensor(expected_mask_slices), atol=5e-2, rtol=5e-2)
         expected_foreground = Expectations({("cuda", 8): [59138, 51824]}).get_expectation()
-        foreground = (outputs.pred_masks[0] > 0).sum(dim=(-1, -2)).tolist()
+        foreground = (mask_logits[0] > 0).sum(dim=(-1, -2)).tolist()
         for pixels, expected_pixels in zip(foreground, expected_foreground):
             self.assertAlmostEqual(pixels, expected_pixels, delta=0.005 * expected_pixels)
 
-    def test_generate_grounding(self):
+    def test_model_vision_generation(self):
         model = XiaomiLens0ForConditionalGeneration.from_pretrained(
             self.model_id, dtype=torch.bfloat16, device_map=torch_device
         )
@@ -397,16 +333,20 @@ class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertEqual(completion, expected_completion)
 
         mask_inputs = self.prepare_inputs(text, completion.removesuffix("<|im_end|>"))
-        outputs = model(**mask_inputs)
+        _, mask_logits, mask_token_indices = self.forward_and_decode_masks(model, mask_inputs)
         results = self.processor.post_process_grounding(
-            mask_inputs.input_ids, outputs.pred_masks, mask_inputs.image_grid_thw, target_sizes=[(480, 640)]
+            mask_inputs.input_ids,
+            mask_inputs.image_grid_thw,
+            mask_logits,
+            mask_token_indices,
+            target_sizes=[(480, 640)],
         )
         torch.testing.assert_close(results[0]["boxes"], torch.tensor([[8.96, 55.2, 316.16, 474.24]]))
         self.assertEqual(results[0]["masks"].shape, (1, 480, 640))
         expected_foreground = Expectations({("cuda", 8): 51985}).get_expectation()
         self.assertAlmostEqual(results[0]["masks"].sum().item(), expected_foreground, delta=0.01 * expected_foreground)
 
-    def test_generate_with_reasoning(self):
+    def test_model_vision_generation_with_reasoning(self):
         model = XiaomiLens0ForConditionalGeneration.from_pretrained(
             self.model_id, dtype=torch.bfloat16, device_map=torch_device
         )

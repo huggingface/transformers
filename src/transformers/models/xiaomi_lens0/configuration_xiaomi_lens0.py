@@ -184,6 +184,10 @@ class XiaomiLens0Config(PreTrainedConfig):
         The config object or dictionary of the mask decoder.
     mask_token_id (`int`, *optional*, defaults to 248077):
         The id of the `<|mask|>` token. Every `<|mask|>` token is decoded into a segmentation mask.
+    think_start_token_id (`int`, *optional*, defaults to 248068):
+        The ID of `<think>`, used to filter reasoning masks before decoding.
+    think_end_token_id (`int`, *optional*, defaults to 248069):
+        The ID of `</think>`, used to filter reasoning masks before decoding.
 
     Example:
 
@@ -220,6 +224,8 @@ class XiaomiLens0Config(PreTrainedConfig):
 
     mask_decoder_config: dict | PreTrainedConfig | None = None
     mask_token_id: int = 248077
+    think_start_token_id: int = 248068
+    think_end_token_id: int = 248069
 
 
 __all__ = ["XiaomiLens0Config", "XiaomiLens0TextConfig", "XiaomiLens0VisionConfig", "XiaomiLens0MaskDecoderConfig"]

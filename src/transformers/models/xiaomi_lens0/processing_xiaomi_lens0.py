@@ -42,6 +42,36 @@ class XiaomiLens0ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+def get_preceding_image_indices(
+    input_ids: torch.LongTensor, image_token_id: int
+) -> tuple[torch.LongTensor, torch.LongTensor]:
+    """Map each token to its preceding image.
+
+    Returns:
+        `tuple[torch.LongTensor, torch.LongTensor]`: `image_indices` of shape `(batch_size, sequence_length)`
+        contains image indices across the batch, or `-1` for tokens before any image in their sequence.
+        `images_per_sequence` of shape `(batch_size,)` contains the number of images in each sequence.
+    """
+    is_image_token = input_ids == image_token_id
+    is_image_start = is_image_token & ~F.pad(is_image_token[:, :-1], (1, 0))
+    images_per_sequence = is_image_start.sum(-1)
+    image_indices = is_image_start.cumsum(-1) - 1
+    has_preceding_image = image_indices >= 0
+    image_indices += (images_per_sequence.cumsum(0) - images_per_sequence)[:, None]
+    image_indices.masked_fill_(~has_preceding_image, -1)
+    return image_indices, images_per_sequence
+
+
+def get_non_thinking_token_mask(
+    input_ids: torch.LongTensor, think_start_token_id: int, think_end_token_id: int
+) -> torch.BoolTensor:
+    """Returns boolean mask where all tokens outside thinking blocks are `True`."""
+    token_positions = torch.arange(input_ids.shape[-1], device=input_ids.device) + 1
+    latest_thinking_start_positions = ((input_ids == think_start_token_id) * token_positions).cummax(-1).values
+    latest_thinking_end_positions = ((input_ids == think_end_token_id) * token_positions).cummax(-1).values
+    return (latest_thinking_start_positions <= latest_thinking_end_positions) & (input_ids != think_end_token_id)
+
+
 @auto_docstring
 class XiaomiLens0Processor(ProcessorMixin):
     valid_processor_kwargs = XiaomiLens0ProcessorKwargs
@@ -76,6 +106,12 @@ class XiaomiLens0Processor(ProcessorMixin):
             if getattr(tokenizer, "vision_end_token_id", None)
             else tokenizer.convert_tokens_to_ids(self.vision_end_token)
         )
+        self.mask_token_id = self.tokenizer.convert_tokens_to_ids("<|mask|>")
+        self.think_start_token_id = self.tokenizer.convert_tokens_to_ids("<think>")
+        self.think_end_token_id = self.tokenizer.convert_tokens_to_ids("</think>")
+        self.bbox_start_token_id = self.tokenizer.convert_tokens_to_ids("<bbox>")
+        self.bbox_end_token_id = self.tokenizer.convert_tokens_to_ids("</bbox>")
+        self.box_pattern = re.compile(r"\s*\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]\s*")
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         merge_length = self.image_processor.merge_size**2
@@ -195,65 +231,131 @@ class XiaomiLens0Processor(ProcessorMixin):
     def post_process_grounding(
         self,
         input_ids: torch.LongTensor,
-        pred_masks: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
+        mask_logits: list[torch.FloatTensor] | None = None,
+        mask_token_indices: list[torch.LongTensor] | None = None,
         target_sizes: list[tuple[int, int]] | None = None,
         mask_threshold: float = 0.5,
+        ignore_thinking: bool = True,
     ) -> list[dict[str, torch.Tensor]]:
         r"""
-        Extracts the boxes and masks of the final answer of [`XiaomiLens0ForConditionalGeneration`]. Each grounded
-        instance is written as `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|></mask>`, with box coordinates normalized to
-        `[0, 1000]`. Masks decoded from `<|mask|>` tokens inside the thinking block are discarded. Expects one image per
-        sample.
+        Extract boxes and masks independently, pairing them by occurrence order within each image.
+        Boxes use `<bbox>[x1, y1, x2, y2]</bbox>` with coordinates normalized to `[0, 1000]`; masks use
+        `<|mask|>`. Either may appear first or without the other. The first box pairs with the first mask,
+        and so on; excess boxes or masks are unpaired. Malformed boxes raise `ValueError`.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The full sequences (prompt and generated tokens) the masks were decoded from.
-            pred_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
-                The `pred_masks` returned by [`XiaomiLens0ForConditionalGeneration`].
-            image_grid_thw (`torch.LongTensor` of shape `(batch_size, 3)`):
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
                 The image grids returned by the processor.
+            mask_logits (`list[torch.FloatTensor]`, *optional*):
+                One `(num_masks, height, width)` tensor per image, in token order as returned by `decode_masks`.
+                Omit or pass `None` for box-only output with empty mask tensors.
+            mask_token_indices (`list[torch.LongTensor]`, *optional*):
+                One CPU `(num_masks, 2)` tensor per image containing `(batch_index, token_position)`, as returned
+                by `decode_masks`, in token order matching `mask_logits`. Required when `mask_logits` is provided.
             target_sizes (`list[tuple[int, int]]`, *optional*):
                 The `(height, width)` of each image to resize the boxes and masks to. Defaults to the size of the
                 resized image fed to the vision encoder.
             mask_threshold (`float`, *optional*, defaults to 0.5):
                 Probability threshold to binarize the masks.
+            ignore_thinking (`bool`, *optional*, defaults to `True`):
+                Exclude boxes inside thinking blocks, using the same token filter as `decode_masks`.
+                Use the same setting for decoding masks so both occurrence orders refer to the same text.
 
         Returns:
-            `list[dict]`: One dictionary per sample with:
+            `list[dict]`: One dictionary per image with:
                 - **boxes** (`torch.FloatTensor` of shape `(num_boxes, 4)`): Boxes in absolute
                   `(top_left_x, top_left_y, bottom_right_x, bottom_right_y)` format.
                 - **masks** (`torch.BoolTensor` of shape `(num_masks, height, width)`): Binary masks.
+                  Boxes and masks are each in token order. Entries with the same index are paired up to
+                  `min(num_boxes, num_masks)`, remaining entries have no counterpart.
         """
-        mask_token_id = self.tokenizer.convert_tokens_to_ids("<|mask|>")
-        think_end_token_id = self.tokenizer.convert_tokens_to_ids("</think>")
-        box_pattern = re.compile(r"<bbox>\s*\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]\s*</bbox>")
         patch_size = self.image_processor.patch_size
+        image_grids = image_grid_thw.tolist()
+        num_images = len(image_grids)
+
+        if mask_logits is None:
+            if mask_token_indices is not None:
+                raise ValueError("mask_token_indices cannot be set if mask_logits is None")
+            mask_logits = [torch.empty(0, height * patch_size, width * patch_size) for _, height, width in image_grids]
+            mask_token_indices = [torch.empty((0, 2), dtype=torch.long) for _ in image_grids]
+        if mask_token_indices is None or len(mask_logits) != num_images or len(mask_token_indices) != num_images:
+            raise ValueError(
+                "Expected one mask tensor and one token-index tensor per image grid. "
+                f"But got {len(mask_logits)} masks, {num_images} images, and {len(mask_token_indices)} mask_token_images."
+            )
+        if target_sizes is not None and len(target_sizes) != num_images:
+            raise ValueError(
+                f"Expected one target size per image. But got {len(target_sizes)} target sizes and {num_images} images"
+            )
+
+        sequences = input_ids.tolist()
+        selected_tokens = (
+            get_non_thinking_token_mask(input_ids, self.think_start_token_id, self.think_end_token_id).tolist()
+            if ignore_thinking
+            else None
+        )
+
+        image_indices, images_per_sequence = get_preceding_image_indices(input_ids, self.image_token_id)
+        image_indices = image_indices.tolist()
+        image_counts = images_per_sequence.tolist()
+
+        # Text-only processor inputs can omit image placeholders when there is one image per sequence.
+        if sum(image_counts) == 0 and num_images == len(sequences):
+            image_indices = [[sequence_index] * len(tokens) for sequence_index, tokens in enumerate(sequences)]
+        elif sum(image_counts) != num_images:
+            raise ValueError("The number of image placeholders must match the image grids.")
+
+        boxes_per_image = [[] for _ in image_grids]
+        for sequence_index, sequence_ids in enumerate(sequences):
+            bbox_start_index = None
+            for token_index, token_id in enumerate(sequence_ids):
+                if selected_tokens is not None and not selected_tokens[sequence_index][token_index]:
+                    bbox_start_index = None
+                    continue
+
+                if token_id == self.bbox_start_token_id:
+                    if bbox_start_index is not None:
+                        raise ValueError(f"Unclosed bbox in sequence {sequence_index}.")
+                    bbox_start_index = token_index
+                elif token_id == self.bbox_end_token_id:
+                    if bbox_start_index is None:
+                        raise ValueError(f"Missing <bbox> in sequence {sequence_index}.")
+                    coordinates = self.tokenizer.decode(
+                        sequence_ids[bbox_start_index + 1 : token_index], skip_special_tokens=False
+                    )
+                    match = self.box_pattern.fullmatch(coordinates)
+                    if match is None:
+                        raise ValueError(f"Invalid bbox in sequence {sequence_index} at token {bbox_start_index}.")
+                    image_index = image_indices[sequence_index][bbox_start_index]
+                    if image_index >= 0:
+                        boxes_per_image[image_index].append([int(coordinate) for coordinate in match.groups()])
+                    bbox_start_index = None
+            if bbox_start_index is not None:
+                raise ValueError(f"Unclosed bbox in sequence {sequence_index}.")
 
         results = []
-        for sample_idx, sample_ids in enumerate(input_ids.tolist()):
-            answer_start = 0
-            if think_end_token_id in sample_ids:
-                answer_start = len(sample_ids) - sample_ids[::-1].index(think_end_token_id)
-            num_thinking_masks = sample_ids[:answer_start].count(mask_token_id)
-            num_masks = sample_ids.count(mask_token_id)
-
-            _, grid_height, grid_width = image_grid_thw[sample_idx].tolist()
-            canvas_height, canvas_width = grid_height * patch_size, grid_width * patch_size
-            height, width = target_sizes[sample_idx] if target_sizes is not None else (canvas_height, canvas_width)
-
-            mask_logits = pred_masks[sample_idx, num_thinking_masks:num_masks, :canvas_height, :canvas_width]
-            if (height, width) != (canvas_height, canvas_width):
-                mask_logits = F.interpolate(
-                    mask_logits[None].float(), size=(height, width), mode="bilinear", align_corners=False
+        for image_index, (image_mask_logits, token_indices) in enumerate(zip(mask_logits, mask_token_indices)):
+            if len(token_indices) != image_mask_logits.shape[0]:
+                raise ValueError(
+                    f"Image {image_index} has {len(token_indices)} mask token indices but received {image_mask_logits.shape[0]} masks."
+                )
+            _, grid_height, grid_width = image_grids[image_index]
+            height, width = (
+                target_sizes[image_index]
+                if target_sizes is not None
+                else (grid_height * patch_size, grid_width * patch_size)
+            )
+            if len(token_indices) == 0:
+                image_mask_logits = image_mask_logits.new_empty(0, height, width)
+            elif (height, width) != image_mask_logits.shape[-2:]:
+                image_mask_logits = F.interpolate(
+                    image_mask_logits[None].float(), size=(height, width), mode="bilinear", align_corners=False
                 )[0]
-            masks = mask_logits.sigmoid() >= mask_threshold
-
-            answer = self.tokenizer.decode(sample_ids[answer_start:], skip_special_tokens=False)
-            boxes = torch.tensor(
-                [[int(coordinate) for coordinate in match] for match in box_pattern.findall(answer)],
-                dtype=torch.float32,
-            ).reshape(-1, 4)
+            masks = image_mask_logits.sigmoid() >= mask_threshold
+            boxes = torch.tensor(boxes_per_image[image_index], dtype=torch.float32).reshape(-1, 4)
             boxes = boxes / 1000 * torch.tensor([width, height, width, height])
             results.append({"boxes": boxes, "masks": masks})
         return results

@@ -14,7 +14,6 @@
 """PyTorch Xiaomi-Lens-0 model."""
 
 import re
-from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
@@ -22,15 +21,11 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5Config, Qwen3_5TextConfig, Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
-    Qwen3_5CausalLMOutputWithPast,
     Qwen3_5ForConditionalGeneration,
     Qwen3_5Model,
     Qwen3_5PreTrainedModel,
@@ -107,6 +102,10 @@ class XiaomiLens0Config(Qwen3_5Config):
         The config object or dictionary of the mask decoder.
     mask_token_id (`int`, *optional*, defaults to 248077):
         The id of the `<|mask|>` token. Every `<|mask|>` token is decoded into a segmentation mask.
+    think_start_token_id (`int`, *optional*, defaults to 248068):
+        The ID of `<think>`, used to filter reasoning masks before decoding.
+    think_end_token_id (`int`, *optional*, defaults to 248069):
+        The ID of `</think>`, used to filter reasoning masks before decoding.
 
     Example:
 
@@ -131,6 +130,8 @@ class XiaomiLens0Config(Qwen3_5Config):
 
     mask_decoder_config: dict | PreTrainedConfig | None = None
     mask_token_id: int = 248077
+    think_start_token_id: int = 248068
+    think_end_token_id: int = 248069
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
@@ -154,36 +155,6 @@ class XiaomiLens0TextModel(Qwen3_5TextModel):
 
 class XiaomiLens0Model(Qwen3_5Model):
     pass
-
-
-@auto_docstring(
-    custom_intro="""
-    Base class for Xiaomi-Lens-0 causal language model (or autoregressive) outputs with segmentation masks.
-    """
-)
-@dataclass
-class XiaomiLens0CausalLMOutputWithPast(Qwen3_5CausalLMOutputWithPast):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-        Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-        Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-        Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
-        `past_key_values` input) to speed up sequential decoding.
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`, *optional*):
-        Mask logits for every `<|mask|>` token in `input_ids`, in order of appearance. Each mask is predicted at the
-        resolution of the (resized) image fed to the vision encoder and placed in the top-left corner of the
-        `(height, width)` canvas, which covers the largest image of the batch. Returned when `input_ids` contain
-        `<|mask|>` tokens and images are passed.
-    """
-
-    pred_masks: torch.FloatTensor | None = None
 
 
 class XiaomiLens0MaskDecoderAttention(SiglipAttention):
@@ -287,6 +258,36 @@ class XiaomiLens0MaskDecoder(XiaomiLens0PreTrainedModel):
         return F.interpolate(mask_logits, scale_factor=4, mode="bilinear", align_corners=False)
 
 
+def get_preceding_image_indices(
+    input_ids: torch.LongTensor, image_token_id: int
+) -> tuple[torch.LongTensor, torch.LongTensor]:
+    """Map each token to its preceding image.
+
+    Returns:
+        `tuple[torch.LongTensor, torch.LongTensor]`: `image_indices` of shape `(batch_size, sequence_length)`
+        contains image indices across the batch, or `-1` for tokens before any image in their sequence.
+        `images_per_sequence` of shape `(batch_size,)` contains the number of images in each sequence.
+    """
+    is_image_token = input_ids == image_token_id
+    is_image_start = is_image_token & ~F.pad(is_image_token[:, :-1], (1, 0))
+    images_per_sequence = is_image_start.sum(-1)
+    image_indices = is_image_start.cumsum(-1) - 1
+    has_preceding_image = image_indices >= 0
+    image_indices += (images_per_sequence.cumsum(0) - images_per_sequence)[:, None]
+    image_indices.masked_fill_(~has_preceding_image, -1)
+    return image_indices, images_per_sequence
+
+
+def get_non_thinking_token_mask(
+    input_ids: torch.LongTensor, think_start_token_id: int, think_end_token_id: int
+) -> torch.BoolTensor:
+    """Returns boolean mask where all tokens outside thinking blocks are `True`."""
+    token_positions = torch.arange(input_ids.shape[-1], device=input_ids.device) + 1
+    latest_thinking_start_positions = ((input_ids == think_start_token_id) * token_positions).cummax(-1).values
+    latest_thinking_end_positions = ((input_ids == think_end_token_id) * token_positions).cummax(-1).values
+    return (latest_thinking_start_positions <= latest_thinking_end_positions) & (input_ids != think_end_token_id)
+
+
 @auto_docstring
 class XiaomiLens0ForConditionalGeneration(Qwen3_5ForConditionalGeneration):
     def __init__(self, config):
@@ -295,248 +296,244 @@ class XiaomiLens0ForConditionalGeneration(Qwen3_5ForConditionalGeneration):
 
         self.post_init()
 
-    def get_pred_masks(
+    def decode_masks(
         self,
         input_ids: torch.LongTensor,
         hidden_states: torch.FloatTensor,
         image_hidden_states: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
-        r"""
-        Decodes every `<|mask|>` token of `input_ids` against the closest image preceding it in the same sequence.
+        ignore_thinking: bool = True,
+    ) -> tuple[list[torch.FloatTensor], list[torch.LongTensor]]:
+        """Decode mask-token states against their preceding images, returning only decoded masks.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary.
-            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Last hidden states of the language model.
+                Full input sequences, including generated tokens when decoding generation output.
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, processed_length, hidden_size)`):
+                Final-layer hidden states aligned with `input_ids`.
             image_hidden_states (`torch.FloatTensor` of shape `(num_patches, vision_hidden_size)`):
-                Vision encoder patch features before the spatial merger, as returned in the `last_hidden_state` of
-                [`~XiaomiLens0Model.get_image_features`].
+                Vision patch features before the spatial merger (`get_image_features().last_hidden_state`),
+                ordered by image occurrence in `input_ids`.
             image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
+                Temporal, height and width dimensions for each image's patch features.
+            ignore_thinking (`bool`, *optional*, defaults to `True`):
+                Do not decode masks inside thinking blocks.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`: the mask logits, see
-            [`XiaomiLens0CausalLMOutputWithPast`].
+            `tuple[list[torch.FloatTensor], list[torch.LongTensor]]`: Mask logits and their token indices, with
+            one entry per image in image-occurrence order across the batch. Logits have shape
+            `(num_masks, height, width)` and indices have shape `(num_masks, 2)`, containing
+            `(batch_index, token_position)`. Indices are returned on CPU for postprocessing. Both tensors are empty
+            for images without decoded masks.
         """
-        is_image_token = input_ids == self.config.image_token_id
-        is_image_start = is_image_token & ~F.pad(is_image_token[:, :-1], (1, 0))
-        images_per_sample = is_image_start.sum(-1)
-        image_index_in_sample = is_image_start.cumsum(-1) - 1
-        image_index = image_index_in_sample + (images_per_sample.cumsum(0) - images_per_sample)[:, None]
+        image_indices, _ = get_preceding_image_indices(input_ids, self.config.image_token_id)
 
         is_mask_token = input_ids == self.config.mask_token_id
-        mask_index = is_mask_token.cumsum(-1) - 1
         # `<|mask|>` tokens without a preceding image in their sequence are not decoded
-        batch_indices, token_indices = (is_mask_token & (image_index_in_sample >= 0)).nonzero(as_tuple=True)
-        mask_image_index = image_index[batch_indices, token_indices]
+        mask_tokens_to_decode = is_mask_token & (image_indices >= 0)
+        if ignore_thinking:
+            mask_tokens_to_decode &= get_non_thinking_token_mask(
+                input_ids, self.config.think_start_token_id, self.config.think_end_token_id
+            )
+        selected_mask_batch_indices, selected_mask_token_indices = mask_tokens_to_decode.nonzero(as_tuple=True)
+        selected_mask_image_indices = image_indices[selected_mask_batch_indices, selected_mask_token_indices]
 
-        merge_size = self.config.vision_config.spatial_merge_size
-        patches_per_image = image_grid_thw.prod(-1).tolist()
-        image_hidden_states = torch.split(image_hidden_states, patches_per_image)
-        decoded_masks = []
-        for image_idx in mask_image_index.unique().tolist():
-            _, grid_height, grid_width = image_grid_thw[image_idx].tolist()
+        # Selected tokens are in batch/sequence order, so masks for each preceding image are contiguous.
+        masks_per_image = torch.bincount(selected_mask_image_indices, minlength=image_grid_thw.shape[0]).tolist()
+        if mask_tokens_to_decode[:, hidden_states.shape[1] :].any():
+            # TODO: ignore instead of raise?
+            raise ValueError(
+                "The final <|mask|> token has no hidden state. Generate further or use a full forward pass."
+            )
+        # Grid dimensions are needed by Python for splitting features and reshaping each image.
+        image_grids = image_grid_thw.tolist()
+        spatial_merge_size = self.config.vision_config.spatial_merge_size
+        patches_per_image = [
+            grid_time * grid_height * grid_width for grid_time, grid_height, grid_width in image_grids
+        ]
+        patch_features_per_image = torch.split(image_hidden_states, patches_per_image)
+        decoded_masks_per_image = []
+        mask_offset = 0
+        for image_index, (num_image_masks, (_, grid_height, grid_width)) in enumerate(
+            zip(masks_per_image, image_grids)
+        ):
+            if num_image_masks == 0:
+                patch_size = self.config.vision_config.patch_size
+                decoded_masks_per_image.append(
+                    hidden_states.new_empty(0, grid_height * patch_size, grid_width * patch_size)
+                )
+                continue
             # The vision encoder orders patches by spatial merge window, restore the row-major layout
-            image_features = (
-                image_hidden_states[image_idx]
-                .view(grid_height // merge_size, grid_width // merge_size, merge_size, merge_size, -1)
+            spatial_image_features = (
+                patch_features_per_image[image_index]
+                .view(
+                    grid_height // spatial_merge_size,
+                    grid_width // spatial_merge_size,
+                    spatial_merge_size,
+                    spatial_merge_size,
+                    -1,
+                )
                 .permute(0, 2, 1, 3, 4)
                 .reshape(1, grid_height, grid_width, -1)
             )
-            is_image_mask = mask_image_index == image_idx
-            mask_hidden_states = hidden_states[batch_indices[is_image_mask], token_indices[is_image_mask]]
-            masks = self.mask_decoder(mask_hidden_states[None], image_features.to(hidden_states.dtype), **kwargs)
-            decoded_masks.append((is_image_mask, masks[0]))
-
-        canvas_height, canvas_width = (
-            image_grid_thw[:, 1:].max(0).values * self.config.vision_config.patch_size
-        ).tolist()
-        pred_masks = hidden_states.new_zeros(
-            input_ids.shape[0], is_mask_token.sum(-1).max(), canvas_height, canvas_width
-        )
-        for is_image_mask, masks in decoded_masks:
-            mask_batch_indices = batch_indices[is_image_mask]
-            mask_slot_indices = mask_index[mask_batch_indices, token_indices[is_image_mask]]
-            pred_masks[mask_batch_indices, mask_slot_indices, : masks.shape[-2], : masks.shape[-1]] = masks
-        return pred_masks
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
-        pixel_values: torch.Tensor | None = None,
-        pixel_values_videos: torch.FloatTensor | None = None,
-        image_grid_thw: torch.LongTensor | None = None,
-        video_grid_thw: torch.LongTensor | None = None,
-        mm_token_type_ids: torch.IntTensor | None = None,
-        logits_to_keep: int | torch.Tensor = 0,
-        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | XiaomiLens0CausalLMOutputWithPast:
-        r"""
-        Example:
-
-        ```python
-        >>> from transformers import AutoProcessor, XiaomiLens0ForConditionalGeneration
-
-        >>> model = XiaomiLens0ForConditionalGeneration.from_pretrained("SeerRay-Lab/Xiaomi-Lens-0", device_map="auto")
-        >>> processor = AutoProcessor.from_pretrained("SeerRay-Lab/Xiaomi-Lens-0")
-
-        >>> messages = [
-        ...     {
-        ...         "role": "user",
-        ...         "content": [
-        ...             {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
-        ...             {
-        ...                 "type": "text",
-        ...                 "text": 'Locate all instances in the image that match the description "cat".\nReport bbox coordinates and masks.',
-        ...             },
-        ...         ],
-        ...     }
-        ... ]
-        >>> inputs = processor.apply_chat_template(
-        ...     messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
-        ... ).to(model.device)
-
-        >>> # Generate the answer, then decode one mask per generated `<|mask|>` token
-        >>> generated_ids = model.generate(**inputs, max_new_tokens=1024)
-        >>> completion = processor.decode(generated_ids[0, inputs.input_ids.shape[1] :]).removesuffix("<|im_end|>")
-        >>> messages.append({"role": "assistant", "content": completion})
-        >>> mask_inputs = processor.apply_chat_template(
-        ...     messages, tokenize=True, return_dict=True, return_tensors="pt"
-        ... ).to(model.device)
-        >>> outputs = model(**mask_inputs)
-        >>> results = processor.post_process_grounding(
-        ...     mask_inputs.input_ids, outputs.pred_masks, mask_inputs.image_grid_thw
-        ... )
-        ```
-        """
-        image_features = mm_encoder_outputs.get("image") if mm_encoder_outputs is not None else None
-        decode_masks = (
-            input_ids is not None
-            and image_grid_thw is not None
-            and (pixel_values is not None or image_features is not None)
-            and (input_ids == self.config.mask_token_id).any()
-        )
-        if decode_masks and image_features is None:
-            # The mask decoder needs the patch features before the spatial merger, compute them once here
-            image_features = self.model.get_image_features(pixel_values, image_grid_thw, return_dict=True, **kwargs)
-            mm_encoder_outputs = {**(mm_encoder_outputs or {}), "image": image_features}
-            pixel_values = None
-
-        outputs = self.model(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            pixel_values_videos=pixel_values_videos,
-            image_grid_thw=image_grid_thw,
-            video_grid_thw=video_grid_thw,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            mm_token_type_ids=mm_token_type_ids,
-            mm_encoder_outputs=mm_encoder_outputs,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state
-        logits = self.lm_head(slice_logits_to_keep(hidden_states, logits_to_keep))
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+            image_mask_slice = slice(mask_offset, mask_offset + num_image_masks)
+            mask_offset += num_image_masks
+            mask_batch_indices = selected_mask_batch_indices[image_mask_slice]
+            mask_token_indices = selected_mask_token_indices[image_mask_slice]
+            mask_hidden_states = hidden_states[mask_batch_indices, mask_token_indices]
+            image_mask_logits = self.mask_decoder(
+                mask_hidden_states[None], spatial_image_features.to(hidden_states.dtype)
             )
+            decoded_masks_per_image.append(image_mask_logits[0])
 
-        pred_masks = None
-        if decode_masks:
-            pred_masks = self.get_pred_masks(
-                input_ids, hidden_states, image_features.last_hidden_state, image_grid_thw
-            )
-
-        return XiaomiLens0CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
-            pred_masks=pred_masks,
-        )
+        mask_token_indices = torch.stack((selected_mask_batch_indices, selected_mask_token_indices), dim=-1).cpu()
+        return decoded_masks_per_image, list(mask_token_indices.split(masks_per_image))
 
 
 class XiaomiLens0Processor(Qwen3VLProcessor):
+    def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
+        super().__init__(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+            video_processor=video_processor,
+            chat_template=chat_template,
+            **kwargs,
+        )
+        self.mask_token_id = self.tokenizer.convert_tokens_to_ids("<|mask|>")
+        self.think_start_token_id = self.tokenizer.convert_tokens_to_ids("<think>")
+        self.think_end_token_id = self.tokenizer.convert_tokens_to_ids("</think>")
+        self.bbox_start_token_id = self.tokenizer.convert_tokens_to_ids("<bbox>")
+        self.bbox_end_token_id = self.tokenizer.convert_tokens_to_ids("</bbox>")
+        self.box_pattern = re.compile(r"\s*\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]\s*")
+
     def post_process_grounding(
         self,
         input_ids: torch.LongTensor,
-        pred_masks: torch.FloatTensor,
         image_grid_thw: torch.LongTensor,
+        mask_logits: list[torch.FloatTensor] | None = None,
+        mask_token_indices: list[torch.LongTensor] | None = None,
         target_sizes: list[tuple[int, int]] | None = None,
         mask_threshold: float = 0.5,
+        ignore_thinking: bool = True,
     ) -> list[dict[str, torch.Tensor]]:
         r"""
-        Extracts the boxes and masks of the final answer of [`XiaomiLens0ForConditionalGeneration`]. Each grounded
-        instance is written as `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|></mask>`, with box coordinates normalized to
-        `[0, 1000]`. Masks decoded from `<|mask|>` tokens inside the thinking block are discarded. Expects one image per
-        sample.
+        Extract boxes and masks independently, pairing them by occurrence order within each image.
+        Boxes use `<bbox>[x1, y1, x2, y2]</bbox>` with coordinates normalized to `[0, 1000]`; masks use
+        `<|mask|>`. Either may appear first or without the other. The first box pairs with the first mask,
+        and so on; excess boxes or masks are unpaired. Malformed boxes raise `ValueError`.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 The full sequences (prompt and generated tokens) the masks were decoded from.
-            pred_masks (`torch.FloatTensor` of shape `(batch_size, num_masks, height, width)`):
-                The `pred_masks` returned by [`XiaomiLens0ForConditionalGeneration`].
-            image_grid_thw (`torch.LongTensor` of shape `(batch_size, 3)`):
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
                 The image grids returned by the processor.
+            mask_logits (`list[torch.FloatTensor]`, *optional*):
+                One `(num_masks, height, width)` tensor per image, in token order as returned by `decode_masks`.
+                Omit or pass `None` for box-only output with empty mask tensors.
+            mask_token_indices (`list[torch.LongTensor]`, *optional*):
+                One CPU `(num_masks, 2)` tensor per image containing `(batch_index, token_position)`, as returned
+                by `decode_masks`, in token order matching `mask_logits`. Required when `mask_logits` is provided.
             target_sizes (`list[tuple[int, int]]`, *optional*):
                 The `(height, width)` of each image to resize the boxes and masks to. Defaults to the size of the
                 resized image fed to the vision encoder.
             mask_threshold (`float`, *optional*, defaults to 0.5):
                 Probability threshold to binarize the masks.
+            ignore_thinking (`bool`, *optional*, defaults to `True`):
+                Exclude boxes inside thinking blocks, using the same token filter as `decode_masks`.
+                Use the same setting for decoding masks so both occurrence orders refer to the same text.
 
         Returns:
-            `list[dict]`: One dictionary per sample with:
+            `list[dict]`: One dictionary per image with:
                 - **boxes** (`torch.FloatTensor` of shape `(num_boxes, 4)`): Boxes in absolute
                   `(top_left_x, top_left_y, bottom_right_x, bottom_right_y)` format.
                 - **masks** (`torch.BoolTensor` of shape `(num_masks, height, width)`): Binary masks.
+                  Boxes and masks are each in token order. Entries with the same index are paired up to
+                  `min(num_boxes, num_masks)`, remaining entries have no counterpart.
         """
-        mask_token_id = self.tokenizer.convert_tokens_to_ids("<|mask|>")
-        think_end_token_id = self.tokenizer.convert_tokens_to_ids("</think>")
-        box_pattern = re.compile(r"<bbox>\s*\[\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\]\s*</bbox>")
         patch_size = self.image_processor.patch_size
+        image_grids = image_grid_thw.tolist()
+        num_images = len(image_grids)
+
+        if mask_logits is None:
+            if mask_token_indices is not None:
+                raise ValueError("mask_token_indices cannot be set if mask_logits is None")
+            mask_logits = [torch.empty(0, height * patch_size, width * patch_size) for _, height, width in image_grids]
+            mask_token_indices = [torch.empty((0, 2), dtype=torch.long) for _ in image_grids]
+        if mask_token_indices is None or len(mask_logits) != num_images or len(mask_token_indices) != num_images:
+            raise ValueError(
+                "Expected one mask tensor and one token-index tensor per image grid. "
+                f"But got {len(mask_logits)} masks, {num_images} images, and {len(mask_token_indices)} mask_token_images."
+            )
+        if target_sizes is not None and len(target_sizes) != num_images:
+            raise ValueError(
+                f"Expected one target size per image. But got {len(target_sizes)} target sizes and {num_images} images"
+            )
+
+        sequences = input_ids.tolist()
+        selected_tokens = (
+            get_non_thinking_token_mask(input_ids, self.think_start_token_id, self.think_end_token_id).tolist()
+            if ignore_thinking
+            else None
+        )
+
+        image_indices, images_per_sequence = get_preceding_image_indices(input_ids, self.image_token_id)
+        image_indices = image_indices.tolist()
+        image_counts = images_per_sequence.tolist()
+
+        # Text-only processor inputs can omit image placeholders when there is one image per sequence.
+        if sum(image_counts) == 0 and num_images == len(sequences):
+            image_indices = [[sequence_index] * len(tokens) for sequence_index, tokens in enumerate(sequences)]
+        elif sum(image_counts) != num_images:
+            raise ValueError("The number of image placeholders must match the image grids.")
+
+        boxes_per_image = [[] for _ in image_grids]
+        for sequence_index, sequence_ids in enumerate(sequences):
+            bbox_start_index = None
+            for token_index, token_id in enumerate(sequence_ids):
+                if selected_tokens is not None and not selected_tokens[sequence_index][token_index]:
+                    bbox_start_index = None
+                    continue
+
+                if token_id == self.bbox_start_token_id:
+                    if bbox_start_index is not None:
+                        raise ValueError(f"Unclosed bbox in sequence {sequence_index}.")
+                    bbox_start_index = token_index
+                elif token_id == self.bbox_end_token_id:
+                    if bbox_start_index is None:
+                        raise ValueError(f"Missing <bbox> in sequence {sequence_index}.")
+                    coordinates = self.tokenizer.decode(
+                        sequence_ids[bbox_start_index + 1 : token_index], skip_special_tokens=False
+                    )
+                    match = self.box_pattern.fullmatch(coordinates)
+                    if match is None:
+                        raise ValueError(f"Invalid bbox in sequence {sequence_index} at token {bbox_start_index}.")
+                    image_index = image_indices[sequence_index][bbox_start_index]
+                    if image_index >= 0:
+                        boxes_per_image[image_index].append([int(coordinate) for coordinate in match.groups()])
+                    bbox_start_index = None
+            if bbox_start_index is not None:
+                raise ValueError(f"Unclosed bbox in sequence {sequence_index}.")
 
         results = []
-        for sample_idx, sample_ids in enumerate(input_ids.tolist()):
-            answer_start = 0
-            if think_end_token_id in sample_ids:
-                answer_start = len(sample_ids) - sample_ids[::-1].index(think_end_token_id)
-            num_thinking_masks = sample_ids[:answer_start].count(mask_token_id)
-            num_masks = sample_ids.count(mask_token_id)
-
-            _, grid_height, grid_width = image_grid_thw[sample_idx].tolist()
-            canvas_height, canvas_width = grid_height * patch_size, grid_width * patch_size
-            height, width = target_sizes[sample_idx] if target_sizes is not None else (canvas_height, canvas_width)
-
-            mask_logits = pred_masks[sample_idx, num_thinking_masks:num_masks, :canvas_height, :canvas_width]
-            if (height, width) != (canvas_height, canvas_width):
-                mask_logits = F.interpolate(
-                    mask_logits[None].float(), size=(height, width), mode="bilinear", align_corners=False
+        for image_index, (image_mask_logits, token_indices) in enumerate(zip(mask_logits, mask_token_indices)):
+            if len(token_indices) != image_mask_logits.shape[0]:
+                raise ValueError(
+                    f"Image {image_index} has {len(token_indices)} mask token indices but received {image_mask_logits.shape[0]} masks."
+                )
+            _, grid_height, grid_width = image_grids[image_index]
+            height, width = (
+                target_sizes[image_index]
+                if target_sizes is not None
+                else (grid_height * patch_size, grid_width * patch_size)
+            )
+            if len(token_indices) == 0:
+                image_mask_logits = image_mask_logits.new_empty(0, height, width)
+            elif (height, width) != image_mask_logits.shape[-2:]:
+                image_mask_logits = F.interpolate(
+                    image_mask_logits[None].float(), size=(height, width), mode="bilinear", align_corners=False
                 )[0]
-            masks = mask_logits.sigmoid() >= mask_threshold
-
-            answer = self.tokenizer.decode(sample_ids[answer_start:], skip_special_tokens=False)
-            boxes = torch.tensor(
-                [[int(coordinate) for coordinate in match] for match in box_pattern.findall(answer)],
-                dtype=torch.float32,
-            ).reshape(-1, 4)
+            masks = image_mask_logits.sigmoid() >= mask_threshold
+            boxes = torch.tensor(boxes_per_image[image_index], dtype=torch.float32).reshape(-1, 4)
             boxes = boxes / 1000 * torch.tensor([width, height, width, height])
             results.append({"boxes": boxes, "masks": masks})
         return results

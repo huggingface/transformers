@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-10-23.*
+*This model was contributed to Hugging Face Transformers on 2026-10-27.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -37,7 +37,7 @@ The original code can be found [here](https://github.com/SeerRay-Lab/Xiaomi-Lens
 
 ## Usage
 
-Grounded instances are written as `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|></mask>`, with box coordinates normalized to `[0, 1000]`. Generate the answer first, then append it to the conversation and run a forward pass over the full sequence to decode one mask per `<|mask|>` token. [`~XiaomiLens0Processor.post_process_grounding`] keeps the boxes and masks of the final answer, after the thinking block, and resizes them to the original image.
+Boxes are written as `<bbox>[x1, y1, x2, y2]</bbox>` with coordinates normalized to `[0, 1000]`, and masks as `<mask><|mask|></mask>`. A grounded instance is written as `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|></mask>`. Encode the image once, generate text while collecting final-layer hidden states, then call `decode_masks` to reuse those features without rerunning either backbone. [`~XiaomiLens0Processor.post_process_grounding`] extracts boxes and resizes masks to the original image. Decoding and postprocessing exclude thinking tokens by default.
 
 ```python
 import torch
@@ -63,19 +63,27 @@ inputs = processor.apply_chat_template(
     messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
 ).to(model.device)
 
-generated_ids = model.generate(**inputs, max_new_tokens=1024)
-completion = processor.decode(generated_ids[0, inputs.input_ids.shape[1] :]).removesuffix("<|im_end|>")
-print(completion)
-
-# Decode the masks of the generated `<|mask|>` tokens with a forward pass over the full conversation
-messages.append({"role": "assistant", "content": completion})
-mask_inputs = processor.apply_chat_template(messages, tokenize=True, return_dict=True, return_tensors="pt").to(
-    model.device
-)
 with torch.no_grad():
-    outputs = model(**mask_inputs)
+    image_features = model.get_image_features(
+        inputs.pop("pixel_values"), inputs.image_grid_thw, return_dict=True
+    )
+    generated = model.generate(
+        **inputs,
+        mm_encoder_outputs={"image": image_features},
+        return_dict_in_generate=True,
+        output_hidden_states=[model.config.text_config.num_hidden_layers - 1],
+        use_cache=True,
+        num_beams=1,
+        num_return_sequences=1,
+        max_new_tokens=1024,
+    )
+    hidden_states = torch.cat([step[-1] for step in generated.hidden_states], dim=1)
+    mask_logits, mask_token_indices = model.decode_masks(
+        generated.sequences, hidden_states, image_features.last_hidden_state,
+        inputs.image_grid_thw, ignore_thinking=True,
+    )
 results = processor.post_process_grounding(
-    mask_inputs.input_ids, outputs.pred_masks, mask_inputs.image_grid_thw, target_sizes=[(480, 640)]
+    generated.sequences, inputs.image_grid_thw, mask_logits, mask_token_indices, target_sizes=[(480, 640)]
 )
 print(results[0]["boxes"], results[0]["masks"].shape)
 ```
@@ -114,19 +122,22 @@ Tips:
 
 [[autodoc]] XiaomiLens0VisionModel
     - forward
+    - decode_masks
 
 ## XiaomiLens0TextModel
 
 [[autodoc]] XiaomiLens0TextModel
     - forward
+    - decode_masks
 
 ## XiaomiLens0Model
 
 [[autodoc]] XiaomiLens0Model
     - forward
+    - decode_masks
 
 ## XiaomiLens0ForConditionalGeneration
 
 [[autodoc]] XiaomiLens0ForConditionalGeneration
     - forward
-    - get_pred_masks
+    - decode_masks
