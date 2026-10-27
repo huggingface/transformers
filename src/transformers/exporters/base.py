@@ -127,7 +127,7 @@ class ExportArtifacts(Mapping, PushToHubMixin):
 
         components = {}
         for name, component in self.components.items():
-            filename = f"{name}{exporter.artifact_suffix}"
+            filename = f"{exporter.artifact_prefix}{name}{exporter.artifact_suffix}"
             exporter.save_artifact(component.artifact, directory / filename)
             components[name] = {"file": filename, "metadata": dict(component.metadata.raw)}
 
@@ -222,8 +222,10 @@ class HfExporter(ABC):
 
     export_format: ExportFormat | str
     config_class: type[ExportConfigMixin]
-    # Extension of a saved component's file (`model.onnx`, `decode.pte`, ...).
+    # A saved component's file is `<artifact_prefix><name><artifact_suffix>` (`model.onnx`, `openvino_decode.xml`).
     artifact_suffix: str
+    # Only for formats whose extension doesn't name them (OpenVINO's `.xml` / `.bin`).
+    artifact_prefix: str = ""
 
     required_packages: list[str] = []
     # Hard minimum versions — the exporter raises below these (features it relies on are absent).

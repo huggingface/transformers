@@ -223,6 +223,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             entry = self._save_decode(OpenVINOExporter(), OpenVINOConfig(dynamic=True), directory)
+            self.assertEqual(entry["file"], "openvino_model.xml")
             ov_model = openvino.Core().read_model(str(Path(directory) / entry["file"]))
             self.assertEqual(entry["metadata"]["input_names"], [port.get_any_name() for port in ov_model.inputs])
             self.assertEqual(entry["metadata"]["output_names"], [port.get_any_name() for port in ov_model.outputs])

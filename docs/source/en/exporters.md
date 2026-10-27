@@ -31,12 +31,12 @@ in the modeling code.
 > [!WARNING]
 > The exporters are experimental. Many of the patches in this module work around specific upstream bugs (Torch, ONNX Script, ONNX Runtime, ExecuTorch) and will be removed as soon as the fix lands upstream. Until the API stabilizes, treat the patches as tied to the versions used in the test suite. Pin those versions in production tooling, and expect new patches to appear and old ones to disappear as upstream changes land.
 
-| Exporter               | Program (`.artifact`)      | Saved as        | Runtime                                    |
-| ---------------------- | -------------------------- | --------------- | ------------------------------------------ |
-| [`DynamoExporter`]     | `ExportedProgram`          | `.pt2`          | Any PyTorch runtime, AOT compilation       |
-| [`OnnxExporter`]       | `ONNXProgram`              | `.onnx`         | Any ONNX runtime (ORT, TensorRT, OpenVINO) |
-| [`ExecutorchExporter`] | `ExecutorchProgramManager` | `.pte`          | Mobile and edge devices (ExecuTorch)       |
-| [`OpenVINOExporter`]   | `openvino.Model`           | `.xml` + `.bin` | OpenVINO runtime (Intel CPU/GPU/NPU)       |
+| Exporter               | Program (`.artifact`)      | Saved as                      | Runtime                                    |
+| ---------------------- | -------------------------- | ----------------------------- | ------------------------------------------ |
+| [`DynamoExporter`]     | `ExportedProgram`          | `model.pt2`                   | Any PyTorch runtime, AOT compilation       |
+| [`OnnxExporter`]       | `ONNXProgram`              | `model.onnx`                  | Any ONNX runtime (ORT, TensorRT, OpenVINO) |
+| [`ExecutorchExporter`] | `ExecutorchProgramManager` | `model.pte`                   | Mobile and edge devices (ExecuTorch)       |
+| [`OpenVINOExporter`]   | `openvino.Model`           | `openvino_model.xml` + `.bin` | OpenVINO runtime (Intel CPU/GPU/NPU)       |
 
 Every export returns an [`ExportArtifacts`], a mapping of component names to [`ExportedComponent`]s. A
 component holds the backend's program (`.artifact`) and the [`ExportMetadata`] recorded while tracing it
@@ -56,6 +56,9 @@ exported.artifact  # the backend's program
 exported.save_pretrained("exported-model")  # model.<suffix>, export.json, config.json
 loaded = ExportArtifacts.from_pretrained("exported-model")
 ```
+
+A directory holds one export, since `export.json` and `config.json` have fixed names. Keep exports to several
+formats in their own subfolders (`onnx/`, `openvino/`) and load them with `subfolder="onnx"`.
 
 [`AutoHfExporter`] picks the right exporter from a config, and [`AutoExportConfig`] picks the
 right config class from a dict. Both follow the same auto-class pattern in Transformers, which
