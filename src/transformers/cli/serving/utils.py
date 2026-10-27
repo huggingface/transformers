@@ -1089,6 +1089,8 @@ class BaseHandler:
 
     _valid_params_class: type | None = None
     _unused_fields: set[str] = set()
+    # Arguments the handler passes to `apply_chat_template` itself, so `chat_template_kwargs` can't set them.
+    _ignored_chat_template_kwargs: set[str] = set()
 
     def __init__(
         self,
@@ -1112,6 +1114,13 @@ class BaseHandler:
         unused = input_keys & self._unused_fields
         if unused:
             logger.warning_once(f"Ignoring unsupported fields in the request: {unused}")
+
+    def _filter_chat_template_kwargs(self, chat_template_kwargs: dict) -> dict:
+        """Drop, with a warning, the `chat_template_kwargs` that the handler already passes to `apply_chat_template`."""
+        ignored = sorted(chat_template_kwargs.keys() & self._ignored_chat_template_kwargs)
+        if ignored:
+            logger.warning_once(f"Ignoring {ignored} in `chat_template_kwargs`, the server sets them itself.")
+        return {key: value for key, value in chat_template_kwargs.items() if key not in ignored}
 
     @staticmethod
     def chunk_to_sse(chunk: "str | pydantic.BaseModel") -> str:
