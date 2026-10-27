@@ -293,7 +293,7 @@ def _dequantize_fp8_weight(
         rows, cols = weight.shape[-2:]
         scale = scale.repeat_interleave(block_size[0], dim=-2)[..., :rows, :]
         scale = scale.repeat_interleave(block_size[1], dim=-1)[..., :cols]
-    return weight.to(dtype) * scale
+    return weight.to(dtype).mul_(scale)
 
 
 class FP8LinearFunction(torch.autograd.Function):
