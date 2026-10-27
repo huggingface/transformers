@@ -215,7 +215,10 @@ SPECIAL_CASES_TO_ALLOW = {
     "CsmConfig": ["tie_codebooks_embeddings"],
     # read by the generation mixin in `generation_lfm3_audio.py`
     "Lfm3AudioConfig": ["interleaved_n_audio", "interleaved_n_text", "maskgit_schedule"],
+    "Lfm3OmniConfig": ["interleaved_n_audio", "interleaved_n_text", "maskgit_schedule"],
+    # sizes the default `text_config` of the speech encoder
     "Lfm3AudioEncoderConfig": ["sliding_window"],
+    "Lfm3OmniEncoderConfig": ["sliding_window"],
     "DeepseekV2Config": ["norm_topk_prob"],
     "DeepseekV4Config": [
         # All BC / config-compat surface that the modeling code never reads but

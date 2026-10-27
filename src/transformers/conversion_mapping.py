@@ -1285,6 +1285,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "lfm3_audio": [*_LFM3_SPEECH_CONVERSIONS],
+        "lfm3_omni": [*_LFM3_SPEECH_CONVERSIONS],
         "lfm2_moe": [
             WeightConverter(
                 source_patterns=[
