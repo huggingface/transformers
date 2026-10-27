@@ -16,7 +16,7 @@
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import ImageInput, get_image_size, is_valid_image
+from ...image_utils import ImageInput, get_image_size, is_pil_image, is_valid_image
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
@@ -87,6 +87,12 @@ class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
             "max_patches": 12,
         },
     }
+
+
+def _get_box_image_size(image: ImageInput) -> tuple[int, int]:
+    """Return image dimensions in (width, height) order."""
+    size = get_image_size(image)
+    return size if is_pil_image(image) else size[::-1]
 
 
 def preprocess_box_annotation(box: list | tuple, image_size: tuple[int, int]) -> list:
@@ -186,9 +192,9 @@ class GotOcr2Processor(ProcessorMixin):
         if text is None:
             text = []
             if multi_page:
-                image_sizes = [get_image_size(image) for image_group in images for image in image_group]
+                image_sizes = [_get_box_image_size(image) for image_group in images for image in image_group]
             else:
-                image_sizes = [get_image_size(image) for image in images]
+                image_sizes = [_get_box_image_size(image) for image in images]
 
             for box_single, color_single, size in zip(box, color, image_sizes):
                 if box_single[0] is not None:
