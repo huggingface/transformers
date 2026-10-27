@@ -156,7 +156,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     @property
     def is_trainable(self) -> bool:
-        return False
+        return True
 
     @property
     def is_compileable(self) -> bool:
