@@ -24,7 +24,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...integrations import use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
@@ -296,9 +296,9 @@ class InklingConfig(PreTrainedConfig):
 
     model_type = "inkling_mm_model"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=InklingTextConfig),
-        "vision_config": SubConfigSpec(config_class=InklingVisionConfig),
-        "audio_config": SubConfigSpec(config_class=InklingAudioConfig),
+        "text_config": InklingTextConfig,
+        "vision_config": InklingVisionConfig,
+        "audio_config": InklingAudioConfig,
     }
 
     text_config: InklingTextConfig | dict | None = None
@@ -714,7 +714,7 @@ class InklingNormedEmbedding(nn.Embedding):
 
 @auto_docstring
 class InklingPreTrainedModel(PreTrainedModel):
-    config_class = InklingConfig
+    config: InklingConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["InklingDecoderLayer"]
@@ -917,6 +917,8 @@ class InklingAudioModelEmbeddings(HiggsAudioV2Embeddings): ...
 
 @auto_docstring
 class InklingAudioModel(InklingPreTrainedModel):
+    config: InklingAudioConfig
+
     def __init__(self, config: InklingAudioConfig):
         super().__init__(config)
         self.embed_audio_tokens = InklingAudioModelEmbeddings(config)
@@ -1054,6 +1056,8 @@ def plan_out_scales(
 
 @auto_docstring
 class InklingVisionModel(InklingPreTrainedModel):
+    config: InklingVisionConfig
+
     def __init__(self, config: InklingVisionConfig):
         super().__init__(config)
         self.scales = plan_out_scales(

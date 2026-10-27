@@ -15,6 +15,7 @@
 import copy
 import functools
 import gc
+import io
 import itertools
 import math
 import os
@@ -62,9 +63,13 @@ from transformers.generation.continuous_batching.requests import (
     GenerationOutput,
     RequestState,
     RequestStatus,
+)
+from transformers.generation.continuous_batching.utils import (
+    DEVICE_TYPE_TO_GRAPH_NAME,
+    _get_allowed_numa_nodes,
+    _get_numa_nodes_memory,
     get_device_and_memory_breakdown,
 )
-from transformers.generation.continuous_batching.utils import DEVICE_TYPE_TO_GRAPH_NAME
 from transformers.integrations.eager_paged import eager_paged_attention_forward
 from transformers.testing_utils import (
     Expectations,
@@ -831,11 +836,10 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                     slot_to_token[idx] = past_length + offset
             past_length += query_length
 
-    @slow
     def test_continuous_batching_no_accelerators(self) -> None:
         """Test continuous batching generation when no accelerator is available. It uses a simulated CPU-only PyTorch
-        environment by mocking all acceleratoravailability checks to return False"""
-        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+        environment by mocking all accelerator availability checks to return False"""
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         # Accelerator availability are cached, so we clear the cache before mocking to ensure the CPU-only
         cached_availability_checks = [is_torch_cuda_available, is_torch_mps_available, is_torch_xpu_available]
         for check in cached_availability_checks:
@@ -853,15 +857,20 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                 self.assertFalse(is_torch_xpu_available())
                 self.assertFalse(torch.backends.mps.is_available())
 
-                tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu")
-                user_messages = _DEFAULT_USER_MESSAGES[:1]
+                tokenizer, model = get_tokenizer_and_model(model_id, "sdpa", "cpu", dtype=torch.float32)
+                user_messages = ["Where is Paris?"]
                 input_ids = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=True)
+                num_input_tokens = len(input_ids[0])
 
                 model.generation_config.max_new_tokens = 10
                 model.generation_config.do_sample = False
 
                 continuous_batching_config = ContinuousBatchingConfig(
-                    use_cuda_graph=False, use_async_batching=False, auto_switch_to_flash=False
+                    use_cuda_graph=False,
+                    use_async_batching=False,
+                    auto_switch_to_flash=False,
+                    num_blocks=16,
+                    max_batch_tokens=256,
                 )
 
                 # This should not crash even with all accelerators unavailable
@@ -870,12 +879,20 @@ class ContinuousBatchingNoAcceleratorTest(unittest.TestCase):
                     generation_config=model.generation_config,
                     continuous_batching_config=continuous_batching_config,
                 )
+                cb_output_tokens = outputs["req_0"].generated_tokens
 
                 # Verify we got outputs
                 self.assertEqual(len(outputs), len(input_ids))
                 for output in outputs.values():
                     self.assertIsNotNone(output.generated_tokens)
                     self.assertGreater(len(output.generated_tokens), 0)
+
+                # Run regular generation to compare
+                inputs = get_generation_inputs(user_messages, tokenizer, for_continuous_batching=False)
+                generate_outputs = model.generate(**inputs, generation_config=model.generation_config)
+                generate_output_tokens = generate_outputs[0, num_input_tokens:].tolist()
+
+                self.assertEqual(cb_output_tokens, generate_output_tokens)
         finally:
             # Clear the caches again so the mocked availabilities do not leak into subsequent tests.
             for check in cached_availability_checks:
@@ -2400,6 +2417,54 @@ class ContinuousBatchingWithAcceleratorTest(unittest.TestCase):
             max_new_tokens=30,
             num_repeat_prompts=4,
         )
+
+
+class ContinuousBatchingMemoryTests(unittest.TestCase):
+    """Tests the detection of the CPU memory available to the process, with the /proc and /sys files faked."""
+
+    STATUS = "/proc/self/status"
+    NUMA_MAPS = "/proc/self/numa_maps"
+
+    @staticmethod
+    def fake_files(files: dict[str, str]):
+        """Patches `open` in the CB utils so it reads from `files` (path -> content) instead of the filesystem."""
+
+        def _open(path, *args, **kwargs):
+            if path not in files:
+                raise FileNotFoundError(path)
+            return io.StringIO(files[path])
+
+        return patch("transformers.generation.continuous_batching.utils.open", _open, create=True)
+
+    def test_allowed_numa_nodes(self):
+        cases = [
+            # (Mems_allowed_list, first numa_maps line, expected)
+            ("0-1", "00400000 default file=/usr/bin/python3", {0, 1}),  # unrestricted
+            ("0-1", "00400000 bind:0 file=/usr/bin/python3", {0}),  # numactl --membind=0
+            ("0", "00400000 bind:0-1 file=/usr/bin/python3", {0}),  # cpuset narrower than policy
+            ("0-1", "00400000 bind=static:1 file=/usr/bin/python3", {1}),  # policy flags
+            ("0-1", "00400000 prefer:1 file=/usr/bin/python3", {0, 1}),  # not a hard limit
+            (None, "00400000 bind:1 file=/usr/bin/python3", {1}),  # no cpuset line
+            (None, None, set()),  # not Linux
+        ]
+        for mems_allowed, first_mapping, expected in cases:
+            files = {}
+            if mems_allowed is not None:
+                files[self.STATUS] = f"Name:\tpython\nMems_allowed_list:\t{mems_allowed}\n"
+            if first_mapping is not None:
+                files[self.NUMA_MAPS] = first_mapping + "\n"
+            with self.subTest(mems_allowed=mems_allowed, first_mapping=first_mapping), self.fake_files(files):
+                self.assertEqual(_get_allowed_numa_nodes(), expected)
+
+    def test_numa_nodes_memory(self):
+        meminfo = "/sys/devices/system/node/node{}/meminfo"
+        files = {
+            meminfo.format(0): "Node 0 MemTotal:       1024 kB\nNode 0 MemFree: ...\n",
+            meminfo.format(1): "Node 1 MemTotal:       2048 kB\n",
+        }
+        with self.fake_files(files):
+            self.assertEqual(_get_numa_nodes_memory({0, 1}), 3072 * 1024)
+            self.assertIsNone(_get_numa_nodes_memory({0, 2}))  # node 2 unreadable
 
 
 @require_torch_accelerator
