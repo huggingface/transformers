@@ -93,5 +93,8 @@ RUN uv pip install onnxscript onnxruntime --no-cache-dir
 
 ENV OCL_ICD_VENDORS=/etc/OpenCL/vendors
 ENV CCL_ATL_TRANSPORT=ofi
+# FIXME: the default allreduce algorithm hits a latent bug on Intel XPU during the backward
+# pass. Forcing the ring algorithm avoids it; remove once the upstream fix lands.
+ENV CCL_ALLREDUCE=ring
 ENV CLASSPATH=/opt/venv/share/java/mpi.jar
 ENV LD_LIBRARY_PATH=/opt/venv/lib
