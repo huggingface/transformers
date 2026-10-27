@@ -65,7 +65,7 @@ class Data2VecTextLayer(RobertaLayer):
 
 @auto_docstring
 class Data2VecTextPreTrainedModel(PreTrainedModel):
-    config_class = Data2VecTextConfig
+    config: Data2VecTextConfig
     base_model_prefix = "data2vec_text"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Data2VecTextEmbeddings", "Data2VecTextLayer"]
