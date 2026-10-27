@@ -1,12 +1,13 @@
 import argparse
 import json
+import os
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
 from transformers import PixtralImageProcessor, PixtralProcessor
 from transformers.integrations.mistral import convert_tekken_tokenizer
-from transformers.models.mistral_large4.modular_mistral_large4 import MistralLarge4Config
+from transformers.models.mistral_large4.configuration_mistral_large4 import MistralLarge4Config
 
 
 BASE_CONFIG_DICT = {
@@ -248,7 +249,8 @@ if __name__ == "__main__":
 
     # Config: build the real object so that it validates, then save it (only non-default fields are written)
     config = MistralLarge4Config(**convert_config(params, special_token_ids))
-    config.save_pretrained(output_dir)
+    # NOTE: we do not use `save_pretrained` as it drops the very important `transformers_weights`
+    config.to_json_file(os.path.join(output_dir, "config.json"))
     print(f"config.json -> {output_dir}")
 
     if not args.config_only:
