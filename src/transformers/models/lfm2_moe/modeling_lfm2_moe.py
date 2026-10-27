@@ -374,8 +374,7 @@ def causal_conv1d_update(
     return out.to(hidden_states.dtype)
 
 
-@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
-def causal_conv1d_fn(
+def _causal_conv1d_fn_torch(
     hidden_states: torch.Tensor,
     weight: nn.Parameter,
     bias: nn.Parameter | None = None,
@@ -408,6 +407,18 @@ def causal_conv1d_fn(
     if activation is not None:
         out = ACT2FN[activation](out)
     return out.to(hidden_states.dtype)
+
+
+@use_kernel_func_from_hub_with_fallback("causal_conv1d_fn", "causal_conv1d")
+def causal_conv1d_fn(
+    hidden_states: torch.Tensor,
+    weight: nn.Parameter,
+    bias: nn.Parameter | None = None,
+    seq_idx: torch.Tensor | None = None,
+    activation: str | None = None,
+    **kwargs,
+):
+    return _causal_conv1d_fn_torch(hidden_states, weight, bias, seq_idx, activation)
 
 
 @use_kernelized_func([causal_conv1d_update, causal_conv1d_fn])
@@ -450,13 +461,23 @@ class Lfm2MoeShortConv(nn.Module):
         BCx = self.in_proj(hidden_states).transpose(-1, -2)
         B, C, x = BCx.chunk(3, dim=-2)
         hidden_states = B * x
+        if self.bias and attention_mask is not None:
+            # the in_proj bias re-fills the padded positions, so mask them again before they enter the conv window
+            hidden_states = hidden_states * attention_mask[:, None, :].to(hidden_states.dtype)
 
         if past_key_values is not None:
             conv_state = past_key_values.get_conv_state(self.layer_idx, state_idx=0)
         else:
             conv_state = None
 
-        if conv_state is not None and seq_len == 1 and not past_key_values.is_recording_past(self.layer_idx):
+        # the causal_conv1d kernels only serve widths 2-4; wider convs (LFM3 uses 7) stay on the torch reference
+        use_kernel = 2 <= self.conv_kernel_size <= 4
+        if (
+            conv_state is not None
+            and seq_len == 1
+            and use_kernel
+            and not past_key_values.is_recording_past(self.layer_idx)
+        ):
             # Single-token cached decode: the fused per-step kernel updates the conv state in-place.
             hidden_states = causal_conv1d_update(
                 hidden_states, conv_state, self.conv.weight.squeeze(1), self.conv.bias
@@ -467,7 +488,8 @@ class Lfm2MoeShortConv(nn.Module):
                     hidden_states, self.layer_idx, conv_kernel_size=self.conv_kernel_size
                 )
 
-            hidden_states = causal_conv1d_fn(hidden_states, self.conv.weight.squeeze(1), self.conv.bias, **kwargs)
+            conv1d_fn = causal_conv1d_fn if use_kernel else _causal_conv1d_fn_torch
+            hidden_states = conv1d_fn(hidden_states, self.conv.weight.squeeze(1), self.conv.bias, **kwargs)
 
             # Drop the additional previous states
             if past_key_values is not None:
