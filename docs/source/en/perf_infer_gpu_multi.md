@@ -141,8 +141,6 @@ The table below describes each strategy.
 | `MoeIdentityParallel` | Pre-divides the input of a zero or identity expert by the mesh size, cancelling the all-reduce that `moe_tp_experts` applies downstream. |
 | `MoEParamShard` | Shards MoE expert weights on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` also rewrites `module.num_experts` to the per-rank expert count. |
 | `EpRouterParallel` | Masks router scores for non-local experts and remaps global expert IDs to local ones, so each rank runs only the experts it owns. Requires `num_experts` to be divisible by the mesh size. |
-| `RouterParallelMegaMoe` | Router variant for DeepGEMM Mega MoE, which dispatches experts inside the kernel which wants the router output untouched. |
-| `MoeTensorParalellMegaMoeExperts` | Inference-only experts layer for DeepGEMM Mega MoE. Skips the gradient syncs and passes the process group into the module so the kernel can set up its shared buffers on the first forward. |
 
 ### Packed strategies
 

@@ -713,9 +713,7 @@ def gather_state_dict_for_save(
 _MOVED_TO_EXPERT_PARALLEL = (
     "MoEParamShard",
     "EpRouterParallel",
-    "RouterParallelMegaMoe",
     "EpDispatchExpertsParallel",
-    "MoeTensorParalellMegaMoeExperts",
     "apply_expert_parallelism",
 )
 
