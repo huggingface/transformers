@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -108,8 +108,8 @@ class DiaConfig(PreTrainedConfig):
     model_type = "dia"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
-        "encoder_config": SubConfigSpec(config_class=DiaEncoderConfig),
-        "decoder_config": SubConfigSpec(config_class=DiaDecoderConfig),
+        "encoder_config": DiaEncoderConfig,
+        "decoder_config": DiaDecoderConfig,
     }
 
     encoder_config: DiaEncoderConfig | dict | None = None

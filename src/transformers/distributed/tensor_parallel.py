@@ -392,14 +392,25 @@ class ReplicatedWithGradAllReduce(TensorParallelLayer):
     """
 
     def install_forward(self, module, mesh):
-        # A module hook rather than `param.register_hook`: params are replaced during weight
-        # loading, which happens after TP is applied, and would drop a param-level hook.
-        def _all_reduce_grads(mod, grad_input, grad_output):
-            for param in mod.parameters(recurse=False):
-                if param.grad is not None:
-                    dist.all_reduce(param.grad, group=mesh.get_group())
+        original_forward = module.forward
+        # Module-level backward hooks create graph breaks when using torch.compile but not with parameter-level
+        # hooks. We can't add them during setup time as the parameters are empty placeholders that are going to be
+        # replaced with the loaded weights, discarding all previously attached hooks. So they are attached only on
+        # first forward pass. A dict tracks what's already hooked.
+        is_already_hooked: dict[str, torch.nn.Parameter] = {}
 
-        module.register_full_backward_hook(_all_reduce_grads)
+        def _all_reduce_grad(param):
+            dist.all_reduce(param.grad, group=mesh.get_group())
+
+        def tp_forward(*args, **kwargs):
+            if torch.is_grad_enabled():
+                for name, param in module.named_parameters(recurse=False):
+                    if param.requires_grad and is_already_hooked.get(name) is not param:
+                        param.register_post_accumulate_grad_hook(_all_reduce_grad)
+                        is_already_hooked[name] = param
+            return original_forward(*args, **kwargs)
+
+        module.forward = tp_forward
         return module
 
 

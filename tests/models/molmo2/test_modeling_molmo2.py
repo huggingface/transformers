@@ -407,6 +407,7 @@ class Molmo2_4BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): [-10.407500, -5.903657, -10.977587, -10.325406, -16.847645, -14.505170, -11.184648, -9.696571, -11.637183, -9.205433],
                 ("cuda", (8, 6)): [-10.407710, -5.903650, -10.977592, -10.325156, -16.847317, -14.505305, -11.184698, -9.697040, -11.636929, -9.205041],
+                ("xpu", 5): [-10.407711, -5.903655, -10.977608, -10.325190, -16.847345, -14.505308, -11.184708, -9.697016, -11.636967, -9.205076],
             }
         )  # fmt: skip
         torch.testing.assert_close(
@@ -437,6 +438,7 @@ class Molmo2_4BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): "In this captivating image, a large, chubby cat",
                 ("cuda", (8, 6)): "In this captivating image, a large, chubby cat",
+                ("xpu", 5): "In this captivating image, a large, chubby cat",
             }
         )  # fmt: skip
         self.assertEqual(generated_text.strip(), expected_texts.get_expectation())
@@ -521,6 +523,7 @@ class Molmo2_O7BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): [-13.0625, -5.9375, -11.75, -11.0, -12.6875, -16.25, -10.375, -12.3125, -12.6875, -10.625],
                 ("cuda", (8, 6)): [-13.0625, -5.875, -11.6875, -11.0, -12.6875, -16.25, -10.3125, -12.25, -12.6875, -10.625],
+                ("xpu", 5): [-13.0625, -5.9375, -11.75, -11.0625, -12.75, -16.25, -10.375, -12.3125, -12.6875, -10.6875],
             }
         )  # fmt: skip
         torch.testing.assert_close(
@@ -551,6 +554,7 @@ class Molmo2_O7BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): "In this captivating image, a small, chubby cat",
                 ("cuda", (8, 6)): "In this captivating image, a small, chubby cat",
+                ("xpu", 5): "In this captivating image, a small, chubby cat",
             }
         )  # fmt: skip
         self.assertEqual(generated_text.strip(), expected_texts.get_expectation())
@@ -635,6 +639,7 @@ class Molmo2_8BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): [-15.875, -7.875, -15.5625, -15.0, -16.5, -18.25, -14.4375, -15.8125, -15.4375, -12.4375],
                 ("cuda", (8, 6)): [-15.875, -7.875, -15.625, -15.0, -16.5, -18.25, -14.5, -15.75, -15.4375, -12.5],
+                ("xpu", 5): [-15.875, -7.875, -15.5625, -15.0, -16.5, -18.25, -14.5, -15.75, -15.4375, -12.4375],
             }
         )  # fmt: skip
         torch.testing.assert_close(
@@ -665,6 +670,7 @@ class Molmo2_8BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): "In this captivating image, a snow leopard is captured",
                 ("cuda", (8, 6)): "In this captivating image, a snow leopard is captured",
+                ("xpu", 5): "In this captivating image, a snow leopard is captured",
             }
         )  # fmt: skip
         self.assertEqual(generated_text.strip(), expected_texts.get_expectation())
@@ -708,6 +714,7 @@ class Molmo2_8BIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_texts = Expectations(
             {
                 ("cuda", (8, 0)): "Penguins appear in the video.",
+                ("xpu", 5): "Penguins appear in the video.",
             }
         )  # fmt: skip
         self.assertEqual(generated_text.strip(), expected_texts.get_expectation())
