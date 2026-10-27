@@ -1092,10 +1092,30 @@ class Fp8Dequantize(ConversionOps):
                 return {target_key: self._dequantize_one(quantized, scales, output_dtype=output_dtype)}
             return {target_key: quantized}
 
+        # Experts saved after quantizing on load have per-expert weights but their scales merged like the converter's
+        # target, e.g. `experts.gate_up_proj_scale_inv`. Split it into a scale per expert and weight: the converter
+        # merges the experts on dim 0 and concatenates the weights on dim 1.
+        input_dict = dict(input_dict)
+        weight_keys = [key for key in input_dict if "scale" not in key]
+        merged_keys = [
+            k for k in input_dict if k.endswith("_scale_inv") and k.removesuffix("_scale_inv") not in input_dict
+        ]
+        for merged_key in merged_keys:
+            merged = input_dict[merged_key]
+            merged = merged[0] if isinstance(merged, list) else merged
+            # Only per-expert weights, one per expert of the merged scale. Other merges keep the scale unused
+            if not all(
+                isinstance(input_dict[key], list) and len(input_dict[key]) == len(merged) for key in weight_keys
+            ):
+                continue
+            del input_dict[merged_key]
+            for key, scales in zip(weight_keys, merged.chunk(len(weight_keys), dim=1)):
+                input_dict.setdefault(f"{key}_scale_inv", list(scales))
+
         # Generic chain path: dequantize every weight pattern that has a sibling scale.
         result: dict[str, list[torch.Tensor] | torch.Tensor] = {}
         for key, value in input_dict.items():
-            if "activation_scale" in key or "weight_scale_inv" in key:
+            if "activation_scale" in key or key.endswith("_scale_inv"):
                 continue  # consumed by the dequant; drop from the chain
             scale_key = f"{key}_scale_inv"
             if scale_key not in input_dict:

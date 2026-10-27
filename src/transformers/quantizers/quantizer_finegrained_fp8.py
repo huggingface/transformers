@@ -22,7 +22,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
-    dequantized_saves_unquantized = True
     quantization_config: "FineGrainedFP8Config"
 
     @property
