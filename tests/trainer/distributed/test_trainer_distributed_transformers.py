@@ -41,8 +41,8 @@ class TestTrainerDistributedConfig(TestCasePlus):
         return cmd + (script_args or [])
 
     @require_peft
-    def test_peft_save(self):
-        """`Trainer` saves the LoRA adapter of a model sharded at load time, and the saved adapter is the trained one."""
+    def test_peft_save_fsdp(self):
+        """Save and reload an adapter whose weights are sharded with FSDP."""
         cmd = self.get_torchrun_cmd(
             PEFT_SAVE_SCRIPT, ["--output_dir", self.get_auto_remove_tmp_dir(), "--parallelism", "fsdp"]
         )
