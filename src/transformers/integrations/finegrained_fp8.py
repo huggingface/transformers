@@ -595,11 +595,9 @@ def fp8_grouped_mm_experts_forward(
 
     # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
     # `histc(max=num_experts-1)` drops them from `tokens_per_expert`, and the grouped matmul skips
-    # rows beyond `offsets[-1]` — sentinels cost no real GEMM compute. The kernel writes only
-    # valid rows, so sentinel-tail `proj_out` rows are uninit (fwd output and bwd `d_input`); the
-    # fwd post-mask below kills `proj_out[sentinel] * 0 = NaN * 0 = NaN` before the per-token
-    # reduction, and the bwd pre-mask zeros the sentinel rows of `d_selected_hidden_states_g`
-    # before the gather's scatter-add pushes them into `d_hidden_states`.
+    # rows beyond `offsets[-1]`, leaving them uninit (fwd output and bwd `d_input`). The fwd
+    # post-mask kills `NaN * 0 = NaN` before the per-token reduction, the bwd pre-mask zeros them
+    # in `d_selected_hidden_states_g` before the gather's scatter-add.
     sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1) if self._is_expert_parallel else None
 
     weight_up = self.gate_up_proj if self.has_gate else self.up_proj
