@@ -418,7 +418,7 @@ class MistralLarge4TextAttention(nn.Module):
 
         # Either the layer computes it's own cache or it loads it from shared_kv_states
         if self.is_kv_shared_layer:
-            k_pass, k_rot = shared_kv_states["indexed_attention"]
+            k_pass, k_rot = shared_kv_states["rope" if self.use_rope else "nope"]
             k_pass = k_pass.to(q_states.device)  # device of past layer may be different from current one
             k_rot = k_rot.to(q_states.device)
         else:
@@ -442,7 +442,7 @@ class MistralLarge4TextAttention(nn.Module):
             k_pass, k_rot = past_key_values.update(k_pass, k_rot, self.layer_idx)
         # If the layer takes part in cache sharing and computes its own cache, store a copy in shared_kv_states
         if self.store_full_length_kv:
-            shared_kv_states["indexed_attention"] = (k_pass, k_rot)  # one layer type, so it is hardcoded
+            shared_kv_states["rope" if self.use_rope else "nope"] = (k_pass, k_rot)
 
         # Recompose and apply softmax-scaling to the queries
         query_states = torch.cat((q_pass, q_rot), dim=-1)
