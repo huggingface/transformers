@@ -213,6 +213,9 @@ SPECIAL_CASES_TO_ALLOW = {
     ],
     "Cohere2MoeConfig": ["rope_scaling", "sliding_window_pattern"],
     "CsmConfig": ["tie_codebooks_embeddings"],
+    # read by the generation mixin in `generation_lfm3_audio.py`
+    "Lfm3AudioConfig": ["interleaved_n_audio", "interleaved_n_text", "maskgit_schedule"],
+    "Lfm3AudioEncoderConfig": ["sliding_window"],
     "DeepseekV2Config": ["norm_topk_prob"],
     "DeepseekV4Config": [
         # All BC / config-compat surface that the modeling code never reads but

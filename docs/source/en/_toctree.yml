@@ -1189,6 +1189,8 @@
         title: Kyutai Speech-To-Text
       - local: model_doc/lasr
         title: LASR
+      - local: model_doc/lfm3_audio
+        title: LFM3-Audio
       - local: model_doc/liquid_codec
         title: Liquid Codec
       - local: model_doc/mimi
