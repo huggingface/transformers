@@ -38,8 +38,7 @@ from ...utils.output_capturing import capture_outputs
 from ...utils.type_validators import interval, positive_int_field
 from ..clip.modeling_clip import CLIPMLP, CLIPEncoderLayer
 from ..glmasr.configuration_glmasr import GlmAsrEncoderConfig
-from ..glmasr.modeling_glmasr import GlmAsrAttention
-from ..llama.modeling_llama import LlamaRotaryEmbedding
+from ..glmasr.modeling_glmasr import GlmAsrAttention, GlmAsrRotaryEmbedding
 from ..pe_audio.modeling_pe_audio import PeAudioPreTrainedModel
 
 
@@ -488,7 +487,7 @@ class Nemotron3DiarizationFeatureStacking(nn.Module):
         return self.projection(stacked)
 
 
-class Nemotron3DiarizationRotaryEmbedding(LlamaRotaryEmbedding): ...
+class Nemotron3DiarizationRotaryEmbedding(GlmAsrRotaryEmbedding): ...
 
 
 class Nemotron3DiarizationAttention(GlmAsrAttention):
