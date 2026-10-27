@@ -293,14 +293,21 @@ class LlamaIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             [input_text], tokenize=True, return_tensors="pt", add_generation_prompt=True
         ).to(model.device)
 
-        out_sdpa = model.generate(**inputs, max_new_tokens=100, cache_implementation="static", do_sample=False)
+        out_sdpa = model.generate(
+            **inputs, max_new_tokens=100, cache_implementation="static", disable_compile=True, do_sample=False
+        )
         output_text_sdpa = tokenizer.batch_decode(out_sdpa[0, inputs.input_ids.shape[1] :])[0]
 
         # Now toggle FA and test again
         model.set_attn_implementation("flash_attention_2")
 
         out_fa = model.generate(
-            **inputs, max_new_tokens=100, cache_implementation="static", do_sample=False, return_dict_in_generate=True
+            **inputs,
+            max_new_tokens=100,
+            cache_implementation="static",
+            disable_compile=True,
+            do_sample=False,
+            return_dict_in_generate=True,
         )
         output_text_fa = tokenizer.batch_decode(out_fa.sequences[0, inputs.input_ids.shape[1] :])[0]
 

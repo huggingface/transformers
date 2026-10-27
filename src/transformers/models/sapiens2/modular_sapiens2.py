@@ -22,7 +22,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -1308,7 +1308,7 @@ class Sapiens2Config(DINOv3ViTConfig):
 
     model_type = "sapiens2"
     sub_configs_defaults = {
-        "head_config": SubConfigSpec(config_class=Sapiens2HeadConfig),
+        "head_config": Sapiens2HeadConfig,
     }
 
     hidden_size: int = 1024

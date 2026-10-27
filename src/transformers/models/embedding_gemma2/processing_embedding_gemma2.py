@@ -36,7 +36,6 @@ from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import (
     auto_docstring,
 )
-from ...utils.import_utils import requires
 from ...video_utils import VideoInput, is_valid_video, make_batched_videos
 
 
