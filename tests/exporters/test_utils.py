@@ -40,6 +40,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from transformers import BertConfig, GenerationConfig
 from transformers.exporters import utils as exporter_utils
 from transformers.exporters.auto import (
     EXPORT_BACKENDS,
@@ -59,7 +60,6 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import GenerationConfig
     from transformers.exporters.utils import (
         cast_leaf_tensors,
         decompose_prefill_decode,
@@ -163,6 +163,10 @@ class _StubExporter(HfExporter):
     def save_artifact(cls, artifact, path):
         Path(path).write_text(artifact, encoding="utf-8")
 
+    @classmethod
+    def load_artifact(cls, path):
+        return Path(path).read_text(encoding="utf-8")
+
 
 class RegistrationTest(unittest.TestCase):
     """Cover the edge cases of `register_backend` that the built-in registrations don't hit. The registry is
@@ -219,6 +223,66 @@ class ExportArtifactsTest(unittest.TestCase):
         self.assertEqual(manifest["export_format"], "stub")
         self.assertEqual(manifest["components"]["prefill"]["file"], "prefill.txt")
         self.assertEqual(manifest["components"]["prefill"]["metadata"], {"input_names": ["input_ids"]})
+
+    def test_from_pretrained_loads_what_save_pretrained_wrote(self):
+        components = {"decode": ExportedComponent("decode program", ExportMetadata({"input_names": ["input_ids"]}))}
+        config, generation_config = BertConfig(hidden_size=32), GenerationConfig(max_new_tokens=3)
+        with mock.patch.dict(EXPORT_BACKENDS):
+            register_backend("stub", _StubConfig, _StubExporter)
+            with tempfile.TemporaryDirectory() as directory:
+                ExportArtifacts(components, "stub", config, generation_config).save_pretrained(directory)
+                loaded = ExportArtifacts.from_pretrained(directory)
+        self.assertEqual(loaded.export_format, "stub")
+        self.assertEqual(loaded["decode"].artifact, "decode program")
+        self.assertEqual(loaded["decode"].metadata.input_names, ("input_ids",))
+        self.assertEqual(loaded.config.hidden_size, 32)
+        self.assertEqual(loaded.generation_config.max_new_tokens, 3)
+
+    def test_from_pretrained_downloads_only_the_export_from_the_hub(self):
+        """From the Hub, the manifest is fetched first, then only the files it names (and the configs), so an
+        export in a model repo's subfolder doesn't pull the model's own weights."""
+        components = {"decode": ExportedComponent("decode program", ExportMetadata())}
+        with mock.patch.dict(EXPORT_BACKENDS), tempfile.TemporaryDirectory() as repo:
+            register_backend("stub", _StubConfig, _StubExporter)
+            ExportArtifacts(components, "stub").save_pretrained(Path(repo) / "stub")
+
+            def hf_hub_download(repo_id, filename, subfolder=None, **kwargs):
+                return str(Path(repo) / (subfolder or "") / filename)
+
+            def snapshot_download(repo_id, allow_patterns, **kwargs):
+                self.assertEqual(
+                    sorted(allow_patterns),
+                    ["stub/config.json", "stub/decode.txt", "stub/export.json", "stub/generation_config.json"],
+                )
+                return repo
+
+            with (
+                mock.patch("transformers.exporters.base.hf_hub_download", hf_hub_download),
+                mock.patch("transformers.exporters.base.snapshot_download", snapshot_download),
+            ):
+                loaded = ExportArtifacts.from_pretrained("org/model", subfolder="stub")
+        self.assertEqual(loaded["decode"].artifact, "decode program")
+
+    def test_push_to_hub_uploads_the_saved_export(self):
+        """`push_to_hub(repo_id)` and `save_pretrained(..., push_to_hub=True)` upload what `save_pretrained` writes."""
+        components = {"decode": ExportedComponent("decode program", ExportMetadata())}
+        artifacts = ExportArtifacts(components, "stub", generation_config=GenerationConfig(max_new_tokens=3))
+        api = mock.Mock()
+        api.create_repo.return_value.repo_id = "org/model"
+        with (
+            mock.patch.dict(EXPORT_BACKENDS),
+            mock.patch("transformers.utils.hub.hf_api", return_value=api),
+            mock.patch("transformers.exporters.base.hf_api", return_value=api),
+            mock.patch("transformers.utils.hub.create_and_tag_model_card"),
+            tempfile.TemporaryDirectory() as directory,
+        ):
+            register_backend("stub", _StubConfig, _StubExporter)
+            artifacts.push_to_hub("org/model")
+            artifacts.save_pretrained(directory, push_to_hub=True, repo_id="org/model")
+        for call in api.create_commit.call_args_list:
+            uploaded = {operation.path_in_repo for operation in call.kwargs["operations"]}
+            self.assertLessEqual({"decode.txt", "export.json", "generation_config.json"}, uploaded)
+        self.assertEqual(api.create_commit.call_count, 2)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

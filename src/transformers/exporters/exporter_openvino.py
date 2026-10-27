@@ -135,6 +135,7 @@ class OpenVINOExporter(DynamoExporter):
         if config.compress_to_fp16:
             compress_model_transformation(ov_model)
 
+        update_openvino_metadata(metadata, ov_model)
         return ov_model, metadata
 
     @classmethod
@@ -143,10 +144,26 @@ class OpenVINOExporter(DynamoExporter):
         otherwise halve `float32` weights on its own)."""
         openvino.save_model(artifact, str(path), compress_to_fp16=False)
 
+    @classmethod
+    def artifact_files(cls, filename: str) -> list[str]:
+        """The `.xml` graph and its `.bin` weights."""
+        return [filename, f"{filename.removesuffix('.xml')}.bin"]
+
+    @classmethod
+    def load_artifact(cls, path) -> openvino.Model:
+        return openvino.Core().read_model(str(path))
+
 
 # ── Conversion helpers ──────────────────────────────────────────────────────
 # Small helpers for ``OpenVINOExporter.export`` — extracted for readability and so each stage
 # of the conversion has a single responsibility.
+
+
+def update_openvino_metadata(metadata: dict[str, Any], ov_model: openvino.Model) -> None:
+    """Record the OpenVINO model's own port names: dotted leaf paths, and once `stateful`, no cache ports but a
+    `beam_idx` input."""
+    metadata["input_names"] = [port.get_any_name() for port in ov_model.inputs]
+    metadata["output_names"] = [port.get_any_name() for port in ov_model.outputs]
 
 
 def _fix_exported_program(exported_program: ExportedProgram) -> tuple[ExportedProgram, Any]:

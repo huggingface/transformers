@@ -44,9 +44,17 @@ component holds the backend's program (`.artifact`) and the [`ExportMetadata`] r
 component, so its program is directly `exported.artifact`. [`~ExportArtifacts.save_pretrained`] writes one
 file per component, an `export.json` manifest with each component's file and metadata, and the model config.
 
+[`~ExportArtifacts.from_pretrained`] loads it back, from a local directory or a Hub repo (pass `subfolder` for an
+export kept next to the model's weights; only the export's own files are downloaded). Dynamo, ONNX, and OpenVINO
+programs load as the same type the export returned; an ExecuTorch `.pte` loads as an `executorch.runtime.Program`,
+ready to run.
+
 ```python
+from transformers.exporters import ExportArtifacts
+
 exported.artifact  # the backend's program
 exported.save_pretrained("exported-model")  # model.<suffix>, export.json, config.json
+loaded = ExportArtifacts.from_pretrained("exported-model")
 ```
 
 [`AutoHfExporter`] picks the right exporter from a config, and [`AutoExportConfig`] picks the

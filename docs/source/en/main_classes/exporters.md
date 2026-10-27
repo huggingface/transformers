@@ -46,6 +46,7 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 [[autodoc]] exporters.base.ExportArtifacts
     - artifact
     - save_pretrained
+    - from_pretrained
 
 ## ExportedComponent
 

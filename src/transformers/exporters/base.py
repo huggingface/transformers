@@ -24,7 +24,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from ..utils import logging
+from huggingface_hub import hf_hub_download, snapshot_download
+
+from ..generation import GenerationConfig
+from ..models.auto.configuration_auto import AutoConfig
+from ..utils import CONFIG_NAME, GENERATION_CONFIG_NAME, PushToHubMixin, logging
+from ..utils.hub import hf_api
 from .configs import ExportConfigMixin, ExportFormat, export_format_name
 from .metadata import ExportMetadata
 from .quantizers.utils import capture_calibration_inputs
@@ -43,7 +48,6 @@ if TYPE_CHECKING:
     import torch
 
     from ..cache_utils import Cache
-    from ..generation import GenerationConfig
     from ..modeling_utils import PreTrainedModel
 
 
@@ -55,7 +59,7 @@ class ExportedComponent:
     metadata: ExportMetadata
 
 
-class ExportArtifacts(Mapping):
+class ExportArtifacts(Mapping, PushToHubMixin):
     """What an export produced: a `Mapping` over `{name: ExportedComponent}`, plus the configs they were traced
     against.
 
@@ -97,14 +101,29 @@ class ExportArtifacts(Mapping):
             )
         return next(iter(self.components.values())).artifact
 
-    def save_pretrained(self, save_directory: str | Path) -> None:
+    def save_pretrained(self, save_directory: str | Path, push_to_hub: bool = False, **kwargs) -> None:
         """Write the components (one file each), the configs, and a manifest naming each component's file and the
-        metadata recorded when tracing it."""
+        metadata recorded when tracing it. [`~ExportArtifacts.from_pretrained`] loads them back.
+
+        Args:
+            save_directory (`str` or `Path`):
+                The directory to write to, created if it does not exist.
+            push_to_hub (`bool`, *optional*, defaults to `False`):
+                Whether to upload the saved files to the Hub too, to `repo_id` (defaults to the name of
+                `save_directory` in your namespace).
+            kwargs (`dict[str, Any]`, *optional*):
+                Passed to the Hub upload: `repo_id`, `commit_message`, `token`, `private`, ...
+        """
         from .auto import export_backend
 
         exporter = export_backend(self.export_format, "exporter")
         directory = Path(save_directory)
         directory.mkdir(parents=True, exist_ok=True)
+        if push_to_hub:
+            commit_message = kwargs.pop("commit_message", None)
+            repo_id = kwargs.pop("repo_id", directory.name)
+            repo_id = hf_api().create_repo(repo_id, exist_ok=True, **kwargs).repo_id
+            files_timestamps = self._get_files_timestamps(directory)
 
         components = {}
         for name, component in self.components.items():
@@ -122,15 +141,83 @@ class ExportArtifacts(Mapping):
             self.config.save_pretrained(directory)
         if self.generation_config is not None:
             self.generation_config.save_pretrained(directory)
+        if push_to_hub:
+            self._upload_modified_files(
+                directory, repo_id, files_timestamps, commit_message=commit_message, token=kwargs.get("token")
+            )
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path: str | Path,
+        *,
+        subfolder: str = "",
+        revision: str | None = None,
+        token: str | bool | None = None,
+        cache_dir: str | Path | None = None,
+    ) -> ExportArtifacts:
+        """Load what [`~ExportArtifacts.save_pretrained`] wrote: each component through its backend's
+        [`~HfExporter.load_artifact`], with its metadata, and the configs saved next to them.
+
+        Args:
+            pretrained_model_name_or_path (`str` or `Path`):
+                A local directory, or a Hub repo id. From the Hub, only the files the manifest names are
+                downloaded, so an export can sit next to the model's own weights.
+            subfolder (`str`, *optional*):
+                The directory of the export inside the repo or local directory, e.g. `"onnx"`.
+            revision (`str`, *optional*):
+                The Hub revision (branch, tag, or commit) to load from.
+            token (`str` or `bool`, *optional*):
+                The Hub token, for private repos.
+            cache_dir (`str` or `Path`, *optional*):
+                Where Hub downloads are cached.
+        """
+        from .auto import export_backend
+
+        directory = Path(pretrained_model_name_or_path) / subfolder
+        if not directory.is_dir():
+            directory = cls._download(
+                str(pretrained_model_name_or_path), subfolder, revision=revision, token=token, cache_dir=cache_dir
+            )
+        manifest = json.loads((directory / EXPORT_MANIFEST_FILE).read_text(encoding="utf-8"))
+        exporter = export_backend(manifest["export_format"], "exporter")
+        components = {
+            name: ExportedComponent(
+                exporter.load_artifact(directory / entry["file"]), ExportMetadata.from_dict(entry["metadata"])
+            )
+            for name, entry in manifest["components"].items()
+        }
+        config = AutoConfig.from_pretrained(directory) if (directory / CONFIG_NAME).exists() else None
+        generation_config = (
+            GenerationConfig.from_pretrained(directory) if (directory / GENERATION_CONFIG_NAME).exists() else None
+        )
+        return cls(components, exporter.export_format, config=config, generation_config=generation_config)
+
+    @staticmethod
+    def _download(repo_id: str, subfolder: str, **hub_kwargs) -> Path:
+        """Download an export from the Hub: its manifest first, then only the files the manifest names (each
+        component's [`~HfExporter.artifact_files`]) and the configs. Returns the export's local directory."""
+        from .auto import export_backend
+
+        manifest_path = hf_hub_download(repo_id, EXPORT_MANIFEST_FILE, subfolder=subfolder or None, **hub_kwargs)
+        manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+        exporter = export_backend(manifest["export_format"], "exporter")
+        files = [EXPORT_MANIFEST_FILE, CONFIG_NAME, GENERATION_CONFIG_NAME]
+        for entry in manifest["components"].values():
+            files += exporter.artifact_files(entry["file"])
+        prefix = f"{subfolder.strip('/')}/" if subfolder else ""
+        root = snapshot_download(repo_id, allow_patterns=[prefix + file for file in files], **hub_kwargs)
+        return Path(root) / subfolder
 
 
 class HfExporter(ABC):
     """
     Abstract base class for all Transformers exporters.
 
-    To add a backend, subclass and implement its two halves: [`~HfExporter.export_artifact`] to trace one
-    graph, and [`~HfExporter.save_artifact`] to write one out. The public [`~HfExporter.export`] and
-    [`~HfExporter.export_for_generation`] build an [`ExportArtifacts`] on top of them.
+    To add a backend, subclass and implement [`~HfExporter.export_artifact`] to trace one graph, and
+    [`~HfExporter.save_artifact`] / [`~HfExporter.load_artifact`] to write one out and read it back. The public
+    [`~HfExporter.export`] and [`~HfExporter.export_for_generation`] build an [`ExportArtifacts`] on top of
+    them.
     """
 
     export_format: ExportFormat | str
@@ -192,6 +279,17 @@ class HfExporter(ABC):
     @abstractmethod
     def save_artifact(cls, artifact: Any, path: str | Path) -> None:
         """Write one program returned by [`~HfExporter.export_artifact`] to `path`, in the backend's file format."""
+
+    @classmethod
+    @abstractmethod
+    def load_artifact(cls, path: str | Path) -> Any:
+        """Read back one program written by [`~HfExporter.save_artifact`]."""
+
+    @classmethod
+    def artifact_files(cls, filename: str) -> list[str]:
+        """The files [`~HfExporter.save_artifact`] writes for a program saved as `filename`: the file itself, plus
+        any the format keeps beside it (weights, external data)."""
+        return [filename]
 
     def export(
         self,

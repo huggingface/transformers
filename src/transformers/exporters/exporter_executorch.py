@@ -93,6 +93,7 @@ if is_executorch_available():
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
     from executorch.exir.sym_util import eval_expr
     from executorch.exir.tensor import determine_tensor_dynanism
+    from executorch.runtime import Runtime
 
     # The ExecuTorch CUDA backend pulls in `triton`, which CPU-only torch builds don't ship. Guard the
     # import on CUDA availability so the module still imports (and the xnnpack CPU path still works) on
@@ -163,6 +164,12 @@ class ExecutorchExporter(DynamoExporter):
         """Stream the `.pte` to `path` (`.buffer` would materialize the whole program first)."""
         with open(path, "wb") as file:
             artifact.write_to_file(file)
+
+    @classmethod
+    def load_artifact(cls, path):
+        """The saved `.pte` as an `executorch.runtime.Program`, ready to run: the export-time
+        `ExecutorchProgramManager` can't be rebuilt from the file."""
+        return Runtime.get().load_program(str(path))
 
 
 def _get_transform_passes(backend: str):

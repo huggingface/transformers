@@ -32,15 +32,21 @@ Current coverage — the generation `decode` component:
 """
 
 import copy
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 import pytest
 
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
+from transformers.exporters import ExportArtifacts
 from transformers.exporters.utils import decompose_for_generation
 from transformers.testing_utils import (
+    require_executorch,
     require_onnxruntime,
     require_onnxscript,
+    require_openvino,
     require_torch,
     slow,
     torch_device,
@@ -151,6 +157,76 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         self.assertEqual(int(past_key_values.get_seq_length()), 5)
 
     # ──────────────────────── ONNX Runtime ────────────────────────
+
+    def _save_decode(self, exporter, config, directory):
+        """Export the static-cache decode and save it, returning the component's manifest entry."""
+        decode_model, decode_inputs = self._decompose_static_decode(self._tiny_model(), torch.randint(0, 64, (1, 4)))
+        exported = exporter.export(decode_model, copy.deepcopy(decode_inputs), config=config)
+        exported.save_pretrained(directory)
+        loaded = ExportArtifacts.from_pretrained(directory)
+        self.assertEqual(loaded["model"].metadata, exported["model"].metadata)
+        entry = json.loads((Path(directory) / "export.json").read_text(encoding="utf-8"))["components"]["model"]
+        # `artifact_files` names everything the backend wrote, which is what a Hub download fetches
+        written = {path.name for path in Path(directory).iterdir()} - {"export.json", "config.json"}
+        self.assertIn(entry["file"], written)
+        self.assertLessEqual(written, set(exporter.artifact_files(entry["file"])))
+        return entry
+
+    @pytest.mark.torch_export_test
+    def test_saved_dynamo_program_loads_back(self):
+        from transformers.exporters import DynamoConfig, DynamoExporter
+
+        with tempfile.TemporaryDirectory() as directory:
+            entry = self._save_decode(DynamoExporter(), DynamoConfig(dynamic=True), directory)
+            program = ExportArtifacts.from_pretrained(directory).artifact
+            self.assertEqual(entry["file"], "model.pt2")
+            self.assertIsInstance(program, torch.export.ExportedProgram)
+
+    @require_executorch
+    @pytest.mark.executorch_export_test
+    def test_saved_executorch_program_loads_back(self):
+        from executorch.runtime import Program
+
+        from transformers.exporters import ExecutorchConfig, ExecutorchExporter
+
+        with tempfile.TemporaryDirectory() as directory:
+            entry = self._save_decode(ExecutorchExporter(), ExecutorchConfig(), directory)
+            program = ExportArtifacts.from_pretrained(directory).artifact
+            self.assertEqual(entry["file"], "model.pte")
+            self.assertIsInstance(program, Program)
+            self.assertIn("forward", program.method_names)
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_saved_metadata_names_match_onnx_model(self):
+        """The saved metadata names the inputs and outputs of the saved `.onnx` file, cache pairs included."""
+        import onnxruntime as ort
+
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        with tempfile.TemporaryDirectory() as directory:
+            entry = self._save_decode(OnnxExporter(), OnnxConfig(dynamic=True), directory)
+            session = ort.InferenceSession(str(Path(directory) / entry["file"]), providers=["CPUExecutionProvider"])
+            self.assertEqual(entry["metadata"]["input_names"], [node.name for node in session.get_inputs()])
+            self.assertEqual(entry["metadata"]["output_names"], [node.name for node in session.get_outputs()])
+        self.assertTrue(any(name.startswith("input.") for name in entry["metadata"]["input_names"]))
+
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    def test_saved_metadata_names_match_openvino_model(self):
+        """The saved metadata names the ports of the saved `.xml` model: with `stateful`, no cache ports and a
+        `beam_idx` input."""
+        import openvino
+
+        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
+
+        with tempfile.TemporaryDirectory() as directory:
+            entry = self._save_decode(OpenVINOExporter(), OpenVINOConfig(dynamic=True), directory)
+            ov_model = openvino.Core().read_model(str(Path(directory) / entry["file"]))
+            self.assertEqual(entry["metadata"]["input_names"], [port.get_any_name() for port in ov_model.inputs])
+            self.assertEqual(entry["metadata"]["output_names"], [port.get_any_name() for port in ov_model.outputs])
+        self.assertIn("beam_idx", entry["metadata"]["input_names"])
 
     @require_onnxscript
     @require_onnxruntime

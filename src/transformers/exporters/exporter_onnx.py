@@ -155,6 +155,7 @@ class OnnxExporter(DynamoExporter):
         if quantizer is not None and not quantizer.quantizes_fx_graph:
             onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
 
+        update_onnx_metadata(metadata, onnx_program)
         return onnx_program, metadata
 
     @classmethod
@@ -162,9 +163,25 @@ class OnnxExporter(DynamoExporter):
         """Weights go to a `<name>.onnx.data` sidecar file, so models past the 2 GB protobuf limit save too."""
         artifact.save(str(path), external_data=True)
 
+    @classmethod
+    def artifact_files(cls, filename: str) -> list[str]:
+        return [filename, f"{filename}.data"]
+
+    @classmethod
+    def load_artifact(cls, path) -> ONNXProgram:
+        """The saved graph as an `ONNXProgram`, which runs it with ONNX Runtime when called."""
+        return ONNXProgram(onnx_ir.load(str(path)), None)
+
 
 # ── ONNX helpers ────────────────────────────────────────────────────────────
 # Model forward wrapper and I/O naming used by OnnxExporter.export.
+
+
+def update_onnx_metadata(metadata: dict[str, Any], onnx_program: ONNXProgram) -> None:
+    """Record the ONNX graph's own input and output names, which differ from the traced program's (dotted leaf
+    paths, `input.` / `output.` prefixes on mutated inputs)."""
+    metadata["input_names"] = [value.name for value in onnx_program.model.graph.inputs]
+    metadata["output_names"] = [value.name for value in onnx_program.model.graph.outputs]
 
 
 @contextmanager

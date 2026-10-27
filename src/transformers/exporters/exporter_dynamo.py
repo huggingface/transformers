@@ -151,6 +151,10 @@ class DynamoExporter(HfExporter):
     def save_artifact(cls, artifact: ExportedProgram, path) -> None:
         torch.export.save(artifact, str(path))
 
+    @classmethod
+    def load_artifact(cls, path) -> ExportedProgram:
+        return torch.export.load(str(path))
+
 
 # ── Stage 1: Model signature patch ──────────────────────────────────────────
 # Replaces `model.forward` with a flat explicit signature derived from the

@@ -138,9 +138,9 @@ starting with backend preparation (see
 
 ## Add a backend
 
-A backend is an [`HfExporter`] subclass with two methods, plus a config. `export_artifact` traces one graph and
-returns the backend's program with the metadata recorded while tracing it, and `save_artifact` writes one program
-to disk. [`~HfExporter.export`] and [`~HfExporter.export_for_generation`] build the [`ExportArtifacts`] on top of
+A backend is an [`HfExporter`] subclass, plus a config. `export_artifact` traces one graph and returns the
+backend's program with the metadata recorded while tracing it, `save_artifact` writes one program to disk, and
+`load_artifact` reads it back. [`~HfExporter.export`] and [`~HfExporter.export_for_generation`] build the [`ExportArtifacts`] on top of
 them. Subclassing [`DynamoExporter`] reuses its trace and its metadata, so a backend only converts the
 `ExportedProgram`:
 
@@ -167,6 +167,10 @@ class MyExporter(DynamoExporter):
     @classmethod
     def save_artifact(cls, artifact, path):
         artifact.save(path)
+
+    @classmethod
+    def load_artifact(cls, path):
+        return load(path)
 
 
 register_backend("my_format", MyConfig, MyExporter)
