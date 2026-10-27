@@ -37,6 +37,7 @@ from ...utils.output_capturing import capture_outputs
 from ...video_utils import VideoInput
 from ...vision_utils import (
     get_vision_attention_seqlens,
+    get_vision_cu_seqlens,
     get_vision_position_ids,
     get_vision_window_index,
 )
@@ -432,6 +433,46 @@ class Qwen2_5_VLModel(Qwen2VLModel):
         mrope_position_deltas = torch.tensor(mrope_position_deltas, device=input_ids.device).unsqueeze(1)
         return position_ids, mrope_position_deltas
 
+    def _add_precomputed_vision_kwargs(
+        self,
+        kwargs: dict,
+        grid_thw: torch.LongTensor | None,
+        prefix: str,
+        target_device: torch.device,
+    ) -> dict:
+        # Full override of the Qwen2-VL helper (rather than extending it via `super()`), additionally
+        # precomputing the window-attention tensors, which are likewise built from `grid_thw` with
+        # data-dependent ops inside the vision encoder.
+        if grid_thw is None:
+            return kwargs
+        precomputed_keys = (
+            f"{prefix}_cu_seqlens",
+            f"{prefix}_position_ids",
+            f"{prefix}_max_seqlen",
+            f"{prefix}_window_index",
+            f"{prefix}_cu_window_seqlens",
+            f"{prefix}_max_window_seqlen",
+        )
+        if any(key in kwargs for key in precomputed_keys) or "cu_seqlens" in kwargs or "position_ids" in kwargs:
+            return kwargs
+        grid_thw_cpu = grid_thw.detach().cpu()
+        cu_seqlens = get_vision_cu_seqlens(grid_thw_cpu)
+        position_ids = get_vision_position_ids(grid_thw_cpu, self.visual.spatial_merge_size)
+        window_index, cu_window_seqlens = get_vision_window_index(
+            grid_thw_cpu,
+            spatial_merge_size=self.visual.spatial_merge_size,
+            window_size=self.visual.window_size,
+            patch_size=self.visual.patch_size,
+        )
+        kwargs = dict(kwargs)
+        kwargs[f"{prefix}_cu_seqlens"] = cu_seqlens.to(target_device)
+        kwargs[f"{prefix}_position_ids"] = position_ids.to(target_device)
+        kwargs[f"{prefix}_max_seqlen"] = int((cu_seqlens[1:] - cu_seqlens[:-1]).max().item())
+        kwargs[f"{prefix}_window_index"] = window_index.to(target_device)
+        kwargs[f"{prefix}_cu_window_seqlens"] = cu_window_seqlens.to(target_device)
+        kwargs[f"{prefix}_max_window_seqlen"] = int((cu_window_seqlens[1:] - cu_window_seqlens[:-1]).max().item())
+        return kwargs
+
     def compute_3d_position_ids(
         self,
         input_ids: torch.Tensor | None,
@@ -511,13 +552,17 @@ class Qwen2_5_VLModel(Qwen2VLModel):
 
         mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
         if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            image_kwargs = self._add_precomputed_vision_kwargs(kwargs, image_grid_thw, "image", pixel_values.device)
             mm_encoder_outputs["image"] = self.get_image_features(
-                pixel_values, image_grid_thw, return_dict=True, **kwargs
+                pixel_values, image_grid_thw, return_dict=True, **image_kwargs
             )
 
         if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            video_kwargs = self._add_precomputed_vision_kwargs(
+                kwargs, video_grid_thw, "video", pixel_values_videos.device
+            )
             mm_encoder_outputs["video"] = self.get_video_features(
-                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+                pixel_values_videos, video_grid_thw, return_dict=True, **video_kwargs
             )
 
         if mm_encoder_outputs.get("image") is not None:
