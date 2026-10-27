@@ -817,7 +817,7 @@ def is_kernel(attn_implementation: str | None) -> bool:
 
 
 def get_attn_kernel_version(repo_id: str) -> int:
-    """Return the major version of the hub kernel repo `repo_id` to load, e.g. `3` for `kernels-community/flash-attn2`."""
+    """Return the major version of the hub kernel repo `repo_id` to load, e.g. `4` for `kernels-community/flash-attn2`."""
     return FLASH_ATTN_KERNEL_VERSIONS.get(repo_id, 1)
 
 

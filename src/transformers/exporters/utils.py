@@ -89,7 +89,7 @@ if is_torch_available():
 # `@register_fx_node_fix` decorators, or direct list-append for cases that can't be expressed
 # as dotted paths). The export pipeline drives them via the backend-keyed helpers below.
 
-_PATCHES: dict[str, list[tuple[Any, str, callable]]] = {}
+_PATCHES: dict[str, list[tuple[str, str, callable]]] = {}
 _FX_NODE_FIXES: dict[str, list[callable]] = {}
 _FX_PROGRAM_FIXES: dict[str, list[callable]] = {}
 
@@ -121,7 +121,12 @@ def patch_attributes(patches: list[tuple[Any, str, callable]]):
 @contextlib.contextmanager
 def apply_patches(backend: str):
     """Install `_PATCHES[backend]` for the duration of the block."""
-    with patch_attributes(_PATCHES.get(backend, [])):
+    resolved = [
+        (obj, attribute, fn)
+        for obj_path, attribute, fn in _PATCHES.get(backend, [])
+        if (obj := _resolve_dotted_path(obj_path)) is not None
+    ]
+    with patch_attributes(resolved):
         yield
 
 
@@ -161,9 +166,9 @@ def register_patch(backend: str, *paths: str):
     Each `path` is a dotted Python path like `"torch.where"`, `"torch.Tensor.unsqueeze"`,
     or `"transformers.models.nllb_moe.modeling_nllb_moe.NllbMoeTop2Router._cast_classifier"`.
     The rightmost segment is the attribute to swap; the rest is the object that owns it.
-    Paths are resolved at decoration time — submodules are imported as needed, falling
-    back to `getattr` for class attributes. A path that fails to resolve (e.g. the backend
-    isn't installed) is silently skipped so the module still imports.
+    Paths are resolved lazily at export time (inside `apply_patches`) — submodules are
+    imported as needed, falling back to `getattr` for class attributes. A path that fails
+    to resolve (e.g. the backend isn't installed) is silently skipped.
 
     Passing multiple paths registers the SAME factory against each — useful for swapping
     the same method or torch op across several call sites (e.g. ``torch.unsqueeze`` +
@@ -173,10 +178,7 @@ def register_patch(backend: str, *paths: str):
     def decorator(fn):
         for path in paths:
             obj_path, _, attribute = path.rpartition(".")
-            obj = _resolve_dotted_path(obj_path)
-            if obj is None:
-                continue
-            _PATCHES.setdefault(backend, []).append((obj, attribute, fn))
+            _PATCHES.setdefault(backend, []).append((obj_path, attribute, fn))
         return fn
 
     return decorator

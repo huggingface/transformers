@@ -25,7 +25,6 @@ from transformers.utils.import_utils import is_mistral_common_available
 
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...utils import (
     is_g2p_en_available,
@@ -203,6 +202,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("metaclip_2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("mgp-str", "MgpstrTokenizer"),
         ("mimo_v2_flash", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("minicpm_ocr", "TokenizersBackend" if is_tokenizers_available() else None),
         ("minicpmv4_6", "TokenizersBackend" if is_tokenizers_available() else None),
         ("minicpmv4_7", "TokenizersBackend" if is_tokenizers_available() else None),
         (
@@ -752,6 +752,7 @@ class AutoTokenizer:
         _ = kwargs.pop("use_fast", None)
         tokenizer_type = kwargs.pop("tokenizer_type", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        code_revision = kwargs.pop("code_revision", None)
         gguf_file = kwargs.get("gguf_file")
         mistral_format = kwargs.pop("mistral_format", None)
 
@@ -796,12 +797,17 @@ class AutoTokenizer:
             if metadata["general.architecture"] in GGUF_CONFIG_ARCHS:
                 config_dict = get_gguf_config(metadata, tensor_names)
             else:
+                from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
                 config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
             config = AutoConfig.for_model(**config_dict)
         elif config is None:
             try:
                 config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    pretrained_model_name_or_path,
+                    trust_remote_code=trust_remote_code,
+                    code_revision=code_revision,
+                    **kwargs,
                 )
             except (ValueError, OSError):
                 config = PreTrainedConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
@@ -937,8 +943,9 @@ class AutoTokenizer:
             # BC v5: register *Fast aliases before remote code loads.
             if tokenizer_config_class:
                 tokenizer_class_from_name(tokenizer_config_class.removesuffix("Fast"))
-            tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
-            _ = kwargs.pop("code_revision", None)
+            tokenizer_class = get_class_from_dynamic_module(
+                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
+            )
             tokenizer_class.register_for_auto_class()
             return tokenizer_class.from_pretrained(
                 pretrained_model_name_or_path, *inputs, trust_remote_code=trust_remote_code, **kwargs

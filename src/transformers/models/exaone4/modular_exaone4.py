@@ -231,7 +231,7 @@ class Exaone4DecoderLayer(Olmo2DecoderLayer):
 
 
 class Exaone4PreTrainedModel(LlamaPreTrainedModel):
-    config_class = Exaone4Config
+    config: Exaone4Config
     _no_split_modules = ["Exaone4DecoderLayer"]
 
 
