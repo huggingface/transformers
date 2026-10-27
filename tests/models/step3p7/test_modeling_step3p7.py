@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Step3p7 model."""
 
 import re
+import tempfile
 import unittest
 from unittest.mock import patch
 
@@ -188,6 +189,25 @@ class Step3p7ModelTest(VLMModelTest, unittest.TestCase):
         if model_tester is None:
             model_tester = self.model_tester
         return model_tester.get_vision_config().num_hidden_layers
+
+    def test_e_score_correction_bias_kept_in_float32(self):
+        # Step-3.7-Flash checkpoints store the routing bias (`router_bias`) in float32, with
+        # values of 5.8-8.7 that differ by ~0.05 between experts. In bfloat16, experts' biases would collapse to a few
+        # distinct values, so loading in bfloat16 must keep them in float32.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Step3p7ForConditionalGeneration(config)
+        biases = [b for n, b in model.named_buffers() if n.endswith("e_score_correction_bias")]
+        self.assertTrue(biases)
+        for bias in biases:
+            bias.copy_(8.5 + 0.02 * torch.arange(bias.numel(), dtype=torch.float32))
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = Step3p7ForConditionalGeneration.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+        for name, bias in model.named_buffers():
+            if name.endswith("e_score_correction_bias"):
+                self.assertEqual(bias.dtype, torch.float32, name)
+                expected = 8.5 + 0.02 * torch.arange(bias.numel(), dtype=torch.float32)
+                torch.testing.assert_close(bias, expected.to(bias.device), rtol=0, atol=0)
 
 
 @require_torch

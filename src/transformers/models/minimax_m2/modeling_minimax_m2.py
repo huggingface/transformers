@@ -37,7 +37,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_minimax_m2 import MiniMaxM2Config
 
@@ -52,7 +52,9 @@ class MiniMaxM2TopKRouter(nn.Module):
 
     def forward(self, hidden_states, e_score_correction_bias):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)  # (seq_len, num_experts)
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Keep the gate's dtype, even under autocast
+            router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)  # (seq_len, num_experts)
         # Main difference to other Moe, using Sigmoid activation instead of Softmax
         routing_weights = nn.functional.sigmoid(router_logits.float())
         scores_for_choice = routing_weights + e_score_correction_bias
@@ -393,6 +395,8 @@ class MiniMaxM2PreTrainedModel(PreTrainedModel):
         "hidden_states": MiniMaxM2DecoderLayer,
         "attentions": MiniMaxM2Attention,
     }
+    # The checkpoints store the router and its correction bias in float32
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias", "mlp.gate.weight"]
 
     @torch.no_grad()
     def _init_weights(self, module):

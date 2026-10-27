@@ -42,7 +42,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check, torch_int
-from ...utils.generic import merge_with_config_defaults
+from ...utils.generic import maybe_autocast, merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_position_ids
 from .configuration_step3p7 import Step3p7Config, Step3p7TextConfig, Step3p7VisionConfig
@@ -350,6 +350,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -589,7 +590,9 @@ class Step3p7TopKRouter(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
-        router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)
+        device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Keep the gate's dtype, even under autocast
+            router_logits = F.linear(hidden_states.to(self.weight.dtype), self.weight)
         # Sigmoid scoring (not softmax), as in M2.
         routing_weights = F.sigmoid(router_logits.float())
         scores_for_choice = routing_weights + self.e_score_correction_bias

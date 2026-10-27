@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch MiniMaxM2 model."""
 
+import tempfile
 import unittest
 
 from transformers import AutoTokenizer, is_torch_available, set_seed
@@ -113,6 +114,35 @@ class MiniMaxM2ModelTest(CausalLMModelTest, unittest.TestCase):
 
         # Configs without the legacy field keep full-width rotary.
         self.assertIsNone(MiniMaxM2Config().rope_parameters.get("partial_rotary_factor"))
+
+    def test_router_and_correction_bias_kept_in_float32(self):
+        # The checkpoints store the router weight and its correction bias in float32. The bias has values of
+        # 1.5-8.6 that differ by ~0.02 between experts, which bfloat16 would collapse to a few distinct values.
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        model = MiniMaxM2ForCausalLM(config)
+        biases = [b for n, b in model.named_buffers() if n.endswith("e_score_correction_bias")]
+        self.assertTrue(biases)
+        for bias in biases:
+            bias.copy_(8.5 + 0.02 * torch.arange(bias.numel(), dtype=torch.float32))
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            model = MiniMaxM2ForCausalLM.from_pretrained(tmpdirname, dtype=torch.bfloat16)
+        for name, bias in model.named_buffers():
+            if name.endswith("e_score_correction_bias"):
+                self.assertEqual(bias.dtype, torch.float32, name)
+                expected = 8.5 + 0.02 * torch.arange(bias.numel(), dtype=torch.float32)
+                torch.testing.assert_close(bias, expected.to(bias.device), rtol=0, atol=0)
+        gates = [p for n, p in model.named_parameters() if n.endswith("mlp.gate.weight")]
+        self.assertTrue(gates)
+        for gate in gates:
+            self.assertEqual(gate.dtype, torch.float32)
+
+        # Under bf16 autocast, as in training, the router still computes in float32
+        mlp = model.model.layers[0].mlp
+        hidden_states = torch.randn(4, config.hidden_size, dtype=torch.bfloat16)
+        with torch.autocast("cpu", dtype=torch.bfloat16):
+            router_logits, _, _ = mlp.gate(hidden_states, mlp.e_score_correction_bias)
+        self.assertEqual(router_logits.dtype, torch.float32)
 
 
 @slow

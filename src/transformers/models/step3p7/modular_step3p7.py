@@ -682,6 +682,7 @@ class Step3p7PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     @torch.no_grad()
     def _init_weights(self, module):
