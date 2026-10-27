@@ -317,7 +317,7 @@ class TimesFmModel(TimesFmPreTrainedModel):
         outputs = (inputs - mu[:, None, None]) / sigma[:, None, None]
         outputs = torch.where(
             torch.abs(inputs - self.config.pad_val) < self.config.tolerance,
-            torch.full((), self.config.pad_val, dtype=outputs.dtype, device=outputs.device),
+            self.config.pad_val,
             outputs,
         )
         return outputs, (mu, sigma)
