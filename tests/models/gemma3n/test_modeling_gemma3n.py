@@ -34,11 +34,14 @@ from transformers import (
     Gemma3nConfig,
     StaticCache,
     is_torch_available,
+    set_seed,
 )
 from transformers.testing_utils import (
     Expectations,
     cleanup,
+    is_flaky,
     require_deterministic_for_xpu,
+    require_flash_attn,
     require_timm,
     require_torch,
     require_torch_accelerator,
@@ -430,6 +433,60 @@ class Gemma3nTextModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip("Gemma3n only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
         pass
+
+    def _check_flash_attn_2_matches_eager(self, padding_side: str | None):
+        """
+        Gemma3n's hidden states are large enough that bf16 rounding alone exceeds the common 3e-2 tolerance (eager vs
+        sdpa drift the same way, while fp32 matches to ~1e-6). Its `hidden_states` also carry an extra leading altup
+        dim, which the common tests slice as if it was the batch, so we compare `last_hidden_state` on non-padded
+        tokens only.
+        """
+        set_seed(42)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Gemma3nTextModel(config)
+        input_ids = inputs_dict["input_ids"].to(torch_device)
+        attention_mask = torch.ones_like(input_ids)
+        if padding_side == "left":
+            attention_mask[:, 0] = 0
+        elif padding_side == "right":
+            attention_mask[:, -1] = 0
+        non_padded = attention_mask.bool()
+
+        outputs = {}
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.save_pretrained(tmpdirname)
+            for attn_implementation in ("eager", "flash_attention_2"):
+                model = Gemma3nTextModel.from_pretrained(
+                    tmpdirname, dtype=torch.bfloat16, attn_implementation=attn_implementation, device_map=torch_device
+                )
+                mask = attention_mask if padding_side is not None else None
+                outputs[attn_implementation] = model(input_ids, attention_mask=mask).last_hidden_state[non_padded]
+
+        torch.testing.assert_close(outputs["flash_attention_2"], outputs["eager"], atol=1.5e-1, rtol=5e-2)
+
+    @require_flash_attn
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
+    @is_flaky()
+    @slow
+    def test_flash_attn_2_equivalence(self):
+        self._check_flash_attn_2_matches_eager(padding_side=None)
+
+    @require_flash_attn
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
+    @is_flaky()
+    @slow
+    def test_flash_attn_2_inference_equivalence(self):
+        self._check_flash_attn_2_matches_eager(padding_side="left")
+
+    @require_flash_attn
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
+    @is_flaky()
+    @slow
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        self._check_flash_attn_2_matches_eager(padding_side="right")
 
     @pytest.mark.generate
     def test_generate_from_inputs_embeds_with_static_cache(self):
