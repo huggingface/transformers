@@ -22,6 +22,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     """
 
     requires_calibration = False
+    dequantized_saves_unquantized = True
     quantization_config: "FineGrainedFP8Config"
 
     @property
@@ -88,27 +89,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 return True
         return False
 
-    def _normalize_modules_to_not_convert(self, model: "PreTrainedModel"):
-        """Rewrite the skip-list to the model's own module tree.
-        For models that were already released, if they have a list of modules to not quantize
-        we need to apply the weight renaming / weight conversion opérations to get the actual
-        layer name of the model in `transformers`.
-        """
-        skip = self.quantization_config.modules_to_not_convert
-        if not skip:
-            return
-
-        from ..conversion_mapping import get_model_conversion_mapping
-
-        renamings = get_model_conversion_mapping(model)
-        remapped = []
-        for name in skip:
-            renamed = name
-            for rename in renamings:
-                renamed, _ = rename.rename_source_key(renamed)
-            remapped.append(renamed)
-        self.quantization_config.modules_to_not_convert = remapped
-
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
@@ -116,7 +96,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
     ):
         from ..integrations.finegrained_fp8 import replace_with_fp8_embedding, replace_with_fp8_linear
 
-        self._normalize_modules_to_not_convert(model)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
@@ -174,9 +153,8 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
         return {"dequantize": Fp8Dequantize}
 
-    def update_weight_conversions(self, weight_conversions, model):
+    def get_checkpoint_renamings(self):
         from ..core_model_loading import WeightRenaming
 
         # Some FP8 checkpoints (e.g. DeepSeek-V4-Flash) ship per-block scales under `.scale`
-        scale_rename = WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv")
-        return [scale_rename] + super().update_weight_conversions(weight_conversions, model)
+        return [WeightRenaming(source_patterns=r"^(.+)\.scale", target_patterns=r"\1.weight_scale_inv")]

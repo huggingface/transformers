@@ -37,6 +37,32 @@ def should_convert_module(full_name, patterns: list[str] | None = None):
     return not any(re.match(rf"(?:{key}){boundary}", full_name) or full_name.endswith(key) for key in patterns)
 
 
+def checkpoint_module_namer(model):
+    """Return a function mapping a module name of `model` to its name in the checkpoint.
+
+    It applies the model's renames in reverse, as the loader does. Renames match keys, and some anchor on a parameter
+    name such as `^embed.weight`. So the namer renames the module's `weight` key. A module rename moves all of its
+    params alike, so `bias` would give the same name.
+    """
+    from ..conversion_mapping import get_model_conversion_mapping
+    from ..core_model_loading import WeightRenaming
+
+    # The legacy renames only rename params, e.g. `LayerNorm.gamma` to `LayerNorm.weight`, not modules
+    reverse = [
+        rule.reverse_transform()
+        for rule in get_model_conversion_mapping(model, add_legacy=False)[::-1]
+        if isinstance(rule, WeightRenaming)
+    ]
+
+    def checkpoint_name(module_name: str) -> str:
+        key = f"{module_name}.weight"
+        for rule in reverse:
+            key, _ = rule.rename_source_key(key)
+        return key.removesuffix(".weight")
+
+    return checkpoint_name
+
+
 @contextmanager
 def on_device(device):
     """Align the current accelerator device with a tensor or device-like object."""
