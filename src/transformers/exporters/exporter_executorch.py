@@ -46,7 +46,7 @@ from typing import Any
 
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
-from .configs import ExecutorchConfig
+from .configs import ExecutorchConfig, ExportFormat
 from .exporter_dynamo import DynamoExporter
 from .utils import (
     apply_fx_node_fixes,
@@ -115,25 +115,26 @@ class ExecutorchExporter(DynamoExporter):
     >>> from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
 
     >>> exporter = ExecutorchExporter()
-    >>> et_program = exporter.export(model, inputs, config=ExecutorchConfig(backend="xnnpack"))
-    >>> et_program.write_to_file("model.pte")
+    >>> exported = exporter.export(model, inputs, config=ExecutorchConfig(backend="xnnpack"))
+    >>> exported.save_pretrained("exported")  # `model.pte`, its metadata and the model config
     ```
     """
+
+    export_format = ExportFormat.EXECUTORCH
+    config_class = ExecutorchConfig
+    artifact_suffix = ".pte"
 
     required_packages = ["torch", "executorch"]
     tested_versions = {"torch": "2.13.0", "executorch": "1.4.1"}
 
-    def export(
+    def export_artifact(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
         config: ExecutorchConfig | dict[str, Any],
-    ) -> ExecutorchProgramManager:
+    ) -> tuple[ExecutorchProgramManager, dict[str, Any]]:
         """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
-        if isinstance(config, dict):
-            config = ExecutorchConfig(**config)
-        elif type(config) is not ExecutorchConfig:
-            raise TypeError(f"Expected config to be an ExecutorchConfig or dict, got {type(config)}")
+        config = self._as_config(config)
 
         prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
         if prepare_for_backend is None:
@@ -142,7 +143,7 @@ class ExecutorchExporter(DynamoExporter):
         model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
 
         with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+            exported_program, metadata = super().export_artifact(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
@@ -155,7 +156,13 @@ class ExecutorchExporter(DynamoExporter):
                 config=_get_backend_config(config)
             )
 
-        return executorch_programs_manager
+        return executorch_programs_manager, metadata
+
+    @classmethod
+    def save_artifact(cls, artifact: ExecutorchProgramManager, path) -> None:
+        """Stream the `.pte` to `path` (`.buffer` would materialize the whole program first)."""
+        with open(path, "wb") as file:
+            artifact.write_to_file(file)
 
 
 def _get_transform_passes(backend: str):

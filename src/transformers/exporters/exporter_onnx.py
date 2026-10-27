@@ -52,7 +52,7 @@ import numpy as np
 
 from ..utils import logging
 from ..utils.import_utils import is_onnxscript_available, is_torch_available
-from .configs import OnnxConfig
+from .configs import ExportFormat, OnnxConfig
 from .exporter_dynamo import DynamoExporter
 from .utils import (
     apply_fx_node_fixes,
@@ -66,7 +66,6 @@ from .utils import (
 
 if is_torch_available():
     import torch
-    from torch.export import ExportedProgram
     from torch.onnx import ONNXProgram
 
 
@@ -114,28 +113,29 @@ class OnnxExporter(DynamoExporter):
     >>> from transformers.exporters.exporter_onnx import OnnxExporter, OnnxConfig
 
     >>> exporter = OnnxExporter()
-    >>> onnx_program = exporter.export(model, inputs, config=OnnxConfig(dynamic=True))
-    >>> outputs = onnx_program(**inputs)  # run in-memory
-    >>> exporter.export(model, inputs, config=OnnxConfig(output_path="model.onnx"))  # save to disk
+    >>> exported = exporter.export(model, inputs, config=OnnxConfig(dynamic=True))
+    >>> outputs = exported.artifact(**inputs)  # run the `ONNXProgram` in memory
+    >>> exported.save_pretrained("exported")  # `model.onnx`, its metadata and the model config
     ```
     """
+
+    export_format = ExportFormat.ONNX
+    config_class = OnnxConfig
+    artifact_suffix = ".onnx"
 
     required_packages = ["torch", "onnx", "onnxscript"]
     tested_versions = {"torch": "2.12.0", "onnx": "1.21.0", "onnxscript": "0.7.0"}
 
-    def export(
+    def export_artifact(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
         config: OnnxConfig | dict[str, Any],
-    ) -> ONNXProgram:
-        if isinstance(config, dict):
-            config = OnnxConfig(**config)
-        elif type(config) is not OnnxConfig:
-            raise TypeError(f"Expected config to be an OnnxConfig or dict, got {type(config)}")
+    ) -> tuple[ONNXProgram, dict[str, Any]]:
+        config = self._as_config(config)
 
         with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("onnx"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+            exported_program, metadata = super().export_artifact(model, sample_inputs, config=config)
             inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
             apply_fx_node_fixes("onnx", exported_program.graph_module)
             onnx_program: ONNXProgram = torch.onnx.export(
@@ -155,15 +155,12 @@ class OnnxExporter(DynamoExporter):
         if quantizer is not None and not quantizer.quantizes_fx_graph:
             onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
 
-        if config.output_path is not None:
-            onnx_program.save(
-                config.output_path,
-                include_initializers=config.export_params,
-                keep_initializers_as_inputs=config.keep_initializers_as_inputs,
-                external_data=config.external_data,
-            )
+        return onnx_program, metadata
 
-        return onnx_program
+    @classmethod
+    def save_artifact(cls, artifact: ONNXProgram, path) -> None:
+        """Weights go to a `<name>.onnx.data` sidecar file, so models past the 2 GB protobuf limit save too."""
+        artifact.save(str(path), external_data=True)
 
 
 # ── ONNX helpers ────────────────────────────────────────────────────────────

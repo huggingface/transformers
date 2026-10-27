@@ -98,7 +98,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         decode = (
             DynamoExporter()
             .export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True))
-            .module()
+            .artifact.module()
         )
 
         for query_len in (1, 2, 4):
@@ -129,7 +129,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         decode = (
             DynamoExporter()
             .export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True))
-            .module()
+            .artifact.module()
         )
 
         past_key_values = copy.deepcopy(decode_inputs["past_key_values"])
@@ -181,8 +181,8 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         model = self._tiny_model()
         prompt = torch.randint(0, 64, (1, 4))
         decode_model, decode_inputs = self._decompose_static_decode(model, prompt)
-        onnx_program = OnnxExporter().export(
-            decode_model, copy.deepcopy(decode_inputs), config=OnnxConfig(dynamic=True, external_data=False)
+        onnx_program = (
+            OnnxExporter().export(decode_model, copy.deepcopy(decode_inputs), config=OnnxConfig(dynamic=True)).artifact
         )
 
         # cache exposed as matched `input.<name>` / `output.<name>` pairs (graph-input order lines up

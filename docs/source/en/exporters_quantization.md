@@ -51,7 +51,7 @@ calibration_dataset = [tokenizer(text, return_tensors="pt") for text in texts]
 inputs = tokenizer("An absolute delight from start to finish.", return_tensors="pt")
 
 config = OnnxConfig(dynamic=True, quantizer=OnnxRuntimeQuantizer(calibration_dataset=calibration_dataset))
-onnx_program = OnnxExporter().export(model, inputs, config)
+onnx_program = OnnxExporter().export(model, inputs, config).artifact
 
 logits = onnx_program(**inputs)[0]
 print(model.config.id2label[int(logits.argmax())])  # POSITIVE
@@ -105,7 +105,7 @@ inputs = tokenizer("Once upon a time", return_tensors="pt")
 
 x86 = X86InductorQuantizer().set_global(get_default_x86_inductor_quantization_config())
 config = DynamoConfig(dynamic=True, quantizer=PT2EQuantizer(x86, calibration_dataset=calibration_dataset))
-components = DynamoExporter().export_for_generation(model, inputs, config)  # {"prefill": ..., "decode": ...}
+components = DynamoExporter().export_for_generation(model, inputs, config)  # "prefill" and "decode" components
 ```
 
 On OpenVINO, PT2E weights stay in full precision behind quantize/dequantize pairs, which OpenVINO converts to
@@ -158,7 +158,7 @@ onnx_int4 = OnnxConfig(quantizer=NNCFOnnxQuantizer(int4))
 # Dynamo: int8 on the FX graph
 dynamo_int8 = DynamoConfig(quantizer=NNCFTorchFXQuantizer(calibration_dataset=calibration_dataset))
 
-ov_model = OpenVINOExporter().export(model, inputs, openvino_int4)
+ov_model = OpenVINOExporter().export(model, inputs, openvino_int4).artifact
 ```
 
 Int8 activations run int8 matmuls, which saturate on CPUs without VNNI (AVX2-only Intel and AMD Zen 2 and older), so
