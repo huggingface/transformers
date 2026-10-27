@@ -70,5 +70,25 @@ class ConverterChangedInDiffTest(unittest.TestCase):
             )
 
 
+class ModularBatchesTest(unittest.TestCase):
+    """A full check collapses the dependency levels into one batch; the incremental path keeps them."""
+
+    levels = [["a", "b"], ["c"], ["d", "e"]]
+
+    def test_check_all_produces_a_single_batch(self):
+        self.assertEqual(
+            check_modular_conversion._modular_batches(self.levels, check_all=True),
+            [["a", "b", "c", "d", "e"]],
+        )
+
+    def test_check_all_keeps_every_file_exactly_once(self):
+        # The flattened batch must be the same multiset as the levels: no file dropped, none doubled.
+        flattened = check_modular_conversion._modular_batches(self.levels, check_all=True)[0]
+        self.assertCountEqual(flattened, [path for level in self.levels for path in level])
+
+    def test_incremental_returns_the_levels_unchanged(self):
+        self.assertIs(check_modular_conversion._modular_batches(self.levels, check_all=False), self.levels)
+
+
 if __name__ == "__main__":
     unittest.main()

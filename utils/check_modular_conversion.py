@@ -173,6 +173,20 @@ def guaranteed_no_diff(modular_file_path, dependencies, models_in_diff):
     return True
 
 
+def _modular_batches(ordered_files, check_all):
+    """The batches handed to `pool.map`.
+
+    The dependency levels exist so `guaranteed_no_diff` can consult results from earlier ones. A full
+    check bypasses that filter entirely, so no level depends on another and the per-level barrier is
+    pure overhead: flattening turns one `pool.map` per level into a single pass over every file, which
+    lets one pool, sized once, drain them. The incremental path still needs the levels, so it gets them
+    unchanged.
+    """
+    if check_all:
+        return [[file_path for level in ordered_files for file_path in level]]
+    return ordered_files
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Compare modular_xxx.py files with modeling_xxx.py files.")
     parser.add_argument(
@@ -217,7 +231,6 @@ if __name__ == "__main__":
 
     non_matching_files = []
     ordered_files, dependencies = find_priority_list(args.files)
-    flat_ordered_files = [item for sublist in ordered_files for item in sublist]
 
     # ordered_files is a *sorted* list of lists of filepaths
     #  - files from the first list do NOT depend on other files
@@ -226,11 +239,14 @@ if __name__ == "__main__":
     #  - ... and so on
     # files (models) within the same list are *independent* of each other;
     # we start applying modular conversion to each list in parallel, starting from the first list
+    # A full check bypasses `guaranteed_no_diff`, so the levels carry no ordering information there;
+    # `_modular_batches` collapses them into one pass. The incremental path keeps them.
+    batches = _modular_batches(ordered_files, args.check_all)
 
     pool = None
     pool_size = 0
     try:
-        for dependency_level_files in ordered_files:
+        for dependency_level_files in batches:
             # Filter files guaranteed no diff
             files_to_check = []
             for file_path in dependency_level_files:
