@@ -493,7 +493,7 @@ class EmbeddingGemma2Processor(OmniModalProcessorMixin):
         # "00:00 <BOI> [frame image tokens] <EOI> 00:00 <BOA> [audio tokens] <EOA> ..."
         segments = []
         processed_audio_tokens = 0
-        for i, frame_sec in enumerate(metadata.timestamps):
+        for i, frame_sec in enumerate(frame_seconds):
             # vision frame block, labeled with its own (rounded) timestamp
             segments.append(
                 f"{self.timestamp_fmt(frame_sec)} {self.boi_token}{self.video_token * num_soft_tokens}{self.eoi_token}"
