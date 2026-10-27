@@ -254,6 +254,7 @@ class Pix2StructImageProcessorPil(PilBackend):
 
         return (image - mean) / adjusted_stddev
 
+    @requires(backends=("torch",))
     def extract_flattened_patches(self, image: np.ndarray, max_patches: int, patch_size: SizeDict) -> np.ndarray:
         """
         Extract flattened patches from an image. Uses torch for patch extraction.
@@ -269,7 +270,6 @@ class Pix2StructImageProcessorPil(PilBackend):
         Returns:
             `np.ndarray`: Flattened patches with row/column IDs of shape (max_patches, patch_dim).
         """
-        requires_backends(self, "torch")
         # Convert to torch for patch extraction (pix2struct requires torch for unfold)
         image_torch = torch.from_numpy(image)
         patch_height, patch_width = patch_size.height, patch_size.width

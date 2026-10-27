@@ -360,7 +360,6 @@ class Mask2FormerImageProcessorPil(MaskFormerImageProcessorPil):
             `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
             `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
-        requires_backends(self, ["torch"])
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
 
@@ -453,7 +452,6 @@ class Mask2FormerImageProcessorPil(MaskFormerImageProcessorPil):
                 - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
                 - **score** -- Prediction score of segment with `segment_id`.
         """
-        requires_backends(self, ["torch"])
         if return_coco_annotation and return_binary_maps:
             raise ValueError("return_coco_annotation and return_binary_maps can not be both set to True.")
 
