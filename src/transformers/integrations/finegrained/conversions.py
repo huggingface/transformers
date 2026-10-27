@@ -19,6 +19,8 @@ checkpoint layout on save.
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 import torch
 
 from ...core_model_loading import ConversionOps, Interleave
@@ -253,6 +255,80 @@ class FineGrainedViewPackedInt8(_FineGrainedOp):
             value = single_tensor(value)
             out[key] = value.view(want) if torch.is_tensor(value) and value.dtype == held else value
         return out
+
+
+class FineGrainedWeightGlobals(_FineGrainedOp):
+    """Collect NVFP4 weight globals and calibrated `input_scale`s as one fp32 value per expert per projection.
+
+    They come from per-expert keys or from a stacked `(E, 2)` tensor per layer.
+
+    A gate|up stack keeps the gate global. The up global is left as a ratio. The GLU is linear in `up`, so the expert
+    output is scaled by `1 / ratio`. The down weight global is multiplied by the ratio to undo it. The down input
+    global is divided by it, so the requantization stays on the calibrated range. This is why one op owns all the
+    globals of a layer.
+    """
+
+    supports_many_to_many = True
+
+    @staticmethod
+    def role(key: str) -> tuple[str, str]:
+        """Return the `(projection, level)` of a global scale key.
+
+        The projection is `"gate_up"` or `"down"`. The level is `"weight"` or `"input"`. The key is a checkpoint key
+        or a module target. Raw checkpoint keys may use vLLM's `w1`/`w2`/`w3`, matched by whole segment.
+        """
+        down = any(seg == "w2" or seg.startswith("down_proj") for seg in key.split("."))
+        level = "input" if "input_scale" in key or "activation_scale" in key else "weight"
+        return ("down" if down else "gate_up"), level
+
+    def convert(self, input_dict, target_patterns=None, model=None, **kwargs):
+        sources = defaultdict(dict)
+        for key, value in input_dict.items():
+            # unwrap so a fused `(E, 2)` pair does not read as `(1, 2E)`
+            sources[self.role(key)][key] = value[0] if isinstance(value, list) and len(value) == 1 else value
+        globals_ = {}
+        for target in target_patterns:
+            if role_sources := sources.get(self.role(target)):
+                # `(E, halves)`, gate column first
+                columns = []
+                for key, value in sorted(role_sources.items(), key=lambda kv: 0 if "gate_proj" in kv[0] else 1):
+                    value = torch.stack(value, dim=0) if isinstance(value, list) else value
+                    columns.append(value.float().reshape(value.shape[0], -1))
+                globals_[target] = torch.cat(columns, dim=1)
+        targets = {self.role(target): target for target in globals_}
+        stack = targets.get(("gate_up", "weight"))
+
+        if stack is not None and globals_[stack].shape[1] == 2:
+            gate, up = globals_[stack].chunk(2, dim=1)
+            gate, up = gate.squeeze(1), up.squeeze(1)
+            if not torch.equal(gate, up):
+                self._assert_halves_foldable(model)
+            globals_[stack] = gate
+            ratio = (up / gate)[:, None]
+            for role, factor in ((("down", "weight"), ratio), (("down", "input"), 1 / ratio)):
+                if target := targets.get(role):
+                    globals_[target] = globals_[target] * factor
+        return {target: value.reshape(-1).contiguous() for target, value in globals_.items()}
+
+    @staticmethod
+    def _assert_halves_foldable(model) -> None:
+        """Check that the up global can move past the GLU.
+
+        The experts must have no bias, since a bias is added after the global. The GLU must be linear in `up`. A
+        clamped SwiGLU and the `up + 1` of SwiGLU-OAI are not.
+        """
+        experts = [module for module in model.modules() if isinstance(module, FineGrainedExperts)] if model else []
+        if any(module.has_bias for module in experts):
+            raise NotImplementedError(
+                "this checkpoint calibrates the gate|up halves separately AND carries an expert "
+                "bias; the up half's bias would have to be folded with the globals."
+            )
+        if any(module.swiglu_limit is not None or module.swiglu_alpha is not None for module in experts):
+            raise NotImplementedError(
+                "this checkpoint calibrates the gate|up halves separately, and this model's GLU "
+                "(`swiglu_limit` / `swiglu_alpha`) is not linear in the up half, so the halves' globals "
+                "cannot be merged into one per expert."
+            )
 
 
 class FineGrainedInputScales(_FineGrainedOp):

@@ -244,14 +244,15 @@ def finegrained_linear(
     return output
 
 
-@functools.cache
-def supported_fused_norms() -> dict[type[nn.Module], str]:
-    """Map each post-expert norm class to the name of its fused kernel form.
+def fused_norm_kind(norm: nn.Module) -> str | None:
+    """Return the name of the fused kernel form of a post-expert norm, or `None` if it has none.
 
-    Match on the exact class, since a subclass may compute something else.
-    Build the map on first use, so importing this module does not import a model.
+    torch's `nn.RMSNorm` is `"rms_norm"`. A model's norm declares its form with a `fused_norm_kind` class attribute.
+    Only the norm's own class counts, since a subclass may compute something else.
     """
-    return {nn.RMSNorm: "rms_norm"}
+    if type(norm) is nn.RMSNorm:
+        return "rms_norm"
+    return vars(type(norm)).get("fused_norm_kind")
 
 
 class _FineGrainedModule:
@@ -642,7 +643,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
 
         # in the model dtype, like the replaced experts
         bias = torch.empty(self.num_experts, rows) if self.has_bias else None
-        # one per expert
+        # one per expert, since `FineGrainedWeightGlobals` merges the separately calibrated gate and up halves
         weight_global = torch.ones(self.num_experts, dtype=self.global_scale_dtype) if self.two_level else None
         activation = torch.ones(self.num_experts, dtype=torch.float32) if self.holds_activation_scale else None
         _set_optional_parameter(self, f"{proj}_bias", bias)
@@ -693,8 +694,10 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
         return final_hidden_states.to(hidden_states.dtype)
 
     def _projection_operands(self, proj: str) -> ProjectionOperands:
-        """``proj``'s tensors as the kernels take them: the calibrated activation scale goes in as NVFP4's
-        activation global or as a static scale."""
+        """Return `proj`'s tensors as the kernels take them.
+
+        The calibrated activation scale goes in as NVFP4's activation global, or else as a static scale.
+        """
         activation = self._parameters[f"{proj}_activation_scale"]
         activation_scale, input_global_scale = self._activation_operands(activation)
         return ProjectionOperands(
@@ -790,7 +793,7 @@ class FineGrainedExperts(_FineGrainedModule, nn.Module):
 
         post_expert_norm, norm_eps = None, 1e-6
         if self.has_post_expert_norm:
-            norm_name = supported_fused_norms().get(type(self.post_expert_norm))
+            norm_name = fused_norm_kind(self.post_expert_norm)
             if norm_name in kernel.get_supported_norms():
                 post_expert_norm = norm_name
                 eps = getattr(self.post_expert_norm, "eps", getattr(self.post_expert_norm, "variance_epsilon", None))

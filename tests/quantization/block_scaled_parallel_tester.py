@@ -34,7 +34,7 @@ from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config,
 
 from ..test_tensor_parallel_mixin import _init_distributed
 from .block_scaled_checkpoint_tester import _checkpoint_bytes
-from .block_scaled_tester import FormatSpec, _cheap_tuning, _require_kernel_capability
+from .block_scaled_tester import NVFP4, FormatSpec, _cheap_tuning, _require_kernel_capability
 
 
 def _check_static_cache_decode(model, ids):
@@ -165,6 +165,10 @@ class LoadPathEquivalenceTesterMixin:
             DeepseekV3ForCausalLM,
             DeepseekV4Config,
             DeepseekV4ForCausalLM,
+            Glm4vMoeConfig,
+            Glm4vMoeForConditionalGeneration,
+            Glm4vMoeTextConfig,
+            Glm4vMoeVisionConfig,
             GptOssConfig,
             GptOssForCausalLM,
             Mistral4Config,
@@ -217,6 +221,46 @@ class LoadPathEquivalenceTesterMixin:
                     "max_position_embeddings": 32,
                 },
                 Fp8Config(weight_block_size=None, activation_scheme="static"),
+            ),
+            # Multimodal. The experts' plans live on `text_config`, not on the config the quantizer gets.
+            "glm4v_moe-nvfp4": (
+                Glm4vMoeConfig,
+                Glm4vMoeForConditionalGeneration,
+                {
+                    "text_config": Glm4vMoeTextConfig(
+                        vocab_size=64,
+                        hidden_size=256,
+                        intermediate_size=256,
+                        moe_intermediate_size=256,
+                        num_hidden_layers=2,
+                        num_attention_heads=4,
+                        num_key_value_heads=2,
+                        max_position_embeddings=32,
+                        rope_parameters={"type": "default", "mrope_section": [16, 8, 8], "partial_rotary_factor": 1.0},
+                        rope_theta=10000,
+                        tie_word_embeddings=True,
+                        bos_token_id=0,
+                        eos_token_id=0,
+                        pad_token_id=0,
+                        n_routed_experts=4,
+                        n_shared_experts=1,
+                        n_group=1,
+                        topk_group=1,
+                        num_experts_per_tok=2,
+                        first_k_dense_replace=0,
+                    ),
+                    "vision_config": Glm4vMoeVisionConfig(
+                        depth=2,
+                        num_heads=4,
+                        hidden_size=64,
+                        out_hidden_size=256,
+                        intermediate_size=64,
+                        patch_size=14,
+                        spatial_merge_size=1,
+                        temporal_patch_size=2,
+                    ),
+                },
+                NVFP4.checkpoint_config(),
             ),
             # Interleaved, transposed rows (`is_concatenated=False`) with expert biases that the EP plan names
             "gpt_oss-mxfp4": (

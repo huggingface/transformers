@@ -11,109 +11,119 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import annotations
+"""NVFP4 quantizer for E2M1 weights with one E4M3 scale per 16 values and an fp32 global scale.
+
+It loads both layouts NVIDIA ModelOpt exports, per expert per projection or stacked per layer.
+It also quantizes a full-precision checkpoint on the fly.
+"""
 
 from typing import TYPE_CHECKING
 
-from ..utils import is_kernels_available, is_torch_available
-from ..utils.import_utils import KERNELS_MAX_VERSION, KERNELS_MIN_VERSION
-from .base import HfQuantizer
-from .quantizers_utils import get_module_from_name
+from .block_scaled_utils import BlockScaledQuantizer, ProducerLayout
+from .quantizers_utils import FUSED_STACKS
 
-
-if is_torch_available():
-    import torch
 
 if TYPE_CHECKING:
-    from ..modeling_utils import PreTrainedModel
     from ..utils.quantization_config import NVFP4Config
 
 
-def _as_cuda_device(device) -> torch.device | None:
-    if isinstance(device, int):
-        return torch.device("cuda", device)
-    try:
-        device = torch.device(device)
-    except (TypeError, RuntimeError):
-        return None
-    return device if device.type == "cuda" else None
+class NVFP4HfQuantizer(BlockScaledQuantizer):
+    """NVFP4 weights in both key layouts that ModelOpt ships."""
 
+    quantization_config: "NVFP4Config"
+    # ModelOpt also calibrates an FP8 KV cache. Here the cache stays in the model dtype.
+    unexpected_keys = (r"\.(k_proj\.k|v_proj\.v)_scale$",)
+    # NVFP4 checkpoints, transformers saves included, use the ModelOpt layout
+    producer_layouts = {None: ProducerLayout(block_scale_name="weight_scale", packed_as_uint8=True)}
 
-class NVFP4HfQuantizer(HfQuantizer):
-    """Quantize eligible linear weights to NVFP4 while loading a full-precision checkpoint."""
+    def get_weight_conversions(self, model=None):
+        from ..core_model_loading import WeightRenaming
 
-    requires_calibration = False
-    quantization_config: NVFP4Config
-
-    @property
-    def quantized_element_size(self) -> float:
-        return 0.5
-
-    def validate_environment(self, device_map, **kwargs):
-        if self.pre_quantized:
-            raise ValueError("Loading pre-quantized NVFP4 checkpoints is not supported yet.")
-        if not is_kernels_available():
-            raise ImportError(
-                "NVFP4 quantization requires the `kernels` package. "
-                f"Install a compatible version ({KERNELS_MIN_VERSION} <= version < {KERNELS_MAX_VERSION}), "
-                f"for example with `pip install kernels=={KERNELS_MIN_VERSION}`."
-            )
-        if not torch.cuda.is_available():
-            raise RuntimeError("NVFP4 quantization requires a CUDA GPU.")
-
-        if device_map is None:
-            raise ValueError("NVFP4 quantization requires a CUDA `device_map`.")
-        devices = set(device_map.values()) if isinstance(device_map, dict) else {device_map}
-        cuda_devices = {_as_cuda_device(device) for device in devices}
-        if None in cuda_devices:
-            raise ValueError("NVFP4 quantization does not support CPU or disk offload.")
-        if len(cuda_devices) != 1:
-            raise ValueError(
-                "NVFP4 quantization currently supports one CUDA device. Tensor parallelism and multi-device "
-                "`device_map` configurations are not supported yet."
-            )
-        self.quantization_device = cuda_devices.pop()
-
-        major, minor = torch.cuda.get_device_capability(self.quantization_device)
-        if major < 10:
-            raise RuntimeError(f"NVFP4 requires Blackwell (sm100+) block-scaled tensor cores; found sm{major}{minor}.")
-
-    def update_parallel_plan(self, model, plan):
-        distributed_config = getattr(model.config, "distributed_config", None)
-        tp_size = getattr(distributed_config, "tp_size", None)
-        if tp_size is not None and tp_size > 1:
-            raise ValueError(
-                "NVFP4 quantization does not support tensor parallelism yet because its scale metadata does not have "
-                "a sharding plan."
-            )
-
-    def param_needs_quantization(self, model: PreTrainedModel, param_name: str, **kwargs) -> bool:
-        from ..integrations.nvfp4 import NVFP4Linear
-
-        module, tensor_name = get_module_from_name(model, param_name)
-        return isinstance(module, NVFP4Linear) and tensor_name == "weight"
-
-    def _process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs):
-        from ..integrations.nvfp4 import replace_with_nvfp4_linear
-
-        self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
+        conversions = super().get_weight_conversions(model)
+        if not self.pre_quantized:
+            return conversions
+        dequantize, up_projections = self.quantization_config.dequantize, self._up_projections(model)
+        # Weight-only and dequantized models have no activation global to load `input_scale` into
+        calibrated = not dequantize and self.quantization_config.activation_format != "bf16"
+        # rename the weight globals to the slot every module holds them in, experts included
+        conversions.append(
+            WeightRenaming(source_patterns=r"^(.+)\.weight_scale_2", target_patterns=r"\1.weight_global_scale")
         )
-        replace_with_nvfp4_linear(model, modules_to_not_convert=self.modules_to_not_convert)
+        if calibrated:
+            # The down projection's activation scale loads with its weight globals
+            conversions += self._activation_scale_conversions(up_projections, projections=up_projections)
+        if dequantize:
+            # Rename stacked scales to the slot names each stack's dequantize converter collects.
+            # Cover every stack a model may hold, without looking at its experts.
+            conversions += self._fused_renames(
+                FUSED_STACKS, (("_weight_scale", "_scale_inv"), ("_weight_scale_2", "_weight_global_scale"))
+            )
+        elif up_projections:
+            conversions += self._per_expert_conversions(calibrated, up_projections)
+            conversions += self._fused_conversions(calibrated, up_projections)
+        return conversions
 
-    def get_quantize_ops(self):
-        from ..integrations.nvfp4 import NVFP4Quantize
+    def _per_expert_conversions(self, calibrated: bool, up_projections: tuple[str, ...]):
+        """Return converters for one key per expert per projection, as GLM-5.2-NVFP4 ships them.
 
-        return NVFP4Quantize(self.quantization_device)
+        `MergeModulelist` lets expert parallelism keep only this rank's experts.
+        """
+        from ..core_model_loading import MergeModulelist, WeightConverter
+        from ..integrations.finegrained.conversions import FineGrainedWeightGlobals
 
-    @property
-    def is_serializable(self) -> bool:
-        return False
+        return [
+            # One converter for all of a layer's globals.
+            # `FineGrainedWeightGlobals` folds the gate and up halves. This moves the up global to the down projection.
+            WeightConverter(
+                source_patterns=[
+                    *self._per_expert_sources(up, "weight_global_scale"),
+                    *self._per_expert_sources("down_proj", "weight_global_scale"),
+                    *(self._per_expert_sources("down_proj", "activation_scale") if calibrated else []),
+                ],
+                target_patterns=[
+                    f"experts.{up}_weight_global_scale",
+                    "experts.down_proj_weight_global_scale",
+                    *(["experts.down_proj_activation_scale"] if calibrated else []),
+                ],
+                operations=[MergeModulelist(dim=0), FineGrainedWeightGlobals(self)],
+            )
+            for up in up_projections
+        ]
 
-    @property
-    def is_trainable(self) -> bool:
-        return False
+    @staticmethod
+    def _fused_renames(projections, slots) -> list:
+        """Rename the stacked `{proj}{shipped}` scales to `{proj}{slot}`, for each `(shipped, slot)` pair."""
+        from ..core_model_loading import WeightRenaming
 
-    @property
-    def is_compileable(self) -> bool:
-        return True
+        return [
+            WeightRenaming(source_patterns=rf"experts\.{proj}{shipped}", target_patterns=f"experts.{proj}{slot}")
+            for proj in projections
+            for shipped, slot in slots
+        ]
+
+    def _fused_conversions(self, calibrated: bool, up_projections: tuple[str, ...]):
+        """Return converters for experts stacked per layer, as vLLM's fused layout ships them.
+
+        The scales only take their slot name.
+        """
+        from ..core_model_loading import WeightConverter
+        from ..integrations.finegrained.conversions import FineGrainedWeightGlobals
+
+        converters = self._fused_renames((*up_projections, "down_proj"), (("_weight_scale", "_scale_inv"),))
+        converters += [
+            WeightConverter(
+                source_patterns=[
+                    rf"experts\.{up}_weight_scale_2",
+                    r"experts\.down_proj_weight_scale_2",
+                    *([r"experts\.down_proj_input_scale"] if calibrated else []),
+                ],
+                target_patterns=[
+                    f"experts.{up}_weight_global_scale",
+                    "experts.down_proj_weight_global_scale",
+                    *(["experts.down_proj_activation_scale"] if calibrated else []),
+                ],
+                operations=[FineGrainedWeightGlobals(self)],
+            )
+            for up in up_projections
+        ]
+        return converters
