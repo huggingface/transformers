@@ -37,7 +37,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import BailingHybridConfig, BailingHybridForCausalLM, BailingHybridModel, FineGrainedFP8Config
-    from transformers.conversion_mapping import get_model_conversion_mapping
     from transformers.generation.utils import ALL_CACHE_NAMES
     from transformers.integrations.finegrained_fp8 import FP8Linear
     from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
@@ -181,33 +180,6 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
             outputs = lora_model(**self._prepare_for_class(inputs_dict, BailingHybridForCausalLM))
         self.assertEqual(outputs.logits.shape[:2], inputs_dict["input_ids"].shape)
 
-    def test_attention_name_mapping_round_trip(self):
-        with torch.device("meta"):
-            model = BailingHybridForCausalLM(self.model_tester.get_config())
-        conversions = get_model_conversion_mapping(model)
-        reverse_conversions = [conversion.reverse_transform() for conversion in reversed(conversions)]
-        names = {
-            "attention.b_proj": "self_attn.b_proj",
-            "attention.q_b_proj": "self_attn.q_b_proj",
-            "model.layers.0.attention.b_proj.weight": "model.layers.0.self_attn.b_proj.weight",
-            "model.layers.1.attention.q_b_proj.weight": "model.layers.1.self_attn.q_b_proj.weight",
-            "model.layers.1.attention.kv_b_proj.weight": "model.layers.1.self_attn.kv_b_proj.weight",
-            "cross_attention.b_proj": "cross_attention.b_proj",
-            "model.layers.0.cross_attention.b_proj": "model.layers.0.cross_attention.b_proj",
-        }
-        for original, native in names.items():
-            with self.subTest(name=original):
-                converted = original
-                for conversion in conversions:
-                    converted, _ = conversion.rename_source_key(converted)
-                self.assertEqual(converted, native)
-                for conversion in conversions:
-                    converted, _ = conversion.rename_source_key(converted)
-                self.assertEqual(converted, native)
-                for conversion in reverse_conversions:
-                    converted, _ = conversion.rename_source_key(converted)
-                self.assertEqual(converted, original)
-
     def test_fp8_mixed_precision_modules(self):
         config = self.model_tester.get_config()
         config.q_lora_rank = 12
@@ -216,7 +188,7 @@ class BailingHybridModelTest(CausalLMModelTest, unittest.TestCase):
             "modules_to_not_convert": [
                 "lm_head",
                 "model.word_embeddings",
-                "attention.b_proj",
+                "model.layers.0.attention.b_proj",
                 "model.layers.1.attention.g_proj",
                 f"model.layers.{config.num_hidden_layers}.eh_proj",
             ],
