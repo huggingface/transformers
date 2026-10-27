@@ -171,8 +171,8 @@ class DynamicLayer(CacheLayerMixin):
                 "Please use a negative integer to remove that number of tokens from the cache instead."
             )
 
-        # Nothing to do in these cases: 0 tokens to crop or the layer is not initialized (can happen with KV sharing)
-        if tokens_to_remove == 0 or not self.is_initialized:
+        # Nothing to do in this case
+        if tokens_to_remove == 0:
             return
 
         # Crop the cache
