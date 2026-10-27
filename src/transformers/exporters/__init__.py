@@ -43,7 +43,6 @@ _import_structure = {
     "exporter_onnx": ["OnnxExporter"],
     "exporter_openvino": ["OpenVINOExporter"],
     "metadata": ["ExportMetadata"],
-    "runtimes": ["ExportedModel", "ModelRunner"],
     "quantizers": [
         "ExportQuantizer",
         "NNCFOnnxQuantizer",
@@ -56,6 +55,7 @@ _import_structure = {
         "OnnxRuntimeStaticConfig",
         "PT2EQuantizer",
     ],
+    "runtimes": ["ExportedModel", "ModelRunner"],
 }
 
 if TYPE_CHECKING:
