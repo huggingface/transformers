@@ -103,10 +103,9 @@ class Lfm3VlProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            # copy: `update` on the class-level defaults would leak this call's kwargs into every later call
-            images_kwargs = dict(Lfm3VlProcessorKwargs._defaults.get("images_kwargs", {}))
+            images_kwargs = Lfm3VlProcessorKwargs._defaults.get("images_kwargs", {})
             images_kwargs.update(kwargs)
-            merge_size = images_kwargs.get("merge_size") or self.image_processor.merge_size
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
@@ -116,9 +115,9 @@ class Lfm3VlProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = dict(Lfm3VlProcessorKwargs._defaults.get("videos_kwargs", {}))
+            videos_kwargs = Lfm3VlProcessorKwargs._defaults.get("videos_kwargs", {})
             videos_kwargs.update(kwargs)
-            merge_size = videos_kwargs.get("merge_size") or self.video_processor.merge_size
+            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
             num_video_patches = [
                 self.video_processor.get_num_of_video_patches(*video_size, videos_kwargs) for video_size in video_sizes
             ]
