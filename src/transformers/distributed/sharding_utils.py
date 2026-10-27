@@ -88,7 +88,7 @@ class DtensorShardOperation:
        we skip it. Later, the converter (e.g. `MergeModulelist`) stacks the owned experts we kept into the rank's local shard
     """
 
-    def __init__(self, param: DTensor):
+    def __init__(self, param: DTensor, source_placements: tuple | None = None):
         self.device_mesh = param.device_mesh
         self.placements = tuple(param.placements)
         self.param_ndim = param.ndim
@@ -98,6 +98,10 @@ class DtensorShardOperation:
         self._axis0_offset = offsets[0]
         self._axis0_local_size = local_shape[0]
         self._axis0_size = param.shape[0]
+        # How to slice the checkpoint tensor when a converter lays it out differently from `param` (see
+        # `ConversionOps.get_source_placements`), e.g. transposed or fused with other params
+        if source_placements is not None:
+            self.placements = tuple(source_placements)
 
     def shard_tensor(
         self, source: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None

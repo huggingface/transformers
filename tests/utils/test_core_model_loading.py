@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import torch
 import torch.nn as nn
-from torch.distributed.tensor.placement_types import Shard
+from torch.distributed.tensor.placement_types import Shard, _StridedShard
 
 from transformers import PreTrainedConfig, PreTrainedModel
 from transformers.conversion_mapping import (
@@ -36,6 +36,7 @@ from transformers.core_model_loading import (
     PermuteForRope,
     PrefixChange,
     Split,
+    Transpose,
     VisionFuseAndPermuteForRope,
     VisionUnfuseAndPermuteForRope,
     WeightConverter,
@@ -280,6 +281,78 @@ class DummyRootMerged(PreTrainedModel):
 
 
 class TestConvertAndLoadStateDict(unittest.TestCase):
+    def test_dtensor_sharding_follows_transposed_checkpoint_dimensions(self):
+        target = torch.arange(48).reshape(2, 6, 4).float()
+        source = target.transpose(1, 2).contiguous()
+        converter = WeightConverter("experts.weight", "experts.weight", operations=[Transpose(1, 2, check_dims=True)])
+        target_param = SimpleNamespace(placements=(Shard(1),), shape=target.shape)
+        source_placements = converter.get_source_placements(source, target_param)
+
+        self.assertEqual(converter.operations[0].get_source_dim_mapping(source.shape, target.shape), {1: 2, 2: 1})
+        self.assertEqual(source_placements, (Shard(2),))
+        self.assertIsNone(converter.get_source_placements(target, target_param))
+        for rank in range(2):
+            shard_op = _make_dtensor_shard_op(
+                FakeMesh(shape=(2,), rank=rank),
+                [Shard(1)],
+                param_shape=target.shape,
+                local_shape=(2, 3, 4),
+                source_placements=source_placements,
+            )
+            source_shard = shard_op.shard_tensor(source)
+            torch.testing.assert_close(source_shard.transpose(1, 2), target[:, rank * 3 : (rank + 1) * 3])
+
+    def test_dtensor_sharding_reads_each_param_of_a_chunked_checkpoint_tensor(self):
+        # A fused [q; k] checkpoint tensor, chunked into `q_proj` and `k_proj`, each sharded colwise
+        q, k = torch.arange(24).reshape(6, 4).float(), -torch.arange(24).reshape(6, 4).float()
+        source = torch.cat([q, k])
+        converter = WeightConverter("qk_proj.weight", ["q_proj.weight", "k_proj.weight"], operations=[Chunk(dim=0)])
+        source_placements = converter.get_source_placements(
+            source, SimpleNamespace(placements=(Shard(0),), shape=q.shape)
+        )
+
+        self.assertEqual(source_placements, (_StridedShard(0, split_factor=2),))
+        for rank in range(2):
+            shard_op = _make_dtensor_shard_op(
+                FakeMesh(shape=(2,), rank=rank),
+                [Shard(0)],
+                param_shape=q.shape,
+                local_shape=(3, 4),
+                source_placements=source_placements,
+            )
+            local_q, local_k = shard_op.shard_tensor(source).chunk(2)
+            torch.testing.assert_close(local_q, q[rank * 3 : (rank + 1) * 3])
+            torch.testing.assert_close(local_k, k[rank * 3 : (rank + 1) * 3])
+
+    def test_dtensor_sharding_reads_a_contiguous_shard_of_each_concatenated_checkpoint_tensor(self):
+        # `gate_proj` and `up_proj` checkpoint tensors, concatenated into a packed-colwise `gate_up_proj`
+        gate, up = torch.arange(24).reshape(6, 4).float(), -torch.arange(24).reshape(6, 4).float()
+        converter = WeightConverter(
+            ["gate_proj.weight", "up_proj.weight"], "gate_up_proj.weight", operations=[Concatenate(dim=0)]
+        )
+        target_param = SimpleNamespace(placements=(_StridedShard(0, split_factor=2),), shape=(12, 4))
+        source_placements = converter.get_source_placements(gate, target_param)
+
+        self.assertEqual(source_placements, (Shard(0),))
+        for rank in range(2):
+            shard_op = _make_dtensor_shard_op(
+                FakeMesh(shape=(2,), rank=rank),
+                target_param.placements,
+                param_shape=target_param.shape,
+                local_shape=(6, 4),
+                source_placements=source_placements,
+            )
+            torch.testing.assert_close(shard_op.shard_tensor(gate), gate[rank * 3 : (rank + 1) * 3])
+            torch.testing.assert_close(shard_op.shard_tensor(up), up[rank * 3 : (rank + 1) * 3])
+
+    def test_transpose_source_dim_mapping_rejects_invalid_dimensions(self):
+        source_shape = (2, 4, 6)
+        target_shape = (2, 6, 4)
+
+        for invalid_dim in (-4, 3):
+            with self.subTest(invalid_dim=invalid_dim), self.assertRaisesRegex(IndexError, "Dimension out of range"):
+                Transpose(1, invalid_dim).get_source_dim_mapping(source_shape, target_shape)
+
     def test_dtensor_shard_aware_mixtral_conversion_uses_only_local_experts(self):
         """Integration test: FSDP-sharded expert loading + WeightConverter.
 

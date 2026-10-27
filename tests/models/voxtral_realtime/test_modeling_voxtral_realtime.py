@@ -158,6 +158,11 @@ class VoxtralRealtimeForConditionalGenerationModelTest(ALMModelTest, unittest.Te
             self.model_tester.feat_seq_length = original_feat_seq_length
         return config, inputs_dict
 
+    def _get_tp_extra_inputs(self, batch_size, seq_length):
+        # the audio is summed over every token position, prompt and generated ones, so it must cover all of them
+        audio_length = seq_length * self.model_tester.get_config().audio_length_per_tok
+        return {"input_features": floats_tensor([batch_size, self.model_tester.num_mel_bins, audio_length])}
+
     @_with_max_new_tokens(max_new_tokens=10)
     def test_generate_methods_with_logits_to_keep(self):
         super().test_generate_methods_with_logits_to_keep()

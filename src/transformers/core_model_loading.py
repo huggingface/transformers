@@ -39,11 +39,21 @@ from .utils.logging import get_logger, tqdm
 
 
 if TYPE_CHECKING:
+    from torch.distributed.tensor import DTensor
+
     from .modeling_utils import LoadStateDictConfig, PreTrainedModel
     from .quantizers import HfQuantizer
 
 
 logger = get_logger(__name__)
+
+
+def _with_placement_dim(placement, dim: int, split_factor: int | None = None):
+    """`placement` (a `Shard` or `_StridedShard`) moved to `dim`, strided by `split_factor` if given (1 for contiguous)."""
+    from torch.distributed.tensor.placement_types import Shard, _StridedShard
+
+    split_factor = getattr(placement, "split_factor", 1) if split_factor is None else split_factor
+    return Shard(dim) if split_factor == 1 else _StridedShard(dim, split_factor=split_factor)
 
 
 def build_glob_alternation(
@@ -93,6 +103,23 @@ class ConversionOps(ABC):
     ) -> dict[str, list[torch.Tensor]]:
         raise NotImplementedError
 
+    def get_source_placements(
+        self,
+        placements: tuple,
+        source_shape: tuple[int, ...],
+        target_shape: tuple[int, ...],
+        num_sources: int,
+        num_targets: int,
+    ) -> tuple | None:
+        """Return the placements to slice a checkpoint tensor with for shard-on-read.
+
+        DTensor placements describe the target parameter, but shard-on-read slices the checkpoint before conversion.
+        Ops that lay the checkpoint out differently from the parameter override this so that the conversion of the
+        sliced checkpoint gives this rank's shard: "Transpose" moves the sharded dims, "Chunk" and "Concatenate"
+        account for the params fused along the sharded dim. "None" means the checkpoint is laid out like the parameter.
+        """
+        return None
+
     @property
     def reverse_op(self) -> ConversionOps:
         raise NotImplementedError
@@ -141,6 +168,19 @@ class Chunk(ConversionOps):
             num_shards = getattr(subconfig, self.num_shards_attribute)
             target_patterns = [target_patterns[0].replace("*", str(i)) for i in range(num_shards)]
             return target_patterns
+
+    def get_source_placements(self, placements, source_shape, target_shape, num_sources, num_targets):
+        # The checkpoint fuses `num_targets` params like the target along `dim`: read this rank's shard of each of them
+        # (strided), not a contiguous shard of the fused tensor
+        if self.num_shards_attribute is not None:
+            return None
+        dim = self.dim % len(target_shape)
+        return tuple(
+            _with_placement_dim(placement, dim, num_targets)
+            if placement.is_shard() and placement.dim % len(target_shape) == dim
+            else placement
+            for placement in placements
+        )
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -219,6 +259,19 @@ class Concatenate(ConversionOps):
         if len(target_patterns) > 1:
             raise ValueError("Undefined Operation encountered!")
         return target_patterns[0]
+
+    def get_source_placements(self, placements, source_shape, target_shape, num_sources, num_targets):
+        # The target packs `num_sources` checkpoint tensors along `dim` and is sharded on each of them (strided): each
+        # checkpoint tensor holds one of them, so read a contiguous shard of it
+        if self.num_shards_attribute is not None:
+            return None
+        dim = self.dim % len(target_shape)
+        return tuple(
+            _with_placement_dim(placement, dim, 1)
+            if getattr(placement, "split_factor", None) == num_sources and placement.dim % len(target_shape) == dim
+            else placement
+            for placement in placements
+        )
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -365,7 +418,8 @@ class Transpose(ConversionOps):
         # In this case, check the shapes before transposing
         else:
             # NOTE: this rely on the first param name, so cannot be used for many-to-one operation
-            expected_shape = kwargs["model"].get_parameter(kwargs["full_layer_name"]).shape
+            expected_param = kwargs["model"].get_parameter(kwargs["full_layer_name"])
+            expected_shape = expected_param.to_local().shape if is_dtensor(expected_param) else expected_param.shape
             # The shapes are the same: do NOT transpose
             if tensor.shape == expected_shape:
                 return {target_pattern: tensor}
@@ -386,6 +440,41 @@ class Transpose(ConversionOps):
         # Here it's the only operation, or the last operation in a chain, so we return the target
         else:
             return target_patterns[0]
+
+    def get_source_dim_mapping(
+        self, source_shape: tuple[int, ...], target_shape: tuple[int, ...]
+    ) -> dict[int, int] | None:
+        """Map target model dimensions to source checkpoint dimensions for shard-on-read.
+
+        DTensor placements describe the target parameter, but the loader slices the raw checkpoint before this
+        transpose runs, avoiding full tensor materialization. Qwen3-VL-MoE uses this for its expert weights:
+        packed-colwise `gate_up_proj` shards target dim 1 in `[E, 2I, H]`, stored at checkpoint dim 2 in `[E, H, 2I]`.
+        This method swaps those axes otherwise we end up sharding the wrong dimensions. When `check_dims` finds matching shapes,
+        conversion skips both transpose and remapping.
+        """
+        if self.check_dims and source_shape == target_shape:
+            return None
+
+        ndim = len(target_shape)
+        if not (-ndim <= self.dim0 < ndim and -ndim <= self.dim1 < ndim):
+            raise IndexError(f"Dimension out of range for a {ndim}D tensor: {(self.dim0, self.dim1)}")
+
+        dim0 = self.dim0 % ndim
+        dim1 = self.dim1 % ndim
+        return {dim0: dim1, dim1: dim0}
+
+    def get_source_placements(self, placements, source_shape, target_shape, num_sources, num_targets):
+        if num_sources != 1 or num_targets != 1:
+            return None
+        if not (source_dim_mapping := self.get_source_dim_mapping(source_shape, target_shape)):
+            return None
+        ndim = len(target_shape)
+        return tuple(
+            _with_placement_dim(placement, source_dim_mapping.get(placement.dim % ndim, placement.dim % ndim))
+            if hasattr(placement, "dim")
+            else placement
+            for placement in placements
+        )
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -1207,6 +1296,20 @@ class WeightConverter(WeightTransform):
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
 
+    def get_source_placements(self, tensor: Any, target_param: DTensor) -> tuple | None:
+        """The placements to slice the checkpoint `tensor` with, so that this converter gives this rank's shard of
+        `target_param` (see `ConversionOps.get_source_placements`). `None` to slice it like `target_param`."""
+        if len(self.operations) != 1:
+            return None
+        source_shape = tuple(tensor.shape) if isinstance(tensor, torch.Tensor) else tuple(tensor.get_shape())
+        return self.operations[0].get_source_placements(
+            tuple(target_param.placements),
+            source_shape,
+            tuple(target_param.shape),
+            len(self.source_patterns),
+            len(self.target_patterns),
+        )
+
     def convert(
         self,
         layer_name: str,
@@ -1742,7 +1845,12 @@ def convert_and_load_state_dict_in_model(
             param_device = get_device(device_map, renamed_key, valid_torch_device=True)
             sharding_op = None
             if is_dtensor(empty_param):
-                sharding_op = DtensorShardOperation(empty_param)
+                source_placements = (
+                    mapping.get_source_placements(tensor, empty_param)
+                    if isinstance(mapping, WeightConverter)
+                    else None
+                )
+                sharding_op = DtensorShardOperation(empty_param, source_placements=source_placements)
 
             # Some parameters are so large (qwen4_exp ple_embedding is about ~95 GiB) that we cannot afford to perform the Operations
             # directly on the device, as it will completely blow up the memory during the ops memory spike. So defer to "cpu", then

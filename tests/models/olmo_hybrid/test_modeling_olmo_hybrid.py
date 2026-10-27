@@ -68,10 +68,6 @@ class OlmoHybridModelTest(CausalLMModelTest, unittest.TestCase):
     def _get_recurrent_state_shape(self, batch_size: int, config):
         return (batch_size, config.linear_num_value_heads, config.linear_key_head_dim, config.linear_value_head_dim)
 
-    @unittest.skip("Float8 quantization + TP numerical noise exceeds match threshold")
-    def test_tp_generation_quantized(self):
-        pass
-
     def test_linear_attention_multi_token_cached_forward_matches_single_token(self):
         """
         OLMo-Hybrid's GatedDeltaNet layers must produce the same output for a token regardless of

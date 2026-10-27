@@ -67,7 +67,7 @@ class AriaVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("intermediate_size", 16)
         kwargs.setdefault("head_dim", 4)
         kwargs.setdefault("max_position_embeddings", 60)
-        kwargs.setdefault("moe_num_experts", 3)
+        kwargs.setdefault("moe_num_experts", 4)
         kwargs.setdefault("moe_topk", 2)
         super().__init__(parent, **kwargs)
         self.projector_patch_to_query_dict = {(self.image_size // self.patch_size) ** 2: self.num_image_tokens}

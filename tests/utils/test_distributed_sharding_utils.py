@@ -65,7 +65,7 @@ class FakeMesh:
         )
 
 
-def _make_dtensor_shard_op(mesh, placements, param_shape, local_shape):
+def _make_dtensor_shard_op(mesh, placements, param_shape, local_shape, source_placements=None):
     """Build a DtensorShardOperation without requiring a real DTensor / distributed init.
 
     The axis-0 ownership cache is computed by mimicking
@@ -74,7 +74,7 @@ def _make_dtensor_shard_op(mesh, placements, param_shape, local_shape):
     """
     op = object.__new__(DtensorShardOperation)
     op.device_mesh = mesh
-    op.placements = tuple(placements)
+    op.placements = tuple(placements if source_placements is None else source_placements)
     op.param_ndim = len(param_shape)
     op._axis0_offset = 0
     op._axis0_local_size = local_shape[0]
@@ -141,6 +141,23 @@ class TestDtensorShardOperation(unittest.TestCase):
         for rank in range(2):
             mesh = FakeMesh(shape=(2,), rank=rank)
             op = _make_dtensor_shard_op(mesh, [Shard(0)], param_shape=(4, 4), local_shape=(2, 4))
+            torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
+
+    def test_1D_shard_uses_source_placements(self):
+        tensor = torch.arange(24).reshape(4, 6).float()
+        expected = {
+            0: tensor[:, :3],
+            1: tensor[:, 3:],
+        }
+        for rank in range(2):
+            mesh = FakeMesh(shape=(2,), rank=rank)
+            op = _make_dtensor_shard_op(
+                mesh,
+                [Shard(0)],
+                param_shape=(6, 4),
+                local_shape=(3, 4),
+                source_placements=[Shard(1)],
+            )
             torch.testing.assert_close(op.shard_tensor(tensor), expected[rank], msg=f"rank {rank}")
 
     def test_1D_strided_shard(self):

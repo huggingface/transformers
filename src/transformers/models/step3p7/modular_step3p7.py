@@ -37,7 +37,6 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     logging,
-    no_inherit_decorator,
     torch_int,
 )
 from ...utils.generic import merge_with_config_defaults
@@ -789,7 +788,6 @@ class Step3p7MLP(DeepseekV4MLP):
         return self.down_proj(gate * up)
 
 
-@no_inherit_decorator
 class Step3p7Experts(DeepseekV4Experts):
     _fp8_experts_clamp_after_activation = True
 

@@ -98,6 +98,9 @@ class MuseGlimmerTextConfig(PreTrainedConfig):
     model_type = "muse_glimmer_text"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
+        # the embedding normalizes its own lookup: the norm needs the reduced vocab-parallel lookup
+        "embed_tokens": "embedding_rowwise",
+        "embed_tokens.embed_norm": "replicate_input",
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
