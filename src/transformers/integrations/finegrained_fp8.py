@@ -336,7 +336,7 @@ class FP8GroupedMatmulFunction(torch.autograd.Function):
         weight, weight_scale_inv, offsets = ctx.saved_tensors
         weight = _dequantize_fp8_weight(weight, weight_scale_inv, ctx.block_size, grad_output.dtype)
         # (S, output_dim) @ grouped (num_experts, output_dim, input_dim) -> (S, input_dim)
-        return _grouped_mm(grad_output, weight, offs=offsets), None, None, None, None, None
+        return _grouped_mm(grad_output.contiguous(), weight, offs=offsets), None, None, None, None, None
 
 
 class FP8Linear(nn.Linear):
@@ -478,15 +478,7 @@ class FP8GroupedLinear(FP8Linear):
         tokens_per_expert = torch.full((self.n_groups,), tokens_per_group, device=x.device, dtype=torch.int32)
         offsets = torch.arange(1, self.n_groups + 1, device=x.device, dtype=torch.int32) * tokens_per_group
 
-        finegrained_fp8 = load_finegrained_fp8_kernel()
-        y = finegrained_fp8.grouped_matmul(
-            x,
-            w,
-            scale_inv,
-            offsets=offsets,
-            tokens_per_expert=tokens_per_expert,
-            block_size=self.block_size,
-        )
+        y = FP8GroupedMatmulFunction.apply(x, w, scale_inv, offsets, tokens_per_expert, self.block_size)
         y = y.reshape(self.n_groups, *input_shape, -1).movedim(0, -2)
         if self.has_bias:
             y.add_(self.bias.view(self.n_groups, -1))

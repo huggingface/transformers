@@ -505,6 +505,24 @@ class FP8LinearTest(unittest.TestCase):
         expected = torch.ones(1, 5, 384, device=self.device) @ (linear.weight.float() * scale)
         torch.testing.assert_close(x.grad.float(), expected, rtol=1e-2, atol=1e-1)
 
+    def test_grouped_linear_backward_goes_through_dequantized_weight(self):
+        """
+        Test that FP8GroupedLinear passes the input gradient through its dequantized weight, group by group.
+        """
+        from transformers.integrations.finegrained_fp8 import FP8GroupedLinear
+
+        linear = FP8GroupedLinear(256, 512, n_groups=2, block_size=(128, 128)).to(self.device)
+        linear.weight.data = torch.randn(512, 256).to(self.device, torch.float8_e4m3fn)
+        linear.weight_scale_inv.data = torch.rand(4, 2).to(self.device) + 0.5
+        x = torch.randn((3, 2, 256), dtype=torch.bfloat16).to(self.device).requires_grad_()
+
+        linear(x).sum().backward()
+
+        scale = linear.weight_scale_inv.repeat_interleave(128, dim=0).repeat_interleave(128, dim=1)
+        weight = (linear.weight.float() * scale).view(2, 256, 256)
+        expected = torch.ones(3, 2, 1, 256, device=self.device) @ weight
+        torch.testing.assert_close(x.grad.float(), expected.squeeze(2), rtol=1e-2, atol=1e-1)
+
 
 class FP8EmbeddingTest(unittest.TestCase):
     """
