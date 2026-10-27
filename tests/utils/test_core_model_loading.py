@@ -1867,3 +1867,12 @@ class TestConversionMapping(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WeightTransformPatternsTest(unittest.TestCase):
+    def test_a_reverse_leaves_the_transforms_own_patterns_alone(self):
+        converter = WeightConverter(r"\.experts.*.w2.weight", r"\.experts.down_proj", [MergeModulelist(dim=0)])
+        converter.reverse_transform()
+        converter.reverse_transform()
+        self.assertEqual(converter._original_target_patterns, [r"\.experts.down_proj"])
+        self.assertEqual(converter._original_source_patterns, [r"\.experts.*.w2.weight"])

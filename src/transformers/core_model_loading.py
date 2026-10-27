@@ -904,9 +904,8 @@ class WeightTransform:
             # without the other can mess-up with the capturing groups/compiled sources
             if hasattr(self, name):
                 raise ValueError(f"Cannot assign to field {name}, you should create a new instance")
-            # Switch str to list
-            elif isinstance(value, str):
-                value = [value]
+            # Switch str to list. A copy of a list, since the patterns are processed in place.
+            value = [value] if isinstance(value, str) else list(value)
         object.__setattr__(self, name, value)
 
     def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
