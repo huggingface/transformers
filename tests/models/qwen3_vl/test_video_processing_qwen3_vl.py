@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 import numpy as np
@@ -24,11 +25,13 @@ from ...test_video_processing_common import VideoProcessingTestMixin, prepare_vi
 
 
 if is_torch_available():
+    import torch
     from PIL import Image
 
 if is_vision_available() and is_torchvision_available():
-    from transformers import Qwen3VLVideoProcessor
+    from transformers import AutoVideoProcessor, Qwen3VLVideoProcessor
     from transformers.models.qwen3_vl.video_processing_qwen3_vl import smart_resize
+    from transformers.video_utils import VideoMetadata
 
 
 class Qwen3VLVideoProcessingTester:
@@ -169,6 +172,64 @@ class Qwen3VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             self.video_processor_dict, size={"longest_edge": 42, "shortest_edge": 42}
         )
         self.assertEqual(video_processor.size, {"longest_edge": 42, "shortest_edge": 42})
+
+    def _get_video_processor(self, **kwargs):
+        # a budget that keeps 64x96 frames whole: a 4x6 patch grid, frames paired along time
+        size = {"shortest_edge": 32 * 32, "longest_edge": 256 * 256 * 4}
+        return self.fast_video_processing_class(**{**self.video_processor_dict, "size": size, **kwargs})
+
+    def test_explicit_num_frames_overrides_the_default_fps(self):
+        video_processor = self._get_video_processor()
+        video = torch.randint(0, 255, (8, 3, 64, 96), dtype=torch.uint8)
+        metadata = VideoMetadata(total_num_frames=8, fps=2.0)
+        # the default fps would keep all 8 frames; an explicit frame count wins over it instead of colliding
+        inputs = video_processor(video, num_frames=3, video_metadata=metadata, return_tensors="pt")
+        self.assertEqual(inputs["video_grid_thw"].tolist(), [[2, 4, 6]])
+        inputs = video_processor(video, video_metadata=metadata, return_tensors="pt")
+        self.assertEqual(inputs["video_grid_thw"].tolist(), [[4, 4, 6]])
+        with self.assertRaisesRegex(ValueError, "mutually exclusive"):
+            video_processor(video, num_frames=3, fps=2.0, video_metadata=metadata)
+        with self.assertRaisesRegex(ValueError, "mutually exclusive"):
+            video_processor.sample_frames(metadata, num_frames=3, fps=2.0)
+
+    def test_configured_num_frames_beats_the_default_fps(self):
+        video = torch.randint(0, 255, (16, 3, 64, 96), dtype=torch.uint8)
+
+        def temporal_patches(video_processor, **kwargs):
+            metadata = VideoMetadata(total_num_frames=16, fps=4.0)
+            inputs = video_processor(video, video_metadata=metadata, return_tensors="pt", **kwargs)
+            return inputs["video_grid_thw"][0, 0].item()
+
+        # the 4 s clip gives 8 frames at the default 2 fps, so a configured budget of 6 frames is distinguishable
+        self.assertEqual(temporal_patches(self._get_video_processor()), 4)
+        video_processor = self._get_video_processor(num_frames=6)
+        self.assertEqual(temporal_patches(video_processor), 3)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            video_processor.save_pretrained(tmp_dir)
+            self.assertEqual(temporal_patches(AutoVideoProcessor.from_pretrained(tmp_dir)), 3)
+        # a caller option beats the configured one; only a caller pair collides
+        self.assertEqual(temporal_patches(video_processor, fps=1), 2)
+        self.assertEqual(temporal_patches(video_processor, num_frames=4), 2)
+        with self.assertRaisesRegex(ValueError, "mutually exclusive"):
+            temporal_patches(video_processor, num_frames=4, fps=1)
+
+    def test_video_metadata_needs_one_entry_per_video(self):
+        video_processor = self._get_video_processor()
+        video = torch.randint(0, 255, (8, 3, 64, 96), dtype=torch.uint8)
+        metadata = VideoMetadata(total_num_frames=8, fps=2.0)
+        for videos, video_metadata in (
+            ([video, video], [metadata]),
+            ([video, video], metadata),
+            ([video], [metadata, metadata]),
+            ([video], []),
+        ):
+            with (
+                self.subTest(num_videos=len(videos), video_metadata=video_metadata),
+                self.assertRaisesRegex(ValueError, f"Received {len(videos)} videos but"),
+            ):
+                video_processor(videos, video_metadata=video_metadata)
+        inputs = video_processor([video, video], video_metadata=[metadata, metadata], return_tensors="pt")
+        self.assertEqual(inputs["video_grid_thw"].tolist(), [[4, 4, 6]] * 2)
 
     def test_get_num_patches_without_videos(self):
         video_processing = self.fast_video_processing_class(**self.video_processor_dict)
