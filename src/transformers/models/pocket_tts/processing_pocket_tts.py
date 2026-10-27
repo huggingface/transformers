@@ -15,6 +15,8 @@
 import re
 from pathlib import Path
 
+from tokenizers import normalizers
+
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
@@ -165,7 +167,16 @@ class PocketTTSProcessor(ProcessorMixin):
             replacements = [self.audio_token * len(row) for row in latents]
             text, _ = self.get_text_with_replacements(text, audio_replacements=replacements)
 
-        inputs = super().__call__(text=text, audio=audio, **kwargs)
+        # The normalizer is the text preparation of inference, then the original's own normalizer (its last step). The
+        # original's training loader tokenizes the raw transcript: for training, only the latter applies.
+        backend = self.tokenizer.backend_tokenizer
+        normalizer = backend.normalizer
+        if any(is_target) and isinstance(normalizer, normalizers.Sequence):
+            backend.normalizer = normalizer[len(normalizer) - 1]
+        try:
+            inputs = super().__call__(text=text, audio=audio, **kwargs)
+        finally:
+            backend.normalizer = normalizer
 
         # split the conversations' audio, in order, into the voices and the training targets
         if audio is not None:
