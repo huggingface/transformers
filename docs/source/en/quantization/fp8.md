@@ -102,5 +102,6 @@ passed. New code uses the config of the checkpoint format, with the same field n
 
 | `FineGrainedFP8Config` | Use |
 |---|---|
-| any `weight_block_size` | [`Fp8Config`] |
+| `weight_block_size=[1, 32]` with `scale_fmt="ue8m0"` | [`Mxfp8Config`] |
+| any other `weight_block_size` | [`Fp8Config`] |
 | a model whose config declares `expert_dtype="fp4"`, such as DeepSeek-V4 | [`Fp8Config`]. It loads as a [`FineGrainedConfig`]. |

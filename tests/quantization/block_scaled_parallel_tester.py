@@ -30,7 +30,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config, Mxfp4Config
+from transformers.utils.quantization_config import FineGrainedConfig, Fp8Config, Mxfp4Config, Mxfp8Config
 
 from ..test_tensor_parallel_mixin import _init_distributed
 from .block_scaled_checkpoint_tester import _checkpoint_bytes
@@ -133,6 +133,42 @@ def _checkpoint_expert_shape(model_dir):
     return (len(experts), 2 * rows)  # the module stacks gate and up along the rows
 
 
+def _minimax_m3_vl_config():
+    """Return the model tester's config, widened so a 2-way split keeps whole 128-wide swizzled tiles."""
+    from ..models.minimax_m3_vl.test_modeling_minimax_m3_vl import MiniMaxM3VLVisionText2TextModelTester
+
+    tester = MiniMaxM3VLVisionText2TextModelTester(
+        None,
+        hidden_size=256,
+        intermediate_size=512,
+        dense_intermediate_size=256,
+        shared_intermediate_size=256,
+        projector_hidden_size=256,
+        head_dim=64,
+        rotary_dim=32,
+        num_hidden_layers=2,
+        num_key_value_heads=4,
+        vocab_size=64,
+        mlp_layer_types=["dense", "sparse"],
+    )
+    return tester.get_config()
+
+
+def _pin_minimax_m3_vl_routing(model):
+    """Route every token to experts 0 and 3, one per EP rank.
+
+    A near-tie in the router scores would otherwise flip under sharded rounding. The test then compares routing,
+    not sharding.
+    """
+    for name, module in model.named_modules():
+        if name.endswith(".mlp.gate"):
+            module.e_score_correction_bias.copy_(torch.tensor([2.0, 0.0, 0.0, 2.0]))
+
+
+# Weight changes a fixture needs before it is saved, by model label
+_FIXTURE_PREPARATION = {"minimax_m3_vl-mxfp8": _pin_minimax_m3_vl_routing}
+
+
 class LoadPathEquivalenceTesterMixin:
     """Check that expert parallelism and intra-expert tensor parallelism match the `device_map` baseline.
 
@@ -171,6 +207,7 @@ class LoadPathEquivalenceTesterMixin:
             Glm4vMoeVisionConfig,
             GptOssConfig,
             GptOssForCausalLM,
+            MiniMaxM3SparseForConditionalGeneration,
             Mistral4Config,
             Mistral4ForCausalLM,
         )
@@ -305,6 +342,8 @@ class LoadPathEquivalenceTesterMixin:
                     }
                 ),
             ),
+            # A second multimodal nesting. Its MoE dims are raised so a 2-way split stays 128-aligned.
+            "minimax_m3_vl-mxfp8": (_minimax_m3_vl_config, MiniMaxM3SparseForConditionalGeneration, {}, Mxfp8Config()),
         }
 
     @classmethod
@@ -339,7 +378,10 @@ class LoadPathEquivalenceTesterMixin:
         quant_dir = os.path.join(self._tmp, label, "quantized")
         torch.manual_seed(0)
         # Every model here ships in bf16, so save in bf16 and let `dtype="auto"` reload it
-        model_cls(config).to(torch.bfloat16).save_pretrained(bf16_dir, safe_serialization=True)
+        model = model_cls(config).to(torch.bfloat16)
+        if label in _FIXTURE_PREPARATION:
+            _FIXTURE_PREPARATION[label](model)
+        model.save_pretrained(bf16_dir, safe_serialization=True)
         quantized = model_cls.from_pretrained(
             bf16_dir,
             dtype="auto",

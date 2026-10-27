@@ -59,9 +59,9 @@ from transformers.image_utils import load_image
 
 
 model = AutoModelForImageTextToText.from_pretrained(
-    "MiniMaxAI/MiniMax-M3-preview", dtype=torch.bfloat16, device_map="auto",
+    "MiniMaxAI/MiniMax-M3", dtype=torch.bfloat16, device_map="auto",
 )
-processor = AutoProcessor.from_pretrained("MiniMaxAI/MiniMax-M3-preview")
+processor = AutoProcessor.from_pretrained("MiniMaxAI/MiniMax-M3")
 
 image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
 messages = [
@@ -92,9 +92,9 @@ from transformers.image_utils import load_image
 
 
 model = AutoModelForImageTextToText.from_pretrained(
-    "MiniMaxAI/MiniMax-M3-preview", dtype=torch.bfloat16, device_map="auto",
+    "MiniMaxAI/MiniMax-M3", dtype=torch.bfloat16, device_map="auto",
 )
-processor = AutoProcessor.from_pretrained("MiniMaxAI/MiniMax-M3-preview")
+processor = AutoProcessor.from_pretrained("MiniMaxAI/MiniMax-M3")
 
 image = load_image("https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg")
 messages = [
@@ -122,23 +122,18 @@ print(processor.batch_decode(generated_ids, skip_special_tokens=True)[0])
 |  8K |  17.8 tok/s |       29.6 |            +66% |      1906 ms |      976 ms |            1.95× |
 | 16K |  12.0 tok/s |       27.6 |           +130% |      6110 ms |     2344 ms |            2.61× |
 
-The checkpoint ships in native MXFP8. For **decode throughput**, the fastest validated configuration is
-**bf16 (dequantized at load) + the MSA block-sparse attention kernel + tensor & expert parallelism + a
-`reduce-overhead` cudagraph compile** — roughly **31 tok/s** decode on 8×B200 at a 2048-token prefill.
-
-Keeping the weights in **native FP8 is a memory-footprint option only — it is never faster on this setup**.
-The FP8 Triton experts/linear kernels lower as opaque inductor fallback kernels that cudagraph cannot
-capture on the hot expert path, so native-FP8 decode measured ~4.2 tok/s (≈7× slower than the bf16 path)
-even under `torch.compile(fullgraph=True)`. Use FP8 only when the bf16 weights do not fit.
+The fastest validated decode configuration combines bf16 weights, the MSA block-sparse attention kernel, tensor and
+expert parallelism, and a `reduce-overhead` cudagraph compile. It reaches roughly **31 tok/s** decode on 8×B200 at a
+2048-token prefill.
 
 | config (sdpa baseline, TP+EP, 2048-token prefill, 8×B200) | decode |
 |---|---|
-| bf16 dequantize-at-load + **MSA** + compile/cudagraph | **~31 tok/s** |
-| bf16 dequantize-at-load + sdpa + compile/cudagraph | ~28 tok/s |
-| native FP8 + compile/cudagraph | ~4 tok/s (memory-only, not for speed) |
+| bf16 + **MSA** + compile/cudagraph | **~31 tok/s** |
+| bf16 + sdpa + compile/cudagraph | ~28 tok/s |
 
-Dequantizing to bf16 only fits with even sharding across GPUs (TP/EP), not with `device_map="auto"`
-(pipeline placement OOMs at load). Launch one process per GPU with `torchrun`:
+[`MiniMaxAI/MiniMax-M3-MXFP8`](https://huggingface.co/MiniMaxAI/MiniMax-M3-MXFP8) ships the same model in
+[MXFP8](../quantization/mxfp8), which takes less memory. The bf16 weights only fit when tensor and expert parallelism
+shard them evenly across GPUs. They do not fit with `device_map="auto"`. Launch one process per GPU with `torchrun`.
 
 ```bash
 torchrun --nproc_per_node=8 fastest_m3_vl.py
@@ -153,7 +148,6 @@ from transformers import (
     AutoModelForImageTextToText,
     AutoTokenizer,
     CompileConfig,
-    FineGrainedFP8Config,
 )
 from transformers.distributed import DistributedConfig
 
@@ -161,19 +155,16 @@ from transformers.distributed import DistributedConfig
 torch.backends.cuda.enable_cudnn_sdp(False)
 
 model = AutoModelForImageTextToText.from_pretrained(
-    "MiniMaxAI/MiniMax-M3-preview",
+    "MiniMaxAI/MiniMax-M3",
     dtype=torch.bfloat16,
-    # Dequantize the native MXFP8 weights to bf16 at load (the speed win); needs even TP/EP sharding.
-    quantization_config=FineGrainedFP8Config(dequantize=True),
     distributed_config=DistributedConfig(
         tp_size=int(os.environ["WORLD_SIZE"]),
         ep_size=int(os.environ["WORLD_SIZE"]),
     ),
     attn_implementation="kernels-staging/msa@v0",  # MSA block-sparse attention kernel
 )
-model.eval()
 
-tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M3-preview")
+tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M3")
 messages = [{"role": "user", "content": "Summarize the history of computing."}]
 inputs = tokenizer.apply_chat_template(
     messages, add_generation_prompt=True, return_tensors="pt", return_dict=True
