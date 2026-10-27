@@ -18,7 +18,7 @@ import numpy as np
 
 from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, is_torch_available, logging
 from ...utils.import_utils import requires
@@ -183,10 +183,12 @@ class AudioFlamingo3Processor(ProcessorMixin):
         self,
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
+        transcription: str | list[str] | None = None,
         **kwargs: Unpack[AudioFlamingo3ProcessorKwargs],
     ) -> BatchFeature:
         """
-        Prepare inputs for automatic speech recognition without manually writing the default transcription prompt.
+        Prepare inputs for automatic speech recognition without manually writing the default transcription prompt,
+        either for inference or, when `transcription` is given, for training.
 
         Args:
             audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
@@ -195,12 +197,19 @@ class AudioFlamingo3Processor(ProcessorMixin):
             prompt (`str` or `list[str]`, *optional*):
                 Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
                 each sample uses `"Transcribe the input speech."`.
+            transcription (`str` or `list[str]`, *optional*):
+                Target transcript(s) for training, one per audio. When given, each transcript is written as the
+                assistant turn and `labels` are returned (see `output_labels` in
+                [`~AudioFlamingo3Processor.__call__`]).
             **kwargs:
-                Additional keyword arguments forwarded to [`~AudioFlamingo3Processor.apply_chat_template`] (for example
-                `text_kwargs`, `audio_kwargs`, ...).
+                Additional keyword arguments forwarded to [`~AudioFlamingo3Processor.apply_chat_template`].
+                Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
+                `processor_kwargs={...}`.
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to [`AudioFlamingo3ForConditionalGeneration.generate`].
+            [`BatchFeature`]: Processor outputs ready to be passed to
+            [`AudioFlamingo3ForConditionalGeneration.generate`], or to
+            [`AudioFlamingo3ForConditionalGeneration.forward`] to compute the loss when `transcription` is given.
 
         """
 
@@ -231,8 +240,16 @@ class AudioFlamingo3Processor(ProcessorMixin):
         else:
             raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
 
-        conversations = [
-            [
+        is_training = transcription is not None
+        if isinstance(transcription, str):
+            transcription = [transcription]
+        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription")
+        if is_training:
+            kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
+
+        conversations = []
+        for prompt_text, audio_item, transcript in zip(prompts, audio_items, transcriptions):
+            conversation = [
                 {
                     "role": "user",
                     "content": [
@@ -241,13 +258,14 @@ class AudioFlamingo3Processor(ProcessorMixin):
                     ],
                 }
             ]
-            for prompt_text, audio_item in zip(prompts, audio_items)
-        ]
+            if transcript is not None:
+                conversation.append({"role": "assistant", "content": [{"type": "text", "text": transcript}]})
+            conversations.append(conversation)
 
         return self.apply_chat_template(
             conversations,
             tokenize=True,
-            add_generation_prompt=True,
+            add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,
         )

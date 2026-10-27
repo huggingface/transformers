@@ -81,6 +81,35 @@ class GlmAsrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(reloaded.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(reloaded.feature_extractor, WhisperFeatureExtractor)
 
+    @require_torch
+    def test_apply_transcription_request_with_transcription(self):
+        processor = self.get_processor()
+        audio = self.prepare_audio_inputs(batch_size=2)
+        transcriptions = ["Hello world.", "A longer transcription so that padding is applied."]
+
+        helper_outputs = processor.apply_transcription_request(audio=audio, transcription=transcriptions)
+        conversations = [
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "audio", "audio": audio_el},
+                        {"type": "text", "text": processor.default_transcription_prompt},
+                    ],
+                },
+                {"role": "assistant", "content": [{"type": "text", "text": text}]},
+            ]
+            for audio_el, text in zip(audio, transcriptions)
+        ]
+        manual_outputs = processor.apply_chat_template(
+            conversations, tokenize=True, return_dict=True, processor_kwargs={"output_labels": True}
+        )
+
+        self.assertIn("labels", helper_outputs)
+        self.assertEqual(set(helper_outputs.keys()), set(manual_outputs.keys()))
+        for key in helper_outputs:
+            self.assertTrue(helper_outputs[key].equal(manual_outputs[key]))
+
     # Overwrite to remove skip numpy inputs (still need to keep as many cases as parent)
     @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])

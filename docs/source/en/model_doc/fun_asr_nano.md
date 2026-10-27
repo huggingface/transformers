@@ -102,40 +102,31 @@ print(processor.decode(generated_ids, skip_special_tokens=True)[0])
 
 ### Training
 
+The model can be trained with the loss it outputs. Pass the target transcripts to `apply_transcription_request` with
+`transcription`, which writes them as the assistant turn and returns `labels`. With `apply_chat_template`, the same is done by putting the transcript in an assistant turn
+and passing `processor_kwargs={"output_labels": True}`.
+
 ```python
+from datasets import Audio, load_dataset
 from transformers import AutoModelForSpeechSeq2Seq, AutoProcessor
 
 model_id = "FunAudioLLM/Fun-ASR-Nano-2512-hf"
+NUM_SAMPLES = 2
+
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForSpeechSeq2Seq.from_pretrained(model_id, device_map="auto")
 model.train()
 
-audio_url = "https://huggingface.co/FunAudioLLM/Fun-ASR-Nano-2512/resolve/main/example/en.mp3"
-conversation = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "audio", "path": audio_url},
-        ],
-    },
-    {
-        "role": "assistant",
-        "content": [
-            {
-                "type": "text",
-                "text": "The tribal chieftain called for the boy, and presented him with fifty pieces of gold.",
-            }
-        ],
-    },
-]
-inputs = processor.apply_chat_template(
-    conversation,
-    tokenize=True,
-    return_dict=True,
-    processor_kwargs={"output_labels": True},
-).to(model.device)
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+speech_samples = [el["array"] for el in ds["audio"][:NUM_SAMPLES]]
+text_samples = ds["text"][:NUM_SAMPLES]
+
+inputs = processor.apply_transcription_request(speech_samples, language="en", transcription=text_samples)
+inputs.to(model.device, dtype=model.dtype)
 
 loss = model(**inputs).loss
+print("Loss:", loss.item())
 loss.backward()
 ```
 

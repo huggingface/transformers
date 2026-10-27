@@ -23,7 +23,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
+from ...processing_utils import Unpack, prepare_prompt_input
 from ...utils import TransformersKwargs, auto_docstring, is_torch_available, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults, no_inherit_decorator
 from ...utils.import_utils import requires
@@ -93,10 +93,12 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
         self,
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
+        transcription: str | list[str] | None = None,
         **kwargs: Unpack[GlmAsrProcessorKwargs],
     ) -> BatchFeature:
         """
-        Prepare inputs for automatic speech recognition without manually writing the default transcription prompt.
+        Prepare inputs for automatic speech recognition without manually writing the default transcription prompt,
+        either for inference or, when `transcription` is given, for training.
 
         Args:
             audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
@@ -105,12 +107,17 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
             prompt (`str` or `list[str]`, *optional*):
                 Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
                 each sample uses `"Transcribe the input speech."`.
+            transcription (`str` or `list[str]`, *optional*):
+                Target transcript(s) for training, one per audio. When given, each transcript is written as the
+                assistant turn and `labels` are returned (see `output_labels` in [`~GlmAsrProcessor.__call__`]).
             **kwargs:
-                Additional keyword arguments forwarded to [`~GlmAsrProcessor.apply_chat_template`] (for example
-                `text_kwargs`, `audio_kwargs`, ...).
+                Additional keyword arguments forwarded to [`~GlmAsrProcessor.apply_chat_template`].
+                Processor kwargs (for example `text_kwargs`, `audio_kwargs`, ...) should be passed as
+                `processor_kwargs={...}`.
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to [`GlmAsrForConditionalGeneration.generate`].
+            [`BatchFeature`]: Processor outputs ready to be passed to [`GlmAsrForConditionalGeneration.generate`],
+            or to [`GlmAsrForConditionalGeneration.forward`] to compute the loss when `transcription` is given.
 
         """
 
@@ -141,8 +148,16 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
         else:
             raise TypeError("`prompt` must be a string, a sequence of strings, or `None`.")
 
-        conversations = [
-            [
+        is_training = transcription is not None
+        if isinstance(transcription, str):
+            transcription = [transcription]
+        transcriptions = prepare_prompt_input(transcription, batch_size, input_name="transcription")
+        if is_training:
+            kwargs["processor_kwargs"] = {"output_labels": True, **kwargs.get("processor_kwargs", {})}
+
+        conversations = []
+        for prompt_text, audio_item, transcript in zip(prompts, audio_items, transcriptions):
+            conversation = [
                 {
                     "role": "user",
                     "content": [
@@ -151,13 +166,14 @@ class GlmAsrProcessor(AudioFlamingo3Processor):
                     ],
                 }
             ]
-            for prompt_text, audio_item in zip(prompts, audio_items)
-        ]
+            if transcript is not None:
+                conversation.append({"role": "assistant", "content": [{"type": "text", "text": transcript}]})
+            conversations.append(conversation)
 
         return self.apply_chat_template(
             conversations,
             tokenize=True,
-            add_generation_prompt=True,
+            add_generation_prompt=not is_training,
             return_dict=True,
             **kwargs,
         )
