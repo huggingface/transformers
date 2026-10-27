@@ -39,10 +39,6 @@ class Gemma3nProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = False):
         return super().prepare_images_inputs(batch_size=batch_size, nested=True)
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.boi_token
-
     def test_audio_feature_extractor(self):
         processor = self.get_processor()
         feature_extractor = self.get_component("feature_extractor")

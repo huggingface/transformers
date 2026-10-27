@@ -48,10 +48,6 @@ class PI0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
         return tokenizer
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-
     @require_vision
     def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = True):
         return super().prepare_images_inputs(batch_size, nested=nested)

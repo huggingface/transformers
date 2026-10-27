@@ -51,10 +51,6 @@ class InklingProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     audio_input_name = "audio_input_ids"
 
     @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-
-    @classmethod
     def _setup_feature_extractor(cls):
         feature_extractor_class = cls._get_component_class_from_processor("feature_extractor")
         gemma4_feature_extractor_kwargs = {}

@@ -36,11 +36,6 @@ class Qwen3VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     videos_text_kwargs_max_length = 870
     videos_text_kwargs_override_max_length = 870
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-        cls.video_token = processor.video_token
-
     @property
     def video_sampling_expectations(self):
         return [

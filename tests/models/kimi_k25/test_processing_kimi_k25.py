@@ -59,11 +59,6 @@ class Kimi_K25ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }
         return image_processor_class(**image_processor_kwargs)
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-        cls.video_token = processor.video_token
-
     @property
     def video_sampling_expectations(self):
         return [
