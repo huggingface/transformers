@@ -553,7 +553,7 @@ class MoeExpertsParallel(TensorParallelLayer):
     def should_use_local_tensors(self, module):
         return True
 
-    def transform_inputs_pre_forward(self, module, args, kwargs, mesh, *, is_expert_parallel=False):
+    def transform_inputs_pre_forward(self, module, args, kwargs, mesh):
         hidden_states, *routing_args = args
         tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
         if isinstance(hidden_states, DTensor):
@@ -564,36 +564,12 @@ class MoeExpertsParallel(TensorParallelLayer):
             top_k_index, top_k_weights, *extra_args = routing_args
             if isinstance(top_k_weights, DTensor):
                 top_k_weights = top_k_weights.to_local()
-            if not is_expert_parallel:
-                top_k_weights = _all_reduce_backward(top_k_weights, tp_group)
+            top_k_weights = _all_reduce_backward(top_k_weights, tp_group)
             routing_args = [top_k_index, top_k_weights, *extra_args]
 
         return (hidden_states, *routing_args), kwargs
 
-    def install_forward(self, module, mesh, *, is_expert_parallel=False):
-        """Install the transforms but pass `is_expert_parallel` in the forward call."""
-        original_forward = module.forward
-        output_source = (
-            Partial()
-            if any(
-                isinstance(param, DTensor) and any(not placement.is_replicate() for placement in param.placements)
-                for param in module.parameters()
-            )
-            else Replicate()
-        )
-
-        def tp_forward(*args, **kwargs):
-            args, kwargs = self.transform_inputs_pre_forward(
-                module, args, kwargs, mesh, is_expert_parallel=is_expert_parallel
-            )
-            with self.context_around_forward(module, mesh):
-                output = original_forward(*args, **kwargs)
-            return self.transform_output_post_forward(module, output, mesh, source=output_source)
-
-        module.forward = tp_forward
-        return module
-
-    def transform_output_post_forward(self, module, output, mesh, source=None):
+    def transform_output_post_forward(self, module, output, mesh):
         if output is None:
             return None
 
@@ -712,7 +688,6 @@ def gather_state_dict_for_save(
 # Lazy import because expert_parallel.py imports from this file (circular import otherwise).
 _MOVED_TO_EXPERT_PARALLEL = (
     "MoEParamShard",
-    "EpRouterParallel",
     "EpDispatchExpertsParallel",
     "apply_expert_parallelism",
 )

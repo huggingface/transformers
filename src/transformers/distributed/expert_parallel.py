@@ -85,8 +85,8 @@ class ExpertParallelLayer:
 class MoEParamShard(ExpertParallelLayer):
     """Param-only EP style for MoE expert weights (``grouped_gemm``).
 
-    Shards dim 0 and updates module.num_experts to the per-rank local count so the
-    experts forward and ep_router sentinel agree.
+    Shards dim 0 and updates module.num_experts to the per-rank local count, so the experts forward skips the
+    expert ids the EP implementations mark as off-rank.
     """
 
     def __init__(self, placement, *, shards_expert_dim: bool = False):
@@ -112,77 +112,6 @@ class MoEParamShard(ExpertParallelLayer):
             distribute_tensor(meta, mesh, [self.placement], src_data_rank=None),
             requires_grad=meta.requires_grad,
         )
-
-
-class EpRouterParallel(ExpertParallelLayer):
-    """Expert-parallel router: forward-only slicing of router outputs to local experts.
-
-    Expects the router to return `(router_logits, router_scores, router_indices, *extra)`.
-    `router_logits` and any trailing `extra` outputs are passed through unchanged.
-
-    The gate runs replicated on every rank and emits global expert IDs and scores.
-    Under EP each rank owns `num_experts // ep_size` experts, so this post-forward hook:
-
-    - zeroes scores for non-local experts
-    - remaps surviving global indices to local indices (`fmod` after masking non-local slots)
-    - sets dropped slots to sentinel `num_local_experts` (skipped by grouped_gemm experts forward)
-
-    Downstream `moe_tp_experts` allreduce-sums partial per-rank expert outputs.
-
-    Example: 4 tokens, top_k=4, 128 experts, EP=8 → num_local_experts=16.
-
-    Router output (identical on all ranks):
-        router_indices:
-            [ 52,  42, 119,  67],
-            [102,  89,  61,  40],
-            [ 82, 103,   4,  34],
-            [ 93,  23, 109,  11]
-
-    Owning rank (`index // 16`):
-            [ 3,  2,  7,  4],
-            [ 6,  5,  3,  2],
-            [ 5,  6,  0,  2],
-            [ 5,  1,  6,  0],
-
-    After slicing on rank 0 (owns experts 0-15):
-        router_indices:          router_scores (illustrative):
-            [16, 16, 16, 16],       [0.0, 0.0, 0.0, 0.0],
-            [16, 16, 16, 16],       [0.0, 0.0, 0.0, 0.0],
-            [16, 16,  4, 16],       [0.0, 0.0, 0.3, 0.0],
-            [16, 16, 16, 11],       [0.0, 0.0, 0.0, 0.1],
-
-    On rank 1 (owns experts 16-31), global expert 23 remaps to local index 7 via `23 % 16`.
-
-    Scores and indices stay paired element-wise in `(seq, top_k)` shape.
-    """
-
-    def transform_output_post_forward(self, module, output, mesh):
-        ep_rank, ep_size = mesh.get_local_rank(), mesh.size()
-        num_experts = getattr(module, "num_experts", None)
-        if num_experts is None:
-            num_experts = getattr(getattr(module, "config", None), "num_experts", None)
-        if num_experts is None:
-            raise AttributeError(
-                f"Router module {type(module).__name__} is missing `num_experts` and `config.num_experts`"
-            )
-        if num_experts % ep_size != 0:
-            raise ValueError(f"num_experts must be divisible by ep_size: {num_experts} % {ep_size} != 0")
-        num_local_experts = num_experts // ep_size
-
-        router_logits, router_scores, router_indices, *extra_outputs = output
-        # Each rank's score gradient covers only its local experts' slots; sum the per-rank partials
-        # before the mask (each slot has exactly one owning rank, so the sum is exact).
-        process_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
-        router_scores = _all_reduce_backward(router_scores, process_group)
-        non_local_mask = (router_indices // num_local_experts) != ep_rank
-        router_scores = router_scores.masked_fill(non_local_mask, 0.0)
-        router_indices = router_indices.masked_fill(non_local_mask, -1)
-        if num_local_experts > 1:
-            router_indices = torch.fmod(router_indices, num_local_experts)
-        else:
-            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
-        router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
-        return router_logits, router_scores, router_indices, *extra_outputs
 
 
 class EPImplementation:
@@ -479,7 +408,6 @@ class EpDispatchExpertsParallel(ExpertParallelLayer):
 
 if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("grouped_gemm", MoEParamShard(Shard(0), shards_expert_dim=True))
-    ALL_PARALLEL_STYLES.register("ep_router", EpRouterParallel())
     ALL_PARALLEL_STYLES.register("ep_dispatch_experts", EpDispatchExpertsParallel())
 
 

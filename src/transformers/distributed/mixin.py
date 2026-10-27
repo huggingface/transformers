@@ -259,9 +259,10 @@ class DistributedMixin:
                 "`base_model_ep_plan` to the model's config, or disable expert parallelism."
             )
 
-        if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
+        if "ep_router" in ep_plan.values():
             raise ValueError(
-                "`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`."
+                "The `ep_router` style was removed: name the experts `ep_dispatch_experts` and drop the router rule. "
+                '`DistributedConfig(ep_implementation="all_reduce")` gives the same masking and all-reduce.'
             )
 
         if distributed_config.fsdp_size > 1 and not fsdp_plan:
