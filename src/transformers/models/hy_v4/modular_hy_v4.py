@@ -216,6 +216,10 @@ class HYV4Indexer(DeepseekV32Indexer):
         position_ids: torch.Tensor,  # Kept for BC
         past_key_values: Cache | None = None,
     ) -> torch.Tensor:
+        """
+        Same as [`DeepseekV32Indexer.forward`], but RoPE rotates the trailing slice of each head, the key norm runs
+        in fp32, and only the `int32` top-k indices `[B, S, topk]` are returned.
+        """
         batch_size, seq_len, _ = hidden_states.shape
         cos, sin = position_embeddings
         q = self.wq_b(q_resid)  # [B, S, H*D]
