@@ -91,6 +91,20 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Mega MoE expert parallelism requires `ep_size=tp_size`"):
             DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(config.base_model_ep_plan)
 
+    def test_expert_parallelism_is_masked(self):
+        """Check that token-dispatch expert parallelism becomes masked."""
+        model = torch.nn.Module()
+        model.config = DeepseekV4Config()
+        model.layers = torch.nn.ModuleList([torch.nn.Module()])
+        model.layers[0].mlp = torch.nn.Module()
+        model.layers[0].mlp.gate = torch.nn.Module()
+        model.layers[0].mlp.experts = torch.nn.Module()
+        plan = {"layers.*.mlp.experts": "ep_dispatch_experts", "layers.*.mlp.experts.gate_up_proj": "grouped_gemm"}
+        FineGrainedFP8HfQuantizer(FineGrainedFP8Config()).update_parallel_plan(model, plan)
+        self.assertEqual(plan["layers.*.mlp.experts"], "moe_tp_experts")
+        self.assertEqual(plan["layers.*.mlp.gate"], "ep_router")
+        self.assertEqual(plan["layers.*.mlp.experts.gate_up_proj"], "grouped_gemm")
+
 
 @slow
 @require_accelerate
