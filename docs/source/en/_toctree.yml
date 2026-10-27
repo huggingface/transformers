@@ -291,6 +291,8 @@
       title: torchao
     title: Quantize on the fly
   - sections:
+    - local: quantization/finegrained
+      title: Fine-grained
     - local: quantization/fbgemm_fp8
       title: FBGEMM
     - local: quantization/finegrained_fp8
