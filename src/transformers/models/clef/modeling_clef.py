@@ -26,7 +26,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...decision import Question
+from ...decision import DecisionMixin, Question
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -389,7 +389,7 @@ class ClefPreTrainedModel(PreTrainedModel):
     is scored against the field of its question.
     """
 )
-class ClefForDecision(ClefPreTrainedModel):
+class ClefForDecision(DecisionMixin, ClefPreTrainedModel):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: ClefConfig):
