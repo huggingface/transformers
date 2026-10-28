@@ -57,7 +57,9 @@ class VonForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             model.model.set_attn_implementation(implementation)
             with torch.no_grad():
                 inputs = prompt.model_inputs()
-                backbone_inputs = model.backbone_inputs(inputs["input_ids"], inputs["marks"], inputs["num_options"])
+                backbone_inputs = model.backbone_inputs(
+                    inputs["input_ids"][0], inputs["marks"][0], inputs["num_options"][0]
+                )
                 states.append(model.model(**backbone_inputs).last_hidden_state[0])
             first, second = states[-1].split(10)
             torch.testing.assert_close(first[[0, 1, 2, 3, 6, 7, 8, 9]], second[[0, 1, 2, 3, 4, 5, 6, 9]])
