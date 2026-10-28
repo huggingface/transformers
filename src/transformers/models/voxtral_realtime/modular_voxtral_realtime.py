@@ -43,7 +43,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_voxtral_realtime import VoxtralRealtimeEncoderConfig
+from .configuration_voxtral_realtime import VoxtralRealtimeConfig, VoxtralRealtimeEncoderConfig
 
 
 logger = logging.get_logger(__name__)
@@ -307,7 +307,7 @@ class VoxtralRealtimeEncoder(VoxtralRealtimePreTrainedModel):
         "hidden_states": VoxtralRealtimeEncoderLayer,
     }
 
-    def __init__(self, config):
+    def __init__(self, config: VoxtralRealtimeEncoderConfig):
         super().__init__(config)
         self.embedder = VoxtralRealtimeEmbedder(config)
         self.layers = nn.ModuleList(
@@ -487,7 +487,7 @@ class VoxtralRealtimeMultiModalProjector(VoxtralMultiModalProjector):
     """
 )
 class VoxtralRealtimeModel(VoxtralRealtimePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: VoxtralRealtimeConfig):
         super().__init__(config)
         self.audio_tower = VoxtralRealtimeEncoder(config.audio_config)
         self.language_model = VoxtralRealtimeTextModel(config.text_config)
@@ -638,7 +638,7 @@ class VoxtralRealtimeForConditionalGeneration(VoxtralRealtimePreTrainedModel, Ge
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
-    def __init__(self, config):
+    def __init__(self, config: VoxtralRealtimeConfig):
         super().__init__(config)
         self.model = VoxtralRealtimeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

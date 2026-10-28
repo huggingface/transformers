@@ -1092,7 +1092,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
     """
 )
 class UniSpeechForCTC(UniSpeechPreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: UniSpeechConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -1219,7 +1219,7 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
     """
 )
 class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UniSpeechConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:

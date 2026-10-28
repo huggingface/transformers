@@ -911,7 +911,7 @@ class ClvpDecoder(ClvpPreTrainedModel):
 
     config: ClvpDecoderConfig
 
-    def __init__(self, config):
+    def __init__(self, config: ClvpDecoderConfig):
         super().__init__(config)
 
         self.config = config
@@ -1071,7 +1071,7 @@ class ClvpModel(ClvpPreTrainedModel):
 class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
     config: ClvpDecoderConfig
 
-    def __init__(self, config):
+    def __init__(self, config: ClvpDecoderConfig):
         super().__init__(config)
 
         self.config = config

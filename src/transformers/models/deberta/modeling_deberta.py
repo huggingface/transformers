@@ -625,7 +625,7 @@ class DebertaPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DebertaModel(DebertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaConfig):
         super().__init__(config)
 
         self.embeddings = DebertaEmbeddings(config)
@@ -817,7 +817,7 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         "cls.predictions.decoder.weight": "deberta.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: DebertaConfig):
         super().__init__(config)
         self.legacy = config.legacy
         self.deberta = DebertaModel(config)
@@ -923,7 +923,7 @@ class ContextPooler(nn.Module):
     """
 )
 class DebertaForSequenceClassification(DebertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaConfig):
         super().__init__(config)
 
         num_labels = getattr(config, "num_labels", 2)
@@ -1025,7 +1025,7 @@ class DebertaForSequenceClassification(DebertaPreTrainedModel):
 
 @auto_docstring
 class DebertaForTokenClassification(DebertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1084,7 +1084,7 @@ class DebertaForTokenClassification(DebertaPreTrainedModel):
 
 @auto_docstring
 class DebertaForQuestionAnswering(DebertaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

@@ -722,7 +722,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
     # Copied from transformers.models.idefics2.modeling_idefics2.Idefics2ForConditionalGeneration.__init__ with Idefics2->Idefics3
-    def __init__(self, config):
+    def __init__(self, config: Idefics3Config):
         super().__init__(config)
         self.model = Idefics3Model(config)
         self.image_token_id = self.config.image_token_id

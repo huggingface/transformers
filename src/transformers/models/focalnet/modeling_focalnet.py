@@ -590,7 +590,7 @@ class FocalNetPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class FocalNetModel(FocalNetPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+    def __init__(self, config: FocalNetConfig, add_pooling_layer=True, use_mask_token=False):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -673,7 +673,7 @@ class FocalNetModel(FocalNetPreTrainedModel):
     """
 )
 class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FocalNetConfig):
         super().__init__(config)
 
         self.focalnet = FocalNetModel(config, add_pooling_layer=False, use_mask_token=True)

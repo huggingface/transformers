@@ -1440,7 +1440,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3VLMoeConfig):
         super().__init__(config)
         self.model = Qwen3VLMoeModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

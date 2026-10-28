@@ -509,7 +509,7 @@ class ViltPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class ViltModel(ViltPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: ViltConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -673,7 +673,7 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         "mlm_score.decoder.weight": "vilt.embeddings.text_embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: ViltConfig):
         super().__init__(config)
 
         self.vilt = ViltModel(config)
@@ -838,7 +838,7 @@ class ViltMLMHead(nn.Module):
     """
 )
 class ViltForQuestionAnswering(ViltPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ViltConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -951,7 +951,7 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
     """
 )
 class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ViltConfig):
         super().__init__(config)
 
         self.vilt = ViltModel(config)
@@ -1050,7 +1050,7 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
     """
 )
 class ViltForImagesAndTextClassification(ViltPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ViltConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels
@@ -1192,7 +1192,7 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
 
 @auto_docstring
 class ViltForTokenClassification(ViltPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ViltConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels

@@ -761,7 +761,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel):
     """
 )
 class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecAudioConfig):
         r"""
         config ([`Data2VecAudioForCTC`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
@@ -854,7 +854,7 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel):
     """
 )
 class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecAudioConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -947,7 +947,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel):
 
 @auto_docstring
 class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecAudioConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1093,7 +1093,7 @@ class TDNNLayer(nn.Module):
     """
 )
 class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecAudioConfig):
         super().__init__(config)
 
         self.data2vec_audio = Data2VecAudioModel(config)

@@ -743,7 +743,7 @@ class FalconMambaModel(FalconMambaPreTrainedModel):
 class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "backbone.embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: FalconMambaConfig):
         super().__init__(config)
         self.backbone = FalconMambaModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)

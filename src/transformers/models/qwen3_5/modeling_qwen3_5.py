@@ -1757,7 +1757,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
     accepts_loss_kwargs = False
     input_modalities = ("image", "video", "text")
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3_5Config):
         super().__init__(config)
         self.model = Qwen3_5Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

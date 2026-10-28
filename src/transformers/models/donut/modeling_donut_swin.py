@@ -783,7 +783,7 @@ class DonutSwinPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class DonutSwinModel(DonutSwinPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True, use_mask_token=False):
+    def __init__(self, config: DonutSwinConfig, add_pooling_layer=True, use_mask_token=False):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -879,7 +879,7 @@ class DonutSwinModel(DonutSwinPreTrainedModel):
 )
 # Todo - Refactor as part of vision refactor. Copied from transformers.models.swin.modeling_swin.SwinForImageClassification with Swin->DonutSwin,swin->donut
 class DonutSwinForImageClassification(DonutSwinPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DonutSwinConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels

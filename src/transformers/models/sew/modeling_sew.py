@@ -769,7 +769,7 @@ class SEWModel(SEWPreTrainedModel):
     """
 )
 class SEWForCTC(SEWPreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: SEWConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -896,7 +896,7 @@ class SEWForCTC(SEWPreTrainedModel):
     """
 )
 class SEWForSequenceClassification(SEWPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SEWConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:

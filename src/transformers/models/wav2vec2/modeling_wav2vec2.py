@@ -1516,7 +1516,7 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
     """
 )
 class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: Wav2Vec2Config, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -1643,7 +1643,7 @@ class Wav2Vec2ForCTC(Wav2Vec2PreTrainedModel):
     """
 )
 class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1736,7 +1736,7 @@ class Wav2Vec2ForSequenceClassification(Wav2Vec2PreTrainedModel):
 
 @auto_docstring
 class Wav2Vec2ForAudioFrameClassification(Wav2Vec2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1882,7 +1882,7 @@ class TDNNLayer(nn.Module):
     """
 )
 class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2Config):
         super().__init__(config)
 
         self.wav2vec2 = Wav2Vec2Model(config)

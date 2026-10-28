@@ -587,7 +587,7 @@ class MobileBertModel(MobileBertPreTrainedModel):
     https://huggingface.co/papers/2004.02984
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: MobileBertConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -664,7 +664,7 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
         "cls.predictions.decoder.weight": "mobilebert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
         self.mobilebert = MobileBertModel(config)
         self.cls = MobileBertPreTrainingHeads(config)
@@ -763,7 +763,7 @@ class MobileBertForMaskedLM(MobileBertPreTrainedModel):
         "cls.predictions.decoder.weight": "mobilebert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
         self.mobilebert = MobileBertModel(config, add_pooling_layer=False)
         self.cls = MobileBertOnlyMLMHead(config)
@@ -840,7 +840,7 @@ class MobileBertOnlyNSPHead(nn.Module):
     """
 )
 class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
 
         self.mobilebert = MobileBertModel(config)

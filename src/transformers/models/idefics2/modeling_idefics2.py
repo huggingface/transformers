@@ -685,7 +685,7 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
     _supports_flash_attn = True
     _supports_flex_attn = True
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: Idefics2PerceiverConfig) -> None:
         super().__init__(config)
         self.hidden_size = config.hidden_size
         self.hidden_act = config.hidden_act
@@ -982,7 +982,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
-    def __init__(self, config):
+    def __init__(self, config: Idefics2Config):
         super().__init__(config)
         self.model = Idefics2Model(config)
         self.image_token_id = self.config.image_token_id

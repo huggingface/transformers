@@ -209,7 +209,7 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel, Wav2Vec2Model):
 
 
 class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel, Wav2Vec2ForCTC):
-    def __init__(self, config):
+    def __init__(self, config: Data2VecAudioConfig):
         r"""
         config ([`Data2VecAudioForCTC`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not

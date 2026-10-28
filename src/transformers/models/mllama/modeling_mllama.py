@@ -1162,7 +1162,7 @@ class MllamaForCausalLM(MllamaPreTrainedModel, GenerationMixin):
     _can_compile_fullgraph = True  # only the LLM without cross attn can do compile
     base_model_prefix = "language_model"
 
-    def __init__(self, config):
+    def __init__(self, config: MllamaTextConfig):
         super().__init__(config.get_text_config())
         self.text_config = config.get_text_config()
         self.vocab_size = self.text_config.vocab_size

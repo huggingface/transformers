@@ -1043,7 +1043,7 @@ class WavLMModel(WavLMPreTrainedModel):
     """
 )
 class WavLMForCTC(WavLMPreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: WavLMConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -1170,7 +1170,7 @@ class WavLMForCTC(WavLMPreTrainedModel):
     """
 )
 class WavLMForSequenceClassification(WavLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: WavLMConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1263,7 +1263,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
 
 @auto_docstring
 class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: WavLMConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1409,7 +1409,7 @@ class TDNNLayer(nn.Module):
     """
 )
 class WavLMForXVector(WavLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: WavLMConfig):
         super().__init__(config)
 
         self.wavlm = WavLMModel(config)
