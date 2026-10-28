@@ -17,13 +17,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import json
-from pathlib import Path
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...utils import auto_docstring, cached_file
+from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
@@ -44,11 +41,6 @@ CLEF_TEMPLATE = r"""{#- Cloudflare/clef, clef-flash (joint_schema_model.encode_r
 {{- "END FIELD\n" -}}
 {%- endfor -%}
 {{- "<|split|>\n<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\nJOINT SCHEMA DECISIONS:" -}}"""
-
-
-def _read_json(pretrained_model_name_or_path, filename: str, **kwargs) -> dict | None:
-    path = cached_file(pretrained_model_name_or_path, filename, _raise_exceptions_for_missing_entries=False, **kwargs)
-    return None if path is None else json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 @auto_docstring(checkpoint="Cloudflare/clef")
@@ -90,12 +82,12 @@ class ClefConfig(PreTrainedConfig):
     extra_files = ("joint_head.safetensors",)
     extra_config_files = ("joint_head_config.json",)
 
-    @classmethod
-    def decision_config(cls, pretrained_model_name_or_path, **kwargs):
-        """The decision config of a clef checkpoint, or `None` for any other checkpoint."""
+    @staticmethod
+    def decision_config(head_configs: dict, text_config: dict):
+        """The decision config of a clef checkpoint, from its config files, or `None` for any other checkpoint."""
         from ...decision import DecisionConfig
 
-        if _read_json(pretrained_model_name_or_path, "joint_head_config.json", **kwargs) is None:
+        if "joint_head_config" not in head_configs:
             return None
         return DecisionConfig(noul_options=["true", "false"], sort_choices=True, chat_template=CLEF_TEMPLATE)
 
