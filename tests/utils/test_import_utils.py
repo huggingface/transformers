@@ -22,6 +22,7 @@ from transformers.utils.import_utils import (
     clear_import_cache,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
+    is_flash_linear_attention_available,
 )
 
 
@@ -196,6 +197,35 @@ def test_flash_attn_3_available_with_package():
         assert is_flash_attn_3_available()
         assert is_flash_attn_3_available(kernels_fallback_ok=True)
         get_kernel.assert_not_called()
+
+
+@parameterized.expand(
+    [
+        # musa, cuda, xpu, mlu, present, version, expected
+        (True, False, False, False, True, "0.5.0", True),
+        (True, False, False, False, True, "0.2.2", True),
+        (True, False, False, False, True, "0.2.1", False),
+        (True, False, False, False, False, "0.5.0", False),
+        (False, True, False, False, True, "0.5.0", True),
+        (False, False, False, False, True, "0.5.0", False),
+    ]
+)
+def test_flash_linear_attention_available(musa, cuda, xpu, mlu, present, version, expected):
+    is_flash_linear_attention_available.cache_clear()
+    try:
+        with (
+            patch(
+                "transformers.utils.import_utils._is_package_available",
+                return_value=(present, version),
+            ),
+            patch("transformers.utils.import_utils.is_torch_musa_available", return_value=musa),
+            patch("transformers.utils.import_utils.is_torch_cuda_available", return_value=cuda),
+            patch("transformers.utils.import_utils.is_torch_xpu_available", return_value=xpu),
+            patch("transformers.utils.import_utils.is_torch_mlu_available", return_value=mlu),
+        ):
+            assert is_flash_linear_attention_available() is expected
+    finally:
+        is_flash_linear_attention_available.cache_clear()
 
 
 @parameterized.expand(
