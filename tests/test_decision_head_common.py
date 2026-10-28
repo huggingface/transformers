@@ -35,7 +35,8 @@ class DecisionHeadTesterMixin:
     """
     Common tests of a decision head on `decision_repo`, the decision files of the most downloaded model with that head:
     the request of its `decision_test.json` with the input ids and marks that the code of the original model builds for
-    it, and its head config at the `tiny_sizes` of the subclass, which also sets `all_model_classes`. The head reads a
+    it, and its head config at the `tiny_sizes` of the subclass, which also sets `all_model_classes` (the head) and
+    `for_decision_class`. The head reads a
     tiny `backbone_class` model.
     """
 
@@ -92,6 +93,12 @@ class DecisionHeadTesterMixin:
             head.config.to_json_file(f"{tmp}/{DECISION_HEAD_CONFIG_NAME}")
             decide = pipeline("decision", model=tmp, dtype="float32")
             answers = decide(self.test["request"])
+            # The same files as one model, the backbone and its head
+            model = self.for_decision_class.from_pretrained(tmp, dtype="float32")
+        self.assertIsInstance(model.head, self.all_model_classes[0])
+        inputs = self.prompts[0].model_inputs()
+        with torch.no_grad():
+            torch.testing.assert_close(model(**inputs), model.head(**inputs, backbone=model.model))
         self.assertIsInstance(decide.head, self.all_model_classes[0])
         self.assertEqual(decide.head.dtype, torch.bfloat16)
         self.assertEqual(list(answers), list(self.test["request"]["questions"]))
