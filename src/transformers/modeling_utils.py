@@ -4260,7 +4260,7 @@ class PreTrainedModel(
                 tqdm_class=tqdm_class,
             )
             # A model reading the checkpoint of another one finds its own weights next to them (`readout.safetensors`)
-            for filename in getattr(config, "head_files", ()):
+            for filename in getattr(config, "extra_files", ()):
                 path = cached_file(
                     pretrained_model_name_or_path,
                     filename,
