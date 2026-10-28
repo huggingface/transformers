@@ -67,9 +67,7 @@ from .utils import (
 from .utils.chat_template_utils import (
     _CONTROL_TOKEN_END,
     _CONTROL_TOKEN_START,
-    _get_control_token_patterns,
     _get_template_variables,
-    mark_control_tokens,
     render_jinja_template,
 )
 from .utils.type_validators import (
@@ -2029,7 +2027,7 @@ class ProcessorMixin(PushToHubMixin):
         return_dict: bool = False,
         load_audio_from_video: bool = False,
         processor_kwargs: dict | None = None,
-        sanitize_control_tokens: bool | list[str] = False,
+        sanitize_control_tokens: bool = False,
         **kwargs,
     ) -> str:
         """
@@ -2056,10 +2054,10 @@ class ProcessorMixin(PushToHubMixin):
             chat_template (`Optional[str]`, *optional*):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
-            sanitize_control_tokens (`bool` or `list[str]`, defaults to `False`):
-                Whether to encode the control tokens found in the conversation, tools and documents (and in the
-                template variables passed as `**kwargs` whose names are listed, when a list is given) as plain text, so
-                that user input can't write them, nor mm placeholders. See the tokenizer's `apply_chat_template`.
+            sanitize_control_tokens (`bool`, defaults to `False`):
+                Whether to encode the control tokens found in the conversation, tools, documents and the template
+                variables passed as `**kwargs` as plain text, so that user input can't write them, nor mm placeholders.
+                See the tokenizer's `apply_chat_template`.
                 Requires `tokenize=True`.
         """
         processor_kwargs = processor_kwargs or {}
@@ -2095,7 +2093,7 @@ class ProcessorMixin(PushToHubMixin):
             logger.warning(
                 "Kwargs passed to `processor.__call__` have to be in `processor_kwargs` dict, not in `**kwargs`"
             )
-            processor_kwargs = {**processor_kwargs_from_kwargs, **processor_kwargs}
+            processor_kwargs = processor_kwargs_from_kwargs
 
         # Check if tokenizer is fast - use backend attribute if available, otherwise fall back to class name
         is_tokenizers_fast = False
@@ -2231,16 +2229,9 @@ class ProcessorMixin(PushToHubMixin):
                     "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
                     "`return_assistant_tokens_mask=True`."
                 )
-            # Wrap control tokens that appear in the user's strings with private markers, like the tokenizer does
-            control_tokens_re = _get_control_token_patterns(self.tokenizer._get_control_tokens(chat_template))[0]
-            conversations = [mark_control_tokens(conversation, control_tokens_re) for conversation in conversations]
-            tools = mark_control_tokens(tools, control_tokens_re)
-            documents = mark_control_tokens(documents, control_tokens_re)
-            if isinstance(sanitize_control_tokens, list):  # the names of template variables with user input
-                kwargs = {
-                    k: mark_control_tokens(v, control_tokens_re) if k in sanitize_control_tokens else v
-                    for k, v in kwargs.items()
-                }
+            conversations, tools, documents, kwargs = self.tokenizer._mark_chat_inputs(
+                chat_template, conversations, tools, documents, kwargs
+            )
             processor_kwargs["sanitize_control_tokens"] = True
 
         template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}

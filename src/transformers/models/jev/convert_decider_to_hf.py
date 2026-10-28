@@ -27,7 +27,7 @@ from huggingface_hub import hf_hub_download
 from safetensors.torch import load_file, save_file
 
 from transformers import AutoConfig, AutoProcessor, JevConfig
-from transformers.decision import DecisionConfig
+from transformers.decision import DecisionConfig, Question
 
 
 # One prompt per question, the image of the state before its text, read at the last token
@@ -84,20 +84,15 @@ PROMPTS = {
 def convert(repo_id: str, output_dir: str):
     with open(hf_hub_download(repo_id, "decision_config.json"), encoding="utf-8") as file:
         readout_config = json.load(file)
-    # Older exports (pplx-decider-v1 and its fine-tunes) read the last token causally and don't say so
-    if (pooling := readout_config.get("pooling", "last")) != "last":
-        raise ValueError(f"The JEV head reads the last token, {repo_id} pools with {pooling!r}.")
     prompt = PROMPTS[readout_config.get("prompt", "pplx")]
 
     text_config = AutoConfig.from_pretrained(repo_id).get_text_config()
     codes = readout_config["codes"]
-    question_types = ["noul", "choice", "score"]
-    config = JevConfig(
+    JevConfig(
         hidden_size=text_config.hidden_size,
         num_verbalizers=len(codes),
-        offsets=dict.fromkeys(question_types, 0),
-    )
-    config.save_pretrained(f"{output_dir}/decision_head")
+        offsets=dict.fromkeys(Question.questions_types, 0),
+    ).save_pretrained(f"{output_dir}/decision_head")
 
     weight = load_file(hf_hub_download(repo_id, "readout.safetensors"))["weight"]
     head = {"proj.weight": weight, "proj.bias": torch.zeros(len(codes), dtype=weight.dtype)}
@@ -112,8 +107,8 @@ def convert(repo_id: str, output_dir: str):
     for name in ("system", "closing", "empty_state"):
         template = f"{{%- set {name} = {json.dumps(prompt[name]) if prompt[name] else 'none'} -%}}\n" + template
     DecisionConfig(
-        labels=dict.fromkeys(question_types, codes),
-        temperature=dict.fromkeys(question_types, readout_config["temperature"]),
+        labels=dict.fromkeys(Question.questions_types, codes),
+        temperature=dict.fromkeys(Question.questions_types, readout_config["temperature"]),
         chat_template=template,
         noul_options=["false", "true"],
         # The backbone attends to the whole prompt

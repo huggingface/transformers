@@ -47,7 +47,7 @@ from .tokenization_utils_base import (
     generate_merges,
 )
 from .utils import PaddingStrategy, add_end_docstrings, hf_api, logging
-from .utils.chat_template_utils import _get_control_token_patterns, encode_marked_chat
+from .utils.chat_template_utils import encode_marked_chat
 
 
 logger = logging.get_logger(__name__)
@@ -1074,8 +1074,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             post_processor = self._tokenizer.post_processor
             if add_special_tokens and post_processor is not None and post_processor.num_special_tokens_to_add(False):
                 raise NotImplementedError("`sanitize_control_tokens=True` needs a template that writes special tokens")
-            markers_re = _get_control_token_patterns(tuple(self.added_tokens_encoder))[1]
-            input_ids = [encode_marked_chat(self, chat, markers_re) for chat in batch_text_or_text_pairs]
+            input_ids = [encode_marked_chat(self, chat) for chat in batch_text_or_text_pairs]
             if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length is not None:
                 side = self.truncation_side
                 input_ids = [ids[:max_length] if side == "right" else ids[-max_length:] for ids in input_ids]
