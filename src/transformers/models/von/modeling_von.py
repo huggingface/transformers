@@ -16,6 +16,7 @@ from typing import Any
 import torch
 from torch import nn
 
+from ...decision.modeling_utils import ForDecision
 from ...masking_utils import (
     and_masks,
     create_bidirectional_mask,
@@ -42,7 +43,7 @@ class VonPreTrainedModel(PreTrainedModel):
     counts its tokens.
     """
 )
-class VonForDecision(VonPreTrainedModel):
+class VonDecisionHead(VonPreTrainedModel):
     def __init__(self, config: VonConfig):
         super().__init__(config)
         self.input_norm = nn.LayerNorm(config.hidden_size)
@@ -128,4 +129,8 @@ class VonForDecision(VonPreTrainedModel):
         return scores
 
 
-__all__ = ["VonForDecision", "VonPreTrainedModel"]
+class VonForDecision(ForDecision):
+    """Von: the model of a repo and its [`VonDecisionHead`]."""
+
+
+__all__ = ["VonDecisionHead", "VonForDecision", "VonPreTrainedModel"]

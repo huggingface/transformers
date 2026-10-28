@@ -38,7 +38,13 @@ decide(
 
 [[autodoc]] VonConfig
 
+## VonDecisionHead
+
+[[autodoc]] VonDecisionHead
+    - forward
+
 ## VonForDecision
 
 [[autodoc]] VonForDecision
+    - from_pretrained
     - forward
