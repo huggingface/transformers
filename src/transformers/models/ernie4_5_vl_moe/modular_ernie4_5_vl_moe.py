@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...masking_utils import create_causal_mask
@@ -199,8 +199,8 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     model_type = "ernie4_5_vl_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Ernie4_5_VLMoeVisionConfig),
-        "text_config": SubConfigSpec(config_class=Ernie4_5_VLMoeTextConfig),
+        "vision_config": Ernie4_5_VLMoeVisionConfig,
+        "text_config": Ernie4_5_VLMoeTextConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

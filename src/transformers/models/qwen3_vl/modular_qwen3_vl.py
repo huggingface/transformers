@@ -23,7 +23,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -191,8 +191,8 @@ class Qwen3VLConfig(PreTrainedConfig):
 
     model_type = "qwen3_vl"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Qwen3VLVisionConfig),
-        "text_config": SubConfigSpec(config_class=Qwen3VLTextConfig),
+        "vision_config": Qwen3VLVisionConfig,
+        "text_config": Qwen3VLTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 

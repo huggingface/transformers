@@ -324,7 +324,7 @@ class CwmModelOutputWithPast(BaseModelOutputWithPast):
 
 @auto_docstring
 class CwmModel(CwmPreTrainedModel):
-    config_class = CwmConfig
+    config: CwmConfig
 
     def __init__(self, config: CwmConfig):
         super().__init__(config)

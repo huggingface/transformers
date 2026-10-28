@@ -23,7 +23,7 @@ from torch.nn import LayerNorm
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
@@ -197,8 +197,8 @@ class Glm4vConfig(PreTrainedConfig):
 
     model_type = "glm4v"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Glm4vVisionConfig),
-        "text_config": SubConfigSpec(config_class=Glm4vTextConfig),
+        "vision_config": Glm4vVisionConfig,
+        "text_config": Glm4vTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -720,15 +720,14 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
             # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
             text_position_ids = None
 
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": inputs_embeds,
-            "attention_mask": attention_mask,
-            "past_key_values": past_key_values,
-            "position_ids": text_position_ids,
-        }
-        # Create the masks
-        causal_mask = create_causal_mask(**mask_kwargs)
+        # Create the mask
+        causal_mask = create_causal_mask(
+            config=self.config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            position_ids=text_position_ids,
+        )
 
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)

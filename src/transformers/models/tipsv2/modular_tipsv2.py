@@ -23,7 +23,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...backbone_utils import filter_output_hidden_states
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_bidirectional_mask
@@ -274,8 +274,8 @@ class Tipsv2Config(PreTrainedConfig):
 
     model_type = "tipsv2"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Tipsv2TextConfig),
-        "vision_config": SubConfigSpec(config_class=Tipsv2VisionConfig),
+        "text_config": Tipsv2TextConfig,
+        "vision_config": Tipsv2VisionConfig,
     }
 
     text_config: dict | Tipsv2TextConfig | None = None
