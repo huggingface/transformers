@@ -83,6 +83,12 @@ class FastSpeech2ConformerTokenizerTest(TokenizerTesterMixin, unittest.TestCase)
     def test_tokenize_special_tokens(self):
         pass
 
+    @unittest.skip(
+        "FastSpeech2Conformer tokenizer does not support adding tokens as they can't be added to the g2p_en backend"
+    )
+    def test_special_tokens_mask_flags_special_tokens_in_text(self):
+        pass
+
     def test_full_tokenizer(self):
         tokenizer = self.get_tokenizer()
 
