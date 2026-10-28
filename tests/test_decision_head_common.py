@@ -54,7 +54,7 @@ class DecisionHeadTesterMixin:
             num_attention_heads=2,
             num_key_value_heads=1,
         )
-        # Against sdpa: the questions of clef attend to each other, a causal mask would change the scores
+        # Against sdpa: heads whose questions attend to each other would get different scores from a causal mask
         backbone_config._attn_implementation = "eager"
         torch.manual_seed(0)
         cls.backbone = cls.backbone_class(backbone_config).eval()

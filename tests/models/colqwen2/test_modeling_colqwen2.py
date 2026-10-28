@@ -55,6 +55,7 @@ class ColQwen2ForRetrievalModelTester:
         is_training=False,
         use_cache=False,
         vlm_config={
+            "_name_or_path": "Qwen/Qwen2-VL-2B-Instruct",
             "bos_token_id": 0,
             "eos_token_id": 1,
             "vision_start_token_id": 3,
