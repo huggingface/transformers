@@ -126,8 +126,9 @@ class DecisionPipelineTest(unittest.TestCase):
         questions = {"a": {"type": "Choice", "criteria": {"x": None}}, "b": {"type": "noul", "instruction": "typo"}}
         with self.assertRaises(ValueError) as error:
             DecisionTemplate(self.tokenizer)({"state": "s", "questions": questions})
-        self.assertIn("Did you mean 'choice'?", str(error.exception))
-        self.assertIn("Did you mean 'instructions'?", str(error.exception))
+        self.assertIn("Question 'a': `type` must be one of noul, choice, score, got 'Choice'.", str(error.exception))
+        self.assertIn("(a noul question looks like", str(error.exception))
+        self.assertIn("unexpected keyword argument 'instruction'", str(error.exception))
 
     def test_bare_states_are_asked_the_current_questions(self):
         template = DecisionTemplate(self.tokenizer)

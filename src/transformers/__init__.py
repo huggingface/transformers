@@ -376,7 +376,6 @@ else:
             "AlternatingCodebooksLogitsProcessor",
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
-            "CalibratedTemperatureLogitsWarper",
             "ClassifierFreeGuidanceLogitsProcessor",
             "ContinuousBatchingManager",
             "ContinuousMixin",
@@ -398,7 +397,6 @@ else:
             "MinLengthLogitsProcessor",
             "MinNewTokensLengthLogitsProcessor",
             "MinPLogitsWarper",
-            "NoulBandLogitsWarper",
             "NoBadWordsLogitsProcessor",
             "NoRepeatNGramLogitsProcessor",
             "PrefixConstrainedLogitsProcessor",
@@ -520,7 +518,6 @@ if TYPE_CHECKING:
     from .generation import AsyncTextIteratorStreamer as AsyncTextIteratorStreamer
     from .generation import BayesianDetectorConfig as BayesianDetectorConfig
     from .generation import BayesianDetectorModel as BayesianDetectorModel
-    from .generation import CalibratedTemperatureLogitsWarper as CalibratedTemperatureLogitsWarper
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
     from .generation import ContinuousBatchingConfig as ContinuousBatchingConfig
@@ -547,7 +544,6 @@ if TYPE_CHECKING:
     from .generation import MinPLogitsWarper as MinPLogitsWarper
     from .generation import NoBadWordsLogitsProcessor as NoBadWordsLogitsProcessor
     from .generation import NoRepeatNGramLogitsProcessor as NoRepeatNGramLogitsProcessor
-    from .generation import NoulBandLogitsWarper as NoulBandLogitsWarper
     from .generation import PrefixConstrainedLogitsProcessor as PrefixConstrainedLogitsProcessor
     from .generation import RepetitionPenaltyLogitsProcessor as RepetitionPenaltyLogitsProcessor
     from .generation import SequenceBiasLogitsProcessor as SequenceBiasLogitsProcessor

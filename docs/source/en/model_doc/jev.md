@@ -35,32 +35,8 @@ decide(
 decide("Where is my parcel?")  # a bare state is asked the questions of the last request
 ```
 
-Questions can also be set when creating the pipeline, or per call, and become the ones asked of the next bare states:
-
-```python
-decide = pipeline(
-    "decision",
-    model="autotrust/GEV-26B-Decide",
-    decision_config="ArthurZ/GEV-26B-Decide",
-    questions={"refund": {"type": "noul", "instructions": "Is a refund requested?"}},
-)
-decide("I was charged twice for my order and want a refund.")
-decide("Buy cheap watches now!!!", questions={"spam": {"type": "noul", "instructions": "Is this spam?"}})
-```
-
-Images come as `assets`, like in the System One API: each placeholder in the state, the instructions or the criteria is
-replaced with its image. An asset is `{"type": "image", "format": "png", "data_base64": ...}`, a PIL image, a path or a
-URL, and the model needs a processor that handles images.
-
-```python
-decide(
-    {
-        "state": "The customer sent photo-1 and asks if it is damaged.",
-        "assets": {"photo-1": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png"},
-        "questions": {"damaged": {"type": "noul", "instructions": "Is the product in the photo damaged?"}},
-    }
-)
-```
+See the [decision pipeline](../main_classes/pipelines#transformers.DecisionPipeline) for questions set up front,
+bare states and image assets.
 
 The same head reads the 255 answer codes of [pplx-decider](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b)
 and [d3](https://huggingface.co/vllm-sr/d3), whose Qwen3.5 backbone attends to the whole prompt

@@ -69,8 +69,7 @@ import functools
 import json
 import re
 import string
-from dataclasses import asdict, dataclass, field, fields
-from difflib import get_close_matches
+from dataclasses import asdict, dataclass, field
 from typing import Any, Literal
 
 from huggingface_hub.dataclasses import strict
@@ -161,7 +160,6 @@ class Question:
     options: list[str]
     labels: list[str]
     descriptions: list[Any]
-    legend: list[Any] | None = None
     questions_schemes = {"noul": NoulQuestion, "choice": ChoiceQuestion, "score": ScoreQuestion}
     questions_types = tuple(questions_schemes)
 
@@ -169,33 +167,22 @@ class Question:
     def from_request(cls, name: str, question: dict[str, Any], config: DecisionConfig) -> "Question":
         kind = question.get("type") if isinstance(question, dict) else None
         if kind not in cls.questions_schemes:
-            close = get_close_matches(str(kind).lower(), cls.questions_types, n=1)
-            hint = f" Did you mean {close[0]!r}?" if close else f" For example: {NoulQuestion.__doc__}"
-            got = f"type {kind!r}" if isinstance(question, dict) else repr(question)
+            got = kind if isinstance(question, dict) else question
             raise ValueError(
-                f"Question {name!r}: expected a `type` among {', '.join(cls.questions_types)}, got {got}.{hint}"
+                f"Question {name!r}: `type` must be one of {', '.join(cls.questions_types)}, got {got!r}."
             )
 
         schema = cls.questions_schemes[kind]
         try:
             question = asdict(schema(**question))
         except (TypeError, StrictDataclassError) as error:
-            if field := re.match(r"Validation error for field '(\w+)'", str(error)):
-                reason = f"`{field[1]}` can't be {question[field[1]]!r}"
-            else:  # an unknown field (`TypeError`) or a class validator
-                reason = str(error.__cause__ or error).split("() ", 1)[-1].split(". Did you mean", 1)[0]
-                reason = reason.replace("got an unexpected keyword argument", "unknown field")
-                unknown = re.match(r"unknown field '(\w+)'", reason)
-                if unknown and (close := get_close_matches(unknown[1], [f.name for f in fields(schema)], n=1)):
-                    reason += f". Did you mean {close[0]!r}?"
-            reason += "" if reason.endswith((".", "?")) else "."
-            raise ValueError(f"Question {name!r}: {reason} A {kind} question looks like {schema.__doc__}") from error
+            raise ValueError(f"Question {name!r}: {error} (a {kind} question looks like {schema.__doc__})") from error
 
         criteria = question["criteria"]
         if kind == "noul":
             criteria = {option: (criteria or {}).get(option) for option in config.noul_options}
         elif kind == "choice":
-            criteria = dict(sorted(criteria.items()) if config.sort_choices else criteria.items())
+            criteria = dict(criteria)
         else:
             criteria = {str(index): level for index, level in enumerate(criteria)}
 
@@ -206,8 +193,7 @@ class Question:
                 f"{len(criteria)} (`labels.{kind}` in its decision config)."
             )
         options, descriptions = list(criteria), list(criteria.values())
-        legend = descriptions if kind == "score" else None
-        return cls(name, kind, question.get("instructions"), options, labels[: len(options)], descriptions, legend)
+        return cls(name, kind, question.get("instructions"), options, labels[: len(options)], descriptions)
 
     def answer(self, probabilities: list[float]) -> dict[str, Any]:
         """The System One answer, from the probabilities of the options."""
@@ -224,9 +210,10 @@ class Question:
         uniform_distance = sum(abs(level - (n_options - 1) / 2) for level in range(n_options)) / n_options
         confidence = 1.0 if n_options == 1 else max(0.0, 1 - distance / uniform_distance)
         score = sum(level * probability for level, probability in enumerate(probabilities))
-        answer = {"type": "score", "score": score, "legend": dict(zip(self.options, self.legend))}
         return {
-            **answer,
+            "type": "score",
+            "score": score,
+            "legend": dict(zip(self.options, self.descriptions)),
             "confidence": confidence,
             "probabilities": by_option,
         }
@@ -270,10 +257,8 @@ class DecisionPrompt:
 
     def backbone_inputs(self) -> BatchEncoding:
         """The inputs of the backbone, as a batch of one: `input_ids` and the `backbone_kwargs`."""
-        inputs = {"input_ids": [self.input_ids]}
-        for key, value in self.backbone_kwargs.items():
-            inputs[key] = [value] if isinstance(value, list) else value
-        return BatchEncoding(inputs, tensor_type="pt")
+        kwargs = {key: [value] if isinstance(value, list) else value for key, value in self.backbone_kwargs.items()}
+        return BatchEncoding({"input_ids": [self.input_ids], **kwargs}, tensor_type="pt")
 
     def model_inputs(self) -> BatchEncoding:
         """
@@ -284,7 +269,7 @@ class DecisionPrompt:
             "input_ids": self.input_ids,
             "marks": self.marks,
             "num_options": [len(question.options) for question in self.questions],
-            "question_type_ids": [type(question).questions_types.index(question.type) for question in self.questions],
+            "question_type_ids": [Question.questions_types.index(question.type) for question in self.questions],
         }
         return BatchEncoding(inputs, tensor_type="pt")
 
@@ -330,9 +315,7 @@ def _split_at_placeholders(text: str, assets: dict[str, Any], load) -> list[dict
 
 def _load_asset(asset: Any):
     if isinstance(asset, dict):  # a System One asset
-        if asset.get("type") != "image" or "data_base64" not in asset:
-            raise ValueError(f"Assets are images with `data_base64`, got {sorted(asset)}.")
-        asset = f"data:image/{asset.get('format', 'png')};base64,{asset['data_base64']}"
+        asset = asset["data_base64"]
     return load_image(asset)
 
 
@@ -351,22 +334,21 @@ def _insert_images(template_inputs: dict[str, Any], assets: dict[str, Any], load
         - the images, `[<red>, <blue>]`, for the processor: it only collects images from `messages`, not from template
           inputs. They are in dict order, the order templates print them in (state, instructions, options).
     """
-    template_inputs, images = copy.deepcopy(template_inputs), []
-    # The (parent, key) of each value left to visit, the next one last: the values are visited in dict order
-    to_visit = [(template_inputs, key) for key in reversed(list(template_inputs))]
-    while to_visit:
-        parent, key = to_visit.pop()
-        value = parent[key]
+    images = []
+
+    def insert(value):  # visits the values in dict order
         if isinstance(value, dict):
-            to_visit += [(value, key) for key in reversed(list(value))]
-        elif isinstance(value, list):
-            to_visit += [(value, index) for index in reversed(range(len(value)))]
-        elif isinstance(value, str):
+            return {key: insert(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [insert(item) for item in value]
+        if isinstance(value, str):
             parts = _split_at_placeholders(value, assets, load)
             if any(part["type"] == "image" for part in parts):
-                parent[key] = parts
-                images += [part["image"] for part in parts if part["type"] == "image"]
-    return template_inputs, images
+                images.extend(part["image"] for part in parts if part["type"] == "image")
+                return parts
+        return value
+
+    return insert(template_inputs), images
 
 
 class DecisionTemplate:
@@ -395,8 +377,8 @@ class DecisionTemplate:
         self.processor = processor if getattr(processor, "image_processor", None) is not None else None
         self.config = config or DecisionConfig()
         self.decision_template = self.config.chat_template
-        self.prompt = _compile_jinja_template(self.decision_template or DECISION_PROMPT)
-        self.template_input_names = _get_template_variables(self.decision_template or DECISION_PROMPT)
+        template = self.decision_template or DECISION_PROMPT
+        self.prompt, self.template_input_names = _compile_jinja_template(template), _get_template_variables(template)
         self.one_prompt = "questions" in self.template_input_names
         self.chat_kwargs = {"enable_thinking": False}
         if self.processor is not None and "enable_thinking" not in _get_template_variables(processor.chat_template):
@@ -469,18 +451,19 @@ class DecisionTemplate:
                 kwargs = {"sanitize_control_tokens": sanitize}
             else:
                 template_inputs = {
-                    "state": state,
-                    "question": asdict(group[0]),
-                    "questions": [asdict(q) for q in group],
-                }
-                template_inputs = {
-                    name: value for name, value in template_inputs.items() if name in self.template_input_names
+                    name: value
+                    for name, value in (
+                        ("state", state),
+                        ("question", asdict(group[0])),
+                        ("questions", [asdict(q) for q in group]),
+                    )
+                    if name in self.template_input_names
                 }
                 images = []
                 if assets:
                     template_inputs, images = _insert_images(template_inputs, assets, load)
                 content, kwargs = "", {"chat_template": self.decision_template, **template_inputs}
-                kwargs["sanitize_control_tokens"] = list(template_inputs) if sanitize else False
+                kwargs["sanitize_control_tokens"] = sanitize
                 if images:
                     kwargs["processor_kwargs"] = {"images": images}
             inputs = (self.processor or self.tokenizer).apply_chat_template(
@@ -517,8 +500,6 @@ class DecisionTemplate:
 
 __all__ = [
     "DECISION_PROMPT",
-    "MARK",
-    "SPLIT",
     "DecisionPrompt",
     "DecisionTemplate",
     "Question",
