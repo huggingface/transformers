@@ -533,7 +533,7 @@ class CsmDepthDecoderForCausalLM(CsmPreTrainedModel, GenerationMixin):
     _pp_plan = None
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: CsmConfig):
         super().__init__(config)
         self.model = CsmDepthDecoderModel(config)
         self.vocab_size = config.vocab_size
@@ -649,7 +649,7 @@ class CsmBackboneModelEmbeddings(nn.Module):
 
 @auto_docstring
 class CsmBackboneModel(CsmPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CsmConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size

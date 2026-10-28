@@ -1805,7 +1805,7 @@ class Glm5NextVisionModel(Glm5NextPreTrainedModel):
         "attentions": Glm5NextVisionAttention,
     }
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: Glm5NextVisionConfig) -> None:
         super().__init__(config)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size

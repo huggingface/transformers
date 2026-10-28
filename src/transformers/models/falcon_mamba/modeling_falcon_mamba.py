@@ -651,7 +651,7 @@ class FalconMambaCausalLMOutput(ModelOutput):
 
 @auto_docstring
 class FalconMambaModel(FalconMambaPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: FalconMambaConfig):
         super().__init__(config)
 
         self.embeddings = nn.Embedding(config.vocab_size, config.hidden_size)

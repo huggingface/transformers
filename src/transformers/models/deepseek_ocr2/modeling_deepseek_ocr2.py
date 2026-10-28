@@ -891,7 +891,7 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
         "attentions": DeepseekOcr2VisionAttention,
     }
 
-    def __init__(self, config):
+    def __init__(self, config: DeepseekOcr2Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size

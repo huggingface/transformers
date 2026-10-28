@@ -1591,7 +1591,7 @@ class Qwen4ExpForCausalLM(Qwen4ExpPreTrainedModel, GenerationMixin):
     config: Qwen4ExpTextConfig
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen4ExpTextConfig):
         super().__init__(config)
         self.model = Qwen4ExpTextModel(config)
         self.vocab_size = config.vocab_size
@@ -1929,7 +1929,7 @@ class Qwen4ExpVisionModel(Qwen4ExpPreTrainedModel):
     }
     _no_split_modules = ["Qwen4ExpVisionBlock"]
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
+    def __init__(self, config: Qwen4ExpVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
@@ -2014,7 +2014,7 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
     input_modalities = ("image", "video", "text")
     _no_split_modules = ["Qwen4ExpDecoderLayer", "Qwen4ExpVisionBlock"]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen4ExpConfig):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)

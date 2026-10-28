@@ -1130,7 +1130,7 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
         "attentions": Qwen3OmniMoeVisionAttention,
     }
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
+    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.merger_list = nn.ModuleList(
             [
@@ -2172,7 +2172,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _can_compile_fullgraph = True
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3OmniMoeThinkerConfig):
         super().__init__(config)
         self.vocab_size = config.text_config.vocab_size
         self.model = Qwen3OmniMoeThinkerModel(config)

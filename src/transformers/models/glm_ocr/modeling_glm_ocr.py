@@ -574,7 +574,7 @@ class GlmOcrVisionModel(GlmOcrPreTrainedModel):
         "attentions": GlmOcrVisionAttention,
     }
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: GlmOcrVisionConfig) -> None:
         super().__init__(config)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
@@ -819,7 +819,7 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
     accepts_loss_kwargs = False
     _no_split_modules = ["GlmOcrTextDecoderLayer", "GlmOcrVisionBlock"]
 
-    def __init__(self, config):
+    def __init__(self, config: GlmOcrConfig):
         super().__init__(config)
         self.visual = GlmOcrVisionModel._from_config(config.vision_config)
         self.language_model = GlmOcrTextModel._from_config(config.text_config)

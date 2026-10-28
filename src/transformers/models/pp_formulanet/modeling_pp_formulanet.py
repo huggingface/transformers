@@ -963,7 +963,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
 
 
 class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PPFormulaNetConfig):
         super().__init__(config)
 
         self.decoder = PPFormulaNetTextModel(config.text_config)

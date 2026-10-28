@@ -921,7 +921,7 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
 )
 # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with Bert->MobileBert all-casing
 class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -997,7 +997,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with Bert->MobileBert all-casing
 class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1066,7 +1066,7 @@ class MobileBertForQuestionAnswering(MobileBertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with Bert->MobileBert all-casing
 class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
 
         self.mobilebert = MobileBertModel(config)
@@ -1161,7 +1161,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with Bert->MobileBert all-casing
 class MobileBertForTokenClassification(MobileBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MobileBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

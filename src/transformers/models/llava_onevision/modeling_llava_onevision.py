@@ -266,7 +266,7 @@ def unpad_image(tensor, original_size):
 class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
     base_model_prefix = "model"
 
-    def __init__(self, config):
+    def __init__(self, config: LlavaOnevisionConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
 
