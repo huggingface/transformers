@@ -26,12 +26,12 @@ from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 
 
 if is_torch_available():
-    from transformers import JevDecisionHead
+    from transformers import JevForDecision
 
 
 @require_torch
-class JevDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
-    all_model_classes = (JevDecisionHead,) if is_torch_available() else ()
+class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
+    all_model_classes = (JevForDecision,) if is_torch_available() else ()
     decision_repo = "ArthurZ/GEV-26B-Decide"
     tiny_sizes = {"hidden_size": 16}
 

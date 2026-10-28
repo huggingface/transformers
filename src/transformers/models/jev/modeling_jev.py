@@ -32,7 +32,7 @@ class JevPreTrainedModel(PreTrainedModel):
     each question, soft-capped like the logits of a language model head.
     """
 )
-class JevDecisionHead(JevPreTrainedModel):
+class JevForDecision(JevPreTrainedModel):
     def __init__(self, config: JevConfig):
         super().__init__(config)
         self.proj = nn.Linear(config.hidden_size, config.num_verbalizers)
@@ -61,4 +61,4 @@ class JevDecisionHead(JevPreTrainedModel):
         return logits[(rows >= starts[:, None]) & (rows < (starts + num_options)[:, None])]
 
 
-__all__ = ["JevDecisionHead", "JevPreTrainedModel"]
+__all__ = ["JevForDecision", "JevPreTrainedModel"]

@@ -2152,45 +2152,6 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
-    mapping["clef"] = [
-        WeightRenaming(r"^evidence_layers.(\d+).query_norm.", r"evidence_layers.\1.input_layernorm."),
-        WeightRenaming(r"^evidence_layers.(\d+).memory_norm.", r"evidence_layers.\1.memory_layernorm."),
-        WeightRenaming(r"^evidence_layers.(\d+).attention.out_proj.", r"evidence_layers.\1.cross_attn.o_proj."),
-        WeightRenaming(r"^evidence_layers.(\d+).feedforward_norm.", r"evidence_layers.\1.post_attention_layernorm."),
-        WeightRenaming(r"^evidence_layers.(\d+).feedforward.0.", r"evidence_layers.\1.mlp.fc1."),
-        WeightRenaming(r"^evidence_layers.(\d+).feedforward.3.", r"evidence_layers.\1.mlp.fc2."),
-        WeightRenaming(r"^layers.(\d+).norm1.", r"layers.\1.input_layernorm."),
-        WeightRenaming(r"^layers.(\d+).norm2.", r"layers.\1.post_attention_layernorm."),
-        WeightRenaming(r"^layers.(\d+).norm3.", r"layers.\1.final_layernorm."),
-        WeightRenaming(r"^layers.(\d+).self_attn.out_proj.", r"layers.\1.self_attn.o_proj."),
-        WeightRenaming(r"^layers.(\d+).multihead_attn.out_proj.", r"layers.\1.encoder_attn.o_proj."),
-        WeightRenaming(r"^layers.(\d+).linear1.", r"layers.\1.mlp.fc1."),
-        WeightRenaming(r"^layers.(\d+).linear2.", r"layers.\1.mlp.fc2."),
-        WeightRenaming(r"^residual_scorer.0.", "residual_scorer.fc1."),
-        WeightRenaming(r"^residual_scorer.3.", "residual_scorer.fc2."),
-        # The embeddings, encoder and scorer of the head
-        WeightRenaming(r"^(hidden_norm|\w+_projection|type_embedding).", r"embeddings.\1."),
-        WeightRenaming(r"^(evidence_layers|option_summary_norm|layers|field_norm).", r"encoder.\1."),
-        WeightRenaming(
-            r"^(option_norm|residual_scorer|prior_logit_scale|joint_logit_scale|residual_gate)", r"scorer.\1"
-        ),
-        WeightConverter(
-            r"^(encoder.evidence_layers.\d+).attention.in_proj_",
-            [r"\1.cross_attn.q_proj.", r"\1.cross_attn.k_proj.", r"\1.cross_attn.v_proj."],
-            operations=[Chunk(dim=0)],
-        ),
-        WeightConverter(
-            r"^(encoder.layers.\d+).self_attn.in_proj_",
-            [r"\1.self_attn.q_proj.", r"\1.self_attn.k_proj.", r"\1.self_attn.v_proj."],
-            operations=[Chunk(dim=0)],
-        ),
-        WeightConverter(
-            r"^(encoder.layers.\d+).multihead_attn.in_proj_",
-            [r"\1.encoder_attn.q_proj.", r"\1.encoder_attn.k_proj.", r"\1.encoder_attn.v_proj."],
-            operations=[Chunk(dim=0)],
-        ),
-    ]
-
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue
