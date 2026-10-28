@@ -306,12 +306,13 @@ def sort_checkpoints(
 
     ordering_and_checkpoint_path = []
     for path in glob_checkpoints:
+        regex_match = re.fullmatch(rf"{re.escape(checkpoint_prefix)}-([0-9]+)", Path(path).name)
+        if regex_match is None:
+            continue
         if use_mtime:
             ordering_and_checkpoint_path.append((os.path.getmtime(path), path))
         else:
-            regex_match = re.match(f".*{checkpoint_prefix}-([0-9]+)", path)
-            if regex_match is not None and regex_match.groups() is not None:
-                ordering_and_checkpoint_path.append((int(regex_match.groups()[0]), path))
+            ordering_and_checkpoint_path.append((int(regex_match.group(1)), path))
 
     checkpoints_sorted = sorted(ordering_and_checkpoint_path)
 
