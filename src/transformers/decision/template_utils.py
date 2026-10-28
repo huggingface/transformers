@@ -36,8 +36,15 @@ A model with a `decision_template.jinja` places two sentinels, e.g. `ArthurZ/cle
     <|im_end|>
     <|im_start|>assistant
 
-- `<|mark|>`: where the head reads. The position can't be inferred: clef reads the spans between pairs of marks (the
-  instruction and each option), mid-sequence; kev reads after every option. A head reading the last token needs none.
+- `<|mark|>` (▮ below): where the head reads, which depends on the head:
+
+      jev    ... [decision]:▮                       reads 1 token: the one before each mark (one per question)
+      kev    ... opt A▮ opt B▮ opt C▮ state▮         reads 1 token before each mark, one mark after each option
+      von    ... [MASK]▮ [MASK]▮ ... ▮              reads 1 token per option; the last mark ends the block
+      clef   INSTRUCTION: ▮What is the tone?▮        reads every token BETWEEN a pair of marks, pooled
+             OPTION 1:    ▮{"option_id":"calm"}▮     (hidden states + output embeddings of the span)
+             OPTION 2:    ▮{"option_id":"pushy"}▮    → spans sit mid-sequence, not at the end
+
 - `<|split|>`: the text between two sentinels is tokenized on its own, like the original code did, so the state can't
   merge into a token with `STATE:\n` around it.
 
