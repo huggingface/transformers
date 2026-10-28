@@ -40,12 +40,13 @@ bare states and image assets.
 
 The same head reads the 255 answer codes of [pplx-decider](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b)
 and [d3](https://huggingface.co/vllm-sr/d3), whose Qwen3.5 backbone attends to the whole prompt
-(`is_causal=False` in their decision config). `convert_decider_to_hf.py` writes their head and decision config,
-used with the original checkpoint:
+(`is_causal=False` in the `text_config` of their `JevForDecision`). `convert_decider_to_hf.py` writes the files to add
+next to their weights: `decision_head.json`, which reads their shards and `readout.safetensors`, and the decision
+config:
 
 ```python
-pplx = pipeline("decision", model="perplexity-ai/pplx-decider-v1.1-27b", decision_config="ArthurZ/pplx-decider-v1.1-27b")
-d3 = pipeline("decision", model="vllm-sr/d3", decision_config="ArthurZ/d3")
+pplx = pipeline("decision", model="perplexity-ai/pplx-decider-v1.1-27b")
+d3 = pipeline("decision", model="vllm-sr/d3")
 request = {
     "state": "I was charged twice for my order and I want my money back today.",
     "questions": {
@@ -60,13 +61,7 @@ pplx(request), d3(request)
 
 [[autodoc]] JevConfig
 
-## JevDecisionHead
-
-[[autodoc]] JevDecisionHead
-    - forward
-
 ## JevForDecision
 
 [[autodoc]] JevForDecision
-    - from_pretrained
     - forward

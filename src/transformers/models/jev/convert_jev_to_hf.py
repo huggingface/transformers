@@ -28,7 +28,7 @@ import json
 import os
 
 import torch
-from huggingface_hub import file_exists, hf_hub_download
+from huggingface_hub import file_exists, get_safetensors_metadata, hf_hub_download
 from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 
@@ -36,6 +36,8 @@ from transformers import AutoConfig, JevConfig
 from transformers.decision import DecisionConfig
 from transformers.decision.configuration_utils import DECISION_HEAD_CONFIG_NAME
 
+
+DECISION_INDEX_NAME = "decision.safetensors.index.json"
 
 # The `bare-v1` prompt of System 1 (`serve_decide.py`), read before `<|mark|>`
 TEMPLATE = """
@@ -64,6 +66,16 @@ TEMPLATE = """
 def load_json(repo_id: str, filename: str) -> dict:
     with open(hf_hub_download(repo_id, filename), encoding="utf-8") as file:
         return json.load(file)
+
+
+def write_decision_files(repo_id: str, config: JevConfig, head_file: str, head_keys: list[str], output_dir: str):
+    """`decision_head.json`, whose weights are the shards of the model of the repo and the file of the head."""
+    weight_map = dict(get_safetensors_metadata(repo_id).weight_map) | dict.fromkeys(head_keys, head_file)
+    os.makedirs(output_dir, exist_ok=True)
+    with open(f"{output_dir}/{DECISION_INDEX_NAME}", "w", encoding="utf-8") as file:
+        json.dump({"metadata": {}, "weight_map": weight_map}, file, indent=2)
+    config.transformers_weights = DECISION_INDEX_NAME
+    config.to_json_file(f"{output_dir}/{DECISION_HEAD_CONFIG_NAME}")
 
 
 def convert(repo_id: str, output_dir: str):
@@ -99,10 +111,9 @@ def convert(repo_id: str, output_dir: str):
         num_verbalizers=slots["num_slots"],
         offsets={question_type: start for question_type, (start, _) in ranges.items()},
         softcap=spec.get("softcap"),
+        text_config=backbone_config,
     )
-    config.transformers_weights = weights
-    os.makedirs(output_dir, exist_ok=True)
-    config.to_json_file(f"{output_dir}/{DECISION_HEAD_CONFIG_NAME}")
+    write_decision_files(repo_id, config, weights, ["proj.weight", "proj.bias"], output_dir)
 
     verbalizers = slots["verbalizers"]
     DecisionConfig(

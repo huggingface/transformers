@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 from huggingface_hub import is_offline_mode
 
 from ..configuration_utils import PreTrainedConfig
+from ..decision.configuration_utils import DECISION_HEAD_CONFIG_NAME
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import FeatureExtractionMixin
 from ..image_processing_utils import BaseImageProcessor
@@ -36,6 +37,7 @@ from ..processing_utils import ProcessorMixin
 from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
     CONFIG_NAME,
+    cached_file,
     find_adapter_config_file,
     hf_api,
     is_kenlm_available,
@@ -974,6 +976,14 @@ def pipeline(
                             cache_dir=model_kwargs.get("cache_dir"),
                         )
 
+        # A decision model next to the model it reads: its config, here and when loading the model, is `decision_head.json`
+        if task == "decision" and cached_file(
+            model,
+            DECISION_HEAD_CONFIG_NAME,
+            _raise_exceptions_for_missing_entries=False,
+            **{key: value for key, value in hub_kwargs.items() if key != "trust_remote_code"},
+        ):
+            model_kwargs = {**model_kwargs, "_configuration_file": DECISION_HEAD_CONFIG_NAME}
         config = AutoConfig.from_pretrained(
             model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
         )
