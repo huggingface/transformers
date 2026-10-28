@@ -50,7 +50,7 @@ We otherwise can turn any model into a decision model with a `DECISION_PROMPT`, 
     B. pushy: Pressures the reader
     Answer with the letter of the option that fits best (A to B) only.<|im_end|>
     <|im_start|>assistant
-``` 
+```
 
 The rest of this file handles the different input validation, escaping user text from the mark/split tokens,
 and replacing images with the corresponding assets.
