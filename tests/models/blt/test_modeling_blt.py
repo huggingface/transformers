@@ -39,7 +39,7 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-    from transformers import BltConfig, BltForCausalLM, BltModel
+    from transformers import BltConfig, BltForCausalLM, BltModel, EncoderDecoderCache
 
 
 @require_torch
@@ -196,6 +196,21 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
     )
     def test_generate_from_inputs_embeds(self, _, num_beams):
         pass
+
+    def test_forward_with_cache_on_checkpoint_config(self):
+        # The tester sets `num_hidden_layers` on the top-level config, which a checkpoint's `BltConfig` does not have.
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        values = config.to_dict()
+        for key in ("num_hidden_layers", "num_attention_heads", "hidden_size"):
+            values.pop(key, None)
+        config = BltConfig(**values)
+        self.assertFalse(hasattr(config, "num_hidden_layers"))
+        model = BltForCausalLM(config).to(torch_device).eval()
+        with torch.no_grad():
+            cached = model(**inputs_dict, use_cache=True)
+            uncached = model(**inputs_dict, use_cache=False)
+        self.assertIsInstance(cached.past_key_values, EncoderDecoderCache)
+        torch.testing.assert_close(cached.logits, uncached.logits)
 
     @pytest.mark.generate
     def test_generate_with_quant_cache(self):
