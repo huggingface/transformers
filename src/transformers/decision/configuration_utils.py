@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Settings of decision models, saved as `decision_config.json` and `decision_template.jinja`."""
+"""Settings of decision models, saved as `decision.json` and `decision_template.jinja`."""
 
 import json
 from dataclasses import asdict, dataclass, field, fields
@@ -22,14 +22,16 @@ from huggingface_hub.dataclasses import strict
 from ..utils import cached_file
 
 
-DECISION_CONFIG_NAME, DECISION_TEMPLATE_NAME = "decision_config.json", "decision_template.jinja"
+# Next to the model files, without clashing with them: the config of the head is read with `_configuration_file`
+DECISION_CONFIG_NAME, DECISION_TEMPLATE_NAME = "decision.json", "decision_template.jinja"
+DECISION_HEAD_CONFIG_NAME = "decision_head.json"
 
 
 @strict
 @dataclass
 class DecisionConfig:
     """
-    Settings of a decision model, saved as `decision_config.json` (and its chat template as `decision_template.jinja`).
+    Settings of a decision model, saved as `decision.json` (and its chat template as `decision_template.jinja`).
 
     Args:
         labels (`dict[str, list[str]]`, *optional*):
@@ -55,6 +57,8 @@ class DecisionConfig:
         is_causal (`bool`, *optional*, defaults to `True`):
             Whether the model attends causally. Decision models that read the whole prompt set it to `False`, which the
             pipeline sets on the config of the model it loads.
+        adapter (`str`, *optional*):
+            Subfolder of the LoRA that the pipeline loads on the model, for repos that don't keep it at their root.
     """
 
     labels: dict[str, list[str]] = field(default_factory=dict)
@@ -66,6 +70,7 @@ class DecisionConfig:
     sort_choices: bool = False
     sanitize_control_tokens: bool = True
     is_causal: bool = True
+    adapter: str | None = None
 
     def validate_noul_options(self):
         if sorted(self.noul_options) != ["false", "true"]:
@@ -94,8 +99,10 @@ class DecisionConfig:
         return cls(**{key: value for key, value in config.items() if key in {f.name for f in fields(cls)}})
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str | Path, **kwargs) -> "DecisionConfig":
-        config = cls.from_file(cached_file(pretrained_model_name_or_path, DECISION_CONFIG_NAME, **kwargs))
+    def from_pretrained(
+        cls, pretrained_model_name_or_path: str | Path, config_name: str = DECISION_CONFIG_NAME, **kwargs
+    ) -> "DecisionConfig":
+        config = cls.from_file(cached_file(pretrained_model_name_or_path, config_name, **kwargs))
         kwargs["_raise_exceptions_for_missing_entries"] = False
         if (template := cached_file(pretrained_model_name_or_path, DECISION_TEMPLATE_NAME, **kwargs)) is not None:
             config.chat_template = Path(template).read_text(encoding="utf-8")
