@@ -511,3 +511,35 @@ class MaskTest(MemoryCleanupMixin, unittest.TestCase):
         self.assertIsNone(
             create_masks_for_generate(config, inputs_embeds=None, attention_mask=None, past_key_values=None)
         )
+
+    def test_causal_mask_default_layer_skips_linear_layers(self):
+        """A linear layer is not sliding either, so the default must not pick it over the full-attention layer."""
+        config = LlamaConfig(
+            num_hidden_layers=4,
+            hidden_size=32,
+            sliding_window=4,
+            attn_implementation="eager",
+            layer_types=["conv", "sliding_attention", "conv", "full_attention"],
+        )
+        cache = DynamicCache(config=config)
+        self.assertEqual(cache.is_sliding, [False, True, False, False])
+        self.assertEqual(cache.is_linear, [True, False, True, False])
+
+        # 10 cached tokens on both attention layers, then decode a single token at position 10
+        prefill_size = 10
+        fake_kv = torch.rand(1, 2, prefill_size, 8, device=torch_device)
+        cache.update(fake_kv, fake_kv, 1)
+        cache.update(fake_kv, fake_kv, 3)
+        inputs_embeds = torch.zeros(1, 1, config.hidden_size, device=torch_device)
+        attention_mask = torch.ones(1, prefill_size + 1, dtype=torch.long, device=torch_device)
+        position_ids = torch.tensor([[prefill_size]], device=torch_device)
+
+        causal_mask = create_causal_mask(
+            config=config,
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            past_key_values=cache,
+            position_ids=position_ids,
+        )
+        self.assertEqual(causal_mask.shape, (1, 1, 1, prefill_size + 1))
+        self.assertTrue((causal_mask == 0).all())

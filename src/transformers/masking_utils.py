@@ -909,9 +909,17 @@ def create_causal_mask(
             allow_is_bidirectional_skip=allow_is_causal_skip,
         )
 
-    # If we have a hybrid cache structure, here we want to create the mask for the full layers
+    # If we have a hybrid cache structure, here we want to create the mask for the full layers (linear layers are not
+    # sliding either, but their `get_mask_sizes` redirects to the first attention layer of any type)
     if layer_idx is None:
-        if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
+        if hasattr(past_key_values, "is_linear"):
+            full_layers = [
+                i
+                for i, (is_sliding, is_linear) in enumerate(zip(past_key_values.is_sliding, past_key_values.is_linear))
+                if not (is_sliding or is_linear)
+            ]
+            layer_idx = full_layers[0] if full_layers else 0
+        elif hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
             layer_idx = past_key_values.is_sliding.index(False)
         else:
             layer_idx = 0
@@ -1016,8 +1024,16 @@ def create_bidirectional_mask(
             `False` to always materialize the mask, e.g. when it is later concatenated with another mask. Defaults to
             `True`.
     """
-    # If we have a hybrid cache structure, here we want to create the mask for the full layers
-    if hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
+    # If we have a hybrid cache structure, here we want to create the mask for the full layers (linear layers are not
+    # sliding either, but their `get_mask_sizes` redirects to the first attention layer of any type)
+    if hasattr(past_key_values, "is_linear"):
+        full_layers = [
+            i
+            for i, (is_sliding, is_linear) in enumerate(zip(past_key_values.is_sliding, past_key_values.is_linear))
+            if not (is_sliding or is_linear)
+        ]
+        layer_idx = full_layers[0] if full_layers else 0
+    elif hasattr(past_key_values, "is_sliding") and False in past_key_values.is_sliding:
         layer_idx = past_key_values.is_sliding.index(False)
     else:
         layer_idx = 0
