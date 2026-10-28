@@ -87,7 +87,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("chinese_clip", "ChineseCLIPModel"),
         ("chinese_clip_vision_model", "ChineseCLIPVisionModel"),
         ("clap", "ClapModel"),
-        ("clef", "ClefForDecision"),
         ("clip", "CLIPModel"),
         ("clip_text_model", "CLIPTextModel"),
         ("clip_vision_model", "CLIPVisionModel"),
@@ -2113,6 +2112,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
 
 MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
     [
+        ("clef", "ClefForDecision"),
         ("jev", "JevForDecision"),
         ("kev", "KevForDecision"),
         ("von", "VonForDecision"),
