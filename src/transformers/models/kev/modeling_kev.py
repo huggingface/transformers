@@ -16,6 +16,7 @@ import math
 import torch
 from torch import nn
 
+from ...decision.modeling_utils import DecisionMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from ..auto import AutoModel
@@ -36,7 +37,7 @@ class KevPreTrainedModel(PreTrainedModel):
     after each of its options and one after itself.
     """
 )
-class KevForDecision(KevPreTrainedModel):
+class KevForDecision(DecisionMixin, KevPreTrainedModel):
     def __init__(self, config: KevConfig):
         super().__init__(config)
         self.model = AutoModel.from_config(config.text_config)
