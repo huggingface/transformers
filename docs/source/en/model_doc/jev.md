@@ -33,11 +33,10 @@ decide(
         "questions": {"refund": {"type": "noul", "instructions": "Is a refund requested?"}},
     }
 )
-decide("Where is my parcel?")  # a bare state is asked the questions of the last request
+decide("Where is my parcel?", questions={"refund": {"type": "noul", "instructions": "Is a refund requested?"}})
 ```
 
-See the [decision pipeline](../main_classes/pipelines#transformers.DecisionPipeline) for questions set up front,
-bare states and image assets.
+See the [decision pipeline](../main_classes/pipelines#transformers.DecisionPipeline) for image assets.
 
 Without the pipeline, the template renders a prompt per question (or one for all of them), the model scores the options
 of each question, and the decision config turns the scores into the probabilities of the answer:

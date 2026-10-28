@@ -35,21 +35,18 @@ class DecisionPipeline(Pipeline):
     ... )
     >>> answers["refund"]["type"]
     'noul'
-    >>> decide("Where is my parcel?")["refund"]["type"]  # a bare state is asked the last questions
+    >>> decide("Where is my parcel?", questions={"refund": {"type": "noul"}})["refund"]["type"]
     'noul'
     ```
-
-    Questions can also be set up front, with `pipeline("decision", model=..., questions={...})`.
 
     Call arguments:
         inputs (`dict`, `str` or `list`):
             `{"state": ..., "questions": {name: {"type": ..., "instructions": ..., "criteria": ...}}}` or its JSON, with
             `type` one of `choice` (`criteria` maps options to descriptions), `score` (`criteria` lists the levels,
-            lowest first) or `noul` (optional `criteria` describe `true` and `false`). Any other input is a bare
-            `state`, asked the current questions: those of the last request, or the ones set up front. Requests can
-            carry `assets`, as in the System One API.
+            lowest first) or `noul` (optional `criteria` describe `true` and `false`). Requests can carry `assets`, as
+            in the System One API.
         questions (`dict`, *optional*):
-            Questions to ask the input, as a bare `state`. They become the current questions.
+            Questions to ask the input, as the `state` of a request.
         assets (`dict`, *optional*):
             Images keyed by a placeholder: wherever the placeholder appears in a string of the state, the instructions
             or the criteria, the model sees the image. An image is a System One asset (`{"type": "image", "format":
@@ -67,7 +64,6 @@ class DecisionPipeline(Pipeline):
         self,
         *args,
         decision_config: DecisionConfig | str | None = None,
-        questions: dict[str, Any] | None = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -78,7 +74,7 @@ class DecisionPipeline(Pipeline):
             except OSError:  # a checkpoint shipping a decision head next to its weights, or a model without one
                 from_checkpoint = getattr(type(self.model.config), "decision_config", None)
                 decision_config = (from_checkpoint and from_checkpoint(repo)) or DecisionConfig()
-        self.template = DecisionTemplate(self.processor or self.tokenizer, decision_config, questions)
+        self.template = DecisionTemplate(self.processor or self.tokenizer, decision_config)
         # A decision model (`XxxForDecision`) scores the options itself, any other model by the logits of their labels
         self.reads_marks = "marks" in inspect.signature(self.model.forward).parameters
         if decision_config.adapter:  # a LoRA in a subfolder of the repo
