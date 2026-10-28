@@ -877,6 +877,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         kwargs["cache_dir"] = cache_dir
         kwargs["force_download"] = force_download
         kwargs["local_files_only"] = local_files_only
+        kwargs["token"] = token
         kwargs["revision"] = revision
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)

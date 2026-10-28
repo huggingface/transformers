@@ -476,6 +476,33 @@ class ConfigTestUtils(unittest.TestCase):
         self.assertIsInstance(new_config_instance.nan, float)
 
 
+class ConfigTokenPropagationTest(unittest.TestCase):
+    def test_token_kwarg_forwarded_to_get_config_dict(self):
+        """
+        Regression test: `token` is an explicit parameter of `PreTrainedConfig.from_pretrained`
+        but was not forwarded into `kwargs` before calling `get_config_dict`, so it arrived as
+        `None` in `cached_files`. This broke loading from private/gated repos when `token=` was
+        passed as a kwarg and `HF_TOKEN` env var was not set.
+        """
+        captured = {}
+
+        def fake_get_config_dict(cls, pretrained_model_name_or_path, **kwargs):
+            captured["token"] = kwargs.get("token")
+            raise OSError("stop")  # abort early, we only care about kwargs
+
+        with mock.patch.object(BertConfig, "get_config_dict", classmethod(fake_get_config_dict)):
+            try:
+                BertConfig.from_pretrained("dummy-repo", token="my-secret-token")
+            except OSError:
+                pass
+
+        self.assertEqual(
+            captured.get("token"),
+            "my-secret-token",
+            "token kwarg was not forwarded to get_config_dict",
+        )
+
+
 class ConfigSubclassKwOnlyTest(unittest.TestCase):
     """Test that config subclasses with non-default fields following parent default fields
     no longer raise TypeError (fixed by kw_only=True in __init_subclass__). Regression
