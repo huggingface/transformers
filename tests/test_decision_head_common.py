@@ -33,11 +33,10 @@ if is_torch_available():
 
 class DecisionHeadTesterMixin:
     """
-    Common tests of a decision head on `decision_repo`, the decision files of the most downloaded model with that head:
+    Common tests of a decision model on `decision_repo`, the decision files of the most downloaded model with that head:
     the request of its `decision_test.json` with the input ids and marks that the code of the original model builds for
-    it, and its head config at the `tiny_sizes` of the subclass, which also sets `all_model_classes` (the head) and
-    `for_decision_class`. The head reads a
-    tiny `backbone_class` model.
+    it, and its config at the `tiny_sizes` of the subclass (which also sets `all_model_classes`), reading a tiny
+    `backbone_class` model.
     """
 
     backbone_class = Qwen2ForCausalLM if is_torch_available() else None
@@ -51,7 +50,7 @@ class DecisionHeadTesterMixin:
         cls.config = AutoConfig.from_pretrained(
             cls.decision_repo, _configuration_file=DECISION_HEAD_CONFIG_NAME, **cls.tiny_sizes
         )
-        backbone_config = cls.backbone_class.config_class(
+        cls.config.text_config = cls.backbone_class.config_class(
             vocab_size=len(cls.tokenizer),
             hidden_size=getattr(cls.config, "backbone_hidden_size", cls.config.hidden_size),
             intermediate_size=32,
@@ -60,47 +59,53 @@ class DecisionHeadTesterMixin:
             num_key_value_heads=1,
         )
         # Against sdpa: heads whose questions attend to each other would get different scores from a causal mask
-        backbone_config._attn_implementation = "eager"
-        torch.manual_seed(0)
-        cls.backbone = cls.backbone_class(backbone_config).eval()
+        cls.config._attn_implementation = "eager"
 
     def test_chat_template_reproduces_the_model_code(self):
         sequences = [{"input_ids": prompt.input_ids, "marks": prompt.marks} for prompt in self.prompts]
         self.assertEqual(sequences, self.test["sequences"])
 
+    def scores(self, model):
+        with torch.no_grad():
+            return [model(**prompt.model_inputs()) for prompt in self.prompts]
+
     def test_scores_and_save_load(self):
         for model_class in self.all_model_classes:
-            head = model_class(self.config).eval()
+            torch.manual_seed(0)
+            model = model_class(self.config).eval()
             with tempfile.TemporaryDirectory() as tmp:
-                head.save_pretrained(tmp)
-                loaded = AutoModel.from_pretrained(tmp)
-            for prompt in self.prompts:
-                inputs = prompt.model_inputs()
-                with torch.no_grad():
-                    scores = head(**inputs, backbone=self.backbone)
-                    torch.testing.assert_close(loaded(**inputs, backbone=self.backbone), scores)
+                model.save_pretrained(tmp)
+                loaded = AutoModel.from_pretrained(tmp, attn_implementation="eager").eval()
+            for prompt, scores, loaded_scores in zip(self.prompts, self.scores(model), self.scores(loaded)):
+                torch.testing.assert_close(loaded_scores, scores)
                 self.assertEqual(len(scores), sum(len(question.options) for question in prompt.questions))
 
-    def test_pipeline_from_pretrained(self):
+    def test_from_the_repo_of_the_model(self):
+        # The repo of the original model, its config and weights, with the files of the decision model next to them:
+        # `decision_head.json` and the index of its weights, the shards of the model and the file of the head
+        torch.manual_seed(0)
+        model = self.all_model_classes[0](self.config).eval()
         with tempfile.TemporaryDirectory() as tmp:
-            # All in one folder: the model, its tokenizer and decision config, and the head in another dtype than the
-            # model, like the float32 head of JEV, its config naming its weights file
-            for component in (self.backbone, self.tokenizer, self.decision_config):
+            backbone = self.backbone_class(self.config.text_config)
+            backbone.base_model.load_state_dict(model.model.state_dict())
+            backbone.save_pretrained(tmp)
+            for component in (self.tokenizer, self.decision_config):
                 component.save_pretrained(tmp)
-            head = self.all_model_classes[0](self.config).to(torch.bfloat16)
-            save_file(head.state_dict(), f"{tmp}/head.safetensors", metadata={"format": "pt"})
-            head.config.transformers_weights, head.config.dtype = "head.safetensors", torch.bfloat16
-            head.config.to_json_file(f"{tmp}/{DECISION_HEAD_CONFIG_NAME}")
-            decide = pipeline("decision", model=tmp, dtype="float32")
+            head = {key: value for key, value in model.state_dict().items() if not key.startswith("model.")}
+            save_file(head, f"{tmp}/head.safetensors", metadata={"format": "pt"})
+            index = dict.fromkeys(backbone.state_dict(), "model.safetensors") | dict.fromkeys(head, "head.safetensors")
+            Path(tmp, "decision.safetensors.index.json").write_text(
+                json.dumps({"metadata": {}, "weight_map": index}), encoding="utf-8"
+            )
+            config = model.config
+            config.transformers_weights = "decision.safetensors.index.json"
+            config.to_json_file(f"{tmp}/{DECISION_HEAD_CONFIG_NAME}")
+            loaded = self.all_model_classes[0].from_pretrained(tmp, attn_implementation="eager").eval()
+            decide = pipeline("decision", model=tmp, model_kwargs={"attn_implementation": "eager"})
             answers = decide(self.test["request"])
-            # The same files as one model, the backbone and its head
-            model = self.for_decision_class.from_pretrained(tmp, dtype="float32")
-        self.assertIsInstance(model.head, self.all_model_classes[0])
-        inputs = self.prompts[0].model_inputs()
-        with torch.no_grad():
-            torch.testing.assert_close(model(**inputs), model.head(**inputs, backbone=model.model))
-        self.assertIsInstance(decide.head, self.all_model_classes[0])
-        self.assertEqual(decide.head.dtype, torch.bfloat16)
+        self.assertIsInstance(decide.model, self.all_model_classes[0])
+        for scores, loaded_scores in zip(self.scores(model), self.scores(loaded)):
+            torch.testing.assert_close(loaded_scores, scores)
         self.assertEqual(list(answers), list(self.test["request"]["questions"]))
         for answer in answers.values():
             if "probabilities" in answer:

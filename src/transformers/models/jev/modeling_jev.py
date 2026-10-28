@@ -15,26 +15,28 @@ import torch
 from torch import nn
 
 from ...decision import Question
-from ...decision.modeling_utils import ForDecision
-from ...modeling_utils import PreTrainedModel
+from ...decision.modeling_utils import DecisionPreTrainedModel
 from ...utils import auto_docstring
+from ..auto import AutoModel
 from .configuration_jev import JevConfig
 
 
 @auto_docstring
-class JevPreTrainedModel(PreTrainedModel):
+class JevPreTrainedModel(DecisionPreTrainedModel):
     config: JevConfig
+    base_model_prefix = "model"
 
 
 @auto_docstring(
     custom_intro="""
-    Decision head of JEV (autotrust/JEV-9B): linear scores of single-token labels at the token before the `<|mark|>` of
-    each question, soft-capped like the logits of a language model head.
+    JEV (autotrust/JEV-9B): the model of its repo and a decision head, linear scores of single-token labels at the token
+    before the `<|mark|>` of each question, soft-capped like the logits of a language model head.
     """
 )
-class JevDecisionHead(JevPreTrainedModel):
+class JevForDecision(JevPreTrainedModel):
     def __init__(self, config: JevConfig):
         super().__init__(config)
+        self.model = AutoModel.from_config(config.text_config)
         self.proj = nn.Linear(config.hidden_size, config.num_verbalizers)
         self.post_init()
 
@@ -45,12 +47,9 @@ class JevDecisionHead(JevPreTrainedModel):
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor,
-        backbone: PreTrainedModel,
-        backbone_kwargs: dict | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        outputs = backbone.base_model(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
-        hidden_states = outputs.last_hidden_state[0]
+        hidden_states = self.model(input_ids=input_ids[None], use_cache=False, **kwargs).last_hidden_state[0]
         logits = self.proj(hidden_states[marks - 1].to(self.proj.weight.dtype))
         if self.config.softcap is not None:
             logits = self.config.softcap * torch.tanh(logits / self.config.softcap)
@@ -61,10 +60,4 @@ class JevDecisionHead(JevPreTrainedModel):
         return logits[(rows >= starts[:, None]) & (rows < (starts + num_options)[:, None])]
 
 
-class JevForDecision(ForDecision):
-    """JEV: the model of a repo and its [`JevDecisionHead`], e.g. `JevForDecision.from_pretrained("autotrust/JEV-9B")`."""
-
-    config: JevConfig
-
-
-__all__ = ["JevDecisionHead", "JevForDecision", "JevPreTrainedModel"]
+__all__ = ["JevForDecision", "JevPreTrainedModel"]
