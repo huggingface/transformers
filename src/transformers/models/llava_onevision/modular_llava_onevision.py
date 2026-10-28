@@ -52,6 +52,7 @@ from ..llava_next_video.modeling_llava_next_video import (
     image_size_to_num_patches,
     unpad_image,
 )
+from .configuration_llava_onevision import LlavaOnevisionConfig
 
 
 logger = logging.get_logger(__name__)

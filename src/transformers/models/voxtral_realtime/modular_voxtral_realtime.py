@@ -43,7 +43,11 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_voxtral_realtime import VoxtralRealtimeConfig, VoxtralRealtimeEncoderConfig
+from .configuration_voxtral_realtime import (
+    VoxtralRealtimeConfig,
+    VoxtralRealtimeEncoderConfig,
+    VoxtralRealtimeTextConfig,
+)
 
 
 logger = logging.get_logger(__name__)

@@ -580,7 +580,6 @@ class UnlimitedOcrSamVisionEncoder(UnlimitedOcrPreTrainedModel):
     config: UnlimitedOcrSamVisionConfig
     _can_record_outputs = {"hidden_states": UnlimitedOcrSamVisionLayer, "attentions": UnlimitedOcrSamVisionAttention}
     _input_embed_layer = "patch_embed"
-    config: UnlimitedOcrSamVisionConfig
 
     def __init__(self, config: UnlimitedOcrSamVisionConfig):
         super().__init__(config)

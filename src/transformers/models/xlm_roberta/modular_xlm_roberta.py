@@ -40,6 +40,7 @@ from ..roberta.modeling_roberta import (
     RobertaModel,
     RobertaPreTrainedModel,
 )
+from .configuration_xlm_roberta import XLMRobertaConfig
 
 
 @auto_docstring

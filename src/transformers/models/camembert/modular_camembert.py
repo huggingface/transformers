@@ -40,6 +40,7 @@ from ..roberta.modeling_roberta import (
     RobertaModel,
     RobertaPreTrainedModel,
 )
+from .configuration_camembert import CamembertConfig
 
 
 class CamembertPreTrainedModel(RobertaPreTrainedModel):
