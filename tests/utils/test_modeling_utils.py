@@ -2747,11 +2747,11 @@ class ModelUtilsTest(TestCasePlus):
 class ModelOnTheFlyConversionTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.user = "huggingface-hub-ci"
-        cls.token = os.getenv("HUGGINGFACE_PRODUCTION_USER_TOKEN", None)
+        cls.user = "hf-internal-testing"
+        cls.token = os.getenv("HF_TOKEN_TRANSFORMERS_BOT", None)
 
         if cls.token is None:
-            raise ValueError("Cannot run tests as secret isn't setup.")
+            raise unittest.SkipTest("HF_TOKEN_TRANSFORMERS_BOT not set, skipping.")
 
         cls.api = HfApi(token=cls.token)
 
@@ -2783,6 +2783,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.author, "SFconvertbot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
+    @unittest.skip(reason="private/gated testing not needed")
     def test_safetensors_on_the_fly_conversion_private(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2805,6 +2806,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.author, self.user)
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
+    @unittest.skip(reason="private/gated testing not needed")
     def test_safetensors_on_the_fly_conversion_gated(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2850,6 +2852,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.author, "SFconvertbot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
+    @unittest.skip(reason="private/gated testing not needed")
     def test_safetensors_on_the_fly_sharded_conversion_private(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2872,6 +2875,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.author, self.user)
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
+    @unittest.skip(reason="private/gated testing not needed")
     def test_safetensors_on_the_fly_sharded_conversion_gated(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
