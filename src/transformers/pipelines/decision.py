@@ -93,22 +93,20 @@ class DecisionPipeline(Pipeline):
 
     def preprocess(self, inputs, questions: dict[str, Any] | None = None, assets: dict[str, Any] | None = None):
         prompts = self.template(inputs if questions is None else {"state": inputs, "questions": questions}, assets)
-        return {
-            "prompts": prompts,
-            "inputs": [prompt.model_inputs() for prompt in prompts],
-            "backbone": [prompt.backbone_inputs() for prompt in prompts],
-        }
+        return {"prompts": prompts, "inputs": [prompt.model_inputs() for prompt in prompts]}
 
     def _forward(self, model_inputs):
         # TODO: batch / continious batching
         scores = []
-        for prompt, inputs, backbone in zip(model_inputs["prompts"], model_inputs["inputs"], model_inputs["backbone"]):
+        for prompt, inputs in zip(model_inputs["prompts"], model_inputs["inputs"]):
             if self.reads_marks:
-                backbone_kwargs = {key: value for key, value in backbone.items() if key != "input_ids"}
-                option_scores = self.model(**inputs, **backbone_kwargs)
-                scores.append(option_scores.split(inputs["num_options"].tolist()))
+                scores.append(self.model(**inputs).split(inputs["num_options"][0].tolist()))
             else:  # the logits of the labels before each mark
-                logits = self.model(**backbone, use_cache=False, logits_to_keep=inputs["marks"] - 1).logits[0]
+                marks = inputs.pop("marks")[0]
+                inputs = {
+                    key: value for key, value in inputs.items() if key not in ("num_options", "question_type_ids")
+                }
+                logits = self.model(**inputs, use_cache=False, logits_to_keep=marks - 1).logits[0]
                 labels = [self.label_token_ids(tuple(question.labels)) for question in prompt.questions]
                 scores.append([logits[index, label_ids] for index, label_ids in enumerate(labels)])
         return {"prompts": model_inputs["prompts"], "scores": scores}
