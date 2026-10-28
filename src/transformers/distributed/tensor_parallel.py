@@ -41,6 +41,7 @@ if is_torch_available():
 
 if is_torch_distributed_available():
     import torch.distributed as dist
+    from torch.distributed._functional_collectives import all_to_all_single_autograd
     from torch.distributed.tensor import DTensor, Partial, Replicate, Shard, distribute_tensor
     from torch.distributed.tensor.placement_types import _StridedShard
 
@@ -575,6 +576,126 @@ class PackedRowwiseParallel(TensorParallelLayer):
         )
 
 
+class ParamShard(TensorParallelLayer):
+    """Parameter-only TP style with a fixed DTensor placement."""
+
+    def __init__(self, placement):
+        self.placement = placement
+
+    def shard_param(self, module, param, mesh):
+        meta = module._parameters.get(param)
+        if meta is None:
+            return
+        module._parameters[param] = torch.nn.Parameter(
+            distribute_tensor(meta, mesh, [self.placement], src_data_rank=None),
+            requires_grad=meta.requires_grad,
+        )
+
+
+class GatedDeltaNetParallel(ParamShard):
+    """TP style for head-local Gated DeltaNet state and communication."""
+
+    def __init__(self):
+        super().__init__(Shard(0))
+
+    def validate_param(self, module, param, mesh, parameter_name=None):
+        tp_size = mesh.size()
+        if module.num_k_heads % tp_size != 0 or module.num_v_heads % tp_size != 0:
+            raise ValueError(
+                f"Gated DeltaNet heads must divide evenly across TP ranks, got "
+                f"num_k_heads={module.num_k_heads}, num_v_heads={module.num_v_heads}, tp_size={tp_size}."
+            )
+
+    def should_use_local_tensors(self, module):
+        return True
+
+    @contextlib.contextmanager
+    def context_around_forward(self, module, mesh):
+        with contextlib.ExitStack() as stack:
+            stack.enter_context(_use_local_dtensor_params(module))
+            stack.enter_context(_use_local_dtensor_params(module.conv1d))
+            yield
+
+    def install_forward(self, module, mesh):
+        module._tp_group = mesh.get_group() if mesh.ndim == 1 else mesh.get_group("tp")
+        module._tp_size = mesh.size()
+        return super().install_forward(module, mesh)
+
+
+def _redistribute_packed_tensor(
+    packed_tensor: torch.Tensor,
+    section_sizes: tuple[int, ...],
+    process_group,
+    dim: int = 1,
+) -> torch.Tensor:
+    """Redistribute a contiguous TP shard of packed sections into per-section local shards."""
+    if not is_torch_distributed_available():
+        raise RuntimeError("Packed tensor redistribution requires torch.distributed.")
+
+    world_size = dist.get_world_size(process_group)
+    if world_size == 1:
+        return packed_tensor
+
+    if any(section_size % world_size != 0 for section_size in section_sizes):
+        raise ValueError(
+            f"Packed tensor sections must divide evenly across TP ranks, got "
+            f"section_sizes={section_sizes}, tp_size={world_size}."
+        )
+
+    total_size = sum(section_sizes)
+    local_contiguous_size = total_size // world_size
+    if packed_tensor.shape[dim] != local_contiguous_size:
+        raise ValueError(
+            f"Expected local packed dimension of size {local_contiguous_size}, "
+            f"got {packed_tensor.shape[dim]}."
+        )
+
+    rank = dist.get_rank(process_group)
+    source_start = rank * local_contiguous_size
+    source_end = source_start + local_contiguous_size
+    local_section_sizes = tuple(section_size // world_size for section_size in section_sizes)
+
+    def rank_ranges(dst_rank: int) -> tuple[tuple[int, int], ...]:
+        ranges = []
+        section_start = 0
+        for section_size, local_section_size in zip(section_sizes, local_section_sizes):
+            start = section_start + dst_rank * local_section_size
+            ranges.append((start, start + local_section_size))
+            section_start += section_size
+        return tuple(ranges)
+
+    local_tensor = packed_tensor.movedim(dim, 0).contiguous()
+
+    send_chunks = []
+    send_sizes = []
+    for dst_rank in range(world_size):
+        dst_size = 0
+        for range_start, range_end in rank_ranges(dst_rank):
+            start = max(source_start, range_start)
+            end = min(source_end, range_end)
+            if start < end:
+                send_chunks.append(local_tensor[start - source_start : end - source_start])
+                dst_size += end - start
+        send_sizes.append(dst_size)
+
+    send_tensor = torch.cat(send_chunks, dim=0)
+
+    recv_sizes = []
+    local_ranges = rank_ranges(rank)
+    for src_rank in range(world_size):
+        src_start = src_rank * local_contiguous_size
+        src_end = src_start + local_contiguous_size
+        recv_sizes.append(
+            sum(
+                max(0, min(src_end, range_end) - max(src_start, range_start))
+                for range_start, range_end in local_ranges
+            )
+        )
+
+    recv_tensor = all_to_all_single_autograd(send_tensor, recv_sizes, send_sizes, process_group)
+    return recv_tensor.movedim(0, dim).contiguous()
+
+
 class MoeExpertsParallel(TensorParallelLayer):
     def should_use_local_tensors(self, module):
         return True
@@ -661,6 +782,8 @@ if is_torch_distributed_available():
     ALL_PARALLEL_STYLES.register("packed_colwise", PackedColwiseParallel())
     ALL_PARALLEL_STYLES.register("packed_rowwise", PackedRowwiseParallel())
     ALL_PARALLEL_STYLES.register("sequence_parallel", SequenceParallel(use_local_output=True))
+    ALL_PARALLEL_STYLES.register("shard_dim_0", ParamShard(Shard(0)))
+    ALL_PARALLEL_STYLES.register("gated_deltanet", GatedDeltaNetParallel())
     ALL_PARALLEL_STYLES.register("replicated_with_grad_allreduce", ReplicatedWithGradAllReduce())
     ALL_PARALLEL_STYLES.register("mla_kv_a_proj", MlaKvAProjParallel())
     ALL_PARALLEL_STYLES.register("all_reduce", AllReduceParallel())

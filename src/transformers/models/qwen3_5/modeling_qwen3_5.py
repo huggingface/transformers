@@ -29,6 +29,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
+from ...distributed.tensor_parallel import _redistribute_packed_tensor
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
@@ -587,13 +588,24 @@ class Qwen3_5GatedDeltaNet(nn.Module):
             if cache_params is not None:
                 mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
+        tp_size = getattr(self, "_tp_size", 1)
+        if tp_size > 1:
+            mixed_qkv = _redistribute_packed_tensor(
+                mixed_qkv,
+                (self.key_dim, self.key_dim, self.value_dim),
+                self._tp_group,
+            )
+
+        local_key_dim = self.key_dim // tp_size
+        local_value_dim = self.value_dim // tp_size
+
         mixed_qkv = mixed_qkv.transpose(1, 2)
         query, key, value = torch.split(
             mixed_qkv,
             [
-                self.key_dim,
-                self.key_dim,
-                self.value_dim,
+                local_key_dim,
+                local_key_dim,
+                local_value_dim,
             ],
             dim=-1,
         )
