@@ -61,10 +61,6 @@ def _first_attr(config, *names):
     return next(getattr(config, name) for name in names if getattr(config, name, None) is not None)
 
 
-def _parameter(tensor: torch.Tensor) -> nn.Parameter:
-    return nn.Parameter(tensor, requires_grad=False)
-
-
 def _is_blackwell() -> bool:
     return torch.cuda.is_available() and torch.cuda.get_device_capability()[0] >= 10
 
@@ -122,12 +118,14 @@ class NVFP4Linear(nn.Module):
             if pre_quantized
             else torch.empty(out_features, in_features)
         )
-        self.weight = _parameter(weight)
+        self.weight = nn.Parameter(weight, requires_grad=False)
         scale_shape = (out_features, in_features // GROUP_SIZE)
-        self.weight_scale_inv = _parameter(torch.empty(scale_shape, dtype=torch.float8_e4m3fn))
-        self.weight_global_scale = _parameter(torch.ones((), dtype=torch.float32))
-        self.input_global_scale = None if weight_only else _parameter(torch.ones((), dtype=torch.float32))
-        self.bias = _parameter(torch.empty(out_features)) if bias else None
+        self.weight_scale_inv = nn.Parameter(torch.empty(scale_shape, dtype=torch.float8_e4m3fn), requires_grad=False)
+        self.weight_global_scale = nn.Parameter(torch.ones((), dtype=torch.float32), requires_grad=False)
+        self.input_global_scale = (
+            None if weight_only else nn.Parameter(torch.ones((), dtype=torch.float32), requires_grad=False)
+        )
+        self.bias = nn.Parameter(torch.empty(out_features), requires_grad=False) if bias else None
 
     def swizzles_scales(self, slot: str, rows: int, scale_cols: int) -> bool:
         """Return whether scales of this shape should be swizzled. A linear only needs its own scales to fit.
@@ -212,10 +210,12 @@ class NVFP4Experts(nn.Module):
             if pre_quantized
             else torch.empty(self.num_experts, rows, cols)
         )
-        setattr(self, proj, _parameter(packed))
-        setattr(self, f"{proj}_scale_inv", _parameter(torch.empty(scale_shape, dtype=torch.float8_e4m3fn)))
-        setattr(self, f"{proj}_weight_global_scale", _parameter(torch.ones(self.num_experts, dtype=torch.float32)))
-        input_global = None if weight_only else _parameter(torch.ones(self.num_experts, dtype=torch.float32))
+        setattr(self, proj, nn.Parameter(packed, requires_grad=False))
+        setattr(self, f"{proj}_scale_inv", nn.Parameter(torch.empty(scale_shape, dtype=torch.float8_e4m3fn), False))
+        setattr(
+            self, f"{proj}_weight_global_scale", nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32), False)
+        )
+        input_global = None if weight_only else nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32), False)
         setattr(self, f"{proj}_input_global_scale", input_global)
 
     def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
@@ -347,7 +347,9 @@ def replace_with_nvfp4(
         loads = "nvfp4" if formats is None else formats.get(name)
         if loads == "dequantize" and pre_quantized:
             # an FP8 layer loads its scale into a slot of its own, see `dequantize_fp8_linears`
-            module.register_parameter("weight_scale_inv", _parameter(torch.empty((), device="meta")))
+            module.register_parameter(
+                "weight_scale_inv", nn.Parameter(torch.empty((), device="meta"), requires_grad=False)
+            )
             continue
         if loads not in ("nvfp4", "nvfp4_weight_only"):
             continue
