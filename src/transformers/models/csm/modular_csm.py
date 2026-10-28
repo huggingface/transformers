@@ -277,7 +277,7 @@ class CsmDepthDecoderForCausalLM(LlamaForCausalLM, GenerationMixin):
     _pp_plan = None
     config: CsmDepthDecoderConfig
 
-    def __init__(self, config):
+    def __init__(self, config: CsmDepthDecoderConfig):
         super().__init__(config)
         del self.lm_head
         self.codebooks_head = CsmCodebooksHead(config.hidden_size, config.num_codebooks, config.vocab_size)

@@ -550,7 +550,7 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         "predictions.decoder.bias": "predictions.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: AlbertConfig):
         super().__init__(config)
 
         self.albert = AlbertModel(config, add_pooling_layer=False)
