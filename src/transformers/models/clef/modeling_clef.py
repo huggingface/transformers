@@ -410,11 +410,12 @@ class ClefForDecision(ClefPreTrainedModel):
         question_type_ids: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        hidden_states = self.model(input_ids=input_ids[None], use_cache=False, **kwargs).last_hidden_state
+        marks, num_options, question_type_ids = marks[0], num_options[0], question_type_ids[0]  # a batch of one prompt
+        hidden_states = self.model(input_ids=input_ids, use_cache=False, **kwargs).last_hidden_state
         option_question_ids = torch.repeat_interleave(num_options)
         # The output embeddings of the tokens of each option give its lexical prior
         memory, options, fields, field_embeddings, priors = self.embeddings(
-            hidden_states, input_ids[None], marks, num_options, question_type_ids, self.lm_head.weight
+            hidden_states, input_ids, marks, num_options, question_type_ids, self.lm_head.weight
         )
         options, fields = self.encoder(memory, options, fields, field_embeddings, option_question_ids, **kwargs)
         scores = self.scorer(fields[:, option_question_ids], options, priors)
