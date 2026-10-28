@@ -64,51 +64,20 @@ def _set_rank_device(rank, backend=None):
         torch.accelerator.set_device_index(rank)
 
 
-def _rank_main(rank, world_size, store_port, backend, conn):
-    """Initializes the process group, then runs every function received on `conn` until pytest exits."""
-    # pytest captures our output under the test running when it is written, and a rank may be killed (after another
-    # rank failed) before it flushes a block-buffered stdout
-    sys.stdout.reconfigure(line_buffering=True)
-    os.environ.update(
-        WORLD_SIZE=str(world_size),
-        RANK=str(rank),
-        LOCAL_RANK=str(rank),
-        MASTER_ADDR="localhost",
-        MASTER_PORT=str(store_port),
-    )
-    # some backends, e.g. tpu, require the rank to be set before initializing the process group
-    _set_rank_device(rank, backend)
-    store = dist.TCPStore("localhost", store_port, world_size=None, is_master=False)
-    dist.init_process_group(backend, store=store, rank=rank, world_size=world_size, timeout=_COLLECTIVE_TIMEOUT)
-
-    while True:
-        try:
-            func, args, kwargs = conn.recv()
-        except EOFError:  # pytest exited
-            return
-        _reset_rank()
-        try:
-            func(rank, *args, **kwargs)
-            dist.barrier()
-            error = None
-        except BaseException:
-            error = f"Rank {rank} failed:\n{traceback.format_exc()}"
-        conn.send(error)
-
-
-def _reset_rank():
-    """Undo what the previous test left behind: its models, compiled graphs, device mesh groups and RNG state."""
-    cleanup(_get_distributed_device_type(), gc_collect=True)
-    for group in list(_world.pg_map):
-        if group is not GroupMember.WORLD:
-            dist.destroy_process_group(group)
-    set_seed(42)
-
-
-class _Ranks:
+class _PersistentRanks:
     """`world_size` processes with an initialized process group, kept alive across tests."""
 
+    # the ranks currently alive, one set per (world_size, backend)
+    _alive: dict[tuple[int, str], "_PersistentRanks"] = {}
+
+    @classmethod
+    def get(cls, world_size: int, backend: str) -> "_PersistentRanks":
+        if (world_size, backend) not in cls._alive:
+            cls._alive[world_size, backend] = cls(world_size, backend)
+        return cls._alive[world_size, backend]
+
     def __init__(self, world_size: int, backend: str):
+        self.key = (world_size, backend)
         ctx = mp.get_context("spawn")
         # held for as long as the ranks live, so another xdist worker cannot claim its port
         self.store = dist.TCPStore("localhost", 0, world_size=None, is_master=True, wait_for_workers=False)
@@ -117,7 +86,9 @@ class _Ranks:
             conn, rank_conn = ctx.Pipe()
             # daemon: multiprocessing kills the ranks when pytest exits
             process = ctx.Process(
-                target=_rank_main, args=(rank, world_size, self.store.port, backend, rank_conn), daemon=True
+                target=_PersistentRanks._main,
+                args=(rank, world_size, self.store.port, backend, rank_conn),
+                daemon=True,
             )
             process.start()
             # the rank now holds the only copy of its end, so `conn` reads EOF once the rank dies
@@ -143,8 +114,54 @@ class _Ranks:
                 if error is not None:
                     raise RuntimeError(error)
 
+    def kill(self):
+        """Kill the ranks, e.g. when some may be stuck in a collective; the next `get` starts fresh ones."""
+        del self._alive[self.key]
+        for process in self.processes:
+            process.kill()
 
-_RANKS: dict[tuple[int, str], _Ranks] = {}
+    # The static methods below run inside the rank processes, which have no `_PersistentRanks` instance.
+
+    @staticmethod
+    def _main(rank, world_size, store_port, backend, conn):
+        """Initializes the process group, then runs every function received on `conn` until pytest exits."""
+        # pytest captures our output under the test running when it is written, and a rank may be killed (after
+        # another rank failed) before it flushes a block-buffered stdout
+        sys.stdout.reconfigure(line_buffering=True)
+        os.environ.update(
+            WORLD_SIZE=str(world_size),
+            RANK=str(rank),
+            LOCAL_RANK=str(rank),
+            MASTER_ADDR="localhost",
+            MASTER_PORT=str(store_port),
+        )
+        # some backends, e.g. tpu, require the rank to be set before initializing the process group
+        _set_rank_device(rank, backend)
+        store = dist.TCPStore("localhost", store_port, world_size=None, is_master=False)
+        dist.init_process_group(backend, store=store, rank=rank, world_size=world_size, timeout=_COLLECTIVE_TIMEOUT)
+
+        while True:
+            try:
+                func, args, kwargs = conn.recv()
+            except EOFError:  # pytest exited
+                return
+            _PersistentRanks._reset()
+            try:
+                func(rank, *args, **kwargs)
+                dist.barrier()
+                error = None
+            except BaseException:
+                error = f"Rank {rank} failed:\n{traceback.format_exc()}"
+            conn.send(error)
+
+    @staticmethod
+    def _reset():
+        """Undo what the previous test left behind: its models, compiled graphs, device mesh groups and RNG state."""
+        cleanup(_get_distributed_device_type(), gc_collect=True)
+        for group in list(_world.pg_map):
+            if group is not GroupMember.WORLD:
+                dist.destroy_process_group(group)
+        set_seed(42)
 
 
 def run_distributed(world_size: int, backend: str | None = None):
@@ -154,14 +171,11 @@ def run_distributed(world_size: int, backend: str | None = None):
 
     def decorator(func):
         def wrapper(*args, **kwargs):
-            if key not in _RANKS:
-                _RANKS[key] = _Ranks(*key)
+            ranks = _PersistentRanks.get(*key)
             try:
-                _RANKS[key].run(func, args, kwargs)
+                ranks.run(func, args, kwargs)
             except BaseException:
-                # the other ranks may be stuck in a collective: kill them, so the next call starts from fresh ranks
-                for process in _RANKS.pop(key).processes:
-                    process.kill()
+                ranks.kill()
                 raise
 
         return wrapper
