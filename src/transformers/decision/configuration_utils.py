@@ -47,9 +47,6 @@ class DecisionConfig:
         sanitize_control_tokens (`bool`, *optional*, defaults to `True`):
             Whether control tokens in the request are encoded as text. Templates that escape them themselves disable it,
             to keep the input ids of their original code.
-        is_causal (`bool`, *optional*, defaults to `True`):
-            Whether the model attends causally. Decision models that read the whole prompt set it to `False`, which the
-            pipeline sets on the config of the model it loads.
         adapter (`str`, *optional*):
             Subfolder of the LoRA that the pipeline loads on the model, for repos that don't keep it at their root.
     """
@@ -59,7 +56,6 @@ class DecisionConfig:
     chat_template: str | None = None
     noul_options: list[str] = field(default_factory=lambda: ["true", "false"])
     sanitize_control_tokens: bool = True
-    is_causal: bool = True
     adapter: str | None = None
 
     def validate_noul_options(self):

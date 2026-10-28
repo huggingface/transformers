@@ -14,8 +14,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="autotrust/JEV-9B")
@@ -29,20 +30,24 @@ class JevConfig(PreTrainedConfig):
         `offsets[question.type]` on, in order.
     softcap (`float`, *optional*):
         Soft cap of the scores, `softcap * tanh(scores / softcap)`, like the logits of a language model head.
+    text_config (`dict` or `PreTrainedConfig`, *optional*):
+        Config of the model the head reads, the `config.json` of its repo.
 
     Example:
     ```python
-    >>> from transformers import JevConfig, JevDecisionHead
+    >>> from transformers import JevConfig, JevForDecision
 
-    >>> head = JevDecisionHead(JevConfig(hidden_size=4096))
+    >>> model = JevForDecision(JevConfig(hidden_size=4096))
     ```"""
 
     model_type = "jev"
+    sub_configs_defaults = {"text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_text")}
 
     hidden_size: int = 4096
     num_verbalizers: int = 24
     offsets: dict[str, int] | None = None
     softcap: float | None = None
+    text_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):

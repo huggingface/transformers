@@ -14,7 +14,8 @@
 """
 Converts a decision model shipped as a Qwen3.5 checkpoint with a `readout.safetensors` of its answer codes
 (perplexity-ai/pplx-decider-v1.1-27b, vllm-sr/d3) to the files that make it run with `pipeline("decision", model=repo_id)`,
-to add to its repo: the config of the JEV head (`decision_head.json`, reading `readout.safetensors`), the decision config
+to add to its repo: the config of the model and its JEV head (`decision_head.json`, reading the shards of the model and
+`readout.safetensors` through `decision.safetensors.index.json`), the decision config
 (`decision.json`, next to the `decision_config.json` of vLLM) and its template.
 
     python convert_decider_to_hf.py --repo_id vllm-sr/d3 --output_dir d3-jev
@@ -24,12 +25,14 @@ import argparse
 import json
 import os
 
-from huggingface_hub import hf_hub_download
+from huggingface_hub import get_safetensors_metadata, hf_hub_download
 
 from transformers import AutoConfig, AutoProcessor, JevConfig
 from transformers.decision import DecisionConfig, Question
 from transformers.decision.configuration_utils import DECISION_HEAD_CONFIG_NAME
 
+
+DECISION_INDEX_NAME = "decision.safetensors.index.json"
 
 # One prompt per question, the image of the state before its text, read at the last token
 TEMPLATE = """
@@ -87,15 +90,22 @@ def convert(repo_id: str, output_dir: str):
         readout_config = json.load(file)
     prompt = PROMPTS[readout_config.get("prompt", "pplx")]
 
-    text_config = AutoConfig.from_pretrained(repo_id).get_text_config()
+    backbone_config = AutoConfig.from_pretrained(repo_id)
+    # The backbone attends to the whole prompt
+    backbone_config.get_text_config().is_causal = readout_config.get("attention_mode") != "noncausal_full_attention"
     codes = readout_config["codes"]
     config = JevConfig(
-        hidden_size=text_config.hidden_size,
+        hidden_size=backbone_config.get_text_config().hidden_size,
         num_verbalizers=len(codes),
         offsets=dict.fromkeys(Question.questions_types, 0),
+        text_config=backbone_config,
     )
-    config.transformers_weights = "readout.safetensors"  # already in the repo, `weight` loads as `proj.weight`
+    # The weights of the model and the `readout.safetensors` already in the repo, its `weight` loads as `proj.weight`
+    weight_map = dict(get_safetensors_metadata(repo_id).weight_map) | {"weight": "readout.safetensors"}
     os.makedirs(output_dir, exist_ok=True)
+    with open(f"{output_dir}/{DECISION_INDEX_NAME}", "w", encoding="utf-8") as file:
+        json.dump({"metadata": {}, "weight_map": weight_map}, file, indent=2)
+    config.transformers_weights = DECISION_INDEX_NAME
     config.to_json_file(f"{output_dir}/{DECISION_HEAD_CONFIG_NAME}")
 
     processor = AutoProcessor.from_pretrained(repo_id)  # the tokenizer of text-only models
@@ -111,8 +121,6 @@ def convert(repo_id: str, output_dir: str):
         temperature=dict.fromkeys(Question.questions_types, readout_config["temperature"]),
         chat_template=template,
         noul_options=["false", "true"],
-        # The backbone attends to the whole prompt
-        is_causal=readout_config.get("attention_mode") != "noncausal_full_attention",
     ).save_pretrained(output_dir)
 
 

@@ -924,8 +924,7 @@ def should_be_tested(model_name: str) -> bool:
     """
     Whether or not a model should be tested.
     """
-    # Decision models are a tested model and head, loaded together by the `for_decision_class` of their head's tests
-    if model_name in IGNORE_NON_TESTED or model_name.endswith("ForDecision"):
+    if model_name in IGNORE_NON_TESTED:
         return False
     return not is_building_block(model_name)
 
@@ -999,8 +998,7 @@ def get_all_auto_configured_models() -> list[str]:
 def ignore_unautoclassed(model_name: str) -> bool:
     """Rules to determine if a model should be in an auto class."""
     # Special white list
-    # Decision models load their model and head (which is in the auto mappings) themselves
-    if model_name in IGNORE_NON_AUTO_CONFIGURED or model_name.endswith("ForDecision"):
+    if model_name in IGNORE_NON_AUTO_CONFIGURED:
         return True
     # Encoder and Decoder should be ignored
     if "Encoder" in model_name or "Decoder" in model_name:
