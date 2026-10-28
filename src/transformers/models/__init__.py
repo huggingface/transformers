@@ -72,6 +72,7 @@ if TYPE_CHECKING:
     from .chinese_clip import *
     from .chmv2 import *
     from .clap import *
+    from .clef import *
     from .clip import *
     from .clipseg import *
     from .clvp import *
