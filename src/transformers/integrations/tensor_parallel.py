@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import warnings
 
-from ..distributed.expert_parallel import EpRouterParallel, MoEParamShard
+from ..distributed.expert_parallel import MoEParamShard
 from ..distributed.parallel_utils import replace_layer_number_by_wildcard
 from ..distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
@@ -44,7 +44,6 @@ from ..distributed.tensor_parallel import (
 from ..distributed.utils import initialize_tensor_parallelism
 
 
-RouterParallel = EpRouterParallel
 MoeIdentityExpertParallel = MoeIdentityParallel
 MoeTensorParalellExperts = MoeExpertsParallel
 
@@ -65,11 +64,9 @@ __all__ = [
     "ALL_PARALLEL_STYLES",
     "MoeIdentityExpertParallel",
     "MoeTensorParalellExperts",
-    "RouterParallel",
     "initialize_tensor_parallelism",
     "AllReduceParallel",
     "ColwiseParallel",
-    "EpRouterParallel",
     "MlaKvAProjParallel",
     "MoeExpertsParallel",
     "MoEParamShard",

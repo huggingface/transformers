@@ -140,7 +140,6 @@ The table below describes each strategy.
 | `MoeExpertsParallel` | Tensor parallel MoE experts. All-reduces the expert output forward and adds the backward all-reduces for hidden states and routing weights. |
 | `MoeIdentityParallel` | Pre-divides the input of a zero or identity expert by the mesh size, cancelling the all-reduce that `moe_tp_experts` applies downstream. |
 | `MoEParamShard` | Shards MoE expert weights on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` also rewrites `module.num_experts` to the per-rank expert count. |
-| `EpRouterParallel` | Masks router scores for non-local experts and remaps global expert IDs to local ones, so each rank runs only the experts it owns. Requires `num_experts` to be divisible by the mesh size. |
 
 ### Packed strategies
 
