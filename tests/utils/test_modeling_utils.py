@@ -2788,7 +2788,6 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.author, "SFconvertbot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
-    @unittest.skip(reason="private/gated testing not needed")
     def test_safetensors_on_the_fly_conversion_private(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2808,10 +2807,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name, token=self.token)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
-    @unittest.skip(reason="private/gated testing not needed")
+    @unittest.skip(reason="SFconvertbot cannot agree to gating on dynamically-created repos")
     def test_safetensors_on_the_fly_conversion_gated(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2857,7 +2856,6 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.author, "SFconvertbot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
-    @unittest.skip(reason="private/gated testing not needed")
     def test_safetensors_on_the_fly_sharded_conversion_private(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2877,10 +2875,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
-    @unittest.skip(reason="private/gated testing not needed")
+    @unittest.skip(reason="SFconvertbot cannot agree to gating on dynamically-created repos")
     def test_safetensors_on_the_fly_sharded_conversion_gated(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2924,7 +2922,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
         # We now switch the repo visibility to public
