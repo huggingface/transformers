@@ -91,11 +91,10 @@ def quantize_nvfp4(weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, to
 
 
 class NVFP4Linear(nn.Module):
-    """Linear layer with NVFP4 weights.
-
+    """
+    Linear layer with NVFP4 weights.
     Activations quantize against the calibrated `input_global_scale`, or a global of 1 when quantized on the fly.
-    `weight_only=True` keeps them in the model dtype. On the fly, the weight starts as a full-precision placeholder.
-    On SM100 the scales may load swizzled, as a 5-D grid, see `NVFP4SwizzleScales`.
+    `weight_only=True` keeps them in the model dtype. On SM100 the scales may load swizzled, as a 5-D grid, see `NVFP4SwizzleScales`.
     """
 
     def __init__(
@@ -116,8 +115,9 @@ class NVFP4Linear(nn.Module):
             else torch.empty(out_features, in_features)
         )
         self.weight = nn.Parameter(weight, requires_grad=False)
-        scale_shape = (out_features, in_features // GROUP_SIZE)
-        self.weight_scale_inv = nn.Parameter(torch.empty(scale_shape, dtype=torch.float8_e4m3fn), requires_grad=False)
+        self.weight_scale_inv = nn.Parameter(
+            torch.empty((out_features, in_features // GROUP_SIZE), dtype=torch.float8_e4m3fn), requires_grad=False
+        )
         self.weight_global_scale = nn.Parameter(torch.ones((), dtype=torch.float32), requires_grad=False)
         self.input_global_scale = (
             None if weight_only else nn.Parameter(torch.ones((), dtype=torch.float32), requires_grad=False)
