@@ -29,6 +29,8 @@ from transformers.distributed.tensor_parallel import (
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
+from ..test_tensor_parallel_mixin import _init_distributed
+
 
 @is_tensor_parallel_test
 class TestTensorParallelProperties(TestCasePlus):
@@ -364,3 +366,105 @@ class TestTensorParallelLayer(TestCasePlus):
 
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
+
+    def test_param_shard_dim_0(self):
+        module = torch.nn.Conv1d(
+            in_channels=8,
+            out_channels=8,
+            kernel_size=4,
+            groups=8,
+            bias=False,
+        )
+        style = ALL_PARALLEL_STYLES["shard_dim_0"]
+
+        placements = self._get_parameter_placements(
+            module,
+            style,
+            self.MockDeviceMesh(world_size=2, rank=0),
+        )
+
+        self.assertEqual(placements["weight"].dim, 0)
+        local_shape = self._get_local_shape(
+            module.weight.shape,
+            placements["weight"],
+            world_size=2,
+            rank=0,
+        )
+        self.assertEqual(local_shape, (4, 1, 4))
+
+    def test_redistribute_packed_tensor(self):
+        _init_distributed(tp=2, backend="gloo")(_redistribute_packed_tensor_matches_expected_sections)()
+
+    def test_gated_deltanet_parallel(self):
+        module = torch.nn.Module()
+        module.num_k_heads = 4
+        module.num_v_heads = 8
+        module.register_parameter("A_log", torch.nn.Parameter(torch.empty(8)))
+        module.register_parameter("dt_bias", torch.nn.Parameter(torch.empty(8)))
+
+        style = ALL_PARALLEL_STYLES["gated_deltanet"]
+        mesh = self.MockDeviceMesh(world_size=2, rank=0)
+
+        style.validate_param(module, "A_log", mesh)
+        style.validate_param(module, "dt_bias", mesh)
+
+        placements = self._get_parameter_placements(module, style, mesh)
+
+        self.assertEqual(placements["A_log"].dim, 0)
+        self.assertEqual(placements["dt_bias"].dim, 0)
+
+        invalid_mesh = self.MockDeviceMesh(world_size=3, rank=0)
+        with self.assertRaisesRegex(ValueError, "Gated DeltaNet heads must divide evenly"):
+            style.validate_param(module, "A_log", invalid_mesh)
+
+def _redistribute_packed_tensor_matches_expected_sections(rank):
+    key_dim = 6
+    value_dim = 10
+    world_size = torch.distributed.get_world_size()
+    local_key_dim = key_dim // world_size
+    local_value_dim = value_dim // world_size
+
+    total_dim = 2 * key_dim + value_dim
+    local_contiguous_dim = total_dim // world_size
+    source_start = rank * local_contiguous_dim
+    source_end = source_start + local_contiguous_dim
+
+    full_qkv = torch.arange(total_dim, dtype=torch.float32).view(1, total_dim, 1)
+    local_qkv = full_qkv[:, source_start:source_end].clone().requires_grad_()
+
+    output = tensor_parallel._redistribute_packed_tensor(
+        local_qkv,
+        (key_dim, key_dim, value_dim),
+        torch.distributed.group.WORLD,
+    )
+
+    expected = torch.cat(
+        (
+            full_qkv[:, rank * local_key_dim : (rank + 1) * local_key_dim],
+            full_qkv[
+                :,
+                key_dim + rank * local_key_dim : key_dim + (rank + 1) * local_key_dim,
+            ],
+            full_qkv[
+                :,
+                2 * key_dim + rank * local_value_dim : 2 * key_dim + (rank + 1) * local_value_dim,
+            ],
+        ),
+        dim=1,
+    )
+    torch.testing.assert_close(output, expected)
+
+    output.sum().mul(rank + 1).backward()
+
+    expected_grad = []
+    for channel in range(source_start, source_end):
+        if channel < key_dim:
+            destination = channel // local_key_dim
+        elif channel < 2 * key_dim:
+            destination = (channel - key_dim) // local_key_dim
+        else:
+            destination = (channel - 2 * key_dim) // local_value_dim
+        expected_grad.append(destination + 1)
+
+    expected_grad = torch.tensor(expected_grad, dtype=local_qkv.dtype).view_as(local_qkv)
+    torch.testing.assert_close(local_qkv.grad, expected_grad)

@@ -20,6 +20,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
+from ...distributed.tensor_parallel import _redistribute_packed_tensor
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import (
@@ -110,11 +111,13 @@ class Qwen3_5TextConfig(Qwen3NextConfig):
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.linear_attn.in_proj_qkv": "colwise_gather_output",
-        "layers.*.linear_attn.in_proj_z": "colwise_gather_output",
-        "layers.*.linear_attn.in_proj_b": "colwise_gather_output",
-        "layers.*.linear_attn.in_proj_a": "colwise_gather_output",
-        "layers.*.linear_attn.out_proj": "colwise_gather_output",
+        "layers.*.linear_attn": "gated_deltanet",
+        "layers.*.linear_attn.conv1d": "shard_dim_0",
+        "layers.*.linear_attn.in_proj_qkv": "colwise",
+        "layers.*.linear_attn.in_proj_z": "colwise",
+        "layers.*.linear_attn.in_proj_b": "colwise",
+        "layers.*.linear_attn.in_proj_a": "colwise",
+        "layers.*.linear_attn.out_proj": "rowwise",
     }
     base_model_ep_plan = None  # no Moe
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
@@ -276,13 +279,24 @@ class Qwen3_5GatedDeltaNet(Qwen3NextGatedDeltaNet):
             if cache_params is not None:
                 mixed_qkv = mixed_qkv[:, :, -seq_len:]
 
+        tp_size = getattr(self, "_tp_size", 1)
+        if tp_size > 1:
+            mixed_qkv = _redistribute_packed_tensor(
+                mixed_qkv,
+                (self.key_dim, self.key_dim, self.value_dim),
+                self._tp_group,
+            )
+
+        local_key_dim = self.key_dim // tp_size
+        local_value_dim = self.value_dim // tp_size
+
         mixed_qkv = mixed_qkv.transpose(1, 2)
         query, key, value = torch.split(
             mixed_qkv,
             [
-                self.key_dim,
-                self.key_dim,
-                self.value_dim,
+                local_key_dim,
+                local_key_dim,
+                local_value_dim,
             ],
             dim=-1,
         )
