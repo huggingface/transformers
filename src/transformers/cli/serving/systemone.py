@@ -18,11 +18,9 @@ Answers typed questions (`choice`, `score`, `noul`) about a `state`, and the ima
 for every allowed answer, by running the served model through [`DecisionPipeline`]. No text is generated.
 """
 
-import functools
-import json
 from typing import TYPE_CHECKING, Any
 
-from ...decision import DecisionConfig, Question, parse_questions
+from ...decision import DecisionConfig, parse_questions
 from ...utils import logging
 from ...utils.import_utils import is_serve_available
 
@@ -79,13 +77,9 @@ class SystemOneHandler(BaseHandler):
             if isinstance(decision_config, DecisionConfig)
             else DecisionConfig.from_file(decision_config)
         )
-        # Each distinct set of questions is validated once: keyed by its JSON, a repeated set is a cache hit
-        self.parse_questions = functools.lru_cache(maxsize=256)(
-            lambda questions: parse_questions(json.loads(questions), self.decision_config)
-        )
         self.pipelines: dict[str, DecisionPipeline] = {}
 
-    def _validate_request(self, body: dict) -> tuple[SystemOneRequest, list[Question]]:
+    def _validate_request(self, body: dict) -> SystemOneRequest:
         """Validate the entire request, questions included, before resolving or loading a model."""
         if "model" not in body and self.model_manager.force_model is not None:
             body = {**body, "model": self.model_manager.force_model}
@@ -95,10 +89,11 @@ class SystemOneHandler(BaseHandler):
             detail = [{**item, "loc": ("body", *item["loc"])} for item in error.errors(include_url=False)]
             raise HTTPException(status_code=422, detail=detail) from error
         try:
-            return request, self.parse_questions(json.dumps(request.questions, ensure_ascii=False))
+            parse_questions(request.questions, self.decision_config)
         except ValueError as error:
             detail = [{"loc": ("body", "questions"), "msg": str(error), "type": "value_error"}]
             raise HTTPException(status_code=422, detail=detail) from error
+        return request
 
     def _pipeline(
         self, model_id: str, model: "PreTrainedModel", processor: "ProcessorMixin | PreTrainedTokenizerFast"
@@ -134,7 +129,7 @@ class SystemOneHandler(BaseHandler):
         Returns:
             `JSONResponse`: `model`, `answers` keyed by question name, and `usage`.
         """
-        request, _ = self._validate_request(body)
+        request = self._validate_request(body)
         model_id, model, processor = self._resolve_model(body)
         logger.warning(f"[Request received] Model: {model_id}, questions: {len(request.questions)}")
 

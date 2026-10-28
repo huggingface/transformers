@@ -1580,12 +1580,6 @@ class ConfigArgs:
     """,
     }
 
-    question_types = {
-        "description": """
-    The question types of a decision head, in the order of the `question_type_ids` it gets.
-    """,
-    }
-
     final_logit_softcapping = {
         "description": """
     Soft-capping value applied to the final logits before computing the probability distribution. Logits are

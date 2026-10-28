@@ -720,11 +720,10 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
         self.assertEqual(answers, expected)
         self.assertGreater(input_tokens, 0)
 
-    def test_questions_are_validated_once_per_distinct_set(self):
+    def test_questions_are_validated(self):
         handler = SystemOneHandler(MagicMock(), GenerationState())
         body = {"model": "x", "state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
-        _, questions = handler._validate_request(body)
-        self.assertIs(handler._validate_request(body)[1], questions)
+        self.assertEqual(handler._validate_request(body).questions, body["questions"])
         body["questions"] = {"a": {"type": "Choice", "criteria": {}}, "b": {"type": "noul", "instruction": "typo"}}
         with self.assertRaises(HTTPException) as error:
             handler._validate_request(body)
