@@ -2037,7 +2037,7 @@ class ProcessorMixin(PushToHubMixin):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
         """
-        processor_kwargs = processor_kwargs or {}
+        processor_kwargs = processor_kwargs.copy() or {}
 
         if chat_template is None:
             if isinstance(self.chat_template, dict) and "default" in self.chat_template:
