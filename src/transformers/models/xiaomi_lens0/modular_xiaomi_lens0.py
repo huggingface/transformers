@@ -88,6 +88,13 @@ class XiaomiLens0MaskDecoderConfig(PreTrainedConfig):
 
     model_type = "xiaomi_lens0_mask_decoder"
     base_config_key = "mask_decoder_config"
+    attribute_map = {
+        "llm_hidden_size": "hidden_size",
+        "llm_intermediate_size": "intermediate_size",
+        "llm_num_heads": "num_attention_heads",
+        "mask_decoder_channels": "upscale_channels",
+        "mask_decoder_embed_dim": "mask_embed_dim",
+    }
 
     hidden_size: int = 2560
     intermediate_size: int = 9216
@@ -154,7 +161,11 @@ class XiaomiLens0Config(Qwen3_5Config):
     mask_loss_chunk_size: int = 8
 
     def __post_init__(self, **kwargs):
-        raise AttributeError("Not needed for Xiaomi-Lens-0")
+        # For BC with the original hub checkpoint
+        legacy_mask_decoder = kwargs.pop("mask_decoder", None)
+        if self.mask_decoder_config is None and legacy_mask_decoder is not None:
+            self.mask_decoder_config = legacy_mask_decoder
+        PreTrainedConfig.__post_init__(self, **kwargs)
 
 
 @auto_docstring

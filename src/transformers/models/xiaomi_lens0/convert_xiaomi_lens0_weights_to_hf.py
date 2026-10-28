@@ -11,100 +11,88 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Converts the original Xiaomi-Lens-0 checkpoint (https://huggingface.co/SeerRay-Lab/Xiaomi-Lens-0) to the
-`xiaomi_lens0` format.
+"""Prepare the original Xiaomi-Lens-0 checkpoint for native Transformers loading.
 
-The weights keep their original names: `conversion_mapping.py` renames the mask decoder weights on the fly. Only the
-config (stored as a `qwen3_5` config with an extra `mask_decoder` dict) and the processor are rewritten.
+Only metadata is changed. Weight files, the original architecture name, Qwen sub-configs,
+and the legacy mask_decoder dictionary are preserved for the original implementation.
+The native model converts decoder weights on load using conversion_mapping.py.
+
+The original repo must explicitly load Qwen3VLProcessor when using an older Transformers
+release that does not provide XiaomiLens0Processor. Existing remote-code files and auto_map
+entries are copied, but this script does not create a remote implementation.
 
 Usage:
-
-```bash
-python src/transformers/models/xiaomi_lens0/convert_xiaomi_lens0_weights_to_hf.py \
-    --input_path SeerRay-Lab/Xiaomi-Lens-0 --output_path Xiaomi-Lens-0-hf
-```
+    python src/transformers/models/xiaomi_lens0/convert_xiaomi_lens0_weights_to_hf.py \
+        --input_path SeerRay-Lab/Xiaomi-Lens-0 --output_path Xiaomi-Lens-0-hf
 """
 
 import argparse
+import copy
 import json
+import shutil
+from pathlib import Path
 
-import torch
-from huggingface_hub import hf_hub_download
+from huggingface_hub import HfApi, snapshot_download
 
-from transformers import (
-    AutoTokenizer,
-    GenerationConfig,
-    Qwen2VLImageProcessor,
-    Qwen3VLVideoProcessor,
-    XiaomiLens0Config,
-    XiaomiLens0ForConditionalGeneration,
-    XiaomiLens0Processor,
-)
+from transformers import AutoTokenizer, XiaomiLens0Config
 
 
-# Keys of the original `mask_decoder` config dict -> `XiaomiLens0MaskDecoderConfig` attributes
-MASK_DECODER_CONFIG_MAPPING = {
-    "llm_hidden_size": "hidden_size",
-    "llm_intermediate_size": "intermediate_size",
-    "llm_num_heads": "num_attention_heads",
-    "vision_hidden_size": "vision_hidden_size",
-    "mask_decoder_channels": "upscale_channels",
-    "mask_decoder_embed_dim": "mask_embed_dim",
-}
+def convert_config(original_config: dict, mask_token_id: int) -> dict:
+    config = copy.deepcopy(original_config)
+    config["model_type"] = "xiaomi_lens0"
+    config["mask_token_id"] = mask_token_id
+    # Check that the native config accepts the legacy schema without serializing it back:
+    # serialization would replace the Qwen sub-config types and legacy decoder field names.
+    XiaomiLens0Config.from_dict(config)
+    return config
 
 
-def convert_config(original_config: dict, mask_token_id: int) -> XiaomiLens0Config:
-    text_config = {key: value for key, value in original_config["text_config"].items() if key != "model_type"}
-    vision_config = {key: value for key, value in original_config["vision_config"].items() if key != "model_type"}
-    mask_decoder_config = {
-        MASK_DECODER_CONFIG_MAPPING[key]: value for key, value in original_config["mask_decoder"].items()
-    }
-    return XiaomiLens0Config(
-        text_config=text_config,
-        vision_config=vision_config,
-        mask_decoder_config=mask_decoder_config,
-        image_token_id=original_config["image_token_id"],
-        video_token_id=original_config["video_token_id"],
-        vision_start_token_id=original_config["vision_start_token_id"],
-        vision_end_token_id=original_config["vision_end_token_id"],
-        mask_token_id=mask_token_id,
-        tie_word_embeddings=original_config["tie_word_embeddings"],
-    )
+def convert_checkpoint(input_path: str, output_path: str, push_to_hub: str | None = None, revision: str | None = None):
+    output_dir = Path(output_path).resolve()
+    if output_dir.exists() and (not output_dir.is_dir() or any(output_dir.iterdir())):
+        raise ValueError("output_path must be an empty directory or a new path.")
+    source_dir = Path(input_path)
+    if not source_dir.is_dir():
+        source_dir = Path(snapshot_download(input_path, revision=revision))
+    source_dir = source_dir.resolve()
+    if output_dir == source_dir or output_dir.is_relative_to(source_dir):
+        raise ValueError("output_path must not be inside the input checkpoint.")
 
-
-def convert_checkpoint(input_path: str, output_path: str, push_to_hub: str | None = None):
-    with open(hf_hub_download(input_path, "config.json"), encoding="utf-8") as config_file:
-        original_config = json.load(config_file)
-    tokenizer = AutoTokenizer.from_pretrained(input_path)
+    original_config = json.loads((source_dir / "config.json").read_text(encoding="utf-8"))
+    tokenizer = AutoTokenizer.from_pretrained(source_dir)
     config = convert_config(original_config, mask_token_id=tokenizer.convert_tokens_to_ids("<|mask|>"))
-    config.think_start_token_id = tokenizer.convert_tokens_to_ids("<think>")
-    config.think_end_token_id = tokenizer.convert_tokens_to_ids("</think>")
+    config["think_start_token_id"] = tokenizer.convert_tokens_to_ids("<think>")
+    config["think_end_token_id"] = tokenizer.convert_tokens_to_ids("</think>")
 
-    processor = XiaomiLens0Processor(
-        image_processor=Qwen2VLImageProcessor.from_pretrained(input_path),
-        tokenizer=tokenizer,
-        video_processor=Qwen3VLVideoProcessor.from_pretrained(input_path),
-        chat_template=tokenizer.chat_template,
-    )
+    # Copy bytes instead of loading and re-saving tensors, preserving shard names, dtypes,
+    # indexes, and the original fused attention projections exactly.
+    shutil.copytree(source_dir, output_dir, dirs_exist_ok=True, ignore=shutil.ignore_patterns(".git", ".cache"))
+    (output_dir / "config.json").write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    for filename in (
+        "processor_config.json",
+        "preprocessor_config.json",
+        "video_preprocessor_config.json",
+        "tokenizer_config.json",
+    ):
+        path = output_dir / filename
+        if not path.is_file():
+            continue
+        metadata = json.loads(path.read_text(encoding="utf-8"))
+        if filename == "processor_config.json" or "processor_class" in metadata:
+            metadata["processor_class"] = "XiaomiLens0Processor"
+            path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
-    model, loading_info = XiaomiLens0ForConditionalGeneration.from_pretrained(
-        input_path, config=config, dtype=torch.bfloat16, output_loading_info=True
-    )
-    if any(loading_info[key] for key in ("missing_keys", "unexpected_keys", "mismatched_keys")):
-        raise ValueError(f"The checkpoint does not match the model: {loading_info}")
-    model.generation_config = GenerationConfig.from_pretrained(input_path)
-
-    model.save_pretrained(output_path)
-    processor.save_pretrained(output_path)
     if push_to_hub is not None:
-        model.push_to_hub(push_to_hub, private=True)
-        processor.push_to_hub(push_to_hub, private=True)
+        api = HfApi()
+        api.create_repo(push_to_hub, private=True, exist_ok=True)
+        api.upload_folder(repo_id=push_to_hub, folder_path=output_dir)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--input_path", default="SeerRay-Lab/Xiaomi-Lens-0", help="Original checkpoint repo or path.")
-    parser.add_argument("--output_path", required=True, help="Directory to save the converted checkpoint to.")
+    parser.add_argument("--output_path", required=True, help="New or empty directory for the converted checkpoint.")
+    parser.add_argument("--revision", default=None, help="Source Hub revision to download.")
     parser.add_argument("--push_to_hub", default=None, help="Optional repo id to push the converted checkpoint to.")
     args = parser.parse_args()
-    convert_checkpoint(args.input_path, args.output_path, args.push_to_hub)
+    convert_checkpoint(args.input_path, args.output_path, args.push_to_hub, args.revision)

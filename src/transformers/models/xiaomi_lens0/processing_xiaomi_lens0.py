@@ -239,10 +239,12 @@ class XiaomiLens0Processor(ProcessorMixin):
         ignore_thinking: bool = True,
     ) -> list[dict[str, torch.Tensor]]:
         r"""
-        Extract boxes and masks independently, pairing them by occurrence order within each image.
-        Boxes use `<bbox>[x1, y1, x2, y2]</bbox>` with coordinates normalized to `[0, 1000]`; masks use
-        `<|mask|>`. Either may appear first or without the other. The first box pairs with the first mask,
-        and so on; excess boxes or masks are unpaired. Malformed boxes raise `ValueError`.
+        Extract boxes and segmentation masks from the model outputs.
+
+        Boxes and masks are expected in `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|><\mask>` format with
+        box coordinates normalized to `[0, 1000]`. Both are optional. Masks require `mask_logits` and
+        `mask_token_indices` to be set. If boxes and masks are detected, they are paired based on their
+        position in `input_ids`, such that the first box is matched with the first mask and so on.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -253,7 +255,7 @@ class XiaomiLens0Processor(ProcessorMixin):
                 One `(num_masks, height, width)` tensor per image, in token order as returned by `decode_masks`.
                 Omit or pass `None` for box-only output with empty mask tensors.
             mask_token_indices (`list[torch.LongTensor]`, *optional*):
-                One CPU `(num_masks, 2)` tensor per image containing `(batch_index, token_position)`, as returned
+                One `(num_masks, 2)` tensor per image containing `(batch_index, token_position)`, as returned
                 by `decode_masks`, in token order matching `mask_logits`. Required when `mask_logits` is provided.
             target_sizes (`list[tuple[int, int]]`, *optional*):
                 The `(height, width)` of each image to resize the boxes and masks to. Defaults to the size of the
@@ -261,14 +263,14 @@ class XiaomiLens0Processor(ProcessorMixin):
             mask_threshold (`float`, *optional*, defaults to 0.5):
                 Probability threshold to binarize the masks.
             ignore_thinking (`bool`, *optional*, defaults to `True`):
-                Exclude boxes inside thinking blocks, using the same token filter as `decode_masks`.
-                Use the same setting for decoding masks so both occurrence orders refer to the same text.
+                Ignore boxes inside thinking blocks. Ignoring masks inside thinking blocks is controlled by
+                the `ignore_thinking` argument in [`XiaomiLens0ForConditionalGeneration.decode_masks`].
 
         Returns:
             `list[dict]`: One dictionary per image with:
                 - **boxes** (`torch.FloatTensor` of shape `(num_boxes, 4)`): Boxes in absolute
-                  `(top_left_x, top_left_y, bottom_right_x, bottom_right_y)` format.
-                - **masks** (`torch.BoolTensor` of shape `(num_masks, height, width)`): Binary masks.
+                  `(top_left_x, top_left_y, bottom_right_x, bottom_right_y)` pixel coordinates.
+                - **masks** (`torch.BoolTensor` of shape `(num_masks, height, width)`): Binary segmentation masks.
                   Boxes and masks are each in token order. Entries with the same index are paired up to
                   `min(num_boxes, num_masks)`, remaining entries have no counterpart.
         """
