@@ -530,6 +530,7 @@ if TYPE_CHECKING:
     from .vits import *
     from .vivit import *
     from .vjepa2 import *
+    from .von import *
     from .voxtral import *
     from .voxtral_realtime import *
     from .wav2vec2 import *
