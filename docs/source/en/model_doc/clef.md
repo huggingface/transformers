@@ -25,7 +25,7 @@ the settings and the head live in their own repo next to it.
 ```python
 from transformers import pipeline
 
-decide = pipeline("decision", model="Cloudflare/clef-flash", decision_config="ArthurZ/clef-flash")
+decide = pipeline("decision", model="Cloudflare/clef-flash")
 decide(
     {
         "state": "I was charged twice for my order and want a refund.",
