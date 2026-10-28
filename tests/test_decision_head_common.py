@@ -48,7 +48,7 @@ class DecisionHeadTesterMixin:
         cls.decision_config = DecisionConfig.from_pretrained(cls.decision_repo)
         cls.prompts = DecisionTemplate(cls.tokenizer, cls.decision_config)(cls.test["request"])
         cls.config = AutoConfig.from_pretrained(
-            cls.decision_repo, _configuration_file=DECISION_HEAD_CONFIG_NAME, **cls.tiny_sizes
+            cls.decision_repo, config_file_name=DECISION_HEAD_CONFIG_NAME, **cls.tiny_sizes
         )
         cls.config.text_config = cls.backbone_class.config_class(
             vocab_size=len(cls.tokenizer),
@@ -106,7 +106,11 @@ class DecisionHeadTesterMixin:
             config = model.config
             config.transformers_weights = "decision.safetensors.index.json"
             config.to_json_file(f"{tmp}/{DECISION_HEAD_CONFIG_NAME}")
-            loaded = self.all_model_classes[0].from_pretrained(tmp, attn_implementation="eager").eval()
+            loaded = (
+                self.all_model_classes[0]
+                .from_pretrained(tmp, config_file_name=DECISION_HEAD_CONFIG_NAME, attn_implementation="eager")
+                .eval()
+            )
             decide = pipeline("decision", model=tmp, model_kwargs={"attn_implementation": "eager"})
             answers = decide(self.test["request"])
         self.assertIsInstance(decide.model, self.all_model_classes[0])

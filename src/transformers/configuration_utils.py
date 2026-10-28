@@ -833,6 +833,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
+            config_file_name (`str`, *optional*, defaults to `"config.json"`):
+                Name of the configuration file in the repo, for a model whose files sit next to the ones of another.
             kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
@@ -941,6 +943,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         revision = kwargs.pop("revision", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         subfolder = kwargs.pop("subfolder", "")
+        config_file_name = kwargs.pop("config_file_name", None) or CONFIG_NAME
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
 
@@ -964,7 +967,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             resolved_config_file = pretrained_model_name_or_path
             is_local = True
         else:
-            configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME) if gguf_file is None else gguf_file
+            configuration_file = (
+                kwargs.pop("_configuration_file", config_file_name) if gguf_file is None else gguf_file
+            )
 
             try:
                 # Load from local folder or from cache or download from model Hub and cache

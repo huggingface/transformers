@@ -983,7 +983,7 @@ def pipeline(
             _raise_exceptions_for_missing_entries=False,
             **{key: value for key, value in hub_kwargs.items() if key != "trust_remote_code"},
         ):
-            model_kwargs = {**model_kwargs, "_configuration_file": DECISION_HEAD_CONFIG_NAME}
+            model_kwargs = {**model_kwargs, "config_file_name": DECISION_HEAD_CONFIG_NAME}
         config = AutoConfig.from_pretrained(
             model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
         )
