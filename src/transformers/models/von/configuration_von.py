@@ -13,8 +13,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="wfzyx/von")
@@ -24,18 +25,22 @@ class VonConfig(PreTrainedConfig):
     noul_prior (`dict[str, float]`, *optional*):
         Debiasing of zero-shot `noul` questions by the block without the state: the score of `true` is lowered by
         `a * (null_true - null_false) + b`.
+    text_config (`dict` or `PreTrainedConfig`, *optional*):
+        Config of the model the head reads, the `config.json` of its repo.
 
     Example:
     ```python
-    >>> from transformers import VonConfig, VonDecisionHead
+    >>> from transformers import VonConfig, VonForDecision
 
-    >>> head = VonDecisionHead(VonConfig(hidden_size=1024))
+    >>> model = VonForDecision(VonConfig(hidden_size=1024))
     ```"""
 
     model_type = "von"
+    sub_configs_defaults = {"text_config": SubConfigSpec(config_class=AutoConfig, model_type="modernbert")}
 
     hidden_size: int = 1024
     noul_prior: dict[str, float] | None = None
+    text_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
 
 

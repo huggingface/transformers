@@ -16,7 +16,7 @@ from typing import Any
 import torch
 from torch import nn
 
-from ...decision.modeling_utils import ForDecision
+from ...decision.modeling_utils import DecisionPreTrainedModel
 from ...masking_utils import (
     and_masks,
     create_bidirectional_mask,
@@ -24,28 +24,30 @@ from ...masking_utils import (
     packed_sequence_mask_function,
     padding_mask_function,
 )
-from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
+from ..auto import AutoModel
 from .configuration_von import VonConfig
 
 
 @auto_docstring
-class VonPreTrainedModel(PreTrainedModel):
+class VonPreTrainedModel(DecisionPreTrainedModel):
     config: VonConfig
+    base_model_prefix = "model"
 
 
 @auto_docstring(
     custom_intro="""
-    Decision head of von (wfzyx/von): each option is scored by an MLP on the hidden state of its `[MASK]` (the token before
+    von (wfzyx/von): the model of its repo and a decision head, each option is scored by an MLP on the hidden state of its `[MASK]` (the token before
     each `<|mark|>`, a last mark closing the block), with options that only attend to the prompt and to themselves. A
     zero-shot `noul` question has a second block without the state, whose scores debias the first, with `true` first as
-    in its decision config. The state written once more after the last block is not given to the backbone, the pipeline
+    in its decision config. The state written once more after the last block is not given to the model, the pipeline
     counts its tokens.
     """
 )
-class VonDecisionHead(VonPreTrainedModel):
+class VonForDecision(VonPreTrainedModel):
     def __init__(self, config: VonConfig):
         super().__init__(config)
+        self.model = AutoModel.from_config(config.text_config)
         self.input_norm = nn.LayerNorm(config.hidden_size)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size // 2)
         self.norm = nn.LayerNorm(config.hidden_size // 2)
@@ -59,7 +61,6 @@ class VonDecisionHead(VonPreTrainedModel):
 
     def backbone_inputs(
         self,
-        backbone: PreTrainedModel,
         input_ids: torch.LongTensor,
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
@@ -67,7 +68,7 @@ class VonDecisionHead(VonPreTrainedModel):
         """
         Blocks are mutually invisible, options attend to the prompt of their block and to themselves, and the positions of
         every option restart after the prompt, also for the sliding window. The masking API makes the masks for the
-        attention implementation of the backbone.
+        attention implementation of the model.
         """
         reads, ends = self.split_marks(marks, num_options)
         # The state written after the last block is not part of the input
@@ -84,7 +85,7 @@ class VonDecisionHead(VonPreTrainedModel):
 
         rows = torch.stack([input_ids[: len(positions)], block_ids, option_ids, position_ids])
         input_ids, block_ids, option_ids, position_ids = rows[:, None]
-        config, inputs_embeds = backbone.config.get_text_config(), backbone.get_input_embeddings()(input_ids)
+        config, inputs_embeds = self.config.text_config, self.model.get_input_embeddings()(input_ids)
         options = and_masks(
             packed_sequence_mask_function(block_ids),
             or_masks(packed_sequence_mask_function(option_ids), padding_mask_function(option_ids == -1)),
@@ -113,11 +114,11 @@ class VonDecisionHead(VonPreTrainedModel):
         input_ids: torch.LongTensor,
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
-        backbone: PreTrainedModel,
         **kwargs,
     ) -> torch.Tensor:
-        backbone_inputs = self.backbone_inputs(backbone, input_ids, marks, num_options)
-        hidden_states = backbone.base_model(**backbone_inputs, use_cache=False).last_hidden_state[0].to(self.dtype)
+        backbone_inputs = self.backbone_inputs(input_ids, marks, num_options)
+        hidden_states = self.model(**backbone_inputs, **kwargs).last_hidden_state[0]
+        hidden_states = hidden_states.to(self.out_proj.weight.dtype)
         reads, _ = self.split_marks(marks, num_options)
         hidden_states = self.input_norm(hidden_states[reads])
         logits = self.out_proj(self.norm(nn.functional.gelu(self.dense(hidden_states))))[..., 0]
@@ -129,10 +130,4 @@ class VonDecisionHead(VonPreTrainedModel):
         return scores
 
 
-class VonForDecision(ForDecision):
-    """Von: the model of a repo and its [`VonDecisionHead`]."""
-
-    config: VonConfig
-
-
-__all__ = ["VonDecisionHead", "VonForDecision", "VonPreTrainedModel"]
+__all__ = ["VonForDecision", "VonPreTrainedModel"]
