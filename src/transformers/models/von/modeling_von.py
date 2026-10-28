@@ -132,5 +132,7 @@ class VonDecisionHead(VonPreTrainedModel):
 class VonForDecision(ForDecision):
     """Von: the model of a repo and its [`VonDecisionHead`]."""
 
+    config: VonConfig
+
 
 __all__ = ["VonDecisionHead", "VonForDecision", "VonPreTrainedModel"]
