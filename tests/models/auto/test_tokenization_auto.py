@@ -106,7 +106,7 @@ class AutoTokenizerTest(unittest.TestCase):
         "microsoft/wavecoder-ultra-6.7b",
         "LSX-UniWue/LLaMmlein_1B_prerelease",
         "AI-MO/NuminaMath-7B-TIR",
-        "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B"
+        "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
     ]
 
     @slow
