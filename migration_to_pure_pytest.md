@@ -200,6 +200,20 @@ Out of scope until Phase 3 is complete and stable.
 
 ---
 
+## Fix timeline (chronological order of fixes applied)
+
+| Order | Issue # | What was fixed | When |
+|-------|---------|---------------|------|
+| 1 | Issue 1 | `python_classes = ["Test*", "*Test"]` added to `pyproject.toml` | Phase 1, Step 1.1 |
+| 2 | Issue 2 | `setUp` → `setup_method` renamed in bert, roberta, t5, `causal_lm_tester.py` | Phase 1–2 |
+| 3 | Issue 4 | `_testMethodName` setter added to compat mixin — stops crash in unmigrated `unittest.TestCase` models | After CI job 123003870110 analysis |
+
+**Still open (not yet fixed, in discovery order):**
+- Issue 3: `_testMethodName` getter fragility (inspect.stack)
+- Issue 6: `CausalLMModelTest` collection leak + setUp rename breaks 97 models
+
+---
+
 ## Issues found so far
 
 ### Issue 1: `python_classes` config missing
