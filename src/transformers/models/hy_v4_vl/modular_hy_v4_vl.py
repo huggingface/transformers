@@ -718,45 +718,6 @@ class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         )
 
 
-def video_adaptive_resize(
-    frame_height: int,
-    frame_width: int,
-    num_frames: int,
-    *,
-    factor: int,
-    max_pixels: int = 33554432,
-    max_image_size: int = 1024 * 1024,
-) -> tuple[int, int]:
-    """Return the largest aligned ``(width, height)`` for a frame that fits every budget.
-
-    ``factor`` is the merged patch edge in pixels (``patch_size * merge_size``). A frame of ``rows x cols``
-    merged patches costs ``rows * (cols + 1)`` tokens, one newline token per row, which is the same accounting the
-    processor uses. The result never upscales, keeps each frame within ``max_image_size`` pixels, and keeps
-    ``num_frames * rows * (cols + 1)`` inside the visual token budget of ``max_pixels``. Calling it again on its own
-    output returns the same size, so a frame that was already resized is left untouched.
-    """
-    if min(num_frames, frame_height, frame_width, factor, max_pixels, max_image_size) <= 0:
-        raise ValueError("Video dimensions, resize factor, and pixel budgets must be positive.")
-    if max(frame_height, frame_width) / min(frame_height, frame_width) > 200:
-        raise ValueError(
-            f"absolute aspect ratio must be smaller than 200, got {max(frame_height, frame_width) / min(frame_height, frame_width)}"
-        )
-    max_rows = max(1, frame_height // factor)
-    max_cols = max(1, frame_width // factor)
-    visual_budget = max_pixels // (factor * factor)
-    for rows in range(max_rows, 0, -1):
-        # On the ray scale * (height, width), rows == k spans cols floor(W*k/H) .. ceil(W*(k+1)/H) - 1;
-        # rows clamp at 1, so the last step admits any narrower width.
-        low_cols = 1 if rows == 1 else max(1, frame_width * rows // frame_height)
-        high_cols = min(max_cols, max(1, -(-frame_width * (rows + 1) // frame_height) - 1))
-        budget_cols = visual_budget // (num_frames * rows) - 1 if visual_budget > 0 else 0
-        cap_cols = max_image_size // (factor * factor * rows)
-        cols = min(high_cols, budget_cols, cap_cols)
-        if cols >= low_cols:
-            return cols * factor, rows * factor
-    return factor, factor
-
-
 @auto_docstring
 class HYV4VLImageProcessor(HunYuanVLImageProcessor):
     pass
@@ -804,6 +765,45 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
     max_video_tokens = AttributeError()
     valid_kwargs = HYV4VLVideoProcessorInitKwargs
 
+    @staticmethod
+    def _adaptive_resize(
+        frame_height: int,
+        frame_width: int,
+        num_frames: int,
+        *,
+        factor: int,
+        max_pixels: int = 33554432,
+        max_image_size: int = 1024 * 1024,
+    ) -> tuple[int, int]:
+        """Return the largest aligned ``(height, width)`` for a frame that fits every budget.
+
+        ``factor`` is the merged patch edge in pixels (``patch_size * merge_size``). A frame of ``rows x cols``
+        merged patches costs ``rows * (cols + 1)`` tokens, one newline token per row, which is the same accounting the
+        processor uses. The result never upscales, keeps each frame within ``max_image_size`` pixels, and keeps
+        ``num_frames * rows * (cols + 1)`` inside the visual token budget of ``max_pixels``. Calling it again on its
+        own output returns the same size, so a frame that was already resized is left untouched.
+        """
+        if min(num_frames, frame_height, frame_width, factor, max_pixels, max_image_size) <= 0:
+            raise ValueError("Video dimensions, resize factor, and pixel budgets must be positive.")
+        if max(frame_height, frame_width) / min(frame_height, frame_width) > 200:
+            raise ValueError(
+                f"absolute aspect ratio must be smaller than 200, got {max(frame_height, frame_width) / min(frame_height, frame_width)}"
+            )
+        max_rows = max(1, frame_height // factor)
+        max_cols = max(1, frame_width // factor)
+        visual_budget = max_pixels // (factor * factor)
+        for rows in range(max_rows, 0, -1):
+            # On the ray scale * (height, width), rows == k spans cols floor(W*k/H) .. ceil(W*(k+1)/H) - 1;
+            # rows clamp at 1, so the last step admits any narrower width.
+            low_cols = 1 if rows == 1 else max(1, frame_width * rows // frame_height)
+            high_cols = min(max_cols, max(1, -(-frame_width * (rows + 1) // frame_height) - 1))
+            budget_cols = visual_budget // (num_frames * rows) - 1 if visual_budget > 0 else 0
+            cap_cols = max_image_size // (factor * factor * rows)
+            cols = min(high_cols, budget_cols, cap_cols)
+            if cols >= low_cols:
+                return rows * factor, cols * factor
+        return factor, factor
+
     def resize(
         self,
         videos: "torch.Tensor",
@@ -813,9 +813,10 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
         max_image_size: dict[str, int],
         **kwargs,
     ) -> "torch.Tensor":
+        # `shortest_edge` is part of the size contract but is never a lower bound: frames are not upscaled.
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-        width, height = video_adaptive_resize(
+        height, width = self._adaptive_resize(
             frame_height=videos.shape[-2],
             frame_width=videos.shape[-1],
             num_frames=videos.shape[1],
@@ -956,7 +957,7 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
 
         factor = patch_size * merge_size
         if do_resize:
-            width, height = video_adaptive_resize(
+            height, width = self._adaptive_resize(
                 frame_height=height,
                 frame_width=width,
                 num_frames=num_frames,
