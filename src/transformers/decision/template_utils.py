@@ -249,23 +249,20 @@ class DecisionPrompt:
     questions: list[Question]
     backbone_kwargs: dict[str, Any] = field(default_factory=dict)
 
-    def backbone_inputs(self) -> BatchEncoding:
-        """The inputs of the backbone, as a batch of one: `input_ids` and the `backbone_kwargs`."""
-        kwargs = {key: [value] if isinstance(value, list) else value for key, value in self.backbone_kwargs.items()}
-        return BatchEncoding({"input_ids": [self.input_ids], **kwargs}, tensor_type="pt")
-
     def model_inputs(self) -> BatchEncoding:
         """
-        The inputs of the heads, as tensors: `input_ids`, `marks` (the number of tokens before each `<|mark|>`), and the
-        `num_options` and `question_type_ids` (index in `Question.questions_types`) of each question.
+        The inputs of a decision model for the prompt, as a batch of one: `input_ids`, `marks` (the number of tokens
+        before each `<|mark|>`), the `num_options` and `question_type_ids` (index in `Question.questions_types`) of each
+        question, and the other inputs of the model it reads (`backbone_kwargs`, like `pixel_values`).
         """
         inputs = {
-            "input_ids": self.input_ids,
-            "marks": self.marks,
-            "num_options": [len(question.options) for question in self.questions],
-            "question_type_ids": [Question.questions_types.index(question.type) for question in self.questions],
+            "input_ids": [self.input_ids],
+            "marks": [self.marks],
+            "num_options": [[len(question.options) for question in self.questions]],
+            "question_type_ids": [[Question.questions_types.index(question.type) for question in self.questions]],
         }
-        return BatchEncoding(inputs, tensor_type="pt")
+        kwargs = {key: [value] if isinstance(value, list) else value for key, value in self.backbone_kwargs.items()}
+        return BatchEncoding(inputs | kwargs, tensor_type="pt")
 
 
 def parse_questions(questions: dict[str, Any], config: DecisionConfig) -> list[Question]:
