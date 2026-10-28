@@ -16,40 +16,27 @@ TLDR: decision models answer a question in a single forward pass, by reading the
 prompt. A request is `{"state": ..., "questions": {name: question}}`, rendered with a chat template into a prompt per
 question (or one for all of them, when the template uses `questions`).
 
-A model with a `decision_template.jinja` places two sentinels, e.g. `ArthurZ/clef-flash` (system prompt cut):
+A model with a `decision_template.jinja` places two sentinel tokens:
 
-    <|im_start|>user
-    STATE:
-    <|split|>{"message":"WIN a FREE iPhone, click here!"}<|split|>
+- `<|mark|>`: where the head reads, which depends on the head:
 
-    SCHEMA FIELDS:
-    <|split|>
-    FIELD 1
-    ID: tone
-    TYPE: choice
-    INSTRUCTION: <|mark|>What is the tone?<|mark|>
-    ALLOWED OPTIONS:
-    OPTION 1: <|mark|>{"option_id":"calm"}<|mark|>
-    OPTION 2: <|mark|>{"description":"Pressures the reader","option_id":"pushy"}<|mark|>
-    END FIELD
-    <|split|>
-    <|im_end|>
-    <|im_start|>assistant
-
-- `<|mark|>` (▮ below): where the head reads, which depends on the head:
-
-      jev    ... [decision]:▮                       reads 1 token: the one before each mark (one per question)
-      kev    ... opt A▮ opt B▮ opt C▮ state▮         reads 1 token before each mark, one mark after each option
-      von    ... [MASK]▮ [MASK]▮ ... ▮              reads 1 token per option; the last mark ends the block
-      clef   INSTRUCTION: ▮What is the tone?▮        reads every token BETWEEN a pair of marks, pooled
-             OPTION 1:    ▮{"option_id":"calm"}▮     (hidden states + output embeddings of the span)
-             OPTION 2:    ▮{"option_id":"pushy"}▮    → spans sit mid-sequence, not at the end
+      jev    ... [decision]:<|mark|>
+             reads 1 token: the one before each mark (one per question)
+      kev    ... opt A<|mark|> opt B<|mark|> opt C<|mark|> state<|mark|>
+             reads 1 token before each mark, one mark after each option
+      von    ... [MASK]<|mark|> [MASK]<|mark|> ... <|mark|>
+             reads 1 token per option; the last mark ends the block
+      clef   INSTRUCTION: <|mark|>What is the tone?<|mark|>
+             OPTION 1: <|mark|>{"option_id":"calm"}<|mark|>
+             OPTION 2: <|mark|>{"option_id":"pushy"}<|mark|>
+             reads every token between a pair of marks, pooled (hidden states + output embeddings of the span):
+             the spans sit mid-sequence, not at the end
 
 - `<|split|>`: the text between two sentinels is tokenized on its own, like the original code did, so the state can't
   merge into a token with `STATE:\n` around it.
 
 Both are dropped from the input ids: a [`DecisionPrompt`] keeps the ids and `marks`, the number of tokens before each
-`<|mark|>` (here `[70, 75, 85, 92, 98, 112]`).
+`<|mark|>`.
 
 Any other model gets `DECISION_PROMPT` as the user message of its own chat template, and the logits of the option
 labels (`A`, `B`, ... or `Yes`/`No`) are read after the generation prompt, e.g. for `Qwen/Qwen2.5-0.5B-Instruct`:
