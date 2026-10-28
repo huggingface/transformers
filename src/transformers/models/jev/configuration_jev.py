@@ -13,12 +13,11 @@
 # limitations under the License.
 
 import json
-from pathlib import Path
 
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
-from ...utils import auto_docstring, cached_file
+from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
@@ -131,14 +130,14 @@ class JevConfig(PreTrainedConfig):
 
     # The files of a checkpoint that holds a JEV head next to its weights, read with them: its weights and its configs
     extra_files = ("head.safetensors", "readout.safetensors")
-    extra_config_files = ("decision_config.json", "judge_config.json")
+    extra_config_files = ("decision_config.json", "judge_config.json", "calibration.json")
 
-    @classmethod
-    def decision_config(cls, pretrained_model_name_or_path, **kwargs):
-        """The decision config of a checkpoint that ships a JEV head next to its weights, or `None`."""
+    @staticmethod
+    def decision_config(head_configs: dict, text_config: dict):
+        """The decision config of a checkpoint that ships a JEV head next to its weights, from its config files."""
         from ...decision import DecisionConfig
 
-        if (vllm := _read_json(pretrained_model_name_or_path, "decision_config.json", **kwargs)) and "codes" in vllm:
+        if "codes" in (vllm := head_configs.get("decision_config") or {}):  # vLLM decision models
             prompt = DECIDER_PROMPTS[vllm.get("prompt", "pplx")]
             settings = "".join(
                 f"{{%- set {name} = {json.dumps(prompt[name]) if prompt[name] else 'none'} -%}}\n"
@@ -150,20 +149,21 @@ class JevConfig(PreTrainedConfig):
                 chat_template=settings + DECIDER_TEMPLATE,
                 noul_options=["false", "true"],
             )
-        if (spec := _read_json(pretrained_model_name_or_path, "judge_config.json", **kwargs)) is not None:
-            config = _read_json(pretrained_model_name_or_path, "config.json", **kwargs)
+        if (spec := head_configs.get("judge_config")) is not None:  # JEV, with the LoRA of `adapter/`
             verbalizers, ranges = spec["slots"]["verbalizers"], spec["slots"]["ranges"]
             return DecisionConfig(
                 labels={question_type: verbalizers[start:end] for question_type, (start, end) in ranges.items()},
-                temperature=_read_json(pretrained_model_name_or_path, "calibration.json", **kwargs)["per_kind"],
+                temperature=head_configs["calibration"]["per_kind"],
                 # Gemma reads the prompt after `<bos>`
-                chat_template=("<bos>" if "gemma" in config["model_type"] else "") + JEV_TEMPLATE,
+                chat_template=("<bos>" if "gemma" in text_config["model_type"] else "") + JEV_TEMPLATE,
                 noul_options=["false", "true"],
                 adapter="adapter",
             )
         return None
 
-    def __post_init__(self, decision_config: dict | None = None, judge_config: dict | None = None, **kwargs):
+    def __post_init__(
+        self, decision_config: dict | None = None, judge_config: dict | None = None, calibration=None, **kwargs
+    ):
         # The configs of a checkpoint that ships a JEV head next to its weights, whose config is `text_config`
         text_config = (
             self.text_config.get("text_config", self.text_config) if isinstance(self.text_config, dict) else {}
@@ -183,11 +183,6 @@ class JevConfig(PreTrainedConfig):
 
 
 QUESTION_TYPES = ("noul", "choice", "score")
-
-
-def _read_json(pretrained_model_name_or_path, filename: str, **kwargs) -> dict | None:
-    path = cached_file(pretrained_model_name_or_path, filename, _raise_exceptions_for_missing_entries=False, **kwargs)
-    return None if path is None else json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 __all__ = ["JevConfig"]
