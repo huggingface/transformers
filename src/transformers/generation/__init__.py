@@ -45,7 +45,6 @@ else:
     ]
     _import_structure["logits_process"] = [
         "AlternatingCodebooksLogitsProcessor",
-        "CalibratedTemperatureLogitsWarper",
         "ClassifierFreeGuidanceLogitsProcessor",
         "EncoderNoRepeatNGramLogitsProcessor",
         "EncoderRepetitionPenaltyLogitsProcessor",
@@ -61,7 +60,6 @@ else:
         "MinLengthLogitsProcessor",
         "MinNewTokensLengthLogitsProcessor",
         "MinPLogitsWarper",
-        "NoulBandLogitsWarper",
         "NoBadWordsLogitsProcessor",
         "NoRepeatNGramLogitsProcessor",
         "PrefixConstrainedLogitsProcessor",
@@ -153,7 +151,6 @@ if TYPE_CHECKING:
         )
         from .logits_process import (
             AlternatingCodebooksLogitsProcessor,
-            CalibratedTemperatureLogitsWarper,
             ClassifierFreeGuidanceLogitsProcessor,
             EncoderNoRepeatNGramLogitsProcessor,
             EncoderRepetitionPenaltyLogitsProcessor,
@@ -171,7 +168,6 @@ if TYPE_CHECKING:
             MinPLogitsWarper,
             NoBadWordsLogitsProcessor,
             NoRepeatNGramLogitsProcessor,
-            NoulBandLogitsWarper,
             PrefixConstrainedLogitsProcessor,
             RepetitionPenaltyLogitsProcessor,
             SequenceBiasLogitsProcessor,
