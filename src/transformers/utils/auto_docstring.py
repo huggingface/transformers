@@ -2215,6 +2215,13 @@ class ModelArgs:
         "shape": None,
     }
 
+    backbone = {
+        "description": """
+    The model the decision head reads, loaded on its own: the head only holds its own weights.
+    """,
+        "shape": None,
+    }
+
     backbone_kwargs = {
         "description": """
     The other inputs of the backbone of a decision head for the prompt, like its `pixel_values` and `mm_token_type_ids`.

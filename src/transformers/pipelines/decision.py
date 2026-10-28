@@ -3,12 +3,14 @@ from pathlib import Path
 from typing import Any
 
 from ..decision import DecisionConfig, DecisionTemplate, Question, label_token_ids
-from ..utils import add_end_docstrings, is_torch_available
+from ..utils import add_end_docstrings, cached_file, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
     import torch
+
+    from ..models.auto import AutoModel
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
@@ -16,9 +18,9 @@ class DecisionPipeline(Pipeline):
     """
     Decision pipeline: answers typed questions (`choice`, `score`, `noul`) about a `state` with a probability for every
     option, from one forward pass per prompt (the System One API of Jev-like models). The decision config (see
-    [`DecisionConfig`]) lives next to the model or in the repo given as `decision_config`. The model can be a decision
-    head, which reads the model of its `backbone_config`; otherwise the options are scored by the next-token logits of
-    their labels, so any chat model can answer.
+    [`DecisionConfig`]) and the decision head (`decision_head/`) live next to the model or in the repo given as
+    `decision_config`. The head scores the options from the model it is given; without a head, the options are scored
+    by the next-token logits of their labels, so any chat model can answer.
 
     Example:
 
@@ -61,6 +63,13 @@ class DecisionPipeline(Pipeline):
             except OSError:
                 decision_config = DecisionConfig()
         self.template = DecisionTemplate(self.processor or self.tokenizer, decision_config, questions)
+        if not decision_config.is_causal:
+            self.model.config.get_text_config().is_causal = False
+        self.head = None
+        if repo and cached_file(
+            repo, "config.json", subfolder="decision_head", _raise_exceptions_for_missing_entries=False
+        ):
+            self.head = AutoModel.from_pretrained(repo, subfolder="decision_head").to(self.device).eval()
         self.logits_processors = {
             kind: decision_config.get_logits_processor(kind) for kind in Question.questions_types
         }
@@ -112,9 +121,9 @@ class DecisionPipeline(Pipeline):
         # TODO: batch / continious batching
         scores = []
         for prompt, inputs, backbone in zip(model_inputs["prompts"], model_inputs["inputs"], model_inputs["backbone"]):
-            if hasattr(self.model.config, "backbone_config"):  # a decision head, on the model it reads
+            if self.head is not None:
                 backbone_kwargs = {key: value for key, value in backbone.items() if key != "input_ids"}
-                option_scores = self.model(**inputs, backbone_kwargs=backbone_kwargs)
+                option_scores = self.head(**inputs, backbone=self.model, backbone_kwargs=backbone_kwargs)
                 scores.append(option_scores.split(inputs["num_options"].tolist()))
             else:  # the logits of the labels before each mark
                 logits = self.model(**backbone, use_cache=False, logits_to_keep=inputs["marks"] - 1).logits[0]

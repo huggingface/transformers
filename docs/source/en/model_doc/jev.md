@@ -64,12 +64,12 @@ decide(
 
 The same head reads the 255 answer codes of [pplx-decider](https://huggingface.co/perplexity-ai/pplx-decider-v1.1-27b)
 and [d3](https://huggingface.co/vllm-sr/d3), whose Qwen3.5 backbone attends to the whole prompt
-(`is_causal=False`). `convert_decider_to_hf.py` writes their head, which loads the backbone from the
-original repo:
+(`is_causal=False` in their decision config). `convert_decider_to_hf.py` writes their head and decision config,
+used with the original checkpoint:
 
 ```python
-pplx = pipeline("decision", model="ArthurZ/pplx-decider-v1.1-27b")
-d3 = pipeline("decision", model="ArthurZ/d3")
+pplx = pipeline("decision", model="perplexity-ai/pplx-decider-v1.1-27b", decision_config="ArthurZ/pplx-decider-v1.1-27b")
+d3 = pipeline("decision", model="vllm-sr/d3", decision_config="ArthurZ/d3")
 request = {
     "state": "I was charged twice for my order and I want my money back today.",
     "questions": {
