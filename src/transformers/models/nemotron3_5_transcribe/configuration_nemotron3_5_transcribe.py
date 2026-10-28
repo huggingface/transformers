@@ -222,8 +222,9 @@ class Nemotron3_5TranscribeAudioConfig(PreTrainedConfig):
 @strict
 class Nemotron3_5TranscribeConfig(PreTrainedConfig):
     r"""
-    audio_token_id (`int`, *optional*, defaults to 142):
-        The audio token index used as a placeholder for the audio embeddings.
+    audio_token_id (`int`, *optional*, defaults to 131072):
+        The audio token index used as a placeholder for the audio embeddings. The original checkpoint appends it after
+        the language model's vocabulary, with no embedding row: it is embedded as token 0, then replaced by the audio.
     word_timestamp_config (`Union[dict, Nemotron3_5TranscribeWordTimestampConfig]`, *optional*):
         Configuration of the word timestamp encoder and head, which predict alignment tokenizer pieces from the speech
         recognition encoder states.
@@ -271,7 +272,7 @@ class Nemotron3_5TranscribeConfig(PreTrainedConfig):
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-    audio_token_id: int = 142
+    audio_token_id: int = 131072
     word_timestamp_config: dict | PreTrainedConfig | None = None
 
 

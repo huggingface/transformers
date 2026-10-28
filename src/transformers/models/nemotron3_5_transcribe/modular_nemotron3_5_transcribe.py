@@ -21,6 +21,7 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
+from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import GenerationMixin
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_recurrent_attention_mask
@@ -228,8 +229,9 @@ class Nemotron3_5TranscribeAudioConfig(PreTrainedConfig):
 @strict
 class Nemotron3_5TranscribeConfig(PreTrainedConfig):
     r"""
-    audio_token_id (`int`, *optional*, defaults to 142):
-        The audio token index used as a placeholder for the audio embeddings.
+    audio_token_id (`int`, *optional*, defaults to 131072):
+        The audio token index used as a placeholder for the audio embeddings. The original checkpoint appends it after
+        the language model's vocabulary, with no embedding row: it is embedded as token 0, then replaced by the audio.
     word_timestamp_config (`Union[dict, Nemotron3_5TranscribeWordTimestampConfig]`, *optional*):
         Configuration of the word timestamp encoder and head, which predict alignment tokenizer pieces from the speech
         recognition encoder states.
@@ -277,7 +279,7 @@ class Nemotron3_5TranscribeConfig(PreTrainedConfig):
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-    audio_token_id: int = 142
+    audio_token_id: int = 131072
     word_timestamp_config: dict | PreTrainedConfig | None = None
 
 
@@ -634,6 +636,45 @@ class Nemotron3_5TranscribeModel(AudioFlamingo3Model):
         self.multi_modal_projector = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size)
         self.word_timestamp_encoder = Nemotron3_5TranscribeWordTimestampModel(config.word_timestamp_config)
 
+    def _embed_input_ids(self, input_ids: torch.LongTensor) -> torch.FloatTensor:
+        # the audio token can be past the language model's vocabulary (NVIDIA's tokenizer appends it): it is looked up
+        # as 0, its positions take the audio embeddings
+        if self.config.audio_token_id >= self.config.text_config.vocab_size:
+            input_ids = input_ids.masked_fill(input_ids == self.config.audio_token_id, 0)
+        return self.get_input_embeddings()(input_ids)
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Nemotron3_5TranscribeModelOutputWithPast:
+        r"""
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padding feature indices.
+        """
+        if inputs_embeds is None and input_ids is not None:
+            inputs_embeds = self._embed_input_ids(input_ids)
+        return super().forward(
+            input_ids=input_ids,
+            input_features=input_features,
+            input_features_mask=input_features_mask,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+
     @auto_docstring(
         custom_intro="""
         Runs the word timestamp encoder on the speech recognition encoder states, in the chunks of the encoder: the
@@ -739,7 +780,7 @@ class Nemotron3_5TranscribeForConditionalGeneration(AudioFlamingo3ForConditional
 
         # the audio model runs once: its embeddings fill the prompt, its states feed the word timestamp head
         audio_outputs = self.get_audio_features(input_features, input_features_mask)
-        inputs_embeds = self.get_input_embeddings()(input_ids)
+        inputs_embeds = self.model._embed_input_ids(input_ids)
         audio_embeds = audio_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
         special_audio_mask = self.model.get_placeholder_mask(input_ids, inputs_embeds, audio_embeds)
         inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds)

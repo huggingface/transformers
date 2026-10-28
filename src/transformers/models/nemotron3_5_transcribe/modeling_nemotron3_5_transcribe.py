@@ -723,6 +723,8 @@ class Nemotron3_5TranscribeModel(Nemotron3_5TranscribePreTrainedModel):
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padding feature indices.
         """
+        if inputs_embeds is None and input_ids is not None:
+            inputs_embeds = self._embed_input_ids(input_ids)
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -754,6 +756,13 @@ class Nemotron3_5TranscribeModel(Nemotron3_5TranscribePreTrainedModel):
             attentions=outputs.attentions,
             audio_hidden_states=audio_embeds,
         )
+
+    def _embed_input_ids(self, input_ids: torch.LongTensor) -> torch.FloatTensor:
+        # the audio token can be past the language model's vocabulary (NVIDIA's tokenizer appends it): it is looked up
+        # as 0, its positions take the audio embeddings
+        if self.config.audio_token_id >= self.config.text_config.vocab_size:
+            input_ids = input_ids.masked_fill(input_ids == self.config.audio_token_id, 0)
+        return self.get_input_embeddings()(input_ids)
 
     @auto_docstring(
         custom_intro="""
@@ -925,7 +934,7 @@ class Nemotron3_5TranscribeForConditionalGeneration(Nemotron3_5TranscribePreTrai
 
         # the audio model runs once: its embeddings fill the prompt, its states feed the word timestamp head
         audio_outputs = self.get_audio_features(input_features, input_features_mask)
-        inputs_embeds = self.get_input_embeddings()(input_ids)
+        inputs_embeds = self.model._embed_input_ids(input_ids)
         audio_embeds = audio_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
         special_audio_mask = self.model.get_placeholder_mask(input_ids, inputs_embeds, audio_embeds)
         inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds)

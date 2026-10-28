@@ -294,6 +294,31 @@ class Nemotron3_5TranscribeForConditionalGenerationModelTest(ALMModelTest, unitt
         torch.testing.assert_close(outputs.word_timestamp_logits, logits, rtol=0, atol=0)
         torch.testing.assert_close(outputs.speaker_logits, audio_outputs.speaker_logits, rtol=0, atol=0)
 
+    def test_audio_token_past_the_vocabulary(self):
+        """
+        NVIDIA's tokenizer appends the audio token after the language model's vocabulary, with no embedding row: the
+        outputs are those of an audio token inside the vocabulary, since its positions take the audio embeddings.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Nemotron3_5TranscribeForConditionalGeneration(config).to(torch_device).eval()
+        generation_kwargs = {"max_new_tokens": 3, "do_sample": False, "return_word_timestamp_logits": True}
+        with torch.no_grad():
+            expected_logits = model(**inputs_dict).logits
+        expected_sequences = model.generate(**inputs_dict, **generation_kwargs).sequences
+
+        audio_token_id, model.config.audio_token_id = model.config.audio_token_id, config.text_config.vocab_size
+        input_ids = inputs_dict["input_ids"].masked_fill(
+            inputs_dict["input_ids"] == audio_token_id, model.config.audio_token_id
+        )
+        inputs_dict = {**inputs_dict, "input_ids": input_ids}
+        with torch.no_grad():
+            logits = model(**inputs_dict).logits
+        sequences = model.generate(**inputs_dict, **generation_kwargs).sequences
+
+        torch.testing.assert_close(logits, expected_logits, rtol=0, atol=0)
+        prompt_length = input_ids.shape[1]
+        torch.testing.assert_close(sequences[:, prompt_length:], expected_sequences[:, prompt_length:], rtol=0, atol=0)
+
 
 @require_torch
 @require_torch_accelerator_memory(memory=70)
