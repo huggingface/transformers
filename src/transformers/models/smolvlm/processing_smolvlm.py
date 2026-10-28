@@ -268,7 +268,7 @@ class SmolVLMProcessor(ProcessorMixin):
 
         # Users might be passing processor kwargs simply as `**kwargs`
         if processor_kwargs or not kwargs:
-            processor_kwargs = processor_kwargs.copy() or {}
+            processor_kwargs = processor_kwargs.copy() if processor_kwargs is not None else {}
             processor_kwargs.setdefault("num_frames", self.video_processor.num_frames)
             processor_kwargs.setdefault("fps", self.video_processor.fps)
         elif kwargs:
