@@ -31,7 +31,7 @@ if is_torch_available():
 @require_torch
 class VonForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (VonForDecision,) if is_torch_available() else ()
-    decision_repo = "ArthurZ/von"
+    decision_repo = "hf-internal-testing/decision-von"
     tiny_sizes = {"hidden_size": 16}
     backbone_class = ModernBertModel if is_torch_available() else None
 
