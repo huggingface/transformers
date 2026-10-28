@@ -43,14 +43,11 @@ class JevConfig(PreTrainedConfig):
     num_verbalizers: int = 24
     offsets: dict[str, int] | None = None
     softcap: float | None = None
-    question_types: list[str] | None = None
     initializer_range: float = 0.02
 
     def __post_init__(self, **kwargs):
         if self.offsets is None:
             self.offsets = {"noul": 0, "score": 2, "choice": 8}
-        if self.question_types is None:
-            self.question_types = ["noul", "choice", "score"]
         super().__post_init__(**kwargs)
 
 

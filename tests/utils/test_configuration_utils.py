@@ -44,7 +44,6 @@ classvar_fields = {
 }
 config_common_kwargs = {
     "return_dict": False,
-    "keep_in_fp32_modules": ["^lm_head"],
     "output_hidden_states": True,
     "output_attentions": True,
     "dtype": "float16",

@@ -2525,6 +2525,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         all_kwargs.update(kwargs)
         if text is None and text_target is None:
             raise ValueError("You need to specify either `text` or `text_target`.")
+
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=all_kwargs.pop("padding", False),
             truncation=all_kwargs.pop("truncation", None),
@@ -3025,7 +3026,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         add_generation_prompt: bool = False,
         continue_final_message: bool | str = False,
         tokenize: bool = True,
-        sanitize_control_tokens: bool | list[str] = False,
+        sanitize_control_tokens: bool = False,
         padding: bool | str | PaddingStrategy = False,
         truncation: bool = False,
         max_length: int | None = None,
@@ -3069,10 +3070,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 (e.g. "reasoning_content"). Cannot be used at the same time as `add_generation_prompt`.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
-            sanitize_control_tokens (`bool` or `list[str]`, defaults to `False`):
-                If set, control tokens that appear in messages, tools or documents (and in the template variables
-                passed as `**kwargs` whose names are listed, when a list is given) are encoded as ordinary text, so
-                only the control tokens written by the chat template itself are encoded as tokens. Control tokens are
+            sanitize_control_tokens (`bool`, defaults to `False`):
+                If set, control tokens that appear in messages, tools, documents or the template variables passed as
+                `**kwargs` are encoded as ordinary text, so only the control tokens written by the chat template itself
+                are encoded as tokens. Control tokens are
                 the tokenizer's special tokens, plus the added tokens in `tokenizer.chat_control_tokens`. If that
                 variable is not set, control tokens are inferred from the added tokens that appear in the chat
                 template's text and string literals. Only whole control tokens are sanitized, so if the template joins
@@ -3150,15 +3151,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
                     "`return_assistant_tokens_mask=True`."
                 )
-            # Wrap control tokens that appear in the user's strings with private markers
-            control_tokens_re = _get_control_token_patterns(self._get_control_tokens(chat_template))[0]
-            conversations = [
-                mark_control_tokens(getattr(chat, "messages", chat), control_tokens_re) for chat in conversations
-            ]
-            tools = mark_control_tokens(tools, control_tokens_re)
-            documents = mark_control_tokens(documents, control_tokens_re)
-            if isinstance(sanitize_control_tokens, list) and sanitize_control_tokens:
-                kwargs = {k: mark_control_tokens(v, control_tokens_re) for k, v in kwargs.items()}
+            conversations, tools, documents, kwargs = self._mark_chat_inputs(
+                chat_template, conversations, tools, documents, kwargs
+            )
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
@@ -3183,7 +3178,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 max_length=max_length,
                 add_special_tokens=False,
                 return_tensors=return_tensors,
-                sanitize_control_tokens=bool(sanitize_control_tokens),
+                sanitize_control_tokens=sanitize_control_tokens,
                 **tokenizer_kwargs,
             )
 
@@ -3220,6 +3215,16 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 return out["input_ids"]
         else:
             return rendered_chat
+
+    def _mark_chat_inputs(self, chat_template: str, conversations, tools, documents, template_kwargs: dict):
+        """Wrap the control tokens that appear in the user's strings with private markers, see `mark_control_tokens`."""
+        control_tokens_re, _ = _get_control_token_patterns(self._get_control_tokens(chat_template))
+        conversations = [
+            mark_control_tokens(getattr(chat, "messages", chat), control_tokens_re) for chat in conversations
+        ]
+        tools = mark_control_tokens(tools, control_tokens_re)
+        documents = mark_control_tokens(documents, control_tokens_re)
+        return conversations, tools, documents, mark_control_tokens(template_kwargs, control_tokens_re)
 
     def _get_control_tokens(self, chat_template: str) -> tuple[str, ...]:
         """The tokens that `apply_chat_template(..., sanitize_control_tokens=True)` encodes as text in user input."""
