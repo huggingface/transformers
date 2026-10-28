@@ -2980,7 +2980,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         BertModel.from_pretrained(self.repo_name, token=self.token)
 
         for thread in threading.enumerate():
-            if thread.name == "Thread-autoconversion":
+            if thread.name == "Thread-auto_conversion":
                 thread.join(timeout=10)
 
         discussions = self.api.get_repo_discussions(self.repo_name)
