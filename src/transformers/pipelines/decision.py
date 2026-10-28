@@ -1,4 +1,5 @@
 import functools
+import inspect
 from pathlib import Path
 from typing import Any
 
@@ -9,8 +10,6 @@ from .base import Pipeline, build_pipeline_init_args
 
 if is_torch_available():
     import torch
-
-    from ..decision.modeling_utils import DecisionPreTrainedModel
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
@@ -79,6 +78,10 @@ class DecisionPipeline(Pipeline):
             except OSError:
                 decision_config = DecisionConfig()
         self.template = DecisionTemplate(self.processor or self.tokenizer, decision_config, questions)
+        # A decision model (`XxxForDecision`) scores the options itself, any other model by the logits of their labels
+        self.reads_marks = "marks" in inspect.signature(self.model.forward).parameters
+        if decision_config.adapter:  # a LoRA in a subfolder of the repo
+            self.model.load_adapter(repo, adapter_kwargs={"subfolder": decision_config.adapter})
         self.logits_processors = {
             kind: decision_config.get_logits_processor(kind) for kind in Question.questions_types
         }
@@ -100,7 +103,7 @@ class DecisionPipeline(Pipeline):
         # TODO: batch / continious batching
         scores = []
         for prompt, inputs, backbone in zip(model_inputs["prompts"], model_inputs["inputs"], model_inputs["backbone"]):
-            if isinstance(self.model, DecisionPreTrainedModel):
+            if self.reads_marks:
                 backbone_kwargs = {key: value for key, value in backbone.items() if key != "input_ids"}
                 option_scores = self.model(**inputs, **backbone_kwargs)
                 scores.append(option_scores.split(inputs["num_options"].tolist()))
