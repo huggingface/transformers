@@ -16,7 +16,14 @@
 import unittest
 
 from transformers import AutoProcessor, is_torch_available
-from transformers.testing_utils import Expectations, require_torch, require_torch_accelerator, slow, torch_device
+from transformers.testing_utils import (
+    Expectations,
+    require_torch,
+    require_torch_accelerator,
+    require_vision,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
@@ -204,7 +211,7 @@ class XiaomiLens0ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         return (batch_size, num_v_heads, head_k_dim, head_v_dim)
 
     def test_attention_outputs(self):
-        "Needs to be overwritten as Xiaomi-Lens-0 alternates between attention layers and gated deltanet layers."
+        "Needs to be overwritten as Xiaomi-Lens-0 alternates between attention layers and gated deltanet layers (same as Qwen3.5)."
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         seq_len = self.model_tester.seq_length
         num_attention_layers = sum(layer == "full_attention" for layer in config.text_config.layer_types)
@@ -223,26 +230,26 @@ class XiaomiLens0ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
                 list(attentions[0].shape[-3:]), [config.text_config.num_attention_heads, seq_len, seq_len]
             )
 
-    @unittest.skip("The mask decoder is not part of `XiaomiLens0Model`, the base model of the checkpoint mapping")
-    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
-        pass
+    def test_reverse_loading_mapping(self):
+        # The mask decoder exists only on the conditional generation model.
+        super().test_reverse_loading_mapping(skip_base_model=True)
 
 
 @slow
 @require_torch_accelerator
+@require_vision
 class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    model_id = "SeerRay-Lab/Xiaomi-Lens-0"
+    model_id = "guarin/Xiaomi-Lens-0"  # "SeerRay-Lab/Xiaomi-Lens-0"
     image_url = (
         "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
     )
-    grounding_suffix = "\nReport bbox coordinates and masks."
 
     def setUp(self):
         super().setUp()
         self.processor = AutoProcessor.from_pretrained(self.model_id)
 
-    def prepare_inputs(self, text, completion=None):
-        messages = [
+    def get_messages(self, text):
+        return [
             {
                 "role": "user",
                 "content": [
@@ -251,119 +258,137 @@ class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 ],
             }
         ]
-        if completion is not None:
-            messages.append({"role": "assistant", "content": completion})
-        return self.processor.apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=completion is None,
-            return_dict=True,
-            return_tensors="pt",
-        ).to(torch_device)
 
-    def forward_and_decode_masks(self, model, inputs):
-        inputs = dict(inputs)
-        image_features = model.get_image_features(
-            inputs.pop("pixel_values"), inputs["image_grid_thw"], return_dict=True
-        )
-        outputs = model(**inputs, mm_encoder_outputs={"image": image_features}, output_hidden_states=True)
-        mask_logits, mask_token_indices = model.decode_masks(
-            inputs["input_ids"],
-            outputs.hidden_states[-1],
-            image_features.last_hidden_state,
-            inputs["image_grid_thw"],
-        )
-        return outputs, mask_logits, mask_token_indices
-
-    def test_model_logits(self):
-        # fp32 as bf16 logits differ by a few ulps from the original, too much for a meaningful comparison
+    def test_grounding_logits(self):
         model = XiaomiLens0ForConditionalGeneration.from_pretrained(
-            self.model_id, dtype=torch.float32, device_map=torch_device
-        )
-        text = "How many cats are there?" + self.grounding_suffix
-        completion = (
-            "\n</think>\n\n<bbox>[541, 52, 1000, 775]</bbox><mask><|mask|></mask>"
-            "<bbox>[14, 115, 494, 988]</bbox><mask><|mask|></mask>"
-        )
-        inputs = self.prepare_inputs(text, completion)
-        outputs, mask_logits, _ = self.forward_and_decode_masks(model, inputs)
+            self.model_id, dtype=torch.bfloat16, device_map=torch_device
+        ).eval()
 
-        prompt_length = self.prepare_inputs(text).input_ids.shape[1]
+        messages = self.get_messages("How many cats are there?\nReport bbox coordinates and masks.")
+        inputs = self.processor.apply_chat_template(
+            messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(model.device)
+        with torch.no_grad():
+            outputs = model(**inputs)
+
         expected_logits = Expectations(
-            {
-                ("cuda", 8): [5.1540, 6.4170, 7.1199, 6.4834, 1.0022, 3.2335, 4.3166, 3.6997, 5.5916, 5.8586],
-            }
+            {("cuda", 9): [5.09375, 6.4375, 7.0, 6.5, 0.92578125, 3.265625, 4.28125, 3.640625, 5.5625, 5.84375]}
         ).get_expectation()
         torch.testing.assert_close(
-            outputs.logits[0, prompt_length - 1, :10].cpu(), torch.tensor(expected_logits), atol=1e-3, rtol=1e-3
+            outputs.logits[0, -1, :10].float(),
+            torch.tensor(expected_logits, device=torch_device),
+            atol=1e-5,
+            rtol=1e-5,
         )
 
-        self.assertEqual(len(mask_logits), 1)
-        self.assertEqual(mask_logits[0].shape, (2, 480, 640))
-        # Mask logits inside each predicted cat mask, and the number of foreground pixels
-        expected_mask_slices = Expectations(
-            {
-                ("cuda", 8): [[6.156, 6.09, 6.023, 5.957, 5.887], [8.711, 8.75, 8.797, 8.836, 8.844]],
-            }
-        ).get_expectation()
-        mask_slices = torch.stack([mask_logits[0][0, 198, 493:498], mask_logits[0][1, 228, 146:151]])
-        torch.testing.assert_close(mask_slices.cpu(), torch.tensor(expected_mask_slices), atol=5e-2, rtol=5e-2)
-        expected_foreground = Expectations({("cuda", 8): [59138, 51824]}).get_expectation()
-        foreground = (mask_logits[0] > 0).sum(dim=(-1, -2)).tolist()
-        for pixels, expected_pixels in zip(foreground, expected_foreground):
-            self.assertAlmostEqual(pixels, expected_pixels, delta=0.005 * expected_pixels)
-
-    def test_model_vision_generation(self):
+    def test_grounding_generation(self):
         model = XiaomiLens0ForConditionalGeneration.from_pretrained(
             self.model_id, dtype=torch.bfloat16, device_map=torch_device
-        )
-        text = (
+        ).eval()
+
+        messages = self.get_messages(
             'Locate all instances in the image that match the description "the cat on the left".'
-            + self.grounding_suffix
+            "\nReport bbox coordinates and masks."
         )
-        inputs = self.prepare_inputs(text)
-        generated_ids = model.generate(**inputs, max_new_tokens=64, do_sample=False)
-        completion = self.processor.decode(generated_ids[0, inputs.input_ids.shape[1] :])
+        inputs = self.processor.apply_chat_template(
+            messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(model.device)
 
-        expected_completion = Expectations(
-            {
-                ("cuda", 8): "\n</think>\n\n<bbox>[14, 115, 494, 988]</bbox><mask><|mask|></mask><|im_end|>",
-            }
-        ).get_expectation()
-        self.assertEqual(completion, expected_completion)
-
-        mask_inputs = self.prepare_inputs(text, completion.removesuffix("<|im_end|>"))
-        _, mask_logits, mask_token_indices = self.forward_and_decode_masks(model, mask_inputs)
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=64,
+                do_sample=False,
+                return_dict_in_generate=True,
+                output_logits=True,
+                output_hidden_states=[model.config.text_config.num_hidden_layers - 1],
+            )
+            hidden_states = torch.cat([step[-1] for step in outputs.hidden_states], dim=1)
+            mask_logits, mask_token_indices = model.decode_masks(
+                outputs.sequences,
+                hidden_states,
+                outputs.image_hidden_states,
+                inputs.image_grid_thw,
+                ignore_thinking=True,
+            )
         results = self.processor.post_process_grounding(
-            mask_inputs.input_ids,
-            mask_inputs.image_grid_thw,
-            mask_logits,
-            mask_token_indices,
-            target_sizes=[(480, 640)],
+            outputs.sequences, inputs.image_grid_thw, mask_logits, mask_token_indices, target_sizes=[(480, 640)]
         )
-        torch.testing.assert_close(results[0]["boxes"], torch.tensor([[8.96, 55.2, 316.16, 474.24]]))
         self.assertEqual(results[0]["masks"].shape, (1, 480, 640))
-        expected_foreground = Expectations({("cuda", 8): 51985}).get_expectation()
-        self.assertAlmostEqual(results[0]["masks"].sum().item(), expected_foreground, delta=0.01 * expected_foreground)
 
-    def test_model_vision_generation_with_reasoning(self):
+        expected_logits = Expectations(
+            {("cuda", 9): [6.34375, 8.125, 2.53125, 4.90625, 1.3515625, 4.28125, 7.21875, 2.265625, 11.625, 7.84375]}
+        ).get_expectation()
+        torch.testing.assert_close(
+            outputs.logits[0][0, :10].float(), torch.tensor(expected_logits, device=torch_device), atol=1e-5, rtol=1e-5
+        )
+
+        expected_boxes = Expectations(
+            {("cuda", 9): [[8.960000038146973, 53.76000213623047, 316.1600036621094, 474.239990234375]]}
+        ).get_expectation()
+        torch.testing.assert_close(results[0]["boxes"], torch.tensor(expected_boxes), atol=1e-5, rtol=1e-5)
+
+        expected_foreground = Expectations({("cuda", 9): 52097}).get_expectation()
+        self.assertAlmostEqual(results[0]["masks"].sum().item(), expected_foreground, delta=5e-4 * expected_foreground)
+
+        expected_mask = Expectations(
+            {("cuda", 9): [[[0, 0, 0, 0, 0], [0, 0, 1, 0, 0], [0, 1, 1, 0, 0], [0, 1, 0, 0, 0], [0, 0, 0, 0, 0]]]}
+        ).get_expectation()
+        torch.testing.assert_close(
+            results[0]["masks"][:, ::96, ::128], torch.tensor(expected_mask, dtype=torch.bool, device=torch_device)
+        )
+
+    def test_grounding_generation_with_reasoning(self):
         model = XiaomiLens0ForConditionalGeneration.from_pretrained(
             self.model_id, dtype=torch.bfloat16, device_map=torch_device
-        )
-        inputs = self.prepare_inputs("What color is the blanket the cats are lying on?")
-        generated_ids = model.generate(**inputs, max_new_tokens=160, do_sample=False)
-        completion = self.processor.decode(generated_ids[0, inputs.input_ids.shape[1] :])
+        ).eval()
 
-        expected_completion = Expectations(
-            {
-                ("cuda", 8): (
-                    "The user wants to know the color of the blanket. I need to look at the image and identify the "
-                    "blanket covering the couch where the cats are lying. The blanket is a bright pink color, covering "
-                    "most of the lower portion of the image. I'll localize the blanket region to support my answer.\n"
-                    "</think>\n\nThe blanket covering the couch where the cats are resting is a vivid pink color, as "
-                    "seen across the lower portion of the image <bbox>[0, 248, 1000, 998]</bbox><mask><|mask|></mask>."
-                    "\n\nPink<|im_end|>"
-                ),
-            }
+        messages = self.get_messages("What color is the blanket the cats are lying on?")
+        inputs = self.processor.apply_chat_template(
+            messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(model.device)
+
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=160,
+                do_sample=False,
+                return_dict_in_generate=True,
+                output_logits=True,
+                output_hidden_states=[model.config.text_config.num_hidden_layers - 1],
+            )
+            hidden_states = torch.cat([step[-1] for step in outputs.hidden_states], dim=1)
+            mask_logits, mask_token_indices = model.decode_masks(
+                outputs.sequences,
+                hidden_states,
+                outputs.image_hidden_states,
+                inputs.image_grid_thw,
+                ignore_thinking=True,
+            )
+
+        results = self.processor.post_process_grounding(
+            outputs.sequences, inputs.image_grid_thw, mask_logits, mask_token_indices, target_sizes=[(480, 640)]
+        )
+        self.assertEqual(results[0]["masks"].shape, (1, 480, 640))
+
+        expected_logits = Expectations(
+            {("cuda", 9): [6.28125, 9.9375, 2.84375, 6.40625, 3.078125, 3.5625, 7.1875, 2.703125, 7.5625, 7.46875]}
         ).get_expectation()
-        self.assertEqual(completion, expected_completion)
+        torch.testing.assert_close(
+            outputs.logits[0][0, :10].float(), torch.tensor(expected_logits, device=torch_device), atol=1e-5, rtol=1e-5
+        )
+
+        expected_boxes = Expectations(
+            {("cuda", 9): [[0.0, 119.04000091552734, 640.0, 479.0400085449219]]}
+        ).get_expectation()
+        torch.testing.assert_close(results[0]["boxes"], torch.tensor(expected_boxes), atol=1e-5, rtol=1e-5)
+
+        expected_foreground = Expectations({("cuda", 9): 132000}).get_expectation()
+        self.assertAlmostEqual(results[0]["masks"].sum().item(), expected_foreground, delta=5e-4 * expected_foreground)
+
+        expected_mask = Expectations(
+            {("cuda", 9): [[[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [1, 0, 0, 0, 1], [1, 0, 1, 0, 0], [1, 1, 1, 1, 1]]]}
+        ).get_expectation()
+        torch.testing.assert_close(
+            results[0]["masks"][:, ::96, ::128], torch.tensor(expected_mask, dtype=torch.bool, device=torch_device)
+        )

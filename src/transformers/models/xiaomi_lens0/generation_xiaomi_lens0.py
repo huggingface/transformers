@@ -52,9 +52,7 @@ class XiaomiLens0GenerationMixin(GenerationMixin):
         if (
             pixel_values is not None or kwargs.get("pixel_values_videos") is not None
         ) and mm_encoder_outputs is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
-            )
+            raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings")
 
         mm_encoder_outputs = {} if mm_encoder_outputs is None else dict(mm_encoder_outputs)
         if pixel_values is not None:

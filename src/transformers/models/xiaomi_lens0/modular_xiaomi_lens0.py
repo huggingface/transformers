@@ -217,9 +217,7 @@ class XiaomiLens0Model(Qwen3_5Model):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | XiaomiLens0ModelOutputWithPast:
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
-            raise ValueError(
-                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
-            )
+            raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings")
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)

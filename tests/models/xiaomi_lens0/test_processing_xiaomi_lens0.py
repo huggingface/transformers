@@ -33,6 +33,7 @@ if is_vision_available():
 class XiaomiLens0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = XiaomiLens0Processor
     # Xiaomi-Lens-0 uses the Qwen3-VL processing, the tiny Qwen3-VL processor avoids loading the full tokenizer
+    # TODO: Update
     tiny_model_id = "hf-internal-testing/tiny-processor-qwen3_vl"
     videos_unstructured_max_length = 870
     videos_text_kwargs_max_length = 870
