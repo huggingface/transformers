@@ -1237,7 +1237,7 @@ class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
 
 
 class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
-    # trf-ignore: TRF055
+    config: Ernie4_5_VLMoeConfig
 
     def post_init(self):
         logger.warning_once(
