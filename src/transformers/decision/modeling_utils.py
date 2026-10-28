@@ -48,6 +48,8 @@ class ForDecision(PreTrainedModel):
     """
 
     base_model_prefix = "model"
+    # The model and the head are loaded with their own attention implementation, and checked for it
+    _supports_sdpa = _supports_flash_attn = _supports_flex_attn = True
 
     def __init__(
         self,
