@@ -207,11 +207,11 @@ Out of scope until Phase 3 is complete and stable.
 | 1 | Issue 1 | `python_classes = ["Test*", "*Test"]` added to `pyproject.toml` | Phase 1, Step 1.1 |
 | 2 | Issue 2 | `setUp` → `setup_method` renamed in bert, roberta, t5, `causal_lm_tester.py` | Phase 1–2 |
 | 3 | Issue 4 | `_testMethodName` setter added to compat mixin — stops crash in unmigrated `unittest.TestCase` models | After CI job 123003870110 analysis |
-| 4 | Issue 6 | `__test__ = False` on `CausalLMModelTest` (stops collection leak) + `setUp` alias (keeps unmigrated subclasses working) | After CI job 123003870110 analysis |
+| 4 | Issue 6 | `__test__ = False` on `CausalLMModelTest` (prevents unintended standalone collection) + `setUp` alias (keeps unmigrated subclasses working) | After CI job 123003870110 analysis |
 
 **Still open (not yet fixed, in discovery order):**
 - Issue 3: `_testMethodName` getter fragility (inspect.stack)
-- Issue 7: `VLMModelTest` + `ALMModelTest` collection leak
+- Issue 7: `VLMModelTest` + `ALMModelTest` unintended standalone collection by pytest's `*Test` pattern
 - Issue 8: `setup_method(self)` wrong signature in `unittest.TestCase` subclasses
 - Issue 9: `VideoPrismModelTest` pre-existing broken declaration (possibly out of scope)
 
@@ -324,7 +324,7 @@ Note: this does NOT fix Issue 3 (getter is still fragile for pure-pytest classes
 
 ---
 
-### CI Issue 6: `setUp` rename in `causal_lm_tester.py` breaks 97 models + leaks as collected class
+### CI Issue 6: `setUp` rename in `causal_lm_tester.py` breaks 97 models + base class unintentionally collected by pytest
 **Severity**: CRITICAL — 6226 of 6762 errors (92%) in shard 1 alone are from this issue
 **Discovered**: CI job 123003870110, ERROR lines all tagged `CausalLMModelTest`
 
@@ -360,7 +360,7 @@ solar_open, stablelm, starcoder2, vaultgemma, youtu, zaya
 (✓ = already migrated to pure pytest; the rest are still unmigratable by this bug)
 
 **Fix strategy**:
-1. **Short-term (prevent leaking)**: Rename `CausalLMModelTest` to `_CausalLMModelTestBase`
+1. **Short-term (prevent unintended collection)**: Rename `CausalLMModelTest` to `_CausalLMModelTestBase`
    (with underscore prefix) so pytest does not collect it. OR: add `__test__ = False` class
    attribute to `CausalLMModelTest` to opt it out of pytest collection.
 2. **For setUp rename**: Keep BOTH `setUp` and `setup_method` during transition:
@@ -388,17 +388,20 @@ Both fixes are small and safe — they do not require touching any individual mo
 
 ---
 
-### Issue 7: `VLMModelTest` and `ALMModelTest` collection leak
+### Issue 7: `VLMModelTest` and `ALMModelTest` unintentionally collected by pytest's `*Test` pattern
 **Found**: CI run 40759614150 (PR #50087, all 8 shards) — 2026-10-28
 **Confirmed**: 100%
 
-**Root cause**: Same **collection leak mechanism** as Issue 6 Part 1, but WITHOUT the setUp
-rename problem. `VLMModelTest` (in `vlm_tester.py`) and `ALMModelTest` (in `alm_tester.py`)
-both end in `Test` → our `python_classes = ["Test*", "*Test"]` change causes pytest to collect
-them as standalone test classes from every model file that imports them.
+**Root cause**: Same mechanism as Issue 6 Part 1 (unintended standalone collection), but WITHOUT
+the setUp rename problem. `VLMModelTest` (in `vlm_tester.py`) and `ALMModelTest` (in `alm_tester.py`)
+are base/mixin test classes that both end in `Test`. Our `python_classes = ["Test*", "*Test"]`
+config change tells pytest to collect any class whose name ends in `Test` — which is correct for
+concrete classes like `FalconModelTest`, but also catches these base classes from every model file
+that imports them. pytest is doing exactly what we asked; we simply forgot to mark these base
+classes with `__test__ = False` to opt them out.
 `MultiModalModelTest` (their parent, in `multimodal_tester.py`) still uses `setUp` and was NOT
-renamed — so this is purely a collection leak, no setUp alias complication.
-When collected standalone as plain pytest classes, `setUp` is never called →
+renamed — so there is no setUp alias complication here.
+When collected as plain pytest classes (standalone), `setUp` is never called →
 `config_tester`/`model_tester` stay None → every test fails.
 
 **Error signatures** (identical to Issue 6):
