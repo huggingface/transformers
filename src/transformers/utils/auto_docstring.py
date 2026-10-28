@@ -1580,12 +1580,6 @@ class ConfigArgs:
     """,
     }
 
-    question_types = {
-        "description": """
-    The question types of a decision head, in the order of the `question_type_ids` it gets.
-    """,
-    }
-
     final_logit_softcapping = {
         "description": """
     Soft-capping value applied to the final logits before computing the probability distribution. Logits are
@@ -2245,7 +2239,7 @@ class ModelArgs:
 
     question_type_ids = {
         "description": """
-    Type of each question of the prompt, as its index in the config's `question_types`.
+    Type of each question of the prompt, as its index in `Question.questions_types`.
     """,
         "shape": "of shape `(num_questions,)`",
     }

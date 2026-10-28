@@ -81,9 +81,6 @@ generation.
 [[autodoc]] AlternatingCodebooksLogitsProcessor
     - __call__
 
-[[autodoc]] CalibratedTemperatureLogitsWarper
-    - __call__
-
 [[autodoc]] ClassifierFreeGuidanceLogitsProcessor
     - __call__
 
@@ -127,9 +124,6 @@ generation.
     - __call__
 
 [[autodoc]] MinPLogitsWarper
-    - __call__
-
-[[autodoc]] NoulBandLogitsWarper
     - __call__
 
 [[autodoc]] NoBadWordsLogitsProcessor

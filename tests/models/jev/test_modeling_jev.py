@@ -35,6 +35,18 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
     decision_repo = "ArthurZ/GEV-26B-Decide"
     tiny_sizes = {"hidden_size": 16}
 
+    @require_vision
+    def test_chat_template_reproduces_the_model_code(self):
+        super().test_chat_template_reproduces_the_model_code()
+        # The converted decider heads (`DECIDERS`), whose templates see images
+        for repo in DECIDERS:
+            with self.subTest(repo):
+                test = json.loads(Path(hf_hub_download(repo, "decision_test.json")).read_bytes())
+                template = DecisionTemplate(AutoProcessor.from_pretrained(repo), DecisionConfig.from_pretrained(repo))
+                prompts = template(test["request"])
+                sequences = [{"input_ids": prompt.input_ids, "marks": prompt.marks} for prompt in prompts]
+                self.assertEqual(sequences, test["sequences"])
+
 
 # Code readouts of a Qwen3.5 checkpoint, converted with `convert_decider_to_hf.py`: the backbone loads from the
 # original repo. The answers each converted head gives to the request of its `decision_test.json`
@@ -112,19 +124,6 @@ DECIDERS = {
         "urgency": {"0": 0.0074, "1": 0.0098, "2": 0.8503, "3": 0.1324},
     },
 }
-
-
-@require_torch
-@require_vision
-class DeciderTemplateTest(unittest.TestCase):
-    def test_template_reproduces_the_model_code(self):
-        for repo in DECIDERS:
-            with self.subTest(repo):
-                test = json.loads(Path(hf_hub_download(repo, "decision_test.json")).read_bytes())
-                template = DecisionTemplate(AutoProcessor.from_pretrained(repo), DecisionConfig.from_pretrained(repo))
-                prompts = template(test["request"])
-                sequences = [{"input_ids": prompt.input_ids, "marks": prompt.marks} for prompt in prompts]
-                self.assertEqual(sequences, test["sequences"])
 
 
 @slow

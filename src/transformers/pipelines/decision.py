@@ -41,9 +41,25 @@ class DecisionPipeline(Pipeline):
     ```
 
     Questions can also be set up front, with `pipeline("decision", model=..., questions={...})`.
+
+    Call arguments:
+        inputs (`dict`, `str` or `list`):
+            `{"state": ..., "questions": {name: {"type": ..., "instructions": ..., "criteria": ...}}}` or its JSON, with
+            `type` one of `choice` (`criteria` maps options to descriptions), `score` (`criteria` lists the levels,
+            lowest first) or `noul` (optional `criteria` describe `true` and `false`). Any other input is a bare
+            `state`, asked the current questions: those of the last request, or the ones set up front. Requests can
+            carry `assets`, as in the System One API.
+        questions (`dict`, *optional*):
+            Questions to ask the input, as a bare `state`. They become the current questions.
+        assets (`dict`, *optional*):
+            Images keyed by a placeholder: wherever the placeholder appears in a string of the state, the instructions
+            or the criteria, the model sees the image. An image is a System One asset (`{"type": "image", "format":
+            "png", "data_base64": ...}`), a PIL image, a path or a URL. Needs a model with a processor that handles
+            images.
+
+    Returns `dict` (or a list of `dict`): the answers keyed by question name, in the System One format.
     """
 
-    _load_processor = None  # the processor of models that see images
     _load_image_processor = False
     _load_feature_extractor = False
     _load_tokenizer = True
@@ -78,36 +94,6 @@ class DecisionPipeline(Pipeline):
     def _sanitize_parameters(self, questions: dict[str, Any] | None = None, assets: dict[str, Any] | None = None):
         preprocess_params = {key: value for key, value in (("questions", questions), ("assets", assets)) if value}
         return preprocess_params, {}, {}
-
-    def __call__(
-        self,
-        inputs: dict[str, Any] | str | list,
-        questions: dict[str, Any] | None = None,
-        assets: dict[str, Any] | None = None,
-        **kwargs,
-    ):
-        """
-        Answer the questions of one or several System One requests.
-
-        Args:
-            inputs (`dict`, `str` or `list`):
-                `{"state": ..., "questions": {name: {"type": ..., "instructions": ..., "criteria": ...}}}` or its JSON,
-                with `type` one of `choice` (`criteria` maps options to descriptions), `score` (`criteria` lists the
-                levels, lowest first) or `noul` (optional `criteria` describe `true` and `false`). Any other input is
-                a bare `state`, asked the current questions: those of the last request, or the ones set up front.
-                Requests can carry `assets`, as in the System One API.
-            questions (`dict`, *optional*):
-                Questions to ask the input, as a bare `state`. They become the current questions.
-            assets (`dict`, *optional*):
-                Images keyed by a placeholder: wherever the placeholder appears in a string of the state, the
-                instructions or the criteria, the model sees the image. An image is a System One asset (`{"type":
-                "image", "format": "png", "data_base64": ...}`), a PIL image, a path or a URL. Needs a model with a
-                processor that handles images.
-
-        Return:
-            `dict` (or a list of `dict`): The answers keyed by question name, in the System One format.
-        """
-        return super().__call__(inputs, questions=questions, assets=assets, **kwargs)
 
     def preprocess(self, inputs, questions: dict[str, Any] | None = None, assets: dict[str, Any] | None = None):
         prompts = self.template(inputs if questions is None else {"state": inputs, "questions": questions}, assets)

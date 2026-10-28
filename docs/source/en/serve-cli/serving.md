@@ -1760,8 +1760,6 @@ Question 'team': expected a `type` among noul, choice, score, got type 'Choice'.
 Question 'upset': unknown field 'instruction'. Did you mean 'instructions'? A noul question looks like {"type": "noul", ...}
 ```
 
-Each distinct set of questions is validated once and cached, so clients that send the same questions with every request skip validation after the first one.
-
 For vision-capable models, add `assets`, as in the System One API: up to four images keyed by a placeholder of your choice (a UUID is safest). Wherever a placeholder appears in a string of the `state`, the `instructions`, or the `criteria`, the model sees the image there. An asset is `{"type": "image", "format": "png", "data_base64": "..."}`; remote image URLs are not accepted. The model needs a processor that handles images.
 
 ```json
