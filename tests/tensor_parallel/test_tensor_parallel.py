@@ -29,8 +29,6 @@ from transformers.distributed.tensor_parallel import (
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
-from ..distributed_testing_utils import run_distributed
-
 
 @is_tensor_parallel_test
 class TestTensorParallelProperties(TestCasePlus):
