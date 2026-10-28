@@ -766,7 +766,8 @@ def convert_to_rgb(
 
     Args:
         image (`PIL.Image.Image` or `np.ndarray`):
-            The image to convert. Arrays are expected in channels-last (H, W, C) uint8 layout.
+            The image to convert. Arrays are expected in channels-last (H, W, C) uint8 layout. Other inputs are
+            returned unchanged.
         return_numpy (`bool`, *optional*, defaults to `False`):
             Whether to return a `np.ndarray` (H, W, 3) instead of a `PIL.Image.Image`.
             Returning a PIL image is deprecated and will be removed in future versions.
@@ -808,7 +809,8 @@ def convert_to_rgb(
             return PIL.Image.fromarray(image_rgb)
         return np.moveaxis(image_rgb, -1, channel_axis)
 
-    raise ValueError(f"Input image must be either in PIL or numpy format but got {type(image)}")
+    # BC: other inputs (e.g. torch tensors from remote code processors) were always returned unchanged
+    return image
 
 
 def flip_channel_order(
