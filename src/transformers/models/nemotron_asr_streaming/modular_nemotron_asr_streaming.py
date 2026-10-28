@@ -211,9 +211,6 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
         mel_filters_dtype="float32",
         **kwargs,
     ):
-        if not isinstance(getattr(torch, mel_filters_dtype, None), torch.dtype):
-            raise ValueError(f"`mel_filters_dtype` must name a torch dtype, got {mel_filters_dtype!r}.")
-        self.mel_filters_dtype = mel_filters_dtype
         super().__init__(
             feature_size=feature_size,
             sampling_rate=sampling_rate,
@@ -224,13 +221,11 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
             padding_value=padding_value,
             **kwargs,
         )
-
-    def _round_constant(self, tensor: torch.Tensor) -> torch.Tensor:
-        """Rounds a front-end constant to `mel_filters_dtype` and back to float32, as the original checkpoint stores it."""
-        return tensor.to(getattr(torch, self.mel_filters_dtype)).to(torch.float32)
+        self.mel_filters_dtype = mel_filters_dtype
 
     def _torch_extract_fbank_features(self, waveform, device="cpu", center=True):
-        window = self._round_constant(torch.hann_window(self.win_length, periodic=False, device=device))
+        dtype = getattr(torch, self.mel_filters_dtype)
+        window = torch.hann_window(self.win_length, periodic=False, device=device).to(dtype).float()
         stft = torch.stft(
             waveform,
             self.n_fft,
@@ -245,8 +240,8 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
         magnitudes = torch.sqrt(magnitudes.pow(2).sum(-1))
         magnitudes = magnitudes.pow(2)
 
-        # log mel spectrogram, with the filter bank as the original checkpoint stores it
-        mel_filters = self._round_constant(self.mel_filters).to(device)
+        # log mel spectrogram
+        mel_filters = self.mel_filters.to(device).to(dtype).float()
         mel_spec = mel_filters @ magnitudes
         mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
 
