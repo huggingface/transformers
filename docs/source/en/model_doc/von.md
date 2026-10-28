@@ -38,7 +38,7 @@ decide(
 
 [[autodoc]] VonConfig
 
-## VonDecisionHead
+## VonForDecision
 
-[[autodoc]] VonDecisionHead
+[[autodoc]] VonForDecision
     - forward

@@ -44,7 +44,7 @@ class VonPreTrainedModel(PreTrainedModel):
     counts its tokens.
     """
 )
-class VonDecisionHead(VonPreTrainedModel):
+class VonForDecision(VonPreTrainedModel):
     def __init__(self, config: VonConfig):
         super().__init__(config)
         self.input_norm = nn.LayerNorm(config.hidden_size)
@@ -122,4 +122,4 @@ class VonDecisionHead(VonPreTrainedModel):
         return scores
 
 
-__all__ = ["VonDecisionHead", "VonPreTrainedModel"]
+__all__ = ["VonForDecision", "VonPreTrainedModel"]
