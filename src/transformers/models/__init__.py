@@ -341,6 +341,7 @@ if TYPE_CHECKING:
     from .nanochat import *
     from .nemotron import *
     from .nemotron3_5_asr import *
+    from .nemotron3_5_transcribe import *
     from .nemotron3_diarization import *
     from .nemotron_asr_streaming import *
     from .nemotron_h import *
