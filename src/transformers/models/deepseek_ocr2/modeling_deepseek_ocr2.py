@@ -554,6 +554,7 @@ class DeepseekOcr2SamVisionProj(nn.Module):
 
 
 class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
+    config: DeepseekOcr2SamVisionConfig
     _can_record_outputs = {"hidden_states": DeepseekOcr2SamVisionLayer, "attentions": DeepseekOcr2SamVisionAttention}
     _input_embed_layer = "patch_embed"
 

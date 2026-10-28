@@ -318,6 +318,8 @@ class PPFormulaNetMultiModalProjector(nn.Module):
 
 
 class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
+    config: PPFormulaNetVisionConfig
+
     def __init__(self, config: PPFormulaNetVisionConfig):
         super().__init__()
         self.multi_modal_projector = PPFormulaNetMultiModalProjector(config)

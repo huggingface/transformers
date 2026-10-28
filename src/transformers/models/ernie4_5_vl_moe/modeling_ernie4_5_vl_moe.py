@@ -1717,6 +1717,8 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VLMoeForConditionalGenera
 
 
 class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
+    # trf-ignore: TRF055
+
     def post_init(self):
         logger.warning_once(
             "`Ernie4_5_VL_MoePreTrainedModel` is deprecated; please use `Ernie4_5_VLMoePreTrainedModel` instead.",

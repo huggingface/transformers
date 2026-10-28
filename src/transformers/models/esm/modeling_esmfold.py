@@ -31,6 +31,7 @@ from ...utils import (
     logging,
 )
 from ...utils.generic import maybe_autocast
+from .configuration_esm import EsmFoldConfig
 from .modeling_esm import EsmModel, EsmPreTrainedModel
 from .openfold_utils import (
     OFProtein,
@@ -881,6 +882,8 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
+
+    config: EsmFoldConfig
 
     # Subclass `EsMPreTrainedModel` to deal with special init
     @torch.no_grad()
@@ -1960,7 +1963,7 @@ class EsmFoldingTrunk(nn.Module):
     protein(s).
     """
 )
-class EsmForProteinFolding(EsmPreTrainedModel):
+class EsmForProteinFolding(EsmFoldPreTrainedModel):
     _no_split_modules = ["EsmFoldStructureModule", "EsmFoldTriangularSelfAttentionBlock"]
     _supports_flash_attn = False
     _supports_sdpa = False
@@ -1973,7 +1976,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
         if isinstance(module, EsmForProteinFolding):
             init.copy_(module.af2_to_esm, module._af2_to_esm_from_vocab_list(module.config.vocab_list))
 
-    def __init__(self, config):
+    def __init__(self, config: EsmFoldConfig):
         super().__init__(config)
 
         self.config = config

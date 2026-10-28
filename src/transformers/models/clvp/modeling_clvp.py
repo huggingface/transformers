@@ -825,7 +825,7 @@ class ClvpEncoder(ClvpPreTrainedModel):
 
     config: ClvpEncoderConfig
 
-    def __init__(self, config: ClvpConfig):
+    def __init__(self, config: ClvpEncoderConfig):
         super().__init__(config)
 
         self.config = config

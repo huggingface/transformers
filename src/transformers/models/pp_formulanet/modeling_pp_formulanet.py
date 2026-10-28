@@ -429,6 +429,7 @@ class PPFormulaNetVisionNeck(nn.Module):
 
 
 class PPFormulaNetVisionModel(PPFormulaNetPreTrainedModel):
+    config: PPFormulaNetVisionConfig
     _can_record_outputs = {"hidden_states": PPFormulaNetVisionLayer, "attentions": PPFormulaNetVisionAttention}
     input_modalities = ("image",)
 
