@@ -22,10 +22,12 @@ import pytest
 from transformers import (
     AsyncTextIteratorStreamer,
     AutoTokenizer,
+    LatencyStreamer,
     TextIteratorStreamer,
     TextStreamer,
     is_torch_available,
 )
+from transformers.generation import BaseStreamer
 from transformers.testing_utils import CaptureStdout, require_torch, torch_device
 from transformers.utils.logging import _get_library_root_logger
 
@@ -154,6 +156,74 @@ class StreamerTester(unittest.TestCase):
         finally:
             release.set()
             thread.join()
+
+    def test_latency_streamer_generate(self):
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model.config.eos_token_id = -1
+
+        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
+        streamer = LatencyStreamer()
+        model.generate(input_ids, max_new_tokens=10, do_sample=False, streamer=streamer)
+
+        self.assertGreater(streamer.ttft, 0)
+        self.assertEqual(len(streamer.step_latencies), 9)
+        self.assertGreaterEqual(streamer.total_time, streamer.ttft)
+        self.assertGreater(streamer.tokens_per_second, 0)
+        self.assertEqual(streamer.num_prompt_tokens, 5)
+        self.assertEqual(streamer.num_generated_tokens, 10)
+
+    def test_latency_streamer_manual(self):
+        streamer = LatencyStreamer()
+        # Prompt prefill step
+        streamer.put(torch.ones((1, 4), dtype=torch.long))
+        self.assertIsNone(streamer.ttft)
+        self.assertEqual(streamer.num_prompt_tokens, 4)
+
+        # 3 decode steps: 1st emitted token completes TTFT, remaining 2 decode steps record ITL
+        for _ in range(3):
+            streamer.put(torch.ones((1, 1), dtype=torch.long))
+        streamer.end()
+
+        self.assertGreater(streamer.ttft, 0)
+        self.assertEqual(len(streamer.step_latencies), 2)
+        self.assertGreater(streamer.total_time, 0)
+        self.assertEqual(streamer.num_generated_tokens, 3)
+        self.assertGreater(streamer.mean_inter_token_latency, 0)
+
+        # Test reset
+        streamer.reset()
+        self.assertIsNone(streamer.prompt_time)
+        self.assertIsNone(streamer.ttft)
+        self.assertEqual(len(streamer.step_latencies), 0)
+        self.assertEqual(streamer.num_prompt_tokens, 0)
+        self.assertEqual(streamer.num_generated_tokens, 0)
+
+    def test_latency_streamer_wrapper_and_batch_check(self):
+        class DummyStreamer(BaseStreamer):
+            def __init__(self):
+                self.put_count = 0
+                self.ended = False
+
+            def put(self, value):
+                self.put_count += 1
+
+            def end(self):
+                self.ended = True
+
+        dummy = DummyStreamer()
+        streamer = LatencyStreamer(streamer=dummy)
+
+        # Verify batch size > 1 raises ValueError
+        with self.assertRaises(ValueError):
+            streamer.put(torch.ones((2, 4), dtype=torch.long))
+
+        # Verify calls forward to wrapped streamer
+        streamer.put(torch.ones((1, 4), dtype=torch.long))
+        streamer.put(torch.ones((1, 1), dtype=torch.long))
+        streamer.end()
+
+        self.assertEqual(dummy.put_count, 2)
+        self.assertTrue(dummy.ended)
 
 
 @require_torch
