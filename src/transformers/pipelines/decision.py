@@ -17,9 +17,8 @@ class DecisionPipeline(Pipeline):
     """
     Decision pipeline: answers typed questions (`choice`, `score`, `noul`) about a `state` with a probability for every
     option, from one forward pass per prompt (the System One API of Jev-like models). The decision config (see
-    [`DecisionConfig`]) and the decision head (`decision_head.json`) live next to the model or in the repo given as
-    `decision_config`. The head scores the options from the model it is given; without a head, the options are scored
-    by the next-token logits of their labels, so any chat model can answer.
+    [`DecisionConfig`]) lives next to the model or in the repo given as `decision_config`. A decision model
+    (`XxxForDecision`) scores the options itself; any other model scores them by the next-token logits of their labels, so any chat model can answer.
 
     Example:
 

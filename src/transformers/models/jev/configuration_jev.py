@@ -129,35 +129,9 @@ class JevConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
 
-    # The files of a checkpoint that holds a JEV head next to its weights, read with them
+    # The files of a checkpoint that holds a JEV head next to its weights, read with them: its weights and its configs
     extra_files = ("head.safetensors", "readout.safetensors")
-
-    @classmethod
-    def from_checkpoint(cls, pretrained_model_name_or_path, text_config: dict, **kwargs) -> dict | None:
-        """
-        The fields of the JEV head of a checkpoint that ships it next to its weights, whose config is `text_config`, or
-        `None` for any other checkpoint.
-        """
-        text = text_config.get("text_config", text_config)
-        if (vllm := _read_json(pretrained_model_name_or_path, "decision_config.json", **kwargs)) and "codes" in vllm:
-            # vLLM decision models: a code per option, read from the whole prompt
-            text["is_causal"] = vllm.get("attention_mode") != "noncausal_full_attention"
-            return {
-                "hidden_size": text["hidden_size"],
-                "num_verbalizers": len(vllm["codes"]),
-                "offsets": dict.fromkeys(QUESTION_TYPES, 0),
-            }
-        if (spec := _read_json(pretrained_model_name_or_path, "judge_config.json", **kwargs)) is not None:
-            # JEV: the trained head of `head.safetensors`, on the model with the LoRA of `adapter/`
-            slots = spec["slots"]
-            offsets = {question_type: start for question_type, (start, _) in slots["ranges"].items()}
-            return {
-                "hidden_size": text["hidden_size"],
-                "num_verbalizers": slots["num_slots"],
-                "offsets": offsets,
-                "softcap": spec.get("softcap"),
-            }
-        return None
+    extra_config_files = ("decision_config.json", "judge_config.json")
 
     @classmethod
     def decision_config(cls, pretrained_model_name_or_path, **kwargs):
@@ -189,7 +163,20 @@ class JevConfig(PreTrainedConfig):
             )
         return None
 
-    def __post_init__(self, **kwargs):
+    def __post_init__(self, decision_config: dict | None = None, judge_config: dict | None = None, **kwargs):
+        # The configs of a checkpoint that ships a JEV head next to its weights, whose config is `text_config`
+        text_config = (
+            self.text_config.get("text_config", self.text_config) if isinstance(self.text_config, dict) else {}
+        )
+        if decision_config and "codes" in decision_config:  # vLLM decision models: a code per option, whole prompt
+            text_config["is_causal"] = decision_config.get("attention_mode") != "noncausal_full_attention"
+            self.hidden_size, self.num_verbalizers = text_config["hidden_size"], len(decision_config["codes"])
+            self.offsets = dict.fromkeys(QUESTION_TYPES, 0)
+        if judge_config:  # JEV: the trained head of `head.safetensors`, on the model with the LoRA of `adapter/`
+            slots = judge_config["slots"]
+            self.hidden_size, self.num_verbalizers = text_config["hidden_size"], slots["num_slots"]
+            self.offsets = {question_type: start for question_type, (start, _) in slots["ranges"].items()}
+            self.softcap = judge_config.get("softcap")
         if self.offsets is None:
             self.offsets = {"noul": 0, "score": 2, "choice": 8}
         super().__post_init__(**kwargs)

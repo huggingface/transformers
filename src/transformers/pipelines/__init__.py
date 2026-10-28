@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any, Optional, Union
 from huggingface_hub import is_offline_mode
 
 from ..configuration_utils import PreTrainedConfig
-from ..decision.configuration_utils import DECISION_HEAD_CONFIG_NAME
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import FeatureExtractionMixin
 from ..image_processing_utils import BaseImageProcessor
@@ -990,23 +989,17 @@ def pipeline(
                             cache_dir=model_kwargs.get("cache_dir"),
                         )
 
-        # A decision model next to the model it reads: its config, here and when loading the model, is `decision_head.json`
-        if task == "decision" and cached_file(
-            model,
-            DECISION_HEAD_CONFIG_NAME,
-            _raise_exceptions_for_missing_entries=False,
-            **{key: value for key, value in hub_kwargs.items() if key != "trust_remote_code"},
-        ):
-            model_kwargs = {**model_kwargs, "config_file_name": DECISION_HEAD_CONFIG_NAME}
         config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
-        # A checkpoint shipping a decision head next to its weights: the decision model that reads its files
+        # A checkpoint shipping a decision head next to its weights: the decision model whose config files it has
         if task == "decision" and config.model_type not in MODEL_FOR_DECISION_MAPPING_NAMES:
+            files_kwargs = {"revision": hub_kwargs["revision"], "token": hub_kwargs["token"]}
             for model_type in MODEL_FOR_DECISION_MAPPING_NAMES:
                 config_class = CONFIG_MAPPING[model_type]
-                if hasattr(config_class, "from_checkpoint") and config_class.from_checkpoint(model, config.to_dict()):
-                    config = config_class.from_pretrained(
-                        model, revision=hub_kwargs["revision"], token=hub_kwargs["token"]
-                    )
+                if any(
+                    cached_file(model, filename, _raise_exceptions_for_missing_entries=False, **files_kwargs)
+                    for filename in getattr(config_class, "extra_config_files", ())
+                ):
+                    config = config_class.from_pretrained(model, **files_kwargs)
                     break
 
     custom_tasks = {}
