@@ -120,7 +120,7 @@ class XiaomiLens0Config(Qwen3_5Config):
     mask_bce_loss_weight (`float`, *optional*, defaults to 2.0):
         Weight of the pixel-wise binary cross-entropy term in the mask loss.
     mask_loss_chunk_size (`int`, *optional*, defaults to 8):
-        Positive number of masks processed per chunk for each image when computing the mask loss.
+        Number of masks processed per chunk for each image when computing the mask loss.
 
     Example:
 
@@ -433,15 +433,12 @@ class XiaomiLens0CausalLMOutputWithPast(Qwen3_5CausalLMOutputWithPast):
         Mask logits grouped by image, each of shape `(num_masks, height, width)`.
     mask_token_indices (`list[torch.LongTensor]`, *optional*):
         Batch and sequence indices of the decoded mask tokens, grouped by image.
-    lm_loss (`torch.FloatTensor` of shape `()`, *optional*):
-        Language modeling loss.
     mask_loss (`torch.FloatTensor` of shape `()`, *optional*):
         Weighted Dice and binary cross-entropy loss. The total loss is the sum of the language modeling loss and this weighted mask loss.
     """
 
     mask_logits: list[torch.FloatTensor] | None = None
     mask_token_indices: list[torch.LongTensor] | None = None
-    lm_loss: torch.FloatTensor | None = None
     mask_loss: torch.FloatTensor | None = None
 
 
@@ -513,16 +510,16 @@ class XiaomiLens0ForConditionalGeneration(Qwen3_5ForConditionalGeneration):
 
         hidden_states = outputs.last_hidden_state
         logits = self.lm_head(slice_logits_to_keep(hidden_states, logits_to_keep))
-        
+
         mask_logits = mask_token_indices = None
         if mask_labels is not None or output_masks:
             mask_logits, mask_token_indices = self.decode_masks(
                 input_ids, hidden_states, outputs.image_hidden_states, image_grid_thw, ignore_thinking=False
             )
 
-        loss = lm_loss = mask_loss = None
+        loss = mask_loss = None
         if labels is not None or mask_labels is not None:
-            loss, lm_loss, mask_loss = self.loss_function(
+            loss, _, mask_loss = self.loss_function(
                 logits=logits,
                 labels=labels,
                 mask_logits=mask_logits,
@@ -536,7 +533,6 @@ class XiaomiLens0ForConditionalGeneration(Qwen3_5ForConditionalGeneration):
             loss=loss,
             mask_logits=mask_logits,
             mask_token_indices=mask_token_indices,
-            lm_loss=lm_loss,
             mask_loss=mask_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,

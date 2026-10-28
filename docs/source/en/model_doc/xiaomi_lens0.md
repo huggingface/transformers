@@ -119,7 +119,7 @@ mask supervision, configure the distributed wrapper to handle unused parameters 
 Gradient accumulation averages microbatch losses. Without `mask_labels`, only the language loss is computed;
 the mask decoder is skipped and receives no gradients.
 The configuration exposes `mask_loss_weight`, `mask_dice_loss_weight`, and `mask_bce_loss_weight`
-(defaults: 1, 1, 2). Outputs include the language modeling `lm_loss` and weighted `mask_loss`, whose sum is `loss`,
+(defaults: 1, 1, 2). Outputs include the combined `loss` and weighted `mask_loss`,
 as well as `mask_logits` and `mask_token_indices`. The `mask_loss_chunk_size` configuration value (default: 8)
 sets how many masks per image are processed at a time when computing the loss. Omit language `labels`
 for mask-only supervision.

@@ -51,8 +51,8 @@ def xiaomi_lens0_mask_loss(
         bce_weight (`float`):
             Weight of the binary cross-entropy loss, averaged over valid pixels within each mask.
         chunk_size (`int`):
-            Positive number of masks processed per chunk for each image. Logits and targets are converted to
-            float32 per chunk to limit temporary memory usage.
+            Number of masks processed per chunk for each image. Logits and targets are converted to
+            float per chunk to limit memory usage.
 
     Returns:
         `torch.Tensor` of shape `()`: Scalar float32 loss. Weighted per-mask losses are summed locally and divided
@@ -60,34 +60,34 @@ def xiaomi_lens0_mask_loss(
         the global valid-mask count divided by the world size, also clamped to at least 1.
     """
     total_loss = 0
-    num_masks = 0
+    num_masks = logits[0].new_zeros((), dtype=torch.float32)
     for index, (image_logits, image_targets) in enumerate(zip(logits, targets)):
         image_valid_mask = None if valid_targets_mask is None else valid_targets_mask[index]
         num_masks += image_logits.shape[0] if image_valid_mask is None else image_valid_mask.flatten(1).any(-1).sum()
 
         for start in range(0, image_logits.shape[0], chunk_size):
-            with torch.autocast(device_type=image_logits.device.type, enabled=False):
-                chunk_logits = image_logits[start : start + chunk_size].float().flatten(1)
-                chunk_targets = image_targets[start : start + chunk_size].float().flatten(1)
-                probabilities = chunk_logits.sigmoid()
+            chunk_logits = image_logits[start : start + chunk_size].float().flatten(1)
+            chunk_targets = image_targets[start : start + chunk_size].float().flatten(1)
+            probabilities = chunk_logits.sigmoid()
 
-                if image_valid_mask is None:
-                    bce_loss = (
-                        F.binary_cross_entropy_with_logits(chunk_logits, chunk_targets, reduction="none").mean(-1).sum()
-                    )
-                else:
-                    chunk_valid_mask = image_valid_mask[start : start + chunk_size].float().flatten(1)
-                    weights = chunk_valid_mask / chunk_valid_mask.sum(-1, keepdim=True).clamp_min(1.0)
-                    bce_loss = F.binary_cross_entropy_with_logits(
-                        chunk_logits, chunk_targets, weight=weights, reduction="sum"
-                    )
-                    probabilities = probabilities * chunk_valid_mask
-                    chunk_targets = chunk_targets * chunk_valid_mask
+            if image_valid_mask is None:
+                bce_loss = (
+                    F.binary_cross_entropy_with_logits(chunk_logits, chunk_targets, reduction="mean")
+                    * chunk_logits.shape[0]
+                )
+            else:
+                chunk_valid_mask = image_valid_mask[start : start + chunk_size].float().flatten(1)
+                weights = chunk_valid_mask / chunk_valid_mask.sum(-1, keepdim=True).clamp_min(1.0)
+                bce_loss = F.binary_cross_entropy_with_logits(
+                    chunk_logits, chunk_targets, weight=weights, reduction="sum"
+                )
+                probabilities = probabilities * chunk_valid_mask
+                chunk_targets = chunk_targets * chunk_valid_mask
 
-                intersection = 2 * (probabilities * chunk_targets).sum(-1)
-                denominator = probabilities.sum(-1) + chunk_targets.sum(-1)
-                dice_loss = (1 - (intersection + 1) / (denominator + 1)).sum()
-                total_loss = total_loss + dice_weight * dice_loss + bce_weight * bce_loss
+            intersection = 2 * (probabilities * chunk_targets).sum(-1)
+            denominator = probabilities.sum(-1) + chunk_targets.sum(-1)
+            dice_loss = (1 - (intersection + 1) / (denominator + 1)).sum()
+            total_loss = total_loss + dice_weight * dice_loss + bce_weight * bce_loss
 
     return total_loss / _normalize_mask_count(num_masks)
 
