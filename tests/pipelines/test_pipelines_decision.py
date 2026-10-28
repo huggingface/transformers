@@ -130,17 +130,16 @@ class DecisionPipelineTest(unittest.TestCase):
         self.assertIn("(a noul question looks like", str(error.exception))
         self.assertIn("unexpected keyword argument 'instruction'", str(error.exception))
 
-    def test_bare_states_are_asked_the_current_questions(self):
+    def test_each_request_carries_its_questions(self):
         template = DecisionTemplate(self.tokenizer)
-        with self.assertRaises(ValueError):
-            template("a state, but no questions yet")
-        expected = [prompt.input_ids for prompt in template(REQUEST)]
-        self.assertEqual([prompt.input_ids for prompt in template(REQUEST["state"])], expected)
-        upfront = DecisionTemplate(self.tokenizer, questions=REQUEST["questions"])
-        self.assertEqual([prompt.input_ids for prompt in upfront(REQUEST["state"])], expected)
+        for request in (REQUEST["state"], '{"a": 1}', {"questions": REQUEST["questions"]}):
+            with self.assertRaises(ValueError):
+                template(request)
+        # Asking the same questions twice is the same, the questions are parsed once
+        self.assertEqual(
+            [p.input_ids for p in template(REQUEST)], [p.input_ids for p in template(json.dumps(REQUEST))]
+        )
         self.assertIs(template.parse_questions(REQUEST["questions"]), template.parse_questions(REQUEST["questions"]))
-        # JSON that isn't a request is a state too
-        self.assertEqual([p.questions for p in upfront('{"a": 1}')], [p.questions for p in upfront(REQUEST)])
 
     @require_vision
     def test_assets_are_images_where_their_placeholders_are(self):
@@ -154,7 +153,7 @@ class DecisionPipelineTest(unittest.TestCase):
         }
         (prompt,) = template(request)
         # The same chat, with the images as content blocks
-        text = template.prompt.render(state=request["state"], question=template.questions[0])
+        text = template.prompt.render(state=request["state"], question=prompt.questions[0])
         before, middle, after = re.split("img-1|img-2", text)
         content = [{"type": "text", "text": before}, {"type": "image", "image": red}]
         content += [
@@ -173,10 +172,6 @@ class DecisionPipelineTest(unittest.TestCase):
         for key, value in prompt.model_inputs().items():
             if key in expected:  # the inputs of the model it reads, next to the marks and questions
                 torch.testing.assert_close(value, expected[key])
-        # Remembered questions keep their image, the bare state brings its own
-        (prompt,) = template("img-1 again", assets={"img-1": red})
-        (expected,) = template({**request, "state": "img-1 again"})
-        self.assertEqual(prompt.input_ids, expected.input_ids)
         # A decision template places the image parts of the state and questions itself
         decision_template = (
             "{% macro parts(x) %}{% if x is string %}{{ x }}{% else %}{% for part in x %}"
@@ -232,7 +227,8 @@ class DecisionPipelineTest(unittest.TestCase):
         decide = pipeline("decision", model=Qwen2ForCausalLM(config), tokenizer=self.tokenizer)
         refund = {"refund": REQUEST["questions"]["refund"]}
         self.assertEqual(list(decide(REQUEST["state"], questions=refund)), ["refund"])
-        self.assertEqual(list(decide("Where is my parcel?")), ["refund"])
+        with self.assertRaises(ValueError):  # no questions are remembered between calls
+            decide("Where is my parcel?")
 
     @slow
     @require_torch
