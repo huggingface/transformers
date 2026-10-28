@@ -13,8 +13,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="jaredpalmer/kev-4b")
@@ -23,18 +24,22 @@ class KevConfig(PreTrainedConfig):
     r"""
     head_dim (`int`, *optional*, defaults to 256):
         Dimension of the projections of the hidden states of the options and of the question.
+    text_config (`dict` or `PreTrainedConfig`, *optional*):
+        Config of the model the head reads, the `config.json` of its repo.
 
     Example:
     ```python
-    >>> from transformers import KevConfig, KevDecisionHead
+    >>> from transformers import KevConfig, KevForDecision
 
-    >>> head = KevDecisionHead(KevConfig(hidden_size=2560))
+    >>> model = KevForDecision(KevConfig(hidden_size=2560))
     ```"""
 
     model_type = "kev"
+    sub_configs_defaults = {"text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_text")}
 
     hidden_size: int = 2560
     head_dim: int = 256
+    text_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
 
 
