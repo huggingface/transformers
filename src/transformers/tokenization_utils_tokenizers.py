@@ -1391,7 +1391,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         """Return whether `tokenizer.json` declares a ByteLevel pre_tokenizer or decoder.
 
         Used when Hub `tokenizer_class` is `LlamaTokenizer` but the serialized tokenizer is
-        byte-level, so AutoTokenizer can load `TokenizersBackend` instead.
+        byte-level, so AutoTokenizer loads with `TokenizersBackend` instead.
         """
         resolved_file = cached_file(
             pretrained_model_name_or_path,
