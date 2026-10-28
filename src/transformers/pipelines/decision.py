@@ -10,7 +10,7 @@ from .base import Pipeline, build_pipeline_init_args
 if is_torch_available():
     import torch
 
-    from ..decision.modeling_utils import load_decision_head
+    from ..decision.modeling_utils import DecisionPreTrainedModel
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
@@ -79,7 +79,6 @@ class DecisionPipeline(Pipeline):
             except OSError:
                 decision_config = DecisionConfig()
         self.template = DecisionTemplate(self.processor or self.tokenizer, decision_config, questions)
-        self.head = load_decision_head(self.model, repo, decision_config) if repo else None
         self.logits_processors = {
             kind: decision_config.get_logits_processor(kind) for kind in Question.questions_types
         }
@@ -101,9 +100,9 @@ class DecisionPipeline(Pipeline):
         # TODO: batch / continious batching
         scores = []
         for prompt, inputs, backbone in zip(model_inputs["prompts"], model_inputs["inputs"], model_inputs["backbone"]):
-            if self.head is not None:
+            if isinstance(self.model, DecisionPreTrainedModel):
                 backbone_kwargs = {key: value for key, value in backbone.items() if key != "input_ids"}
-                option_scores = self.head(**inputs, backbone=self.model, backbone_kwargs=backbone_kwargs)
+                option_scores = self.model(**inputs, **backbone_kwargs)
                 scores.append(option_scores.split(inputs["num_options"].tolist()))
             else:  # the logits of the labels before each mark
                 logits = self.model(**backbone, use_cache=False, logits_to_keep=inputs["marks"] - 1).logits[0]
