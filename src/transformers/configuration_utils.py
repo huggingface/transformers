@@ -24,7 +24,6 @@ import warnings
 from collections.abc import Sequence
 from dataclasses import MISSING, dataclass, fields
 from functools import wraps
-from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar
 
 from huggingface_hub.dataclasses import strict
@@ -878,20 +877,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         kwargs["revision"] = revision
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-        # A model whose files sit next to the weights of the checkpoint it reads, like a decision head: the config of
-        # that checkpoint is its `text_config`, and its own config files are read next to it
-        hub_kwargs = {
-            key: kwargs[key] for key in ("cache_dir", "local_files_only", "revision", "token") if key in kwargs
-        }
-        extra_configs = {}
-        for filename in getattr(cls, "extra_config_files", ()):
-            path = cached_file(
-                pretrained_model_name_or_path, filename, _raise_exceptions_for_missing_entries=False, **hub_kwargs
-            )
-            if path is not None:
-                extra_configs[Path(filename).stem] = json.loads(Path(path).read_text(encoding="utf-8"))
-        if extra_configs and config_dict.get("model_type") != cls.model_type:
-            config_dict = {"model_type": cls.model_type, "text_config": config_dict, **extra_configs}
         if cls.base_config_key and cls.base_config_key in config_dict:
             config_dict = config_dict[cls.base_config_key]
 

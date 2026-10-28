@@ -13,10 +13,14 @@
 # limitations under the License.
 """`decide`, the `generate` of decision models: like the `GenerationMixin` of the models that generate."""
 
+import json
+from pathlib import Path
 from typing import Any
 
 import torch
 
+from ..configuration_utils import PreTrainedConfig
+from ..utils import cached_file
 from .configuration_utils import DecisionConfig
 from .template_utils import Question
 
@@ -43,6 +47,38 @@ class DecisionMixin:
     The `decide` of the `XxxForDecision` models, with their `decision_config`: the decision config of their repo, or the
     one of the checkpoint they read the head of, like `generation_config` for `generate`.
     """
+
+    @classmethod
+    def from_pretrained(cls, pretrained_model_name_or_path, *args, config=None, **kwargs):
+        """
+        Also loads the checkpoints that ship a decision head next to their weights, in their own format: the config of
+        the checkpoint is the `text_config` of the decision model, and the config files of its head
+        (`config_class.extra_config_files`) give the rest of its config, in `__post_init__`.
+        """
+        if config is None:
+            config = cls.checkpoint_config(pretrained_model_name_or_path, **kwargs)
+        return super().from_pretrained(pretrained_model_name_or_path, *args, config=config, **kwargs)
+
+    @classmethod
+    def checkpoint_config(cls, pretrained_model_name_or_path, **kwargs) -> PreTrainedConfig | None:
+        """
+        The config of the decision model of a checkpoint that ships its head next to its weights, or `None` for any other
+        repo (e.g. one saved by `save_pretrained`, whose `config.json` is the one of the decision model).
+        """
+        hub_kwargs = {
+            key: kwargs[key] for key in ("cache_dir", "local_files_only", "revision", "token") if key in kwargs
+        }
+        head_configs = {}
+        for filename in getattr(cls.config_class, "extra_config_files", ()):
+            path = cached_file(
+                pretrained_model_name_or_path, filename, _raise_exceptions_for_missing_entries=False, **hub_kwargs
+            )
+            if path is not None:
+                head_configs[Path(filename).stem] = json.loads(Path(path).read_text(encoding="utf-8"))
+        text_config, _ = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **hub_kwargs)
+        if not head_configs or text_config.get("model_type") == cls.config_class.model_type:
+            return None
+        return cls.config_class(text_config=text_config, **head_configs)
 
     @property
     def decision_config(self) -> DecisionConfig:

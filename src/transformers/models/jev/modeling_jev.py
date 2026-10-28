@@ -35,7 +35,7 @@ class JevPreTrainedModel(PreTrainedModel):
     before the `<|mark|>` of each question, soft-capped like the logits of a language model head.
     """
 )
-class JevForDecision(JevPreTrainedModel, DecisionMixin):
+class JevForDecision(DecisionMixin, JevPreTrainedModel):
     def __init__(self, config: JevConfig):
         super().__init__(config)
         self.model = AutoModel.from_config(config.text_config)
