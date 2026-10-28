@@ -20,7 +20,7 @@ import warnings
 
 from parameterized import parameterized
 
-from transformers import Gemma3TextConfig, LlamaConfig
+from transformers import Gemma3TextConfig, LlamaConfig, PreTrainedConfig
 from transformers.testing_utils import CaptureLogger, is_torch_available, require_torch, torch_device
 from transformers.utils import logging as transformers_logging
 
@@ -52,6 +52,24 @@ class RopeTest(unittest.TestCase):
         self.assertTrue(any(issubclass(w.category, FutureWarning) for w in caught))
         self.assertEqual(config.rope_parameters["rope_type"], "yarn")
         LlamaRotaryEmbedding(config)
+
+    def test_rope_scaling_setter_during_init(self):
+        # Mimics remote code (e.g. Phi-3) that sets and validates `rope_scaling` before the rest of the config
+        class RemoteConfig(PreTrainedConfig):
+            model_type = "remote"
+
+            def __init__(self, rope_scaling=None, rope_theta=10000.0, **kwargs):
+                self.rope_scaling = rope_scaling
+                if set(self.rope_scaling) != {"type", "factor"}:
+                    raise ValueError(f"Unexpected `rope_scaling`: {self.rope_scaling}")
+                self.rope_theta = rope_theta
+                super().__init__(**kwargs)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            config = RemoteConfig(rope_scaling={"type": "dynamic", "factor": 2.0})
+        self.assertEqual(config.rope_parameters["rope_type"], "dynamic")
+        self.assertEqual(config.rope_parameters["rope_theta"], 10000.0)
 
     def test_rope_scaling_setter_accepts_none(self):
         config = LlamaConfig(rope_theta=500000.0)
