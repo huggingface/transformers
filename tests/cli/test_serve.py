@@ -19,6 +19,7 @@ Tests for the serving layer.
 import asyncio
 import json
 import socket
+import tempfile
 import time
 import unittest
 from unittest.mock import MagicMock
@@ -720,6 +721,28 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
         expected = pipeline("decision", model=model, tokenizer=tokenizer, decision_config=decision_config)(request)
         self.assertEqual(answers, expected)
         self.assertGreater(input_tokens, 0)
+
+    @require_torch
+    def test_reads_the_decision_config_of_the_repo(self):
+        from transformers import AutoTokenizer, Qwen2Config, Qwen2ForCausalLM
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        config = Qwen2Config(
+            vocab_size=len(tokenizer),
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=1,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+        )
+        model = Qwen2ForCausalLM(config).eval()
+        template = "{{ state }}"
+        with tempfile.TemporaryDirectory() as repo:
+            DecisionConfig(temperature={"noul": 2.0}, chat_template=template).save_pretrained(repo)
+            model.config._name_or_path = model.name_or_path = repo  # as if loaded from the repo
+            pipe = SystemOneHandler(MagicMock(), GenerationState())._pipeline(repo, model, tokenizer)
+        self.assertEqual(pipe.template.config.temperature, {"noul": 2.0})
+        self.assertEqual(pipe.template.decision_template, template)
 
     def test_questions_are_validated(self):
         handler = SystemOneHandler(MagicMock(), GenerationState())
