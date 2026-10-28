@@ -2757,8 +2757,13 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
 
     def setUp(self) -> None:
         self.repo_name = f"{self.user}/test-model-on-the-fly-{uuid.uuid4()}"
+        # conftest.py disables conversion globally to avoid Hub traffic in regular tests;
+        # this class specifically tests conversion, so we re-enable it.
+        self._prev_disable = os.environ.pop("DISABLE_SAFETENSORS_CONVERSION", None)
 
     def tearDown(self) -> None:
+        if self._prev_disable is not None:
+            os.environ["DISABLE_SAFETENSORS_CONVERSION"] = self._prev_disable
         self.api.delete_repo(self.repo_name)
 
     def test_safetensors_on_the_fly_conversion(self):
