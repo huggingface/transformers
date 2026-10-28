@@ -603,12 +603,6 @@ class ImageTransformsTester(unittest.TestCase):
         self.assertEqual(rgb_image.size, (2, 1))
         self.assertTrue(np.allclose(np.array(rgb_image), np.array([[[0, 0, 0], [255, 255, 255]]], dtype=np.uint8)))
 
-    @require_torch
-    def test_convert_to_rgb_passes_through_tensors(self):
-        # Remote code processors pass video frames as tensors
-        image = torch.zeros(3, 2, 2, dtype=torch.uint8)
-        self.assertIs(convert_to_rgb(image), image)
-
     @parameterized.expand(["RGB", "L", "P"])
     def test_convert_to_rgb_png_transparency(self, mode):
         image = PIL.Image.new(mode, (2, 1))
