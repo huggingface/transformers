@@ -907,7 +907,7 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
                     init.xavier_uniform_(module.weight, gain=1)
                 elif module.init == "gating":
                     init.zeros_(module.weight)
-                    if module.bias:
+                    if getattr(module, "bias", None) is not None:
                         init.ones_(module.bias)
                 elif module.init == "normal":
                     init.kaiming_normal_(module.weight, nonlinearity="linear")
