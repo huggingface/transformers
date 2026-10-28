@@ -12,12 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Converts a JEV checkpoint (autotrust/JEV-9B, JEV-27B, JEV-27B-VL, JEV-35B, JEV-Gemma4-26B-A4B) to a JEV head in
-`decision_head/`, next to the decision config. System 1 reads the log-probabilities of the slot tokens at the last prompt token, adds
-the bias of each slot and divides by the temperature of the question type: the log-softmax normalizer is the same for
-every slot, so the head is the `lm_head` rows of the slot tokens (with their LoRA) and their bias, or the trained head
-of `head.safetensors`. The LoRA of the backbone (`adapter_vllm/` or `adapter/`) is saved at the root, so that
-`pipeline("decision", model=output_dir)` loads the checkpoint with it.
+Writes the files that make a JEV checkpoint (autotrust/JEV-9B, JEV-27B, JEV-27B-VL, JEV-35B, JEV-Gemma4-26B-A4B) run with
+`pipeline("decision", model=repo_id)`, to add to its repo: the config of the head (`decision_head.json`), the decision
+config and its template. System 1 reads the log-probabilities of the slot tokens at the last prompt token, adds the bias
+of each slot and divides by the temperature of the question type: the log-softmax normalizer is the same for every slot,
+so the head is the trained head of `head.safetensors`, already in the repo, or the `lm_head` rows of the slot tokens
+(with their LoRA) and their bias, written to `decision_head.safetensors`. The pipeline loads the LoRA of the backbone
+from its subfolder (`adapter/` or `adapter_vllm/`).
 
     python convert_jev_to_hf.py --repo_id autotrust/JEV-27B --output_dir JEV-27B
 """
@@ -31,8 +32,9 @@ from huggingface_hub import file_exists, hf_hub_download
 from safetensors import safe_open
 from safetensors.torch import load_file, save_file
 
-from transformers import AutoConfig, AutoProcessor, JevConfig
+from transformers import AutoConfig, JevConfig
 from transformers.decision import DecisionConfig
+from transformers.decision.configuration_utils import DECISION_HEAD_CONFIG_NAME
 
 
 # The `bare-v1` prompt of System 1 (`serve_decide.py`), read before `<|mark|>`
@@ -68,43 +70,40 @@ def convert(repo_id: str, output_dir: str):
     backbone_config = AutoConfig.from_pretrained(repo_id)
     text_config = backbone_config.get_text_config()
     if file_exists(repo_id, "head.safetensors"):  # a trained float32 head, on the backbone with the LoRA of `adapter/`
-        spec, adapter = load_json(repo_id, "judge_config.json"), "adapter"
-        state_dict = load_file(hf_hub_download(repo_id, "head.safetensors"))
+        spec, adapter, weights = load_json(repo_id, "judge_config.json"), "adapter", "head.safetensors"
     else:  # the `lm_head` rows of the slot tokens, merged or with the LoRA of `adapter_vllm/`
         spec = load_json(repo_id, "adapter_vllm/decision_head.json")
-        adapter = None if spec.get("merged") else "adapter_vllm"
+        adapter, weights = None if spec.get("merged") else "adapter_vllm", "decision_head.safetensors"
         weight_map = load_json(repo_id, "model.safetensors.index.json")["weight_map"]
         name = next(key for key in weight_map if key.endswith("lm_head.weight"))
         with safe_open(hf_hub_download(repo_id, weight_map[name]), "pt") as file:
             weight = file.get_tensor(name)[spec["verbalizer_ids"]].float()
-        state_dict = {"proj.weight": weight, "proj.bias": torch.tensor(spec["bias"], dtype=torch.float32)}
-    if adapter is not None:
-        lora_config = load_json(repo_id, f"{adapter}/adapter_config.json")
-        lora = load_file(hf_hub_download(repo_id, f"{adapter}/adapter_model.safetensors"))
-        if (lora_a := lora.pop("base_model.model.lm_head.lora_A.weight", None)) is not None:
-            lora_b = lora.pop("base_model.model.lm_head.lora_B.weight")[spec["verbalizer_ids"]]
-            scaling = lora_config["lora_alpha"] / lora_config["r"]
-            state_dict["proj.weight"] += scaling * lora_b.float() @ lora_a.float()
-        # The `lm_head` LoRA is folded in the head above
-        if isinstance(lora_config["target_modules"], list):
-            lora_config["target_modules"] = [target for target in lora_config["target_modules"] if target != "lm_head"]
-        lora_config["base_model_name_or_path"] = repo_id
+        if adapter is not None:  # the `lm_head` LoRA, folded in the head
+            lora_config = load_json(repo_id, f"{adapter}/adapter_config.json")
+            lora = load_file(hf_hub_download(repo_id, f"{adapter}/adapter_model.safetensors"))
+            lora_a, lora_b = (
+                lora["base_model.model.lm_head.lora_A.weight"],
+                lora["base_model.model.lm_head.lora_B.weight"],
+            )
+            weight += (
+                lora_config["lora_alpha"] / lora_config["r"] * lora_b[spec["verbalizer_ids"]].float() @ lora_a.float()
+            )
+        # float32: System 1 adds the float32 bias to float32 log-probabilities
+        head = {"proj.weight": weight, "proj.bias": torch.tensor(spec["bias"], dtype=torch.float32)}
         os.makedirs(output_dir, exist_ok=True)
-        with open(f"{output_dir}/adapter_config.json", "w", encoding="utf-8") as file:
-            json.dump(lora_config, file, indent=2)
-        save_file(lora, f"{output_dir}/adapter_model.safetensors", metadata={"format": "pt"})
+        save_file(head, f"{output_dir}/{weights}", metadata={"format": "pt"})
 
     slots, ranges = spec["slots"], spec["slots"]["ranges"]
-    JevConfig(
+    config = JevConfig(
         hidden_size=text_config.hidden_size,
         num_verbalizers=slots["num_slots"],
         offsets={question_type: start for question_type, (start, _) in ranges.items()},
         softcap=spec.get("softcap"),
-    ).save_pretrained(f"{output_dir}/decision_head")
-    # float32: System 1 adds the float32 bias to float32 log-probabilities
-    save_file(state_dict, f"{output_dir}/decision_head/model.safetensors", metadata={"format": "pt"})
+    )
+    config.transformers_weights = weights
+    os.makedirs(output_dir, exist_ok=True)
+    config.to_json_file(f"{output_dir}/{DECISION_HEAD_CONFIG_NAME}")
 
-    AutoProcessor.from_pretrained(repo_id).save_pretrained(output_dir)
     verbalizers = slots["verbalizers"]
     DecisionConfig(
         labels={question_type: verbalizers[start:end] for question_type, (start, end) in ranges.items()},
@@ -112,6 +111,7 @@ def convert(repo_id: str, output_dir: str):
         # Gemma reads the prompt after `<bos>`
         chat_template=("<bos>" if "gemma" in backbone_config.model_type else "") + TEMPLATE,
         noul_options=["false", "true"],
+        adapter=adapter,
     ).save_pretrained(output_dir)
 
 
