@@ -40,6 +40,43 @@ if is_torch_available():
 CASES = {
     "qwen3_moe": ("Qwen3Moe", {"moe_intermediate_size": 24, "num_experts": 3}, {"router_logits": 2}),
     "granitemoe": ("GraniteMoe", {"num_local_experts": 3}, {"router_logits": 2}),
+    "olmoe": ("Olmoe", {"num_experts": 3, "eos_token_id": 2}, {"router_logits": 2}),
+    # Only the text components are constructed: no vision inputs or encoders.
+    "aria": (
+        "AriaText",
+        {"moe_num_experts": 3, "moe_topk": 2, "moe_num_shared_experts": 1},
+        {"router_logits": 2},
+    ),
+    "deepseek_ocr2": (
+        "DeepseekOcr2Text",
+        {
+            "num_hidden_layers": 3,
+            "n_routed_experts": 3,
+            "n_shared_experts": 1,
+            "moe_intermediate_size": 24,
+            "mlp_layer_types": ["dense", "sparse", "sparse"],
+        },
+        {"router_logits": 2},
+    ),
+    "deepseek_v3": (
+        "DeepseekV3",
+        {
+            "num_hidden_layers": 3,
+            "num_key_value_heads": 4,
+            "moe_intermediate_size": 24,
+            "n_routed_experts": 4,
+            "n_shared_experts": 1,
+            "n_group": 2,
+            "topk_group": 1,
+            "first_k_dense_replace": 1,
+            "q_lora_rank": 4,
+            "kv_lora_rank": 4,
+            "qk_rope_head_dim": 2,
+            "qk_nope_head_dim": 2,
+            "v_head_dim": 4,
+        },
+        {"router_logits": 2},
+    ),
     "qwen2_moe": (
         "Qwen2Moe",
         {
@@ -111,7 +148,10 @@ def make_model(family):
     config_kwargs.update(extra)
     config = getattr(transformers, prefix + "Config")(**config_kwargs)
     config._attn_implementation = "eager"
-    model_class = prefix + ("ForConditionalGeneration" if family == "switch_transformers" else "ForCausalLM")
+    suffix = "ForConditionalGeneration" if family == "switch_transformers" else "ForCausalLM"
+    if family == "deepseek_ocr2":
+        suffix = "Model"  # This public text backbone has no separate causal-LM head.
+    model_class = prefix + suffix
     torch.manual_seed(13)
     return getattr(transformers, model_class)(config).cpu().train()
 
@@ -121,6 +161,8 @@ def model_inputs(family):
     inputs = {"input_ids": input_ids, "attention_mask": torch.ones_like(input_ids), "labels": input_ids.clone()}
     if family == "switch_transformers":
         inputs["decoder_input_ids"] = input_ids.flip(1)
+    if family == "deepseek_ocr2":
+        inputs.pop("labels")
     return inputs
 
 
@@ -149,9 +191,15 @@ def assert_same(actual, expected):
         assert actual == expected
 
 
-def auxiliary_loss(outputs, family):
+def router_gradient_objective(outputs, family):
     if family == "switch_transformers":
         return outputs.encoder_aux_loss + outputs.decoder_aux_loss
+    if family in ("deepseek_v3", "aria", "deepseek_ocr2"):
+        # These models expose scores but no model auxiliary loss. A test-only
+        # scalar checks their gradient connection; the optimizer still uses the
+        # separate model-output objective below.
+        assert getattr(outputs, "aux_loss", None) is None
+        return sum(scores.square().mean() for scores in outputs.router_logits)
     return outputs.aux_loss
 
 
@@ -207,7 +255,7 @@ def test_router_collection_preserves_optional_outputs(family, hidden_states):
         if family != "jetmoe" or checkpoint is None
     ],
 )
-def test_router_collection_preserves_auxiliary_gradients_and_update(family, checkpoint):
+def test_router_collection_preserves_router_gradients_and_update(family, checkpoint):
     check_gradients_and_update(family, checkpoint, require_aux_gradients=True)
 
 
@@ -233,12 +281,18 @@ def check_gradients_and_update(family, checkpoint, require_aux_gradients):
         torch.manual_seed(29)
         with capture_context(family, scoped):
             outputs = current(**inputs, output_router_logits=True)
-            aux = auxiliary_loss(outputs, family)
+            aux = router_gradient_objective(outputs, family)
             aux_grads = None
             if require_aux_gradients or aux.requires_grad:
                 aux_grads = torch.autograd.grad(aux, params, retain_graph=True, allow_unused=True)
                 assert any(grad is not None and torch.count_nonzero(grad) for grad in aux_grads)
-            outputs.loss.backward()
+            if family == "deepseek_ocr2":
+                # The public text backbone returns hidden states, not LM loss.
+                # This test-only scalar checks backbone gradients and updates;
+                # it does not qualify multimodal training or invent a task loss.
+                outputs.last_hidden_state[..., 0].mean().backward()
+            else:
+                outputs.loss.backward()
         grads = tuple(None if parameter.grad is None else parameter.grad.clone() for parameter in params)
         assert any(grad is not None and torch.count_nonzero(grad) for grad in grads)
         assert all(grad is None or torch.isfinite(grad).all() for grad in grads)
