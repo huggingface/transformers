@@ -676,7 +676,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ForPreTraining):
 
 
 class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: Wav2Vec2ConformerConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -693,17 +693,17 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ForCTC):
 
 
 class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
 
 
 class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
 
 
 class Wav2Vec2ConformerForXVector(Wav2Vec2ForXVector):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2ConformerConfig):
         super().__init__(config)
 
 

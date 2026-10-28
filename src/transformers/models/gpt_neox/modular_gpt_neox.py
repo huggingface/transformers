@@ -245,7 +245,7 @@ GPT_NEOX_INPUTS_DOCSTRING = None  # Will be picked up by modular
 
 
 class GPTNeoXModel(LlamaModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoXConfig):
         PreTrainedModel.__init__(self, config)
         self.config = config
 

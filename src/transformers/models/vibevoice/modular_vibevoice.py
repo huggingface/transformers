@@ -187,7 +187,7 @@ class VibeVoicePreTrainedModel(VoxtralPreTrainedModel):
     """
 )
 class VibeVoiceModel(VoxtralModel):
-    def __init__(self, config):
+    def __init__(self, config: VibeVoiceConfig):
         super().__init__(config)
         self.multi_modal_projector = VibeVoiceMultiModalProjector(
             config.audio_config.hidden_size, config.text_config.hidden_size

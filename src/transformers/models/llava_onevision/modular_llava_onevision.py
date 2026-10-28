@@ -399,7 +399,7 @@ class LlavaOnevisionPreTrainedModel(LlavaNextVideoPreTrainedModel):
 
 
 class LlavaOnevisionModel(LlavaNextVideoModel):
-    def __init__(self, config):
+    def __init__(self, config: LlavaOnevisionConfig):
         super().__init__(config)
         del self.vision_resampler
 

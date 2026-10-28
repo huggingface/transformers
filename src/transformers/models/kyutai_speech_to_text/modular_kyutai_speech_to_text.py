@@ -251,7 +251,7 @@ class KyutaiSpeechToTextEmbeddings(nn.Module):
 
 
 class KyutaiSpeechToTextModel(MoshiModel):
-    def __init__(self, config):
+    def __init__(self, config: KyutaiSpeechToTextConfig):
         super().__init__(config)
         self.embed_tokens = KyutaiSpeechToTextEmbeddings(config)
 
@@ -261,7 +261,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
     _keep_in_fp32_modules_strict = ["codec_model"]
     output_modalities = ("audio", "text")
 
-    def __init__(self, config):
+    def __init__(self, config: KyutaiSpeechToTextConfig):
         super().__init__(config)
         self.codec_model = AutoModel.from_config(config.codec_config)
 

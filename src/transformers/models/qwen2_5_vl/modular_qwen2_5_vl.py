@@ -312,7 +312,7 @@ class Qwen2_5_VLModel(Qwen2VLModel):
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen2_5_VLConfig):
         super().__init__(config)
         self.visual = Qwen2_5_VisionTransformerPretrainedModel._from_config(config.vision_config)
 

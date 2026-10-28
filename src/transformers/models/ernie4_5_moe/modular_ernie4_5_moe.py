@@ -280,7 +280,7 @@ class Ernie4_5_MoeModel(Ernie4_5_MoePreTrainedModel):
 
 @auto_docstring
 class Ernie4_5_MoeForCausalLM(MixtralForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: Ernie4_5_MoeConfig):
         PreTrainedModel.__init__(self, config)
         self.model = Ernie4_5_MoeModel(config)
         self.vocab_size = config.vocab_size

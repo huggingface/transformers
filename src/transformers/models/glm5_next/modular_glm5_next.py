@@ -1404,7 +1404,7 @@ class Glm5NextVisionBlock(GlmOcrVisionBlock):
 
 @auto_docstring
 class Glm5NextVisionModel(GlmOcrVisionModel):
-    def __init__(self, config) -> None:
+    def __init__(self, config: Glm5NextVisionConfig) -> None:
         super().__init__(config)
         self.blocks = nn.ModuleList([Glm5NextVisionBlock(config) for _ in range(config.depth)])
         self.merger = Glm5NextVisionPatchMerger(

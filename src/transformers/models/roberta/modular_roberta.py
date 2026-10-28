@@ -175,7 +175,7 @@ class RobertaPreTrainedModel(PreTrainedModel):
 
 
 class RobertaModel(BertModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: RobertaConfig, add_pooling_layer=True):
         super().__init__(self, config)
 
 

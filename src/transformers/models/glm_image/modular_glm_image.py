@@ -460,7 +460,7 @@ class GlmImageTextModel(Glm4vTextModel):
 
 
 class GlmImageModel(Glm4vModel):
-    def __init__(self, config):
+    def __init__(self, config: GlmImageConfig):
         super().__init__(config)
         self.visual = GlmImageVisionModel._from_config(config.vision_config)
         self.language_model = GlmImageTextModel._from_config(config.text_config)

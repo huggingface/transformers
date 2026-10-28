@@ -598,7 +598,7 @@ class Qwen3VLTextModel(Qwen3VLPreTrainedModel, Qwen3Model):
 
 @auto_docstring
 class Qwen3VLModel(Qwen2VLModel):
-    def __init__(self, config):
+    def __init__(self, config: Qwen3VLConfig):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)

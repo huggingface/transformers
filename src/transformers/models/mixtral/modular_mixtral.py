@@ -324,7 +324,7 @@ class MixtralForCausalLM(MistralForCausalLM):
     _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: MixtralConfig):
         super().__init__(config)
         self.model = MixtralModel(config)
         self.router_aux_loss_coef = config.router_aux_loss_coef

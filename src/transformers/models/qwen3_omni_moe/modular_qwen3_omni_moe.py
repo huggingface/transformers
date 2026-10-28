@@ -1080,7 +1080,7 @@ class Qwen3OmniMoeVisionRotaryEmbedding(Qwen3VLMoeVisionRotaryEmbedding):
 class Qwen3OmniMoeVisionEncoder(Qwen3VLMoeVisionModel):
     config: Qwen3OmniMoeVisionEncoderConfig
 
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: Qwen3OmniMoeVisionEncoderConfig, *inputs, **kwargs):
         self.merger_list = nn.ModuleList(
             [
                 Qwen3OmniMoeVisionPatchMerger(
@@ -1377,7 +1377,7 @@ class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
 
 
 class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForConditionalGeneration):
-    def __init__(self, config):
+    def __init__(self, config: Qwen3OmniMoeThinkerConfig):
         super().__init__(config)
         self.num_experts = config.text_config.num_experts
         self.num_experts_per_tok = config.text_config.num_experts_per_tok

@@ -450,7 +450,7 @@ class VoxtralRealtimeTextDecoderLayer(MistralDecoderLayer):
 
 
 class VoxtralRealtimeTextModel(MistralModel):
-    def __init__(self, config):
+    def __init__(self, config: VoxtralRealtimeTextConfig):
         super().__init__(config)
         self.norm = VoxtralRealtimeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = VoxtralRealtimeRotaryEmbedding(config=config)
