@@ -19,8 +19,9 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="Cloudflare/clef")
@@ -31,15 +32,18 @@ class ClefConfig(PreTrainedConfig):
         Dimension of the hidden states of the backbone that the head reads.
     num_evidence_layers (`int`, *optional*, defaults to 2):
         Number of layers in which the options attend to the prompt.
+    text_config (`dict` or `PreTrainedConfig`, *optional*):
+        Config of the model the head reads, the `config.json` of its repo.
 
     Example:
     ```python
-    >>> from transformers import ClefConfig, ClefDecisionHead
+    >>> from transformers import ClefConfig, ClefForDecision
 
-    >>> head = ClefDecisionHead(ClefConfig(backbone_hidden_size=4096))
+    >>> model = ClefForDecision(ClefConfig(backbone_hidden_size=4096))
     ```"""
 
     model_type = "clef"
+    sub_configs_defaults = {"text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_text")}
 
     backbone_hidden_size: int = 4096
     hidden_size: int = 1024
@@ -52,11 +56,15 @@ class ClefConfig(PreTrainedConfig):
     attention_bias: bool = True
     attention_dropout: float = 0.0
     initializer_range: float = 0.02
+    text_config: dict | PreTrainedConfig | None = None
+    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         super().__post_init__(**kwargs)
+        # The output embeddings of the model are its input embeddings when its config ties them
+        self.tie_word_embeddings = self.tie_word_embeddings or self.text_config.tie_word_embeddings
 
 
 __all__ = ["ClefConfig"]

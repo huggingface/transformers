@@ -18,12 +18,12 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...configuration_utils import PreTrainedConfig
-from ...decision import ForDecision, Question
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...decision import DecisionPreTrainedModel, Question
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
+from ..auto import AutoConfig, AutoModel
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere_asr.modeling_cohere_asr import CohereAsrDecoderLayer
 from ..molmo2.modeling_molmo2 import Molmo2VisionAttention
@@ -37,15 +37,18 @@ class ClefConfig(PreTrainedConfig):
         Dimension of the hidden states of the backbone that the head reads.
     num_evidence_layers (`int`, *optional*, defaults to 2):
         Number of layers in which the options attend to the prompt.
+    text_config (`dict` or `PreTrainedConfig`, *optional*):
+        Config of the model the head reads, the `config.json` of its repo.
 
     Example:
     ```python
-    >>> from transformers import ClefConfig, ClefDecisionHead
+    >>> from transformers import ClefConfig, ClefForDecision
 
-    >>> head = ClefDecisionHead(ClefConfig(backbone_hidden_size=4096))
+    >>> model = ClefForDecision(ClefConfig(backbone_hidden_size=4096))
     ```"""
 
     model_type = "clef"
+    sub_configs_defaults = {"text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_text")}
 
     backbone_hidden_size: int = 4096
     hidden_size: int = 1024
@@ -58,11 +61,15 @@ class ClefConfig(PreTrainedConfig):
     attention_bias: bool = True
     attention_dropout: float = 0.0
     initializer_range: float = 0.02
+    text_config: dict | PreTrainedConfig | None = None
+    tie_word_embeddings: bool = False
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         super().__post_init__(**kwargs)
+        # The output embeddings of the model are its input embeddings when its config ties them
+        self.tie_word_embeddings = self.tie_word_embeddings or self.text_config.tie_word_embeddings
 
 
 class ClefAttention(Molmo2VisionAttention):
@@ -240,8 +247,9 @@ class ClefScorer(nn.Module):
 
 
 @auto_docstring
-class ClefPreTrainedModel(PreTrainedModel):
+class ClefPreTrainedModel(DecisionPreTrainedModel):
     config: ClefConfig
+    base_model_prefix = "model"
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -254,16 +262,21 @@ class ClefPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Decision head of clef (Cloudflare/clef): all the options of all the questions are scored jointly. The template marks
-    the span of each instruction and then of each of its options with a pair of `<|mark|>`. The options of all the
-    questions are packed in one sequence: pooled from the hidden states and from the output embeddings of their tokens,
-    they attend to the prompt and are summarized into the field of their question. The fields of the questions then
-    attend to each other and to the prompt, and each option is scored against the field of its question.
+    Clef (Cloudflare/clef): the model of its repo, its language modeling head and a decision head that scores all the
+    options of all the questions jointly. The template marks the span of each instruction and then of each of its
+    options with a pair of `<|mark|>`. The options of all the questions are packed in one sequence: pooled from the
+    hidden states and from the output embeddings of their tokens, they attend to the prompt and are summarized into the
+    field of their question. The fields of the questions then attend to each other and to the prompt, and each option
+    is scored against the field of its question.
     """
 )
-class ClefDecisionHead(ClefPreTrainedModel):
+class ClefForDecision(ClefPreTrainedModel):
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
+
     def __init__(self, config: ClefConfig):
         super().__init__(config)
+        self.model = AutoModel.from_config(config.text_config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
         self.embeddings = ClefEmbeddings(config)
         self.encoder = ClefEncoder(config)
         self.scorer = ClefScorer(config)
@@ -276,27 +289,17 @@ class ClefDecisionHead(ClefPreTrainedModel):
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor,
-        backbone: PreTrainedModel,
-        backbone_kwargs: dict | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        outputs = backbone.base_model(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
-        hidden_states = outputs.last_hidden_state.to(self.dtype)
-        # The output embeddings of the tokens of each option give its lexical prior
-        output_embeddings = backbone.get_output_embeddings().weight
+        hidden_states = self.model(input_ids=input_ids[None], use_cache=False, **kwargs).last_hidden_state
         option_question_ids = torch.repeat_interleave(num_options)
+        # The output embeddings of the tokens of each option give its lexical prior
         memory, options, fields, field_embeddings, priors = self.embeddings(
-            hidden_states, input_ids[None], marks, num_options, question_type_ids, output_embeddings
+            hidden_states, input_ids[None], marks, num_options, question_type_ids, self.lm_head.weight
         )
         options, fields = self.encoder(memory, options, fields, field_embeddings, option_question_ids, **kwargs)
         scores = self.scorer(fields[:, option_question_ids], options, priors)
         return scores[0]
 
 
-class ClefForDecision(ForDecision):
-    """Clef: the model of a repo and its [`ClefDecisionHead`]."""
-
-    config: ClefConfig
-
-
-__all__ = ["ClefConfig", "ClefDecisionHead", "ClefForDecision", "ClefPreTrainedModel"]
+__all__ = ["ClefConfig", "ClefForDecision", "ClefPreTrainedModel"]

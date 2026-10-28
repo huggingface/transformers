@@ -2428,6 +2428,9 @@ def _build_checkpoint_conversion_mapping():
             operations=[Chunk(dim=0)],
         ),
     ]
+    # The attention of the head only, not the `self_attn` of the model it reads
+    for converter in mapping["clef"][-3:]:
+        converter.scope_prefix, converter.base_model_prefix = "encoder", ""
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
