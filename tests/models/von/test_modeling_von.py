@@ -16,7 +16,6 @@ import copy
 import unittest
 
 from transformers import is_torch_available
-from transformers.decision import DecisionPrompt
 from transformers.testing_utils import require_torch, require_torch_accelerator, slow
 
 from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
@@ -49,17 +48,15 @@ class VonForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             local_attention=8,
         )
         model = VonForDecision(config).eval()
-        input_ids = [3, 4, 5, 6, 1, 9, 1, 7, 8, 2] + [3, 4, 5, 6, 1, 7, 8, 1, 10, 2]
+        input_ids = torch.tensor([3, 4, 5, 6, 1, 9, 1, 7, 8, 2] + [3, 4, 5, 6, 1, 7, 8, 1, 10, 2])
+        marks = torch.tensor([5, 7, 10, 15, 18, 20])
         # The first question of the request has two options
-        prompt = DecisionPrompt(input_ids, [5, 7, 10, 15, 18, 20], self.prompts[0].questions)
+        num_options = torch.tensor([len(question.options) for question in self.prompts[0].questions])
         states = []
         for implementation in ("sdpa", "eager"):
             model.model.set_attn_implementation(implementation)
             with torch.no_grad():
-                inputs = prompt.model_inputs()
-                backbone_inputs = model.backbone_inputs(
-                    inputs["input_ids"][0], inputs["marks"][0], inputs["num_options"][0]
-                )
+                backbone_inputs = model.backbone_inputs(input_ids, marks, num_options)
                 states.append(model.model(**backbone_inputs).last_hidden_state[0])
             first, second = states[-1].split(10)
             torch.testing.assert_close(first[[0, 1, 2, 3, 6, 7, 8, 9]], second[[0, 1, 2, 3, 4, 5, 6, 9]])
