@@ -731,8 +731,8 @@ class HYV4VLImageProcessorPil(HunYuanVLImageProcessorPil):
 class HYV4VLVideoProcessorInitKwargs(Qwen3VLVideoProcessorInitKwargs, total=False):
     r"""
     size (`dict[str, int]`, *optional*):
-        Required per-frame pixel-area key (`shortest_edge`, validated only, frames are never upscaled to reach it)
-        and total clip pixel budget (`longest_edge`).
+        Total clip pixel budget, given by the required `longest_edge` key. A `shortest_edge` entry, which existing
+        configs carry, is accepted but not used: frames are never upscaled.
     patch_size (`int`, *optional*, defaults to 16):
         The spatial patch size of the vision encoder.
     temporal_patch_size (`int`, *optional*, defaults to 1):
@@ -813,9 +813,9 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
         max_image_size: dict[str, int],
         **kwargs,
     ) -> "torch.Tensor":
-        # `shortest_edge` is part of the size contract but is never a lower bound: frames are not upscaled.
-        if not size.shortest_edge or not size.longest_edge:
-            raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
+        # Only the clip budget is needed: `shortest_edge` is not a lower bound, frames are never upscaled.
+        if not size.longest_edge:
+            raise ValueError(f"`size` dict must contain a 'longest_edge' key but got {size}.")
         height, width = self.smart_resize(
             frame_height=videos.shape[-2],
             frame_width=videos.shape[-1],

@@ -258,7 +258,7 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         self.assertEqual(patches, output.pixel_values_videos.shape[0])
 
     def test_does_not_upscale_small_frames(self):
-        # `size.shortest_edge` is validated but never used to enlarge a frame.
+        # `size.shortest_edge` is accepted for config compatibility but never enlarges a frame.
         processor = self.fast_video_processing_class(**self.video_processor_dict)
         video = np.zeros((2, 32, 64, 3), dtype=np.uint8)
         output = processor(video, return_tensors="pt")
@@ -268,7 +268,7 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
     def test_rejects_invalid_size_and_aspect_ratio(self):
         processor = self.fast_video_processing_class(**self.video_processor_dict)
-        with self.assertRaisesRegex(ValueError, "shortest_edge.*longest_edge"):
+        with self.assertRaisesRegex(ValueError, "longest_edge"):
             processor(np.zeros((2, 32, 64, 3), dtype=np.uint8), size={"height": 32, "width": 64})
         with self.assertRaisesRegex(ValueError, "aspect ratio"):
             processor(np.zeros((2, 1, 256, 3), dtype=np.uint8), input_data_format="channels_last")
