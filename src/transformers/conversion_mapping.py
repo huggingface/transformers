@@ -2174,19 +2174,26 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(
             r"^(option_norm|residual_scorer|prior_logit_scale|joint_logit_scale|residual_gate)", r"scorer.\1"
         ),
+        WeightConverter(
+            r"attention.in_proj_",
+            ["cross_attn.q_proj.", "cross_attn.k_proj.", "cross_attn.v_proj."],
+            operations=[Chunk(dim=0)],
+        ),
+        WeightConverter(
+            r"self_attn.in_proj_",
+            ["self_attn.q_proj.", "self_attn.k_proj.", "self_attn.v_proj."],
+            operations=[Chunk(dim=0)],
+        ),
+        WeightConverter(
+            r"multihead_attn.in_proj_",
+            ["encoder_attn.q_proj.", "encoder_attn.k_proj.", "encoder_attn.v_proj."],
+            operations=[Chunk(dim=0)],
+        ),
     ]
-    # The head's attention projections: scoped to its `encoder`, so the reverse (on save) leaves the backbone's
-    # `self_attn` alone
-    for source, target in [
-        ("attention", "cross_attn"),
-        ("self_attn", "self_attn"),
-        ("multihead_attn", "encoder_attn"),
-    ]:
-        converter = WeightConverter(
-            f"{source}.in_proj_", [f"{target}.{proj}_proj." for proj in "qkv"], operations=[Chunk(dim=0)]
-        )
-        converter.scope_prefix, converter.base_model_prefix = "encoder", ""
-        mapping["clef"].append(converter)
+    # The head's converters only apply under its `encoder`, so that saving leaves the backbone's `self_attn` alone
+    for transform in mapping["clef"]:
+        if isinstance(transform, WeightConverter):
+            transform.scope_prefix, transform.base_model_prefix = "encoder", ""
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
