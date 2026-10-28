@@ -353,6 +353,9 @@ class BltIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
 
+        from transformers.testing_utils import get_device_properties  # TEMPORARY: record GPU values
+
+        print("BLT_PROBE", self._testMethodName, get_device_properties(), output[0, :2, :30].float().cpu().tolist())
         torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30].to(torch_device), rtol=1e-3, atol=1e-3)
 
     @slow
@@ -420,6 +423,9 @@ class BltIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         with torch.no_grad():
             output = model(torch.tensor([input_ids]).to(torch_device))[0]
 
+        from transformers.testing_utils import get_device_properties  # TEMPORARY: record GPU values
+
+        print("BLT_PROBE", self._testMethodName, get_device_properties(), output[0, :2, :30].float().cpu().tolist())
         torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30].to(torch_device), rtol=1e-3, atol=1e-3)
 
     @slow
