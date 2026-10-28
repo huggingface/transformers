@@ -473,6 +473,7 @@ class PhimoeTopKRouter(nn.Linear):
         self.num_experts = config.num_local_experts
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         if self.training and self.input_jitter_noise > 0:
             hidden_states *= torch.empty_like(hidden_states).uniform_(
                 1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
@@ -498,26 +499,19 @@ class PhimoeSparseMoeBlock(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.hidden_dim = config.hidden_size
-        self.ffn_dim = config.intermediate_size
-        self.num_experts = config.num_local_experts
-        self.top_k = config.num_experts_per_tok
-        self.router = PhimoeTopKRouter(config)
+        # diff from parent: the input jitter is `input_jitter_noise` (`router_jitter_noise` is the router's own)
+        self.jitter_noise = config.input_jitter_noise
+        self.gate = PhimoeTopKRouter(config)
         self.experts = PhimoeExperts(config)
-        self.input_jitter_noise = config.input_jitter_noise
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        if self.training and self.input_jitter_noise > 0:
-            hidden_states *= torch.empty_like(hidden_states).uniform_(
-                1.0 - self.input_jitter_noise, 1.0 + self.input_jitter_noise
-            )
-
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.reshape(-1, hidden_dim)
-        _, top_k_weights, top_k_index = self.router(hidden_states)
-        final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
-        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        if self.training and self.jitter_noise > 0:
+            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        return hidden_states
 
 
 class PhimoeDecoderLayer(GradientCheckpointingLayer):

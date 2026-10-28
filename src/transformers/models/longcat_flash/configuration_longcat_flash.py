@@ -36,7 +36,7 @@ class LongcatFlashConfig(PreTrainedConfig):
         Number of experts to route to for each token in the MoE layer.
     zero_expert_num (`int`, *optional*, defaults to 256):
         Number of zero experts (identity function) to add to the expert pool.
-    expert_ffn_hidden_size (`int`, *optional*, defaults to 2048):
+    moe_intermediate_size (`int`, *optional*, defaults to 2048):
         Hidden size of individual expert FFN layers.
 
     ```python
@@ -59,7 +59,7 @@ class LongcatFlashConfig(PreTrainedConfig):
         "num_local_experts": "n_routed_experts",
         "num_experts_per_tok": "moe_topk",
         "intermediate_size": "ffn_hidden_size",
-        "moe_intermediate_size": "expert_ffn_hidden_size",
+        "expert_ffn_hidden_size": "moe_intermediate_size",
     }
     default_theta = 10000000.0
     base_model_tp_plan = {
@@ -111,7 +111,7 @@ class LongcatFlashConfig(PreTrainedConfig):
     n_routed_experts: int = 512
     output_router_logits: bool = False
     zero_expert_num: int = 256
-    expert_ffn_hidden_size: int = 2048
+    moe_intermediate_size: int = 2048
     routed_scaling_factor: float = 6.0
 
     @property

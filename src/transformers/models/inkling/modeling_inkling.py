@@ -416,17 +416,17 @@ class InklingSparseMoeBlock(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.gate = InklingTopKRouter(config)
         self.experts = InklingExperts(config)
+        self.gate = InklingTopKRouter(config)
         self.shared_experts = InklingSharedExperts(config)
 
     def forward(self, hidden_states) -> torch.Tensor:
         residuals = hidden_states
-        input_shape = hidden_states.shape
+        orig_shape = hidden_states.shape
+        # diff from parent: the router also returns per-token gammas that weight the shared experts
         _, top_k_weights, top_k_index, shared_gammas = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*input_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
         return hidden_states
 

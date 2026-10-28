@@ -226,7 +226,6 @@ class AXK1SparseMoeBlock(nn.Module):
 
     def __init__(self, config: AXK1Config):
         super().__init__()
-        self.config = config
         self.experts = AXK1Experts(config)
         self.gate = AXK1TopKRouter(config)
         self.shared_experts = AXK1MLP(
@@ -241,6 +240,7 @@ class AXK1SparseMoeBlock(nn.Module):
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
+        # diff from parent: norm on the block output
         return self.post_mlp_layernorm(hidden_states)
 
 

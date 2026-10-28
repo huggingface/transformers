@@ -29,6 +29,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ..clip.modeling_clip import CLIPMLP
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     apply_rotary_pos_emb_interleave,
@@ -40,13 +41,12 @@ from ..deepseek_v32.modeling_deepseek_v32 import (
     DeepseekV32Indexer,
     DeepseekV32Model,
     DeepseekV32PreTrainedModel,
-    DeepseekV32SparseMoeBlock,
     yarn_apply_mscale,
 )
 from ..glm4_moe.modeling_glm4_moe import Glm4MoeTopKRouter
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 
 
 logger = logging.get_logger(__name__)
@@ -259,7 +259,11 @@ class AXK2Experts(Qwen2MoeExperts):
     pass
 
 
-class AXK2SparseMoeBlock(DeepseekV32SparseMoeBlock):
+class AXK2MLP(Qwen2MoeMLP):
+    pass
+
+
+class AXK2SparseMoeBlock(DeepseekV2SparseMoeBlock):
     pass
 
 

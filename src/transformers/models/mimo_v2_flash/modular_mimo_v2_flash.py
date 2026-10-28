@@ -29,7 +29,6 @@ from ...utils.generic import no_inherit_decorator
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
     DeepseekV3PreTrainedModel,
-    DeepseekV3SparseMoeBlock,
     DeepseekV3TopKRouter,
 )
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding
@@ -40,6 +39,7 @@ from ..laguna.modeling_laguna import LagunaModel
 from ..llama.modeling_llama import LlamaRMSNorm
 from ..qwen2.modeling_qwen2 import Qwen2Attention
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 
 
 @auto_docstring(checkpoint="XiaomiMiMo/MiMo-V2-Flash")
@@ -179,21 +179,11 @@ class MiMoV2FlashExperts(Qwen2MoeExperts):
     pass
 
 
-class MiMoV2FlashSparseMoeBlock(DeepseekV3SparseMoeBlock):
+class MiMoV2FlashSparseMoeBlock(Qwen3MoeSparseMoeBlock):
     """
     Only difference from `DeepseekV3SparseMoeBlock` is that we have no shared experts.
     So we drop it and override the forward to skip the shared expert (residual like) add.
     """
-
-    def __init__(self, config: MiMoV2FlashConfig):
-        super().__init__(config)
-        del self.shared_experts
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        orig_shape = hidden_states.shape
-        _, top_k_weights, top_k_index = self.gate(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        return self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
 
 
 class MiMoV2FlashMLP(Qwen2MoeMLP):

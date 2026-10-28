@@ -56,7 +56,6 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "glm4_moe_lite": "qwen2_moe",
     "glm_moe_dsa": "qwen2_moe",
     "glm4v_moe": "qwen2_moe",
-    "longcat_flash": "qwen2_moe",
     "solar_open": "qwen2_moe",
     "mellum": "qwen2_moe",
     "qwen3_moe": "qwen2_moe",
@@ -760,6 +759,7 @@ def _build_checkpoint_conversion_mapping():
         ],
         # Legacy MoE weight names → standard ``@use_experts_implementation`` interface.
         "aria_text": [
+            WeightRenaming(r"(layers\.\d+)\.mlp\.router\.weight", r"\1.mlp.gate.weight"),
             WeightRenaming(
                 source_patterns=r"mlp\.experts\.fc1\.weight",
                 target_patterns="mlp.experts.gate_up_proj",
@@ -1266,7 +1266,6 @@ def _build_checkpoint_conversion_mapping():
         ],
         "phimoe": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
-            WeightRenaming(".gate.weight", ".router.weight"),
             WeightConverter(
                 source_patterns=[
                     ".experts.*.w1.weight",
@@ -1517,6 +1516,7 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "jamba": [
+            WeightRenaming(r"(layers\.\d+)\.feed_forward\.router\.weight", r"\1.feed_forward.gate.weight"),
             WeightConverter(
                 source_patterns=[
                     "feed_forward.experts.*.gate_proj.weight",
@@ -2183,6 +2183,9 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"\.block_sparse_moe\.experts\.", ".mlp.experts."),
         WeightRenaming(r"\.block_sparse_moe\.e_score_correction_bias", ".mlp.gate.e_score_correction_bias"),
         *mapping["mixtral"][1:],
+    ]
+    mapping["longcat_flash"] = mapping["qwen2_moe"].copy() + [
+        WeightRenaming(r"(layers\.\d+)\.mlp\.router\.", r"\1.mlp.gate."),
     ]
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
     mapping["hunyuan_v1_moe"] += [

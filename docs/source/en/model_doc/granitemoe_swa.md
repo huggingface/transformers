@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 GraniteMoeSWA combines the mixture-of-experts (MoE) architecture of [GraniteMoeShared](./granitemoeshared) with the sliding-window attention and learnable attention sinks of [GraniteSWA](./granite_swa):
 
-- **Mixture of experts.** Each block routes every token to a subset of experts (`num_experts_per_tok` of `num_local_experts`). Optional **shared experts** are supported but **disabled by default** (`shared_intermediate_size=0`); set it to a positive value to enable them.
+- **Mixture of experts.** Each block routes every token to a subset of experts (`num_experts_per_tok` of `num_local_experts`). Optional **shared experts** are supported but **disabled by default** (`shared_expert_intermediate_size=0`); set it to a positive value to enable them.
 - **Per-layer sliding window attention.** Each layer is either `"full_attention"` or `"sliding_attention"` (configured by `layer_types`). By default every fourth layer (`i % 4 == 0`) keeps full attention and the rest attend only to the most recent `sliding_window` tokens.
 - **Learnable per-head attention sinks.** Each head learns a scalar sink that rescales its attention output by `sigmoid(logsumexp(attn_logits) - sink)`, equivalent to appending a single extra learnable logit to the softmax denominator (the attention-sink mechanism used by GPT-OSS).
 

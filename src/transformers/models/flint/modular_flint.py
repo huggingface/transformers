@@ -27,7 +27,7 @@ from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import maybe_autocast
 from ..gpt_oss.modeling_gpt_oss import GptOssRMSNorm
 from ..qwen2_moe.configuration_qwen2_moe import Qwen2MoeConfig
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeModel
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeModel, Qwen2MoeTopKRouter
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeAttention,
     Qwen3MoeDecoderLayer,
@@ -35,7 +35,6 @@ from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeMLP,
     Qwen3MoePreTrainedModel,
     Qwen3MoeSparseMoeBlock,
-    Qwen3MoeTopKRouter,
     apply_rotary_pos_emb,
     repeat_kv,
 )
@@ -115,7 +114,7 @@ class FlintMLP(Qwen3MoeMLP):
     pass
 
 
-class FlintTopKRouter(Qwen3MoeTopKRouter):
+class FlintTopKRouter(Qwen2MoeTopKRouter):
     def forward(self, hidden_states):
         hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         # `device.type` is a proxy under FX tracing, which vLLM uses to fuse this router
@@ -136,13 +135,14 @@ class FlintSparseMoeBlock(Qwen3MoeSparseMoeBlock):
         self.shared_expert = FlintMLP(config, intermediate_size=config.shared_expert_intermediate_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        _, routing_weights, selected_experts = self.gate(hidden_states)
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         # Unlike Qwen2-MoE, the shared expert is always added in full, without a gate
-        final_hidden_states = self.experts(hidden_states, selected_experts, routing_weights)
-        final_hidden_states = final_hidden_states + self.shared_expert(hidden_states)
-        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        hidden_states = hidden_states + self.shared_expert(residuals)
+        return hidden_states
 
 
 def eager_attention_forward(

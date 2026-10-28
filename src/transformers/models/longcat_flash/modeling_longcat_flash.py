@@ -158,7 +158,7 @@ class LongcatFlashTopKRouter(nn.Module):
 class LongcatFlashExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.intermediate_size = config.expert_ffn_hidden_size
+        self.intermediate_size = config.moe_intermediate_size
         self.hidden_size = config.hidden_size
         self.num_routed_experts = config.n_routed_experts
         self.zero_expert_num = config.zero_expert_num or 0
@@ -204,23 +204,19 @@ class LongcatFlashExperts(nn.Module):
         return final_hidden_states
 
 
-# remap config key expert_ffn_hidden_size -> moe_intermediate_size
 class LongcatFlashSparseMoeBlock(nn.Module):
     """
     A mixed expert module containing zero compute (identity) experts.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: LongcatFlashConfig):
         super().__init__()
-        self.intermediate_size = config.expert_ffn_hidden_size
-        self.config = config
         self.experts = LongcatFlashExperts(config)
+        self.gate = LongcatFlashTopKRouter(config)
 
-        self.router = LongcatFlashTopKRouter(config)
-
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         orig_shape = hidden_states.shape
-        _, top_k_weights, top_k_index = self.router(hidden_states)
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         return hidden_states

@@ -24,13 +24,12 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import logging
 from ...utils.output_capturing import OutputRecorder
-from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2TopKRouter
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock, DeepseekV2TopKRouter
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3DecoderLayer,
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
-    DeepseekV3SparseMoeBlock,
     apply_rotary_pos_emb_interleave,
 )
 from ..llama.modeling_llama import (
@@ -94,7 +93,7 @@ class Mistral4Experts(Qwen2MoeExperts):
     pass
 
 
-class Mistral4SparseMoeBlock(DeepseekV3SparseMoeBlock):
+class Mistral4SparseMoeBlock(DeepseekV2SparseMoeBlock):
     pass
 
 

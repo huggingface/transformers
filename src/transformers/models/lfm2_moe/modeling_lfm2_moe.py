@@ -190,6 +190,7 @@ class Lfm2MoeTopKRouter(nn.Module):
             self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states):
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)
         router_probs = router_logits.sigmoid()
         if self.use_expert_bias:
@@ -212,11 +213,11 @@ class Lfm2MoeSparseMoeBlock(nn.Module):
         self.gate = Lfm2MoeTopKRouter(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        _, top_k_weights, top_k_index = self.gate(hidden_states_reshaped)
-        final_hidden_states = self.experts(hidden_states_reshaped, top_k_index, top_k_weights)
-        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        return hidden_states
 
 
 def rotate_half(x):

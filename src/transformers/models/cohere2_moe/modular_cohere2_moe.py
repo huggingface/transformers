@@ -16,7 +16,6 @@
 from collections.abc import Callable
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
 from ... import initialization as init
@@ -42,6 +41,7 @@ from ..granitemoe.modeling_granitemoe import GraniteMoeTopKRouter
 from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import MixtralExperts
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from .configuration_cohere2_moe import Cohere2MoeConfig
 
 
@@ -68,6 +68,7 @@ class Cohere2MoeTopKRouter(GraniteMoeTopKRouter):
         self.norm_topk_prob = config.norm_topk_prob
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)
         top_k_weights, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)
         if self.expert_selection_fn == "softmax":
@@ -85,36 +86,34 @@ class Cohere2MoeTopKRouter(GraniteMoeTopKRouter):
         return router_logits, top_k_weights, top_k_index
 
 
-class Cohere2MoeSparseMoeBlock(nn.Module):
+class Cohere2MoeSparseMoeBlock(Qwen3MoeSparseMoeBlock):
     def __init__(self, config):
-        super().__init__()
-        self.num_shared_experts = config.num_shared_experts
+        super().__init__(config)
         self.shared_expert_combination_strategy = config.shared_expert_combination_strategy
-
-        self.gate = Cohere2MoeTopKRouter(config)
-        self.experts = Cohere2MoeExperts(config)
-        if self.num_shared_experts > 0:
-            self.shared_experts = Cohere2MoeMLP(
-                config,
-                intermediate_size=config.intermediate_size * config.num_shared_experts,
-            )
+        self.shared_experts = (
+            Cohere2MoeMLP(config, intermediate_size=config.intermediate_size * config.n_shared_experts)
+            if config.n_shared_experts > 0
+            else None
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states_flat = hidden_states.view(-1, hidden_dim)
-        _, top_k_weights, top_k_index = self.gate(hidden_states_flat)
-        final_hidden_states = self.experts(hidden_states_flat, top_k_index, top_k_weights)
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
 
-        if self.num_shared_experts > 0:
-            shared_expert_output = self.shared_experts(hidden_states_flat)
+        # diff from parent: optional shared experts, summed or averaged with the routed output
+        if self.shared_experts is not None:
+            shared_expert_output = self.shared_experts(residuals)
             if self.shared_expert_combination_strategy == "sum":
-                final_hidden_states = final_hidden_states + shared_expert_output
+                hidden_states = hidden_states + shared_expert_output
             elif self.shared_expert_combination_strategy == "average":
-                final_hidden_states = (final_hidden_states + shared_expert_output) / 2
+                hidden_states = (hidden_states + shared_expert_output) / 2
             else:
                 raise ValueError("`shared_expert_combination_strategy` can only be `sum` or `average`")
 
-        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        return hidden_states
 
 
 @no_inherit_decorator

@@ -53,7 +53,7 @@ class AfmoeConfig(PreTrainedConfig):
     """
 
     model_type = "afmoe"
-    attribute_map = {"num_local_experts": "num_experts"}
+    attribute_map = {"num_local_experts": "num_experts", "num_shared_experts": "n_shared_experts"}
     keys_to_ignore_at_inference = ["past_key_values"]
 
     # Default pipeline parallel plan for base model
@@ -91,7 +91,7 @@ class AfmoeConfig(PreTrainedConfig):
     rope_parameters: RopeParameters | dict | None = None
     num_experts: int | None = 64
     num_experts_per_tok: int | None = 6
-    num_shared_experts: int | None = 2
+    n_shared_experts: int | None = 2
     route_scale: float | None = 1.0
     output_router_logits: bool = False
     global_attn_every_n_layers: int | None = 4

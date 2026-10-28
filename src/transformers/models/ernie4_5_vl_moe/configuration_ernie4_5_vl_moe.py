@@ -70,7 +70,7 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         Number of selected experts.
     moe_num_experts (`int`, *optional*, defaults to 64):
         Number of routed experts.
-    moe_num_shared_experts (`int`, *optional*, defaults to 2):
+    n_shared_experts (`int`, *optional*, defaults to 2):
         The number of experts that are shared for all MoE forwards.
     moe_norm_min (`float`, *optional*, defaults to 1e-12):
         Minimum division value during routing normalization.
@@ -84,6 +84,7 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         "num_experts": "moe_num_experts",
         "num_experts_per_tok": "moe_k",
         "num_local_experts": "moe_num_experts",
+        "moe_num_shared_experts": "n_shared_experts",
     }
     default_theta = 500000.0
 
@@ -139,7 +140,7 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
     moe_intermediate_size: list[int] | None = None
     moe_k: int | None = 6
     moe_num_experts: int | None = 64
-    moe_num_shared_experts: int | None = 2
+    n_shared_experts: int | None = 2
     moe_norm_min: float | None = 1e-12
     output_router_logits: bool | None = False
     router_aux_loss_coef: float | None = 0.001

@@ -100,9 +100,8 @@ class AfmoeSparseMoeBlock(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.config = config
         self.router = AfmoeTopKRouter(config)
-        self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.num_shared_experts)
+        self.shared_experts = AfmoeMLP(config, config.moe_intermediate_size * config.n_shared_experts)
         self.experts = AfmoeExperts(config)
         self.expert_bias = nn.Parameter(torch.zeros(config.num_experts), requires_grad=False)
 

@@ -320,7 +320,7 @@ class OpenAIPrivacyFilterTopKRouter(nn.Module):
         return router_logits, top_k_weights, top_k_index
 
 
-class OpenAIPrivacyFilterMLP(nn.Module):
+class OpenAIPrivacyFilterSparseMoeBlock(nn.Module):
     """Similar to GPT Oss but with FP32 focus + added experts scaling"""
 
     def __init__(self, config):
@@ -345,8 +345,7 @@ class OpenAIPrivacyFilterEncoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.self_attn = OpenAIPrivacyFilterAttention(config)
-
-        self.mlp = OpenAIPrivacyFilterMLP(config)
+        self.mlp = OpenAIPrivacyFilterSparseMoeBlock(config)
         self.input_layernorm = OpenAIPrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = OpenAIPrivacyFilterRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

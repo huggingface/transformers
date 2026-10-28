@@ -36,6 +36,7 @@ from ..mistral.modeling_mistral import MistralMLP
 from ..mixtral.modeling_mixtral import MixtralExperts, MixtralForCausalLM, MixtralModel
 from ..olmo2.modeling_olmo2 import Olmo2Attention
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeTopKRouter
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from .configuration_olmoe import OlmoeConfig
 
 
@@ -114,20 +115,8 @@ class OlmoeTopKRouter(Qwen2MoeTopKRouter):
     pass
 
 
-class OlmoeSparseMoeBlock(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.gate = OlmoeTopKRouter(config)
-        self.experts = OlmoeExperts(config)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        _, top_k_weights, top_k_index = self.gate(hidden_states)
-        final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).reshape(
-            batch_size, sequence_length, hidden_dim
-        )
-        return final_hidden_states
+class OlmoeSparseMoeBlock(Qwen3MoeSparseMoeBlock):
+    pass
 
 
 class OlmoeDecoderLayer(LlamaDecoderLayer):

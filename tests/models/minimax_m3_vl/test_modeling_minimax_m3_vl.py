@@ -83,7 +83,7 @@ class MiniMaxM3VLVisionText2TextModelTester(VLMModelTester):
         kwargs.setdefault("projector_hidden_size", 32)
         kwargs.setdefault("intermediate_size", 64)
         kwargs.setdefault("dense_intermediate_size", 128)
-        kwargs.setdefault("shared_intermediate_size", 32)
+        kwargs.setdefault("shared_expert_intermediate_size", 32)
         kwargs.setdefault("num_attention_heads", 4)
         kwargs.setdefault("num_key_value_heads", 2)
         kwargs.setdefault("head_dim", 32)

@@ -60,7 +60,7 @@ class AfmoeModelTester(CausalLMModelTester):
         rope_parameters=None,
         num_experts=4,
         num_experts_per_tok=2,
-        num_shared_experts=2,
+        n_shared_experts=2,
         route_norm=True,
         route_scale=1.0,
         global_attn_every_n_layers=2,
@@ -93,7 +93,7 @@ class AfmoeModelTester(CausalLMModelTester):
         self.num_dense_layers = num_dense_layers
         self.num_experts = num_experts
         self.num_experts_per_tok = num_experts_per_tok
-        self.num_shared_experts = num_shared_experts
+        self.n_shared_experts = n_shared_experts
         self.route_norm = route_norm
         self.route_scale = route_scale
         self.global_attn_every_n_layers = global_attn_every_n_layers

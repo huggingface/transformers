@@ -31,7 +31,6 @@ from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3ForCausalLM,
-    DeepseekV3SparseMoeBlock,
     DeepseekV3TopKRouter,
 )
 from ...models.glm5_next.modeling_glm5_next import (
@@ -47,6 +46,7 @@ from ...models.qwen3_next.modeling_qwen3_next import (
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.output_capturing import OutputRecorder
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..llama.modeling_llama import LlamaDecoderLayer
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
 
@@ -248,7 +248,7 @@ class KimiLinearTopKRouter(DeepseekV3TopKRouter):
     pass
 
 
-class KimiLinearSparseMoeBlock(DeepseekV3SparseMoeBlock):
+class KimiLinearSparseMoeBlock(DeepseekV2SparseMoeBlock):
     pass
 
 

@@ -346,6 +346,7 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
         self.norm_min = config.moe_norm_min
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         device_type = hidden_states.device.type if isinstance(hidden_states.device.type, str) else "cpu"
 
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
@@ -361,31 +362,26 @@ class Ernie4_5_MoeTopKRouter(nn.Module):
 class Ernie4_5_MoeSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.hidden_dim = config.hidden_size
-        self.num_experts = config.num_experts
-        self.top_k = config.num_experts_per_tok
-        self.gate = Ernie4_5_MoeTopKRouter(config)
         self.experts = Ernie4_5_MoeExperts(config)
-
-        self.shared_experts = None
-        if config.moe_num_shared_experts > 0:
-            self.shared_experts = Ernie4_5_MoeMLP(config, config.moe_intermediate_size * config.moe_num_shared_experts)
+        self.gate = Ernie4_5_MoeTopKRouter(config)
+        self.shared_experts = (
+            Ernie4_5_MoeMLP(config, config.moe_intermediate_size * config.n_shared_experts)
+            if config.n_shared_experts > 0
+            else None
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, _ = hidden_states.shape
-        hidden_states = hidden_states.view(-1, self.hidden_dim)
-
-        if self.shared_experts is not None:
-            shared_output = self.shared_experts(hidden_states)
-
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
         _, top_k_weights, top_k_index = self.gate(hidden_states)
-        final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
 
+        # diff from parent: optional shared experts, and the output cast back to the input dtype
         if self.shared_experts is not None:
-            final_hidden_states = final_hidden_states + shared_output
+            hidden_states = hidden_states + self.shared_experts(residuals)
 
-        final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, self.hidden_dim)
-        return final_hidden_states.to(hidden_states.dtype)
+        return hidden_states.to(residuals.dtype)
 
 
 class Ernie4_5_MoeDecoderLayer(GradientCheckpointingLayer):

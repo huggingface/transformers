@@ -27,6 +27,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..bamba.modeling_bamba import BambaMixer, BambaRMSNormGated
+from ..granitemoe.modeling_granitemoe import GraniteMoeTopKRouter
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteFlashAttentionKwargs,
     GraniteMoeSharedDecoderLayer,
@@ -34,11 +35,12 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedMLP,
     GraniteMoeSharedModel,
     GraniteMoeSharedPreTrainedModel,
-    GraniteMoeSharedSparseMoeBlock,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
 from ..llama.modeling_llama import LlamaAttention, LlamaRotaryEmbedding
+from ..mixtral.modeling_mixtral import MixtralExperts
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 
 
@@ -110,8 +112,16 @@ class GraniteMoeHybridRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class GraniteMoeHybridSparseMoeBlock(GraniteMoeSharedSparseMoeBlock):
+class GraniteMoeHybridTopKRouter(GraniteMoeTopKRouter):
     pass
+
+
+class GraniteMoeHybridExperts(MixtralExperts):
+    pass
+
+
+class GraniteMoeHybridSparseMoeBlock(Qwen3MoeSparseMoeBlock):
+    """Sparsely-gated mixture-of-experts block: router decides, experts compute."""
 
 
 class GraniteMoeHybridDecoderLayer(GraniteMoeSharedDecoderLayer):

@@ -39,7 +39,7 @@ class LagunaConfig(PreTrainedConfig):
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP type — ``"dense"`` or ``"sparse"``. Length must equal
         ``num_hidden_layers``. Defaults to first layer dense, rest sparse.
-    moe_routed_scaling_factor (`float`, *optional*, defaults to 1.0):
+    routed_scaling_factor (`float`, *optional*, defaults to 1.0):
         Scalar applied to routed-expert output before combining with the shared-expert output.
     moe_apply_router_weight_on_input (`bool`, *optional*, defaults to `False`):
         Whether to apply router weights to the MoE input rather than the output. Not supported
@@ -59,7 +59,7 @@ class LagunaConfig(PreTrainedConfig):
     """
 
     model_type = "laguna"
-    attribute_map = {"num_local_experts": "num_experts"}
+    attribute_map = {"num_local_experts": "num_experts", "moe_routed_scaling_factor": "routed_scaling_factor"}
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -123,7 +123,7 @@ class LagunaConfig(PreTrainedConfig):
     num_attention_heads_per_layer: list[int] | None = None
     # Laguna-specific MoE
     mlp_layer_types: list[str] | None = None
-    moe_routed_scaling_factor: float = 1.0
+    routed_scaling_factor: float = 1.0
     moe_apply_router_weight_on_input: bool = False
     moe_router_logit_softcapping: float = 0.0
 

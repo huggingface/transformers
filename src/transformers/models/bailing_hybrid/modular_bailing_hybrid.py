@@ -30,11 +30,9 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...models.deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ...models.deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
-    DeepseekV3Experts,
     DeepseekV3ForCausalLM,
     DeepseekV3MLP,
     DeepseekV3RotaryEmbedding,
-    DeepseekV3SparseMoeBlock,
     DeepseekV3TopKRouter,
     apply_rotary_pos_emb_interleave,
 )
@@ -48,6 +46,7 @@ from ...models.glm5_next.modeling_glm5_next import (
 )
 from ...models.kimi_linear.modeling_kimi_linear import KimiLinearDecoderLayer
 from ...models.llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
+from ...models.qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from ...models.qwen3_next.modeling_qwen3_next import (
     Qwen3NextModel,
     Qwen3NextPreTrainedModel,
@@ -56,6 +55,7 @@ from ...models.qwen3_next.modeling_qwen3_next import (
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.output_capturing import OutputRecorder
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 
 
 @auto_docstring(checkpoint="inclusionAI/Ling-3.0-Flash")
@@ -202,7 +202,7 @@ class BailingHybridRotaryEmbedding(DeepseekV3RotaryEmbedding):
     pass
 
 
-class BailingHybridExperts(DeepseekV3Experts):
+class BailingHybridExperts(Qwen2MoeExperts):
     pass
 
 
@@ -397,7 +397,7 @@ class BailingHybridTopKRouter(DeepseekV3TopKRouter):
     pass
 
 
-class BailingHybridSparseMoeBlock(DeepseekV3SparseMoeBlock):
+class BailingHybridSparseMoeBlock(DeepseekV2SparseMoeBlock):
     pass
 
 

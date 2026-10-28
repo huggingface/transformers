@@ -158,7 +158,7 @@ class MiniMaxM3VLRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class MiniMaxM3VLDenseMLP(nn.Module):
+class MiniMaxM3VLMLP(nn.Module):
     def __init__(self, config: MiniMaxM3VLTextConfig, intermediate_size: int | None = None):
         super().__init__()
         inter = intermediate_size if intermediate_size is not None else config.dense_intermediate_size
@@ -250,23 +250,20 @@ class MiniMaxM3VLTopKRouter(nn.Module):
 class MiniMaxM3VLSparseMoeBlock(nn.Module):
     def __init__(self, config: MiniMaxM3VLTextConfig):
         super().__init__()
-        self.gate = MiniMaxM3VLTopKRouter(config)
         self.experts = MiniMaxM3VLExperts(config)
+        self.gate = MiniMaxM3VLTopKRouter(config)
+        self.shared_experts = MiniMaxM3VLMLP(config, intermediate_size=config.shared_expert_intermediate_size)
         self.routed_scaling_factor = config.routed_scaling_factor
-        self.shared_experts = MiniMaxM3VLDenseMLP(config, intermediate_size=config.shared_intermediate_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        shared_output = self.shared_experts(hidden_states)
-
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
         _, top_k_weights, top_k_index = self.gate(hidden_states)
-        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         # Additional scaling
         hidden_states = hidden_states * self.routed_scaling_factor
-        hidden_states = hidden_states + shared_output
-
-        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
 
@@ -641,7 +638,7 @@ class MiniMaxM3VLDecoderLayer(GradientCheckpointingLayer):
         self.mlp = (
             MiniMaxM3VLSparseMoeBlock(config)
             if config.mlp_layer_types[layer_idx] == "sparse"
-            else MiniMaxM3VLDenseMLP(config, intermediate_size=config.dense_intermediate_size)
+            else MiniMaxM3VLMLP(config, intermediate_size=config.dense_intermediate_size)
         )
         self.input_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiniMaxM3VLRMSNorm(config.hidden_size, eps=config.rms_norm_eps)

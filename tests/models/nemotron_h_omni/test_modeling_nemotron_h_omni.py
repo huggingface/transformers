@@ -67,7 +67,7 @@ def get_tiny_text_config(tester) -> "NemotronHConfig":
         head_dim=8,
         intermediate_size=40,
         moe_intermediate_size=40,
-        moe_shared_expert_intermediate_size=40,
+        shared_expert_intermediate_size=40,
         mlp_hidden_act="relu2",
         mamba_hidden_act="silu",
         ssm_state_size=16,

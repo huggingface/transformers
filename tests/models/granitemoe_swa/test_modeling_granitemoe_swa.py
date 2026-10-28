@@ -39,7 +39,10 @@ class GraniteMoeSWAModelTester(CausalLMModelTester):
         # With the default `num_hidden_layers=2`, `layer_types` resolves to
         # ["full_attention", "sliding_attention"], so both attention paths are exercised. The default
         # `sliding_window` stays larger than the short test sequences (matching gemma2/gpt_oss). Shared
-        # experts stay disabled (`shared_intermediate_size=0`), matching the model's default.
+        # experts stay disabled (`shared_expert_intermediate_size=0`), matching the model's default.
+
+    def __init__(self, parent, shared_expert_intermediate_size=0, **kwargs):
+        super().__init__(parent, shared_expert_intermediate_size=shared_expert_intermediate_size, **kwargs)
 
 
 @require_torch
@@ -48,7 +51,7 @@ class GraniteMoeSWAModelTest(CausalLMModelTest, unittest.TestCase):
 
     def test_reverse_loading_mapping(self):
         # The shared-MLP renaming rules only match when the optional shared expert is enabled
-        self.model_tester.shared_intermediate_size = 16
+        self.model_tester.shared_expert_intermediate_size = 16
         super().test_reverse_loading_mapping()
 
 

@@ -178,7 +178,7 @@ class Step3p7TextConfig(MiniMaxM3VLTextConfig):
 
     # Unused fields inherited from `MiniMaxM3VLTextConfig`; removed rather than documented.
     dense_intermediate_size = AttributeError()
-    shared_intermediate_size = AttributeError()
+    shared_expert_intermediate_size = AttributeError()
     rotary_dim = AttributeError()
     swiglu_alpha = AttributeError()
     swiglu_limit = AttributeError()

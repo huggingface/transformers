@@ -39,6 +39,7 @@ from ..deepseek_v3.modeling_deepseek_v3 import (
 from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
 from ..mixtral.modeling_mixtral import MixtralTopKRouter
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from .configuration_longcat_flash import LongcatFlashConfig
 
 
@@ -86,7 +87,7 @@ class LongcatFlashTopKRouter(MixtralTopKRouter):
 class LongcatFlashExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.intermediate_size = config.expert_ffn_hidden_size
+        self.intermediate_size = config.moe_intermediate_size
         self.hidden_size = config.hidden_size
         self.num_routed_experts = config.n_routed_experts
         self.zero_expert_num = config.zero_expert_num or 0
@@ -133,25 +134,10 @@ class LongcatFlashExperts(nn.Module):
 
 
 # remap config key expert_ffn_hidden_size -> moe_intermediate_size
-class LongcatFlashSparseMoeBlock(nn.Module):
+class LongcatFlashSparseMoeBlock(Qwen3MoeSparseMoeBlock):
     """
     A mixed expert module containing zero compute (identity) experts.
     """
-
-    def __init__(self, config):
-        super().__init__()
-        self.intermediate_size = config.expert_ffn_hidden_size
-        self.config = config
-        self.experts = LongcatFlashExperts(config)
-
-        self.router = LongcatFlashTopKRouter(config)
-
-    def forward(self, hidden_states):
-        orig_shape = hidden_states.shape
-        _, top_k_weights, top_k_index = self.router(hidden_states)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
-        return hidden_states
 
 
 class LongcatFlashMLA(AXK1Attention):

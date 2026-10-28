@@ -18,12 +18,12 @@ from huggingface_hub.dataclasses import strict
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeForCausalLM,
     Glm4MoeModel,
     Glm4MoePreTrainedModel,
-    Glm4MoeSparseMoeBlock,
     Glm4MoeTopKRouter,
 )
 from ..gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
@@ -152,7 +152,7 @@ class Glm4MoeLiteExperts(Qwen2MoeExperts):
     pass
 
 
-class Glm4MoeLiteSparseMoeBlock(Glm4MoeSparseMoeBlock):
+class Glm4MoeLiteSparseMoeBlock(DeepseekV2SparseMoeBlock):
     pass
 
 

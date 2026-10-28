@@ -14,7 +14,7 @@
 """GraniteMoeSWA: GraniteMoeShared with Sliding Window Attention and learnable attention sinks.
 
 GraniteMoeSWA combines the mixture-of-experts blocks (with optional shared experts, disabled by
-default via ``shared_intermediate_size=0``) of GraniteMoeShared with the per-layer sliding-window
+default via ``shared_expert_intermediate_size=0``) of GraniteMoeShared with the per-layer sliding-window
 attention and learnable per-head attention sinks of GraniteSWA. The eager path computes the
 ``sigmoid``-scaling explicitly, while the FlexAttention, FlashAttention-3 and FlashAttention-4
 backends apply the same sink through the shared attention dispatch by passing ``s_aux``.
@@ -35,7 +35,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..granite_swa.modeling_granite_swa import GraniteSWAAttention
-from ..granitemoe.modeling_granitemoe import GraniteMoeSparseMoeBlock, GraniteMoeTopKRouter
+from ..granitemoe.modeling_granitemoe import GraniteMoeTopKRouter
 from ..granitemoeshared.configuration_granitemoeshared import GraniteMoeSharedConfig
 from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedDecoderLayer,
@@ -44,6 +44,8 @@ from ..granitemoeshared.modeling_granitemoeshared import (
     GraniteMoeSharedPreTrainedModel,
 )
 from ..llama.modeling_llama import LlamaRotaryEmbedding
+from ..mixtral.modeling_mixtral import MixtralExperts
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 
 
 logger = logging.get_logger(__name__)
@@ -53,7 +55,7 @@ logger = logging.get_logger(__name__)
 @strict
 class GraniteMoeSWAConfig(GraniteMoeSharedConfig):
     r"""
-    shared_intermediate_size (`int`, *optional*, defaults to 0):
+    shared_expert_intermediate_size (`int`, *optional*, defaults to 0):
         intermediate size for shared experts. Defaults to `0`, which disables the shared experts.
     sliding_window (`int`, *optional*, defaults to 128):
         Size of the sliding attention window used by layers whose `layer_types` entry is
@@ -114,8 +116,12 @@ class GraniteMoeSWATopKRouter(GraniteMoeTopKRouter):
     pass
 
 
-class GraniteMoeSWASparseMoeBlock(GraniteMoeSparseMoeBlock):
+class GraniteMoeSWAExperts(MixtralExperts):
     pass
+
+
+class GraniteMoeSWASparseMoeBlock(Qwen3MoeSparseMoeBlock):
+    """Sparsely-gated mixture-of-experts block: router decides, experts compute."""
 
 
 class GraniteMoeSWAAttention(GraniteSWAAttention):

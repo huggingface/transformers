@@ -71,6 +71,7 @@ class ZayaConfig(LagunaConfig):
     """
 
     model_type = "zaya"
+    attribute_map = {"num_local_experts": "num_experts"}
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
@@ -107,7 +108,7 @@ class ZayaConfig(LagunaConfig):
     num_attention_heads_per_layer = AttributeError()
     gating = AttributeError()
     mlp_layer_types = AttributeError()
-    moe_routed_scaling_factor = AttributeError()
+    routed_scaling_factor = AttributeError()
     moe_apply_router_weight_on_input = AttributeError()
     moe_router_logit_softcapping = AttributeError()
 

@@ -181,7 +181,7 @@ class MuseSparkTopKRouter(nn.Module):
         self.num_experts = config.num_local_experts
         self.hidden_dim = config.hidden_size
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
+        self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_local_experts))
         self.output_multiplier = config.output_multiplier
         self.scoring_function = ACT2FN["sigmoid"]
         self.norm_topk_prob_eps = 1e-15
@@ -252,7 +252,6 @@ class MuseSparkExperts(nn.Module):
 class MuseSparkSparseMoeBlock(nn.Module):
     def __init__(self, config: MuseSparkTextConfig):
         super().__init__()
-        self.config = config
         self.gate = MuseSparkTopKRouter(config)
         self.pre_expert_proj = nn.Linear(config.hidden_size, config.moe_hidden_size, bias=False)
         self.pre_expert_norm = MuseSparkTextCenteredRMSNorm(config.moe_hidden_size, eps=config.rms_norm_eps)

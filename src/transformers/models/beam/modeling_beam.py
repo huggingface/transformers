@@ -359,8 +359,8 @@ class BeamTopKRouter(nn.Module):
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states.float(), self.weight.float())
-        scores = router_logits.sigmoid()
-        scores_for_choice = scores + self.e_score_correction_bias
+        router_probs = router_logits.sigmoid()
+        scores_for_choice = router_probs + self.e_score_correction_bias
         group_scores = (
             scores_for_choice.view(-1, self.num_group, self.num_experts // self.num_group)
             .topk(2, dim=-1)[0]
@@ -375,12 +375,12 @@ class BeamTopKRouter(nn.Module):
             .reshape(-1, self.num_experts)
         )
         scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), float("-inf"))
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1)[1]
-        topk_weights = scores.gather(1, topk_indices)
+        top_k_index = torch.topk(scores_for_choice, k=self.top_k, dim=-1)[1]
+        top_k_weights = router_probs.gather(1, top_k_index)
         if self.norm_topk_prob:
-            topk_weights /= topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            top_k_weights /= top_k_weights.sum(dim=-1, keepdim=True) + 1e-20
         # `routed_scaling_factor` is applied after expert aggregation in `BeamSparseMoeBlock`.
-        return router_logits, topk_weights, topk_indices
+        return router_logits, top_k_weights, top_k_index
 
 
 class BeamSparseMoeBlock(nn.Module):
@@ -391,12 +391,13 @@ class BeamSparseMoeBlock(nn.Module):
         self.routed_scaling_factor = config.routed_scaling_factor
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
-        final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
-        final_hidden_states = final_hidden_states * self.routed_scaling_factor
-        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        # diff from parent: scale the routed output
+        hidden_states = hidden_states * self.routed_scaling_factor
+        return hidden_states
 
 
 def depth_scaled_residual_add(

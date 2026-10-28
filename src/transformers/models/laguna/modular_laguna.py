@@ -57,7 +57,7 @@ class LagunaConfig(Qwen2MoeConfig):
     mlp_layer_types (`list[str]`, *optional*):
         Per-layer MLP type — ``"dense"`` or ``"sparse"``. Length must equal
         ``num_hidden_layers``. Defaults to first layer dense, rest sparse.
-    moe_routed_scaling_factor (`float`, *optional*, defaults to 1.0):
+    routed_scaling_factor (`float`, *optional*, defaults to 1.0):
         Scalar applied to routed-expert output before combining with the shared-expert output.
     moe_apply_router_weight_on_input (`bool`, *optional*, defaults to `False`):
         Whether to apply router weights to the MoE input rather than the output. Not supported
@@ -77,6 +77,7 @@ class LagunaConfig(Qwen2MoeConfig):
     """
 
     model_type = "laguna"
+    attribute_map = {"num_local_experts": "num_experts", "moe_routed_scaling_factor": "routed_scaling_factor"}
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -115,7 +116,7 @@ class LagunaConfig(Qwen2MoeConfig):
     num_attention_heads_per_layer: list[int] | None = None
     # Laguna-specific MoE
     mlp_layer_types: list[str] | None = None
-    moe_routed_scaling_factor: float = 1.0
+    routed_scaling_factor: float = 1.0
     moe_apply_router_weight_on_input: bool = False
     moe_router_logit_softcapping: float = 0.0
 
@@ -254,20 +255,17 @@ class LagunaSparseMoeBlock(Qwen3MoeSparseMoeBlock):
     def __init__(self, config: LagunaConfig):
         super().__init__(config)
         self.shared_experts = LagunaMLP(config, intermediate_size=config.shared_expert_intermediate_size)
-        self.routed_scaling_factor = config.moe_routed_scaling_factor
+        self.routed_scaling_factor = config.routed_scaling_factor
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-        shared_output = self.shared_experts(hidden_states)
-
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
         _, top_k_weights, top_k_index = self.gate(hidden_states)
-        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         # Additional scaling
         hidden_states = hidden_states * self.routed_scaling_factor
-        hidden_states = hidden_states + shared_output
-
-        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
 

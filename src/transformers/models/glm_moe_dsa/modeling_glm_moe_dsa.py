@@ -559,7 +559,6 @@ class GlmMoeDsaSparseMoeBlock(nn.Module):
 
     def __init__(self, config: GlmMoeDsaConfig):
         super().__init__()
-        self.config = config
         self.experts = GlmMoeDsaExperts(config)
         self.gate = GlmMoeDsaTopKRouter(config)
         self.shared_experts = GlmMoeDsaMLP(
@@ -572,6 +571,7 @@ class GlmMoeDsaSparseMoeBlock(nn.Module):
         _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        # diff from parent: add the shared experts, run on the unflattened input
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 

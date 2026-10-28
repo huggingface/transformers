@@ -49,6 +49,7 @@ class HYV3Config(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_local_experts": "num_experts",
+        "num_shared_experts": "n_shared_experts",
     }
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -99,7 +100,7 @@ class HYV3Config(PreTrainedConfig):
     mlp_bias: bool = False
     num_experts: int | None = 192
     num_experts_per_tok: int | None = 8
-    num_shared_experts: int | None = 1
+    n_shared_experts: int | None = 1
     moe_intermediate_size: int = 1536
     router_scaling_factor: float = 2.826
     enable_moe_fp32_combine: bool = True

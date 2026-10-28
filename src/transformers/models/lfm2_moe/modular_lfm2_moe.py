@@ -70,6 +70,7 @@ class Lfm2MoeTopKRouter(Qwen2MoeTopKRouter):
             self.e_score_correction_bias = nn.Buffer(torch.zeros(config.num_experts, dtype=torch.float32))
 
     def forward(self, hidden_states):
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight)
         router_probs = router_logits.sigmoid()
         if self.use_expert_bias:

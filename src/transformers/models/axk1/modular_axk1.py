@@ -33,13 +33,13 @@ from ...modeling_layers import GenericForSequenceClassification, GenericForToken
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..deepseek_v3.configuration_deepseek_v3 import DeepseekV3Config
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3Attention,
     DeepseekV3ForCausalLM,
     DeepseekV3Model,
     DeepseekV3PreTrainedModel,
-    DeepseekV3SparseMoeBlock,
     DeepseekV3TopKRouter,
     apply_rotary_pos_emb,
     apply_rotary_pos_emb_interleave,
@@ -151,7 +151,7 @@ class AXK1Experts(Qwen2MoeExperts):
     pass
 
 
-class AXK1SparseMoeBlock(DeepseekV3SparseMoeBlock):
+class AXK1SparseMoeBlock(DeepseekV2SparseMoeBlock):
     """DeepSeek-V3 MoE with an extra `post_mlp_layernorm` on the block output (A.X-K1's single delta).
 
     The released checkpoints store the norm at the decoder-layer level (`post_mlp_layernorm.*`); the
@@ -169,6 +169,7 @@ class AXK1SparseMoeBlock(DeepseekV3SparseMoeBlock):
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
+        # diff from parent: norm on the block output
         return self.post_mlp_layernorm(hidden_states)
 
 

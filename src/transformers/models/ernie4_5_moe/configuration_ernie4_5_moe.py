@@ -30,7 +30,7 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
         Number of selected experts.
     moe_num_experts (`int`, *optional*, defaults to 64):
         Number of routed experts.
-    moe_num_shared_experts (`int`, *optional*, defaults to 2):
+    n_shared_experts (`int`, *optional*, defaults to 2):
         The number of experts that are shared for all MoE forwards.
     moe_layer_start_index (`int`, *optional*, defaults to 1):
         The first index at which MoE layers start to appear.
@@ -62,6 +62,7 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
         "num_experts": "moe_num_experts",
         "num_experts_per_tok": "moe_k",
         "num_local_experts": "moe_num_experts",
+        "moe_num_shared_experts": "n_shared_experts",
     }
     default_theta = 500000.0
 
@@ -112,7 +113,7 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
     moe_intermediate_size: int = 1536
     moe_k: int | None = 6
     moe_num_experts: int | None = 64
-    moe_num_shared_experts: int | None = 2
+    n_shared_experts: int | None = 2
     moe_layer_start_index: int | None = 1
     moe_layer_end_index: int | None = -1
     moe_layer_interval: int | None = 1

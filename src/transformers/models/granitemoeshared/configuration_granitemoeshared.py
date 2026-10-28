@@ -37,7 +37,7 @@ class GraniteMoeSharedConfig(PreTrainedConfig):
         residual multiplier
     attention_multiplier (`float`, *optional*, defaults to 1.0):
         attention multiplier
-    shared_intermediate_size (`int`, *optional*, defaults to 1024):
+    shared_expert_intermediate_size (`int`, *optional*, defaults to 0):
         intermediate size for shared experts.
 
     ```python
@@ -55,6 +55,7 @@ class GraniteMoeSharedConfig(PreTrainedConfig):
     """
 
     model_type = "granitemoeshared"
+    attribute_map = {"shared_intermediate_size": "shared_expert_intermediate_size"}
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
@@ -93,7 +94,7 @@ class GraniteMoeSharedConfig(PreTrainedConfig):
     num_experts_per_tok: int | None = 2
     output_router_logits: bool | None = False
     router_aux_loss_coef: float | None = 0.001
-    shared_intermediate_size: int = 0
+    shared_expert_intermediate_size: int = 0
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:

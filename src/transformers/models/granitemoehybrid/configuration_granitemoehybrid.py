@@ -33,7 +33,7 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
         residual multiplier.
     attention_multiplier (`float`, *optional*, defaults to 1.0):
         attention multiplier.
-    shared_intermediate_size (`int`, *optional*, defaults to 1024):
+    shared_expert_intermediate_size (`int`, *optional*, defaults to 1024):
         intermediate size for shared experts.
     position_embedding_type (`str`, *optional*):
         Positional embedding type to be used; defaults to None. Allowed options: `[None, "rope"]`
@@ -51,7 +51,10 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
     ```"""
 
     model_type = "granitemoehybrid"
-    attribute_map = {"layers_block_type": "layer_types"}
+    attribute_map = {
+        "layers_block_type": "layer_types",
+        "shared_intermediate_size": "shared_expert_intermediate_size",
+    }
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
@@ -90,7 +93,7 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
     num_experts_per_tok: int | None = 2
     output_router_logits: bool | None = False
     router_aux_loss_coef: float | None = 0.001
-    shared_intermediate_size: int = 1024
+    shared_expert_intermediate_size: int = 1024
     position_embedding_type: str | None = None
     layer_types: list[str] | None = None
     mamba_n_heads: int | None = 128

@@ -64,7 +64,8 @@ from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 from ..axk1.modeling_axk1 import AXK1Attention
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3SparseMoeBlock, DeepseekV3TopKRouter
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3TopKRouter
 from ..deepseek_v4.modeling_deepseek_v4 import DeepseekV4Experts, DeepseekV4HyperConnection
 from ..exaone4_5.modeling_exaone4_5 import Exaone4_5_Model
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
@@ -343,7 +344,7 @@ class Glm5NextTextTopKRouter(DeepseekV3TopKRouter):
     pass
 
 
-class Glm5NextTextSparseMoeBlock(DeepseekV3SparseMoeBlock):
+class Glm5NextTextSparseMoeBlock(DeepseekV2SparseMoeBlock):
     def __init__(self, config: Glm5NextConfig):
         super().__init__(config)
         self.experts = Glm5NextTextExperts(config)

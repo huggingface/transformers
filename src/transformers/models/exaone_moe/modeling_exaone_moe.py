@@ -314,13 +314,12 @@ class ExaoneMoeSparseMoeBlock(nn.Module):
     A mixed expert module containing shared experts.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: ExaoneMoeConfig):
         super().__init__()
-        self.config = config
         self.experts = ExaoneMoeExperts(config)
         self.gate = ExaoneMoeTopKRouter(config)
         self.shared_experts = ExaoneMoeMLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -329,6 +328,7 @@ class ExaoneMoeSparseMoeBlock(nn.Module):
         _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        # diff from parent: add the shared experts, run on the unflattened input
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 

@@ -105,7 +105,7 @@ class ExaoneMoeConfig(PreTrainedConfig):
     sliding_window: int = 4096
     sliding_window_pattern: str | int | None = 4
     layer_types: list[str] | None = None
-    attribute_map = {"num_local_experts": "num_experts"}
+    attribute_map = {"num_local_experts": "num_experts", "num_shared_experts": "n_shared_experts"}
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
@@ -117,7 +117,7 @@ class ExaoneMoeConfig(PreTrainedConfig):
     num_experts: int = 64
     num_experts_per_tok: int = 8
     output_router_logits: bool = False
-    num_shared_experts: int = 1
+    n_shared_experts: int = 1
     norm_topk_prob: bool = True
     routed_scaling_factor: float = 2.5
     n_group: int = 1

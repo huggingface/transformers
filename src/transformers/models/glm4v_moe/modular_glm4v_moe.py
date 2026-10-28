@@ -158,7 +158,6 @@ class Glm4vMoeTextExperts(Qwen2MoeExperts):
 class Glm4vMoeTextSparseMoeBlock(Glm4MoeSparseMoeBlock):
     def __init__(self, config: Glm4vMoeTextConfig):
         super().__init__(config)
-        self.config = config
         self.experts = Glm4vMoeTextExperts(config)
         self.gate = Glm4vMoeTextTopKRouter(config)
         self.shared_experts = Glm4vMoeTextMLP(

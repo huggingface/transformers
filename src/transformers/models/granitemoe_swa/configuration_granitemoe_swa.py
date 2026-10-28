@@ -28,7 +28,7 @@ from ...utils import auto_docstring
 @strict
 class GraniteMoeSWAConfig(PreTrainedConfig):
     r"""
-    shared_intermediate_size (`int`, *optional*, defaults to 0):
+    shared_expert_intermediate_size (`int`, *optional*, defaults to 0):
         intermediate size for shared experts. Defaults to `0`, which disables the shared experts.
     sliding_window (`int`, *optional*, defaults to 128):
         Size of the sliding attention window used by layers whose `layer_types` entry is
@@ -56,6 +56,7 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
     ```"""
 
     model_type = "granitemoe_swa"
+    attribute_map = {"shared_intermediate_size": "shared_expert_intermediate_size"}
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -99,7 +100,7 @@ class GraniteMoeSWAConfig(PreTrainedConfig):
     num_experts_per_tok: int | None = 2
     output_router_logits: bool | None = False
     router_aux_loss_coef: float | None = 0.001
-    shared_intermediate_size: int = 0
+    shared_expert_intermediate_size: int = 0
 
     sliding_window: int | None = 128
     layer_types: list[str] | None = None

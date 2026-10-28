@@ -17,14 +17,16 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...utils import auto_docstring, logging
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeForCausalLM,
     Glm4MoeModel,
     Glm4MoePreTrainedModel,
-    Glm4MoeSparseMoeBlock,
+    Glm4MoeTopKRouter,
 )
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaRMSNorm
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 logger = logging.get_logger(__name__)
@@ -76,7 +78,15 @@ class SolarOpenDecoderLayer(LlamaDecoderLayer):
         self.mlp = SolarOpenSparseMoeBlock(config)
 
 
-class SolarOpenSparseMoeBlock(Glm4MoeSparseMoeBlock):
+class SolarOpenMLP(Qwen2MoeMLP):
+    pass
+
+
+class SolarOpenTopKRouter(Glm4MoeTopKRouter):
+    pass
+
+
+class SolarOpenSparseMoeBlock(DeepseekV2SparseMoeBlock):
     pass
 
 

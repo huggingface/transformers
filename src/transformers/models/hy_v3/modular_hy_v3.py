@@ -32,6 +32,7 @@ from ...utils import (
     logging,
 )
 from ...utils.output_capturing import OutputRecorder
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
@@ -40,7 +41,7 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
 )
-from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2Model, MiniMaxM2SparseMoeBlock, MiniMaxM2TopKRouter
+from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2Model, MiniMaxM2TopKRouter
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 
@@ -73,6 +74,7 @@ class HYV3Config(PreTrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_local_experts": "num_experts",
+        "num_shared_experts": "n_shared_experts",
     }
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -123,7 +125,7 @@ class HYV3Config(PreTrainedConfig):
     mlp_bias: bool = False
     num_experts: int | None = 192
     num_experts_per_tok: int | None = 8
-    num_shared_experts: int | None = 1
+    n_shared_experts: int | None = 1
     moe_intermediate_size: int = 1536
     router_scaling_factor: float = 2.826
     enable_moe_fp32_combine: bool = True
@@ -185,32 +187,25 @@ class HYV3Experts(Qwen2MoeExperts):
     pass
 
 
-class HYV3SparseMoeBlock(MiniMaxM2SparseMoeBlock):
+class HYV3SparseMoeBlock(DeepseekV2SparseMoeBlock):
     def __init__(self, config: HYV3Config):
         super().__init__(config)
-        del self.jitter_noise
         self.enable_moe_fp32_combine = config.enable_moe_fp32_combine
-        self.gate = HYV3TopKRouter(config)
-        self.experts = HYV3Experts(config)
-        shared_intermediate = config.moe_intermediate_size * config.num_shared_experts
-        self.shared_experts = HYV3MLP(config, intermediate_size=shared_intermediate)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
         _, top_k_weights, top_k_index = self.gate(hidden_states)
-        routed_output = self.experts(hidden_states, top_k_index, top_k_weights)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
 
         # Key difference: optional float casting on combing shared experts
         if self.enable_moe_fp32_combine:
-            hidden_states = (routed_output.float() + self.shared_experts(hidden_states).float()).to(
-                hidden_states.dtype
-            )
+            hidden_states = (hidden_states.float() + self.shared_experts(residuals).float()).to(residuals.dtype)
         else:
-            hidden_states = routed_output + self.shared_experts(hidden_states)
+            hidden_states = hidden_states + self.shared_experts(residuals)
 
-        return hidden_states.reshape(batch_size, seq_len, hidden_dim)
+        return hidden_states
 
 
 class HYV3DecoderLayer(Glm4MoeLiteDecoderLayer):

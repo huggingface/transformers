@@ -536,7 +536,7 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
     if quantization_config.dequantize:
         return model
 
-    from ..models.gpt_oss.modeling_gpt_oss import GptOssMLP
+    from ..models.gpt_oss.modeling_gpt_oss import GptOssSparseMoeBlock
     from .hub_kernels import get_kernel
 
     global triton_kernels_hub
@@ -544,7 +544,9 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
 
     has_been_replaced = False
     for module_name, module in list(model.named_modules()):
-        if isinstance(module, GptOssMLP) and should_convert_module(f"{module_name}.experts", modules_to_not_convert):
+        if isinstance(module, GptOssSparseMoeBlock) and should_convert_module(
+            f"{module_name}.experts", modules_to_not_convert
+        ):
             with torch.device("meta"):
                 model.set_submodule(module_name, Mxfp4GptOssMLP(module.router, Mxfp4GptOssExperts(model.config)))
             has_been_replaced = True

@@ -67,6 +67,7 @@ from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
 from ..qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, Qwen2VLModel, Qwen2VLVisionBlock
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 
 
 logger = logging.get_logger(__name__)
@@ -107,7 +108,7 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
         Number of selected experts.
     moe_num_experts (`int`, *optional*, defaults to 64):
         Number of routed experts.
-    moe_num_shared_experts (`int`, *optional*, defaults to 2):
+    n_shared_experts (`int`, *optional*, defaults to 2):
         The number of experts that are shared for all MoE forwards.
     moe_norm_min (`float`, *optional*, defaults to 1e-12):
         Minimum division value during routing normalization.
@@ -337,42 +338,34 @@ class Ernie4_5_VLMoeMLP(Ernie4_5_MoeMLP):
     pass
 
 
-class Ernie4_5_VLMoeMoeStatics(Ernie4_5_MoeStatics):
+class Ernie4_5_VLMoeStatics(Ernie4_5_MoeStatics):
     pass
 
 
-class Ernie4_5_VLMoeMoeTopKRouter(Ernie4_5_MoeTopKRouter):
+class Ernie4_5_VLMoeTopKRouter(Ernie4_5_MoeTopKRouter):
     def __init__(self, config):
         super().__init__(config)
-        self.moe_statics = Ernie4_5_VLMoeMoeStatics(config)
+        self.moe_statics = Ernie4_5_VLMoeStatics(config)
 
 
-class Ernie4_5_VLMoeMoeExperts(Qwen2MoeExperts):
+class Ernie4_5_VLMoeExperts(Qwen2MoeExperts):
     def __init__(self, config, intermediate_size=None):
         super().__init__(config)
         self.intermediate_dim = config.moe_intermediate_size if intermediate_size is None else intermediate_size
 
 
-class Ernie4_5_VLMoeSparseMoeBlock(nn.Module):
+class Ernie4_5_VLMoeSparseMoeBlock(Qwen3MoeSparseMoeBlock):
     def __init__(self, config, intermediate_size):
-        super().__init__()
-        self.hidden_dim = config.hidden_size
-        self.num_experts = config.num_experts
-        self.top_k = config.num_experts_per_tok
-        self.gate = Ernie4_5_VLMoeMoeTopKRouter(config)
-        self.experts = Ernie4_5_VLMoeMoeExperts(config, intermediate_size)
+        super().__init__(config)
+        self.experts = Ernie4_5_VLMoeExperts(config, intermediate_size)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        hidden_states = hidden_states.view(-1, self.hidden_dim)
-
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        orig_shape = hidden_states.shape
         router_logits, top_k_weights, top_k_index = self.gate(hidden_states)
-        final_hidden_states = self.experts(hidden_states, top_k_index, top_k_weights)
-
-        # moe results are changed to a flattened shape to ease the modality isolated assigning of results
-        return final_hidden_states.flatten(), router_logits.flatten()
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        # diff from parent: also return the router logits, the outer block puts them back in token order
+        return hidden_states, router_logits
 
 
 class Ernie4_5_VLMoeMoeBlock(nn.Module):
@@ -391,17 +384,17 @@ class Ernie4_5_VLMoeMoeBlock(nn.Module):
         self.text_moe = Ernie4_5_VLMoeSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[0])
         self.vision_moe = Ernie4_5_VLMoeSparseMoeBlock(config, intermediate_size=config.moe_intermediate_size[1])
 
-        self.shared_experts = None
-        if config.moe_num_shared_experts > 0:
-            self.shared_experts = Ernie4_5_VLMoeMLP(
-                config, config.moe_intermediate_size[0] * config.moe_num_shared_experts
-            )
+        self.shared_experts = (
+            Ernie4_5_VLMoeMLP(config, config.moe_intermediate_size[0] * config.n_shared_experts)
+            if config.n_shared_experts > 0
+            else None
+        )
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         moe_mm_token_type_ids: torch.IntTensor | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
 
         # (Optional) shared experts
@@ -418,20 +411,18 @@ class Ernie4_5_VLMoeMoeBlock(nn.Module):
 
             # True (1 or 2) == vision, False (0) == text tokens
             moe_mm_token_type_ids = moe_mm_token_type_ids.bool()
-            token_type_ids_router = moe_mm_token_type_ids.reshape(-1)[:, None].expand(-1, self.num_experts)
-            token_type_ids_states = moe_mm_token_type_ids[..., None].expand(-1, -1, hidden_dim)
+            token_type_ids_router = moe_mm_token_type_ids.reshape(-1)
 
             # Run moe on each modality and assign their results to the original token positions
-            final_hidden_states[~token_type_ids_states], router_logits[~token_type_ids_router] = self.text_moe(
-                hidden_states[~token_type_ids_states]
+            # moe results are changed to a flattened shape to ease the modality isolated assigning of results
+            final_hidden_states[~moe_mm_token_type_ids], router_logits[~token_type_ids_router] = self.text_moe(
+                hidden_states[~moe_mm_token_type_ids]
             )
-            final_hidden_states[token_type_ids_states], router_logits[token_type_ids_router] = self.vision_moe(
-                hidden_states[token_type_ids_states]
+            final_hidden_states[moe_mm_token_type_ids], router_logits[token_type_ids_router] = self.vision_moe(
+                hidden_states[moe_mm_token_type_ids]
             )
         else:
             final_hidden_states, router_logits = self.text_moe(hidden_states)
-            final_hidden_states = final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
-            router_logits = router_logits.reshape(-1, self.num_experts)
 
         # Add (optional) shared experts to the result
         if self.shared_experts is not None:
@@ -517,10 +508,10 @@ class Ernie4_5_VLMoePreTrainedModel(Qwen2_5_VLPreTrainedModel):
 
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, Ernie4_5_VLMoeMoeTopKRouter):
+        if isinstance(module, Ernie4_5_VLMoeTopKRouter):
             init.zeros_(module.moe_statics.e_score_correction_bias)
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-        elif isinstance(module, Ernie4_5_VLMoeMoeExperts):
+        elif isinstance(module, Ernie4_5_VLMoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 

@@ -42,6 +42,7 @@ from ..llama.modeling_llama import (
 from ..mixtral.modeling_mixtral import MixtralTopKRouter
 from ..olmoe.modeling_olmoe import OlmoeModel
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 
 
 logger = logging.get_logger(__name__)
@@ -192,12 +193,13 @@ class DeepseekV2TopKRouter(MixtralTopKRouter):
         return router_logits, top_k_weights, top_k_index
 
 
-class DeepseekV2SparseMoeBlock(nn.Module):
+class DeepseekV2SparseMoeBlock(Qwen3MoeSparseMoeBlock):
+    """
+    A mixed expert module containing shared experts.
+    """
+
     def __init__(self, config: DeepseekV2Config):
-        super().__init__()
-        self.config = config
-        self.experts = DeepseekV2Experts(config)
-        self.gate = DeepseekV2TopKRouter(config)
+        super().__init__(config)
         self.shared_experts = DeepseekV2MLP(
             config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
         )
@@ -208,6 +210,7 @@ class DeepseekV2SparseMoeBlock(nn.Module):
         _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        # diff from parent: add the shared experts, run on the unflattened input
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 

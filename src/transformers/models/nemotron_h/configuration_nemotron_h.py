@@ -47,7 +47,7 @@ class NemotronHConfig(PreTrainedConfig):
         Size of the chunks that will comprise the sequence in the Mamba layers.
     mamba_ssm_cache_dtype (`str`, *optional*, defaults to `"float32"`):
         Data type for Mamba SSM cache states.
-    moe_shared_expert_intermediate_size (`int`, *optional*, defaults to 7688):
+    shared_expert_intermediate_size (`int`, *optional*, defaults to 7688):
         Dimension of the MLP representations in shared experts.
     moe_latent_size (`int`, *optional*):
         Latent size for MoE expert projections. If `None`, uses `hidden_size`.
@@ -81,7 +81,11 @@ class NemotronHConfig(PreTrainedConfig):
     """
 
     model_type = "nemotron_h"
-    attribute_map = {"layer_types": "layers_block_type", "num_local_experts": "n_routed_experts"}
+    attribute_map = {
+        "layer_types": "layers_block_type",
+        "num_local_experts": "n_routed_experts",
+        "moe_shared_expert_intermediate_size": "shared_expert_intermediate_size",
+    }
     base_model_tp_plan = {
         "embeddings": "embedding_rowwise",
         "layers.*.mixer.experts.up_proj": "colwise",
@@ -134,7 +138,7 @@ class NemotronHConfig(PreTrainedConfig):
     output_router_logits: bool = False
     n_shared_experts: int = 1
     moe_intermediate_size: int = 7688
-    moe_shared_expert_intermediate_size: int = 7688
+    shared_expert_intermediate_size: int = 7688
     moe_latent_size: int | None = None
     moe_shared_expert_overlap: bool = True
     num_experts_per_tok: int = 2

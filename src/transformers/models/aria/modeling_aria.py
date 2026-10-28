@@ -236,7 +236,7 @@ class AriaSharedExpertsMLP(nn.Module):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size * config.moe_num_shared_experts
+        self.intermediate_size = config.intermediate_size * config.n_shared_experts
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
@@ -263,6 +263,7 @@ class AriaTextTopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = nn.functional.linear(hidden_states, self.weight)  # (num_tokens, num_experts)
         top_k_logits, top_k_index = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
         top_k_weights = nn.functional.softmax(top_k_logits, dim=-1)  # (num_tokens, top_k)
@@ -319,17 +320,20 @@ class AriaTextSparseMoeBlock(nn.Module):
 
     def __init__(self, config: AriaTextConfig):
         super().__init__()
-        self.router = AriaTextTopKRouter(config)
+        # diff from parent: Aria's own experts and shared-experts MLP
         self.experts = AriaExperts(config)
+        self.gate = AriaTextTopKRouter(config)
         self.shared_experts = AriaSharedExpertsMLP(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        original_shape = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_states.size(-1))
-        _, top_k_weights, top_k_index = self.router(hidden_states)
-        expert_output = self.experts(hidden_states, top_k_index, top_k_weights).view(original_shape)
-        shared_expert_output = self.shared_experts(hidden_states.view(original_shape))
-        return expert_output + shared_expert_output
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        # diff from parent: add the shared experts, run on the unflattened input
+        hidden_states = hidden_states + self.shared_experts(residuals)
+        return hidden_states
 
 
 def rotate_half(x):

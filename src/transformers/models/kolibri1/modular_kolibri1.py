@@ -20,17 +20,13 @@ from torch import nn
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, is_torch_greater_or_equal
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3ForCausalLM, DeepseekV3SparseMoeBlock
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3ForCausalLM
 from ..exaone4.modeling_exaone4 import Exaone4Attention
 from ..glm4.modeling_glm4 import Glm4DecoderLayer
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeModel
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeModel, Qwen2MoeTopKRouter
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
-from ..qwen3_moe.modeling_qwen3_moe import (
-    Qwen3MoeExperts,
-    Qwen3MoeMLP,
-    Qwen3MoePreTrainedModel,
-    Qwen3MoeTopKRouter,
-)
+from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeMLP, Qwen3MoePreTrainedModel
 
 
 @auto_docstring(checkpoint="Aleph-Alpha/Kolibri-1")
@@ -111,11 +107,11 @@ class Kolibri1MLP(Qwen3MoeMLP):
     pass
 
 
-class Kolibri1Experts(Qwen3MoeExperts):
+class Kolibri1Experts(Qwen2MoeExperts):
     pass
 
 
-class Kolibri1TopKRouter(Qwen3MoeTopKRouter):
+class Kolibri1TopKRouter(Qwen2MoeTopKRouter):
     def __init__(self, config):
         super().__init__(config)
         self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
@@ -140,10 +136,9 @@ class Kolibri1TopKRouter(Qwen3MoeTopKRouter):
         return router_logits, router_scores, router_indices
 
 
-class Kolibri1SparseMoeBlock(DeepseekV3SparseMoeBlock):
+class Kolibri1SparseMoeBlock(DeepseekV2SparseMoeBlock):
     def __init__(self, config: Kolibri1Config):
         super().__init__(config)
-        self.gate = Kolibri1TopKRouter(config)
         self.shared_experts = Kolibri1MLP(config, intermediate_size=config.shared_expert_intermediate_size)
 
 

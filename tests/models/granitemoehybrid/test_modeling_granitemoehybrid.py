@@ -61,11 +61,11 @@ class GraniteMoeHybridModelTester(BambaModelTester):
         self,
         parent,
         use_cache=False,
-        shared_intermediate_size=174,
+        shared_expert_intermediate_size=174,
         layer_types=None,
     ):
         super().__init__(parent)
-        self.shared_intermediate_size = shared_intermediate_size
+        self.shared_expert_intermediate_size = shared_expert_intermediate_size
         self.layer_types = layer_types
         self.use_cache = use_cache
 
@@ -78,7 +78,7 @@ class GraniteMoeHybridModelTester(BambaModelTester):
 
     def get_config(self):
         return super().get_config(
-            shared_intermediate_size=self.shared_intermediate_size,
+            shared_expert_intermediate_size=self.shared_expert_intermediate_size,
             layer_types=self.layer_types,
         )
 

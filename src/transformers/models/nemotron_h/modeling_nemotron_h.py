@@ -721,14 +721,13 @@ class NemotronHSparseMoeBlock(nn.Module):
 
     def __init__(self, config, layer_idx: int | None = None):
         super().__init__()
-        self.config = config
 
         # Replace with NemotronH-specific experts (non-gated MLP architecture)
         self.experts = NemotronHExperts(config)
         self.gate = NemotronHTopKRouter(config)
 
         # Override shared_experts to use NemotronHMLP with correct intermediate size
-        self.shared_experts = NemotronHMLP(config=config, intermediate_size=config.moe_shared_expert_intermediate_size)
+        self.shared_experts = NemotronHMLP(config=config, intermediate_size=config.shared_expert_intermediate_size)
 
         # NemotronH-specific latent projection layers
         if config.moe_latent_size is not None:

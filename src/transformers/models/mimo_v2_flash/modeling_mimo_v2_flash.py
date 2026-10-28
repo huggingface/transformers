@@ -220,7 +220,6 @@ class MiMoV2FlashSparseMoeBlock(nn.Module):
 
     def __init__(self, config: MiMoV2FlashConfig):
         super().__init__()
-        self.config = config
         self.experts = MiMoV2FlashExperts(config)
         self.gate = MiMoV2FlashTopKRouter(config)
 
@@ -228,7 +227,8 @@ class MiMoV2FlashSparseMoeBlock(nn.Module):
         orig_shape = hidden_states.shape
         _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        return self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        return hidden_states
 
 
 class MiMoV2FlashMLP(nn.Module):

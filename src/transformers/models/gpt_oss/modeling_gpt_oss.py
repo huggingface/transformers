@@ -130,7 +130,7 @@ class GptOssTopKRouter(nn.Module):
 
 
 @use_kernel_forward_from_hub("MegaBlocksMoeMLP")
-class GptOssMLP(nn.Module):
+class GptOssSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.router = GptOssTopKRouter(config)
@@ -334,8 +334,7 @@ class GptOssDecoderLayer(GradientCheckpointingLayer):
         self.hidden_size = config.hidden_size
 
         self.self_attn = GptOssAttention(config=config, layer_idx=layer_idx)
-
-        self.mlp = GptOssMLP(config)
+        self.mlp = GptOssSparseMoeBlock(config)
         self.input_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = GptOssRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 

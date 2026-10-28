@@ -21,11 +21,11 @@ from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPas
 from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3DecoderLayer,
     DeepseekV3ForCausalLM,
     DeepseekV3PreTrainedModel,
-    DeepseekV3SparseMoeBlock,
     DeepseekV3TopKRouter,
 )
 from ..llama.modeling_llama import LlamaRMSNorm, LlamaRotaryEmbedding
@@ -163,7 +163,7 @@ class Dots1TopKRouter(DeepseekV3TopKRouter):
     pass
 
 
-class Dots1SparseMoeBlock(DeepseekV3SparseMoeBlock):
+class Dots1SparseMoeBlock(DeepseekV2SparseMoeBlock):
     pass
 
 

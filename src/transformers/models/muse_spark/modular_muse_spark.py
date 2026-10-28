@@ -38,7 +38,6 @@ from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...vision_utils import get_vision_interpolation_indices_and_weights
 from ..auto import AutoModel
 from ..clip.modeling_clip import CLIPMLP
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Experts
 from ..minimax_m2.modeling_minimax_m2 import MiniMaxM2TopKRouter
 from ..muse_glimmer.configuration_muse_glimmer import MuseGlimmerConfig, MuseGlimmerTextConfig, MuseGlimmerVisionConfig
 from ..muse_glimmer.modeling_muse_glimmer import (
@@ -59,6 +58,7 @@ from ..muse_glimmer.modeling_muse_glimmer import (
     eager_attention_forward,
 )
 from ..muse_glimmer.processing_muse_glimmer import MuseGlimmerProcessor
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from ..voxtral_realtime.modeling_voxtral_realtime import (
     VoxtralRealtimeCausalConv1d,
     VoxtralRealtimeConv1dPaddingCache,
@@ -317,7 +317,6 @@ class MuseSparkTopKRouter(MiniMaxM2TopKRouter):
         super().__init__(config)
         self.output_multiplier = config.output_multiplier
         self.scoring_function = ACT2FN["sigmoid"]
-        self.e_score_correction_bias = nn.Buffer(torch.zeros(self.num_experts))
         self.norm_topk_prob_eps = 1e-15
         self.routed_scaling_factor = config.routed_scaling_factor
 
@@ -337,7 +336,7 @@ class MuseSparkTopKRouter(MiniMaxM2TopKRouter):
 
 
 @use_experts_implementation(has_post_expert_norm=True)
-class MuseSparkExperts(DeepseekV3Experts):
+class MuseSparkExperts(Qwen2MoeExperts):
     def __init__(self, config: MuseSparkTextConfig):
         super().__init__(config)
         self.hidden_dim = config.moe_hidden_size
@@ -375,7 +374,6 @@ class MuseSparkExperts(DeepseekV3Experts):
 class MuseSparkSparseMoeBlock(nn.Module):
     def __init__(self, config: MuseSparkTextConfig):
         super().__init__()
-        self.config = config
         self.gate = MuseSparkTopKRouter(config)
         self.pre_expert_proj = nn.Linear(config.hidden_size, config.moe_hidden_size, bias=False)
         self.pre_expert_norm = MuseSparkTextCenteredRMSNorm(config.moe_hidden_size, eps=config.rms_norm_eps)

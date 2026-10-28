@@ -32,6 +32,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import maybe_autocast
 from ..axk1.modeling_axk1 import AXK1Attention
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..deepseek_v4.modeling_deepseek_v4 import (
     DeepseekV4DecoderLayer,
     DeepseekV4HyperConnection,
@@ -44,7 +45,6 @@ from ..glm4_moe_lite.modeling_glm4_moe_lite import (
     Glm4MoeLiteForCausalLM,
     Glm4MoeLiteModel,
     Glm4MoeLitePreTrainedModel,
-    Glm4MoeLiteSparseMoeBlock,
     apply_rotary_pos_emb,
 )
 from ..glm5_next.modeling_glm5_next import Glm5NextTextExperts
@@ -376,7 +376,7 @@ class HYV4Experts(Glm5NextTextExperts):
     pass
 
 
-class HYV4SparseMoeBlock(Glm4MoeLiteSparseMoeBlock):
+class HYV4SparseMoeBlock(DeepseekV2SparseMoeBlock):
     pass
 
 

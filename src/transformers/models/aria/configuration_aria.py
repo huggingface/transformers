@@ -34,7 +34,7 @@ class AriaTextConfig(PreTrainedConfig):
         The number of experts in the MoE layer.
     moe_topk (`int`, *optional*, defaults to 2):
         The number of top experts to route to for each token.
-    moe_num_shared_experts (`int`, *optional*, defaults to 2):
+    n_shared_experts (`int`, *optional*, defaults to 2):
         The number of shared experts.
     """
 
@@ -80,6 +80,7 @@ class AriaTextConfig(PreTrainedConfig):
     attention_dropout: int | float | None = 0.0
     mlp_bias: bool = False
     head_dim: int | None = None
+    attribute_map = {"moe_num_shared_experts": "n_shared_experts"}
     base_config_key = "text_config"
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
@@ -88,7 +89,7 @@ class AriaTextConfig(PreTrainedConfig):
     }
     moe_num_experts: int = 8
     moe_topk: int = 2
-    moe_num_shared_experts: int = 2
+    n_shared_experts: int = 2
 
     def __post_init__(self, **kwargs):
         if self.head_dim is None:

@@ -42,6 +42,7 @@ from ...utils import (
 )
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..gemma3.modeling_gemma3 import (
     Gemma3CausalLMOutputWithPast,
     Gemma3ForCausalLM,
@@ -568,22 +569,20 @@ class InklingSharedExperts(nn.Module):
         return out.view(input_shape)
 
 
-class InklingSparseMoeBlock(nn.Module):
+class InklingSparseMoeBlock(DeepseekV2SparseMoeBlock):
     """Gate -> routed experts (+ shared experts), TML flavour."""
 
     def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.gate = InklingTopKRouter(config)
-        self.experts = InklingExperts(config)
+        super().__init__(config)
         self.shared_experts = InklingSharedExperts(config)
 
     def forward(self, hidden_states) -> torch.Tensor:
         residuals = hidden_states
-        input_shape = hidden_states.shape
+        orig_shape = hidden_states.shape
+        # diff from parent: the router also returns per-token gammas that weight the shared experts
         _, top_k_weights, top_k_index, shared_gammas = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*input_shape)
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals, gammas=shared_gammas)
         return hidden_states
 

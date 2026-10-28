@@ -25,7 +25,7 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
 from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VLVisionRotaryEmbedding
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP, Qwen2MoeSparseMoeBlock
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
     Qwen3_5GatedDeltaNet,
@@ -45,7 +45,6 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextDecoderLayer,
     Qwen3NextForCausalLM,
     Qwen3NextPreTrainedModel,
-    Qwen3NextSparseMoeBlock,
 )
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
@@ -192,7 +191,7 @@ class Qwen3_5MoeTopKRouter(Qwen3VLMoeTextTopKRouter):
     pass
 
 
-class Qwen3_5MoeSparseMoeBlock(Qwen3NextSparseMoeBlock):
+class Qwen3_5MoeSparseMoeBlock(Qwen2MoeSparseMoeBlock):
     pass
 
 

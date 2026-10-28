@@ -121,7 +121,7 @@ class GptOssTopKRouter(MixtralTopKRouter):
 
 
 @use_kernel_forward_from_hub("MegaBlocksMoeMLP")
-class GptOssMLP(nn.Module):
+class GptOssSparseMoeBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.router = GptOssTopKRouter(config)
@@ -250,6 +250,10 @@ class GptOssAttention(LlamaAttention):
 
 
 class GptOssDecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: GptOssConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.mlp = GptOssSparseMoeBlock(config)
+
     def forward(
         self,
         hidden_states: torch.Tensor,

@@ -33,7 +33,7 @@ class Cohere2MoeConfig(PreTrainedConfig):
         Number of selected experts per token.
     num_experts (`int`, *optional*, defaults to 8):
         Number of routed experts.
-    num_shared_experts (`int`, *optional*, defaults to 0):
+    n_shared_experts (`int`, *optional*, defaults to 0):
         The number of shared experts.
     shared_expert_combination_strategy (`str`, *optional*, defaults to `"average"`):
         The combination strategy of shared expert, must be one of ['average', 'sum'].
@@ -70,7 +70,7 @@ class Cohere2MoeConfig(PreTrainedConfig):
 
     model_type = "cohere2_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"num_local_experts": "num_experts"}
+    attribute_map = {"num_local_experts": "num_experts", "num_shared_experts": "n_shared_experts"}
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -119,7 +119,7 @@ class Cohere2MoeConfig(PreTrainedConfig):
     num_experts_per_tok: int = 2
     num_experts: int = 8
     output_router_logits: bool = False
-    num_shared_experts: int = 0
+    n_shared_experts: int = 0
     shared_expert_combination_strategy: str = "average"
     expert_selection_fn: str = "softmax"
     layer_types: list[str] | None = None

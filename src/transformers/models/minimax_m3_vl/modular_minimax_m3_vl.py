@@ -72,7 +72,7 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
     r"""
     dense_intermediate_size (`int`, *optional*, defaults to 12288):
         Intermediate size of the dense MLP used on layers whose `mlp_layer_types` entry is `"dense"`.
-    shared_intermediate_size (`int`, *optional*, defaults to 3072):
+    shared_expert_intermediate_size (`int`, *optional*, defaults to 3072):
         Intermediate size of a single shared expert in the MoE layers.
     rotary_dim (`int`, *optional*, defaults to 64):
         Number of head channels rotated by RoPE; the remaining channels are passed through unchanged.
@@ -95,12 +95,16 @@ class MiniMaxM3VLTextConfig(MiniMaxM2Config):
     """
 
     model_type = "minimax_m3_vl_text"
+    attribute_map = {
+        "num_experts": "num_local_experts",
+        "shared_intermediate_size": "shared_expert_intermediate_size",
+    }
     base_config_key = "text_config"
 
     hidden_size: int = 6144
     intermediate_size: int = 3072
     dense_intermediate_size: int = 12288
-    shared_intermediate_size: int = 3072
+    shared_expert_intermediate_size: int = 3072
     num_hidden_layers: int = 60
     num_attention_heads: int = 64
     num_key_value_heads: int = 4
@@ -318,7 +322,7 @@ class MiniMaxM3VLRMSNorm(GemmaRMSNorm):
     """Gemma-style RMSNorm: normalizes in fp32 and scales by `weight + 1`."""
 
 
-class MiniMaxM3VLDenseMLP(nn.Module):
+class MiniMaxM3VLMLP(nn.Module):
     def __init__(self, config: MiniMaxM3VLTextConfig, intermediate_size: int | None = None):
         super().__init__()
         inter = intermediate_size if intermediate_size is not None else config.dense_intermediate_size
@@ -358,11 +362,7 @@ class MiniMaxM3VLTopKRouter(MiniMaxM2TopKRouter):
 
 class MiniMaxM3VLSparseMoeBlock(LagunaSparseMoeBlock):
     def __init__(self, config: MiniMaxM3VLTextConfig):
-        nn.Module.__init__(self)
-        self.gate = MiniMaxM3VLTopKRouter(config)
-        self.experts = MiniMaxM3VLExperts(config)
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.shared_experts = MiniMaxM3VLDenseMLP(config, intermediate_size=config.shared_intermediate_size)
+        super().__init__(config)
 
 
 class MiniMaxM3VLRotaryEmbedding(GPTNeoXRotaryEmbedding):
@@ -600,7 +600,7 @@ class MiniMaxM3VLDecoderLayer(LlamaDecoderLayer):
         self.mlp = (
             MiniMaxM3VLSparseMoeBlock(config)
             if config.mlp_layer_types[layer_idx] == "sparse"
-            else MiniMaxM3VLDenseMLP(config, intermediate_size=config.dense_intermediate_size)
+            else MiniMaxM3VLMLP(config, intermediate_size=config.dense_intermediate_size)
         )
 
 

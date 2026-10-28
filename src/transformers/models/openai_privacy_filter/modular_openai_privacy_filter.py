@@ -273,7 +273,7 @@ class OpenAIPrivacyFilterTopKRouter(GptOssTopKRouter):
         return router_logits, top_k_weights, top_k_index
 
 
-class OpenAIPrivacyFilterMLP(nn.Module):
+class OpenAIPrivacyFilterSparseMoeBlock(nn.Module):
     """Similar to GPT Oss but with FP32 focus + added experts scaling"""
 
     def __init__(self, config):

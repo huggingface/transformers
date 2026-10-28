@@ -341,31 +341,33 @@ class HYV3Experts(nn.Module):
 
 
 class HYV3SparseMoeBlock(nn.Module):
+    """
+    A mixed expert module containing shared experts.
+    """
+
     def __init__(self, config: HYV3Config):
         super().__init__()
-        self.top_k = config.num_experts_per_tok
-        self.gate = HYV3TopKRouter(config)
         self.experts = HYV3Experts(config)
+        self.gate = HYV3TopKRouter(config)
+        self.shared_experts = HYV3MLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
         self.enable_moe_fp32_combine = config.enable_moe_fp32_combine
-        shared_intermediate = config.moe_intermediate_size * config.num_shared_experts
-        self.shared_experts = HYV3MLP(config, intermediate_size=shared_intermediate)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, seq_len, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
-
+        residuals = hidden_states
+        orig_shape = hidden_states.shape
         _, top_k_weights, top_k_index = self.gate(hidden_states)
-        routed_output = self.experts(hidden_states, top_k_index, top_k_weights)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
 
         # Key difference: optional float casting on combing shared experts
         if self.enable_moe_fp32_combine:
-            hidden_states = (routed_output.float() + self.shared_experts(hidden_states).float()).to(
-                hidden_states.dtype
-            )
+            hidden_states = (hidden_states.float() + self.shared_experts(residuals).float()).to(residuals.dtype)
         else:
-            hidden_states = routed_output + self.shared_experts(hidden_states)
+            hidden_states = hidden_states + self.shared_experts(residuals)
 
-        return hidden_states.reshape(batch_size, seq_len, hidden_dim)
+        return hidden_states
 
 
 class HYV3DecoderLayer(GradientCheckpointingLayer):

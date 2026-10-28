@@ -23,9 +23,9 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.output_capturing import OutputRecorder
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3ForCausalLM,
-    DeepseekV3SparseMoeBlock,
     DeepseekV3TopKRouter,
 )
 from ..dots1.modeling_dots1 import Dots1Model
@@ -90,7 +90,7 @@ class ExaoneMoeConfig(Exaone4Config):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
-    attribute_map = {"num_local_experts": "num_experts"}
+    attribute_map = {"num_local_experts": "num_experts", "num_shared_experts": "n_shared_experts"}
     base_model_ep_plan = {
         "layers.*.mlp.experts.gate_up_proj": "grouped_gemm",
         "layers.*.mlp.experts.down_proj": "grouped_gemm",
@@ -123,7 +123,7 @@ class ExaoneMoeConfig(Exaone4Config):
     num_experts: int = 64
     num_experts_per_tok: int = 8
     output_router_logits: bool = False
-    num_shared_experts: int = 1
+    n_shared_experts: int = 1
     norm_topk_prob: bool = True
     routed_scaling_factor: float = 2.5
     n_group: int = 1
@@ -154,13 +154,8 @@ class ExaoneMoeExperts(Qwen2MoeExperts):
     pass
 
 
-class ExaoneMoeSparseMoeBlock(DeepseekV3SparseMoeBlock):
-    def __init__(self, config):
-        super().__init__()
-        self.experts = ExaoneMoeExperts(config)
-        self.shared_experts = ExaoneMoeMLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts
-        )
+class ExaoneMoeSparseMoeBlock(DeepseekV2SparseMoeBlock):
+    pass
 
 
 class ExaoneMoeDecoderLayer(LlamaDecoderLayer):

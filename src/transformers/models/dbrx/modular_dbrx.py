@@ -212,7 +212,7 @@ class DbrxRouter(nn.Module):
         return router_logits
 
 
-class DbrxFFN(nn.Module):
+class DbrxSparseMoeBlock(nn.Module):
     """Modular DBRX MLP/FFN component with MoE support."""
 
     def __init__(self, config, **kwargs):
@@ -289,7 +289,7 @@ class DbrxBlock(GradientCheckpointingLayer):
             config=config,
             layer_idx=layer_idx,
         )
-        self.ffn = DbrxFFN(config=config)
+        self.ffn = DbrxSparseMoeBlock(config=config)
 
     def forward(
         self,

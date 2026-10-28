@@ -28,7 +28,7 @@ from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
-from ...models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3SparseMoeBlock, DeepseekV3TopKRouter
+from ...models.deepseek_v3.modeling_deepseek_v3 import DeepseekV3TopKRouter
 from ...models.jamba.modeling_jamba import JambaAttention
 from ...models.llama.modeling_llama import LlamaRMSNorm
 from ...models.nemotron.modeling_nemotron import NemotronMLP
@@ -38,6 +38,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
 from .configuration_nemotron_h import NemotronHConfig
 
 
@@ -168,7 +169,7 @@ class NemotronHExperts(nn.Module):
         return final_hidden_states.to(hidden_states.dtype)
 
 
-class NemotronHSparseMoeBlock(DeepseekV3SparseMoeBlock):
+class NemotronHSparseMoeBlock(DeepseekV2SparseMoeBlock):
     """
     Mixture-of-Experts (MoE) module for NemotronH.
 
@@ -185,7 +186,7 @@ class NemotronHSparseMoeBlock(DeepseekV3SparseMoeBlock):
         self.gate = NemotronHTopKRouter(config)
 
         # Override shared_experts to use NemotronHMLP with correct intermediate size
-        self.shared_experts = NemotronHMLP(config=config, intermediate_size=config.moe_shared_expert_intermediate_size)
+        self.shared_experts = NemotronHMLP(config=config, intermediate_size=config.shared_expert_intermediate_size)
 
         # NemotronH-specific latent projection layers
         if config.moe_latent_size is not None:

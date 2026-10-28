@@ -380,7 +380,6 @@ class Glm4MoeSparseMoeBlock(nn.Module):
 
     def __init__(self, config: Glm4MoeConfig):
         super().__init__()
-        self.config = config
         self.experts = Glm4MoeExperts(config)
         self.gate = Glm4MoeTopKRouter(config)
         self.shared_experts = Glm4MoeMLP(
@@ -393,6 +392,7 @@ class Glm4MoeSparseMoeBlock(nn.Module):
         _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        # diff from parent: add the shared experts, run on the unflattened input
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 

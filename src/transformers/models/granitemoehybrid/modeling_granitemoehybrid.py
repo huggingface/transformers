@@ -749,8 +749,8 @@ class GraniteMoeHybridMLP(nn.Module):
         super().__init__()
 
         self.config = config
-        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.shared_intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.shared_intermediate_size, config.hidden_size, bias=False)
+        self.gate_up_proj = nn.Linear(config.hidden_size, 2 * config.shared_expert_intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.shared_expert_intermediate_size, config.hidden_size, bias=False)
         self.activation_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
@@ -829,6 +829,7 @@ class GraniteMoeHybridTopKRouter(nn.Module):
         self.weight = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim))
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
         router_logits = F.linear(hidden_states, self.weight).float()  # (num_tokens, num_experts)
         top_k_logits, top_k_index = router_logits.topk(self.top_k, dim=-1)  # (num_tokens, top_k)
         top_k_weights = torch.softmax(top_k_logits, dim=-1).type_as(hidden_states)  # (num_tokens, top_k)
@@ -889,11 +890,11 @@ class GraniteMoeHybridSparseMoeBlock(nn.Module):
         self.gate = GraniteMoeHybridTopKRouter(config)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        _, top_k_weights, top_k_index = self.gate(hidden_states_reshaped)
-        final_hidden_states = self.experts(hidden_states_reshaped, top_k_index, top_k_weights)
-        return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
+        orig_shape = hidden_states.shape
+        _, top_k_weights, top_k_index = self.gate(hidden_states)
+        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+        hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        return hidden_states
 
 
 class GraniteFlashAttentionKwargs(TypedDict, total=False):

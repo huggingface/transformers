@@ -62,7 +62,7 @@ class NemotronHModelTester:
         head_dim=32,
         intermediate_size=40,
         moe_intermediate_size=40,
-        moe_shared_expert_intermediate_size=40,
+        shared_expert_intermediate_size=40,
         mlp_hidden_act="relu2",
         mamba_hidden_act="silu",
         max_position_embeddings=512,
@@ -99,7 +99,7 @@ class NemotronHModelTester:
         self.head_dim = head_dim
         self.intermediate_size = intermediate_size
         self.moe_intermediate_size = moe_intermediate_size
-        self.moe_shared_expert_intermediate_size = moe_shared_expert_intermediate_size
+        self.shared_expert_intermediate_size = shared_expert_intermediate_size
         self.mlp_hidden_act = mlp_hidden_act
         self.mamba_hidden_act = mamba_hidden_act
         self.max_position_embeddings = max_position_embeddings
@@ -151,7 +151,7 @@ class NemotronHModelTester:
             head_dim=self.head_dim,
             intermediate_size=self.intermediate_size,
             moe_intermediate_size=self.moe_intermediate_size,
-            moe_shared_expert_intermediate_size=self.moe_shared_expert_intermediate_size,
+            shared_expert_intermediate_size=self.shared_expert_intermediate_size,
             mlp_hidden_act=self.mlp_hidden_act,
             mamba_hidden_act=self.mamba_hidden_act,
             max_position_embeddings=self.max_position_embeddings,

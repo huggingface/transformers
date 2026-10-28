@@ -1173,9 +1173,12 @@ class UnlimitedOcrTextTopKRouter(nn.Module):
 
 
 class UnlimitedOcrTextSparseMoeBlock(nn.Module):
+    """
+    A mixed expert module containing shared experts.
+    """
+
     def __init__(self, config: UnlimitedOcrTextConfig):
         super().__init__()
-        self.config = config
         self.experts = UnlimitedOcrTextExperts(config)
         self.gate = UnlimitedOcrTextTopKRouter(config)
         self.shared_experts = UnlimitedOcrTextMLP(
@@ -1188,6 +1191,7 @@ class UnlimitedOcrTextSparseMoeBlock(nn.Module):
         _, top_k_weights, top_k_index = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
         hidden_states = self.experts(hidden_states, top_k_index, top_k_weights).view(*orig_shape)
+        # diff from parent: add the shared experts, run on the unflattened input
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states
 
