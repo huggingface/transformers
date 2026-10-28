@@ -2239,7 +2239,7 @@ class ModelArgs:
 
     question_type_ids = {
         "description": """
-    Type of each question of the prompt, as its index in the config's `question_types`.
+    Type of each question of the prompt, as its index in `Question.questions_types`.
     """,
         "shape": "of shape `(num_questions,)`",
     }

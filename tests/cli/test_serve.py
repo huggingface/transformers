@@ -710,7 +710,7 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
             num_key_value_heads=1,
         )
         model = Qwen2ForCausalLM(config).eval()
-        decision_config = DecisionConfig(temperature={"noul": 1.5}, noul_band=[0.8, 0.1])
+        decision_config = DecisionConfig(temperature={"noul": 1.5})
         handler = SystemOneHandler(MagicMock(), GenerationState(), decision_config=decision_config)
         request = {"state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
         pipe = handler._pipeline("x", model, tokenizer)
@@ -728,8 +728,8 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
         with self.assertRaises(HTTPException) as error:
             handler._validate_request(body)
         self.assertEqual(error.exception.status_code, 422)
-        self.assertIn("Did you mean 'choice'?", error.exception.detail[0]["msg"])
-        self.assertIn("Did you mean 'instructions'?", error.exception.detail[0]["msg"])
+        self.assertIn("`type` must be one of", error.exception.detail[0]["msg"])
+        self.assertIn("'b'", error.exception.detail[0]["msg"])
 
 
 @slow
