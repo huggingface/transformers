@@ -25,6 +25,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_xiaomi_lens0 import *
+    from .generation_xiaomi_lens0 import *
     from .modeling_xiaomi_lens0 import *
     from .processing_xiaomi_lens0 import *
 else:

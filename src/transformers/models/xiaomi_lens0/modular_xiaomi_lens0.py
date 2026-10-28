@@ -24,7 +24,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
-from ...generation.utils import GenerateDecoderOnlyOutput
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -42,6 +41,7 @@ from ..qwen3_5.modeling_qwen3_5 import (
 from ..qwen3_vl.processing_qwen3_vl import Qwen3VLProcessor
 from ..sam.modeling_sam import SamLayerNorm
 from ..siglip.modeling_siglip import SiglipAttention, SiglipEncoderLayer, SiglipMLP
+from .generation_xiaomi_lens0 import XiaomiLens0GenerationMixin
 
 
 @auto_docstring(checkpoint="SeerRay-Lab/Xiaomi-Lens-0")
@@ -262,6 +262,7 @@ class XiaomiLens0Model(Qwen3_5Model):
             use_cache=use_cache,
             **kwargs,
         )
+        # Return image_hidden_states for mask decoding
         return XiaomiLens0ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
@@ -344,6 +345,7 @@ class XiaomiLens0MaskDecoder(XiaomiLens0PreTrainedModel):
         super().__init__(config)
         self.mask_embed = XiaomiLens0MaskEmbedding(config)
         self.pixel_decoder = XiaomiLens0PixelDecoder(config)
+        self.scale_factor = 4
 
         self.post_init()
 
@@ -372,7 +374,7 @@ class XiaomiLens0MaskDecoder(XiaomiLens0PreTrainedModel):
         mask_logits = mask_embeddings @ pixel_embeddings.flatten(2) / self.config.mask_embed_dim**0.5
         mask_logits = mask_logits.view(batch_size, -1, height, width)
         # The fixed 4x upsampling brings the masks to the resolution of the image fed to the vision encoder
-        return F.interpolate(mask_logits, scale_factor=4, mode="bilinear", align_corners=False)
+        return F.interpolate(mask_logits, scale_factor=self.scale_factor, mode="bilinear", align_corners=False)
 
 
 def get_preceding_image_indices(
@@ -407,23 +409,6 @@ def get_non_thinking_token_mask(
 
 @auto_docstring
 @dataclass
-class XiaomiLens0GenerateOutput(GenerateDecoderOnlyOutput):
-    r"""
-    scores (`tuple[torch.FloatTensor]`, *optional*):
-        Processed prediction scores, one tensor per generated token. Returned when `output_scores=True`.
-    logits (`tuple[torch.FloatTensor]`, *optional*):
-        Unprocessed language-model logits, one tensor per generated token. Returned when `output_logits=True`.
-    image_hidden_states (`torch.FloatTensor` of shape `(num_patches, vision_hidden_size)`, *optional*):
-        Vision patch features before spatial merging, in original input-image order. Returned when images are
-        provided and `return_dict_in_generate=True`, independently of `output_hidden_states`. These features can
-        be passed to `decode_masks`. They are not expanded for multiple returned sequences.
-    """
-
-    image_hidden_states: torch.FloatTensor | None = None
-
-
-@auto_docstring
-@dataclass
 class XiaomiLens0CausalLMOutputWithPast(Qwen3_5CausalLMOutputWithPast):
     r"""
     rope_deltas (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -443,7 +428,7 @@ class XiaomiLens0CausalLMOutputWithPast(Qwen3_5CausalLMOutputWithPast):
 
 
 @auto_docstring
-class XiaomiLens0ForConditionalGeneration(Qwen3_5ForConditionalGeneration):
+class XiaomiLens0ForConditionalGeneration(Qwen3_5ForConditionalGeneration, XiaomiLens0GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
         self.mask_decoder = XiaomiLens0MaskDecoder(config.mask_decoder_config)
@@ -540,27 +525,6 @@ class XiaomiLens0ForConditionalGeneration(Qwen3_5ForConditionalGeneration):
             attentions=outputs.attentions,
             rope_deltas=outputs.rope_deltas,
         )
-
-    @torch.no_grad()
-    def generate(self, *args, **kwargs):
-        # Custom generate to return image_hidden_states for mask decoding.
-        mm_encoder_outputs = dict(kwargs.pop("mm_encoder_outputs", None) or {})
-        pixel_values = kwargs.pop("pixel_values", None)
-        if pixel_values is not None:
-            if mm_encoder_outputs.get("image") is not None:
-                raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings for input image")
-            mm_encoder_outputs["image"] = self.get_image_features(
-                pixel_values, kwargs.get("image_grid_thw"), return_dict=True
-            )
-        if mm_encoder_outputs:
-            kwargs["mm_encoder_outputs"] = mm_encoder_outputs
-
-        image_outputs = mm_encoder_outputs.get("image")
-        image_hidden_states = image_outputs.last_hidden_state if image_outputs is not None else None
-        result = super().generate(*args, **kwargs)
-        if isinstance(result, GenerateDecoderOnlyOutput):
-            return XiaomiLens0GenerateOutput(**result, image_hidden_states=image_hidden_states)
-        return result
 
     def decode_masks(
         self,
@@ -683,10 +647,12 @@ class XiaomiLens0Processor(Qwen3VLProcessor):
         ignore_thinking: bool = True,
     ) -> list[dict[str, torch.Tensor]]:
         r"""
-        Extract boxes and masks independently, pairing them by occurrence order within each image.
-        Boxes use `<bbox>[x1, y1, x2, y2]</bbox>` with coordinates normalized to `[0, 1000]`; masks use
-        `<|mask|>`. Either may appear first or without the other. The first box pairs with the first mask,
-        and so on; excess boxes or masks are unpaired. Malformed boxes raise `ValueError`.
+        Extract boxes and segmentation masks from the model outputs.
+
+        Boxes and masks are expected in `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|><\mask>` format with
+        box coordinates normalized to `[0, 1000]`. Both are optional. Masks require `mask_logits` and
+        `mask_token_indices` to be set. If boxes and masks are detected, they are paired based on their
+        position in `input_ids`, such that the first box is matched with the first mask and so on.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -697,7 +663,7 @@ class XiaomiLens0Processor(Qwen3VLProcessor):
                 One `(num_masks, height, width)` tensor per image, in token order as returned by `decode_masks`.
                 Omit or pass `None` for box-only output with empty mask tensors.
             mask_token_indices (`list[torch.LongTensor]`, *optional*):
-                One CPU `(num_masks, 2)` tensor per image containing `(batch_index, token_position)`, as returned
+                One `(num_masks, 2)` tensor per image containing `(batch_index, token_position)`, as returned
                 by `decode_masks`, in token order matching `mask_logits`. Required when `mask_logits` is provided.
             target_sizes (`list[tuple[int, int]]`, *optional*):
                 The `(height, width)` of each image to resize the boxes and masks to. Defaults to the size of the
@@ -705,14 +671,14 @@ class XiaomiLens0Processor(Qwen3VLProcessor):
             mask_threshold (`float`, *optional*, defaults to 0.5):
                 Probability threshold to binarize the masks.
             ignore_thinking (`bool`, *optional*, defaults to `True`):
-                Exclude boxes inside thinking blocks, using the same token filter as `decode_masks`.
-                Use the same setting for decoding masks so both occurrence orders refer to the same text.
+                Ignore boxes inside thinking blocks. Ignoring masks inside thinking blocks is controlled by
+                the `ignore_thinking` argument in [`XiaomiLens0ForConditionalGeneration.decode_masks`].
 
         Returns:
             `list[dict]`: One dictionary per image with:
                 - **boxes** (`torch.FloatTensor` of shape `(num_boxes, 4)`): Boxes in absolute
-                  `(top_left_x, top_left_y, bottom_right_x, bottom_right_y)` format.
-                - **masks** (`torch.BoolTensor` of shape `(num_masks, height, width)`): Binary masks.
+                  `(top_left_x, top_left_y, bottom_right_x, bottom_right_y)` pixel coordinates.
+                - **masks** (`torch.BoolTensor` of shape `(num_masks, height, width)`): Binary segmentation masks.
                   Boxes and masks are each in token order. Entries with the same index are paired up to
                   `min(num_boxes, num_masks)`, remaining entries have no counterpart.
         """
@@ -814,7 +780,6 @@ __all__ = [
     "XiaomiLens0TextModel",
     "XiaomiLens0Model",
     "XiaomiLens0ForConditionalGeneration",
-    "XiaomiLens0GenerateOutput",
     "XiaomiLens0PreTrainedModel",
     "XiaomiLens0Processor",
 ]

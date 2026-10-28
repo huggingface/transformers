@@ -28,8 +28,6 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...generation import GenerationMixin
-from ...generation.utils import GenerateDecoderOnlyOutput
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
@@ -65,6 +63,7 @@ from .configuration_xiaomi_lens0 import (
     XiaomiLens0TextConfig,
     XiaomiLens0VisionConfig,
 )
+from .generation_xiaomi_lens0 import XiaomiLens0GenerationMixin
 
 
 # NOTE: the FLA package does not re-cast to `input_dtype` in its implementation, maybe we should do the same
@@ -1654,6 +1653,7 @@ class XiaomiLens0Model(XiaomiLens0PreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
+        # Return image_hidden_states for mask decoding
         return XiaomiLens0ModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
@@ -1858,6 +1858,7 @@ class XiaomiLens0MaskDecoder(XiaomiLens0PreTrainedModel):
         super().__init__(config)
         self.mask_embed = XiaomiLens0MaskEmbedding(config)
         self.pixel_decoder = XiaomiLens0PixelDecoder(config)
+        self.scale_factor = 4
 
         self.post_init()
 
@@ -1886,24 +1887,7 @@ class XiaomiLens0MaskDecoder(XiaomiLens0PreTrainedModel):
         mask_logits = mask_embeddings @ pixel_embeddings.flatten(2) / self.config.mask_embed_dim**0.5
         mask_logits = mask_logits.view(batch_size, -1, height, width)
         # The fixed 4x upsampling brings the masks to the resolution of the image fed to the vision encoder
-        return F.interpolate(mask_logits, scale_factor=4, mode="bilinear", align_corners=False)
-
-
-@auto_docstring
-@dataclass
-class XiaomiLens0GenerateOutput(GenerateDecoderOnlyOutput):
-    r"""
-    scores (`tuple[torch.FloatTensor]`, *optional*):
-        Processed prediction scores, one tensor per generated token. Returned when `output_scores=True`.
-    logits (`tuple[torch.FloatTensor]`, *optional*):
-        Unprocessed language-model logits, one tensor per generated token. Returned when `output_logits=True`.
-    image_hidden_states (`torch.FloatTensor` of shape `(num_patches, vision_hidden_size)`, *optional*):
-        Vision patch features before spatial merging, in original input-image order. Returned when images are
-        provided and `return_dict_in_generate=True`, independently of `output_hidden_states`. These features can
-        be passed to `decode_masks`. They are not expanded for multiple returned sequences.
-    """
-
-    image_hidden_states: torch.FloatTensor | None = None
+        return F.interpolate(mask_logits, scale_factor=self.scale_factor, mode="bilinear", align_corners=False)
 
 
 @auto_docstring
@@ -1959,7 +1943,7 @@ def get_non_thinking_token_mask(
 
 
 @auto_docstring
-class XiaomiLens0ForConditionalGeneration(XiaomiLens0PreTrainedModel, GenerationMixin):
+class XiaomiLens0ForConditionalGeneration(XiaomiLens0PreTrainedModel, XiaomiLens0GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
     # Reference: fix gemma3 grad acc #37208
@@ -2129,27 +2113,6 @@ class XiaomiLens0ForConditionalGeneration(XiaomiLens0PreTrainedModel, Generation
 
         return position_ids
 
-    @torch.no_grad()
-    def generate(self, *args, **kwargs):
-        # Custom generate to return image_hidden_states for mask decoding.
-        mm_encoder_outputs = dict(kwargs.pop("mm_encoder_outputs", None) or {})
-        pixel_values = kwargs.pop("pixel_values", None)
-        if pixel_values is not None:
-            if mm_encoder_outputs.get("image") is not None:
-                raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings for input image")
-            mm_encoder_outputs["image"] = self.get_image_features(
-                pixel_values, kwargs.get("image_grid_thw"), return_dict=True
-            )
-        if mm_encoder_outputs:
-            kwargs["mm_encoder_outputs"] = mm_encoder_outputs
-
-        image_outputs = mm_encoder_outputs.get("image")
-        image_hidden_states = image_outputs.last_hidden_state if image_outputs is not None else None
-        result = super().generate(*args, **kwargs)
-        if isinstance(result, GenerateDecoderOnlyOutput):
-            return XiaomiLens0GenerateOutput(**result, image_hidden_states=image_hidden_states)
-        return result
-
     def decode_masks(
         self,
         input_ids: torch.LongTensor,
@@ -2249,6 +2212,5 @@ __all__ = [
     "XiaomiLens0TextModel",
     "XiaomiLens0Model",
     "XiaomiLens0ForConditionalGeneration",
-    "XiaomiLens0GenerateOutput",
     "XiaomiLens0PreTrainedModel",
 ]
