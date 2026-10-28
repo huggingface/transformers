@@ -977,12 +977,13 @@ class WeightTransform:
             # All reverse ops, in reverse order
             kwargs["operations"] = [op.reverse_op for op in self.operations[::-1]]
 
-        reverse_transform = self.__class__(
-            source_patterns=self._original_target_patterns, target_patterns=self._original_source_patterns, **kwargs
-        )
-        reverse_transform.scope_prefix = self.scope_prefix
-        reverse_transform.base_model_prefix = self.base_model_prefix
-        return reverse_transform
+        return self.copy(self._original_target_patterns, self._original_source_patterns, **kwargs)
+
+    def copy(self, source_patterns, target_patterns, **kwargs) -> WeightTransform:
+        """A transform of the same type and scope, with new patterns and e.g. new `operations`."""
+        copy = self.__class__(source_patterns=source_patterns, target_patterns=target_patterns, **kwargs)
+        copy.scope_prefix, copy.base_model_prefix = self.scope_prefix, self.base_model_prefix
+        return copy
 
     def materialize_tensors(self) -> dict[str, list[torch.Tensor]]:
         """
@@ -1184,7 +1185,7 @@ _INTERNAL_MANY_TO_MANY_CONVERSIONS = (
 
 
 class WeightConverter(WeightTransform):
-    __slots__ = ("operations", "force_cpu", "target_capture")
+    __slots__ = ("operations", "force_cpu")
 
     def __init__(
         self,
@@ -1196,10 +1197,6 @@ class WeightConverter(WeightTransform):
         super().__init__(source_patterns, target_patterns)
         self.operations: list[ConversionOps] = operations
         self.force_cpu = force_cpu
-        # Targets reusing a group captured by an anchored source, e.g. `\1.self_attn.q_proj.`: reads it back from the
-        # layer name, to give the ops the real target names
-        head, group, tail = self.target_patterns[0].partition(r"\1")
-        self.target_capture = re.compile(re.escape(head) + "(.+?)" + re.escape(tail)) if group else None
 
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
@@ -1222,17 +1219,12 @@ class WeightConverter(WeightTransform):
         # attribute during the whole process
         collected_tensors = self.materialize_tensors()
 
-        target_patterns = self.target_patterns
-        if self.target_capture is not None:
-            captured = self.target_capture.search(layer_name).group(1)
-            target_patterns = [target.replace(r"\1", captured) for target in target_patterns]
-
         for op in self.operations:
             with log_conversion_errors(layer_name, loading_info, (len(collected_tensors), layer_name), op):
                 collected_tensors = op.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
-                    target_patterns=target_patterns,
+                    target_patterns=self.target_patterns,
                     # Additional kwargs, usually not used
                     full_layer_name=layer_name,
                     model=model,
@@ -1261,7 +1253,7 @@ class WeightConverter(WeightTransform):
                 collected_tensors = self.quantization_operation.convert(
                     collected_tensors,
                     source_patterns=self.source_patterns,
-                    target_patterns=target_patterns,
+                    target_patterns=self.target_patterns,
                     full_layer_name=layer_name,
                     config=config,
                     model=model,
