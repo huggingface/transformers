@@ -115,8 +115,10 @@ class VonForDecision(VonPreTrainedModel):
         input_ids: torch.LongTensor,
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
+        question_type_ids: torch.LongTensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
+        input_ids, marks, num_options = input_ids[0], marks[0], num_options[0]  # a batch of one prompt
         backbone_inputs = self.backbone_inputs(input_ids, marks, num_options)
         hidden_states = self.model(**backbone_inputs, **kwargs).last_hidden_state[0]
         hidden_states = hidden_states.to(self.out_proj.weight.dtype)
