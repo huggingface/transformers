@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 MiniCPM-OCR is a document-understanding model from the [MiniCPM-V](https://huggingface.co/papers/2509.18154) family developed by [OpenBMB](https://github.com/OpenBMB). It keeps the [MiniCPM-V 4.6](./minicpmv4_6.md) architecture -- a [SigLIP](./siglip.md) vision encoder with a window-attention merger in front of a [Qwen3.5](./qwen3_5.md) language model -- and specializes it for reading text-dense images such as scanned pages, screenshots, receipts and tables.
 
 This model was contributed by [OpenBMB](https://huggingface.co/openbmb).
-The original code can be found [here](https://github.com/OpenBMB/MiniCPM-V).
+The original code can be found [here](https://github.com/openbmb/MiniCPM-OCR).
 
 
 ## Usage example
