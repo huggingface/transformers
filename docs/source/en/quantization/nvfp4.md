@@ -52,8 +52,12 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 A `MIXED_PRECISION` export may quantize some layers to FP8, block FP8 or MXFP8, for example its attention. Those layers
 load dequantized to the model dtype, and a warning says so.
 
-An MXFP8 checkpoint with `"moe_quant_algo": "NVFP4"` also loads with NVFP4. Its experts load in NVFP4, in the
-`nvfp4-pack-quantized` format. Its other MXFP8 layers load dequantized.
+An MXFP8 checkpoint with `"expert_dtype": "nvfp4"` in its quantization config also loads with NVFP4. Its experts load
+in NVFP4, and its other MXFP8 layers load dequantized.
+
+The tensor names say how a checkpoint stores its NVFP4 tensors. ModelOpt names the globals `weight_scale_2` and
+`input_scale`. compressed-tensors (`nvfp4-pack-quantized`) names the packed weight `weight_packed` and ships the
+reciprocal of each global. Pass `checkpoint_format` to [`NVFP4Config`] to set the layout yourself.
 
 ## Quantize while loading
 

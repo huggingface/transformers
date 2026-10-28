@@ -447,6 +447,26 @@ def _apply_param_ops(op, model, full_name: str, value):
     return tensors[full_name]
 
 
+def checkpoint_format(checkpoint_files: list[str]) -> str | None:
+    """Return the NVFP4 layout the checkpoint's tensor names show, or `None` when they show neither.
+
+    Only compressed-tensors names the packed weight `weight_packed`, and only ModelOpt names the weight global
+    `weight_scale_2`. A Transformers save names its tensors after the modules, and its config says which layout it is.
+    """
+    from safetensors import safe_open
+
+    for file in checkpoint_files:
+        if not file.endswith(".safetensors"):
+            continue
+        with safe_open(file, framework="pt") as f:
+            for name in f.keys():
+                if name.endswith("weight_packed"):
+                    return "nvfp4-pack-quantized"
+                if name.endswith("weight_scale_2"):
+                    return "modelopt"
+    return None
+
+
 def _reciprocal_globals(hf_quantizer) -> bool:
     return hf_quantizer is not None and hf_quantizer.quantization_config.checkpoint_format == "nvfp4-pack-quantized"
 
