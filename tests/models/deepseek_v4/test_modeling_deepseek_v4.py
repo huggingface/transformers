@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import subprocess
 import tempfile
 import unittest
@@ -40,6 +41,7 @@ if is_torch_available():
         DeepseekV4Model,
         FineGrainedFP8Config,
     )
+    from transformers.models.deepseek_v4.modeling_deepseek_v4 import DeepseekV4HashRouter, DeepseekV4TopKRouter
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
@@ -224,6 +226,56 @@ class DeepseekV4ModelTest(CausalLMModelTest, unittest.TestCase):
                 self.assertIsInstance(layer_hidden, torch.Tensor)
                 self.assertEqual(layer_hidden.shape[0], batch_size)
                 self.assertEqual(layer_hidden.shape[-1], config.hidden_size)
+
+    def _bf16_router(self, router_class, config):
+        # Dtypes of a `from_pretrained(..., dtype=torch.bfloat16)` load: the gate weight is bf16 and
+        # `e_score_correction_bias` is kept in float32 (`_keep_in_fp32_modules_strict`).
+        router = router_class(config).to(torch_device)
+        torch.nn.init.normal_(router.weight, std=config.hidden_size**-0.5)
+        router.weight.data = router.weight.data.to(torch.bfloat16)
+        return router
+
+    def test_router_computes_in_float32(self):
+        # The reference `Gate` computes `linear(x.float(), weight.float())` and keeps the scores and routing
+        # weights in float32. In a bf16 model the router input and `gate.weight` are bf16, so the routers must
+        # match a float32 copy of themselves, with and without autocast.
+        config = self.model_tester.get_config()
+        config.n_routed_experts, config.num_experts_per_tok = 16, 4
+        torch.manual_seed(0)
+        hidden_states = torch.randn(2, 64, config.hidden_size, device=torch_device).to(torch.bfloat16)
+        input_ids = torch.randint(0, config.vocab_size, (2, 64), device=torch_device)
+
+        topk_router = self._bf16_router(DeepseekV4TopKRouter, config)
+        torch.nn.init.normal_(topk_router.e_score_correction_bias, std=0.01)
+        hash_router = self._bf16_router(DeepseekV4HashRouter, config)
+        hash_router.tid2eid.copy_(
+            torch.rand(config.vocab_size, config.n_routed_experts).argsort(-1)[:, : config.num_experts_per_tok]
+        )
+
+        with torch.no_grad():
+            for router, inputs in [(topk_router, (hidden_states,)), (hash_router, (hidden_states, input_ids))]:
+                expected = copy.deepcopy(router).float()(inputs[0].float(), *inputs[1:])
+                self.assertEqual(expected[0].dtype, torch.float32)
+                for use_autocast in [False, True]:
+                    with torch.autocast(torch_device, dtype=torch.bfloat16, enabled=use_autocast):
+                        outputs = router(*inputs)
+                    for output, expected_output in zip(outputs, expected):
+                        self.assertEqual(output.dtype, expected_output.dtype)
+                        torch.testing.assert_close(output, expected_output)
+
+        # Two experts with logits 1 and 1.0078125 (both exact in bf16), bias 0.001 and 0, top-1. In float32 the
+        # scores are 1.14598 and 1.14847, so expert 1 wins; rounded to bf16 both are 1.1484375 and the bias
+        # picks expert 0.
+        config.n_routed_experts, config.num_experts_per_tok = 2, 1
+        router = self._bf16_router(DeepseekV4TopKRouter, config)
+        with torch.no_grad():
+            router.weight.zero_()
+            router.weight[:, 0] = torch.tensor([1.0, 1.0078125])
+            router.e_score_correction_bias.copy_(torch.tensor([0.001, 0.0]))
+            hidden_states = torch.zeros(1, 1, config.hidden_size, dtype=torch.bfloat16, device=torch_device)
+            hidden_states[..., 0] = 1.0
+            _, _, indices = router(hidden_states)
+        self.assertEqual(indices.tolist(), [[1]])
 
 
 @require_torch
