@@ -338,7 +338,7 @@ class ResponseParser:
         region is the null sink (no implicit declared, no explicit open), we
         silently discard. Every routed chunk emits a `region_chunk` event so
         consumers can render live; `dirty=True` flags chunks from structured
-        parsers (json, xml-inline, kv-lines) whose raw bytes will only be
+        parsers (json, xml-inline, kv-lines, python-call-list) whose raw bytes will only be
         parsed into the final value on close."""
         if not text or self._current is None:
             return

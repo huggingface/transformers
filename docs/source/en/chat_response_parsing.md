@@ -413,6 +413,28 @@ input = "<meta>name: alice\nage: 30</meta>"
 
 Note `age` keeps `"30"` as a string; add a `value_parser` of `{"name": "int"}` to parse it to `30`.
 
+#### python-call-list
+
+The `python-call-list` parser handles tool calls written as a Python list of function calls with keyword arguments,
+such as `[get_weather(city="Paris", days=2)]`. It returns a list of `{"name": ..., "arguments": {...}}` dicts, so it is
+usually combined with `transform_each`. The text is parsed with Python's `ast` module and never evaluated. Argument
+values must be literals: strings, numbers, lists, tuples (returned as lists), dicts with string keys, `True`/`False`/`None`,
+or their JSON spellings `true`/`false`/`null`. Bare identifiers are accepted as dict keys. It has no `content_args`.
+
+```python
+field = {
+    "tool_calls": {
+        "open": "<|tool_call_start|>",
+        "close": "<|tool_call_end|>",
+        "content": "python-call-list",
+        "transform_each": True,
+        "transform": {"type": "function", "function": {"name": "{name}", "arguments": "{arguments}"}},
+    }
+}
+input = '<|tool_call_start|>[get_weather(city="Paris", days=2)]<|tool_call_end|>'
+# Returns: {"tool_calls": [{"type": "function", "function": {"name": "get_weather", "arguments": {"city": "Paris", "days": 2}}}]}
+```
+
 ### Typing tool-call arguments
 
 Sometimes, the response parser may parse model outputs with the wrong type. For example,
