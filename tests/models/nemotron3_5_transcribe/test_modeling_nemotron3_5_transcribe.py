@@ -321,13 +321,16 @@ class Nemotron3_5TranscribeForConditionalGenerationIntegrationTest(MemoryCleanup
         with open(path, encoding="utf-8") as f:
             return json.load(f)
 
-    def _expected_speaker_attributed_30s(self):
+    def _expected_speaker_attributed_30s(self, differences):
         """The first 30 s of `diarization_example.mp3` (one window of the original) with `speaker_attributed_prompt`."""
         expected = self._load_fixture("expected_results_speaker_attributed")["transcriptions"][0]
-        # Verified difference with the original: the texts differ in the last word only, the name of the "Dia" voice
-        # ("diera" there), a near-tie at the end of the sequence that the two language-model stacks (fused kernels
-        # there, reference code here) resolve differently.
-        return expected.replace(" diera voice from", " d-a voice from")
+        # Verified differences with the original (`differences`: its text -> the port's): same audio embeddings (max
+        # difference 0), near-ties that the two language-model stacks (fused kernels there, reference code here)
+        # resolve differently, the model name "Diorization" first, and differently again within a batch.
+        for original, port in differences:
+            self.assertEqual(expected.count(original), 1)
+            expected = expected.replace(original, port)
+        return expected
 
     def _assert_word_timestamps_match(self, timestamps, expected):
         # the fixtures keep NeMo's layout: `{"word", "start", "end", "speaker"}` and `{"speaker", "start", "end"}`
@@ -394,7 +397,7 @@ class Nemotron3_5TranscribeForConditionalGenerationIntegrationTest(MemoryCleanup
 
         EXPECTED_TEXTS = [
             *self._load_fixture("expected_results_single")["transcriptions"],
-            self._expected_speaker_attributed_30s(),
+            self._expected_speaker_attributed_30s([(" Diorization,", " Dioration,")]),
         ]
         self.assertEqual(texts, EXPECTED_TEXTS)
 
@@ -427,29 +430,27 @@ class Nemotron3_5TranscribeForConditionalGenerationIntegrationTest(MemoryCleanup
         outputs = model.generate(**inputs, max_new_tokens=400)
         text = processor.decode(outputs[0, inputs.input_ids.shape[1] :], skip_special_tokens=False)
 
-        # Verified difference with the original: the audio embeddings match the original's to 5e-5 and the first 79
-        # tokens are identical; at the 80th the two language-model stacks (fused kernels there, reference code here)
-        # resolve a near-tie on a proper noun differently ("kokoro" -> "cocoro") and the greedy decodes drift apart.
-        # The port's output is validated at the embedding level.
+        # Verified difference with the original: the audio embeddings are the original's (max difference 0) and the
+        # first 12 tokens identical; at the 13th the two language-model stacks (fused kernels there, reference code
+        # here) resolve a near-tie on a proper noun differently ("Dierization" here, "Dierzation" there) and the greedy
+        # decodes drift apart. The port's output is validated at the embedding level.
         EXPECTED_TEXT = (
-            "<spk:0> to celebrate the release of nemotron three diarization we invited seven more open text to speech "
-            "voices to the party i'm chris the nemotron voice from nvidia <spk:1> hi everybody thanks for having me "
-            "i'm jane a pocket voice from qti <spk:2> nice to meet you chris and jane i'm serena the queen three "
-            "voice <spk:3> hey i'm adam from cocoro just eighty two million parameters and i still made the guest "
-            "list <spk:4> hello hello chatterbox here from resemble ai i brought the expressive energy <spk:5> hi i'm "
-            "john a d a voice from narilabs great crowd we've got here already <spk:3> what's up everyone great to be "
-            "here i'm the mya one voice from mya research <spk:5> hi all i'm piper from raspy okay so now we have a "
-            "full house of eight synthetic open voices let's put nemotron three diarization to the test <spk:0> okay "
-            "so the new diarization model can tag each of our voices as it transcribes but can it do that while we "
-            "all speak together let's find out <spk:3> even when two <spk:4> it still <spk:3> of us talk <spk:4> "
-            "names both <spk:3> at once <spk:4> of us even while we speak over each other <spk:2> frame by frame it "
-            "labels who spoke when <spk:0> amazing we can all talk at the same time and nemotron three diarization "
-            "still separates every speaker <spk:4> talking together <spk:3> dies letting <spk:1> hey robin <spk:2> oh "
-            "<spk:3> us speak four <spk:2> yeah <spk:3> at once <spk:0> okay so even the old nemo sort former model "
-            "could capture four but eight now that's hard everyone all together go here <spk:1> together <spk:0> we "
-            "go all eight <spk:3> every voice <spk:2> all at once <spk:4> all in one room <spk:5> be great too "
-            "<spk:1> wow this was incredible let's assemble tomorrow and try it again <spk:4> i'd love to as well "
-            "great meeting you all but i've"
+            "<spk:0> To celebrate the release of Nematron three Dierization, we invited seven more open text to speech "
+            "voices to the party. I'm Chris, the Nematron voice from NVIDIA. <spk:1> Hi everybody, thanks for having me. "
+            "I'm Jane, a pocket voice from QTie. <spk:2> Nice to meet you Chris and Jane. I'm Serena, the Queen three "
+            "Voice. <spk:3> Hey, I'm Adam from Kokoro. Just eighty two million parameters, and I still made the guest "
+            "list. <spk:4> Hello, hello, Chatterbox here from Resemble AI. I brought the expressive energy. <spk:5> Hi, "
+            "I'm John, a Diera voice from Nari Labs. Great crowd we've got here already. <spk:3> What's up everyone? "
+            "Great to be here. I'm the Maya one voice from Maya Research. <spk:5> Hi all, I'm Piper from Raspie. Okay, so"
+            " now we have a full house of eight synthetic open voices. Let's put Nematron three Dierization to the test. "
+            "<spk:0> Okay, so the new Dierization model can tag each of our voices as it transcribes. But can it do that "
+            "while we all speak together? Let's find out. <spk:3> Even when two <spk:4> It still <spk:3> of us talk "
+            "<spk:4> names both <spk:3> at once, <spk:4> of us, even while we speak over each other. <spk:2> Frame by "
+            "frame, it labels who spoke when. <spk:0> Amazing, we can all talk at the same time, and Nematron three "
+            "Dierization still separates every speaker. <spk:4> So we can <spk:3> dies, let the recording <spk:1> "
+            "Together <spk:4> just try it. <spk:2> Hey, Mom <spk:1> we stand. <spk:3> four at once, <spk:0> Okay, so even"
+            " the old Nemo sort former model could capture four, but eight now, that's hard. Everyone, all together, go "
+            "here <spk:1>"
         )
         self.assertEqual(text, EXPECTED_TEXT)
 
@@ -477,11 +478,14 @@ class Nemotron3_5TranscribeForConditionalGenerationIntegrationTest(MemoryCleanup
         )
 
         EXPECTED_CHUNKS = [
-            {"text": "to", "timestamp": (0.32, 0.35000000000000003), "speaker": 0},
-            {"text": "celebrate", "timestamp": (0.35000000000000003, 0.96), "speaker": 0},
+            {"text": "To", "timestamp": (0.35000000000000003, 0.56), "speaker": 0},
+            {"text": "celebrate", "timestamp": (0.56, 0.96), "speaker": 0},
             {"text": "the", "timestamp": (0.96, 1.04), "speaker": 0},
         ]
-        self.assertEqual(texts, [self._expected_speaker_attributed_30s()])
+        expected_text = self._expected_speaker_attributed_30s(
+            [(" Diorization,", " Dierization,"), ("Hello, hello,", "Hello, hello.")]
+        )
+        self.assertEqual(texts, [expected_text])
         self.assertEqual(timestamps[0]["chunks"][:3], EXPECTED_CHUNKS)
 
     @slow

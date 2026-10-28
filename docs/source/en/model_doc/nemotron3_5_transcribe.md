@@ -116,9 +116,9 @@ for turn in processor.extract_speaker_dict(text):
 ```
 
 ```text
-{'Speaker': 0, 'Content': "to celebrate the release of nemotron three diarization we invited ... from nvidia"}
-{'Speaker': 1, 'Content': "hi everybody thanks for having me i'm jane a pocket voice from qti"}
-{'Speaker': 2, 'Content': "nice to meet you chris and jane i'm serena the queen three voice"}
+{'Speaker': 0, 'Content': "To celebrate the release of Nematron three Dierization, we invited ... from NVIDIA."}
+{'Speaker': 1, 'Content': "Hi everybody, thanks for having me. I'm Jane, a pocket voice from QTie."}
+{'Speaker': 2, 'Content': "Nice to meet you Chris and Jane. I'm Serena, the Queen three Voice."}
 ...
 ```
 
