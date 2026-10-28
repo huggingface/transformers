@@ -315,8 +315,14 @@ class CalibratedTemperatureLogitsWarper(LogitsProcessor):
             Lowest temperature.
         hi (`float`):
             Highest temperature.
-        bias, entropy, log_tokens, n_options (`float`, *optional*, defaults to 0):
-            Weights of the features.
+        bias (`float`, *optional*, defaults to 0.0):
+            Constant term of the temperature.
+        entropy (`float`, *optional*, defaults to 0.0):
+            Weight of the normalized entropy of the scores.
+        log_tokens (`float`, *optional*, defaults to 0.0):
+            Weight of the log of the number of input tokens.
+        n_options (`float`, *optional*, defaults to 0.0):
+            Weight of the number of options.
     """
 
     def __init__(
