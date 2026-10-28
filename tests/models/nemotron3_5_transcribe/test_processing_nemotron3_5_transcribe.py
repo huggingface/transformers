@@ -40,7 +40,12 @@ if is_tokenizers_available():
 @require_torch
 class Nemotron3_5TranscribeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Nemotron3_5TranscribeProcessor
-    model_id = "eustlb/tiny-processor-nemotron3_5_transcribe"
+    model_id = "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B"
+
+    @classmethod
+    def _setup_from_pretrained(cls, model_id, **kwargs):
+        # TODO: @eustlb, drop the revision once NVIDIA merges the Transformers files (hub PR #2) into main
+        return super()._setup_from_pretrained(model_id, revision="refs/pr/2", **kwargs)
 
     @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])
@@ -140,7 +145,10 @@ class Nemotron3_5TranscribeWordTimestampAlignmentTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        processor = Nemotron3_5TranscribeProcessor.from_pretrained("eustlb/tiny-processor-nemotron3_5_transcribe")
+        # TODO: @eustlb, drop the revision once NVIDIA merges the Transformers files (hub PR #5) into main
+        processor = Nemotron3_5TranscribeProcessor.from_pretrained(
+            "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B", revision="refs/pr/5"
+        )
         tokenizer = Tokenizer(
             models.BPE(
                 vocab={piece: i for i, piece in enumerate(PIECES[:-1])},
