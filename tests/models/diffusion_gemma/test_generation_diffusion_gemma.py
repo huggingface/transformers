@@ -25,6 +25,7 @@ if is_torch_available():
     from transformers import (
         DiffusionGemmaGenerationConfig,
         DiffusionGemmaGenerationMixin,
+        DiffusionSampler,
         EntropyBoundSampler,
         EntropyBoundSamplerConfig,
         GenerationConfig,
@@ -121,9 +122,12 @@ class DiffusionGemmaGenerationClassesTester(unittest.TestCase):
         canvas_2 = sampler.initialize_canvas(batch_size=1, device=torch_device)
         self.assertFalse((canvas_1 == canvas_2).all())
 
-    def test_eb_sampler_accept_canvas(self):
+    def test_eb_sampler_is_a_diffusion_sampler(self):
+        self.assertIsInstance(_get_eb_sampler(), DiffusionSampler)
+
+    def test_eb_sampler_step(self):
         """
-        Tests that `accept_canvas` is working as expected for `EntropyBoundSampler`.
+        Tests that `step` is working as expected for `EntropyBoundSampler`.
         Please see comments in the test for expected logic and corner cases.
         """
 
@@ -132,7 +136,6 @@ class DiffusionGemmaGenerationClassesTester(unittest.TestCase):
         sampler_high_eb = _get_eb_sampler(entropy_bound=1e-1)
 
         current_canvas = sampler_high_eb.initialize_canvas(batch_size=1, device=torch_device)
-        denoiser_canvas = sampler_high_eb.initialize_canvas(batch_size=1, device=torch_device)
 
         # create logits such that all positions have high entropy, except for a few select cases
         # NOTE: the first token above the threshold is accepted
@@ -142,37 +145,29 @@ class DiffusionGemmaGenerationClassesTester(unittest.TestCase):
         logits[0, 2, 2] = 1.45e1  # token entropy at position 2 = 7.8e-2 -> accepted only in the high eb case
 
         # higher EB -> more accepted tokens
-        accepted_high_eb = sampler_high_eb.accept_canvas(
-            current_canvas=current_canvas, denoiser_canvas=denoiser_canvas, logits=logits, cur_step=None
-        )
-        accepted_low_eb = sampler_low_eb.accept_canvas(
-            current_canvas=current_canvas, denoiser_canvas=denoiser_canvas, logits=logits, cur_step=None
-        )
-        num_accepted_high_eb = (accepted_high_eb == denoiser_canvas).sum().item()
-        num_accepted_low_eb = (accepted_low_eb == denoiser_canvas).sum().item()
+        sampler_high_eb.step(model_output=logits, timestep=None, sample=current_canvas)
+        sampler_low_eb.step(model_output=logits, timestep=None, sample=current_canvas)
+        num_accepted_high_eb = sampler_high_eb.accepted_token_mask.sum().item()
+        num_accepted_low_eb = sampler_low_eb.accepted_token_mask.sum().item()
         self.assertTrue(num_accepted_high_eb == num_accepted_low_eb + 1)
 
-    def test_eb_sampler_renoise_canvas(self):
+    def test_eb_sampler_renoise(self):
         """
-        Tests that `renoise_canvas` is working as expected for `EntropyBoundSampler`.
+        Tests that `renoise` is working as expected for `EntropyBoundSampler`.
         All non-accepted tokens are renoised.
         """
         sampler = _get_eb_sampler(entropy_bound=1e-1)
 
-        # NOTE: `renoise_canvas` is stateful: depends on the outcome of `accept_canvas`, as it renoises all
-        # non-accepted tokens
+        # NOTE: `renoise` is stateful: depends on the outcome of `step`, as it renoises all non-accepted tokens
         current_canvas = sampler.initialize_canvas(batch_size=1, device=torch_device)
-        denoiser_canvas = sampler.initialize_canvas(batch_size=1, device=torch_device)
 
         logits = torch.zeros((1, 256, 10000), device=torch_device)  # [bsz, canvas_len, vocab_size]
         # corresponding token entropy = 0 -> these 9 tokens will definitely get accepted and, therefore, not renoised
         # (but the first token above the threshold is also accepted, so we'll have 9+1 accepted tokens)
         logits[0, :9, 0] = 1e6
 
-        accepted_canvas = sampler.accept_canvas(
-            current_canvas=current_canvas, denoiser_canvas=denoiser_canvas, logits=logits, cur_step=None
-        )
-        renoised_canvas = sampler.renoise_canvas(accepted_canvas=accepted_canvas, cur_step=None)
+        accepted_canvas = sampler.step(model_output=logits, timestep=None, sample=current_canvas)
+        renoised_canvas = sampler.renoise(sample=accepted_canvas, timestep=None)
         num_not_renoised_canvas = (renoised_canvas == accepted_canvas).sum().item()
         self.assertGreaterEqual(num_not_renoised_canvas, 10)  # can be >10 if the same token is sampled in the same pos
         self.assertTrue((accepted_canvas[0, :9] == renoised_canvas[0, :9]).all())

@@ -22,7 +22,7 @@ from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from itertools import accumulate
-from typing import TYPE_CHECKING, Any, Optional, cast
+from typing import TYPE_CHECKING, Any, Optional, Protocol, cast, runtime_checkable
 
 import torch
 import torch.distributed as dist
@@ -369,6 +369,28 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
 GenerateNonBeamOutput = GenerateDecoderOnlyOutput | GenerateEncoderDecoderOutput
 GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderOutput
 GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
+
+
+@runtime_checkable
+class DiffusionSampler(Protocol):
+    """
+    What a diffusion `generate` needs from a sampler. The model owns the denoiser forward, the sampler owns the update
+    rule, so a diffusers scheduler that implements these two methods can drive a transformers backbone.
+
+    ```
+    sample ──► model forward ──► model_output ──► step ──► accepted ──► renoise ──► next sample
+      ▲                                                                                │
+      └────────────────────────────────────────────────────────────────────────────────┘
+    ```
+    """
+
+    def step(self, model_output: torch.Tensor, timestep: torch.Tensor, sample: torch.Tensor) -> torch.Tensor:
+        """Update `sample` from the denoiser's `model_output` at `timestep`."""
+        ...
+
+    def renoise(self, sample: torch.Tensor, timestep: torch.Tensor) -> torch.Tensor:
+        """Noise `sample` back to the level the next denoising step expects."""
+        ...
 
 
 def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorded: "tuple | None") -> tuple:

@@ -196,6 +196,15 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 [[autodoc]] EosTokenCriteria
     - __call__
 
+## Diffusion samplers
+
+A diffusion `generate` delegates the update rule to a sampler. Any object with `step` and `renoise`, such as a
+diffusers scheduler, can be passed as `generate(..., sampler=...)`.
+
+[[autodoc]] DiffusionSampler
+    - step
+    - renoise
+
 ## Streamers
 
 [[autodoc]] TextStreamer

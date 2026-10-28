@@ -95,6 +95,7 @@ else:
         "Scheduler",
     ]
     _import_structure["utils"] = [
+        "DiffusionSampler",
         "GenerationMixin",
         "GenerateBeamDecoderOnlyOutput",
         "GenerateBeamEncoderDecoderOutput",
@@ -194,6 +195,7 @@ if TYPE_CHECKING:
             validate_stopping_criteria,
         )
         from .utils import (
+            DiffusionSampler,
             GenerateBeamDecoderOnlyOutput,
             GenerateBeamEncoderDecoderOutput,
             GenerateDecoderOnlyOutput,
