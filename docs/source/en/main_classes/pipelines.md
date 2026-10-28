@@ -388,19 +388,18 @@ Pipelines available for natural language processing tasks include the following.
 
 ### DecisionPipeline
 
-Questions are set by a request, when creating the pipeline, or per call, and become the ones asked of the next bare
-states:
+Each call asks its questions: a request `{"state": ..., "questions": ...}`, or a state with `questions`:
 
 ```python
 from transformers import pipeline
 
-decide = pipeline(
-    "decision",
-    model="autotrust/GEV-26B-Decide",
-    decision_config="ArthurZ/GEV-26B-Decide",
-    questions={"refund": {"type": "noul", "instructions": "Is a refund requested?"}},
+decide = pipeline("decision", model="autotrust/GEV-26B-Decide")
+decide(
+    {
+        "state": "I was charged twice for my order and want a refund.",
+        "questions": {"refund": {"type": "noul", "instructions": "Is a refund requested?"}},
+    }
 )
-decide("I was charged twice for my order and want a refund.")
 decide("Buy cheap watches now!!!", questions={"spam": {"type": "noul", "instructions": "Is this spam?"}})
 ```
 

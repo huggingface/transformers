@@ -354,11 +354,9 @@ class DecisionTemplate:
             The tokenizer, or the processor of models that see images.
         config ([`DecisionConfig`], *optional*):
             The settings of the decision model.
-        questions (`dict`, *optional*):
-            The questions asked when a call gets a bare state, until a request brings others.
     """
 
-    def __init__(self, processor, config: DecisionConfig | None = None, questions: dict[str, Any] | None = None):
+    def __init__(self, processor, config: DecisionConfig | None = None):
         # A copy with the sentinels as special tokens: they split the text they're in, and requests can't write them
         processor = copy.deepcopy(processor)
         self.tokenizer = getattr(processor, "tokenizer", processor)
@@ -378,9 +376,6 @@ class DecisionTemplate:
         self._parse_questions = functools.lru_cache(maxsize=256)(
             lambda questions: parse_questions(json.loads(questions), self.config)
         )
-        # The questions asked when a call gets a bare state: the ones given here, then those of the last request
-        self.questions = None if questions is None else self.parse_questions(questions)
-        self.question_assets = {}
 
     def parse_questions(self, questions: dict[str, Any]) -> list[Question]:
         """[`parse_questions`], cached: the returned list is shared between calls and must not be modified."""
@@ -391,7 +386,6 @@ class DecisionTemplate:
     ) -> list[DecisionPrompt]:
         """
         Answers a decision `request`: a `{"state": ..., "questions": ..., "assets": ...}` as a dict or a JSON.
-        The question is cached, this way you can pass only a `str` (a state) and it will re-use the question.
 
         `assets` map placeholders to images, as in the System One API: each placeholder in a string of the state, the
         instructions or the criteria is replaced with its image. An image is an asset (`{"type": "image", "format":
@@ -412,21 +406,10 @@ class DecisionTemplate:
             if request_assets is not None:
                 request["assets"] = request_assets
 
-        if isinstance(request, dict) and "questions" in request:
-            if "state" not in request:
-                raise ValueError(
-                    'A request is {"state": ..., "questions": {name: question, ...}}, `state` is missing.'
-                )
-            assets = {**request.get("assets", {}), **(assets or {})}
-            self.questions, state = self.parse_questions(request["questions"]), request["state"]
-            questions_text = json.dumps(request["questions"], ensure_ascii=False)
-            self.question_assets = {name: asset for name, asset in assets.items() if name in questions_text}
-        elif self.questions is None:
-            raise ValueError(
-                'No questions to ask yet: send {"state": ..., "questions": {...}} once, or set `questions` up front.'
-            )
-        else:
-            assets, state = {**self.question_assets, **(assets or {})}, request
+        if not isinstance(request, dict) or "questions" not in request or "state" not in request:
+            raise ValueError('A request is {"state": ..., "questions": {name: question, ...}}, as a dict or its JSON.')
+        assets = {**request.get("assets", {}), **(assets or {})}
+        questions, state = self.parse_questions(request["questions"]), request["state"]
 
         if assets and self.processor is None:
             raise ValueError("Images need a model whose processor handles them.")
@@ -434,7 +417,7 @@ class DecisionTemplate:
         load = functools.cache(lambda name: _load_asset(assets[name]))
         sanitize = self.config.sanitize_control_tokens
         prompts = []
-        for group in [self.questions] if self.one_prompt else [[question] for question in self.questions]:
+        for group in [questions] if self.one_prompt else [[question] for question in questions]:
             if self.decision_template is None:
                 text = self.prompt.render(state=state, question=group[0])
                 content = _split_at_placeholders(text, assets, load) if self.processor is not None else text
