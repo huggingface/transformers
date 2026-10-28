@@ -49,7 +49,8 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
 
 
 # Code readouts of a Qwen3.5 checkpoint, converted with `convert_decider_to_hf.py`: the backbone loads from the
-# original repo. The answers each converted head gives to the request of its `decision_test.json`
+# original repo. The answers each converted head gives to the request of its `decision_test.json`. One per prompt and
+# attention mode: the other fine-tunes (d3-*, Darwin-*, PhysicalEye) share them
 DECIDERS = {
     "ArthurZ/pplx-decider-v1.1-27b": {
         "refund": 0.9993,
@@ -68,60 +69,6 @@ DECIDERS = {
         "spam": 0.0006,
         "tone": {"calm": 0.1407, "angry": 0.8094, "sad": 0.05},
         "urgency": {"0": 0.0007, "1": 0.0026, "2": 0.724, "3": 0.2727},
-    },
-    "ArthurZ/d3-flash": {
-        "refund": 0.9871,
-        "spam": 0.0003,
-        "tone": {"calm": 0.2152, "angry": 0.5176, "sad": 0.2672},
-        "urgency": {"0": 0.0028, "1": 0.0026, "2": 0.6529, "3": 0.3417},
-    },
-    "ArthurZ/d3-mini": {
-        "refund": 0.9793,
-        "spam": 0.0003,
-        "tone": {"calm": 0.3256, "angry": 0.5122, "sad": 0.1623},
-        "urgency": {"0": 0.002, "1": 0.0037, "2": 0.5517, "3": 0.4426},
-    },
-    "ArthurZ/d3-nano": {
-        "refund": 0.9981,
-        "spam": 0.0002,
-        "tone": {"calm": 0.2152, "angry": 0.6842, "sad": 0.1006},
-        "urgency": {"0": 0.0409, "1": 0.0035, "2": 0.3306, "3": 0.625},
-    },
-    "ArthurZ/d3-edge": {
-        "refund": 0.9871,
-        "spam": 0.0101,
-        "tone": {"calm": 0.5088, "angry": 0.2285, "sad": 0.2627},
-        "urgency": {"0": 0.31, "1": 0.0586, "2": 0.2674, "3": 0.364},
-    },
-    "ArthurZ/d3-lite": {
-        "refund": 0.9811,
-        "spam": 0.0141,
-        "tone": {"calm": 0.3707, "angry": 0.3955, "sad": 0.2338},
-        "urgency": {"0": 0.2795, "1": 0.0179, "2": 0.3707, "3": 0.332},
-    },
-    "ArthurZ/Darwin-27B-ZTC": {
-        "refund": 0.9793,
-        "spam": 0.0184,
-        "tone": {"calm": 0.2687, "angry": 0.6847, "sad": 0.0465},
-        "urgency": {"0": 0.0014, "1": 0.0151, "2": 0.9057, "3": 0.0778},
-    },
-    "ArthurZ/Darwin-27B-ZTC-v2": {
-        "refund": 0.9757,
-        "spam": 0.0231,
-        "tone": {"calm": 0.3083, "angry": 0.632, "sad": 0.0597},
-        "urgency": {"0": 0.0025, "1": 0.0104, "2": 0.9457, "3": 0.0414},
-    },
-    "ArthurZ/Darwin-27B-ZTC-v5": {
-        "refund": 0.9569,
-        "spam": 0.0171,
-        "tone": {"calm": 0.451, "angry": 0.451, "sad": 0.098},
-        "urgency": {"0": 0.0019, "1": 0.0205, "2": 0.8876, "3": 0.09},
-    },
-    "ArthurZ/PhysicalEye-Decide-35B": {
-        "refund": 0.9962,
-        "spam": 0.0066,
-        "tone": {"calm": 0.0321, "angry": 0.9119, "sad": 0.056},
-        "urgency": {"0": 0.0074, "1": 0.0098, "2": 0.8503, "3": 0.1324},
     },
 }
 
