@@ -67,7 +67,7 @@ array sampled at 16 kHz.
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
 
-model_id = "nvidia/Nemotron-3.5-Transcribe"
+model_id = "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B"
 samples = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
@@ -88,7 +88,7 @@ transcribed with the speaker-tagged prompt of the [next section](#speaker-attrib
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
 
-model_id = "nvidia/Nemotron-3.5-Transcribe"
+model_id = "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B"
 samples = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
@@ -119,7 +119,7 @@ by a space, and thinking disabled. Put the instruction before the audio and do n
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
 
-model_id = "nvidia/Nemotron-3.5-Transcribe"
+model_id = "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B"
 samples = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
@@ -188,7 +188,7 @@ transcript without speaker tags is aligned as a single speaker. The alignment re
 from transformers import AutoModelForMultimodalLM, AutoProcessor
 
 
-model_id = "nvidia/Nemotron-3.5-Transcribe"
+model_id = "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B"
 samples = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/"
 processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")

@@ -26,7 +26,7 @@ from ...utils.type_validators import interval
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3.5-Transcribe")
+@auto_docstring(checkpoint="nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B")
 @strict
 class Nemotron3_5TranscribeAsrAudioConfig(PreTrainedConfig):
     r"""
@@ -83,7 +83,7 @@ class Nemotron3_5TranscribeAsrAudioConfig(PreTrainedConfig):
             )
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3.5-Transcribe")
+@auto_docstring(checkpoint="nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B")
 @strict
 class Nemotron3_5TranscribeWordTimestampConfig(PreTrainedConfig):
     r"""
@@ -147,7 +147,7 @@ class Nemotron3_5TranscribeWordTimestampConfig(PreTrainedConfig):
             )
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3.5-Transcribe")
+@auto_docstring(checkpoint="nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B")
 @strict
 class Nemotron3_5TranscribeAudioConfig(PreTrainedConfig):
     r"""
@@ -218,7 +218,7 @@ class Nemotron3_5TranscribeAudioConfig(PreTrainedConfig):
             )
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3.5-Transcribe")
+@auto_docstring(checkpoint="nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B")
 @strict
 class Nemotron3_5TranscribeConfig(PreTrainedConfig):
     r"""

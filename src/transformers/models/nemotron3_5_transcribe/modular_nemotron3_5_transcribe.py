@@ -52,7 +52,7 @@ from ..nemotron3_diarization.modeling_nemotron3_diarization import (
 from .generation_nemotron3_5_transcribe import Nemotron3_5TranscribeGenerateOutput
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3.5-Transcribe")
+@auto_docstring(checkpoint="nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B")
 @strict
 class Nemotron3_5TranscribeAsrAudioConfig(Nemotron3DiarizationAudioConfig):
     r"""
@@ -89,7 +89,7 @@ class Nemotron3_5TranscribeAsrAudioConfig(Nemotron3DiarizationAudioConfig):
         super().__post_init__(**kwargs)
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3.5-Transcribe")
+@auto_docstring(checkpoint="nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B")
 @strict
 class Nemotron3_5TranscribeWordTimestampConfig(PreTrainedConfig):
     r"""
@@ -153,7 +153,7 @@ class Nemotron3_5TranscribeWordTimestampConfig(PreTrainedConfig):
             )
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3.5-Transcribe")
+@auto_docstring(checkpoint="nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B")
 @strict
 class Nemotron3_5TranscribeAudioConfig(PreTrainedConfig):
     r"""
@@ -224,7 +224,7 @@ class Nemotron3_5TranscribeAudioConfig(PreTrainedConfig):
             )
 
 
-@auto_docstring(checkpoint="nvidia/Nemotron-3.5-Transcribe")
+@auto_docstring(checkpoint="nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B")
 @strict
 class Nemotron3_5TranscribeConfig(PreTrainedConfig):
     r"""
