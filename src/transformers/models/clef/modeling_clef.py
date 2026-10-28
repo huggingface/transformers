@@ -26,9 +26,9 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...decision import DecisionPreTrainedModel, Question
+from ...decision import Question
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ..auto import AutoModel
@@ -366,7 +366,7 @@ class ClefScorer(nn.Module):
 
 
 @auto_docstring
-class ClefPreTrainedModel(DecisionPreTrainedModel):
+class ClefPreTrainedModel(PreTrainedModel):
     config: ClefConfig
     base_model_prefix = "model"
     _supports_sdpa = True
