@@ -86,16 +86,18 @@ class DecisionHeadTesterMixin:
         torch.manual_seed(0)
         model = self.all_model_classes[0](self.config).eval()
         with tempfile.TemporaryDirectory() as tmp:
-            # The weights the backbone has (its model, and the `lm_head` of the heads reading it) are in its file
-            backbone = self.backbone_class(self.config.text_config)
-            backbone_keys = backbone.state_dict().keys()
-            backbone.load_state_dict(
-                {key: value for key, value in model.state_dict().items() if key in backbone_keys}, strict=False
-            )
+            # The weights the backbone has (its model, and the `lm_head` of the heads reading it) are in its file, under
+            # its names: `model.layers.0...` for a `ForCausalLM`, `layers.0...` for a base model
+            state_dict, backbone = model.state_dict(), self.backbone_class(self.config.text_config)
+            names = {
+                key: next((name for name in (key, f"model.{key}") if name in state_dict), None)
+                for key in backbone.state_dict()
+            }
+            backbone.load_state_dict({key: state_dict[name] for key, name in names.items() if name}, strict=False)
             backbone.save_pretrained(tmp)
             for component in (self.tokenizer, self.decision_config):
                 component.save_pretrained(tmp)
-            head = {key: value for key, value in model.state_dict().items() if key not in backbone_keys}
+            head = {key: value for key, value in state_dict.items() if key not in names.values()}
             save_file(head, f"{tmp}/head.safetensors", metadata={"format": "pt"})
             index = dict.fromkeys(backbone.state_dict(), "model.safetensors") | dict.fromkeys(head, "head.safetensors")
             Path(tmp, "decision.safetensors.index.json").write_text(
