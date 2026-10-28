@@ -27,9 +27,9 @@ class VonConfig(PreTrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import VonConfig, VonForDecision
+    >>> from transformers import VonConfig, VonDecisionHead
 
-    >>> head = VonForDecision(VonConfig(hidden_size=1024))
+    >>> head = VonDecisionHead(VonConfig(hidden_size=1024))
     ```"""
 
     model_type = "von"

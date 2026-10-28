@@ -16,6 +16,7 @@ import math
 import torch
 from torch import nn
 
+from ...decision.modeling_utils import ForDecision
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from .configuration_kev import KevConfig
@@ -33,7 +34,7 @@ class KevPreTrainedModel(PreTrainedModel):
     one after itself.
     """
 )
-class KevForDecision(KevPreTrainedModel):
+class KevDecisionHead(KevPreTrainedModel):
     def __init__(self, config: KevConfig):
         super().__init__(config)
         self.key = nn.Linear(config.hidden_size, config.head_dim)
@@ -57,4 +58,8 @@ class KevForDecision(KevPreTrainedModel):
         return scores / math.sqrt(self.config.head_dim)
 
 
-__all__ = ["KevForDecision", "KevPreTrainedModel"]
+class KevForDecision(ForDecision):
+    """Kev: the model of a repo and its [`KevDecisionHead`]."""
+
+
+__all__ = ["KevDecisionHead", "KevForDecision", "KevPreTrainedModel"]
