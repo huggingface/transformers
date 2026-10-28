@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from functools import partial
 
 import torch
 import torch.nn.functional as F
@@ -26,14 +25,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import DynamicCache, LinearAttentionLayer
-from ...integrations import use_kernel_forward_from_hub
-from ...integrations.mlstm import (
-    mlstm_chunkwise_native_autograd,
-    mlstm_recurrent_sequence_native,
-    mlstm_recurrent_step_native,
-    soft_cap,
-    wrap_chunkwise_arbitrary_sequence_length,
-)
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
@@ -133,9 +125,125 @@ class BolmoMultiHeadLayerNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype).flatten(2)
 
 
+def soft_cap(values: torch.Tensor, cap_value: float | None = None) -> torch.Tensor:
+    """Smoothly bounds `values` to `(-cap_value, cap_value)` with a scaled tanh, as Gemma2 does for its logits."""
+    if cap_value is None:
+        return values
+    return cap_value * torch.tanh(values / cap_value)
+
+
+def segment_sum(values: torch.Tensor) -> torch.Tensor:
+    """
+    `[..., t, j] = values[..., j + 1] + ... + values[..., t]` for `j <= t`, `-inf` above the diagonal. Summed directly
+    rather than as a difference of cumsums, which loses precision next to large values. Same as Mamba2's `segment_sum`.
+    """
+    length = values.shape[-1]
+    causal = torch.ones(length, length, dtype=torch.bool, device=values.device).tril()
+    values = values[..., None].expand(*values.shape, length).masked_fill(causal.mT, 0.0)  # [s, j] = values[s] if s > j
+    return values.cumsum(-2).masked_fill(~causal, -float("inf"))
+
+
+@use_kernel_forward_from_hub("mlstm")
+def eager_mlstm_forward(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    input_gate: torch.Tensor,
+    forget_gate: torch.Tensor,
+    state: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None,
+    chunk_size: int = 64,
+    eps: float = 1e-6,
+) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    """
+    The [mLSTM](https://huggingface.co/papers/2405.04517): linear attention with a matrix memory `C`, a
+    normalizer `n`, an exponential input gate `i` and a sigmoid forget gate `f`. The gates act as exponentials, so
+    their logs are kept relative to a running maximum `m`. One step of the recurrence is:
+
+        m_t = max(log f_t + m_{t-1}, i_t)                      with log f_t = logsigmoid(f_t)
+        C_t = exp(log f_t + m_{t-1} - m_t) C_{t-1} + exp(i_t - m_t) k_t v_t^T    (n_t: the same with k_t)
+        h_t = q_t C_t / (max(|q_t n_t|, exp(-m_t)) + eps)      with q_t scaled by qk_head_dim ** -0.5
+
+    It runs chunk by chunk. Unrolled inside a chunk, key `j` reaches query `t >= j` with the log-weight
+    `D[t, j] = i_j + log f_{j+1} + ... + log f_t`, and the state entering the chunk reaches it with
+    `m_prev + log f_1 + ... + log f_t`. A chunk is therefore causal attention weighted by `exp(D - m_t)` plus a read
+    of the carried state. Seen from the next chunk, the whole chunk is one step of the recurrence above. Decoding is a
+    chunk of 1. The last chunk is padded with steps that neither write (`i = -inf`) nor forget (`log f = 0`), so the
+    returned state is exact.
+
+    Args:
+        query, key (`torch.Tensor` of shape `(batch_size, num_heads, seq_len, qk_head_dim)`)
+        value (`torch.Tensor` of shape `(batch_size, num_heads, seq_len, v_head_dim)`)
+        input_gate, forget_gate (`torch.Tensor` of shape `(batch_size, num_heads, seq_len)`):
+            Gate pre-activations `i` and `f`.
+        state (`tuple` of `(C, n, m)`, *optional*):
+            Shapes `(batch_size, num_heads, qk_head_dim, v_head_dim)`, `(batch_size, num_heads, qk_head_dim)` and
+            `(batch_size, num_heads, 1)`. Zeros if `None`.
+        chunk_size (`int`, *optional*, defaults to 64):
+            Length of the chunks processed in parallel.
+        eps (`float`, *optional*, defaults to 1e-6):
+            Added to the denominator.
+
+    Returns:
+        The output `h`, shaped and typed like `value`, and the last `(C, n, m)` state in float32.
+    """
+    batch_size, num_heads, seq_len, qk_head_dim = query.shape
+    output_dtype = value.dtype
+    chunk_size = min(chunk_size, seq_len)
+    padding = -seq_len % chunk_size
+
+    # (batch, heads, seq_len, ...) -> (batch, heads, num_chunks, chunk_size, ...) in fp32, last chunk padded
+    query, key, value = (
+        F.pad(x.float(), (0, 0, 0, padding)).unflatten(2, (-1, chunk_size)) for x in (query, key, value)
+    )
+    input_gate = F.pad(input_gate.float(), (0, padding), value=-float("inf")).unflatten(2, (-1, chunk_size))
+    log_forget = F.pad(F.logsigmoid(forget_gate.float()), (0, padding)).unflatten(2, (-1, chunk_size))
+    query = query * qk_head_dim**-0.5
+
+    # D[t, j]; a segment sum, so a -100_000 reset gate does not round away the decays after it
+    log_weights = segment_sum(log_forget) + input_gate[..., None, :]
+    state_decay = log_forget.cumsum(-1)  # log f_1 + ... + log f_t
+
+    # A chunk as one step: it forgets by its total decay and writes its keys weighted as seen from its last position
+    chunk_forget = state_decay[..., -1:]
+    chunk_input = log_weights[..., -1, :].max(-1, keepdim=True).values
+    key_weights = torch.exp(log_weights[..., -1, :, None] - chunk_input[..., None]) * key
+    chunk_memory, chunk_normalizer = key_weights.mT @ value, key_weights.sum(-2)
+
+    if state is None:
+        memory = query.new_zeros(batch_size, num_heads, qk_head_dim, value.shape[-1])
+        normalizer = query.new_zeros(batch_size, num_heads, qk_head_dim)
+        max_log_gate = query.new_zeros(batch_size, num_heads, 1)
+    else:
+        memory, normalizer, max_log_gate = (state_tensor.float() for state_tensor in state)
+
+    chunk_start_states = []
+    for chunk in range(query.shape[2]):
+        chunk_start_states.append((memory, normalizer, max_log_gate))
+        new_max_log_gate = torch.maximum(chunk_forget[:, :, chunk] + max_log_gate, chunk_input[:, :, chunk])
+        forget_weight = torch.exp(chunk_forget[:, :, chunk] + max_log_gate - new_max_log_gate)
+        input_weight = torch.exp(chunk_input[:, :, chunk] - new_max_log_gate)
+        memory = forget_weight[..., None] * memory + input_weight[..., None] * chunk_memory[:, :, chunk]
+        normalizer = forget_weight * normalizer + input_weight * chunk_normalizer[:, :, chunk]
+        max_log_gate = new_max_log_gate
+    memories, normalizers, max_log_gates = (torch.stack(states, dim=2) for states in zip(*chunk_start_states))
+
+    # Each query reads the state entering its chunk and the keys before it in the chunk, all relative to m_t
+    state_log_weights = state_decay + max_log_gates
+    max_log_weights = torch.maximum(state_log_weights, log_weights.max(-1).values)  # m_t
+    state_weights = torch.exp(state_log_weights - max_log_weights)[..., None]
+    scores = (query @ key.mT) * torch.exp(log_weights - max_log_weights[..., None])
+    numerator = state_weights * (query @ memories) + scores @ value
+    denominator = state_weights * (query @ normalizers[..., None]) + scores.sum(-1, keepdim=True)
+    output = numerator / (torch.maximum(denominator.abs(), torch.exp(-max_log_weights)[..., None]) + eps)
+
+    output = output.flatten(2, 3)[:, :, :seq_len]
+    return output.to(output_dtype), (memory, normalizer, max_log_gate)
+
+
+@use_kernelized_func(eager_mlstm_forward)
 class BolmoMLSTMLayer(nn.Module):
     """
-    xLSTM-large mLSTM layer (`weight_mode="single"`) on the native PyTorch kernels. Every released checkpoint
+    xLSTM-large mLSTM layer (`weight_mode="single"`). Every released checkpoint
     (Bolmo-1B, Bolmo-7B and their Stage1) uses the xLSTM-large defaults, hence the constants: gate soft cap 15,
     `qk_dim = hidden_size // 2`, `v_dim = hidden_size`.
     """
@@ -170,27 +278,13 @@ class BolmoMLSTMLayer(nn.Module):
         fgate = soft_cap(self.fgate_preact(hidden_states), self.gate_soft_cap)
         if sequence_start is not None:
             # closing the forget gate on the first real byte drops the left padding from the state. Not
-            # `finfo.min`: the chunkwise kernel cumsums log forget gates, so `min + x - min` would cancel.
+            # `finfo.min`: chunkwise kernels cumsum log forget gates, so `min + x - min` would cancel.
             # -100_000 is the original implementation's value.
             is_start = torch.arange(seq_len, device=fgate.device) == sequence_start[:, None]
             fgate = fgate.masked_fill(is_start[..., None], -100_000)
         fgate = fgate.transpose(1, 2)
 
-        c_initial, n_initial, m_initial = state if state is not None else (None, None, None)
-        mlstm_output, state = wrap_chunkwise_arbitrary_sequence_length(
-            mlstm_chunkwise_kernel=mlstm_chunkwise_native_autograd,
-            mlstm_sequence_kernel=partial(mlstm_recurrent_sequence_native, dtype_state=torch.float32),
-            mlstm_step_kernel=partial(mlstm_recurrent_step_native, dtype_state=torch.float32),
-            query=query,
-            key=key,
-            value=value,
-            fgate=fgate,
-            igate=igate,
-            c_initial=c_initial,
-            n_initial=n_initial,
-            m_initial=m_initial,
-            autocast_kernel_dtype=torch.float32,
-        )
+        mlstm_output, state = eager_mlstm_forward(query, key, value, input_gate=igate, forget_gate=fgate, state=state)
         mlstm_output = self.multihead_norm(mlstm_output.transpose(1, 2))
         output = self.out_proj(torch.sigmoid(self.ogate_preact(hidden_states)) * mlstm_output)
         return output, state

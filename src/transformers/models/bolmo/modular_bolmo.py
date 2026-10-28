@@ -14,7 +14,6 @@
 
 import json
 import os
-from functools import partial
 
 import torch
 import torch.nn.functional as F
@@ -26,13 +25,7 @@ from torch import nn
 from ...cache_utils import DynamicCache, LinearAttentionLayer
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...convert_slow_tokenizer import bytes_to_unicode
-from ...integrations.mlstm import (
-    mlstm_chunkwise_native_autograd,
-    mlstm_recurrent_sequence_native,
-    mlstm_recurrent_step_native,
-    soft_cap,
-    wrap_chunkwise_arbitrary_sequence_length,
-)
+from ...integrations import use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
@@ -45,6 +38,7 @@ from ..auto import AutoConfig, AutoModel
 from ..olmo3.configuration_olmo3 import Olmo3Config
 from ..olmo3.modeling_olmo3 import Olmo3RMSNorm
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
+from ..xlstm.modeling_xlstm import eager_mlstm_forward, soft_cap
 from .generation_bolmo import BolmoGenerationMixin
 
 
@@ -175,9 +169,10 @@ class BolmoMultiHeadLayerNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype).flatten(2)
 
 
+@use_kernelized_func(eager_mlstm_forward)
 class BolmoMLSTMLayer(nn.Module):
     """
-    xLSTM-large mLSTM layer (`weight_mode="single"`) on the native PyTorch kernels. Every released checkpoint
+    xLSTM-large mLSTM layer (`weight_mode="single"`). Every released checkpoint
     (Bolmo-1B, Bolmo-7B and their Stage1) uses the xLSTM-large defaults, hence the constants: gate soft cap 15,
     `qk_dim = hidden_size // 2`, `v_dim = hidden_size`.
     """
@@ -212,27 +207,13 @@ class BolmoMLSTMLayer(nn.Module):
         fgate = soft_cap(self.fgate_preact(hidden_states), self.gate_soft_cap)
         if sequence_start is not None:
             # closing the forget gate on the first real byte drops the left padding from the state. Not
-            # `finfo.min`: the chunkwise kernel cumsums log forget gates, so `min + x - min` would cancel.
+            # `finfo.min`: chunkwise kernels cumsum log forget gates, so `min + x - min` would cancel.
             # -100_000 is the original implementation's value.
             is_start = torch.arange(seq_len, device=fgate.device) == sequence_start[:, None]
             fgate = fgate.masked_fill(is_start[..., None], -100_000)
         fgate = fgate.transpose(1, 2)
 
-        c_initial, n_initial, m_initial = state if state is not None else (None, None, None)
-        mlstm_output, state = wrap_chunkwise_arbitrary_sequence_length(
-            mlstm_chunkwise_kernel=mlstm_chunkwise_native_autograd,
-            mlstm_sequence_kernel=partial(mlstm_recurrent_sequence_native, dtype_state=torch.float32),
-            mlstm_step_kernel=partial(mlstm_recurrent_step_native, dtype_state=torch.float32),
-            query=query,
-            key=key,
-            value=value,
-            fgate=fgate,
-            igate=igate,
-            c_initial=c_initial,
-            n_initial=n_initial,
-            m_initial=m_initial,
-            autocast_kernel_dtype=torch.float32,
-        )
+        mlstm_output, state = eager_mlstm_forward(query, key, value, input_gate=igate, forget_gate=fgate, state=state)
         mlstm_output = self.multihead_norm(mlstm_output.transpose(1, 2))
         output = self.out_proj(torch.sigmoid(self.ogate_preact(hidden_states)) * mlstm_output)
         return output, state
@@ -468,9 +449,7 @@ class BolmoModel(BolmoPreTrainedModel):
             past_key_values = BolmoCache(config=self.config)
 
         if past_key_values is not None and past_key_values.get_seq_length() > 0:
-            hidden_states, global_outputs = self._decode_step(
-                input_ids, expanded_input_ids, past_key_values, **kwargs
-            )
+            hidden_states, global_outputs = self._decode_step(input_ids, expanded_input_ids, past_key_values, **kwargs)
         else:
             hidden_states, global_outputs = self._prefill(
                 input_ids, expanded_input_ids, attention_mask, boundary_mask, past_key_values, **kwargs

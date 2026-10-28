@@ -16,10 +16,12 @@
 from dataclasses import dataclass
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
 from ...generation import GenerationMixin
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -29,150 +31,137 @@ from ...utils.output_capturing import capture_outputs
 from .configuration_xlstm import xLSTMConfig
 
 
+def soft_cap(values: torch.Tensor, cap_value: float | None = None) -> torch.Tensor:
+    """Smoothly bounds `values` to `(-cap_value, cap_value)` with a scaled tanh, as Gemma2 does for its logits."""
+    if cap_value is None:
+        return values
+    return cap_value * torch.tanh(values / cap_value)
+
+
+def segment_sum(values: torch.Tensor) -> torch.Tensor:
+    """
+    `[..., t, j] = values[..., j + 1] + ... + values[..., t]` for `j <= t`, `-inf` above the diagonal. Summed directly
+    rather than as a difference of cumsums, which loses precision next to large values. Same as Mamba2's `segment_sum`.
+    """
+    length = values.shape[-1]
+    causal = torch.ones(length, length, dtype=torch.bool, device=values.device).tril()
+    values = values[..., None].expand(*values.shape, length).masked_fill(causal.mT, 0.0)  # [s, j] = values[s] if s > j
+    return values.cumsum(-2).masked_fill(~causal, -float("inf"))
+
+
+@use_kernel_forward_from_hub("mlstm")
+def eager_mlstm_forward(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    input_gate: torch.Tensor,
+    forget_gate: torch.Tensor,
+    state: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None,
+    chunk_size: int = 64,
+    eps: float = 1e-6,
+) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    """
+    The [mLSTM](https://huggingface.co/papers/2405.04517): linear attention with a matrix memory `C`, a
+    normalizer `n`, an exponential input gate `i` and a sigmoid forget gate `f`. The gates act as exponentials, so
+    their logs are kept relative to a running maximum `m`. One step of the recurrence is:
+
+        m_t = max(log f_t + m_{t-1}, i_t)                      with log f_t = logsigmoid(f_t)
+        C_t = exp(log f_t + m_{t-1} - m_t) C_{t-1} + exp(i_t - m_t) k_t v_t^T    (n_t: the same with k_t)
+        h_t = q_t C_t / (max(|q_t n_t|, exp(-m_t)) + eps)      with q_t scaled by qk_head_dim ** -0.5
+
+    It runs chunk by chunk. Unrolled inside a chunk, key `j` reaches query `t >= j` with the log-weight
+    `D[t, j] = i_j + log f_{j+1} + ... + log f_t`, and the state entering the chunk reaches it with
+    `m_prev + log f_1 + ... + log f_t`. A chunk is therefore causal attention weighted by `exp(D - m_t)` plus a read
+    of the carried state. Seen from the next chunk, the whole chunk is one step of the recurrence above. Decoding is a
+    chunk of 1. The last chunk is padded with steps that neither write (`i = -inf`) nor forget (`log f = 0`), so the
+    returned state is exact.
+
+    Args:
+        query, key (`torch.Tensor` of shape `(batch_size, num_heads, seq_len, qk_head_dim)`)
+        value (`torch.Tensor` of shape `(batch_size, num_heads, seq_len, v_head_dim)`)
+        input_gate, forget_gate (`torch.Tensor` of shape `(batch_size, num_heads, seq_len)`):
+            Gate pre-activations `i` and `f`.
+        state (`tuple` of `(C, n, m)`, *optional*):
+            Shapes `(batch_size, num_heads, qk_head_dim, v_head_dim)`, `(batch_size, num_heads, qk_head_dim)` and
+            `(batch_size, num_heads, 1)`. Zeros if `None`.
+        chunk_size (`int`, *optional*, defaults to 64):
+            Length of the chunks processed in parallel.
+        eps (`float`, *optional*, defaults to 1e-6):
+            Added to the denominator.
+
+    Returns:
+        The output `h`, shaped and typed like `value`, and the last `(C, n, m)` state in float32.
+    """
+    batch_size, num_heads, seq_len, qk_head_dim = query.shape
+    output_dtype = value.dtype
+    chunk_size = min(chunk_size, seq_len)
+    padding = -seq_len % chunk_size
+
+    # (batch, heads, seq_len, ...) -> (batch, heads, num_chunks, chunk_size, ...) in fp32, last chunk padded
+    query, key, value = (
+        F.pad(x.float(), (0, 0, 0, padding)).unflatten(2, (-1, chunk_size)) for x in (query, key, value)
+    )
+    input_gate = F.pad(input_gate.float(), (0, padding), value=-float("inf")).unflatten(2, (-1, chunk_size))
+    log_forget = F.pad(F.logsigmoid(forget_gate.float()), (0, padding)).unflatten(2, (-1, chunk_size))
+    query = query * qk_head_dim**-0.5
+
+    # D[t, j]; a segment sum, so a -100_000 reset gate does not round away the decays after it
+    log_weights = segment_sum(log_forget) + input_gate[..., None, :]
+    state_decay = log_forget.cumsum(-1)  # log f_1 + ... + log f_t
+
+    # A chunk as one step: it forgets by its total decay and writes its keys weighted as seen from its last position
+    chunk_forget = state_decay[..., -1:]
+    chunk_input = log_weights[..., -1, :].max(-1, keepdim=True).values
+    key_weights = torch.exp(log_weights[..., -1, :, None] - chunk_input[..., None]) * key
+    chunk_memory, chunk_normalizer = key_weights.mT @ value, key_weights.sum(-2)
+
+    if state is None:
+        memory = query.new_zeros(batch_size, num_heads, qk_head_dim, value.shape[-1])
+        normalizer = query.new_zeros(batch_size, num_heads, qk_head_dim)
+        max_log_gate = query.new_zeros(batch_size, num_heads, 1)
+    else:
+        memory, normalizer, max_log_gate = (state_tensor.float() for state_tensor in state)
+
+    chunk_start_states = []
+    for chunk in range(query.shape[2]):
+        chunk_start_states.append((memory, normalizer, max_log_gate))
+        new_max_log_gate = torch.maximum(chunk_forget[:, :, chunk] + max_log_gate, chunk_input[:, :, chunk])
+        forget_weight = torch.exp(chunk_forget[:, :, chunk] + max_log_gate - new_max_log_gate)
+        input_weight = torch.exp(chunk_input[:, :, chunk] - new_max_log_gate)
+        memory = forget_weight[..., None] * memory + input_weight[..., None] * chunk_memory[:, :, chunk]
+        normalizer = forget_weight * normalizer + input_weight * chunk_normalizer[:, :, chunk]
+        max_log_gate = new_max_log_gate
+    memories, normalizers, max_log_gates = (torch.stack(states, dim=2) for states in zip(*chunk_start_states))
+
+    # Each query reads the state entering its chunk and the keys before it in the chunk, all relative to m_t
+    state_log_weights = state_decay + max_log_gates
+    max_log_weights = torch.maximum(state_log_weights, log_weights.max(-1).values)  # m_t
+    state_weights = torch.exp(state_log_weights - max_log_weights)[..., None]
+    scores = (query @ key.mT) * torch.exp(log_weights - max_log_weights[..., None])
+    numerator = state_weights * (query @ memories) + scores @ value
+    denominator = state_weights * (query @ normalizers[..., None]) + scores.sum(-1, keepdim=True)
+    output = numerator / (torch.maximum(denominator.abs(), torch.exp(-max_log_weights)[..., None]) + eps)
+
+    output = output.flatten(2, 3)[:, :, :seq_len]
+    return output.to(output_dtype), (memory, normalizer, max_log_gate)
+
+
 if is_xlstm_available():
     from xlstm.xlstm_large.model import RMSNorm as xLSTMRMSNorm
-    from xlstm.xlstm_large.model import mLSTMBlock, mLSTMStateType, soft_cap
+    from xlstm.xlstm_large.model import mLSTMBlock, mLSTMStateType
 
-    external_xlstm = True
+external_xlstm = is_xlstm_available()
+
+if external_xlstm:
 
     class xLSTMBlock(GradientCheckpointingLayer, mLSTMBlock):
         pass
 
 else:
-    from functools import partial
-    from typing import Literal
-
     from .configuration_xlstm import round_up_to_next_multiple_of
 
     mLSTMLayerStateType = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
     mLSTMStateType = dict[int, mLSTMLayerStateType]
-
-    external_xlstm = False
-
-    from ...integrations.mlstm import (
-        mlstm_chunkwise_native_autograd,
-        mlstm_recurrent_sequence_native,
-        mlstm_recurrent_step_native,
-        soft_cap,
-        wrap_chunkwise_arbitrary_sequence_length,
-        wrap_chunkwise_pad_zeros,
-    )
-
-    class xLSTMBackend(nn.Module):
-        """xLSTM Backend Module for PyTorch.
-
-        This module wraps the xLSTM kernels and provides a high-level interface for training and inference.
-        """
-
-        def __init__(self, config: xLSTMConfig):
-            super().__init__()
-            self.config = config
-            self.chunkwise_kernel_fn = mlstm_chunkwise_native_autograd
-            self.sequence_kernel_fn = mlstm_recurrent_sequence_native
-            self.step_kernel_fn = mlstm_recurrent_step_native
-
-            self._inference_fn = partial(
-                wrap_chunkwise_arbitrary_sequence_length,
-                mlstm_chunkwise_kernel=self.chunkwise_kernel_fn,
-                mlstm_sequence_kernel=partial(
-                    self.sequence_kernel_fn,
-                    dtype_state=getattr(torch, config.inference_state_dtype),
-                ),
-                mlstm_step_kernel=partial(
-                    self.step_kernel_fn,
-                    dtype_state=getattr(torch, config.inference_state_dtype),
-                ),
-                chunk_size=config.chunk_size,
-                eps=config.eps,
-                autocast_kernel_dtype=getattr(torch, config.autocast_kernel_dtype),
-                return_last_states=True,
-            )
-
-            train_kernel_fn = partial(
-                self.chunkwise_kernel_fn,
-                autocast_kernel_dtype=getattr(torch, config.autocast_kernel_dtype),
-                eps=config.eps,
-                chunk_size=config.chunk_size,
-            )
-            if "with_padding" in config.mode:
-                train_kernel_fn = partial(wrap_chunkwise_pad_zeros, mlstm_chunkwise_kernel=train_kernel_fn)
-            self._train_fn = train_kernel_fn
-
-        def forward(
-            self,
-            query: torch.Tensor,
-            key: torch.Tensor,
-            value: torch.Tensor,
-            igate: torch.Tensor,
-            fgate: torch.Tensor,
-            c_initial: torch.Tensor | None = None,
-            n_initial: torch.Tensor | None = None,
-            m_initial: torch.Tensor | None = None,
-            return_last_states: bool | None = None,
-            mode: Literal["train", "inference"] | None = None,
-        ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
-            """Forward pass of the mLSTM backend.
-
-            Depending on the configured mode, this method will call the appropriate kernel function.
-
-            Args:
-                query: The query tensor of shape (batch_size, nh, sequence_length, dhqk).
-                key: The key tensor of shape (batch_size, nh, sequence_length, dhqk).
-                value: The value tensor of shape (batch_size, nh, sequence_length, dhhv).
-                igate: The input gate preactivation tensor of shape (batch_size, nh, sequence_length).
-                fgate: The forget gate preactivation tensor of shape (batch_size, nh, sequence_length).
-                c_initial: The initial cell state tensor of shape (batch_size, nh, dhqk, dhhv).
-                                                    Defaults to None.
-                n_initial: The initial hidden state tensor of shape (batch_size, nh, dhqk). Defaults to None.
-                m_initial: The initial memory tensor of shape (batch_size, nh, 1). Defaults to None.
-                return_last_states: Whether to return the last states of the sequence. Defaults to None.
-                                                    If None, the value from the config is used.
-
-            Returns:
-                hidden states of shape (batch_size, nh, sequence_length, dhhv)
-                hidden states and last states the last states are the cell state cstate (batch_size, nh, dhqk, dhhv),
-                the normalizer state nstate (batch_size, nh, dhqk), and the max state mstate (batch_size, nh, 1)
-            """
-            if mode is None:
-                mode = self.config.mode
-
-            if "train" in mode:
-                if return_last_states is None:
-                    return_last_states = self.config.return_last_states
-
-                if self.config.mode == "train_with_padding":
-                    if return_last_states:
-                        raise ValueError("return_last_states=True is not supported with train_with_padding mode.")
-
-                return self._train_fn(
-                    query=query,
-                    key=key,
-                    value=value,
-                    igate=igate,
-                    fgate=fgate,
-                    c_initial=c_initial,
-                    n_initial=n_initial,
-                    m_initial=m_initial,
-                    return_last_states=return_last_states,
-                )
-
-            elif "inference" in mode:
-                # inference mode always returns the last states
-                return self._inference_fn(
-                    query=query,
-                    key=key,
-                    value=value,
-                    igate=igate,
-                    fgate=fgate,
-                    c_initial=c_initial,
-                    n_initial=n_initial,
-                    m_initial=m_initial,
-                )
-            else:
-                raise ValueError(f"Unknown mode: {self.config.mode}")
-
-        def extra_repr(self) -> str:
-            return f"{self.config}"
 
     class xLSTMRMSNorm(nn.Module):
         """Root mean square normalization layer implementation similar
@@ -360,6 +349,7 @@ else:
             y = self.proj_down(x)
             return y
 
+    @use_kernelized_func(eager_mlstm_forward)
     class xLSTMLayer(nn.Module):
         def __init__(self, config: xLSTMConfig):
             super().__init__()
@@ -413,7 +403,6 @@ else:
                 )
 
             self.ogate_act_fn = nn.Sigmoid()
-            self.mlstm_backend = xLSTMBackend(config=self.config)
 
             self.multihead_norm = xLSTMMultiHeadLayerNorm(
                 num_heads=self.config.num_heads,
@@ -463,20 +452,15 @@ else:
             value = value.reshape(batch_size, sequence_length, self.config.num_heads, -1).transpose(1, 2)
             i_preact = i_preact.transpose(1, 2)
             f_preact = f_preact.transpose(1, 2)
-            if state is None:
-                c_initial, n_initial, m_initial = None, None, None
-            else:
-                c_initial, n_initial, m_initial = state
-
-            h, state = self.mlstm_backend(
-                query=query,
-                key=key,
-                value=value,
-                igate=i_preact,
-                fgate=f_preact,
-                c_initial=c_initial,
-                n_initial=n_initial,
-                m_initial=m_initial,
+            h, state = eager_mlstm_forward(
+                query,
+                key,
+                value,
+                input_gate=i_preact,
+                forget_gate=f_preact,
+                state=state,
+                chunk_size=self.config.chunk_size,
+                eps=self.config.eps,
             )
             expected_h_shape = (
                 batch_size,
