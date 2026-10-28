@@ -117,8 +117,12 @@ class NVFP4Linear(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
         self.activation_format = "bf16" if weight_only else None
-        weight = torch.empty(out_features, in_features // 2, dtype=torch.int8)
-        self.weight = _parameter(weight if pre_quantized else torch.empty(out_features, in_features))
+        weight = (
+            torch.empty(out_features, in_features // 2, dtype=torch.int8)
+            if pre_quantized
+            else torch.empty(out_features, in_features)
+        )
+        self.weight = _parameter(weight)
         scale_shape = (out_features, in_features // GROUP_SIZE)
         self.weight_scale_inv = _parameter(torch.empty(scale_shape, dtype=torch.float8_e4m3fn))
         self.weight_global_scale = _parameter(torch.ones((), dtype=torch.float32))
@@ -203,8 +207,12 @@ class NVFP4Experts(nn.Module):
 
     def _register_projection(self, proj: str, rows: int, cols: int, pre_quantized: bool, weight_only: bool):
         scale_shape = (self.num_experts, rows, cols // GROUP_SIZE)
-        packed = torch.empty(self.num_experts, rows, cols // 2, dtype=torch.int8)
-        setattr(self, proj, _parameter(packed if pre_quantized else torch.empty(self.num_experts, rows, cols)))
+        packed = (
+            torch.empty(self.num_experts, rows, cols // 2, dtype=torch.int8)
+            if pre_quantized
+            else torch.empty(self.num_experts, rows, cols)
+        )
+        setattr(self, proj, _parameter(packed))
         setattr(self, f"{proj}_scale_inv", _parameter(torch.empty(scale_shape, dtype=torch.float8_e4m3fn)))
         setattr(self, f"{proj}_weight_global_scale", _parameter(torch.ones(self.num_experts, dtype=torch.float32)))
         input_global = None if weight_only else _parameter(torch.ones(self.num_experts, dtype=torch.float32))
