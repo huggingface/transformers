@@ -25,6 +25,7 @@ from transformers.distributed.tensor_parallel import (
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
+    get_kv_heads_per_rank,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
@@ -164,6 +165,23 @@ class TestTensorParallelProperties(TestCasePlus):
         # The merge must not have mutated the class attribute shared by all instances
         self.assertEqual(set(type(model)._tp_plan), {"lm_head"})
 
+    def test_get_kv_heads_per_rank(self):
+        """The KV heads are sharded only when the plan splits the (possibly fused) key projection by column."""
+        experts = {"layers.*.mlp.experts.gate_up_proj": "packed_colwise"}
+        for plan, expected in (
+            ({}, 4),
+            (experts, 4),
+            ({"layers.*.self_attn.k_proj": "colwise_gather_output"}, 4),
+            ({"layers.*.self_attn.qkv_proj": "colwise_gather_output"}, 4),
+            ({"layers.*.self_attn.k_proj": "colwise", **experts}, 2),
+            ({"layers.*.attention.query_key_value": "colwise"}, 2),
+        ):
+            self.assertEqual(get_kv_heads_per_rank(plan, 4, tp_size=2), expected, plan)
+
+        sharded = {"layers.*.self_attn.k_proj": "colwise"}
+        self.assertEqual(get_kv_heads_per_rank(sharded, [4, 8], tp_size=2), [2, 4])
+        self.assertIsNone(get_kv_heads_per_rank(sharded, 3, tp_size=2))
+
 
 @is_tensor_parallel_test
 class TestTensorParallelLayer(TestCasePlus):
@@ -209,19 +227,8 @@ class TestTensorParallelLayer(TestCasePlus):
         op.param_ndim = len(param_shape)
         op._axis0_offset = 0
         op._axis0_local_size = local_shape[0]
+        op._axis0_size = param_shape[0]
         return op
-
-    def test_colwise_gather_output_rejects_indivisible_out_features(self):
-        model = torch.nn.Module()
-        model.lm_head = torch.nn.Linear(8, 99)
-        model.tp_plan = {"lm_head": "colwise_gather_output"}
-        device_mesh = self.MockDeviceMesh(world_size=2, rank=0)
-
-        with self.assertRaises(ValueError) as context:
-            tensor_parallel.apply_tensor_parallelism(model, device_mesh)
-
-        self.assertIn("lm_head", str(context.exception))
-        self.assertIn("divisible", str(context.exception))
 
     def test_colwise_uneven_local_shapes(self):
         module = torch.nn.Module()
@@ -251,18 +258,21 @@ class TestTensorParallelLayer(TestCasePlus):
             self.assertEqual(weight_shape, (32, expected_size))
             self.assertEqual(bias_shape, (10,))
 
-    def test_embedding_uneven_local_shapes(self):
-        rowwise_embedding = torch.nn.Embedding(10, 10)
-        rowwise_placement = self._get_parameter_placements(rowwise_embedding, RowwiseParallel())["weight"]
+    def test_linear_styles_reject_embedding(self):
+        for style in ("colwise", "rowwise"):
+            with self.subTest(style=style):
+                with self.assertRaises(ValueError) as context:
+                    ALL_PARALLEL_STYLES[style].install_forward(torch.nn.Embedding(8, 16), mesh=None)
+                self.assertIn("linear layers", str(context.exception))
 
-        colwise_embedding = torch.nn.Embedding(10, 10)
-        colwise_placement = self._get_parameter_placements(colwise_embedding, ColwiseParallel())["weight"]
+    def test_embedding_uneven_local_shapes(self):
+        rowwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_rowwise"])
+        colwise = self._get_parameter_placements(torch.nn.Embedding(10, 10), ALL_PARALLEL_STYLES["embedding_colwise"])
 
         expected_local_sizes = (4, 4, 2)
         for rank, expected_size in enumerate(expected_local_sizes):
-            rowwise_shape = self._get_local_shape((10, 10), rowwise_placement, world_size=3, rank=rank)
-            colwise_shape = self._get_local_shape((10, 10), colwise_placement, world_size=3, rank=rank)
-
+            rowwise_shape = self._get_local_shape((10, 10), rowwise["weight"], world_size=3, rank=rank)
+            colwise_shape = self._get_local_shape((10, 10), colwise["weight"], world_size=3, rank=rank)
             self.assertEqual(rowwise_shape, (expected_size, 10))
             self.assertEqual(colwise_shape, (10, expected_size))
 
@@ -291,7 +301,7 @@ class TestTensorParallelLayer(TestCasePlus):
             },
             "embedding_colwise": {
                 "module": torch.nn.Embedding(32, 16),
-                "style": ColwiseParallel(),
+                "style": ALL_PARALLEL_STYLES["embedding_colwise"],
                 "expected_shapes": {"weight": (32, 4)},
             },
         }
@@ -341,19 +351,8 @@ class TestTensorParallelLayer(TestCasePlus):
             self.assertEqual(op.shard_tensor(packed).shape, (16, 32))
             self.assertEqual(op.shard_tensor(unpacked).shape, (16, 16))
 
-    def test_grouped_gemm_updates_local_expert_count(self):
-        module = torch.nn.Module()
-        module.num_experts = 8
-        module.register_parameter("weight", torch.nn.Parameter(torch.empty(8, 16, 32)))
-        grouped_gemm = ALL_PARALLEL_STYLES["grouped_gemm"]
-
-        placements = self._get_parameter_placements(module, grouped_gemm, self.MockDeviceMesh(world_size=4, rank=0))
-
-        self.assertEqual(placements["weight"].dim, 0)
-        self.assertEqual(module.num_experts, 2)
-
     def test_sharding_does_not_create_unrelated_module_attributes(self):
-        styles = (ColwiseParallel(), RowwiseParallel(), ALL_PARALLEL_STYLES["grouped_gemm"])
+        styles = (ColwiseParallel(), RowwiseParallel())
 
         for style in styles:
             with self.subTest(style=type(style).__name__):

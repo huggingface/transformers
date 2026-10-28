@@ -17,7 +17,7 @@ import inspect
 import os
 from typing import TYPE_CHECKING, Any
 
-from ..utils import is_torch_available, is_torch_distributed_available, is_torch_greater_or_equal, logging, strtobool
+from ..utils import is_torch_available, is_torch_distributed_available, logging, strtobool
 from ..utils.quantization_config import QuantizationMethod
 from .tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
 from .utils import _is_torch_distributed_initialized
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
 if is_torch_available():
     import torch
 
-if is_torch_distributed_available() and is_torch_greater_or_equal("2.6"):
+if is_torch_distributed_available():
     from torch.distributed._composable.fsdp import fully_shard
     from torch.distributed.fsdp import CPUOffloadPolicy, MixedPrecisionPolicy
 
@@ -218,9 +218,9 @@ def apply_fully_sharded_data_parallelism(model: nn.Module, mesh_manager: MeshMan
                 # The expert gradient therefore covers ep_size / tp_size * efsdp_size = fsdp_size batches
                 # not efsdp_size batches (the relationship is efsdp_size = fsdp_size * tp_size / ep_size)
                 module.set_gradient_divide_factor(float(distributed_config.fsdp_size))
-                if torch.distributed.get_backend(expert_mesh.get_group()) != "nccl":
-                    # Non-NCCL backends need to sum first, then apply the division otherwise it runtime error.
-                    module.set_force_sum_reduction_for_comms(True)
+                # FSDP2 applies a divide factor other than the group size through PREMUL_SUM, which non-NCCL backends
+                # reject and NCCL zeroes in bfloat16 up to torch 2.13 (pytorch/pytorch#190747): sum, divide locally.
+                module.set_force_sum_reduction_for_comms(True)
 
     for module_name, module in reshard_targets:
         fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)

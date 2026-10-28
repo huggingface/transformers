@@ -14,23 +14,29 @@
 import math
 from collections import UserDict
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
-from torch.nn import init
 from torchvision.transforms.v2 import functional as tvF
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import (
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    torch_compilable_check,
+)
 from ..gemma2.modeling_gemma2 import Gemma2DecoderLayer
 from ..gemma4.configuration_gemma4 import Gemma4Config, Gemma4TextConfig
 from ..gemma4.image_processing_gemma4 import (
@@ -274,6 +280,7 @@ class Gemma4UnifiedVideoProcessor(Gemma4VideoProcessor):
         pixel_values = []
         position_ids = []
         num_soft_tokens_per_video = []
+        num_frames_per_video = []
 
         for video in videos:
             if do_resize:
@@ -294,6 +301,7 @@ class Gemma4UnifiedVideoProcessor(Gemma4VideoProcessor):
             patch_height = video.shape[-2] // patch_size
             patch_width = video.shape[-1] // patch_size
             patches = convert_video_to_patches(video, patch_size)
+            num_frames_per_video.append(num_frames)
 
             # Step 4: Compute teacher-level position IDs
             device = video.device
@@ -317,13 +325,15 @@ class Gemma4UnifiedVideoProcessor(Gemma4VideoProcessor):
             pixel_values.append(merged_patches)
             position_ids.append(merged_positions)
 
-        # Stack into batch tensors
-        pixel_values = torch.stack(pixel_values, dim=0)
-        position_ids = torch.stack(position_ids, dim=0)
+        # Concatenate along the frame axis rather than stacking on a new video axis, so that videos with
+        # different frame counts can be batched together. `num_frames_per_video` splits it back per video.
+        pixel_values = torch.cat(pixel_values, dim=0)
+        position_ids = torch.cat(position_ids, dim=0)
 
         data = {
             "pixel_values_videos": pixel_values,
             "video_position_ids": position_ids,
+            "num_frames_per_video": num_frames_per_video,
             "num_soft_tokens_per_video": num_soft_tokens_per_video,
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
@@ -333,6 +343,7 @@ class Gemma4UnifiedProcessorKwargs(Gemma4ProcessorKwargs):
     pass
 
 
+@auto_docstring
 class Gemma4UnifiedProcessor(Gemma4Processor):
     def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
         """Replace the audio placeholder with the correct number of audio tokens.
@@ -513,15 +524,7 @@ class Gemma4UnifiedVisionConfig(PreTrainedConfig):
 @auto_docstring(checkpoint="google/gemma-4-12B-it")
 @strict
 class Gemma4UnifiedConfig(Gemma4Config):
-    sub_configs = {
-        "text_config": Gemma4UnifiedTextConfig,
-        "vision_config": Gemma4UnifiedVisionConfig,
-        "audio_config": Gemma4UnifiedAudioConfig,
-    }
-
-    text_config: Gemma4UnifiedTextConfig | dict[str, Any] | None = None
-    vision_config: Gemma4UnifiedVisionConfig | dict[str, Any] | None = None
-    audio_config: Gemma4UnifiedAudioConfig | dict[str, Any] | None = None
+    pass
 
 
 @auto_docstring
@@ -826,9 +829,8 @@ class Gemma4UnifiedForCausalLM(Gemma4ForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if self.config.final_logit_softcapping is not None:
             logits = logits / self.config.final_logit_softcapping
             logits = torch.tanh(logits)
@@ -999,23 +1001,38 @@ class Gemma4UnifiedModel(Gemma4Model):
         self,
         pixel_values_videos: torch.FloatTensor,
         video_position_ids: torch.LongTensor | None = None,
+        num_frames_per_video: torch.LongTensor | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
-        video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
+        pixel_values_videos (`torch.FloatTensor` of shape `(total_num_frames, max_patches, patch_pixels)`):
+            The frames of every video in the batch, concatenated along the frame axis rather than stacked
+            on a separate video axis, so that videos of different lengths can be batched together.
+        video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
+        num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`):
+            Number of frames belonging to each video, used to split the flat frame sequence back per video.
         """
-        vision_outputs = self.embed_vision(pixel_values_videos.flatten(0, 1), video_position_ids.flatten(0, 1))
+        if num_frames_per_video is None:
+            raise ValueError(
+                "`num_frames_per_video` is required when passing `pixel_values_videos`. The frames of all "
+                "videos are concatenated along a single axis, so the per-video frame counts are the only "
+                "way to split the result back per video. The video processor returns them."
+            )
+
+        vision_outputs = self.embed_vision(pixel_values_videos, video_position_ids)
 
         # Strip padding patches before scattering into text sequence.
         non_pad_mask = (video_position_ids != -1).all(dim=-1).to(vision_outputs.pooler_output.device)
 
         # Flatten valid patches: keep only non-padding patches across all frames
-        pooler_output = vision_outputs.pooler_output[
-            non_pad_mask.flatten(0, 1)
-        ]  # (total_valid_patches, text_hidden_size)
+        pooler_output = vision_outputs.pooler_output[non_pad_mask]  # (total_valid_patches, text_hidden_size)
 
-        split_sizes = non_pad_mask.sum(dim=(-2, -1)).tolist()
+        num_tokens_per_frame = non_pad_mask.sum(dim=-1)
+        split_sizes = [
+            int(video_frames.sum())
+            for video_frames in torch.split(num_tokens_per_frame, num_frames_per_video.tolist())
+        ]
         vision_outputs.pooler_output = torch.split(pooler_output, split_sizes)
         return vision_outputs
 
@@ -1073,7 +1090,7 @@ class Gemma4UnifiedModel(Gemma4Model):
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
-        video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
+        video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
         """
@@ -1224,6 +1241,7 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
         position_ids: torch.LongTensor | None = None,
         image_position_ids: torch.LongTensor | None = None,
         video_position_ids: torch.LongTensor | None = None,
+        num_frames_per_video: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
         mm_token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
@@ -1239,9 +1257,12 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
         image_position_ids (`torch.LongTensor` of shape `(batch_size, max_patches, 2)`, *optional*):
             2D patch position coordinates from the image processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
-        video_position_ids (`torch.LongTensor` of shape `(num_videos, num_frames, max_patches, 2)`, *optional*):
+        video_position_ids (`torch.LongTensor` of shape `(total_num_frames, max_patches, 2)`, *optional*):
             2D patch position coordinates from the video processor, with `(-1, -1)` indicating padding.
             Passed through to the vision encoder for positional embedding computation.
+        num_frames_per_video (`torch.LongTensor` of shape `(num_videos,)`, *optional*):
+            Number of frames belonging to each video. Required whenever `pixel_values_videos` is passed,
+            since the frames of all videos are concatenated along a single axis.
         """
         outputs = self.model(
             input_ids=input_ids,
@@ -1264,9 +1285,8 @@ class Gemma4UnifiedForConditionalGeneration(Gemma4ForConditionalGeneration):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if (final_logit_softcapping := self.config.get_text_config().final_logit_softcapping) is not None:
             logits = logits / final_logit_softcapping
             logits = torch.tanh(logits)

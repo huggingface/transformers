@@ -23,11 +23,11 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...generation import ClassifierFreeGuidanceLogitsProcessor, GenerationMixin, GenerationMode, LogitsProcessorList
 from ...generation.utils import GenerateDecoderOnlyOutput
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -36,7 +36,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..auto import AutoConfig, AutoModel
 from ..blip_2.modeling_blip_2 import Blip2VisionModel
 from ..chameleon.configuration_chameleon import ChameleonVQVAEConfig
 from ..chameleon.modeling_chameleon import (
@@ -153,8 +153,8 @@ class JanusConfig(PreTrainedConfig):
     ```"""
 
     model_type = "janus"
-    sub_configs = {
-        "text_config": AutoConfig,
+    sub_configs_defaults = {
+        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama"),
         "vision_config": JanusVisionConfig,
         "vq_config": JanusVQVAEConfig,
     }
@@ -166,28 +166,9 @@ class JanusConfig(PreTrainedConfig):
     tie_word_embeddings: bool = True
 
     def __post_init__(self, **kwargs):
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "llama")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](**self.text_config)
-        elif self.text_config is None:
-            logger.info("`text_config` is None. Initializing with default values")
-            self.text_config = CONFIG_MAPPING["llama"]()
-
-        if self.vision_config is None:
-            logger.info("`vision_config` is None. Initializing with default JanusVisionConfig values")
-            self.vision_config = JanusVisionConfig()
-        elif isinstance(self.vision_config, dict):
-            self.vision_config = JanusVisionConfig(**self.vision_config)
-
-        if self.vq_config is None:
-            logger.info("`vq_config` is None. Initializing with default JanusVQVAEConfig values")
-            self.vq_config = JanusVQVAEConfig()
-        elif isinstance(self.vq_config, dict):
-            self.vq_config = JanusVQVAEConfig(**self.vq_config)
-
+        super().__post_init__(**kwargs)
         # This dimension is required when decoding discrete image tokens to continuous input.
         self.vq_config.num_patches = self.vision_config.image_size // self.vision_config.patch_size
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring
@@ -839,6 +820,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     output_modalities = ("image", "text")
     _can_compile_fullgraph = True
+    _tp_plan = {"lm_head": "colwise_gather_output"}
 
     def __init__(self, config: JanusConfig):
         super().__init__(config)
@@ -882,9 +864,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             **kwargs,
         )
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

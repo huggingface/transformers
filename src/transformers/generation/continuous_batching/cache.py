@@ -30,8 +30,8 @@ from .cache_allocators import (
     SlidingAttentionCacheAllocator,
 )
 from .distributed import DistributedHelper
-from .requests import RequestState, RequestStatus, get_device_and_memory_breakdown, logger
-from .utils import find_head_dim, find_num_key_value_heads
+from .requests import RequestState, RequestStatus
+from .utils import find_head_dim, find_num_key_value_heads, get_device_and_memory_breakdown, logger
 
 
 # Maps each attention type to the allocator class handling its cache
