@@ -27,7 +27,6 @@ class BolmoTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = BolmoTokenizer
     # TODO: "allenai/Bolmo-7B" once its `vocab.json` is on the Hub
     from_pretrained_id = []
-    test_rust_tokenizer = False
 
     @classmethod
     def setUpClass(cls):

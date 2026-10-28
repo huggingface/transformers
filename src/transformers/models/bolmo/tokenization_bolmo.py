@@ -20,178 +20,64 @@
 
 import json
 import os
-import warnings
+
+from tokenizers import Tokenizer, decoders, pre_tokenizers
+from tokenizers.models import BPE
 
 from ...convert_slow_tokenizer import bytes_to_unicode
-from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding
+from ...tokenization_utils_tokenizers import TokenizersBackend
 
 
-class BolmoTokenizer(PreTrainedTokenizer):
+class BolmoTokenizer(TokenizersBackend):
     r"""
-    Byte tokenizer of Bolmo: UTF-8 bytes after 4 special tokens. Also returns `expanded_input_ids`, the id of the longest
-    subword of `vocab_file` ending at each byte.
+    Byte tokenizer of Bolmo, built from `tokenizers` primitives: byte-level BPE without merges over 4 special tokens
+    and 256 bytes, so `"Hi"` -> `[<bos>, H, i]` = `[1, 76, 109]`. Ids shifted by 260 are the same tokens closing a
+    patch (the model generates them), decoded like the plain ones.
+
+    Also returns `expanded_input_ids`: the id of the longest subword of `vocab_file` ending at each byte, which
+    `tokenizers` has no primitive for.
 
     Args:
         vocab_file (`str`):
             Subword vocabulary (`{token: id}`, GPT-2 byte-level strings) used for `expanded_input_ids`.
     """
 
-    model_input_names = ["input_ids", "expanded_input_ids", "attention_mask"]
-
     vocab_files_names = {"vocab_file": "vocab.json"}
+    model_input_names = ["input_ids", "expanded_input_ids", "attention_mask"]
     padding_side = "left"
+    special_tokens = ["<pad>", "<bos>", "<eos>", "<bpe_token_end>"]
 
-    def __init__(
-        self,
-        vocab_file: str,
-        pad_token="<pad>",
-        bos_token="<bos>",
-        eos_token="<bos>",
-        **kwargs,
-    ) -> None:
-        special_tokens = [str(pad_token), str(bos_token), "<eos>", "<bpe_token_end>"]
-        self._added_tokens_decoder = {i: AddedToken(token, special=True) for i, token in enumerate(special_tokens)}
-        self.offset = len(special_tokens)
-        self._utf_vocab_size = 2**8
-        self.boundary_offset = self.offset + self._utf_vocab_size
-        self.bpe_token_end_id = 3
+    def __init__(self, vocab_file: str, pad_token="<pad>", bos_token="<bos>", eos_token="<bos>", **kwargs):
+        self.offset = len(self.special_tokens)
+        self.boundary_offset = self.offset + 256
+        self.bpe_token_end_id = self.special_tokens.index("<bpe_token_end>")
+        vocab = {token: i for i, token in enumerate(self.special_tokens)}
+        vocab.update({char: self.offset + byte for byte, char in bytes_to_unicode().items()})
+        # `<b>` marks a token closing a patch, it is dropped when decoding
+        vocab.update({token + "<b>": i + self.boundary_offset for token, i in list(vocab.items())})
+        self._tokenizer = Tokenizer(BPE(vocab=vocab, merges=[]))
+        self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False, use_regex=False)
+        self._tokenizer.decoder = decoders.Sequence([decoders.Replace("<b>", ""), decoders.ByteLevel()])
+
         with open(vocab_file, encoding="utf-8") as f:
             self.subword_vocab = json.load(f)
         self._subword_trie = None
-        kwargs.setdefault("extra_special_tokens", ["<bpe_token_end>"])
+        kwargs.setdefault("add_bos_token", True)
+        kwargs.setdefault(
+            "extra_special_tokens", ["<bpe_token_end>"] + [token + "<b>" for token in self.special_tokens]
+        )
         super().__init__(pad_token=pad_token, bos_token=bos_token, eos_token=eos_token, **kwargs)
-
-    @property
-    def vocab_size(self):
-        return self._utf_vocab_size
-
-    def get_vocab(self):
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size + self.offset)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
-
-    def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, already_has_special_tokens=False) -> list[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` method.
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(token_ids_0, token_ids_1, True)
-        if token_ids_1 is None:
-            return [1] + [0] * len(token_ids_0)
-        return [1] + [0] * len(token_ids_0) + [1] + [0] * len(token_ids_1)
-
-    def _add_eos_if_not_present(self, token_ids: list[int]) -> list[int]:
-        """Do not add eos again if user already added it."""
-        if len(token_ids) > 0 and token_ids[-1] == self.eos_token_id:
-            warnings.warn(
-                f"This sequence already has {self.eos_token}. In future versions this behavior may lead to duplicated"
-                " eos tokens being added."
-            )
-            return token_ids
-        else:
-            return token_ids + [self.eos_token_id]
-
-    def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None) -> list[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Bolmo does not
-        make use of token type ids, therefore a list of zeros is returned.
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `list[int]`: List of zeros.
-        """
-        return [0] * len(self.build_inputs_with_special_tokens(token_ids_0, token_ids_1))
-
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> list[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A sequence has the following format:
-
-        - single sequence: `X </s>`
-        - pair of sequences: `A </s> B </s>`
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        if token_ids_1 is None:
-            return [self.bos_token_id] + token_ids_0
-        return [self.bos_token_id] + token_ids_0 + [self.bos_token_id] + token_ids_1
-
-    def _tokenize(self, text: str) -> list[str]:
-        """Take as input a string and return a list of strings (tokens) for words/sub-words"""
-        tokens = [chr(i) for i in text.encode("utf-8")]
-        return tokens
-
-    def _convert_token_to_id(self, token):
-        """Converts a token (str) in an id using the vocab."""
-
-        if len(token) != 1:
-            token_id = None
-        else:
-            token_id = ord(token) + self.offset
-
-        return token_id
-
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        token = chr(index - self.offset)
-        return token
-
-    def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (string) in a single string."""
-        bstring = b""
-        for token in tokens:
-            if token in self._added_tokens_decoder:
-                tok_string = self._added_tokens_decoder[token].encode("utf-8")
-            elif token in self._added_tokens_encoder:
-                tok_string = token.encode("utf-8")
-            else:
-                tok_string = bytes([ord(token)])
-            bstring += tok_string
-        string = bstring.decode("utf-8", errors="ignore")
-        return string
-
-    # BolmoTokenizer has no vocab file
-    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
-        vocab_file = os.path.join(save_directory, (filename_prefix + "-" if filename_prefix else "") + "vocab.json")
-        with open(vocab_file, "w", encoding="utf-8") as f:
-            json.dump(self.subword_vocab, f, ensure_ascii=False)
-        return (vocab_file,)
 
     @property
     def subword_trie(self):
         """Subword vocab as a trie over reversed byte ids, to find the longest subword ending at a byte."""
         if self._subword_trie is None:
             byte_decoder = {char: byte for byte, char in bytes_to_unicode().items()}
-            special_ids = {str(token): i for i, token in self._added_tokens_decoder.items()}
             self._subword_trie = {}
             for token, subword_id in self.subword_vocab.items():
-                if token in special_ids:
-                    byte_ids = [special_ids[token]]
+                if token in self.special_tokens:
+                    byte_ids = [self.special_tokens.index(token)]
                 else:
                     byte_ids = [self.offset + byte_decoder[char] for char in token]
                 node = self._subword_trie
@@ -225,12 +111,19 @@ class BolmoTokenizer(PreTrainedTokenizer):
             encoding["expanded_input_ids"] = [self.expand_byte_ids(row) for row in rows]
         else:
             encoding["expanded_input_ids"] = self.expand_byte_ids(rows)
-        return BatchEncoding(encoding.data, tensor_type=kwargs.get("return_tensors"))
+        encoding.convert_to_tensors(kwargs.get("return_tensors"))
+        return encoding
 
-    def _decode(self, token_ids, **kwargs) -> str:
-        token_ids = [token_ids] if isinstance(token_ids, int) else token_ids
-        token_ids = [i - self.boundary_offset if i >= self.boundary_offset else i for i in token_ids]
-        return super()._decode(token_ids, **kwargs)
+    def _save_pretrained(self, save_directory, file_names, legacy_format=None, filename_prefix=None):
+        # `tokenizer.json` holds the byte pipeline, the subword vocab is a separate file
+        file_names = super()._save_pretrained(save_directory, file_names, legacy_format, filename_prefix)
+        return file_names + self.save_vocabulary(save_directory, filename_prefix)
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
+        vocab_file = os.path.join(save_directory, (filename_prefix + "-" if filename_prefix else "") + "vocab.json")
+        with open(vocab_file, "w", encoding="utf-8") as f:
+            json.dump(self.subword_vocab, f, ensure_ascii=False)
+        return (vocab_file,)
 
 
 __all__ = ["BolmoTokenizer"]

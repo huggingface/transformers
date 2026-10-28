@@ -19,6 +19,8 @@ from functools import partial
 import torch
 import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
+from tokenizers import Tokenizer, decoders, pre_tokenizers
+from tokenizers.models import BPE
 from torch import nn
 
 from ...cache_utils import DynamicCache, LinearAttentionLayer
@@ -35,12 +37,11 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..byt5.tokenization_byt5 import ByT5Tokenizer
 from ..olmo3.configuration_olmo3 import Olmo3Config
 from ..olmo3.modeling_olmo3 import (
     Olmo3Attention,
@@ -555,10 +556,14 @@ class BolmoForCausalLM(BolmoPreTrainedModel, BolmoGenerationMixin):
         )
 
 
-class BolmoTokenizer(ByT5Tokenizer):
+class BolmoTokenizer(TokenizersBackend):
     r"""
-    Byte tokenizer of Bolmo: UTF-8 bytes after 4 special tokens. Also returns `expanded_input_ids`, the id of the longest
-    subword of `vocab_file` ending at each byte.
+    Byte tokenizer of Bolmo, built from `tokenizers` primitives: byte-level BPE without merges over 4 special tokens
+    and 256 bytes, so `"Hi"` -> `[<bos>, H, i]` = `[1, 76, 109]`. Ids shifted by 260 are the same tokens closing a
+    patch (the model generates them), decoded like the plain ones.
+
+    Also returns `expanded_input_ids`: the id of the longest subword of `vocab_file` ending at each byte, which
+    `tokenizers` has no primitive for.
 
     Args:
         vocab_file (`str`):
@@ -568,37 +573,38 @@ class BolmoTokenizer(ByT5Tokenizer):
     vocab_files_names = {"vocab_file": "vocab.json"}
     model_input_names = ["input_ids", "expanded_input_ids", "attention_mask"]
     padding_side = "left"
+    special_tokens = ["<pad>", "<bos>", "<eos>", "<bpe_token_end>"]
 
-    def __init__(
-        self,
-        vocab_file: str,
-        pad_token="<pad>",
-        bos_token="<bos>",
-        eos_token="<bos>",
-        **kwargs,
-    ):
-        special_tokens = [str(pad_token), str(bos_token), "<eos>", "<bpe_token_end>"]
-        self._added_tokens_decoder = {i: AddedToken(token, special=True) for i, token in enumerate(special_tokens)}
-        self.offset = len(special_tokens)
-        self._utf_vocab_size = 2**8
-        self.boundary_offset = self.offset + self._utf_vocab_size
-        self.bpe_token_end_id = 3
+    def __init__(self, vocab_file: str, pad_token="<pad>", bos_token="<bos>", eos_token="<bos>", **kwargs):
+        self.offset = len(self.special_tokens)
+        self.boundary_offset = self.offset + 256
+        self.bpe_token_end_id = self.special_tokens.index("<bpe_token_end>")
+        vocab = {token: i for i, token in enumerate(self.special_tokens)}
+        vocab.update({char: self.offset + byte for byte, char in bytes_to_unicode().items()})
+        # `<b>` marks a token closing a patch, it is dropped when decoding
+        vocab.update({token + "<b>": i + self.boundary_offset for token, i in list(vocab.items())})
+        self._tokenizer = Tokenizer(BPE(vocab=vocab, merges=[]))
+        self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=False, use_regex=False)
+        self._tokenizer.decoder = decoders.Sequence([decoders.Replace("<b>", ""), decoders.ByteLevel()])
+
         with open(vocab_file, encoding="utf-8") as f:
             self.subword_vocab = json.load(f)
         self._subword_trie = None
-        kwargs.setdefault("extra_special_tokens", ["<bpe_token_end>"])
-        PreTrainedTokenizer.__init__(self, pad_token=pad_token, bos_token=bos_token, eos_token=eos_token, **kwargs)
+        kwargs.setdefault("add_bos_token", True)
+        kwargs.setdefault(
+            "extra_special_tokens", ["<bpe_token_end>"] + [token + "<b>" for token in self.special_tokens]
+        )
+        super().__init__(pad_token=pad_token, bos_token=bos_token, eos_token=eos_token, **kwargs)
 
     @property
     def subword_trie(self):
         """Subword vocab as a trie over reversed byte ids, to find the longest subword ending at a byte."""
         if self._subword_trie is None:
             byte_decoder = {char: byte for byte, char in bytes_to_unicode().items()}
-            special_ids = {str(token): i for i, token in self._added_tokens_decoder.items()}
             self._subword_trie = {}
             for token, subword_id in self.subword_vocab.items():
-                if token in special_ids:
-                    byte_ids = [special_ids[token]]
+                if token in self.special_tokens:
+                    byte_ids = [self.special_tokens.index(token)]
                 else:
                     byte_ids = [self.offset + byte_decoder[char] for char in token]
                 node = self._subword_trie
@@ -625,34 +631,20 @@ class BolmoTokenizer(ByT5Tokenizer):
         return expanded_ids
 
     def __call__(self, *args, **kwargs) -> BatchEncoding:
-        encoding = PreTrainedTokenizer.__call__(self, *args, **kwargs)
+        encoding = super().__call__(*args, **kwargs)
         input_ids = encoding["input_ids"]
         rows = input_ids.tolist() if hasattr(input_ids, "tolist") else input_ids
         if rows and isinstance(rows[0], list):
             encoding["expanded_input_ids"] = [self.expand_byte_ids(row) for row in rows]
         else:
             encoding["expanded_input_ids"] = self.expand_byte_ids(rows)
-        return BatchEncoding(encoding.data, tensor_type=kwargs.get("return_tensors"))
+        encoding.convert_to_tensors(kwargs.get("return_tensors"))
+        return encoding
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        if token_ids_1 is None:
-            return [self.bos_token_id] + token_ids_0
-        return [self.bos_token_id] + token_ids_0 + [self.bos_token_id] + token_ids_1
-
-    def get_special_tokens_mask(self, token_ids_0, token_ids_1=None, already_has_special_tokens=False):
-        if already_has_special_tokens:
-            return PreTrainedTokenizer.get_special_tokens_mask(self, token_ids_0, token_ids_1, True)
-        if token_ids_1 is None:
-            return [1] + [0] * len(token_ids_0)
-        return [1] + [0] * len(token_ids_0) + [1] + [0] * len(token_ids_1)
-
-    def create_token_type_ids_from_sequences(self, token_ids_0, token_ids_1=None):
-        return [0] * len(self.build_inputs_with_special_tokens(token_ids_0, token_ids_1))
-
-    def _decode(self, token_ids, **kwargs) -> str:
-        token_ids = [token_ids] if isinstance(token_ids, int) else token_ids
-        token_ids = [i - self.boundary_offset if i >= self.boundary_offset else i for i in token_ids]
-        return PreTrainedTokenizer._decode(self, token_ids, **kwargs)
+    def _save_pretrained(self, save_directory, file_names, legacy_format=None, filename_prefix=None):
+        # `tokenizer.json` holds the byte pipeline, the subword vocab is a separate file
+        file_names = super()._save_pretrained(save_directory, file_names, legacy_format, filename_prefix)
+        return file_names + self.save_vocabulary(save_directory, filename_prefix)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         vocab_file = os.path.join(save_directory, (filename_prefix + "-" if filename_prefix else "") + "vocab.json")
