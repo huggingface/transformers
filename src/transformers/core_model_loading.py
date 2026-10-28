@@ -511,13 +511,17 @@ class PermuteForRope(ConversionOps):
             output[target_pattern] = output_tensor
         return output
 
-    def get_target_pattern(self, source_pattern: str, target_patterns: list[str]) -> str:
-        # Here it's the last operation of a chain, so return the source
-        if len(target_patterns) > 1:
+    def get_target_pattern(self, source_pattern: str, source_patterns: list[str], target_patterns: list[str]) -> str:
+        # Here it's the last or first operation of a chain, so return the source
+        if (len(target_patterns) > 1 and len(source_patterns) == 1) or (
+            len(target_patterns) == 1 and len(source_patterns) > 1
+        ):
             return source_pattern
         # Here it's the only operation, so return the target
-        else:
+        elif len(target_patterns) == 1 and len(source_patterns) == 1:
             return target_patterns[0]
+        else:
+            raise ValueError("Undefined Operation encountered!")
 
     @property
     def reverse_op(self) -> ConversionOps:
