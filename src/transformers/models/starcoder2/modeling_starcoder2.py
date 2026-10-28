@@ -144,6 +144,7 @@ class Starcoder2Attention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
+        # head_dim may be set explicitly in the config, otherwise it is derived from hidden_size
         self.head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
