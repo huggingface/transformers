@@ -24,44 +24,14 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Nemotron 3.5 Transcribe is an Audio Language Model for 
-- multilingual transcription
-- speaker-attributed transcription
-- speech translation
-- audio question answering.
-
-The model has three parts:
-
-1. An audio model ([`Nemotron3_5TranscribeAudioModel`]) that turns the log-mel spectrogram into one embedding every
-   80 ms. Two networks read the same spectrogram:
-   - a speech recognition encoder ([`Nemotron3_5TranscribeAsrAudioModel`]), which encodes what is said,
-   - the [Nemotron 3 Diarization](./nemotron3_diarization) model, which predicts which of up to eight speakers are
-     active.
-
-   Each embedding is the encoder output plus a fixed embedding of the active speakers.
-2. A linear projector into the language model's embedding space.
-3. A [Nemotron-H](./nemotron_h) language model (hybrid Mamba-2, attention and mixture-of-experts layers), which
-   generates the text.
-
-A word timestamp head (47M parameters, NVIDIA's `ctc_timestamps` feature)
-reads the speech recognition encoder outputs: two Transformer layers of the same type as the encoder's, followed by a
-CTC classifier over its own vocabulary of 23,862 SentencePiece pieces. It runs only when word timestamps are requested
-(see [Word timestamps](#word-timestamps)).
-
-### Long audio
-
-Audio longer than 40 s is encoded in 40 s chunks, each seeing up to 4 s of context on either side; only the chunk's
-own frames are kept. The speech recognition encoder, the diarization model and the word timestamp head use the same
-chunks, and the diarization speaker cache carries the speaker identities across chunks. The lengths are
-`chunk_length`, `chunk_left_context` and `chunk_right_context` of `config.audio_config.diarization_config`.
+Nemotron 3.5 Transcribe is an audio language model for multilingual transcription, speaker-attributed transcription,
+speech translation and audio question answering. A speech recognition encoder and the
+[Nemotron 3 Diarization](./nemotron3_diarization) model read the same spectrogram; their outputs are projected into a
+[Nemotron-H](./nemotron_h) language model. A word timestamp head on the encoder outputs gives word-level times.
 
 ## Usage
 
 ### Transcription
-
-[`~Nemotron3_5TranscribeProcessor.apply_transcription_request`] builds the prompt from the processor's default
-transcription request (verbatim transcript with punctuation and capitalization). It takes a path, a URL or an audio
-array sampled at 16 kHz.
 
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
@@ -78,11 +48,6 @@ print(processor.decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tok
 ```
 
 ### Batched transcription
-
-Pass a list of audio, all paths or URLs, or all arrays. A list of prompts of the same length can be passed as `prompt`
-(`None` entries use the default prompt). Here the second recording, a conversation, is
-transcribed with the speaker-tagged prompt of the [next section](#speaker-attributed-transcription): decode with
-`skip_special_tokens=False` to keep the speaker tags, and remove the padding of the shorter output.
 
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
@@ -109,11 +74,6 @@ print([text.replace(processor.tokenizer.pad_token, "") for text in texts])
 ```
 
 ### Speaker-attributed transcription
-
-Ask for speaker tags in the prompt, through [`~Nemotron3_5TranscribeProcessor.apply_chat_template`], and the model
-starts each speaker turn with a `<spk:N>` tag. Decode with `skip_special_tokens=False` to keep the tags. The processor
-chat template reproduces the training prompt format: an empty system turn, the text and the audio of a user turn joined
-by a space, and thinking disabled. Put the instruction before the audio and do not add a system prompt.
 
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
@@ -152,10 +112,7 @@ text = processor.decode(outputs[0, inputs.input_ids.shape[1] :], skip_special_to
 print(text)
 ```
 
-The output is a single string, for example `<spk:0> to celebrate the release ... <spk:1> hi everybody ...`.
-[`~Nemotron3_5TranscribeProcessor.extract_speaker_dict`] splits it into one dictionary per speaker turn, with the
-`Speaker` and `Content` keys of [VibeVoice-ASR](./vibevoice_asr) (the generated text has no timestamps, see
-[Word timestamps](#word-timestamps) for word-level times):
+[`~Nemotron3_5TranscribeProcessor.extract_speaker_dict`] splits the output into one dictionary per speaker turn:
 
 ```python
 for turn in processor.extract_speaker_dict(text):
@@ -171,18 +128,7 @@ for turn in processor.extract_speaker_dict(text):
 
 ### Word timestamps
 
-Pass `return_word_timestamp_logits=True` to `generate`: the audio model runs once, and the output adds the logits of
-the word timestamp head and of the diarization model. [`~Nemotron3_5TranscribeProcessor.align_word_timestamps`] aligns
-the decoded text to them. For each recording it returns a dictionary with:
-
-- `chunks`: every generated word, as the word timestamps of the speech recognition pipeline: `text`, `timestamp`
-  (start and end in seconds) and its speaker tag `speaker`,
-- `diarization`: the speaker activity segments predicted by the diarization model (`speaker`, `timestamp`),
-- `speaker_tag_to_diarization_speaker`: the diarization speaker matched to each transcript tag,
-- `failed_speakers`: the tags whose words could not be aligned.
-
-Use the speaker-tagged transcription prompt of the previous section and decode with `skip_special_tokens=False`: a
-transcript without speaker tags is aligned as a single speaker. The alignment requires `torchaudio` and, to match tags to diarization speakers, `scipy`.
+Requires `torchaudio` and `scipy`.
 
 ```python
 from transformers import AutoModelForMultimodalLM, AutoProcessor
@@ -212,17 +158,7 @@ timestamps = processor.align_word_timestamps(
 print(timestamps[0]["chunks"][:3])
 ```
 
-```text
-[{'text': 'to', 'timestamp': (0.32, 0.35000000000000003), 'speaker': 0}, {'text': 'celebrate', 'timestamp': (0.35000000000000003, 0.96), 'speaker': 0}, {'text': 'the', 'timestamp': (0.96, 1.04), 'speaker': 0}]
-```
-
-The processor aligns the generated words to the head's per-frame piece probabilities with a CTC search, one search per
-speaker tag, restricted to the frames where the matched diarization speaker is active, then snaps the word boundaries
-to the 10 ms diarization segments. The head runs once, on the encoder outputs already computed for generation, and the
-alignment is a search on the CPU.
-
-To align a transcript that was not generated (a reference or an edited transcript), run the audio model and the head
-without `generate`:
+To align a transcript that was not generated:
 
 ```python
 input_features_mask = inputs.input_features_mask
@@ -235,13 +171,6 @@ timestamps = processor.align_word_timestamps(
     audio_outputs.speaker_logits,
 )
 ```
-
-The duration of each recording, hence the time step of the head's frames, is read from `input_features_mask` to the
-10 ms hop of the spectrogram below. `language` is detected from the transcript when it is not given. Chinese and Japanese are aligned per character; Thai is not
-supported (it needs `pythainlp`). A transcript that cannot be aligned (empty, too long for the audio, or with a
-character outside the alignment vocabulary) raises a `ValueError`. A speaker tag whose words find no valid path through
-the audio is listed in `failed_speakers`, and its words are left out. To evaluate diarization, use the `diarization`
-segments rather than the word timestamps.
 
 ## Nemotron3_5TranscribeConfig
 
