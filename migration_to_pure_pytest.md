@@ -210,11 +210,14 @@ Out of scope until Phase 3 is complete and stable.
 | 4 | Issue 6 | `__test__ = False` on `CausalLMModelTest` (prevents unintended standalone collection) + `setUp` alias (keeps unmigrated subclasses working) | After CI job 123003870110 analysis |
 | 5 | Issue 7 | `__test__ = False` on `VLMModelTest` and `ALMModelTest` | After CI run 40759614150 analysis |
 | 6 | Issue 8 | Remove `unittest.TestCase` from `RobertaPreLayerNormModelTest`, `MT5EncoderOnlyModelTest`, `UMT5EncoderOnlyModelTest` — setUp was already renamed, removing unittest.TestCase makes them pure pytest and eliminates the wrong-signature crash | After CI run 40759614150 analysis |
+| 7 | Issue 9 | `__test__ = False` on `VideoPrismModelTest` — local base class with no model_tester was collected standalone by `*Test` pattern | After CI run 40765894971 analysis |
 
 **Still open (not yet fixed, in discovery order):**
 - Issue 3: `_testMethodName` getter fragility (inspect.stack)
 - ~~Issue 8: `setup_method(self)` wrong signature in `unittest.TestCase` subclasses (RobertaPreLayerNorm, MT5, UMT5)~~ **FIXED** ✅
-- Issue 9: `VideoPrismModelTest` pre-existing broken declaration (possibly out of scope)
+- ~~Issue 9: `VideoPrismModelTest` unintended standalone collection~~ **FIXED** ✅
+- Issue 10: `assertRaises` returns `ExceptionInfo` with no `.exception` — wrapper needed (CI run 40765894971 shards 1, 3, 6)
+- Issue 11: `get_test_info.py::get_test_classes` misses migrated classes — detection must not require `unittest.TestCase` (CI run 40765894971 tests_repo_utils)
 
 ---
 
@@ -477,26 +480,93 @@ is called with the correct no-extra-argument signature.
 
 ---
 
-### Issue 9: `VideoPrismModelTest` — pre-existing broken class, exposed by our python_classes change
-**Found**: CI run 40759614150, shard 7 — 2026-10-28
-**Confirmed**: Likely pre-existing, NOT introduced by us — but now visible because of our change
+### Issue 9: `VideoPrismModelTest` — local base class collected standalone by our `python_classes` change
+**Found**: CI run 40759614150, shard 7 (89 failures) — 2026-10-28
+**Re-confirmed**: CI run 40765894971, shard 7 — all failures from `VideoPrismModelTest`
 
 **Class**: `tests/models/videoprism/test_modeling_videoprism.py::VideoPrismModelTest`
-Declaration: `class VideoPrismModelTest(ModelTesterMixin):` — **no `unittest.TestCase`**
-Uses: `def setUp(self):` — not renamed to `setup_method`
-Failures in shard 7: **89**
+Declaration: `class VideoPrismModelTest(ModelTesterMixin):` — no `unittest.TestCase`, no `model_tester`, no `all_model_classes`
 
-**What happened**: On `main`, this class was invisible to pytest because:
-- No `unittest.TestCase` → not collected via unittest path
-- Name ends in `Test` (not `Test*`) → not collected via default name matching
+**File structure**:
+- `VideoPrismModelTest(ModelTesterMixin)` — LOCAL base class in the file; no `setUp`, no `model_tester`
+- `VideoPrismVisionModelTest(VideoPrismModelTest, unittest.TestCase)` — concrete, has `setUp` setting `self.model_tester`
+- `VideoPrismTextModelTest(VideoPrismModelTest, unittest.TestCase)` — same
 
-Our `python_classes = ["Test*", "*Test"]` change made it visible for the first time. Since
-`setUp` is never called by pytest for plain classes, `model_tester` is None → all tests fail.
+**What happened**: Our `python_classes = ["Test*", "*Test"]` causes pytest to collect the bare
+`VideoPrismModelTest` as a standalone test class. It has no `model_tester` set → all inherited
+tests crash with `AttributeError: 'NoneType' object has no attribute 'prepare_config_and_inputs_for_common'`.
 
-**Assessment**: This class was broken before our PR — it would never run correctly on main
-either. The fix (rename `setUp` → `setup_method`) is trivial but belongs to the full rollout
-phase (Phase 3), not to fixing migration infrastructure issues. Possibly out of scope for this PR.
-**Status**: Not yet fixed. Low priority — treat as pre-existing.
+This is the same root cause as Issues 6 and 7 (Part 1 — unintended standalone collection), but
+here the base class is defined locally in the model test file rather than in a shared tester file.
+The concrete subclasses (`VideoPrismVisionModelTest`, `VideoPrismTextModelTest`) are unaffected.
+
+**Fix**: Add `__test__ = False` to `VideoPrismModelTest` in `test_modeling_videoprism.py`.
+pytest checks `cls.__dict__` only (not MRO), so the concrete subclasses continue to be collected normally.
+**Status**: **FIXED** ✅ — verified: `VideoPrismModelTest` no longer appears in `--collect-only` output; concrete subclasses unaffected (skipped locally due to `@require_vision`, would run on CI).
+
+---
+
+### Issue 10: `assertRaises` context manager returns `ExceptionInfo` with no `.exception` attribute
+**Found**: CI run 40765894971, shards 1, 3, 6 — 2026-10-28
+**Confirmed**: 100%
+
+**Affected tests** (all fail on `test_forward_labels_should_be_none`):
+- `EfficientLoFTRModelTest` (shard 1)
+- `LightGlueModelTest` (shard 3)
+- `SuperGlueModelTest` (shard 6)
+- `SuperPointModelTest` (shard 6)
+
+**Error**: `AttributeError: 'ExceptionInfo' object has no attribute 'exception'`
+**File**: e.g. `tests/models/efficientloftr/test_modeling_efficientloftr.py:296`
+
+**Root cause**: `_UnittestCompatMixin.assertRaises` (in `test_modeling_common.py:810`) does:
+```python
+def assertRaises(self, exc, *args, **kwargs):
+    return pytest.raises(exc)
+```
+When used as a context manager (`with self.assertRaises(ValueError) as cm:`), `pytest.raises(exc)`
+yields a `pytest.ExceptionInfo` object as `cm`. `ExceptionInfo` has `.value` for the caught
+exception, but **not** `.exception` — that's the `unittest._AssertRaisesContext` attribute.
+
+The four affected classes still have `unittest.TestCase`, but `ModelTesterMixin` (→ `_UnittestCompatMixin`)
+comes **first** in the MRO, so `_UnittestCompatMixin.assertRaises` wins over
+`unittest.TestCase.assertRaises`. The tests then crash at `cm.exception`.
+
+**Fix**: Replace `pytest.raises(exc)` in `_UnittestCompatMixin.assertRaises` with a thin wrapper
+context manager that stores the caught exception under both `.exception` and `.value`, matching
+the `unittest._AssertRaisesContext` interface.
+**Status**: Not yet fixed.
+
+---
+
+### Issue 11: `get_test_info.py::get_test_classes` only finds `unittest.TestCase` subclasses
+**Found**: CI run 40765894971, `tests_repo_utils` shard — 2026-10-28
+**Confirmed**: 100%
+
+**Failing tests**:
+- `GetTestInfoTester::test_get_model_to_test_mapping` — returns `{}` for bert (expected full mapping)
+- `GetTestInfoTester::test_get_model_to_tester_mapping` — same root cause
+- `GetTestInfoTester::test_get_test_to_tester_mapping` — same root cause
+
+**Error**: `AssertionError: {} != {'BertForMaskedLM': ['BertModelTest'], ...}`
+
+**Root cause**: `utils/get_test_info.py::get_test_classes()` (line 94) detects test classes with:
+```python
+if isinstance(attr_value, type) and issubclass(attr_value, unittest.TestCase):
+```
+`BertModelTest` has been migrated (no `unittest.TestCase`), so it is invisible to this function.
+`get_model_to_test_mapping(BERT_TEST_FILE)` returns `{}` instead of the full bert mapping.
+
+This utility is used by CI infrastructure (test fetcher, PR CI routing) to map model classes
+to their test classes. A broken mapping means our migrated models may be missed when deciding
+which tests to run.
+
+**Fix**: Extend the detection condition in `get_test_classes` to also accept classes that are
+subclasses of `ModelTesterMixin` (or that have a non-empty `all_model_classes` attribute and
+are not one of the known base classes to exclude) — without requiring `unittest.TestCase`.
+The comment on line 96–101 already handles `CausalLMModelTest` (where `all_model_classes` is
+set during `setUp`); the same logic can be generalized.
+**Status**: Not yet fixed.
 
 ---
 
