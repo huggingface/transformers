@@ -22,9 +22,7 @@ from huggingface_hub.dataclasses import strict
 from ..utils import cached_file
 
 
-# Next to the model files, without clashing with them: the config of the head is read with `_configuration_file`
 DECISION_CONFIG_NAME, DECISION_TEMPLATE_NAME = "decision.json", "decision_template.jinja"
-DECISION_HEAD_CONFIG_NAME = "decision_head.json"
 
 
 @strict

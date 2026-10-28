@@ -24,6 +24,7 @@ import warnings
 from collections.abc import Sequence
 from dataclasses import MISSING, dataclass, fields
 from functools import wraps
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal, TypeVar
 
 from huggingface_hub.dataclasses import strict
@@ -843,8 +844,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
-            config_file_name (`str`, *optional*, defaults to `"config.json"`):
-                Name of the configuration file in the repo, for a model whose files sit next to the ones of another.
             kwargs (`dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are configuration attributes will be used to override the loaded
                 values. Behavior concerning key/value pairs whose keys are *not* configuration attributes is controlled
@@ -879,6 +878,20 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         kwargs["revision"] = revision
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        # A model whose files sit next to the weights of the checkpoint it reads, like a decision head: the config of
+        # that checkpoint is its `text_config`, and its own config files are read next to it
+        hub_kwargs = {
+            key: kwargs[key] for key in ("cache_dir", "local_files_only", "revision", "token") if key in kwargs
+        }
+        extra_configs = {}
+        for filename in getattr(cls, "extra_config_files", ()):
+            path = cached_file(
+                pretrained_model_name_or_path, filename, _raise_exceptions_for_missing_entries=False, **hub_kwargs
+            )
+            if path is not None:
+                extra_configs[Path(filename).stem] = json.loads(Path(path).read_text(encoding="utf-8"))
+        if extra_configs and config_dict.get("model_type") != cls.model_type:
+            config_dict = {"model_type": cls.model_type, "text_config": config_dict, **extra_configs}
         if cls.base_config_key and cls.base_config_key in config_dict:
             config_dict = config_dict[cls.base_config_key]
 
@@ -888,17 +901,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             for v in config_dict.values():
                 if isinstance(v, dict) and v.get("model_type") == cls.model_type:
                     config_dict = v
-
-            # A model reading the checkpoint of another one, like a decision head next to its weights: the config of
-            # that checkpoint is its `text_config`, and the files of the checkpoint give the rest
-            if config_dict["model_type"] != cls.model_type and hasattr(cls, "from_checkpoint"):
-                hub_kwargs = {
-                    key: kwargs[key] for key in ("cache_dir", "local_files_only", "revision", "token") if key in kwargs
-                }
-                if (
-                    fields := cls.from_checkpoint(pretrained_model_name_or_path, config_dict, **hub_kwargs)
-                ) is not None:
-                    config_dict = {**fields, "model_type": cls.model_type, "text_config": config_dict}
 
             # raise warning only if we still can't see a match in `model_type`
             if config_dict["model_type"] != cls.model_type:
@@ -964,7 +966,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
         revision = kwargs.pop("revision", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         subfolder = kwargs.pop("subfolder", "")
-        config_file_name = kwargs.pop("config_file_name", None) or CONFIG_NAME
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
 
@@ -988,9 +989,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
             resolved_config_file = pretrained_model_name_or_path
             is_local = True
         else:
-            configuration_file = (
-                kwargs.pop("_configuration_file", config_file_name) if gguf_file is None else gguf_file
-            )
+            configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME) if gguf_file is None else gguf_file
 
             try:
                 # Load from local folder or from cache or download from model Hub and cache
