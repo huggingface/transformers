@@ -16,7 +16,6 @@ from typing import Any
 import torch
 from torch import nn
 
-from ...decision.modeling_utils import DecisionPreTrainedModel
 from ...masking_utils import (
     and_masks,
     create_bidirectional_mask,
@@ -24,15 +23,17 @@ from ...masking_utils import (
     packed_sequence_mask_function,
     padding_mask_function,
 )
+from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from ..auto import AutoModel
 from .configuration_von import VonConfig
 
 
 @auto_docstring
-class VonPreTrainedModel(DecisionPreTrainedModel):
+class VonPreTrainedModel(PreTrainedModel):
     config: VonConfig
     base_model_prefix = "model"
+    _supports_sdpa = _supports_flash_attn = _supports_flex_attn = True
 
 
 @auto_docstring(
