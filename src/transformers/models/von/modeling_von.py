@@ -16,6 +16,7 @@ from typing import Any
 import torch
 from torch import nn
 
+from ...decision.modeling_utils import DecisionMixin
 from ...masking_utils import (
     and_masks,
     create_bidirectional_mask,
@@ -45,7 +46,7 @@ class VonPreTrainedModel(PreTrainedModel):
     counts its tokens.
     """
 )
-class VonForDecision(VonPreTrainedModel):
+class VonForDecision(DecisionMixin, VonPreTrainedModel):
     def __init__(self, config: VonConfig):
         super().__init__(config)
         self.model = AutoModel.from_config(config.text_config)
