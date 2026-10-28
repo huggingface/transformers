@@ -29,6 +29,7 @@ if is_torch_available():
     from transformers.models.deepseek_v2.modeling_deepseek_v2 import (
         DeepseekV2Attention,
         DeepseekV2RotaryEmbedding,
+        DeepseekV2TopkRouter,
     )
 
 
@@ -132,6 +133,21 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skip(reason="Matches roughly ~70%, allow harder tolerance / investigate")
     def test_tp_generation_quantized(self):
         pass
+
+    def test_router_ignores_autocast(self):
+        # `F.linear` is on autocast's lower-precision list, which would undo the router's float32 casts
+        config = DeepseekV2Config(hidden_size=64, n_routed_experts=16, num_experts_per_tok=4)
+        router = DeepseekV2TopkRouter(config).to(torch_device)
+        torch.nn.init.normal_(router.weight, std=0.02)
+        hidden_states = torch.randn(256, config.hidden_size, device=torch_device)
+
+        with torch.no_grad():
+            expected = router(hidden_states)
+            with torch.autocast(torch_device, dtype=torch.bfloat16):
+                outputs = router(hidden_states)
+
+        self.assertEqual(outputs[0].dtype, torch.float32)
+        torch.testing.assert_close(outputs, expected)
 
 
 @slow
