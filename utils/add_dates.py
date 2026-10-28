@@ -147,8 +147,10 @@ def get_first_commit_date(model_name: str | None) -> str:
         model_name_src = model_name.replace("-", "_")
     file_path = os.path.join(MODELS_PATH, model_name_src, "__init__.py")
 
-    # If the init file is not found (only true for legacy models), the doc's first commit date is used
-    if not os.path.exists(file_path):
+    # Deprecated models keep the contribution date from their original module's git history.
+    deprecated_init = os.path.join(MODELS_PATH, "deprecated", model_name_src, "__init__.py")
+    # If neither module exists, use the doc's first commit date for legacy models.
+    if not os.path.exists(file_path) and not os.path.exists(deprecated_init):
         file_path = os.path.join(DOCS_PATH, f"{model_name}.md")
 
     # Check if file exists on GitHub main branch
@@ -160,7 +162,7 @@ def get_first_commit_date(model_name: str | None) -> str:
     else:
         # File exists on GitHub main branch, get the first commit date from local git history
         final_date = subprocess.check_output(
-            ["git", "log", "--reverse", "--pretty=format:%ad", "--date=iso", file_path], text=True
+            ["git", "log", "--reverse", "--pretty=format:%ad", "--date=iso", "--", file_path], text=True
         )
     return final_date.strip().split("\n")[0][:10]
 

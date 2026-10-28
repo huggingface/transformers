@@ -21,24 +21,24 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ... import initialization as init
-from ...activations import ACT2FN, QuickGELUActivation
-from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...masking_utils import create_bidirectional_mask, create_causal_mask
-from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (
+from .... import initialization as init
+from ....activations import ACT2FN, QuickGELUActivation
+from ....cache_utils import Cache, DynamicCache, EncoderDecoderCache
+from ....masking_utils import create_bidirectional_mask, create_causal_mask
+from ....modeling_layers import GradientCheckpointingLayer
+from ....modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
     ModelOutput,
     SequenceClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...pytorch_utils import apply_chunking_to_forward
-from ...utils import TransformersKwargs, auto_docstring, logging, torch_int
-from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ....modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ....processing_utils import Unpack
+from ....pytorch_utils import apply_chunking_to_forward
+from ....utils import TransformersKwargs, auto_docstring, logging, torch_int
+from ....utils.generic import can_return_tuple, merge_with_config_defaults
+from ....utils.output_capturing import capture_outputs
 from .configuration_bridgetower import BridgeTowerConfig, BridgeTowerTextConfig, BridgeTowerVisionConfig
 
 
@@ -173,7 +173,6 @@ class BridgeTowerTransformer(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->BridgeTower
 class BridgeTowerVisionEmbeddings(nn.Module):
     def __init__(self, config: BridgeTowerVisionConfig):
         super().__init__()
@@ -340,7 +339,6 @@ class BridgeTowerLinkTower(nn.Module):
             raise NotImplementedError(f"link_tower_type {self.link_tower_type} is not implemented")
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->BridgeTower
 class BridgeTowerSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -355,7 +353,6 @@ class BridgeTowerSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertIntermediate with Bert->BridgeTower
 class BridgeTowerIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -371,7 +368,6 @@ class BridgeTowerIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertOutput with Bert->BridgeTower
 class BridgeTowerOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -386,7 +382,6 @@ class BridgeTowerOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler with Bert->BridgeTower
 class BridgeTowerPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -402,7 +397,6 @@ class BridgeTowerPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -431,7 +425,6 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->BridgeTower
 class BridgeTowerSelfAttention(nn.Module):
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
@@ -499,7 +492,6 @@ class BridgeTowerSelfAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaCrossAttention with Roberta->BridgeTower
 class BridgeTowerCrossAttention(nn.Module):
     def __init__(self, config, is_causal=False, layer_idx=None):
         super().__init__()
@@ -576,7 +568,6 @@ class BridgeTowerCrossAttention(nn.Module):
         return attn_output, attn_weights
 
 
-# Copied from transformers.models.bert.modeling_bert.BertAttention with Bert->BridgeTower,BERT->BRIDGE_TOWER
 class BridgeTowerAttention(nn.Module):
     def __init__(self, config, is_causal=False, layer_idx=None, is_cross_attention=False):
         super().__init__()
@@ -766,7 +757,6 @@ class BridgeTowerTextEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings with Roberta->BridgeTowerText
 class BridgeTowerTextEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
@@ -1037,7 +1027,6 @@ class BridgeTowerTextModel(BridgeTowerPreTrainedModel):
             past_key_values=encoder_outputs.past_key_values,
         )
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel._create_attention_masks
     def _create_attention_masks(
         self,
         attention_mask,
@@ -1352,7 +1341,6 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         return torch.cat([cls_features_text, cls_features_image], dim=-1)
 
 
-# Copied from transformers.models.vilt.modeling_vilt.ViltPredictionHeadTransform with Vilt->BridgeTower
 class BridgeTowerPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()

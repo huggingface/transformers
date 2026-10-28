@@ -127,3 +127,30 @@ class BuildConfigMappingNamesTest(unittest.TestCase):
 
         self.assertEqual(model_type_map["inner"], "InnerConfig")
         self.assertEqual(special_mappings["inner"], "wrapper")
+
+
+class DeprecatedProcessorMappingTest(unittest.TestCase):
+    def test_deprecating_model_preserves_processor_mappings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _write_config(root, "example", [("ExampleConfig", "example")])
+            module_dir = root / "src/transformers/models/example"
+            for filename, name, base in (
+                ("processing", "ExampleProcessor", "ProcessorMixin"),
+                ("image_processing", "ExampleImageProcessor", "TorchvisionBackend"),
+                ("image_processing_pil", "ExampleImageProcessorPil", "PilBackend"),
+            ):
+                (module_dir / f"{filename}_example.py").write_text(f"class {name}({base}):\n    pass\n")
+            with cwd(root):
+                configs, _ = check_auto.build_config_mapping_names()
+                before = check_auto.get_all_processor_mappings(configs)
+                self.assertEqual(before["PROCESSOR_MAPPING_NAMES"]["example"], "ExampleProcessor")
+                self.assertEqual(
+                    before["IMAGE_PROCESSOR_MAPPING_NAMES"]["example"],
+                    {"pil": "ExampleImageProcessorPil", "torchvision": "ExampleImageProcessor"},
+                )
+                deprecated_dir = module_dir.parent / "deprecated"
+                deprecated_dir.mkdir()
+                module_dir.rename(deprecated_dir / "example")
+                configs, _ = check_auto.build_config_mapping_names()
+                self.assertEqual(check_auto.get_all_processor_mappings(configs), before)
