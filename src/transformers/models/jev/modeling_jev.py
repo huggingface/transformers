@@ -50,7 +50,9 @@ class JevForDecision(JevPreTrainedModel):
         question_type_ids: torch.LongTensor,
         **kwargs,
     ) -> torch.Tensor:
-        hidden_states = self.model(input_ids=input_ids[None], use_cache=False, **kwargs).last_hidden_state[0]
+        # A batch of one prompt
+        marks, num_options, question_type_ids = marks[0], num_options[0], question_type_ids[0]
+        hidden_states = self.model(input_ids=input_ids, use_cache=False, **kwargs).last_hidden_state[0]
         logits = self.proj(hidden_states[marks - 1].to(self.proj.weight.dtype))
         if self.config.softcap is not None:
             logits = self.config.softcap * torch.tanh(logits / self.config.softcap)
