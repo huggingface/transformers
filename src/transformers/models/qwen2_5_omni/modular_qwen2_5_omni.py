@@ -3585,7 +3585,7 @@ class Qwen2_5OmniForConditionalGeneration(Qwen2_5OmniPreTrainedModel, Generation
         "Qwen2_5OmniToken2WavModel",
     ]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen2_5OmniConfig):
         super().__init__(config)
 
         self.thinker = Qwen2_5OmniThinkerForConditionalGeneration(config.thinker_config)
