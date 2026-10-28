@@ -72,10 +72,9 @@ class SystemOneHandler(BaseHandler):
         decision_config: DecisionConfig | str | None = None,
     ):
         super().__init__(model_manager, generation_state, chat_template_kwargs)
+        # Without one, each model's pipeline reads the decision config of its repo
         self.decision_config = (
-            decision_config
-            if isinstance(decision_config, DecisionConfig)
-            else DecisionConfig.from_file(decision_config)
+            DecisionConfig.from_file(decision_config) if isinstance(decision_config, str) else decision_config
         )
         self.pipelines: dict[str, DecisionPipeline] = {}
 
@@ -89,7 +88,7 @@ class SystemOneHandler(BaseHandler):
             detail = [{**item, "loc": ("body", *item["loc"])} for item in error.errors(include_url=False)]
             raise HTTPException(status_code=422, detail=detail) from error
         try:
-            parse_questions(request.questions, self.decision_config)
+            parse_questions(request.questions, self.decision_config or DecisionConfig())
         except ValueError as error:
             detail = [{"loc": ("body", "questions"), "msg": str(error), "type": "value_error"}]
             raise HTTPException(status_code=422, detail=detail) from error
