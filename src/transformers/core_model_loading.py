@@ -498,15 +498,15 @@ class PermuteForRope(ConversionOps):
         output: dict[str, torch.Tensor] = {}
         for source_pattern, tensors in input_dict.items():
             target_pattern = self.get_target_pattern(source_pattern, source_patterns, target_patterns)
-            # We only actually permute if the target_pattern matches one of the pre-expected `permute_layer_names`
-            if not any(name in source_pattern for name in self.permute_layer_names):
-                output_tensor = tensors
-            # Here we match one of the keys, so we permute
-            else:
+            # If set, we actually permute only if the target_pattern matches one of the pre-expected `permute_layer_names`
+            if self.permute_layer_names is None or any(name in source_pattern for name in self.permute_layer_names):
                 if isinstance(tensors, list) and len(tensors) > 1:
                     raise ValueError("PermuteForRope expects a single tensor per key.")
                 tensors = tensors[0] if not isinstance(tensors, torch.Tensor) else tensors
                 output_tensor = self._permute_for_rope(tensors, config)
+            # Here we do not match one of the keys, so do not permute
+            else:
+                output_tensor = tensors
 
             output[target_pattern] = output_tensor
         return output
