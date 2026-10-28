@@ -62,6 +62,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "beam": "qwen2_moe",
     "qwen3_omni_moe": "qwen2_moe",
     "qwen3_omni_moe_thinker": "qwen2_moe",
+    "qwen3_omni_moe_text": "qwen2_moe",
     "qwen3_next": "qwen2_moe",
     "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
@@ -132,6 +133,9 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "MaskFormerDetrDecoder": "DetrModel",
     "Qwen2_5_VLModel": "Qwen2VLModel",
     "Qwen2_5_VLForConditionalGeneration": "Qwen2VLForConditionalGeneration",
+    "qwen2_5_omni_thinker": "Qwen2_5OmniThinkerForConditionalGeneration",
+    "Qwen3OmniMoeThinkerModel": "Qwen2_5OmniThinkerModel",
+    "Qwen3OmniMoeThinkerForConditionalGeneration": "Qwen2_5OmniThinkerForConditionalGeneration",
     "Tipsv2VisionBackbone": "Tipsv2VisionModel",
     "UnlimitedOcrTextModel": "qwen2_moe",
     # ViT-style vision models (old HuggingFace checkpoint format → new modular format)
@@ -684,9 +688,14 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^patch_merge_mlp\.linear_2\.",
                 target_patterns="model.multi_modal_projector.merge_linear_2.",
             ),
-            WeightRenaming(source_patterns=r"\.block_sparse_moe\.", target_patterns=r"\.mlp\."),
+            # Only the MoE block. Otherwise a save would also rename the dense and vision `.mlp.` keys.
             WeightRenaming(
-                source_patterns=r"\.e_score_correction_bias", target_patterns=r"\.gate\.e_score_correction_bias"
+                source_patterns=r"\.block_sparse_moe\.(experts|gate|shared_experts)\.",
+                target_patterns=r"\.mlp\.\1\.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.block_sparse_moe\.e_score_correction_bias",
+                target_patterns=r"\.mlp\.gate\.e_score_correction_bias",
             ),
             WeightRenaming(
                 source_patterns=r"\.self_attn\.index_q_proj\.", target_patterns=".self_attn.indexer.q_proj."
@@ -761,6 +770,23 @@ def _build_checkpoint_conversion_mapping():
         ],
         "GraniteSpeechModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
+        ],
+        # Mimi checkpoints use the original flat layout, whose SEANet stacks are `encoder.layers` / `decoder.layers`.
+        # In `MimiModel`, its renaming to `encoder.encoder.layers` is followed by the halves' own, scoped to `encoder.`.
+        # The checkpoint's `quantizer.` is `MimiModel.quantizer`, between the halves.
+        "MimiEncoderModel": [
+            WeightRenaming(source_patterns=r"^encoder\.layers", target_patterns="encoder_seanet.layers"),
+        ],
+        "MimiDecoderModel": [
+            WeightRenaming(source_patterns=r"^decoder\.layers", target_patterns="decoder_seanet.layers"),
+        ],
+        "MimiModel": [
+            WeightRenaming(source_patterns=r"^encoder\.layers", target_patterns="encoder.encoder.layers"),
+            WeightRenaming(source_patterns=r"^encoder_transformer\.", target_patterns="encoder.encoder_transformer."),
+            WeightRenaming(source_patterns=r"^downsample\.", target_patterns="encoder.downsample."),
+            WeightRenaming(source_patterns=r"^upsample\.", target_patterns="decoder.upsample."),
+            WeightRenaming(source_patterns=r"^decoder_transformer\.", target_patterns="decoder.decoder_transformer."),
+            WeightRenaming(source_patterns=r"^decoder\.layers", target_patterns="decoder.decoder.layers"),
         ],
         "vibevoice_asr": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="model.language_model"),
@@ -894,6 +920,19 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
             WeightRenaming(
                 source_patterns=r"^model(?!\.(language_model|visual))", target_patterns="model.language_model"
+            ),
+        ],
+        "Qwen2_5OmniThinkerModel": [
+            PrefixChange(prefix_to_remove="thinker"),
+            PrefixChange(prefix_to_add="language_model", model_prefix="model"),
+        ],
+        "Qwen2_5OmniThinkerForConditionalGeneration": [
+            PrefixChange(prefix_to_remove="thinker"),
+            WeightRenaming(source_patterns=r"^audio_tower", target_patterns="model.audio_tower"),
+            WeightRenaming(source_patterns=r"^visual", target_patterns="model.visual"),
+            WeightRenaming(
+                source_patterns=r"^model(?!\.(language_model|visual|audio_tower))",
+                target_patterns="model.language_model",
             ),
         ],
         "deepseek_ocr2": [
@@ -1126,7 +1165,10 @@ def _build_checkpoint_conversion_mapping():
         "t5gemma2_encoder": [
             WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)embed_tokens\.", "text_model.embed_tokens."),
             WeightRenaming(r"(?<!decoder\.)(?<!text_model\.)(?<!layer)(?<!_)norm\.", "text_model.norm."),
-            WeightRenaming(r"(?<!vision_model.encoder\.)(?<!decoder\.)(?<!text_model\.)layers.", "text_model.layers."),
+            WeightRenaming(
+                r"(?<!vision_model.encoder\.)(?<!vision_tower.encoder\.)(?<!decoder\.)(?<!text_model\.)layers.",
+                "text_model.layers.",
+            ),
         ],
         "mixtral": [
             WeightRenaming(".block_sparse_moe.", ".mlp."),
@@ -1945,6 +1987,10 @@ def _build_checkpoint_conversion_mapping():
         "UltrabertForQuestionAnswering": [
             WeightRenaming(r"^ultrabert\.", "model."),
         ],
+        "UltraVBertForMaskedLM": [
+            WeightRenaming(r"^head\.decoder\.", "lm_head."),
+            WeightRenaming(r"^head\.", "projection_head."),
+        ],
     }
 
     mapping["Tipsv2DptForNormalEstimation"] = [
@@ -2056,6 +2102,10 @@ def _build_checkpoint_conversion_mapping():
     mapping["mimo_v2_flash"] += [
         WeightRenaming("self_attn.attention_sink_bias", "self_attn.sinks"),
     ]
+    mapping["flint"] = mapping["qwen2_moe"].copy()
+    mapping["flint"] += [
+        WeightRenaming("self_attn.softmax_offset", "self_attn.sinks"),
+    ]
     # HYV3: qwen2_moe expert fusion + attribute renames for MiniMaxM2-style inheritance
     mapping["hy_v3"] = mapping["qwen2_moe"].copy()
     mapping["hy_v3"] += [
@@ -2154,6 +2204,52 @@ def _build_checkpoint_conversion_mapping():
 
     # The `readout.safetensors` of the decision models of vLLM (pplx-decider, d3): the weight of the head, no bias
     mapping["jev"] = [WeightRenaming(r"^weight", "proj.weight")]
+
+    # Gradium's runtime checkpoint (`model.safetensors` next to the runtime's files). Its codec (`mimi.`) and its
+    # training-only tensors are left unexpected: the codec is the processor's audio tokenizer.
+    conditioners = r"^flow_lm\.condition_provider\.conditioners\."
+    flow_layers = r"^flow_lm\.transformer\.layers\.(\d+)\."
+    flow_net = r"^flow_lm\.flow_net\."
+    mapping["gradium_phonon_tts"] = [
+        WeightRenaming(conditioners + r"transcript_in_segment\.embed\.", "model.embed_tokens."),
+        WeightRenaming(conditioners + r"speaker_wavs\.output_proj\.", "model.audio_prompt_proj."),
+        WeightRenaming(conditioners + r"num_speakers\.embed\.", "model.num_speakers_embed."),
+        WeightRenaming(conditioners + r"num_speakers\.output_proj\.", "model.num_speakers_proj."),
+        WeightRenaming(conditioners + r"duration_delta\.output_proj\.", "model.duration_delta_proj."),
+        WeightRenaming(r"^flow_lm\.input_linear\.", "model.audio_latent_proj."),
+        WeightRenaming(r"^flow_lm\.bos_emb", "model.bos_latent"),
+        WeightRenaming(r"^flow_lm\.emb_mean", "latent_mean"),
+        WeightRenaming(r"^flow_lm\.emb_std", "latent_std"),
+        WeightRenaming(r"^flow_lm\.out_norm\.", "model.norm."),
+        WeightRenaming(r"^flow_lm\.out_eos\.", "eos_head."),
+        WeightRenaming(flow_layers + r"self_attn\.in_proj\.", r"model.layers.\1.self_attn.in_proj."),
+        WeightRenaming(flow_layers + r"self_attn\.out_proj\.", r"model.layers.\1.self_attn.o_proj."),
+        WeightRenaming(flow_layers + r"linear1\.", r"model.layers.\1.mlp.fc1."),
+        WeightRenaming(flow_layers + r"linear2\.", r"model.layers.\1.mlp.fc2."),
+        WeightRenaming(flow_layers + r"norm1\.", r"model.layers.\1.input_layernorm."),
+        WeightRenaming(flow_layers + r"norm2\.", r"model.layers.\1.post_attention_layernorm."),
+        WeightRenaming(flow_net + r"time_embed\.(\d+)\.freqs", r"flow_head.timestep_embeddings.\1.freqs"),
+        WeightRenaming(flow_net + r"time_embed\.(\d+)\.mlp\.0\.", r"flow_head.timestep_embeddings.\1.fc1."),
+        WeightRenaming(flow_net + r"time_embed\.(\d+)\.mlp\.2\.", r"flow_head.timestep_embeddings.\1.fc2."),
+        WeightRenaming(
+            flow_net + r"time_embed\.(\d+)\.mlp\.3\.alpha", r"flow_head.timestep_embeddings.\1.norm.weight"
+        ),
+        WeightRenaming(flow_net + r"cond_embed\.", "flow_head.cond_proj."),
+        WeightRenaming(flow_net + r"input_proj\.", "flow_head.input_proj."),
+        WeightRenaming(flow_net + r"res_blocks\.(\d+)\.in_ln\.", r"flow_head.layers.\1.norm."),
+        WeightRenaming(flow_net + r"res_blocks\.(\d+)\.mlp\.0\.", r"flow_head.layers.\1.fc1."),
+        WeightRenaming(flow_net + r"res_blocks\.(\d+)\.mlp\.2\.", r"flow_head.layers.\1.fc2."),
+        WeightRenaming(flow_net + r"res_blocks\.(\d+)\.adaLN_modulation\.1\.", r"flow_head.layers.\1.adaln_proj."),
+        WeightRenaming(flow_net + r"final_layer\.linear\.", "flow_head.final_layer.proj."),
+        WeightRenaming(flow_net + r"final_layer\.adaLN_modulation\.1\.", "flow_head.final_layer.adaln_proj."),
+        # The fused projection, its q/k rows permuted from interleaved RoPE pairs to the rotate-half layout (it also
+        # splits the codec's, left unexpected)
+        WeightConverter(
+            source_patterns=r"self_attn\.in_proj\.weight",
+            target_patterns=["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
+            operations=[Chunk(dim=0), PermuteForRope(permute_layer_names=["q_proj", "k_proj"])],
+        ),
+    ]
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:

@@ -126,7 +126,7 @@ class NomicBertLayer(JinaEmbeddingsV3Layer):
 
 
 class NomicBertPreTrainedModel(BertPreTrainedModel):
-    config_class = NomicBertConfig
+    config: NomicBertConfig
     base_model_prefix = "nomic_bert"
 
     # Are kept as non-persistent buffers to avoid being saved in the state dict

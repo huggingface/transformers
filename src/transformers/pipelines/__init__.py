@@ -890,6 +890,13 @@ def pipeline(
         model_kwargs = {}
 
     code_revision = kwargs.pop("code_revision", None)
+    if "code_revision" in model_kwargs:
+        if code_revision is not None:
+            raise ValueError(
+                'You cannot use both `pipeline(... code_revision=..., model_kwargs={"code_revision":...})` as those'
+                " arguments might conflict, use only one."
+            )
+        code_revision = model_kwargs.pop("code_revision")
     kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
     local_files_only = kwargs.get("local_files_only", False)
 
@@ -899,6 +906,7 @@ def pipeline(
         "token": token,
         "trust_remote_code": trust_remote_code,
         "local_files_only": local_files_only,
+        "code_revision": code_revision,
     }
     if task is None and model is None:
         raise RuntimeError(
@@ -943,9 +951,7 @@ def pipeline(
     # Instantiate config if needed
     adapter_path = None
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(
-            config, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
-        )
+        config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
     elif config is None and isinstance(model, str):
         # Check for an adapter file in the model path if PEFT is available
         if is_peft_available():
@@ -984,9 +990,7 @@ def pipeline(
             **{key: value for key, value in hub_kwargs.items() if key != "trust_remote_code"},
         ):
             model_kwargs = {**model_kwargs, "config_file_name": DECISION_HEAD_CONFIG_NAME}
-        config = AutoConfig.from_pretrained(
-            model, _from_pipeline=task, code_revision=code_revision, **hub_kwargs, **model_kwargs
-        )
+        config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
@@ -1022,7 +1026,6 @@ def pipeline(
             pipeline_class = get_class_from_dynamic_module(
                 class_ref,
                 model,
-                code_revision=code_revision,
                 **hub_kwargs,
             )
     else:
