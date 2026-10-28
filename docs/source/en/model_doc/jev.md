@@ -60,7 +60,13 @@ pplx(request), d3(request)
 
 [[autodoc]] JevConfig
 
+## JevDecisionHead
+
+[[autodoc]] JevDecisionHead
+    - forward
+
 ## JevForDecision
 
 [[autodoc]] JevForDecision
+    - from_pretrained
     - forward

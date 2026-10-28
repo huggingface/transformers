@@ -15,6 +15,7 @@ import torch
 from torch import nn
 
 from ...decision import Question
+from ...decision.modeling_utils import ForDecision
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from .configuration_jev import JevConfig
@@ -31,7 +32,7 @@ class JevPreTrainedModel(PreTrainedModel):
     each question, soft-capped like the logits of a language model head.
     """
 )
-class JevForDecision(JevPreTrainedModel):
+class JevDecisionHead(JevPreTrainedModel):
     def __init__(self, config: JevConfig):
         super().__init__(config)
         self.proj = nn.Linear(config.hidden_size, config.num_verbalizers)
@@ -60,4 +61,8 @@ class JevForDecision(JevPreTrainedModel):
         return logits[(rows >= starts[:, None]) & (rows < (starts + num_options)[:, None])]
 
 
-__all__ = ["JevForDecision", "JevPreTrainedModel"]
+class JevForDecision(ForDecision):
+    """JEV: the model of a repo and its [`JevDecisionHead`], e.g. `JevForDecision.from_pretrained("autotrust/JEV-9B")`."""
+
+
+__all__ = ["JevDecisionHead", "JevForDecision", "JevPreTrainedModel"]
