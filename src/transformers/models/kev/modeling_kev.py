@@ -16,16 +16,17 @@ import math
 import torch
 from torch import nn
 
-from ...decision.modeling_utils import DecisionPreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
 from ..auto import AutoModel
 from .configuration_kev import KevConfig
 
 
 @auto_docstring
-class KevPreTrainedModel(DecisionPreTrainedModel):
+class KevPreTrainedModel(PreTrainedModel):
     config: KevConfig
     base_model_prefix = "model"
+    _supports_sdpa = _supports_flash_attn = _supports_flex_attn = True
 
 
 @auto_docstring(
