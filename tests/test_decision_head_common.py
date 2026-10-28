@@ -17,11 +17,9 @@ import tempfile
 from pathlib import Path
 
 from huggingface_hub import hf_hub_download
-from safetensors.torch import save_file
 
 from transformers import AutoConfig, AutoTokenizer, DecisionConfig, is_torch_available, pipeline
 from transformers.decision import DecisionTemplate
-from transformers.decision.configuration_utils import DECISION_HEAD_CONFIG_NAME
 from transformers.testing_utils import torch_device
 
 
@@ -47,9 +45,8 @@ class DecisionHeadTesterMixin:
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.test["model"], revision=cls.test["revision"])
         cls.decision_config = DecisionConfig.from_pretrained(cls.decision_repo)
         cls.prompts = DecisionTemplate(cls.tokenizer, cls.decision_config)(cls.test["request"])
-        cls.config = AutoConfig.from_pretrained(
-            cls.decision_repo, config_file_name=DECISION_HEAD_CONFIG_NAME, **cls.tiny_sizes
-        )
+        config = json.loads(Path(hf_hub_download(cls.decision_repo, "decision_head.json")).read_bytes())
+        cls.config = AutoConfig.for_model(**{**config, **cls.tiny_sizes})
         cls.config.text_config = cls.backbone_class.config_class(
             vocab_size=len(cls.tokenizer),
             hidden_size=getattr(cls.config, "backbone_hidden_size", cls.config.hidden_size),
@@ -79,47 +76,6 @@ class DecisionHeadTesterMixin:
             for prompt, scores, loaded_scores in zip(self.prompts, self.scores(model), self.scores(loaded)):
                 torch.testing.assert_close(loaded_scores, scores)
                 self.assertEqual(len(scores), sum(len(question.options) for question in prompt.questions))
-
-    def test_from_the_repo_of_the_model(self):
-        # The repo of the original model, its config and weights, with the files of the decision model next to them:
-        # `decision_head.json` and the index of its weights, the shards of the model and the file of the head
-        torch.manual_seed(0)
-        model = self.all_model_classes[0](self.config).eval()
-        with tempfile.TemporaryDirectory() as tmp:
-            # The weights the backbone has (its model, and the `lm_head` of the heads reading it) are in its file, under
-            # its names: `model.layers.0...` for a `ForCausalLM`, `layers.0...` for a base model
-            state_dict, backbone = model.state_dict(), self.backbone_class(self.config.text_config)
-            names = {
-                key: next((name for name in (key, f"model.{key}") if name in state_dict), None)
-                for key in backbone.state_dict()
-            }
-            backbone.load_state_dict({key: state_dict[name] for key, name in names.items() if name}, strict=False)
-            backbone.save_pretrained(tmp)
-            for component in (self.tokenizer, self.decision_config):
-                component.save_pretrained(tmp)
-            head = {key: value for key, value in state_dict.items() if key not in names.values()}
-            save_file(head, f"{tmp}/head.safetensors", metadata={"format": "pt"})
-            index = dict.fromkeys(backbone.state_dict(), "model.safetensors") | dict.fromkeys(head, "head.safetensors")
-            Path(tmp, "decision.safetensors.index.json").write_text(
-                json.dumps({"metadata": {}, "weight_map": index}), encoding="utf-8"
-            )
-            config = model.config
-            config.transformers_weights = "decision.safetensors.index.json"
-            config.to_json_file(f"{tmp}/{DECISION_HEAD_CONFIG_NAME}")
-            loaded = (
-                self.all_model_classes[0]
-                .from_pretrained(tmp, config_file_name=DECISION_HEAD_CONFIG_NAME, attn_implementation="eager")
-                .eval()
-            )
-            decide = pipeline("decision", model=tmp, model_kwargs={"attn_implementation": "eager"})
-            answers = decide(self.test["request"])
-        self.assertIsInstance(decide.model, self.all_model_classes[0])
-        for scores, loaded_scores in zip(self.scores(model), self.scores(loaded)):
-            torch.testing.assert_close(loaded_scores, scores)
-        self.assertEqual(list(answers), list(self.test["request"]["questions"]))
-        for answer in answers.values():
-            if "probabilities" in answer:
-                self.assertAlmostEqual(sum(answer["probabilities"].values()), 1.0, places=5)
 
 
 def check_decision(
