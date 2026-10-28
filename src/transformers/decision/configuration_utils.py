@@ -86,6 +86,15 @@ class DecisionConfig:
             processors.append(NoulBandLogitsWarper(*self.noul_band, true_index=self.noul_options.index("true")))
         return processors
 
+    @property
+    def logits_processors(self) -> dict:
+        """The [`LogitsProcessorList`] of each question type, built once."""
+        if getattr(self, "_logits_processors", None) is None:
+            from .template_utils import Question
+
+            self._logits_processors = {kind: self.get_logits_processor(kind) for kind in Question.questions_types}
+        return self._logits_processors
+
     def chat_template_kwargs(self, request, processor) -> list[dict]:
         """The keyword arguments of `processor.apply_chat_template` for each prompt of `request`, see [`chat_template_kwargs`]."""
         from .template_utils import chat_template_kwargs
