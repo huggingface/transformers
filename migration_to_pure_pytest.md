@@ -211,6 +211,9 @@ Out of scope until Phase 3 is complete and stable.
 
 **Still open (not yet fixed, in discovery order):**
 - Issue 3: `_testMethodName` getter fragility (inspect.stack)
+- Issue 7: `VLMModelTest` + `ALMModelTest` collection leak
+- Issue 8: `setup_method(self)` wrong signature in `unittest.TestCase` subclasses
+- Issue 9: `VideoPrismModelTest` pre-existing broken declaration (possibly out of scope)
 
 ---
 
@@ -382,6 +385,107 @@ solar_open, stablelm, starcoder2, vaultgemma, youtu, zaya
 | **Total** | | | **6,762** | |
 
 Both fixes are small and safe — they do not require touching any individual model test files.
+
+---
+
+### Issue 7: `VLMModelTest` and `ALMModelTest` collection leak — same root cause as Issue 6
+**Found**: CI run 40759614150 (PR #50087, all 8 shards) — 2026-10-28
+**Confirmed**: 100%
+
+**Root cause**: Identical to Issue 6. `VLMModelTest` (in `vlm_tester.py`) and `ALMModelTest`
+(in `alm_tester.py`) both end in `Test` → our `python_classes = ["Test*", "*Test"]` change causes
+pytest to collect them as standalone test classes from every model file that imports them.
+`MultiModalModelTest` (their parent, in `multimodal_tester.py`) still uses `setUp` and was NOT
+renamed, so when collected standalone (as plain pytest classes), `setUp` is never called →
+`config_tester`/`model_tester` stay None → every test fails.
+
+**Error signatures** (identical to Issue 6):
+```
+AttributeError: 'VLMModelTest' object has no attribute 'config_tester'
+AttributeError: 'NoneType' object has no attribute 'prepare_config_and_inputs_for_common'
+TypeError: 'NoneType' object is not iterable
+```
+
+**Failure counts across all 8 shards**:
+| Shard job | VLMModelTest | ALMModelTest |
+|-----------|-------------|-------------|
+| 123068682629 (0/8) | 544 | 137 |
+| 123068682581 (1/8) | 544 | 0 |
+| 123068682545 (2/8) | 544 | 548 |
+| 123068682683 (3/8) | 680 | 137 |
+| 123068682640 (4/8) | 1088 | 411 |
+| 123068682447 (5/8) | 816 | 274 |
+| 123068682550 (6/8) | 272 | 0 |
+| 123068682463 (7/8) | 272 | 274 |
+| **Total** | **~4,760** | **~1,781** |
+
+**Fix**: Add `__test__ = False` to `VLMModelTest` in `vlm_tester.py` and `ALMModelTest` in
+`alm_tester.py`. No `setUp` alias needed — unlike `causal_lm_tester.py`, we did NOT rename
+`setUp` in `multimodal_tester.py`, so unmigrated `unittest.TestCase` subclasses still call
+`setUp` correctly via the parent class.
+**Status**: Not yet fixed.
+
+---
+
+### Issue 8: `setup_method(self)` wrong signature crashes `unittest.TestCase` subclasses
+**Found**: CI run 40759614150, shards 6 and 4+7 — 2026-10-28
+**Confirmed**: 100%
+
+**Affected classes**:
+- `RobertaPreLayerNormModelTest` — 522 failures (shard 6)
+- `MT5EncoderOnlyModelTest` — part of ~432 failures across shards 4 and 7
+- `UMT5EncoderOnlyModelTest` — same batch
+
+**Root cause**: During the consistency check phase (Issues fixed in Phase 2), we renamed
+`setUp` → `setup_method` in `roberta_prelayernorm`, `mt5`, and `umt5` test files because they
+use `# Copied from` to track the source class (`RobertaModelTest.setUp` /
+`T5EncoderOnlyModelTest.setUp`). The rename was needed to match the source after we renamed
+there. However, these three classes still carry `unittest.TestCase` in their declarations.
+
+When pytest runs a class that has **both** `unittest.TestCase` AND a `setup_method` method,
+its unittest compatibility layer creates an internal fixture called
+`_unittest_setup_method_fixture_<ClassName>` and calls `setup_method(method)` — passing the
+**test method object as an argument**. Our `setup_method(self)` signature takes only one
+argument (self), so:
+```
+TypeError: RobertaPreLayerNormModelTest.setup_method() takes 1 positional argument but 2 were given
+```
+This is a NEW root cause not seen in previous issues — it's specifically the interaction of
+having BOTH `unittest.TestCase` AND `setup_method` defined on the same class.
+
+**Fix options**:
+1. Change signature to `setup_method(self, method=None)` in the 3 affected files — absorbs
+   the extra argument, both call paths work.
+2. Revert `setUp` → `setup_method` rename in these 3 files — they still have `unittest.TestCase`
+   so they should keep `setUp` during the transition. Then revisit when `unittest.TestCase`
+   is also removed from them.
+
+Option 2 is cleaner philosophically (don't rename `setUp` in classes that still have
+`unittest.TestCase`), but option 1 is simpler and avoids re-doing the rename later.
+**Status**: Not yet fixed.
+
+---
+
+### Issue 9: `VideoPrismModelTest` — pre-existing broken class, exposed by our python_classes change
+**Found**: CI run 40759614150, shard 7 — 2026-10-28
+**Confirmed**: Likely pre-existing, NOT introduced by us — but now visible because of our change
+
+**Class**: `tests/models/videoprism/test_modeling_videoprism.py::VideoPrismModelTest`
+Declaration: `class VideoPrismModelTest(ModelTesterMixin):` — **no `unittest.TestCase`**
+Uses: `def setUp(self):` — not renamed to `setup_method`
+Failures in shard 7: **89**
+
+**What happened**: On `main`, this class was invisible to pytest because:
+- No `unittest.TestCase` → not collected via unittest path
+- Name ends in `Test` (not `Test*`) → not collected via default name matching
+
+Our `python_classes = ["Test*", "*Test"]` change made it visible for the first time. Since
+`setUp` is never called by pytest for plain classes, `model_tester` is None → all tests fail.
+
+**Assessment**: This class was broken before our PR — it would never run correctly on main
+either. The fix (rename `setUp` → `setup_method`) is trivial but belongs to the full rollout
+phase (Phase 3), not to fixing migration infrastructure issues. Possibly out of scope for this PR.
+**Status**: Not yet fixed. Low priority — treat as pre-existing.
 
 ---
 
