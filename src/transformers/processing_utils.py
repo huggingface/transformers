@@ -64,7 +64,14 @@ from .utils import (
     logging,
     resolve_revision,
 )
-from .utils.chat_template_utils import _get_template_variables, render_jinja_template
+from .utils.chat_template_utils import (
+    _CONTROL_TOKEN_END,
+    _CONTROL_TOKEN_START,
+    _get_control_token_patterns,
+    _get_template_variables,
+    mark_control_tokens,
+    render_jinja_template,
+)
 from .utils.type_validators import (
     device_validator,
     image_size_validator,
@@ -88,6 +95,10 @@ if is_vision_available():
     from .image_utils import PILImageResampling
 
 logger = logging.get_logger(__name__)
+
+# Matches where a mm placeholder isn't one that `mark_control_tokens` marked in user input
+_UNMARKED = f"(?<!{_CONTROL_TOKEN_START})"
+_MARKED_RE = re.compile(f"{_CONTROL_TOKEN_START}.*?{_CONTROL_TOKEN_END}")
 
 # type hinting: specifying the type of processor class that inherits from ProcessorMixin
 SpecificProcessorType = TypeVar("SpecificProcessorType", bound="ProcessorMixin")
@@ -204,6 +215,9 @@ class TextKwargs(TypedDict, total=False):
             Whether to return multimodal token type ids indicating mm placeholder token positions.
         return_text_replacement_offsets (`bool`, *optional*):
             Whether to return character offsets for each mm placeholder and its replacement.
+        sanitize_control_tokens (`bool`, *optional*):
+            Whether the text was marked by `mark_control_tokens`: its marked control tokens are encoded as plain text,
+            and aren't expanded as mm placeholders. Set by `apply_chat_template(..., sanitize_control_tokens=True)`.
         return_tensors (`str` or [`~utils.TensorType`], *optional*):
             If set, will return tensors of a particular framework. Acceptable values are:
             - `'pt'`: Return PyTorch `torch.Tensor` objects.
@@ -230,6 +244,7 @@ class TextKwargs(TypedDict, total=False):
     padding_side: Literal["left", "right"] | None
     return_mm_token_type_ids: bool | None
     return_text_replacement_offsets: bool | None
+    sanitize_control_tokens: bool | None
     return_tensors: Annotated[str | TensorType | None, tensor_type_validator()]
 
 
@@ -666,7 +681,11 @@ class ProcessorMixin(PushToHubMixin):
         images, text, videos, audio = self.prepare_inputs_layout(
             images=images, text=text, videos=videos, audio=audio, **kwargs
         )
-        self.validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
+        # Marked control tokens are user text: they don't count as mm placeholders
+        unmarked_text = text
+        if kwargs.get("sanitize_control_tokens") and text is not None:
+            unmarked_text = [_MARKED_RE.sub("", sample) for sample in (text if isinstance(text, list) else [text])]
+        self.validate_inputs(images=images, text=unmarked_text, videos=videos, audio=audio, **kwargs)
 
         merged_kwargs = self._merge_kwargs(
             self.valid_processor_kwargs,
@@ -877,11 +896,11 @@ class ProcessorMixin(PushToHubMixin):
         # Plan: update all models and contrib to vllm, they might benefit largely from `replacement_offsets`
         token_groups = []
         if len(images_replacements) > 0 and (image_token := getattr(self, "image_token", None)) is not None:
-            token_groups.append(f"(?P<image>{re.escape(image_token)})")
+            token_groups.append(f"(?P<image>{_UNMARKED}{re.escape(image_token)})")
         if len(videos_replacements) > 0 and (video_token := getattr(self, "video_token", None)) is not None:
-            token_groups.append(f"(?P<video>{re.escape(video_token)})")
+            token_groups.append(f"(?P<video>{_UNMARKED}{re.escape(video_token)})")
         if len(audio_replacements) > 0 and (audio_token := getattr(self, "audio_token", None)) is not None:
-            token_groups.append(f"(?P<audio>{re.escape(audio_token)})")
+            token_groups.append(f"(?P<audio>{_UNMARKED}{re.escape(audio_token)})")
 
         regex_special_mm_tokens = "|".join(token_groups) or r"(?!)"
         replacements_iters = {
@@ -2010,6 +2029,7 @@ class ProcessorMixin(PushToHubMixin):
         return_dict: bool = False,
         load_audio_from_video: bool = False,
         processor_kwargs: dict | None = None,
+        sanitize_control_tokens: bool | list[str] = False,
         **kwargs,
     ) -> str:
         """
@@ -2036,6 +2056,11 @@ class ProcessorMixin(PushToHubMixin):
             chat_template (`Optional[str]`, *optional*):
                 The Jinja template to use for formatting the conversation. If not provided, the tokenizer's
                 chat template is used.
+            sanitize_control_tokens (`bool` or `list[str]`, defaults to `False`):
+                Whether to encode the control tokens found in the conversation, tools and documents (and in the
+                template variables passed as `**kwargs` whose names are listed, when a list is given) as plain text, so
+                that user input can't write them, nor mm placeholders. See the tokenizer's `apply_chat_template`.
+                Requires `tokenize=True`.
         """
         processor_kwargs = processor_kwargs or {}
 
@@ -2070,7 +2095,7 @@ class ProcessorMixin(PushToHubMixin):
             logger.warning(
                 "Kwargs passed to `processor.__call__` have to be in `processor_kwargs` dict, not in `**kwargs`"
             )
-            processor_kwargs = processor_kwargs_from_kwargs
+            processor_kwargs = {**processor_kwargs_from_kwargs, **processor_kwargs}
 
         # Check if tokenizer is fast - use backend attribute if available, otherwise fall back to class name
         is_tokenizers_fast = False
@@ -2200,6 +2225,24 @@ class ProcessorMixin(PushToHubMixin):
                 batch_videos.append(videos)
 
         # `kwargs` overwrite special tokens if both are present
+        if sanitize_control_tokens:
+            if not tokenize or return_assistant_tokens_mask:
+                raise ValueError(
+                    "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
+                    "`return_assistant_tokens_mask=True`."
+                )
+            # Wrap control tokens that appear in the user's strings with private markers, like the tokenizer does
+            control_tokens_re = _get_control_token_patterns(self.tokenizer._get_control_tokens(chat_template))[0]
+            conversations = [mark_control_tokens(conversation, control_tokens_re) for conversation in conversations]
+            tools = mark_control_tokens(tools, control_tokens_re)
+            documents = mark_control_tokens(documents, control_tokens_re)
+            if isinstance(sanitize_control_tokens, list):  # the names of template variables with user input
+                kwargs = {
+                    k: mark_control_tokens(v, control_tokens_re) if k in sanitize_control_tokens else v
+                    for k, v in kwargs.items()
+                }
+            processor_kwargs["sanitize_control_tokens"] = True
+
         template_kwargs = {**self.tokenizer.special_tokens_map, **kwargs}
         prompt, generation_indices = render_jinja_template(
             conversations=conversations,
@@ -2245,6 +2288,9 @@ class ProcessorMixin(PushToHubMixin):
                 else:
                     processor_kwargs["sampling_rate"] = sampling_rate
 
+            # Images can also come in `processor_kwargs`, for templates that place them from other variables
+            if images := processor_kwargs.pop("images", None):
+                batch_images = [images] if not is_batched else images
             images_exist = any((im is not None) for im_list in batch_images for im in im_list)
             videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)
             out = self(
@@ -2381,7 +2427,7 @@ class ProcessorMixin(PushToHubMixin):
             token_id = getattr(self, f"{modality}_token_id", None)
             if token_str is not None and token_id is not None:
                 ids_count = [list(ids).count(token_id) for ids in input_ids]
-                text_count = [sample.count(token_str) for sample in text]
+                text_count = [len(re.findall(_UNMARKED + re.escape(token_str), sample)) for sample in text]
 
                 if ids_count != text_count:
                     raise ValueError(

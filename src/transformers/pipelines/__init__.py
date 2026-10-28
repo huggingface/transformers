@@ -61,6 +61,7 @@ from .base import (
     get_default_model_and_revision,
     load_model,
 )
+from .decision import DecisionPipeline
 from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
@@ -255,6 +256,12 @@ SUPPORTED_TASKS = {
         "default": {"model": ("google/owlvit-base-patch32", "cbc355f")},
         "type": "multimodal",
     },
+    "decision": {
+        "impl": DecisionPipeline,
+        "pt": (AutoModelForImageTextToText, AutoModelForCausalLM, AutoModel) if is_torch_available() else (),
+        "default": {"model": ("Qwen/Qwen2.5-0.5B-Instruct", "7ae5576")},
+        "type": "multimodal",
+    },
     "depth-estimation": {
         "impl": DepthEstimationPipeline,
         "pt": (AutoModelForDepthEstimation,) if is_torch_available() else (),
@@ -363,6 +370,7 @@ def check_task(task: str) -> tuple[str, dict, Any]:
             - `"audio-classification"`
             - `"automatic-speech-recognition"`
             - `"conversational"`
+            - `"decision"`
             - `"depth-estimation"`
             - `"document-question-answering"`
             - `"feature-extraction"`
@@ -423,6 +431,8 @@ def pipeline(task: Literal["any-to-any"], model: str | PreTrainedModel | None = 
 def pipeline(task: Literal["audio-classification"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> AudioClassificationPipeline: ...
 @overload
 def pipeline(task: Literal["automatic-speech-recognition"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> AutomaticSpeechRecognitionPipeline: ...
+@overload
+def pipeline(task: Literal["decision"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> DecisionPipeline: ...
 @overload
 def pipeline(task: Literal["depth-estimation"], model: str | PreTrainedModel | None = None, config: str | PreTrainedConfig | None = None, tokenizer: str | PreTrainedTokenizer | PreTrainedTokenizerFast | None = None, feature_extractor: str | FeatureExtractionMixin | None = None, image_processor: str | BaseImageProcessor | None = None, video_processor: str | BaseVideoProcessor | None = None, processor: str | ProcessorMixin | None = None, revision: str | None = None, use_fast: bool = True, token: str | bool | None = None, device: int | str | torch.device | None = None, device_map: str | dict[str, int | str] | None = None, dtype: str | torch.dtype | None = "auto", trust_remote_code: bool | None = None, model_kwargs: dict[str, Any] | None = None, pipeline_class: Any | None = None, **kwargs: Any) -> DepthEstimationPipeline: ...
 @overload
@@ -743,6 +753,7 @@ def pipeline(
 
             - `"audio-classification"`: will return a [`AudioClassificationPipeline`].
             - `"automatic-speech-recognition"`: will return a [`AutomaticSpeechRecognitionPipeline`].
+            - `"decision"`: will return a [`DecisionPipeline`].
             - `"depth-estimation"`: will return a [`DepthEstimationPipeline`].
             - `"document-question-answering"`: will return a [`DocumentQuestionAnsweringPipeline`].
             - `"feature-extraction"`: will return a [`FeatureExtractionPipeline`].

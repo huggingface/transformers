@@ -149,6 +149,7 @@ class Qwen4ExpTextConfig(Qwen3_5MoeTextConfig):
         "hyper_connection_mixer": "keep_full_weight",
     }
     base_model_pp_plan = None
+    use_bidirectional_attention = AttributeError()
 
     hc_count: int = 4
     hc_lowrank: int = 320

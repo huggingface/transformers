@@ -25,6 +25,7 @@ from unittest.mock import MagicMock
 
 from huggingface_hub.utils import httpx
 
+from transformers import DecisionConfig
 from transformers.cli.serve import Serve
 from transformers.cli.serving.chat_completion import ChatCompletionHandler
 from transformers.cli.serving.completion import CompletionHandler
@@ -47,6 +48,7 @@ from transformers.testing_utils import (
     require_librosa,
     require_multipart,
     require_serve,
+    require_torch,
     require_torch_accelerator,
     require_torchcodec,
     require_vision,
@@ -689,7 +691,46 @@ class TestSystemOneEndpoint(ServeIntegrationTestCase):
         self.body["questions"]["team"]["criteria"] = {}
         response = httpx.post(f"{self.base_url}/v1/systemone", json=self.body, timeout=30)
         self.assertEqual(response.status_code, 422)
-        self.assertIn("criteria", response.json()["detail"][0]["loc"])
+        self.assertIn("A `choice` question needs `criteria`", response.json()["detail"][0]["msg"])
+
+
+@require_serve
+class TestSystemOneDecisionConfig(unittest.TestCase):
+    @require_torch
+    def test_answers_are_the_pipelines(self):
+        from transformers import AutoTokenizer, Qwen2Config, Qwen2ForCausalLM, pipeline
+
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        config = Qwen2Config(
+            vocab_size=len(tokenizer),
+            hidden_size=16,
+            intermediate_size=32,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+        )
+        model = Qwen2ForCausalLM(config).eval()
+        decision_config = DecisionConfig(temperature={"noul": 1.5}, noul_band=[0.8, 0.1])
+        handler = SystemOneHandler(MagicMock(), GenerationState(), decision_config=decision_config)
+        request = {"state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
+        pipe = handler._pipeline("x", model, tokenizer)
+        self.assertIs(handler._pipeline("x", model, tokenizer), pipe)
+        answers, input_tokens = handler._answer(pipe, request)
+        expected = pipeline("decision", model=model, tokenizer=tokenizer, decision_config=decision_config)(request)
+        self.assertEqual(answers, expected)
+        self.assertGreater(input_tokens, 0)
+
+    def test_questions_are_validated_once_per_distinct_set(self):
+        handler = SystemOneHandler(MagicMock(), GenerationState())
+        body = {"model": "x", "state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
+        _, questions = handler._validate_request(body)
+        self.assertIs(handler._validate_request(body)[1], questions)
+        body["questions"] = {"a": {"type": "Choice", "criteria": {}}, "b": {"type": "noul", "instruction": "typo"}}
+        with self.assertRaises(HTTPException) as error:
+            handler._validate_request(body)
+        self.assertEqual(error.exception.status_code, 422)
+        self.assertIn("Did you mean 'choice'?", error.exception.detail[0]["msg"])
+        self.assertIn("Did you mean 'instructions'?", error.exception.detail[0]["msg"])
 
 
 @slow

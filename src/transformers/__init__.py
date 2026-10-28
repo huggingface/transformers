@@ -78,6 +78,7 @@ _import_structure = {
         "default_data_collator",
     ],
     "debug_utils": [],
+    "decision": ["DecisionConfig"],
     "dependency_versions_check": [],
     "dependency_versions_table": [],
     "distributed": ["DistributedConfig"],
@@ -119,6 +120,7 @@ _import_structure = {
         "AudioClassificationPipeline",
         "AutomaticSpeechRecognitionPipeline",
         "CsvPipelineDataFormat",
+        "DecisionPipeline",
         "DepthEstimationPipeline",
         "DocumentQuestionAnsweringPipeline",
         "FeatureExtractionPipeline",
@@ -374,6 +376,7 @@ else:
             "AlternatingCodebooksLogitsProcessor",
             "BayesianDetectorConfig",
             "BayesianDetectorModel",
+            "CalibratedTemperatureLogitsWarper",
             "ClassifierFreeGuidanceLogitsProcessor",
             "ContinuousBatchingManager",
             "ContinuousMixin",
@@ -395,6 +398,7 @@ else:
             "MinLengthLogitsProcessor",
             "MinNewTokensLengthLogitsProcessor",
             "MinPLogitsWarper",
+            "NoulBandLogitsWarper",
             "NoBadWordsLogitsProcessor",
             "NoRepeatNGramLogitsProcessor",
             "PrefixConstrainedLogitsProcessor",
@@ -503,6 +507,7 @@ if TYPE_CHECKING:
     from .data.data_collator import DataCollatorWithPadding as DataCollatorWithPadding
     from .data.data_collator import DefaultDataCollator as DefaultDataCollator
     from .data.data_collator import default_data_collator as default_data_collator
+    from .decision import DecisionConfig as DecisionConfig
     from .distributed import DistributedConfig as DistributedConfig
     from .feature_extraction_sequence_utils import SequenceFeatureExtractor as SequenceFeatureExtractor
 
@@ -515,6 +520,7 @@ if TYPE_CHECKING:
     from .generation import AsyncTextIteratorStreamer as AsyncTextIteratorStreamer
     from .generation import BayesianDetectorConfig as BayesianDetectorConfig
     from .generation import BayesianDetectorModel as BayesianDetectorModel
+    from .generation import CalibratedTemperatureLogitsWarper as CalibratedTemperatureLogitsWarper
     from .generation import ClassifierFreeGuidanceLogitsProcessor as ClassifierFreeGuidanceLogitsProcessor
     from .generation import CompileConfig as CompileConfig
     from .generation import ContinuousBatchingConfig as ContinuousBatchingConfig
@@ -541,6 +547,7 @@ if TYPE_CHECKING:
     from .generation import MinPLogitsWarper as MinPLogitsWarper
     from .generation import NoBadWordsLogitsProcessor as NoBadWordsLogitsProcessor
     from .generation import NoRepeatNGramLogitsProcessor as NoRepeatNGramLogitsProcessor
+    from .generation import NoulBandLogitsWarper as NoulBandLogitsWarper
     from .generation import PrefixConstrainedLogitsProcessor as PrefixConstrainedLogitsProcessor
     from .generation import RepetitionPenaltyLogitsProcessor as RepetitionPenaltyLogitsProcessor
     from .generation import SequenceBiasLogitsProcessor as SequenceBiasLogitsProcessor
@@ -627,6 +634,7 @@ if TYPE_CHECKING:
     from .pipelines import AudioClassificationPipeline as AudioClassificationPipeline
     from .pipelines import AutomaticSpeechRecognitionPipeline as AutomaticSpeechRecognitionPipeline
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat
+    from .pipelines import DecisionPipeline as DecisionPipeline
     from .pipelines import DepthEstimationPipeline as DepthEstimationPipeline
     from .pipelines import DocumentQuestionAnsweringPipeline as DocumentQuestionAnsweringPipeline
     from .pipelines import FeatureExtractionPipeline as FeatureExtractionPipeline

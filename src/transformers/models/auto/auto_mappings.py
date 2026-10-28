@@ -345,6 +345,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("janus_vision_model", "JanusVisionConfig"),
         ("janus_vqgan", "JanusVQVAEConfig"),
         ("jetmoe", "JetMoeConfig"),
+        ("jev", "JevConfig"),
         ("jina_embeddings_v3", "JinaEmbeddingsV3Config"),
         ("kimi_k25", "Kimi_K25Config"),
         ("kimi_k25_vision", "Kimi_K25VisionConfig"),

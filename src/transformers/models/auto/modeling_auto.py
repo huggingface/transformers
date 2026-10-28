@@ -287,6 +287,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("jamba", "JambaModel"),
         ("janus", "JanusModel"),
         ("jetmoe", "JetMoeModel"),
+        ("jev", "JevDecisionHead"),
         ("jina_embeddings_v3", "JinaEmbeddingsV3Model"),
         ("kimi_k25", "Kimi_K25Model"),
         ("kimi_k25_vision", "Kimi_K25VisionModel"),

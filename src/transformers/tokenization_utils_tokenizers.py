@@ -47,6 +47,7 @@ from .tokenization_utils_base import (
     generate_merges,
 )
 from .utils import PaddingStrategy, add_end_docstrings, hf_api, logging
+from .utils.chat_template_utils import _get_control_token_patterns, encode_marked_chat
 
 
 logger = logging.get_logger(__name__)
@@ -1069,6 +1070,24 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._tokenizer.encode_special_tokens != split_special_tokens:
             self._tokenizer.encode_special_tokens = split_special_tokens
 
+        if kwargs.get("sanitize_control_tokens"):  # marked by `mark_control_tokens`, see `apply_chat_template`
+            post_processor = self._tokenizer.post_processor
+            if add_special_tokens and post_processor is not None and post_processor.num_special_tokens_to_add(False):
+                raise NotImplementedError("`sanitize_control_tokens=True` needs a template that writes special tokens")
+            markers_re = _get_control_token_patterns(tuple(self.added_tokens_encoder))[1]
+            input_ids = [encode_marked_chat(self, chat, markers_re) for chat in batch_text_or_text_pairs]
+            if truncation_strategy != TruncationStrategy.DO_NOT_TRUNCATE and max_length is not None:
+                side = self.truncation_side
+                input_ids = [ids[:max_length] if side == "right" else ids[-max_length:] for ids in input_ids]
+            return self.pad(
+                {"input_ids": input_ids if is_batched or return_tensors else input_ids[0]},
+                padding=padding_strategy,
+                max_length=max_length,
+                pad_to_multiple_of=pad_to_multiple_of,
+                padding_side=padding_side,
+                return_attention_mask=return_attention_mask,
+                return_tensors=return_tensors,
+            )
         # Direct rust backend call
         encodings = self._tokenizer.encode_batch(
             batch_text_or_text_pairs,
