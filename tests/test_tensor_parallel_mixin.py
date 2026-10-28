@@ -10,15 +10,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import atexit
 import copy
-import gc
-import multiprocessing
 import os
-import queue
-import socket
 import tempfile
-import traceback
 from abc import ABC, abstractmethod
 from itertools import product
 
@@ -29,14 +23,13 @@ from transformers.distributed.configuration_utils import DistributedConfig
 from transformers.distributed.tensor_parallel import _get_parameter_plan
 from transformers.testing_utils import (
     SINGLE_PROCESS_DEVICES,
-    backend_empty_cache,
     is_tensor_parallel_test,
     is_torch_available,
     torch_device,
 )
 from transformers.utils import is_torch_greater_or_equal, is_torchao_available
 
-from .test_fsdp_mixin import _get_distributed_backend, _get_distributed_device_type, _set_rank_device
+from .distributed_testing_utils import run_distributed
 
 
 if is_torchao_available():
@@ -47,8 +40,6 @@ if is_torchao_available():
 if is_torch_available():
     import torch
     import torch.distributed as dist
-    import torch.multiprocessing as mp
-    from torch.distributed.distributed_c10d import GroupMember, _world
     from torch.distributed.tensor import DTensor
 
 
@@ -81,16 +72,8 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
 
 
 # =============================================================================
-# Distributed helpers (top-level for pickling to the worker processes)
+# Distributed helpers (top-level for pickling to the ranks)
 # =============================================================================
-
-
-def _find_free_port():
-    """Find a free port by binding a socket and releasing it."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(("localhost", 0))
-        return s.getsockname()[1]
 
 
 def get_packed_grad_shard(grad, world_size, rank, dim):
@@ -117,131 +100,6 @@ def get_packed_grad_shard(grad, world_size, rank, dim):
 
     # Select along the sharded dimension
     return grad.index_select(dim, torch.tensor(indices, device=grad.device))
-
-
-def _persistent_rank(rank, world_size, port, backend, tasks, results):
-    """A rank kept alive across tests: it initializes the process group once, then runs every test function it receives."""
-    os.environ.update(
-        WORLD_SIZE=str(world_size),
-        RANK=str(rank),
-        LOCAL_RANK=str(rank),
-        MASTER_ADDR="localhost",
-        MASTER_PORT=str(port),
-    )
-    # some backends, e.g. tpu, require the rank to be set before initializing the process group
-    _set_rank_device(rank, backend)
-    dist.init_process_group(backend=backend, rank=rank, world_size=world_size)
-    results.put(None)
-
-    while True:
-        try:
-            func, args, kwargs = tasks.get(timeout=5)
-        except queue.Empty:
-            # exit if pytest died without killing us
-            if not multiprocessing.parent_process().is_alive():
-                return
-            continue
-        try:
-            func(rank, *args, **kwargs)
-            dist.barrier()
-            results.put(None)
-        except BaseException:
-            results.put(f"Rank {rank} failed:\n{traceback.format_exc()}")
-
-        # free what the test left behind: its models, and the process groups of its device meshes
-        del func, args, kwargs
-        gc.collect()
-        if _get_distributed_device_type() != "cpu":
-            backend_empty_cache(_get_distributed_device_type())
-        for group in list(_world.pg_map):
-            if group is not GroupMember.WORLD:
-                dist.destroy_process_group(group)
-
-
-class _PersistentRanks:
-    """`world_size` ranks reused across tests, as spawning them (and importing torch in each) takes longer than most tests."""
-
-    def __init__(self, world_size: int, backend: str):
-        ctx = mp.get_context("spawn")
-        port = _find_free_port()
-        self.results = ctx.Queue()
-        self.tasks = [ctx.Queue() for _ in range(world_size)]
-        self.processes = [
-            ctx.Process(
-                target=_persistent_rank, args=(rank, world_size, port, backend, self.tasks[rank], self.results)
-            )
-            for rank in range(world_size)
-        ]
-        for process in self.processes:
-            process.start()
-        try:
-            self._wait()
-        except RuntimeError:
-            self.kill()
-            raise
-
-    def run(self, func, args, kwargs):
-        for tasks in self.tasks:
-            tasks.put((func, args, kwargs))
-        self._wait()
-
-    def _wait(self):
-        """Wait for every rank to report, raising on the first error."""
-        for _ in self.processes:
-            while True:
-                try:
-                    error = self.results.get(timeout=1)
-                    break
-                except queue.Empty:
-                    if not all(process.is_alive() for process in self.processes):
-                        raise RuntimeError("A distributed test rank died, see its output above")
-            if error is not None:
-                raise RuntimeError(error)
-
-    def kill(self):
-        for process in self.processes:
-            process.kill()
-            process.join()
-
-
-# one set of ranks per (world_size, backend), per pytest(-xdist worker) process
-_PERSISTENT_RANKS: dict[tuple[int, str], _PersistentRanks] = {}
-
-
-@atexit.register
-def _kill_persistent_ranks():
-    for ranks in _PERSISTENT_RANKS.values():
-        ranks.kill()
-
-
-def _init_distributed(tp: int, max_retries: int = 5, backend: str | None = None):
-    """Decorator to run a function on `tp` ranks, reusing the ranks (and their process group) across calls."""
-    # default to the current accelerator's backend, as "gloo" cannot carry every accelerator's tensors
-    if backend is None:
-        backend = _get_distributed_backend()
-
-    def _init_distributed_inner(func):
-        def wrapper(*args, **kwargs):
-            key = (tp, backend)
-            for attempt in range(max_retries):
-                if key in _PERSISTENT_RANKS:
-                    break
-                try:
-                    _PERSISTENT_RANKS[key] = _PersistentRanks(tp, backend)
-                except RuntimeError:
-                    # most likely another process took the port in the meantime
-                    if attempt == max_retries - 1:
-                        raise
-            try:
-                _PERSISTENT_RANKS[key].run(func, args, kwargs)
-            except BaseException:
-                # the other ranks may be stuck in a collective, the next call starts from fresh ranks
-                _PERSISTENT_RANKS.pop(key).kill()
-                raise
-
-        return wrapper
-
-    return _init_distributed_inner
 
 
 def _get_expert_weight_names(model):
@@ -751,7 +609,9 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_forward_impl)(tmp_dir, model_class, atol, rtol)
+            run_distributed(world_size=self.tensor_parallel_size)(_test_tp_forward_impl)(
+                tmp_dir, model_class, atol, rtol
+            )
 
     @is_tensor_parallel_test
     def test_tp_backward(self):
@@ -767,7 +627,9 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_backward_impl)(tmp_dir, model_class, atol, rtol)
+            run_distributed(world_size=self.tensor_parallel_size)(_test_tp_backward_impl)(
+                tmp_dir, model_class, atol, rtol
+            )
 
     @is_tensor_parallel_test
     def test_tp_generation(self):
@@ -785,7 +647,7 @@ class TensorParallelTesterMixin(ABC):
             set_seed(42)
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_impl)(
+            run_distributed(world_size=self.tensor_parallel_size)(_test_tp_generation_impl)(
                 tmp_dir, model_class, atol, rtol, max_new_tokens
             )
 
@@ -805,7 +667,7 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_quantized_impl)(
+            run_distributed(world_size=self.tensor_parallel_size)(_test_tp_generation_quantized_impl)(
                 tmp_dir, model_class, max_new_tokens
             )
 
@@ -831,7 +693,7 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(
+            run_distributed(world_size=self.tensor_parallel_size)(_test_ep_forward_impl)(
                 tmp_dir, model_class, atol, rtol, experts_implementation
             )
 
@@ -850,6 +712,6 @@ class TensorParallelTesterMixin(ABC):
             model = model_class(config)
             model.save_pretrained(tmp_dir, save_original_format=True)
 
-            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(
+            run_distributed(world_size=self.tensor_parallel_size)(_test_ep_backward_impl)(
                 tmp_dir, model_class, atol, rtol, experts_implementation
             )

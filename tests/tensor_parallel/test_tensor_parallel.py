@@ -31,7 +31,7 @@ from transformers.distributed.tensor_parallel import (
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
 
-from ..test_tensor_parallel_mixin import _init_distributed
+from ..distributed_testing_utils import run_distributed
 
 
 @is_tensor_parallel_test
@@ -383,7 +383,7 @@ class TestTensorParallelLayer(TestCasePlus):
     def test_dispatch_hands_experts_the_received_rows(self):
         """The all-to-all's pending result (`AsyncCollectiveTensor`) holds a null pointer until a torch op waits on
         it, and experts that launch kernels on raw pointers would read it: the dispatch waits before any experts run."""
-        _init_distributed(tp=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
+        run_distributed(world_size=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
 
 
 class _DummyExperts(torch.nn.Module):
@@ -396,7 +396,7 @@ class _DummyExperts(torch.nn.Module):
         return tokens
 
 
-# Worker functions for the expert-parallel layer tests, spawned through `_init_distributed`.
+# Worker functions for the expert-parallel layer tests, spawned through `run_distributed`.
 def _dispatch_hands_experts_the_received_rows(rank):
     hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
     experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), init_device_mesh("cpu", (2,)))
