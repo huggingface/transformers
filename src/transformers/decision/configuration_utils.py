@@ -66,6 +66,12 @@ class DecisionConfig:
 
         return LogitsProcessorList([TemperatureLogitsWarper(float(self.temperature.get(question_type, 1.0)))])
 
+    def chat_template_kwargs(self, request, processor) -> list[dict]:
+        """The keyword arguments of `processor.apply_chat_template` for each prompt of `request`, see [`chat_template_kwargs`]."""
+        from .template_utils import chat_template_kwargs
+
+        return chat_template_kwargs(self, request, processor)
+
     @classmethod
     def from_file(cls, path: str | Path | None = None) -> "DecisionConfig":
         config = {} if path is None else json.loads(Path(path).read_text(encoding="utf-8"))

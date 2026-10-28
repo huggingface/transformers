@@ -741,8 +741,8 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
             DecisionConfig(temperature={"noul": 2.0}, chat_template=template).save_pretrained(repo)
             model.config._name_or_path = model.name_or_path = repo  # as if loaded from the repo
             pipe = SystemOneHandler(MagicMock(), GenerationState())._pipeline(repo, model, tokenizer)
-        self.assertEqual(pipe.template.config.temperature, {"noul": 2.0})
-        self.assertEqual(pipe.template.decision_template, template)
+        self.assertEqual(pipe.decision_config.temperature, {"noul": 2.0})
+        self.assertEqual(pipe.decision_config.chat_template, template)
 
     def test_questions_are_validated(self):
         handler = SystemOneHandler(MagicMock(), GenerationState())

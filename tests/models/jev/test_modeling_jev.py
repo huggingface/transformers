@@ -21,10 +21,10 @@ from huggingface_hub import hf_hub_download
 from safetensors.torch import save_file
 
 from transformers import AutoProcessor, is_torch_available, pipeline
-from transformers.decision import DecisionConfig, DecisionTemplate
+from transformers.decision import DecisionConfig
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow
 
-from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
+from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision, render
 
 
 if is_torch_available():
@@ -46,8 +46,9 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         for repo in DECIDERS:
             with self.subTest(repo):
                 test = json.loads(Path(hf_hub_download(repo, "decision_test.json")).read_bytes())
-                template = DecisionTemplate(AutoProcessor.from_pretrained(repo), DecisionConfig.from_pretrained(repo))
-                prompts = template(test["request"])
+                prompts = render(
+                    AutoProcessor.from_pretrained(repo), test["request"], DecisionConfig.from_pretrained(repo)
+                )
                 sequences = [{"input_ids": prompt.input_ids, "marks": prompt.marks} for prompt in prompts]
                 self.assertEqual(sequences, test["sequences"])
 
@@ -74,7 +75,7 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.assertFalse(model.config.text_config.is_causal)
         torch.testing.assert_close(model.proj.weight, readout)
         self.assertIsInstance(decide.model, JevForDecision)
-        self.assertEqual(decide.template.config.temperature, dict.fromkeys(["noul", "choice", "score"], 2.0))
+        self.assertEqual(decide.decision_config.temperature, dict.fromkeys(["noul", "choice", "score"], 2.0))
 
 
 # Code readouts of a Qwen3.5 checkpoint, read with the files of its repo. The answers each converted head gives to the request of its `decision_test.json`. One per prompt and
