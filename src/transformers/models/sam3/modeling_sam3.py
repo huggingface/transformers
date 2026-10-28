@@ -1715,8 +1715,9 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         self, height: torch.Tensor, width: torch.Tensor, dtype: torch.dtype, device: torch.device
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Generate normalized coordinate grids."""
-        coords_h = torch.arange(0, height, device=device, dtype=dtype) / height
-        coords_w = torch.arange(0, width, device=device, dtype=dtype) / width
+        # end the grid at 71/72, as at the trained 1008 resolution, for any image size
+        coords_h = torch.arange(0, height, device=device, dtype=dtype) / (height - 1) * 71 / 72
+        coords_w = torch.arange(0, width, device=device, dtype=dtype) / (width - 1) * 71 / 72
         return coords_h, coords_w
 
     def _get_rpb_matrix(
