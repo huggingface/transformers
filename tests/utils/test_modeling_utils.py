@@ -2747,12 +2747,12 @@ class ModelUtilsTest(TestCasePlus):
 class ModelOnTheFlyConversionTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.org = "hf-internal-testing"
-        # Requires a token with write access to cls.org (e.g. TRANSFORMERS_HUB_BOT_HF_TOKEN in CI)
-        cls.token = os.getenv("TRANSFORMERS_HUB_BOT_HF_TOKEN") or os.getenv("HF_TOKEN")
+        cls.org = "hf-ci-ephemeral-repos"
+        # Requires a fine-grained token with repo create/delete + discussion access on cls.org
+        cls.token = os.getenv("HF_CI_EPHEMERAL_REPO_MANIPULATION_TOKEN") or os.getenv("HF_TOKEN")
 
         if not cls.token:
-            raise unittest.SkipTest("TRANSFORMERS_HUB_BOT_HF_TOKEN (or HF_TOKEN) not set, skipping.")
+            raise unittest.SkipTest("HF_CI_EPHEMERAL_REPO_MANIPULATION_TOKEN (or HF_TOKEN) not set, skipping.")
 
         cls.api = HfApi(token=cls.token)
 
