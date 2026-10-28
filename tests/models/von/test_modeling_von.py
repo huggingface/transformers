@@ -24,12 +24,13 @@ from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 if is_torch_available():
     import torch
 
-    from transformers import ModernBertConfig, ModernBertModel, VonForDecision
+    from transformers import ModernBertConfig, ModernBertModel, VonDecisionHead, VonForDecision
 
 
 @require_torch
 class VonForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
-    all_model_classes = (VonForDecision,) if is_torch_available() else ()
+    all_model_classes = (VonDecisionHead,) if is_torch_available() else ()
+    for_decision_class = VonForDecision if is_torch_available() else None
     decision_repo = "ArthurZ/von"
     tiny_sizes = {"hidden_size": 16}
     backbone_class = ModernBertModel if is_torch_available() else None
@@ -46,7 +47,7 @@ class VonForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             num_attention_heads=2,
             local_attention=8,
         )
-        backbone, head = ModernBertModel(config).eval(), VonForDecision(self.config)
+        backbone, head = ModernBertModel(config).eval(), VonDecisionHead(self.config)
         input_ids = [3, 4, 5, 6, 1, 9, 1, 7, 8, 2] + [3, 4, 5, 6, 1, 7, 8, 1, 10, 2]
         # The first question of the request has two options
         prompt = DecisionPrompt(input_ids, [5, 7, 10, 15, 18, 20], self.prompts[0].questions)
