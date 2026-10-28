@@ -2340,16 +2340,15 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(r"\.(feed_forward|shared_experts)\.w2\.", r".\1.down_proj."),
         WeightRenaming(r"\.(feed_forward|shared_experts)\.w3\.", r".\1.up_proj."),
         # Vision model Q and K projectors: saved for interleaved RoPE, Pixtral expects rotate-half
-        # HACK: There is a Chunk(0) before the PermuteForRoPE which acts as a rename because PermuteForRoPE does not
         WeightConverter(
             source_patterns=r"attention\.wq\.",
             target_patterns="attention.q_proj.",
-            operations=[Chunk(dim=0), PermuteForRope(subconfig_key="vision_config", permute_layer_names=["q_proj"])],
+            operations=[PermuteForRope(subconfig_key="vision_config")],
         ),
         WeightConverter(
             source_patterns=r"attention\.wk\.",
             target_patterns="attention.k_proj.",
-            operations=[Chunk(dim=0), PermuteForRope(subconfig_key="vision_config", permute_layer_names=["k_proj"])],
+            operations=[PermuteForRope(subconfig_key="vision_config")],
         ),
     ]
     mapping["mistral_large4_text"] = [
