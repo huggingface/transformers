@@ -12,23 +12,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Convert a Nemotron 3.5 Transcribe checkpoint exported by NeMo (`examples/speechlm2/to_hf.py`: `config.json`,
-`llm_backbone/config.json`, `model.safetensors` and the tokenizer files) to the Transformers format.
+Write the Transformers files of Nemotron 3.5 Transcribe for NVIDIA's NeMo export (`examples/speechlm2/to_hf.py`:
+`config.json`, `llm_backbone/config.json`, `model.safetensors` and the tokenizer files).
 
-The weights are converted one tensor at a time and written in shards, as the model does not fit in CPU memory.
+The weights are not converted: the model loads NVIDIA's `model.safetensors` as is (NeMo key layout, mixed bfloat16 and
+float32), through the `nemotron3_5_transcribe` entry of `src/transformers/conversion_mapping.py`, so that NeMo, vLLM and
+Transformers share one checkpoint. This script only writes the small files, from the export's text files and the
+safetensors header and metadata (no tensor is read but two constants of the word timestamp head):
+- `config.json`: the Transformers config, merged with the top-level keys of NeMo's `config.json` it does not define;
+- `tokenizer.json`, `tokenizer_config.json`: the language model tokenizer, with `<|audio|>` in a reserved slot;
+- `generation_config.json`;
+- `processor_config.json`, `chat_template.jinja`;
+- `alignment_tokenizer/`: the word timestamp head's SentencePiece model, converted to a `tokenizers` tokenizer.
+
+`--output_dir` is an overlay: its files go next to `model.safetensors` (the NeMo files they replace are rewritten from
+them). `--check_dir` loads a directory holding both, checks that every tensor is loaded and transcribes a sample.
 
     python src/transformers/models/nemotron3_5_transcribe/convert_nemotron3_5_transcribe_to_hf.py \
-        --nemo_dir /path/to/nemo_export --output_dir /path/to/output
+        --nemo_dir /path/to/nemo_export --output_dir /path/to/overlay [--check_dir /path/to/overlay_with_weights]
+
+Converting the alignment tokenizer requires `sentencepiece` and `protobuf`.
 """
 
 import argparse
 import json
 import math
-import re
+import tempfile
 from pathlib import Path
 
+import torch
 from safetensors import safe_open
-from safetensors.torch import save_file
+from tokenizers import AddedToken, Tokenizer, decoders, normalizers, pre_tokenizers
+from tokenizers.models import BPE
 
 from transformers import (
     AutoTokenizer,
@@ -37,99 +52,65 @@ from transformers import (
     Nemotron3_5TranscribeForConditionalGeneration,
     Nemotron3_5TranscribeProcessor,
     NemotronAsrStreamingFeatureExtractor,
+    PreTrainedTokenizerFast,
+)
+from transformers.audio_utils import load_audio
+from transformers.convert_slow_tokenizer import SpmConverter, generate_merges, import_protobuf
+
+
+SANITY_CHECK_AUDIO_URL = (
+    "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/en-Alice_woman.wav"
 )
 
-
-# Renders the prompt of the original `nemotron3p5` prompt formatter: an empty system turn by default, text and
-# audio items of a turn joined by a space, and thinking disabled by default.
-CHAT_TEMPLATE = """{%- set enable_thinking = enable_thinking if enable_thinking is defined else false -%}
+# The checkpoint's chat template, which renders string contents only, also takes lists of content parts (what the
+# processor builds from audio items): rendered as NeMo's training prompt (`SALMDataset`, the prompt contract of NeMo's
+# vLLM plugin), the text parts joined by a space, then one `<|audio|>` per audio part. Without a loop over the content,
+# so that vLLM keeps passing string contents, which the plugin requires.
+RENDER_CONTENT = """{#- a list of content parts is rendered as NeMo's training prompt (`SALMDataset`, the vLLM plugin's prompt
+contract): the text parts joined by a space, then one `<|audio|>` per audio part, separated by a space -#}
 {%- macro render_content(content) -%}
     {%- if content is string -%}
         {{- content -}}
     {%- else -%}
-        {%- for item in content -%}
-            {%- if not loop.first %}{{ " " }}{% endif -%}
-            {%- if item.type == "text" -%}
-                {{- item.text -}}
-            {%- elif item.type == "audio" -%}
-                {{- "<|audio|>" -}}
+        {%- set text_parts = content | selectattr("type", "in", ["text", "input_text", "output_text"]) | list -%}
+        {%- set text = text_parts | map(attribute="text") | join(" ") -%}
+        {%- set num_audio = content | selectattr("type", "in", ["audio", "audio_url", "input_audio"]) | list | length -%}
+        {%- set locators = (["<|audio|>"] * num_audio) | join(" ") -%}
+        {%- if num_audio == 0 -%}
+            {{- text_parts | map(attribute="text") | join("\\n") -}}
+        {%- elif text.count("<|audio|>") > 0 -%}
+            {%- if text.count("<|audio|>") != num_audio -%}
+                {{- raise_exception("The text has " ~ text.count("<|audio|>") ~ " <|audio|> locators for " ~ num_audio ~ " audio parts.") -}}
             {%- endif -%}
-        {%- endfor -%}
+            {%- set head = text[:(text | length) - (locators | length)] if text.endswith(locators) else text -%}
+            {%- if text != locators and text != head.rstrip() ~ " " ~ locators -%}
+                {{- raise_exception("An <|audio|> locator in the text must be final and preceded by one space.") -}}
+            {%- endif -%}
+            {{- text -}}
+        {%- elif text -%}
+            {{- text ~ " " ~ locators -}}
+        {%- else -%}
+            {{- locators -}}
+        {%- endif -%}
     {%- endif -%}
 {%- endmacro -%}
-{%- if messages[0].role == "system" -%}
-    {%- set system_message = render_content(messages[0].content) -%}
-    {%- set loop_messages = messages[1:] -%}
-{%- else -%}
-    {%- set system_message = "" -%}
-    {%- set loop_messages = messages -%}
-{%- endif -%}
-{{- "<|im_start|>system\\n" + system_message + "<|im_end|>\\n" -}}
-{%- for message in loop_messages -%}
-    {%- set content = render_content(message.content) -%}
-    {%- if message.role == "assistant" and "<think>" not in content -%}
-        {%- set content = "<think></think>" + content -%}
-    {%- endif -%}
-    {{- "<|im_start|>" + message.role + "\\n" + content + "<|im_end|>\\n" -}}
-{%- endfor -%}
-{%- if add_generation_prompt -%}
-    {%- if enable_thinking -%}
-        {{- "<|im_start|>assistant\\n<think>\\n" -}}
-    {%- else -%}
-        {{- "<|im_start|>assistant\\n<think></think>" -}}
-    {%- endif -%}
-{%- endif -%}"""
+"""
 
-# NeMo `TransformerEncoder` key regex -> HF audio encoder key, relative to the encoder prefix. The fused
-# `attn.w_qkv` projection is split by `split_fused_qkv`.
-ENCODER_MAPPING = {
-    r"pre_encode\.proj\.": "embedder.projection.",
-    r"embed_norm\.": "input_layer_norm.",
-    r"final_norm\.": "layer_norm.",
-    r"layers\.(\d+)\.norm1\.": r"layers.\1.layer_norm1.",
-    r"layers\.(\d+)\.norm2\.": r"layers.\1.layer_norm2.",
-    r"layers\.(\d+)\.attn\.out_proj\.": r"layers.\1.self_attn.o_proj.",
-    r"layers\.(\d+)\.attn\.(q_norm|k_norm)\.": r"layers.\1.self_attn.\2.",
-    r"layers\.(\d+)\.ffn\.net\.0\.": r"layers.\1.mlp.fc1.",
-    r"layers\.(\d+)\.ffn\.net\.3\.": r"layers.\1.mlp.fc2.",
-}
-ENCODER_PREFIXES = {
-    "perception.encoder.asr_encoder.": "model.audio_tower.asr_encoder.",
-    "perception.encoder.diarization_model.encoder.": "model.audio_tower.diarization_model.model.audio_tower.",
-}
-
-# NeMo key regex -> HF key, first match wins.
-STATE_DICT_MAPPING = {
-    r"^perception\.encoder\.diarization_model\.sortformer_modules\.encoder_proj\.": "model.audio_tower.diarization_model.model.proj.",
-    r"^perception\.encoder\.diarization_model\.sortformer_modules\.subpixel_upsample\.": "model.audio_tower.diarization_model.model.upsampler.conv.",
-    r"^perception\.encoder\.diarization_model\.sortformer_modules\.first_hidden_to_hidden\.": "model.audio_tower.diarization_model.classifier.dense.",
-    r"^perception\.encoder\.diarization_model\.sortformer_modules\.single_hidden_to_spks\.": "model.audio_tower.diarization_model.classifier.out_proj.",
-    r"^perception\.encoder\.diarization_model\.sortformer_modules\.learnable_sil_emb$": "model.audio_tower.diarization_model.silence_embeds",
-    r"^perception\.encoder\.asr_norm\.": "model.audio_tower.asr_norm.",
-    r"^perception\.encoder\.diar_norm\.": "model.audio_tower.speaker_norm.",
-    r"^perception\.proj\.": "model.multi_modal_projector.",
-    r"^llm\.model\.embed_tokens\.": "model.language_model.embeddings.",
-    r"^llm\.model\.norm\.": "model.language_model.norm_f.",
-    r"^llm\.model\.layers\.(\d+)\.mixer\._fp32_params\.": r"model.language_model.layers.\1.mixer.",
-    r"^llm\.model\.layers\.(\d+)\.mixer\.experts\.gate_and_up_projs$": r"model.language_model.layers.\1.mixer.experts.up_proj",
-    r"^llm\.model\.layers\.(\d+)\.mixer\.experts\.down_projs$": r"model.language_model.layers.\1.mixer.experts.down_proj",
-    r"^llm\.model\.layers\.": "model.language_model.layers.",
-    r"^llm\.lm_head\.": "lm_head.",
-}
-# NeMo-Automodel stores the routed experts as `(num_experts, in_features, out_features)`.
-TRANSPOSED_KEYS = r"^llm\.model\.layers\.\d+\.mixer\.experts\.(gate_and_up_projs|down_projs)$"
-KEYS_TO_DROP = [
-    # TransformerEngine metadata, empty tensors.
-    r"\._extra_state$",
-    # Multi-token prediction head, only used as a draft model for speculative decoding.
-    r"^llm\.mtp\.",
-    # STFT window and mel filter banks, recomputed by the feature extractor.
-    r"^perception\.preprocessor\.",
-    r"^perception\.encoder\.diarization_model\.preprocessor\.",
-    # Legacy two-branch speaker head, never called in the original forward.
-    r"^perception\.encoder\.diarization_model\.sortformer_modules\.hidden_to_spks\.",
+CHAT_TEMPLATE_REPLACEMENTS = [
+    (
+        '{%- set system_message = messages[0]["content"] %}',
+        '{%- set system_message = render_content(messages[0]["content"]) %}',
+    ),
+    (
+        "{%- set content = message.content | string %}\n        {{- content }}",
+        "{{- render_content(message.content) }}",
+    ),
 ]
-SHARD_SIZE = 5 * 1024**3
+
+# The original appends `<|audio|>` after the vocabulary, with no embedding row. It becomes this reserved Nemotron-H
+# token instead, the first after the `<spk:…>`/`<ev:…>`/`<sty:…>` tags the authors renamed into slots 100-141.
+AUDIO_TOKEN_SLOT = "<SPECIAL_142>"
+
 # Defaults of NeMo `ParallelExpertEncoder` for the windows of its online inference and the diarization speaker cache,
 # which checkpoint configs usually omit. In encoder frames.
 NEMO_ONLINE_INFERENCE_DEFAULTS = {
@@ -153,40 +134,6 @@ NEMO_ENCODER_DEFAULTS = {
 }
 
 
-def convert_key(key: str) -> str | None:
-    if any(re.search(pattern, key) for pattern in KEYS_TO_DROP):
-        return None
-    for nemo_prefix, hf_prefix in ENCODER_PREFIXES.items():
-        if key.startswith(nemo_prefix):
-            suffix = key[len(nemo_prefix) :]
-            for pattern, replacement in ENCODER_MAPPING.items():
-                if re.match(pattern, suffix):
-                    return hf_prefix + re.sub(pattern, replacement, suffix, count=1)
-            if re.fullmatch(r"layers\.\d+\.attn\.w_qkv\.weight", suffix):
-                return hf_prefix + suffix
-            raise ValueError(f"Unexpected NeMo encoder key: {key}")
-    for pattern, replacement in STATE_DICT_MAPPING.items():
-        if re.match(pattern, key):
-            return re.sub(pattern, replacement, key, count=1)
-    raise ValueError(f"Unexpected NeMo key: {key}")
-
-
-def convert_tensors(key, tensor):
-    """Yields the HF `(key, tensor)` pairs of one NeMo tensor."""
-    hf_key = convert_key(key)
-    if hf_key is None:
-        return
-    match = re.match(r"^(.*layers\.\d+)\.attn\.w_qkv\.weight$", hf_key)
-    if match:
-        # NeMo `w_qkv` rows are ordered `[query | key | value]`.
-        for name, weight in zip(("q_proj", "k_proj", "v_proj"), tensor.chunk(3, dim=0)):
-            yield f"{match.group(1)}.self_attn.{name}.weight", weight.contiguous()
-        return
-    if re.match(TRANSPOSED_KEYS, key):
-        tensor = tensor.transpose(1, 2).contiguous()
-    yield hf_key, tensor
-
-
 def check_encoder(name: str, encoder_config: dict, **expected):
     """Checks a NeMo `TransformerEncoder` config against the options the HF encoders implement."""
     expected = {
@@ -205,7 +152,65 @@ def check_encoder(name: str, encoder_config: dict, **expected):
             raise ValueError(f"Unsupported `{name}.{key}={actual}`, expected {value}.")
 
 
-def convert_config(nemo_dir: Path) -> Nemotron3_5TranscribeConfig:
+def read_word_timestamp_metadata(nemo_dir: Path) -> dict:
+    """The word timestamp head's decoder config, stored in the safetensors metadata of the export."""
+    with safe_open(nemo_dir / "model.safetensors", framework="pt") as weights:
+        metadata = weights.metadata()
+    if metadata.get("ctc_timestamp_format") != "nemo_ctc_timestamp_artifact_v1":
+        raise ValueError(f"Unsupported word timestamp head format `{metadata.get('ctc_timestamp_format')}`.")
+    return json.loads(metadata["ctc_timestamp_decoder_config"])
+
+
+def convert_word_timestamp_config(nemo_dir: Path) -> dict:
+    """Checks NeMo's `TransformerCTCDecoder` config against the head the model implements and converts it."""
+    decoder = read_word_timestamp_metadata(nemo_dir)
+    # the options the head implements, with the `TransformerCTCDecoder` defaults for the ones a config may omit
+    expected = {
+        "use_transformer": (True, False),
+        "qkv_bias": (False, False),
+        "qk_norm": (True, False),
+        "pre_block_norm": (True, True),
+        "self_attention_model": ("rope", "rel_pos"),
+        "attn_mode": ("full", "full"),
+        "xscaling": (False, False),
+        "residual": (True, False),
+        "learnable_residual_scale": (False, False),
+        "add_blank": (True, True),
+        "upsampling_factor": (1, 1),
+    }
+    for name, (value, default) in expected.items():
+        if decoder.get(name, default) != value:
+            raise ValueError(
+                f"Unsupported `ctc_timestamp_decoder_config.{name}={decoder.get(name, default)}`, expected {value}."
+            )
+    with safe_open(nemo_dir / "model.safetensors", framework="pt") as weights:
+        residual_scale = weights.get_tensor("ctc_timestamp.decoder.residual_scale")
+    # the head reads the scale from its config, the checkpoint buffer is left unloaded
+    if residual_scale.ndim != 0 or residual_scale != torch.tensor(
+        decoder["residual_scale"], dtype=residual_scale.dtype
+    ):
+        raise ValueError(
+            f"The `residual_scale` tensor ({residual_scale}) differs from the config value ({decoder['residual_scale']})."
+        )
+    return {
+        "hidden_size": decoder["feat_in"],
+        "intermediate_size": int(decoder["feat_in"] * decoder["ff_expansion"]),
+        "num_hidden_layers": decoder["n_layers"],
+        "num_attention_heads": decoder["n_heads"],
+        "max_position_embeddings": decoder["pos_emb_max_len"],
+        "rope_parameters": {
+            "rope_type": "default",
+            "rope_theta": decoder["rope_base"],
+            "partial_rotary_factor": decoder["rotary_fraction"],
+        },
+        # the classes are the alignment tokenizer pieces, then the blank
+        "vocab_size": decoder["num_classes"] + 1,
+        "blank_token_id": decoder["num_classes"],
+        "residual_scale": decoder["residual_scale"],
+    }
+
+
+def convert_config(nemo_dir: Path, audio_token_id: int) -> Nemotron3_5TranscribeConfig:
     nemo_config = json.loads((nemo_dir / "config.json").read_text())
     encoder_config = nemo_config["pe_encoder_config"]
     asr = encoder_config["asr_encoder_cfg"]
@@ -290,12 +295,7 @@ def convert_config(nemo_dir: Path) -> Nemotron3_5TranscribeConfig:
     for name in ("architectures", "auto_map", "_name_or_path", "transformers_version"):
         text_config.pop(name, None)
 
-    tokenizer_config = json.loads((nemo_dir / "tokenizer_config.json").read_text())
-    tokenizer = json.loads((nemo_dir / "tokenizer.json").read_text())
-    audio_token = tokenizer_config["audio_token"]
-    audio_token_id = next(token["id"] for token in tokenizer["added_tokens"] if token["content"] == audio_token)
-
-    return Nemotron3_5TranscribeConfig(
+    config = Nemotron3_5TranscribeConfig(
         audio_config={
             "asr_config": asr_config,
             "diarization_config": diarization_config,
@@ -303,47 +303,187 @@ def convert_config(nemo_dir: Path) -> Nemotron3_5TranscribeConfig:
         },
         text_config=text_config,
         audio_token_id=audio_token_id,
+        word_timestamp_config=convert_word_timestamp_config(nemo_dir),
         dtype="bfloat16",
     )
+    # NeMo and vLLM read the same `config.json`: their keys are kept, but `model_type` and `architectures`
+    nemo_keys = {name: value for name, value in nemo_config.items() if name not in config.to_dict()}
+    config = Nemotron3_5TranscribeConfig(**config.to_dict(), **nemo_keys)
+    config.architectures = ["Nemotron3_5TranscribeForConditionalGeneration"]
+    return config
 
 
-def write_weights(nemo_dir: Path, output_dir: Path):
-    shard, shard_size, total_size = {}, 0, 0
-    shard_names, weight_map = [], {}
-
-    def save_shard():
-        name = f"model-{len(shard_names) + 1:05d}.safetensors"
-        save_file(shard, output_dir / name, metadata={"format": "pt"})
-        shard_names.append(name)
-        weight_map.update(dict.fromkeys(shard, name))
-
-    with safe_open(nemo_dir / "model.safetensors", framework="pt") as reader:
-        for key in reader.keys():
-            for hf_key, tensor in convert_tensors(key, reader.get_tensor(key)):
-                size = tensor.numel() * tensor.element_size()
-                if shard and shard_size + size > SHARD_SIZE:
-                    save_shard()
-                    shard, shard_size = {}, 0
-                shard[hf_key] = tensor
-                shard_size += size
-                total_size += size
-    save_shard()
-
-    num_shards = len(shard_names)
-    final_names = {name: name.replace(".safetensors", f"-of-{num_shards:05d}.safetensors") for name in shard_names}
-    for name, final_name in final_names.items():
-        (output_dir / name).rename(output_dir / final_name)
-    index = {
-        "metadata": {"total_size": total_size},
-        "weight_map": {key: final_names[name] for key, name in sorted(weight_map.items())},
-    }
-    (output_dir / "model.safetensors.index.json").write_text(json.dumps(index, indent=2) + "\n")
+def convert_chat_template(chat_template: str) -> str:
+    """The checkpoint's chat template with `render_content` for the contents of user and system turns."""
+    for old, new in CHAT_TEMPLATE_REPLACEMENTS:
+        if chat_template.count(old) != 1:
+            raise ValueError(
+                f"Unexpected chat template: `{old}` found {chat_template.count(old)} times instead of once."
+            )
+        chat_template = chat_template.replace(old, new)
+    position = chat_template.index("{%- set enable_thinking")
+    return chat_template[:position] + RENDER_CONTENT + chat_template[position:]
 
 
-def write_processor(nemo_dir: Path, output_dir: Path) -> Nemotron3_5TranscribeProcessor:
+def convert_tokenizer(nemo_dir: Path, vocab_size: int):
+    """
+    Loads the original tokenizer with `<|audio|>` renamed from `AUDIO_TOKEN_SLOT`, a reserved token inside the
+    vocabulary, so that the converted checkpoint keeps the original's weights.
+    """
+    tokenizer_config = json.loads((nemo_dir / "tokenizer_config.json").read_text())
+    chat_template = convert_chat_template(tokenizer_config.pop("chat_template"))
+    tokenizer = json.loads((nemo_dir / "tokenizer.json").read_text())
+    # older exports store the audio token at the top level, newer ones under `extra_special_tokens`
+    audio_token = tokenizer_config.get("audio_token") or tokenizer_config["extra_special_tokens"]["audio_token"]
+    audio_token_id = next(token["id"] for token in tokenizer["added_tokens"] if token["content"] == audio_token)
+
+    if audio_token_id >= vocab_size:
+        vocab = tokenizer["model"]["vocab"]
+        slot = next((token for token in tokenizer["added_tokens"] if token["content"] == AUDIO_TOKEN_SLOT), None)
+        if slot is None or vocab.get(AUDIO_TOKEN_SLOT) != slot["id"]:
+            raise ValueError(
+                f"`{AUDIO_TOKEN_SLOT}` must be a reserved token of both `added_tokens` and `model.vocab`."
+            )
+        slot["content"] = audio_token
+        vocab[audio_token] = vocab.pop(AUDIO_TOKEN_SLOT)
+        tokenizer["added_tokens"] = [token for token in tokenizer["added_tokens"] if token["id"] != audio_token_id]
+        audio_token_id = slot["id"]
+
+    # the processor's call defaults, read from the tokenizer's config by `ProcessorMixin`
+    tokenizer_config.update(padding=True, padding_side="left")
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        (Path(tmp_dir) / "tokenizer.json").write_text(json.dumps(tokenizer, ensure_ascii=False))
+        (Path(tmp_dir) / "tokenizer_config.json").write_text(json.dumps(tokenizer_config, ensure_ascii=False))
+        tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
+    # loading flags of the original export, not tokenizer settings
+    for key in ("is_local", "local_files_only"):
+        tokenizer.init_kwargs.pop(key, None)
+    if tokenizer.convert_tokens_to_ids(audio_token) != audio_token_id or len(tokenizer) != vocab_size:
+        raise ValueError(
+            f"Expected `{audio_token}` at id {audio_token_id} and {vocab_size} tokens, got "
+            f"{tokenizer.convert_tokens_to_ids(audio_token)} and {len(tokenizer)}."
+        )
+    return tokenizer, audio_token_id, chat_template
+
+
+class AlignmentTokenizerConverter(SpmConverter):
+    """
+    Converts the word timestamp head's SentencePiece model, a BPE model with `add_dummy_prefix`, no extra whitespace
+    removal, no byte fallback and 48 user-defined tag pieces (`<ev:…>`, `<spk:…>`, `<sty:…>`).
+
+    SentencePiece adds its dummy prefix before matching the tags (`"<ev:laughter> ok"` -> `▁ <ev:laughter> ▁ok`), while
+    a `tokenizers` tokenizer matches added tokens in the raw text, before any normalization. The prefix is therefore
+    added by the pre-tokenizer to the first part of the text only (as SentencePiece adds it to the text only, not after
+    each tag), which gives SentencePiece's pieces for any text that does not start with a tag, a whitespace or `▁`.
+    For any text, encoding `" " + text` gives SentencePiece's pieces of `text`.
+    """
+
+    handle_byte_fallback = False
+
+    def __init__(self, model_proto: bytes):
+        self.original_tokenizer = None
+        self.proto = import_protobuf().ModelProto()
+        self.proto.ParseFromString(model_proto)
+        trainer, normalizer = self.proto.trainer_spec, self.proto.normalizer_spec
+        # `ModelType.BPE`
+        if trainer.model_type != 2 or trainer.byte_fallback or not normalizer.add_dummy_prefix:
+            raise ValueError("The alignment tokenizer must be a SentencePiece BPE model with a dummy prefix.")
+        if normalizer.remove_extra_whitespaces or not normalizer.escape_whitespaces:
+            raise ValueError("The alignment tokenizer must keep and escape every whitespace.")
+        if any(piece.type == 3 for piece in self.proto.pieces):
+            raise ValueError("The alignment tokenizer must have no control pieces.")
+
+    def tokenizer(self, proto):
+        vocab_scores = self.vocab(proto)
+        vocab = {piece: index for index, (piece, _) in enumerate(vocab_scores)}
+        tokenizer = Tokenizer(
+            BPE(
+                vocab,
+                generate_merges(vocab, vocab_scores),
+                unk_token=proto.trainer_spec.unk_piece,
+                fuse_unk=True,
+                byte_fallback=False,
+            )
+        )
+        # the user-defined pieces are matched before the rest of the text, as SentencePiece does
+        tokenizer.add_tokens(
+            [AddedToken(piece.piece, normalized=False, special=False) for piece in proto.pieces if piece.type == 4]
+        )
+        return tokenizer
+
+    def normalizer(self, proto):
+        # whitespaces are kept, so no strip and no merge of consecutive spaces
+        return normalizers.Sequence(
+            [normalizers.Precompiled(proto.normalizer_spec.precompiled_charsmap), normalizers.Replace(" ", "▁")]
+        )
+
+    def pre_tokenizer(self, replacement, add_prefix_space):
+        return pre_tokenizers.Metaspace(replacement=replacement, prepend_scheme="first")
+
+    def decoder(self, replacement, add_prefix_space):
+        return decoders.Metaspace(replacement=replacement, prepend_scheme="first")
+
+
+def convert_alignment_tokenizer(nemo_dir: Path) -> PreTrainedTokenizerFast:
+    """
+    Converts the word timestamp head's SentencePiece model, stored as a uint8 tensor of the checkpoint, and checks it
+    against the `sentencepiece` library.
+    """
+    import sentencepiece
+
+    with safe_open(nemo_dir / "model.safetensors", framework="pt") as weights:
+        model_proto = weights.get_tensor("ctc_timestamp.tokenizer.model_proto").numpy().tobytes()
+    tokenizer = PreTrainedTokenizerFast(
+        tokenizer_object=AlignmentTokenizerConverter(model_proto).converted(),
+        unk_token="<unk>",
+        add_prefix_space=True,
+        clean_up_tokenization_spaces=False,
+        # `<unk>` in a text is text, as for SentencePiece
+        split_special_tokens=True,
+        model_max_length=int(1e30),
+    )
+
+    reference = sentencepiece.SentencePieceProcessor(model_proto=model_proto)
+    pieces = [reference.id_to_piece(index) for index in range(reference.get_piece_size())]
+    # the head's output column `i` is the piece `i`
+    vocabulary = read_word_timestamp_metadata(nemo_dir)["vocabulary"]
+    if vocabulary != pieces or tokenizer.convert_ids_to_tokens(list(range(len(pieces)))) != pieces:
+        raise ValueError("The alignment tokenizer pieces differ from the word timestamp head's vocabulary.")
+    if len(tokenizer) != len(pieces):
+        raise ValueError(f"Expected {len(pieces)} tokens, got {len(tokenizer)}.")
+
+    tags = tuple(piece.piece for piece in AlignmentTokenizerConverter(model_proto).proto.pieces if piece.type == 4)
+    texts = pieces + [f"{tag} ok" for tag in tags] + [f"<spk:0> hi {tag} there" for tag in tags]
+    texts += ["<ev:laughter> ok", "<spk:0> hi", "hi<ev:breath>there", "it's 42 dollars", "hello—world", "a  b "]
+    texts += ["你好 世界", "안녕하세요 세계", "こんにちは 世界"]
+    fixtures = Path(__file__).resolve().parents[4] / "tests" / "fixtures" / "nemotron3_5_transcribe"
+    for path in sorted(fixtures.glob("expected_results_*.json")):
+        for transcript in json.loads(path.read_text())["transcriptions"]:
+            texts += [transcript, *transcript.split()]
+    mismatches = []
+    for text in texts:
+        expected = reference.encode(text)
+        if tokenizer.encode(" " + text, add_special_tokens=False) != expected:
+            mismatches.append((" " + text, expected))
+        if not text[:1].isspace() and not text.startswith(("▁", *tags)):
+            if tokenizer.encode(text, add_special_tokens=False) != expected:
+                mismatches.append((text, expected))
+    if mismatches:
+        raise ValueError(f"{len(mismatches)} texts are tokenized unlike SentencePiece, e.g. {mismatches[:5]}.")
+    print(f"Alignment tokenizer: {len(texts)} texts tokenized as by SentencePiece.")
+    return tokenizer
+
+
+def write_processor(
+    nemo_dir: Path, output_dir: Path, tokenizer, alignment_tokenizer, chat_template: str
+) -> Nemotron3_5TranscribeProcessor:
     nemo_config = json.loads((nemo_dir / "config.json").read_text())
     preprocessor = nemo_config["perception"]["preprocessor"]
     sampling_rate = preprocessor["sample_rate"]
+    # the checkpoint stores the mel filter bank and the STFT window in a reduced precision and computes the features
+    # with those rounded constants: the extractor rounds its own float32 constants the same way
+    with safe_open(nemo_dir / "model.safetensors", framework="pt") as weights:
+        filterbank_dtype = weights.get_slice("perception.preprocessor.featurizer.fb").get_dtype()
     feature_extractor = NemotronAsrStreamingFeatureExtractor(
         feature_size=preprocessor["features"],
         sampling_rate=sampling_rate,
@@ -351,9 +491,16 @@ def write_processor(nemo_dir: Path, output_dir: Path) -> Nemotron3_5TranscribePr
         n_fft=preprocessor["n_fft"],
         win_length=int(preprocessor["window_size"] * sampling_rate),
         return_attention_mask=True,
+        mel_filters_dtype={"BF16": "bfloat16", "F16": "float16", "F32": "float32"}[filterbank_dtype],
     )
-    tokenizer = AutoTokenizer.from_pretrained(nemo_dir, padding_side="left")
-    processor = Nemotron3_5TranscribeProcessor(feature_extractor, tokenizer, chat_template=CHAT_TEMPLATE)
+    processor = Nemotron3_5TranscribeProcessor(
+        feature_extractor,
+        tokenizer,
+        alignment_tokenizer,
+        chat_template=chat_template,
+        # `asr_config.subsampling_factor` of the converted config
+        subsampling_factor=nemo_config["pe_encoder_config"]["asr_encoder_cfg"]["subsampling_factor"],
+    )
     processor.save_pretrained(output_dir)
     return processor
 
@@ -361,36 +508,43 @@ def write_processor(nemo_dir: Path, output_dir: Path) -> Nemotron3_5TranscribePr
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--nemo_dir", required=True, help="Directory of the NeMo `to_hf.py` export.")
-    parser.add_argument("--output_dir", required=True)
-    parser.add_argument("--push_to_repo_id", default=None)
+    parser.add_argument("--output_dir", required=True, help="Directory of the files to put next to the weights.")
+    parser.add_argument(
+        "--check_dir",
+        default=None,
+        help="Directory with the output files and NVIDIA's `model.safetensors`, loaded to check the conversion.",
+    )
     args = parser.parse_args()
 
     nemo_dir, output_dir = Path(args.nemo_dir), Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    config = convert_config(nemo_dir)
-    config.architectures = ["Nemotron3_5TranscribeForConditionalGeneration"]
-    config.save_pretrained(output_dir)
-    write_weights(nemo_dir, output_dir)
-    processor = write_processor(nemo_dir, output_dir)
+    vocab_size = json.loads((nemo_dir / "llm_backbone" / "config.json").read_text())["vocab_size"]
+    tokenizer, audio_token_id, chat_template = convert_tokenizer(nemo_dir, vocab_size)
+    convert_config(nemo_dir, audio_token_id).save_pretrained(output_dir)
+    processor = write_processor(nemo_dir, output_dir, tokenizer, convert_alignment_tokenizer(nemo_dir), chat_template)
     generation_config = json.loads((nemo_dir / "generation_config.json").read_text())
     GenerationConfig(
         eos_token_id=generation_config["eos_token_id"],
         pad_token_id=generation_config["pad_token_id"],
         do_sample=False,
+        # in the original the audio token cannot be generated, `lm_head` has no row for it; the reserved slot has one
+        suppress_tokens=[audio_token_id],
     ).save_pretrained(output_dir)
 
+    if args.check_dir is None:
+        return
     model, loading_info = Nemotron3_5TranscribeForConditionalGeneration.from_pretrained(
-        output_dir, device_map="auto", output_loading_info=True
+        args.check_dir, device_map="auto", output_loading_info=True
     )
+    audio = load_audio(SANITY_CHECK_AUDIO_URL, sampling_rate=processor.feature_extractor.sampling_rate)
+    inputs = processor.apply_transcription_request(audio).to(model.device)
+    outputs = model.generate(**inputs, max_new_tokens=100)
+    print("Greedy transcription:", processor.decode(outputs[:, inputs["input_ids"].shape[1] :])[0])
+    # the checkpoint tensors the model does not use are ignored through `_keys_to_ignore_on_load_unexpected`
     for name, keys in loading_info.items():
         if keys:
-            raise ValueError(f"{name}: {keys}")
-
-    if args.push_to_repo_id:
-        model.push_to_hub(args.push_to_repo_id)
-        processor.push_to_hub(args.push_to_repo_id)
-        model.generation_config.push_to_hub(args.push_to_repo_id)
+            raise ValueError(f"{name}: {sorted(keys)}")
 
 
 if __name__ == "__main__":

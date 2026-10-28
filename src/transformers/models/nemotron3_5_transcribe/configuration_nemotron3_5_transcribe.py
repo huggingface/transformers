@@ -20,14 +20,15 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ...utils.type_validators import interval
+from ..auto import AutoConfig
 
 
 @auto_docstring(checkpoint="nvidia/Nemotron-3.5-Transcribe")
 @strict
-class Nemotron3_5TranscribeAsrEncoderConfig(PreTrainedConfig):
+class Nemotron3_5TranscribeAsrAudioConfig(PreTrainedConfig):
     r"""
     subsampling_factor (`int`, *optional*, defaults to 8):
         Number of consecutive spectrogram frames stacked into one encoder frame.
@@ -35,20 +36,20 @@ class Nemotron3_5TranscribeAsrEncoderConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Nemotron3_5TranscribeAsrEncoder, Nemotron3_5TranscribeAsrEncoderConfig
+    >>> from transformers import Nemotron3_5TranscribeAsrAudioModel, Nemotron3_5TranscribeAsrAudioConfig
 
-    >>> # Initializing a Nemotron3_5TranscribeAsrEncoder configuration
-    >>> configuration = Nemotron3_5TranscribeAsrEncoderConfig()
+    >>> # Initializing a Nemotron3_5TranscribeAsrAudioModel configuration
+    >>> configuration = Nemotron3_5TranscribeAsrAudioConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = Nemotron3_5TranscribeAsrEncoder(configuration)
+    >>> model = Nemotron3_5TranscribeAsrAudioModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
     """
 
-    model_type = "nemotron3_5_transcribe_asr_encoder"
+    model_type = "nemotron3_5_transcribe_asr_audio"
 
     hidden_size: int = 1280
     intermediate_size: int = 5120
@@ -65,8 +66,12 @@ class Nemotron3_5TranscribeAsrEncoderConfig(PreTrainedConfig):
     subsampling_factor: int = 8
 
     def __post_init__(self, **kwargs):
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "default", "rope_theta": 10000.0, "partial_rotary_factor": 0.5}
+        kwargs.setdefault("partial_rotary_factor", 1.0)
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
+
         kwargs.setdefault("partial_rotary_factor", 0.5)
         super().__post_init__(**kwargs)
 
@@ -80,9 +85,69 @@ class Nemotron3_5TranscribeAsrEncoderConfig(PreTrainedConfig):
 
 @auto_docstring(checkpoint="nvidia/Nemotron-3.5-Transcribe")
 @strict
-class Nemotron3_5TranscribeEncoderConfig(PreTrainedConfig):
+class Nemotron3_5TranscribeWordTimestampConfig(PreTrainedConfig):
     r"""
-    asr_config (`Union[dict, Nemotron3_5TranscribeAsrEncoderConfig]`, *optional*):
+    vocab_size (`int`, *optional*, defaults to 23863):
+        Number of classes of the word timestamp head: the pieces of its alignment tokenizer, then the blank.
+    blank_token_id (`int`, *optional*, defaults to 23862):
+        Index of the blank class, after the pieces of the alignment tokenizer.
+    residual_scale (`float`, *optional*, defaults to 0.1):
+        Scale of the transformer output added to the speech recognition encoder states before the classifier.
+
+    Example:
+
+    ```python
+    >>> from transformers import Nemotron3_5TranscribeConfig, Nemotron3_5TranscribeWordTimestampConfig
+
+    >>> # Initializing a Nemotron3_5TranscribeWordTimestamp configuration
+    >>> configuration = Nemotron3_5TranscribeWordTimestampConfig()
+
+    >>> # Using it as the word timestamp head of the model
+    >>> model_configuration = Nemotron3_5TranscribeConfig(word_timestamp_config=configuration)
+    ```
+    """
+
+    model_type = "nemotron3_5_transcribe_word_timestamp"
+    base_config_key = "word_timestamp_config"
+
+    hidden_size: int = 1280
+    intermediate_size: int = 640
+    num_hidden_layers: int = 2
+    num_attention_heads: int = 16
+    num_key_value_heads: int | None = None
+    hidden_act: str = "gelu"
+    max_position_embeddings: int = 5000
+    initializer_range: float = 0.02
+    rope_parameters: dict | None = None
+    attention_dropout: float | int = 0.0
+    vocab_size: int = 23863
+    blank_token_id: int = 23862
+    residual_scale: float = interval(min=0.0)(default=0.1)
+
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "default", "rope_theta": 10000.0, "partial_rotary_factor": 0.5}
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"`hidden_size` ({self.hidden_size}) must be divisible by `num_attention_heads` "
+                f"({self.num_attention_heads})."
+            )
+        if not 0 <= self.blank_token_id < self.vocab_size:
+            raise ValueError(
+                f"`blank_token_id` ({self.blank_token_id}) must be a class below `vocab_size` ({self.vocab_size})."
+            )
+
+
+@auto_docstring(checkpoint="nvidia/Nemotron-3.5-Transcribe")
+@strict
+class Nemotron3_5TranscribeAudioConfig(PreTrainedConfig):
+    r"""
+    asr_config (`Union[dict, Nemotron3_5TranscribeAsrAudioConfig]`, *optional*):
         Configuration of the speech recognition encoder.
     diarization_config (`Union[dict, Nemotron3DiarizationConfig]`, *optional*):
         Configuration of the speaker diarization model, whose speaker activities are added to the speech recognition
@@ -93,55 +158,40 @@ class Nemotron3_5TranscribeEncoderConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Nemotron3_5TranscribeEncoder, Nemotron3_5TranscribeEncoderConfig
+    >>> from transformers import Nemotron3_5TranscribeAudioModel, Nemotron3_5TranscribeAudioConfig
 
-    >>> # Initializing a Nemotron3_5TranscribeEncoder configuration
-    >>> configuration = Nemotron3_5TranscribeEncoderConfig()
+    >>> # Initializing a Nemotron3_5TranscribeAudioModel configuration
+    >>> configuration = Nemotron3_5TranscribeAudioConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = Nemotron3_5TranscribeEncoder(configuration)
+    >>> model = Nemotron3_5TranscribeAudioModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
     """
 
-    model_type = "nemotron3_5_transcribe_encoder"
+    model_type = "nemotron3_5_transcribe_audio"
     base_config_key = "audio_config"
-    sub_configs = {"asr_config": AutoConfig, "diarization_config": AutoConfig}
-    # the original runs the diarization model on 40 s chunks with 4 s of left and right context, and a smaller speaker
-    # cache than Nemotron 3 Diarization
-    _default_diarization_config_kwargs = {
-        "chunk_length": 500,
-        "chunk_left_context": 50,
-        "chunk_right_context": 50,
-        "fifo_length": 40,
-        "speaker_cache_update_period": 300,
-        "streaming_config": {"speaker_cache_length": 188},
+    sub_configs_defaults = {
+        "asr_config": SubConfigSpec(config_class=AutoConfig, model_type="nemotron3_5_transcribe_asr_audio"),
+        "diarization_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="nemotron3_diarization",
+            init_kwargs={
+                "chunk_length": 500,
+                "chunk_left_context": 50,
+                "chunk_right_context": 50,
+                "fifo_length": 40,
+                "speaker_cache_update_period": 300,
+                "streaming_config": {"speaker_cache_length": 188},
+            },
+        ),
     }
 
     asr_config: dict | PreTrainedConfig | None = None
     diarization_config: dict | PreTrainedConfig | None = None
-    speaker_activity_threshold: float = 0.5
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.asr_config, dict):
-            self.asr_config["model_type"] = self.asr_config.get("model_type", "nemotron3_5_transcribe_asr_encoder")
-            self.asr_config = CONFIG_MAPPING[self.asr_config["model_type"]](**self.asr_config)
-        elif self.asr_config is None:
-            self.asr_config = CONFIG_MAPPING["nemotron3_5_transcribe_asr_encoder"]()
-
-        if isinstance(self.diarization_config, dict):
-            self.diarization_config["model_type"] = self.diarization_config.get("model_type", "nemotron3_diarization")
-            self.diarization_config = CONFIG_MAPPING[self.diarization_config["model_type"]](
-                **{**self._default_diarization_config_kwargs, **self.diarization_config}
-            )
-        elif self.diarization_config is None:
-            self.diarization_config = CONFIG_MAPPING["nemotron3_diarization"](
-                **self._default_diarization_config_kwargs
-            )
-
-        super().__post_init__(**kwargs)
+    speaker_activity_threshold: float = interval(min=0.0, max=1.0)(default=0.5)
 
     @property
     def hidden_size(self) -> int:
@@ -168,8 +218,11 @@ class Nemotron3_5TranscribeEncoderConfig(PreTrainedConfig):
 @strict
 class Nemotron3_5TranscribeConfig(PreTrainedConfig):
     r"""
-    audio_token_id (`int`, *optional*, defaults to 131072):
-        The audio token index used as a placeholder for the audio embeddings. It is outside of the text vocabulary.
+    audio_token_id (`int`, *optional*, defaults to 142):
+        The audio token index used as a placeholder for the audio embeddings.
+    word_timestamp_config (`Union[dict, Nemotron3_5TranscribeWordTimestampConfig]`, *optional*):
+        Configuration of the word timestamp encoder and head, which predict alignment tokenizer pieces from the speech
+        recognition encoder states.
 
     Example:
 
@@ -188,45 +241,39 @@ class Nemotron3_5TranscribeConfig(PreTrainedConfig):
     """
 
     model_type = "nemotron3_5_transcribe"
-    sub_configs = {"audio_config": AutoConfig, "text_config": AutoConfig}
-    _default_text_config_kwargs = {
-        "hidden_size": 2688,
-        "intermediate_size": 1856,
-        "hybrid_override_pattern": "MEMEM*EMEMEM*EMEMEM*EMEMEM*EMEMEM*EMEMEMEM*EMEMEMEME",
-        "mamba_num_heads": 64,
-        "max_position_embeddings": 262144,
-        "moe_intermediate_size": 1856,
-        "moe_shared_expert_intermediate_size": 3712,
-        "n_routed_experts": 128,
-        "num_experts_per_tok": 6,
-        "num_key_value_heads": 2,
-        "routed_scaling_factor": 2.5,
+    sub_configs_defaults = {
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="nemotron3_5_transcribe_audio"),
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="nemotron_h",
+            init_kwargs={
+                "hidden_size": 2688,
+                "intermediate_size": 1856,
+                "hybrid_override_pattern": "MEMEM*EMEMEM*EMEMEM*EMEMEM*EMEMEM*EMEMEMEM*EMEMEMEME",
+                "mamba_num_heads": 64,
+                "max_position_embeddings": 262144,
+                "moe_intermediate_size": 1856,
+                "moe_shared_expert_intermediate_size": 3712,
+                "n_routed_experts": 128,
+                "num_experts_per_tok": 6,
+                "num_key_value_heads": 2,
+                "routed_scaling_factor": 2.5,
+            },
+        ),
+        "word_timestamp_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="nemotron3_5_transcribe_word_timestamp"
+        ),
     }
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-    audio_token_id: int = 131072
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "nemotron3_5_transcribe_encoder")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["nemotron3_5_transcribe_encoder"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "nemotron_h")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](
-                **{**self._default_text_config_kwargs, **self.text_config}
-            )
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["nemotron_h"](**self._default_text_config_kwargs)
-
-        super().__post_init__(**kwargs)
+    audio_token_id: int = 142
+    word_timestamp_config: dict | PreTrainedConfig | None = None
 
 
 __all__ = [
-    "Nemotron3_5TranscribeAsrEncoderConfig",
+    "Nemotron3_5TranscribeAsrAudioConfig",
+    "Nemotron3_5TranscribeAudioConfig",
     "Nemotron3_5TranscribeConfig",
-    "Nemotron3_5TranscribeEncoderConfig",
+    "Nemotron3_5TranscribeWordTimestampConfig",
 ]

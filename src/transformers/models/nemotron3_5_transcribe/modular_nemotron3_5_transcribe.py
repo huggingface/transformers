@@ -21,21 +21,25 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...generation import GenerationMixin
+from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_recurrent_attention_mask
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import ProcessingKwargs, Unpack
+from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import merge_with_config_defaults
+from ...utils.output_capturing import capture_outputs
+from ...utils.type_validators import interval
 from ..audioflamingo3.modeling_audioflamingo3 import (
+    AudioFlamingo3CausalLMOutputWithPast,
     AudioFlamingo3ForConditionalGeneration,
     AudioFlamingo3Model,
     AudioFlamingo3ModelOutputWithPast,
     AudioFlamingo3PreTrainedModel,
 )
-from ..audioflamingo3.processing_audioflamingo3 import AudioFlamingo3Processor
-from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForAudioFrameClassification
-from ..glmasr.modeling_glmasr import GlmAsrRotaryEmbedding, apply_rotary_pos_emb, eager_attention_forward
+from ..auto import AutoConfig, AutoModel, AutoModelForAudioFrameClassification
+from ..glmasr.modeling_glmasr import apply_rotary_pos_emb, eager_attention_forward
 from ..nemotron3_diarization.configuration_nemotron3_diarization import Nemotron3DiarizationAudioConfig
 from ..nemotron3_diarization.modeling_nemotron3_diarization import (
     Nemotron3DiarizationAttention,
@@ -43,12 +47,14 @@ from ..nemotron3_diarization.modeling_nemotron3_diarization import (
     Nemotron3DiarizationAudioModel,
     Nemotron3DiarizationFeatureStacking,
     Nemotron3DiarizationMLP,
+    Nemotron3DiarizationRotaryEmbedding,
 )
+from .generation_nemotron3_5_transcribe import Nemotron3_5TranscribeGenerateOutput
 
 
 @auto_docstring(checkpoint="nvidia/Nemotron-3.5-Transcribe")
 @strict
-class Nemotron3_5TranscribeAsrEncoderConfig(Nemotron3DiarizationAudioConfig):
+class Nemotron3_5TranscribeAsrAudioConfig(Nemotron3DiarizationAudioConfig):
     r"""
     subsampling_factor (`int`, *optional*, defaults to 8):
         Number of consecutive spectrogram frames stacked into one encoder frame.
@@ -56,20 +62,20 @@ class Nemotron3_5TranscribeAsrEncoderConfig(Nemotron3DiarizationAudioConfig):
     Example:
 
     ```python
-    >>> from transformers import Nemotron3_5TranscribeAsrEncoder, Nemotron3_5TranscribeAsrEncoderConfig
+    >>> from transformers import Nemotron3_5TranscribeAsrAudioModel, Nemotron3_5TranscribeAsrAudioConfig
 
-    >>> # Initializing a Nemotron3_5TranscribeAsrEncoder configuration
-    >>> configuration = Nemotron3_5TranscribeAsrEncoderConfig()
+    >>> # Initializing a Nemotron3_5TranscribeAsrAudioModel configuration
+    >>> configuration = Nemotron3_5TranscribeAsrAudioConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = Nemotron3_5TranscribeAsrEncoder(configuration)
+    >>> model = Nemotron3_5TranscribeAsrAudioModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
     """
 
-    model_type = "nemotron3_5_transcribe_asr_encoder"
+    model_type = "nemotron3_5_transcribe_asr_audio"
     base_config_key = "asr_config"
 
     hidden_size: int = 1280
@@ -78,17 +84,76 @@ class Nemotron3_5TranscribeAsrEncoderConfig(Nemotron3DiarizationAudioConfig):
     num_attention_heads: int = 10
 
     def __post_init__(self, **kwargs):
-        if self.num_key_value_heads is None:
-            self.num_key_value_heads = self.num_attention_heads
-        kwargs.setdefault("partial_rotary_factor", 0.5)
-        PreTrainedConfig.__post_init__(self, **kwargs)
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "default", "rope_theta": 10000.0, "partial_rotary_factor": 0.5}
+        super().__post_init__(**kwargs)
 
 
 @auto_docstring(checkpoint="nvidia/Nemotron-3.5-Transcribe")
 @strict
-class Nemotron3_5TranscribeEncoderConfig(PreTrainedConfig):
+class Nemotron3_5TranscribeWordTimestampConfig(PreTrainedConfig):
     r"""
-    asr_config (`Union[dict, Nemotron3_5TranscribeAsrEncoderConfig]`, *optional*):
+    vocab_size (`int`, *optional*, defaults to 23863):
+        Number of classes of the word timestamp head: the pieces of its alignment tokenizer, then the blank.
+    blank_token_id (`int`, *optional*, defaults to 23862):
+        Index of the blank class, after the pieces of the alignment tokenizer.
+    residual_scale (`float`, *optional*, defaults to 0.1):
+        Scale of the transformer output added to the speech recognition encoder states before the classifier.
+
+    Example:
+
+    ```python
+    >>> from transformers import Nemotron3_5TranscribeConfig, Nemotron3_5TranscribeWordTimestampConfig
+
+    >>> # Initializing a Nemotron3_5TranscribeWordTimestamp configuration
+    >>> configuration = Nemotron3_5TranscribeWordTimestampConfig()
+
+    >>> # Using it as the word timestamp head of the model
+    >>> model_configuration = Nemotron3_5TranscribeConfig(word_timestamp_config=configuration)
+    ```
+    """
+
+    model_type = "nemotron3_5_transcribe_word_timestamp"
+    base_config_key = "word_timestamp_config"
+
+    hidden_size: int = 1280
+    intermediate_size: int = 640
+    num_hidden_layers: int = 2
+    num_attention_heads: int = 16
+    num_key_value_heads: int | None = None
+    hidden_act: str = "gelu"
+    max_position_embeddings: int = 5000
+    initializer_range: float = 0.02
+    rope_parameters: dict | None = None
+    attention_dropout: float | int = 0.0
+    vocab_size: int = 23863
+    blank_token_id: int = 23862
+    residual_scale: float = interval(min=0.0)(default=0.1)
+
+    def __post_init__(self, **kwargs):
+        if self.num_key_value_heads is None:
+            self.num_key_value_heads = self.num_attention_heads
+        if self.rope_parameters is None:
+            self.rope_parameters = {"rope_type": "default", "rope_theta": 10000.0, "partial_rotary_factor": 0.5}
+        super().__post_init__(**kwargs)
+
+    def validate_architecture(self):
+        if self.hidden_size % self.num_attention_heads != 0:
+            raise ValueError(
+                f"`hidden_size` ({self.hidden_size}) must be divisible by `num_attention_heads` "
+                f"({self.num_attention_heads})."
+            )
+        if not 0 <= self.blank_token_id < self.vocab_size:
+            raise ValueError(
+                f"`blank_token_id` ({self.blank_token_id}) must be a class below `vocab_size` ({self.vocab_size})."
+            )
+
+
+@auto_docstring(checkpoint="nvidia/Nemotron-3.5-Transcribe")
+@strict
+class Nemotron3_5TranscribeAudioConfig(PreTrainedConfig):
+    r"""
+    asr_config (`Union[dict, Nemotron3_5TranscribeAsrAudioConfig]`, *optional*):
         Configuration of the speech recognition encoder.
     diarization_config (`Union[dict, Nemotron3DiarizationConfig]`, *optional*):
         Configuration of the speaker diarization model, whose speaker activities are added to the speech recognition
@@ -99,55 +164,40 @@ class Nemotron3_5TranscribeEncoderConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import Nemotron3_5TranscribeEncoder, Nemotron3_5TranscribeEncoderConfig
+    >>> from transformers import Nemotron3_5TranscribeAudioModel, Nemotron3_5TranscribeAudioConfig
 
-    >>> # Initializing a Nemotron3_5TranscribeEncoder configuration
-    >>> configuration = Nemotron3_5TranscribeEncoderConfig()
+    >>> # Initializing a Nemotron3_5TranscribeAudioModel configuration
+    >>> configuration = Nemotron3_5TranscribeAudioConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = Nemotron3_5TranscribeEncoder(configuration)
+    >>> model = Nemotron3_5TranscribeAudioModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
     """
 
-    model_type = "nemotron3_5_transcribe_encoder"
+    model_type = "nemotron3_5_transcribe_audio"
     base_config_key = "audio_config"
-    sub_configs = {"asr_config": AutoConfig, "diarization_config": AutoConfig}
-    # the original runs the diarization model on 40 s chunks with 4 s of left and right context, and a smaller speaker
-    # cache than Nemotron 3 Diarization
-    _default_diarization_config_kwargs = {
-        "chunk_length": 500,
-        "chunk_left_context": 50,
-        "chunk_right_context": 50,
-        "fifo_length": 40,
-        "speaker_cache_update_period": 300,
-        "streaming_config": {"speaker_cache_length": 188},
+    sub_configs_defaults = {
+        "asr_config": SubConfigSpec(config_class=AutoConfig, model_type="nemotron3_5_transcribe_asr_audio"),
+        "diarization_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="nemotron3_diarization",
+            init_kwargs={
+                "chunk_length": 500,
+                "chunk_left_context": 50,
+                "chunk_right_context": 50,
+                "fifo_length": 40,
+                "speaker_cache_update_period": 300,
+                "streaming_config": {"speaker_cache_length": 188},
+            },
+        ),
     }
 
     asr_config: dict | PreTrainedConfig | None = None
     diarization_config: dict | PreTrainedConfig | None = None
-    speaker_activity_threshold: float = 0.5
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.asr_config, dict):
-            self.asr_config["model_type"] = self.asr_config.get("model_type", "nemotron3_5_transcribe_asr_encoder")
-            self.asr_config = CONFIG_MAPPING[self.asr_config["model_type"]](**self.asr_config)
-        elif self.asr_config is None:
-            self.asr_config = CONFIG_MAPPING["nemotron3_5_transcribe_asr_encoder"]()
-
-        if isinstance(self.diarization_config, dict):
-            self.diarization_config["model_type"] = self.diarization_config.get("model_type", "nemotron3_diarization")
-            self.diarization_config = CONFIG_MAPPING[self.diarization_config["model_type"]](
-                **{**self._default_diarization_config_kwargs, **self.diarization_config}
-            )
-        elif self.diarization_config is None:
-            self.diarization_config = CONFIG_MAPPING["nemotron3_diarization"](
-                **self._default_diarization_config_kwargs
-            )
-
-        super().__post_init__(**kwargs)
+    speaker_activity_threshold: float = interval(min=0.0, max=1.0)(default=0.5)
 
     @property
     def hidden_size(self) -> int:
@@ -174,8 +224,11 @@ class Nemotron3_5TranscribeEncoderConfig(PreTrainedConfig):
 @strict
 class Nemotron3_5TranscribeConfig(PreTrainedConfig):
     r"""
-    audio_token_id (`int`, *optional*, defaults to 131072):
-        The audio token index used as a placeholder for the audio embeddings. It is outside of the text vocabulary.
+    audio_token_id (`int`, *optional*, defaults to 142):
+        The audio token index used as a placeholder for the audio embeddings.
+    word_timestamp_config (`Union[dict, Nemotron3_5TranscribeWordTimestampConfig]`, *optional*):
+        Configuration of the word timestamp encoder and head, which predict alignment tokenizer pieces from the speech
+        recognition encoder states.
 
     Example:
 
@@ -194,41 +247,34 @@ class Nemotron3_5TranscribeConfig(PreTrainedConfig):
     """
 
     model_type = "nemotron3_5_transcribe"
-    sub_configs = {"audio_config": AutoConfig, "text_config": AutoConfig}
-    _default_text_config_kwargs = {
-        "hidden_size": 2688,
-        "intermediate_size": 1856,
-        "hybrid_override_pattern": "MEMEM*EMEMEM*EMEMEM*EMEMEM*EMEMEM*EMEMEMEM*EMEMEMEME",
-        "mamba_num_heads": 64,
-        "max_position_embeddings": 262144,
-        "moe_intermediate_size": 1856,
-        "moe_shared_expert_intermediate_size": 3712,
-        "n_routed_experts": 128,
-        "num_experts_per_tok": 6,
-        "num_key_value_heads": 2,
-        "routed_scaling_factor": 2.5,
+    sub_configs_defaults = {
+        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="nemotron3_5_transcribe_audio"),
+        "text_config": SubConfigSpec(
+            config_class=AutoConfig,
+            model_type="nemotron_h",
+            init_kwargs={
+                "hidden_size": 2688,
+                "intermediate_size": 1856,
+                "hybrid_override_pattern": "MEMEM*EMEMEM*EMEMEM*EMEMEM*EMEMEM*EMEMEMEM*EMEMEMEME",
+                "mamba_num_heads": 64,
+                "max_position_embeddings": 262144,
+                "moe_intermediate_size": 1856,
+                "moe_shared_expert_intermediate_size": 3712,
+                "n_routed_experts": 128,
+                "num_experts_per_tok": 6,
+                "num_key_value_heads": 2,
+                "routed_scaling_factor": 2.5,
+            },
+        ),
+        "word_timestamp_config": SubConfigSpec(
+            config_class=AutoConfig, model_type="nemotron3_5_transcribe_word_timestamp"
+        ),
     }
 
     audio_config: dict | PreTrainedConfig | None = None
     text_config: dict | PreTrainedConfig | None = None
-    audio_token_id: int = 131072
-
-    def __post_init__(self, **kwargs):
-        if isinstance(self.audio_config, dict):
-            self.audio_config["model_type"] = self.audio_config.get("model_type", "nemotron3_5_transcribe_encoder")
-            self.audio_config = CONFIG_MAPPING[self.audio_config["model_type"]](**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = CONFIG_MAPPING["nemotron3_5_transcribe_encoder"]()
-
-        if isinstance(self.text_config, dict):
-            self.text_config["model_type"] = self.text_config.get("model_type", "nemotron_h")
-            self.text_config = CONFIG_MAPPING[self.text_config["model_type"]](
-                **{**self._default_text_config_kwargs, **self.text_config}
-            )
-        elif self.text_config is None:
-            self.text_config = CONFIG_MAPPING["nemotron_h"](**self._default_text_config_kwargs)
-
-        super().__post_init__(**kwargs)
+    audio_token_id: int = 142
+    word_timestamp_config: dict | PreTrainedConfig | None = None
 
 
 @auto_docstring
@@ -237,27 +283,66 @@ class Nemotron3_5TranscribeModelOutputWithPast(AudioFlamingo3ModelOutputWithPast
     pass
 
 
+@auto_docstring(
+    custom_intro="""
+    Base class for Nemotron3_5Transcribe causal language model (or autoregressive) outputs.
+    """
+)
+@dataclass
+class Nemotron3_5TranscribeCausalLMOutputWithPast(AudioFlamingo3CausalLMOutputWithPast):
+    pass
+
+
+@auto_docstring
+@dataclass
+class Nemotron3_5TranscribeAudioModelOutput(BaseModelOutputWithPooling):
+    r"""
+    pooler_output (`torch.FloatTensor` of shape `(num_audio_tokens, text_config.hidden_size)`, *optional*):
+        Projected audio embeddings of the valid encoder frames of every recording, in batch order: the embeddings that
+        replace the audio tokens of the prompt. Returned by `get_audio_features`.
+    asr_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`):
+        Output of the speech recognition encoder, before its normalization and the speaker embeddings: the input of
+        [`~Nemotron3_5TranscribeForConditionalGeneration.get_word_timestamp_logits`].
+    speaker_logits (`torch.FloatTensor` of shape `(batch_size, feature_sequence_length, audio_config.num_speakers)`):
+        Logits of the diarization model, one frame per spectrogram frame.
+    """
+
+    asr_last_hidden_state: torch.FloatTensor | None = None
+    speaker_logits: torch.FloatTensor | None = None
+
+
 class Nemotron3_5TranscribePreTrainedModel(AudioFlamingo3PreTrainedModel):
     _no_split_modules = None
     _is_stateful = True
+    _keys_to_ignore_on_load_unexpected = [
+        r"^llm\.mtp\.",
+        r"^perception\.preprocessor\.",
+        r"^perception\.encoder\.diarization_model\.preprocessor\.",
+        r"^perception\.encoder\.diarization_model\.sortformer_modules\.hidden_to_spks\.",
+        r"\._extra_state$",
+        r"^ctc_timestamp\.decoder\.residual_scale$",
+        r"^ctc_timestamp\.tokenizer\.model_proto$",
+    ]
 
     @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-        if isinstance(module, Nemotron3_5TranscribeEncoder):
+        if isinstance(module, Nemotron3_5TranscribeAudioModel):
             init.copy_(module.speaker_embeddings, module.compute_speaker_embeddings(module.config))
 
 
 class Nemotron3_5TranscribeFeatureStacking(Nemotron3DiarizationFeatureStacking):
-    def __init__(self, config: Nemotron3_5TranscribeAsrEncoderConfig):
+    def __init__(self, config: Nemotron3_5TranscribeAsrAudioConfig):
         super().__init__(config)
 
 
-class Nemotron3_5TranscribeRotaryEmbedding(GlmAsrRotaryEmbedding): ...
+class Nemotron3_5TranscribeRotaryEmbedding(Nemotron3DiarizationRotaryEmbedding):
+    def __init__(self, config: Nemotron3_5TranscribeAsrAudioConfig):
+        super().__init__(config)
 
 
 class Nemotron3_5TranscribeAttention(Nemotron3DiarizationAttention):
-    def __init__(self, config: Nemotron3_5TranscribeAsrEncoderConfig, layer_idx: int):
+    def __init__(self, config: Nemotron3_5TranscribeAsrAudioConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.q_norm = nn.LayerNorm(self.head_dim)
         self.k_norm = nn.LayerNorm(self.head_dim)
@@ -302,8 +387,8 @@ class Nemotron3_5TranscribeAttention(Nemotron3DiarizationAttention):
 class Nemotron3_5TranscribeMLP(Nemotron3DiarizationMLP): ...
 
 
-class Nemotron3_5TranscribeAsrEncoderLayer(Nemotron3DiarizationAudioLayer):
-    def __init__(self, config: Nemotron3_5TranscribeAsrEncoderConfig, layer_idx: int):
+class Nemotron3_5TranscribeAsrAudioLayer(Nemotron3DiarizationAudioLayer):
+    def __init__(self, config: Nemotron3_5TranscribeAsrAudioConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.self_attn = Nemotron3_5TranscribeAttention(config, layer_idx)
 
@@ -314,38 +399,105 @@ class Nemotron3_5TranscribeAsrEncoderLayer(Nemotron3DiarizationAudioLayer):
     and keys of each attention head normalized, and rotary position embeddings on part of each head.
     """
 )
-class Nemotron3_5TranscribeAsrEncoder(Nemotron3DiarizationAudioModel):
-    config: Nemotron3_5TranscribeAsrEncoderConfig
+class Nemotron3_5TranscribeAsrAudioModel(Nemotron3DiarizationAudioModel):
+    config: Nemotron3_5TranscribeAsrAudioConfig
     main_input_name = "input_features"
     input_modalities = "audio"
-    _no_split_modules = ["Nemotron3_5TranscribeAsrEncoderLayer"]
+    _no_split_modules = ["Nemotron3_5TranscribeAsrAudioLayer"]
     _can_record_outputs = {
-        "hidden_states": Nemotron3_5TranscribeAsrEncoderLayer,
+        "hidden_states": Nemotron3_5TranscribeAsrAudioLayer,
         "attentions": Nemotron3_5TranscribeAttention,
     }
 
-    def __init__(self, config: Nemotron3_5TranscribeAsrEncoderConfig):
+    def __init__(self, config: Nemotron3_5TranscribeAsrAudioConfig):
         super().__init__(config)
         self.embedder = Nemotron3_5TranscribeFeatureStacking(config)
         self.layers = nn.ModuleList(
-            [Nemotron3_5TranscribeAsrEncoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [Nemotron3_5TranscribeAsrAudioLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.rotary_emb = Nemotron3_5TranscribeRotaryEmbedding(config)
 
 
 @auto_docstring(
     custom_intro="""
-    The Nemotron 3.5 Transcribe audio encoder: a speech recognition encoder and a speaker diarization model run in
+    The transformer of the Nemotron 3.5 Transcribe word timestamp head.
+    [`Nemotron3_5TranscribeForConditionalGeneration.word_timestamp_head`] classifies its output.
+    """
+)
+class Nemotron3_5TranscribeWordTimestampModel(Nemotron3_5TranscribePreTrainedModel):
+    config: Nemotron3_5TranscribeWordTimestampConfig
+    main_input_name = "inputs_embeds"
+    input_modalities = "audio"
+    _no_split_modules = ["Nemotron3_5TranscribeAsrAudioLayer"]
+    _can_record_outputs = {
+        "hidden_states": Nemotron3_5TranscribeAsrAudioLayer,
+        "attentions": Nemotron3_5TranscribeAttention,
+    }
+
+    def __init__(self, config: Nemotron3_5TranscribeWordTimestampConfig):
+        super().__init__(config)
+        self.input_layer_norm = nn.LayerNorm(config.hidden_size)
+        self.layers = nn.ModuleList(
+            [Nemotron3_5TranscribeAsrAudioLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.layer_norm = nn.LayerNorm(config.hidden_size)
+        self.rotary_emb = Nemotron3_5TranscribeRotaryEmbedding(config)
+        self.post_init()
+
+    @merge_with_config_defaults
+    @capture_outputs
+    @auto_docstring
+    def forward(
+        self,
+        inputs_embeds: torch.FloatTensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        r"""
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_frames, hidden_size)`):
+            Speech recognition encoder states, before the audio model's `asr_norm` and speaker embeddings.
+        attention_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask of the valid encoder frames.
+        """
+        position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)[None, :]
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
+        attention_mask = create_bidirectional_mask(
+            config=self.config, inputs_embeds=inputs_embeds, attention_mask=attention_mask
+        )
+        hidden_states = self.input_layer_norm(inputs_embeds)
+        for layer in self.layers:
+            hidden_states = layer(
+                hidden_states, attention_mask=attention_mask, position_embeddings=position_embeddings, **kwargs
+            )
+        # the original casts its residual scale to the dtype of the states before the product
+        residual_scale = inputs_embeds.new_tensor(self.config.residual_scale)
+        return BaseModelOutput(last_hidden_state=inputs_embeds + residual_scale * self.layer_norm(hidden_states))
+
+
+def normalize_per_feature(input_features: torch.Tensor, input_features_mask: torch.Tensor) -> torch.Tensor:
+    """Normalizes each mel bin to zero mean and unit variance over the valid frames of each sample."""
+    mask = input_features_mask.bool()[..., None]
+    input_features = input_features.float().masked_fill(~mask, 0.0)
+    num_frames = mask.sum(1)
+    mean = input_features.sum(1, keepdim=True) / num_frames[:, None].clamp(min=1)
+    centered = (input_features - mean).masked_fill(~mask, 0.0)
+    # the original uses the unbiased variance (0 for a single frame) and adds its epsilon to the standard deviation
+    std = (centered.pow(2).sum(1, keepdim=True) / (num_frames[:, None] - 1).clamp(min=1)).sqrt() + 1e-5
+    return centered / std
+
+
+@auto_docstring(
+    custom_intro="""
+    The Nemotron 3.5 Transcribe audio model: a speech recognition encoder and a speaker diarization model run in
     parallel on the same spectrogram, and the speaker activities are added to the speech recognition encoder outputs.
     """
 )
-class Nemotron3_5TranscribeEncoder(Nemotron3_5TranscribePreTrainedModel):
-    config: Nemotron3_5TranscribeEncoderConfig
+class Nemotron3_5TranscribeAudioModel(Nemotron3_5TranscribePreTrainedModel):
+    config: Nemotron3_5TranscribeAudioConfig
     main_input_name = "input_features"
     input_modalities = "audio"
-    _no_split_modules = ["Nemotron3_5TranscribeEncoder"]
 
-    def __init__(self, config: Nemotron3_5TranscribeEncoderConfig):
+    def __init__(self, config: Nemotron3_5TranscribeAudioConfig):
         super().__init__(config)
         self.asr_encoder = AutoModel.from_config(config.asr_config)
         self.diarization_model = AutoModelForAudioFrameClassification.from_config(config.diarization_config)
@@ -355,64 +507,92 @@ class Nemotron3_5TranscribeEncoder(Nemotron3_5TranscribePreTrainedModel):
         self.post_init()
 
     @staticmethod
-    def compute_speaker_embeddings(config: Nemotron3_5TranscribeEncoderConfig) -> torch.Tensor:
+    def compute_speaker_embeddings(config: Nemotron3_5TranscribeAudioConfig) -> torch.Tensor:
         """Fixed sinusoidal embedding of each speaker slot, which the speaker activities select."""
         position = torch.arange(config.num_speakers, dtype=torch.float32)[:, None]
         inv_freq = torch.exp(
             torch.arange(0, config.hidden_size, 2, dtype=torch.float32) * -(math.log(10000.0) / config.hidden_size)
         )
-        embeddings = torch.zeros(config.num_speakers, config.hidden_size)
+        # float32 whatever the default dtype of the loading context: the buffer is a fixed table, not a weight
+        embeddings = torch.zeros(config.num_speakers, config.hidden_size, dtype=torch.float32)
         embeddings[:, 0::2] = torch.sin(position * inv_freq)
         embeddings[:, 1::2] = torch.cos(position * inv_freq)
         return embeddings
 
-    @staticmethod
-    def normalize_features(input_features: torch.Tensor, input_features_mask: torch.Tensor) -> torch.Tensor:
-        """Normalizes each mel bin to zero mean and unit variance over the valid frames of each sample."""
-        mask = input_features_mask.bool()[..., None]
-        input_features = input_features.float().masked_fill(~mask, 0.0)
-        num_frames = mask.sum(1)
-        mean = input_features.sum(1, keepdim=True) / num_frames[:, None].clamp(min=1)
-        centered = (input_features - mean).masked_fill(~mask, 0.0)
-        # the original uses the unbiased variance and adds its epsilon to the standard deviation
-        std = (centered.pow(2).sum(1, keepdim=True) / (num_frames[:, None] - 1)).sqrt().nan_to_num(0.0) + 1e-5
-        return centered / std
-
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
+    ) -> Nemotron3_5TranscribeAudioModelOutput:
         r"""
+        input_features (`torch.FloatTensor` of shape `(batch_size, feature_sequence_length, num_mel_bins)`):
+            Log mel spectrogram, padded to a multiple of `config.subsampling_factor` frames. As in the original, audio
+            longer than `config.diarization_config.chunk_length` encoder frames is encoded in chunks with context.
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask of the valid spectrogram frames. Padding must be on the right.
         """
+        subsampling_factor = self.config.subsampling_factor
+        if input_features.shape[1] % subsampling_factor != 0:
+            raise ValueError(
+                f"The number of spectrogram frames ({input_features.shape[1]}) must be a multiple of "
+                f"`subsampling_factor` ({subsampling_factor}): pad `input_features` and `input_features_mask` on the "
+                "right, as the processor does."
+            )
         if input_features_mask is None:
             input_features_mask = torch.ones(input_features.shape[:2], dtype=torch.long, device=input_features.device)
 
-        asr_features = self.normalize_features(input_features, input_features_mask).to(input_features.dtype)
-        asr_outputs = self.asr_encoder(asr_features, attention_mask=input_features_mask, **kwargs)
-        hidden_states = asr_outputs.last_hidden_state
+        num_frames = input_features.shape[1] // subsampling_factor
+        spectrogram_chunks = [
+            (slice(context.start * subsampling_factor, context.stop * subsampling_factor), chunk)
+            for context, chunk in self._get_chunks(num_frames)
+        ]
 
-        # the diarization model reads the raw spectrogram, in chunks with its speaker cache, and predicts speaker
-        # activities at the spectrogram frame rate, averaged back over the spectrogram frames of each encoder frame.
-        # Its logits stop at the last input frame, so the input is padded to whole encoder frames.
-        padding = -input_features.shape[1] % self.config.subsampling_factor
+        asr_input = normalize_per_feature(input_features, input_features_mask).to(self.asr_encoder.dtype)
+        hidden_states = torch.cat(
+            [
+                self.asr_encoder(asr_input[:, context], input_features_mask[:, context]).last_hidden_state[:, chunk]
+                for context, chunk in spectrogram_chunks
+            ],
+            dim=1,
+        )
+
         speaker_logits = self.diarization_model(
-            nn.functional.pad(input_features, (0, 0, 0, padding)),
-            attention_mask=nn.functional.pad(input_features_mask, (0, padding)),
+            input_features.to(self.diarization_model.dtype), attention_mask=input_features_mask
         ).logits
-        speaker_probs = speaker_logits.float().sigmoid().unflatten(1, (hidden_states.shape[1], -1)).mean(2)
-
+        speaker_probabilities = speaker_logits.sigmoid().unflatten(1, (num_frames, -1)).mean(2)
+        speaker_probs = speaker_probabilities.to(hidden_states.dtype)
         speaker_activity = (speaker_probs > self.config.speaker_activity_threshold).to(hidden_states.dtype)
         speaker_states = self.speaker_norm(speaker_activity) @ self.speaker_embeddings.to(hidden_states.dtype)
-        return BaseModelOutput(
+
+        return Nemotron3_5TranscribeAudioModelOutput(
             last_hidden_state=self.asr_norm(hidden_states) + speaker_states,
-            hidden_states=asr_outputs.hidden_states,
-            attentions=asr_outputs.attentions,
+            asr_last_hidden_state=hidden_states,
+            speaker_logits=speaker_logits,
         )
+
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
+        return input_lengths, (input_lengths + self.config.subsampling_factor - 1) // self.config.subsampling_factor
+
+    def _get_chunks(self, num_frames: int) -> list[tuple[slice, slice]]:
+        """
+        The chunks of the original's online inference, which the speech recognition encoder and the word timestamp
+        encoder run on (NeMo `ParallelExpertEncoder._forward_online`, `TimestampAligner._iter_ctc_windows`):
+        `chunk_length` encoder frames each, seeing `chunk_left_context` and `chunk_right_context` more frames, as the
+        diarization model's chunks. Per chunk, `context`, the encoder frames of the sequence the encoder runs on (the
+        chunk with its context), and `chunk`, the chunk's frames in the output of that run.
+        """
+        config = self.config.diarization_config
+        chunks = []
+        for start in range(0, num_frames, config.chunk_length):
+            end = min(start + config.chunk_length, num_frames)
+            context = slice(
+                max(start - config.chunk_left_context, 0), min(end + config.chunk_right_context, num_frames)
+            )
+            chunks.append((context, slice(start - context.start, end - context.start)))
+        return chunks
 
 
 @auto_docstring(
@@ -422,86 +602,41 @@ class Nemotron3_5TranscribeEncoder(Nemotron3_5TranscribePreTrainedModel):
     """
 )
 class Nemotron3_5TranscribeModel(AudioFlamingo3Model):
+    _keep_in_fp32_modules_strict = ["audio_tower", "multi_modal_projector"]
+
     def __init__(self, config: Nemotron3_5TranscribeConfig):
         super().__init__(config)
         self.multi_modal_projector = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size)
+        self.word_timestamp_encoder = AutoModel.from_config(config.word_timestamp_config)
 
-    @can_return_tuple
     @auto_docstring(
-        custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector."
+        custom_intro="""
+        Runs the word timestamp encoder on the speech recognition encoder states, in the chunks of the encoder: the
+        states the word timestamp head classifies.
+        """
     )
-    def get_audio_features(
-        self,
-        input_features: torch.FloatTensor,
-        input_features_mask: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    def get_word_timestamp_hidden_states(
+        self, asr_last_hidden_state: torch.FloatTensor, input_features_mask: torch.Tensor
+    ) -> torch.FloatTensor:
         r"""
-        input_features (`torch.FloatTensor`):
-            Float values of mel features extracted from the raw speech waveform.
+        asr_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`):
+            Output of the speech recognition encoder before its normalization and the speaker embeddings, as returned
+            by [`~Nemotron3_5TranscribeModel.get_audio_features`] for `input_features_mask`.
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask of the valid spectrogram frames. Padding must be on the right.
+
+        Returns:
+            `torch.FloatTensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`: one frame per encoder
+            frame, in the dtype of the word timestamp encoder.
         """
-        audio_output = self.audio_tower(input_features, input_features_mask=input_features_mask, **kwargs)
-        audio_embeds = self.multi_modal_projector(audio_output.last_hidden_state)
-
-        valid_mask = input_features_mask[:, :: self.config.audio_config.subsampling_factor].bool()
-        return BaseModelOutputWithPooling(
-            last_hidden_state=audio_output.last_hidden_state,
-            pooler_output=audio_embeds[valid_mask.to(audio_embeds.device)],
-            hidden_states=audio_output.hidden_states,
-            attentions=audio_output.attentions,
-        )
-
-    @can_return_tuple
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.LongTensor | None = None,
-        input_features: torch.FloatTensor | None = None,
-        input_features_mask: torch.Tensor | None = None,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        use_cache: bool | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> Nemotron3_5TranscribeModelOutputWithPast:
-        r"""
-        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
-            Mask of the valid spectrogram frames. Padding must be on the right.
-        """
-        if inputs_embeds is None:
-            # the audio token is outside of the text vocabulary, its embeddings are replaced below
-            inputs_embeds = self.get_input_embeddings()(
-                input_ids.masked_fill(input_ids == self.config.audio_token_id, 0)
-            )
-
-        audio_embeds = None
-        if input_features is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_features, input_features_mask, return_dict=True).pooler_output
-            special_audio_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, audio_features=audio_embeds
-            )
-            inputs_embeds = inputs_embeds.masked_scatter(
-                special_audio_mask, audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
-            )
-
-        outputs = self.language_model(
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        return Nemotron3_5TranscribeModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            audio_hidden_states=audio_embeds,
+        states = asr_last_hidden_state.to(self.word_timestamp_encoder.dtype)
+        frame_mask = input_features_mask[:, :: self.config.audio_config.subsampling_factor].bool()
+        return torch.cat(
+            [
+                self.word_timestamp_encoder(states[:, context], frame_mask[:, context]).last_hidden_state[:, chunk]
+                for context, chunk in self.audio_tower._get_chunks(states.shape[1])
+            ],
+            dim=1,
         )
 
 
@@ -512,114 +647,113 @@ class Nemotron3_5TranscribeModel(AudioFlamingo3Model):
     """
 )
 class Nemotron3_5TranscribeForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
-    _no_split_modules = ["Nemotron3_5TranscribeEncoder"]
+    def __init__(self, config: Nemotron3_5TranscribeConfig):
+        super().__init__(config)
+        self.word_timestamp_head = nn.Conv1d(
+            config.word_timestamp_config.hidden_size, config.word_timestamp_config.vocab_size, kernel_size=1
+        )
+        self.post_init()
 
-    def forward(**super_kwargs):
+    @auto_docstring
+    def get_audio_features(self, input_features, input_features_mask, **kwargs):
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
-            Mask to avoid performing attention on padding feature indices.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss.
-
-        Example:
-
-        ```python
-        >>> from transformers import AutoProcessor, Nemotron3_5TranscribeForConditionalGeneration
-
-        >>> model_id = "nvidia/Nemotron-3.5-Transcribe"
-        >>> processor = AutoProcessor.from_pretrained(model_id)
-        >>> model = Nemotron3_5TranscribeForConditionalGeneration.from_pretrained(model_id, device_map="auto")
-        ```"""
-        super().forward(**super_kwargs)
-
-
-class Nemotron3_5TranscribeProcessorKwargs(ProcessingKwargs, total=False):  # trf-ignore: TRF019
-    _defaults = {
-        "text_kwargs": {"padding": True},
-        "audio_kwargs": {"sampling_rate": 16000},
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
-@auto_docstring
-class Nemotron3_5TranscribeProcessor(AudioFlamingo3Processor):
-    valid_processor_kwargs = Nemotron3_5TranscribeProcessorKwargs
-
-    def __init__(
-        self,
-        feature_extractor,
-        tokenizer,
-        chat_template=None,
-        audio_token="<|audio|>",
-        default_transcription_prompt="Audio transcription. Language: as spoken. Wording: verbatim, including fillers and repetitions. Formatting: punctuation and capitalization. Output: transcript only.",
-    ):
-        r"""
-        audio_token (`str`, *optional*, defaults to `"<|audio|>"`):
-            Special token used to represent audio inputs in the chat template.
-        default_transcription_prompt (`str`, *optional*):
-            Default prompt used by [`~Nemotron3_5TranscribeProcessor.apply_transcription_request`].
+            Mask of the valid spectrogram frames. Padding must be on the right.
         """
-        super().__init__(
-            feature_extractor,
-            tokenizer,
-            chat_template=chat_template,
-            audio_token=audio_token,
-            default_transcription_prompt=default_transcription_prompt,
-        )
-        del self.max_audio_len
+        return self.model.get_audio_features(input_features, input_features_mask, **kwargs)
 
-    def _get_audio_token_length(self, audio_lengths: torch.Tensor) -> torch.Tensor:
-        # one audio token per `subsampling_factor` spectrogram frames, the last group may be incomplete
-        subsampling_factor = 8
-        return (audio_lengths + subsampling_factor - 1) // subsampling_factor
-
-    def _process_audio(self, audio, **kwargs):
-        audio = self.feature_extractor.fetch_audio(audio)
-        audio_inputs = self.feature_extractor(audio, **kwargs)
-        audio_inputs["input_features_mask"] = audio_inputs.pop("attention_mask")
-        audio_inputs["num_audio_tokens"] = self._get_audio_token_length(audio_inputs["input_features_mask"].sum(-1))
-        audio_replacements = [self.replace_audio_token(audio_inputs, audio_idx=idx) for idx in range(len(audio))]
-        return audio_inputs, audio_replacements
-
-    def apply_transcription_request(**super_kwargs):
+    @auto_docstring(
+        custom_intro="""
+        Logits of the word timestamp head on the speech recognition encoder states, which
+        [`~Nemotron3_5TranscribeProcessor.align_word_timestamps`] turns into word times.
+        """
+    )
+    def get_word_timestamp_logits(
+        self, asr_last_hidden_state: torch.FloatTensor, input_features_mask: torch.Tensor
+    ) -> torch.FloatTensor:
         r"""
-        Prepare inputs for automatic speech recognition without manually writing the default transcription prompt.
-
-        Args:
-            audio (`str`, `list[str]`, `np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                Audio to transcribe. Strings are interpreted as local paths or URLs and will be loaded automatically by
-                the chat template loader; NumPy arrays and PyTorch tensors are forwarded directly.
-            prompt (`str` or `list[str]`, *optional*):
-                Custom prompt(s) to include in the user turn. A list must be the same length as the batch. When `None`,
-                each sample uses `default_transcription_prompt`.
-            **kwargs:
-                Additional keyword arguments forwarded to
-                [`~Nemotron3_5TranscribeProcessor.apply_chat_template`] (for example `text_kwargs`, `audio_kwargs`, ...).
+        asr_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`):
+            Output of the speech recognition encoder before its normalization and the speaker embeddings, as returned
+            by [`~Nemotron3_5TranscribeForConditionalGeneration.get_audio_features`] for `input_features_mask`.
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask of the valid spectrogram frames. Padding must be on the right.
 
         Returns:
-            [`BatchFeature`]: Processor outputs ready to be passed to
-            [`Nemotron3_5TranscribeForConditionalGeneration.generate`].
+            `torch.FloatTensor` of shape `(batch_size, num_frames, word_timestamp_config.vocab_size)`: raw logits over
+            the pieces of the alignment tokenizer and the blank, one frame per encoder frame (the processor applies the
+            log-softmax).
         """
-        return super().apply_transcription_request(**super_kwargs)
+        hidden_states = self.model.get_word_timestamp_hidden_states(asr_last_hidden_state, input_features_mask)
+        return self.word_timestamp_head(hidden_states.transpose(1, 2)).transpose(1, 2)
 
-    def decode(self, *args, **kwargs):
-        raise AttributeError("Not needed")
+    @torch.no_grad()
+    def generate(self, input_ids=None, input_features=None, input_features_mask=None, **kwargs):
+        r"""
+        return_word_timestamp_logits (`bool`, *optional*, defaults to `False`):
+            Whether to also return the logits of the word timestamp head and of the diarization model, for
+            [`~Nemotron3_5TranscribeProcessor.align_word_timestamps`], in a [`Nemotron3_5TranscribeGenerateOutput`]. The
+            audio model runs once. Greedy or sampled decoding with the cache, one sequence per recording.
+        """
+        if not kwargs.pop("return_word_timestamp_logits", False):
+            return GenerationMixin.generate(
+                self,
+                input_ids=input_ids,
+                input_features=input_features,
+                input_features_mask=input_features_mask,
+                **kwargs,
+            )
+        generation_config = kwargs.get("generation_config", self.generation_config)
+        if kwargs.get("use_cache") is False or kwargs.get(
+            "num_return_sequences", generation_config.num_return_sequences
+        ) not in (None, 1):
+            raise ValueError("`return_word_timestamp_logits=True` needs the cache and one sequence per recording.")
 
-    def batch_decode(self, *args, **kwargs):
-        raise AttributeError("Not needed")
+        # the audio model runs once: its embeddings fill the prompt, its states feed the word timestamp head
+        audio_outputs = self.get_audio_features(input_features, input_features_mask)
+        inputs_embeds = self.get_input_embeddings()(input_ids)
+        audio_embeds = audio_outputs.pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
+        special_audio_mask = self.model.get_placeholder_mask(input_ids, inputs_embeds, audio_embeds)
+        inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_embeds)
 
-    def _strip_assistant_prefix_and_quotes(self, text):
-        raise AttributeError("Not needed")
+        outputs = GenerationMixin.generate(
+            self, input_ids=input_ids, inputs_embeds=inputs_embeds, return_dict_in_generate=True, **kwargs
+        )
+        return Nemotron3_5TranscribeGenerateOutput(
+            **outputs,
+            word_timestamp_logits=self.get_word_timestamp_logits(
+                audio_outputs.asr_last_hidden_state, input_features_mask
+            ),
+            speaker_logits=audio_outputs.speaker_logits,
+        )
+
+    @staticmethod
+    def create_masks_for_generate(config, inputs_embeds, attention_mask, past_key_values, position_ids=None, **_):
+        # TODO: @eustlb, remove once `masking_utils.create_masks_for_generate` skips the layers without attention
+        # (Nemotron-H `moe` / `mlp`), which also removes `NemotronHForCausalLM.create_masks_for_generate`
+        # as `NemotronHForCausalLM`: the default dispatch does not know the Nemotron-H `moe` layer type, so both masks
+        # that the language model needs are returned
+        mask_kwargs = {
+            "config": config.get_text_config(),
+            "inputs_embeds": inputs_embeds,
+            "attention_mask": attention_mask,
+            "past_key_values": past_key_values,
+            "position_ids": position_ids,
+        }
+        return {
+            "full_attention": create_causal_mask(**mask_kwargs),
+            "linear_attention": create_recurrent_attention_mask(**mask_kwargs),
+        }
 
 
 __all__ = [
-    "Nemotron3_5TranscribeAsrEncoder",
-    "Nemotron3_5TranscribeAsrEncoderConfig",
+    "Nemotron3_5TranscribeAsrAudioModel",
+    "Nemotron3_5TranscribeAsrAudioConfig",
+    "Nemotron3_5TranscribeAudioConfig",
+    "Nemotron3_5TranscribeAudioModel",
     "Nemotron3_5TranscribeConfig",
-    "Nemotron3_5TranscribeEncoderConfig",
-    "Nemotron3_5TranscribeEncoder",
     "Nemotron3_5TranscribeForConditionalGeneration",
     "Nemotron3_5TranscribeModel",
     "Nemotron3_5TranscribePreTrainedModel",
-    "Nemotron3_5TranscribeProcessor",
+    "Nemotron3_5TranscribeWordTimestampConfig",
+    "Nemotron3_5TranscribeWordTimestampModel",
 ]

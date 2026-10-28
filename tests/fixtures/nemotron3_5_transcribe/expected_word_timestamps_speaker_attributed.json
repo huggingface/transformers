@@ -1,0 +1,569 @@
+{
+  "transcription": "<spk:0> to celebrate the release of nemotron three diarization we invited seven more open text-to-speech voices to the party i'm chris the nemotron voice from nvidia <spk:1> hi everybody thanks for having me i'm jane a pocket voice from qti <spk:2> nice to meet you chris and jane i'm serena the queen three voice <spk:3> hey i'm adam from kokoro just eighty two million parameters and i still made the guest list <spk:4> hello hello chatterbox here from resemble ai i brought the expressive energy <spk:5> hi i'm john a diera voice from<|im_end|>",
+  "aligned_text": "<spk:0> to celebrate the release of nemotron three diarization we invited seven more open text-to-speech voices to the party i'm chris the nemotron voice from nvidia <spk:1> hi everybody thanks for having me i'm jane a pocket voice from qti <spk:2> nice to meet you chris and jane i'm serena the queen three voice <spk:3> hey i'm adam from kokoro just eighty two million parameters and i still made the guest list <spk:4> hello hello chatterbox here from resemble ai i brought the expressive energy <spk:5> hi i'm john a diera voice from",
+  "words": [
+    {
+      "word": "to",
+      "start": 0.32,
+      "end": 0.35000000000000003,
+      "speaker": 0
+    },
+    {
+      "word": "celebrate",
+      "start": 0.35000000000000003,
+      "end": 0.96,
+      "speaker": 0
+    },
+    {
+      "word": "the",
+      "start": 0.96,
+      "end": 1.04,
+      "speaker": 0
+    },
+    {
+      "word": "release",
+      "start": 1.04,
+      "end": 1.44,
+      "speaker": 0
+    },
+    {
+      "word": "of",
+      "start": 1.44,
+      "end": 1.6,
+      "speaker": 0
+    },
+    {
+      "word": "nemotron",
+      "start": 1.6,
+      "end": 2.24,
+      "speaker": 0
+    },
+    {
+      "word": "three",
+      "start": 2.24,
+      "end": 2.48,
+      "speaker": 0
+    },
+    {
+      "word": "diarization",
+      "start": 2.48,
+      "end": 3.44,
+      "speaker": 0
+    },
+    {
+      "word": "we",
+      "start": 3.44,
+      "end": 3.6,
+      "speaker": 0
+    },
+    {
+      "word": "invited",
+      "start": 3.6,
+      "end": 4.0,
+      "speaker": 0
+    },
+    {
+      "word": "seven",
+      "start": 4.0,
+      "end": 4.32,
+      "speaker": 0
+    },
+    {
+      "word": "more",
+      "start": 4.32,
+      "end": 4.64,
+      "speaker": 0
+    },
+    {
+      "word": "open",
+      "start": 4.64,
+      "end": 4.96,
+      "speaker": 0
+    },
+    {
+      "word": "text-to-speech",
+      "start": 4.96,
+      "end": 5.68,
+      "speaker": 0
+    },
+    {
+      "word": "voices",
+      "start": 5.68,
+      "end": 6.08,
+      "speaker": 0
+    },
+    {
+      "word": "to",
+      "start": 6.08,
+      "end": 6.16,
+      "speaker": 0
+    },
+    {
+      "word": "the",
+      "start": 6.16,
+      "end": 6.32,
+      "speaker": 0
+    },
+    {
+      "word": "party",
+      "start": 6.32,
+      "end": 6.8,
+      "speaker": 0
+    },
+    {
+      "word": "i'm",
+      "start": 6.8,
+      "end": 7.12,
+      "speaker": 0
+    },
+    {
+      "word": "chris",
+      "start": 7.12,
+      "end": 7.68,
+      "speaker": 0
+    },
+    {
+      "word": "the",
+      "start": 7.68,
+      "end": 7.76,
+      "speaker": 0
+    },
+    {
+      "word": "nemotron",
+      "start": 7.76,
+      "end": 8.32,
+      "speaker": 0
+    },
+    {
+      "word": "voice",
+      "start": 8.32,
+      "end": 8.64,
+      "speaker": 0
+    },
+    {
+      "word": "from",
+      "start": 8.64,
+      "end": 8.8,
+      "speaker": 0
+    },
+    {
+      "word": "nvidia",
+      "start": 8.8,
+      "end": 9.31,
+      "speaker": 0
+    },
+    {
+      "word": "hi",
+      "start": 9.14,
+      "end": 9.6,
+      "speaker": 1
+    },
+    {
+      "word": "everybody",
+      "start": 9.6,
+      "end": 10.32,
+      "speaker": 1
+    },
+    {
+      "word": "thanks",
+      "start": 10.32,
+      "end": 10.56,
+      "speaker": 1
+    },
+    {
+      "word": "for",
+      "start": 10.56,
+      "end": 10.72,
+      "speaker": 1
+    },
+    {
+      "word": "having",
+      "start": 10.72,
+      "end": 11.040000000000001,
+      "speaker": 1
+    },
+    {
+      "word": "me",
+      "start": 11.040000000000001,
+      "end": 11.44,
+      "speaker": 1
+    },
+    {
+      "word": "i'm",
+      "start": 11.44,
+      "end": 11.76,
+      "speaker": 1
+    },
+    {
+      "word": "jane",
+      "start": 11.76,
+      "end": 12.16,
+      "speaker": 1
+    },
+    {
+      "word": "a",
+      "start": 12.16,
+      "end": 12.32,
+      "speaker": 1
+    },
+    {
+      "word": "pocket",
+      "start": 12.32,
+      "end": 12.72,
+      "speaker": 1
+    },
+    {
+      "word": "voice",
+      "start": 12.72,
+      "end": 12.96,
+      "speaker": 1
+    },
+    {
+      "word": "from",
+      "start": 12.96,
+      "end": 13.200000000000001,
+      "speaker": 1
+    },
+    {
+      "word": "qti",
+      "start": 13.200000000000001,
+      "end": 13.81,
+      "speaker": 1
+    },
+    {
+      "word": "nice",
+      "start": 13.55,
+      "end": 13.92,
+      "speaker": 2
+    },
+    {
+      "word": "to",
+      "start": 13.92,
+      "end": 14.08,
+      "speaker": 2
+    },
+    {
+      "word": "meet",
+      "start": 14.08,
+      "end": 14.32,
+      "speaker": 2
+    },
+    {
+      "word": "you",
+      "start": 14.32,
+      "end": 14.56,
+      "speaker": 2
+    },
+    {
+      "word": "chris",
+      "start": 14.56,
+      "end": 14.96,
+      "speaker": 2
+    },
+    {
+      "word": "and",
+      "start": 14.96,
+      "end": 15.200000000000001,
+      "speaker": 2
+    },
+    {
+      "word": "jane",
+      "start": 15.200000000000001,
+      "end": 15.92,
+      "speaker": 2
+    },
+    {
+      "word": "i'm",
+      "start": 15.92,
+      "end": 16.32,
+      "speaker": 2
+    },
+    {
+      "word": "serena",
+      "start": 16.32,
+      "end": 16.88,
+      "speaker": 2
+    },
+    {
+      "word": "the",
+      "start": 16.88,
+      "end": 17.04,
+      "speaker": 2
+    },
+    {
+      "word": "queen",
+      "start": 17.04,
+      "end": 17.44,
+      "speaker": 2
+    },
+    {
+      "word": "three",
+      "start": 17.44,
+      "end": 17.76,
+      "speaker": 2
+    },
+    {
+      "word": "voice",
+      "start": 17.76,
+      "end": 18.32,
+      "speaker": 2
+    },
+    {
+      "word": "hey",
+      "start": 18.38,
+      "end": 18.72,
+      "speaker": 3
+    },
+    {
+      "word": "i'm",
+      "start": 18.72,
+      "end": 19.04,
+      "speaker": 3
+    },
+    {
+      "word": "adam",
+      "start": 19.04,
+      "end": 19.28,
+      "speaker": 3
+    },
+    {
+      "word": "from",
+      "start": 19.28,
+      "end": 19.44,
+      "speaker": 3
+    },
+    {
+      "word": "kokoro",
+      "start": 19.44,
+      "end": 20.400000000000002,
+      "speaker": 3
+    },
+    {
+      "word": "just",
+      "start": 20.400000000000002,
+      "end": 20.64,
+      "speaker": 3
+    },
+    {
+      "word": "eighty",
+      "start": 20.64,
+      "end": 20.96,
+      "speaker": 3
+    },
+    {
+      "word": "two",
+      "start": 20.96,
+      "end": 21.2,
+      "speaker": 3
+    },
+    {
+      "word": "million",
+      "start": 21.2,
+      "end": 21.6,
+      "speaker": 3
+    },
+    {
+      "word": "parameters",
+      "start": 21.6,
+      "end": 22.240000000000002,
+      "speaker": 3
+    },
+    {
+      "word": "and",
+      "start": 22.240000000000002,
+      "end": 22.32,
+      "speaker": 3
+    },
+    {
+      "word": "i",
+      "start": 22.32,
+      "end": 22.48,
+      "speaker": 3
+    },
+    {
+      "word": "still",
+      "start": 22.48,
+      "end": 22.72,
+      "speaker": 3
+    },
+    {
+      "word": "made",
+      "start": 22.72,
+      "end": 22.88,
+      "speaker": 3
+    },
+    {
+      "word": "the",
+      "start": 22.88,
+      "end": 22.96,
+      "speaker": 3
+    },
+    {
+      "word": "guest",
+      "start": 22.96,
+      "end": 23.28,
+      "speaker": 3
+    },
+    {
+      "word": "list",
+      "start": 23.28,
+      "end": 23.59,
+      "speaker": 3
+    },
+    {
+      "word": "hello",
+      "start": 23.76,
+      "end": 23.77,
+      "speaker": 4
+    },
+    {
+      "word": "hello",
+      "start": 23.77,
+      "end": 24.560000000000002,
+      "speaker": 4
+    },
+    {
+      "word": "chatterbox",
+      "start": 24.560000000000002,
+      "end": 25.04,
+      "speaker": 4
+    },
+    {
+      "word": "here",
+      "start": 25.04,
+      "end": 25.36,
+      "speaker": 4
+    },
+    {
+      "word": "from",
+      "start": 25.36,
+      "end": 25.68,
+      "speaker": 4
+    },
+    {
+      "word": "resemble",
+      "start": 25.68,
+      "end": 26.16,
+      "speaker": 4
+    },
+    {
+      "word": "ai",
+      "start": 26.16,
+      "end": 26.32,
+      "speaker": 4
+    },
+    {
+      "word": "i",
+      "start": 26.32,
+      "end": 26.72,
+      "speaker": 4
+    },
+    {
+      "word": "brought",
+      "start": 26.72,
+      "end": 27.04,
+      "speaker": 4
+    },
+    {
+      "word": "the",
+      "start": 27.04,
+      "end": 27.12,
+      "speaker": 4
+    },
+    {
+      "word": "expressive",
+      "start": 27.12,
+      "end": 27.52,
+      "speaker": 4
+    },
+    {
+      "word": "energy",
+      "start": 27.52,
+      "end": 28.1,
+      "speaker": 4
+    },
+    {
+      "word": "hi",
+      "start": 27.82,
+      "end": 28.16,
+      "speaker": 5
+    },
+    {
+      "word": "i'm",
+      "start": 28.16,
+      "end": 28.48,
+      "speaker": 5
+    },
+    {
+      "word": "john",
+      "start": 28.48,
+      "end": 28.96,
+      "speaker": 5
+    },
+    {
+      "word": "a",
+      "start": 28.96,
+      "end": 29.04,
+      "speaker": 5
+    },
+    {
+      "word": "diera",
+      "start": 29.04,
+      "end": 29.36,
+      "speaker": 5
+    },
+    {
+      "word": "voice",
+      "start": 29.36,
+      "end": 29.6,
+      "speaker": 5
+    },
+    {
+      "word": "from",
+      "start": 29.6,
+      "end": 30.0,
+      "speaker": 5
+    }
+  ],
+  "diarization": [
+    {
+      "speaker": 0,
+      "start": 0.35000000000000003,
+      "end": 9.31
+    },
+    {
+      "speaker": 1,
+      "start": 9.14,
+      "end": 13.81
+    },
+    {
+      "speaker": 2,
+      "start": 13.55,
+      "end": 18.32
+    },
+    {
+      "speaker": 3,
+      "start": 18.38,
+      "end": 23.59
+    },
+    {
+      "speaker": 4,
+      "start": 23.77,
+      "end": 28.1
+    },
+    {
+      "speaker": 5,
+      "start": 27.82,
+      "end": 30.0
+    }
+  ],
+  "speaker_tag_to_diarization_speaker": {
+    "0": 0,
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5
+  },
+  "failed_speakers": []
+}
