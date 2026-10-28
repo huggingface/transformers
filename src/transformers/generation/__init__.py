@@ -96,6 +96,7 @@ else:
     ]
     _import_structure["utils"] = [
         "DiffusionSampler",
+        "DiffusionSamplerOutput",
         "GenerationMixin",
         "GenerateBeamDecoderOnlyOutput",
         "GenerateBeamEncoderDecoderOutput",
@@ -196,6 +197,7 @@ if TYPE_CHECKING:
         )
         from .utils import (
             DiffusionSampler,
+            DiffusionSamplerOutput,
             GenerateBeamDecoderOnlyOutput,
             GenerateBeamEncoderDecoderOutput,
             GenerateDecoderOnlyOutput,

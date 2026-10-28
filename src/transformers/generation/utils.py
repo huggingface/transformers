@@ -371,25 +371,40 @@ GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderO
 GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
+@dataclass
+class DiffusionSamplerOutput(ModelOutput):
+    """
+    Output of [`DiffusionSampler.step`], with the same field name as a diffusers `SchedulerOutput`.
+
+    Args:
+        prev_sample (`torch.Tensor`):
+            The sample to feed the denoiser at the next step: accepted where the sampler commits, renoised elsewhere.
+    """
+
+    prev_sample: torch.Tensor | None = None
+
+
 @runtime_checkable
 class DiffusionSampler(Protocol):
     """
-    What a diffusion `generate` needs from a sampler. The model owns the denoiser forward, the sampler owns the update
-    rule, so a diffusers scheduler that implements these two methods can drive a transformers backbone.
+    What a diffusion `generate` needs from a sampler: the diffusers scheduler `step` signature. The model owns the
+    denoiser forward, the sampler owns the update rule (acceptance and renoising), so any diffusers scheduler can drive
+    a transformers backbone as is.
 
     ```
-    sample ──► model forward ──► model_output ──► step ──► accepted ──► renoise ──► next sample
-      ▲                                                                                │
-      └────────────────────────────────────────────────────────────────────────────────┘
+    sample ──► model forward ──► model_output ──► sampler.step ──► prev_sample (accepted + renoised)
+      ▲                                                                  │
+      └──────────────────────────────────────────────────────────────────┘
     ```
     """
 
-    def step(self, model_output: torch.Tensor, timestep: torch.Tensor, sample: torch.Tensor) -> torch.Tensor:
-        """Update `sample` from the denoiser's `model_output` at `timestep`."""
-        ...
-
-    def renoise(self, sample: torch.Tensor, timestep: torch.Tensor) -> torch.Tensor:
-        """Noise `sample` back to the level the next denoising step expects."""
+    def step(
+        self, model_output: torch.Tensor, timestep: torch.Tensor, sample: torch.Tensor, *, return_dict: bool = True
+    ) -> DiffusionSamplerOutput | tuple:
+        """
+        Update `sample` from the denoiser's `model_output` at `timestep`. Returns an output with `prev_sample`, or a
+        tuple whose first element is `prev_sample` when `return_dict=False`.
+        """
         ...
 
 

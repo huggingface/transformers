@@ -48,6 +48,7 @@ if is_torch_available():
         DiffusionGemmaForBlockDiffusion,
         DiffusionGemmaGenerationConfig,
         DiffusionGemmaModel,
+        DiffusionSamplerOutput,
         DynamicCache,
         EntropyBoundSamplerConfig,
         StaticCache,
@@ -727,6 +728,30 @@ class DiffusionGemmaVisionText2TextModelTest(
 
         expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
         self.assertEqual(generation_outputs.sequences.shape, expected_shape)
+
+    def test_generate_with_custom_sampler(self):
+        """`generate(sampler=...)` accepts anything with the diffusers scheduler `step` signature"""
+
+        class ArgmaxSampler:
+            num_calls = 0
+
+            def step(self, model_output, timestep, sample, *, return_dict=True):
+                self.num_calls += 1
+                prev_sample = model_output.argmax(dim=-1)
+                return DiffusionSamplerOutput(prev_sample=prev_sample) if return_dict else (prev_sample,)
+
+        config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        model = DiffusionGemmaForBlockDiffusion(config=config).to(torch_device).eval()
+        model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
+        sampler = ArgmaxSampler()
+
+        generation_outputs = model.generate(
+            model_inputs["input_ids"], max_new_tokens=16, max_denoising_steps=2, sampler=sampler
+        )
+
+        expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
+        self.assertEqual(generation_outputs.sequences.shape, expected_shape)
+        self.assertGreater(sampler.num_calls, 0)
 
     def test_generate_text_only(self):
         """Same as `test_generate`, but only with text inputs (no images)"""

@@ -198,12 +198,13 @@ A [`StoppingCriteria`] can be used to change when to stop generation (other than
 
 ## Diffusion samplers
 
-A diffusion `generate` delegates the update rule to a sampler. Any object with `step` and `renoise`, such as a
-diffusers scheduler, can be passed as `generate(..., sampler=...)`.
+A diffusion `generate` delegates the update rule to a sampler. Any object with the diffusers scheduler `step`
+signature, such as a diffusers scheduler, can be passed as `generate(..., sampler=...)`.
 
 [[autodoc]] DiffusionSampler
     - step
-    - renoise
+
+[[autodoc]] DiffusionSamplerOutput
 
 ## Streamers
 
