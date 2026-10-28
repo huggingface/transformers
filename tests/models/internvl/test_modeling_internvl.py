@@ -505,6 +505,7 @@ class InternVLQwen2IntegrationTest(unittest.TestCase):
                 ("xpu", 3): "The man is performing a forehand shot.",
                 ("cuda", 8): "The man is performing a forehand shot.",
                 ("rocm", (9, 5)): "The man is performing a volley shot.",
+                ("rocm", (9, 4)): 'The man is performing a forehand shot.',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
