@@ -21,12 +21,12 @@ from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 
 
 if is_torch_available():
-    from transformers import KevDecisionHead
+    from transformers import KevForDecision
 
 
 @require_torch
-class KevDecisionHeadTest(DecisionHeadTesterMixin, unittest.TestCase):
-    all_model_classes = (KevDecisionHead,) if is_torch_available() else ()
+class KevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
+    all_model_classes = (KevForDecision,) if is_torch_available() else ()
     decision_repo = "ArthurZ/kev-4b"
     tiny_sizes = {"hidden_size": 16, "head_dim": 8}
 

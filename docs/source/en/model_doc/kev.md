@@ -38,7 +38,7 @@ decide(
 
 [[autodoc]] KevConfig
 
-## KevDecisionHead
+## KevForDecision
 
-[[autodoc]] KevDecisionHead
+[[autodoc]] KevForDecision
     - forward
