@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import contextlib
+import re
 
 from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available, is_torch_distributed_available
@@ -33,6 +34,39 @@ class ParallelInterface(GeneralInterface):
 
 
 ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
+
+
+def replace_layer_number_by_wildcard(name: str) -> str:
+    """
+    Replace the numbers in the `name` by wildcards, only if they are in-between dots (`.`) or if they are between
+    a dot (`.`) and the end of the string.
+    This matches how modules are named/numbered when using a nn.ModuleList or nn.Sequential, but will NOT match
+    numbers in a parameter name itself, e.g. if the param is named `"w1"` or `"w2"`.
+    """
+    return re.sub(r"\.\d+(\.|$)", lambda m: ".*" + m.group(1), name)
+
+
+def _get_parameter_plan(parameter_name: str, plan: dict[str, str], is_weight=True) -> str | None:
+    """
+    Get the parallel style for a parameter or module from a TP or EP plan.
+
+    The plan is a dictionary that maps parameter or module names to parallel styles.
+    The parameter name can be a generic name with wildcards (e.g. "*.weight") or a specific name (e.g. "layer_1.weight").
+
+    The `is_weight` is important because for weights, we want to support `.weights` and `.bias` cases seamlessly! but
+    not parent classes for `post_init` calls
+    """
+    generic_param_name = replace_layer_number_by_wildcard(parameter_name)
+    if generic_param_name in plan:
+        return plan[generic_param_name]
+    elif is_weight and "." in generic_param_name and (module_name := generic_param_name.rsplit(".", 1)[0]) in plan:
+        return plan[module_name]
+    return None
+
+
+def _same_ranks(mesh_a, mesh_b) -> bool:
+    """Whether two 1D device meshes group the same ranks, e.g. an EP group whose ranks all hold one batch (its TP group)."""
+    return dist.get_process_group_ranks(mesh_a.get_group()) == dist.get_process_group_ranks(mesh_b.get_group())
 
 
 @contextlib.contextmanager
@@ -100,6 +134,14 @@ if is_torch_distributed_available():
             grad = grad.contiguous()
             dist.all_reduce(grad, group=ctx.process_group)
             return grad, None
+
+    def _all_reduce_backward(x, process_group):
+        """Sum the gradient of a replicated `x` over the group in backward. Only when a gradient can flow: at
+        inference it returns `x` untouched, so the per-call overhead of an `autograd.Function` does not compound
+        across layers, e.g. in eager decode."""
+        if torch.is_grad_enabled() and x.requires_grad:
+            return _AllReduceBackward.apply(x, process_group)
+        return x
 
     class _WaitTensor(torch.autograd.Function):
         """Wait on a functional collective's result, identity backward (`wait_tensor` has no autograd kernel before

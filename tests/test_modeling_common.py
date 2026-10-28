@@ -137,7 +137,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING
-    from transformers.distributed.tensor_parallel import _get_parameter_plan
+    from transformers.distributed.parallel_utils import _get_parameter_plan
     from transformers.integrations.accelerate import compute_module_sizes
     from transformers.modeling_utils import load_state_dict
     from transformers.pytorch_utils import id_tensor_storage

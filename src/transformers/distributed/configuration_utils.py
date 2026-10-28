@@ -43,6 +43,10 @@ class DistributedConfig:
             does not change `tp_size` or `fsdp_size`.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
+        fsdp_plan (`dict[str, str]`, *optional*):
+            FSDP2 sharding plan. Leave as `None` to use the model's predefined `base_model_fsdp_plan` and
+            class-level `_fsdp_plan`. Pass a dictionary to override individual rules; unspecified rules are kept.
+            Applied only when `fsdp_size > 1`.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
             Whether to enable CPU offloading for FSDP2.
         fsdp_mixed_precision (`bool`, *optional*, defaults to `False`):
@@ -52,12 +56,18 @@ class DistributedConfig:
         ep_size (`int`, *optional*):
             Number of devices owning distinct expert shards. Defaults to 1. Set it explicitly to enable EP. Must be
             a multiple of `tp_size` and divide `fsdp_size * tp_size`. All-reduce expert plans require
-            `ep_size=tp_size`; token dispatch (`"ep_dispatch_experts"`) also allows `ep_size > tp_size`.
+            `ep_size=tp_size`; `"ep_dispatch_experts"` also allows `ep_size > tp_size`, with all-to-all token dispatch.
         ep_plan (`dict[str, str]`, *optional*):
             Expert parallel sharding plan. Leave as `None` to use the model's predefined `base_model_ep_plan`. Pass a
             dictionary to override individual rules of that plan; unspecified rules are kept. Applied only when
             `ep_size > 1`, and its rules take precedence over `tp_plan` rules for the same modules. An
-            `"ep_dispatch_experts"` rule selects all-to-all token dispatch instead of router masking and all-reduce.
+            `"ep_dispatch_experts"` rule lets `ep_implementation` pick how tokens reach the experts.
+        ep_implementation (`str`, *optional*, defaults to `"auto"`):
+            How an `"ep_dispatch_experts"` rule brings the experts their tokens: the name of an `EPImplementation`
+            registered in `ALL_EP_IMPLEMENTATIONS`. `"all_to_all"` exchanges the routed (token, expert) pairs with
+            all-to-all collectives; `"all_reduce"` masks each rank's experts on a batch the EP group shares and sums the
+            outputs, and requires `ep_size == tp_size`. `"auto"` runs `"all_reduce"` at inference when the EP group
+            shares one batch, and `"all_to_all"` in training and wherever the ranks hold different batches.
     """
 
     tp_size: int | None = None
@@ -65,11 +75,13 @@ class DistributedConfig:
     enable_sequence_parallel: bool = False
     enable_expert_parallel: bool = False
     fsdp_size: int | None = None
+    fsdp_plan: dict[str, str] | None = None
     fsdp_cpu_offload: bool = False
     fsdp_mixed_precision: bool = False
     pp_size: int | None = None
     ep_size: int | None = None
     ep_plan: dict[str, str] | None = None
+    ep_implementation: str = "auto"
 
     @property
     def efsdp_size(self) -> int:
@@ -142,6 +154,8 @@ class DistributedConfig:
         """Validate mesh sizes before the model's expert plan is available."""
         if self.ep_plan is not None and not isinstance(self.ep_plan, dict):
             raise ValueError("`ep_plan` must be a dictionary or None.")
+        if self.fsdp_plan is not None and not isinstance(self.fsdp_plan, dict):
+            raise ValueError("`fsdp_plan` must be a dictionary or None.")
 
         if self.ep_size > 1:
             if self.ep_size % self.tp_size:
