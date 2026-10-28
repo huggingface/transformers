@@ -13,9 +13,10 @@
 # limitations under the License.
 """A decision model: a model and the decision head that reads it, from the files of one repo."""
 
+import copy
 from pathlib import Path
 
-from torch import nn
+from safetensors.torch import save_file
 
 from ..modeling_utils import PreTrainedModel
 from ..models.auto import AutoConfig, AutoModel, AutoModelForCausalLM, AutoModelForImageTextToText
@@ -40,15 +41,25 @@ def load_decision_head(
     return AutoModel.from_pretrained(repo, config=config).to(model.device).eval()
 
 
-class ForDecision(nn.Module):
+class ForDecision(PreTrainedModel):
     """
-    Base of the `XxxForDecision` models: the model of a repo and its decision head, called with the inputs of a
-    [`DecisionPrompt`] (`prompt.model_inputs()`) to score its options.
+    Base of the `XxxForDecision` models: the model of a repo (`model`) and its decision head (`head`), whose config is
+    theirs. Called with the inputs of a [`DecisionPrompt`] (`prompt.model_inputs()`) to score its options.
     """
 
-    def __init__(self, model: PreTrainedModel, head: PreTrainedModel):
-        super().__init__()
-        self.model, self.head = model, head
+    base_model_prefix = "model"
+
+    def __init__(
+        self,
+        config,
+        model: PreTrainedModel | None = None,
+        head: PreTrainedModel | None = None,
+        decision_config: DecisionConfig | None = None,
+    ):
+        super().__init__(config)
+        self.model = model
+        self.head = head if head is not None else AutoModel.from_config(config)
+        self.decision_config = decision_config or DecisionConfig()
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: str | Path, **kwargs) -> "ForDecision":
@@ -59,11 +70,24 @@ class ForDecision(nn.Module):
                 break
             except ValueError:  # not a model of this class
                 continue
-        decision_config = DecisionConfig.from_pretrained(pretrained_model_name_or_path)
+        try:
+            decision_config = DecisionConfig.from_pretrained(pretrained_model_name_or_path)
+        except OSError:
+            decision_config = DecisionConfig()
         head = load_decision_head(model, pretrained_model_name_or_path, decision_config)
         if head is None:
             raise ValueError(f"{pretrained_model_name_or_path} has no `{DECISION_HEAD_CONFIG_NAME}`.")
-        return cls(model, head)
+        return cls(head.config, model=model, head=head, decision_config=decision_config)
+
+    def save_pretrained(self, save_directory: str | Path, **kwargs):
+        """The layout `from_pretrained` reads: the model, and the head next to it with its config naming its weights."""
+        self.model.save_pretrained(save_directory, **kwargs)
+        self.decision_config.save_pretrained(save_directory)
+        weights = "decision_head.safetensors"
+        save_file(self.head.state_dict(), Path(save_directory) / weights, metadata={"format": "pt"})
+        config = copy.deepcopy(self.head.config)
+        config.transformers_weights, config.dtype = weights, self.head.dtype
+        config.to_json_file(Path(save_directory) / DECISION_HEAD_CONFIG_NAME)
 
     def forward(self, **inputs):
         return self.head(**inputs, backbone=self.model)

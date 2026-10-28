@@ -64,5 +64,7 @@ class JevDecisionHead(JevPreTrainedModel):
 class JevForDecision(ForDecision):
     """JEV: the model of a repo and its [`JevDecisionHead`], e.g. `JevForDecision.from_pretrained("autotrust/JEV-9B")`."""
 
+    config: JevConfig
+
 
 __all__ = ["JevDecisionHead", "JevForDecision", "JevPreTrainedModel"]
