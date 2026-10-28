@@ -389,7 +389,7 @@ class ClefPreTrainedModel(PreTrainedModel):
     attend to each other and to the prompt, and each option is scored against the field of its question.
     """
 )
-class ClefDecisionHead(ClefPreTrainedModel):
+class ClefForDecision(ClefPreTrainedModel):
     def __init__(self, config: ClefConfig):
         super().__init__(config)
         self.embeddings = ClefEmbeddings(config)
@@ -421,4 +421,4 @@ class ClefDecisionHead(ClefPreTrainedModel):
         return scores[0]
 
 
-__all__ = ["ClefDecisionHead", "ClefPreTrainedModel"]
+__all__ = ["ClefForDecision", "ClefPreTrainedModel"]
