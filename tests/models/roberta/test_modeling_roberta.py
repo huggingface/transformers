@@ -369,7 +369,7 @@ class RobertaModelTester:
 
 
 @require_torch
-class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
     all_model_classes = (
         (
             RobertaForCausalLM,
@@ -403,7 +403,7 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         config.is_decoder = True
         return config, inputs
 
-    def setUp(self):
+    def setup_method(self):
         self.model_tester = RobertaModelTester(self)
         self.config_tester = ConfigTester(self, config_class=RobertaConfig, hidden_size=32)
 

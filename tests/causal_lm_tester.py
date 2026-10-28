@@ -284,7 +284,7 @@ class CausalLMModelTest(
     all_model_classes = None
     pipeline_model_mapping = None
 
-    def setUp(self):
+    def setup_method(self):
         if self.model_tester_class is None:
             raise ValueError(
                 "You have inherited from CausalLMModelTest but did not set the model_tester_class attribute."

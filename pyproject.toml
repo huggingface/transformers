@@ -82,6 +82,7 @@ line-ending = "auto"
 max-complexity = 75
 
 [tool.pytest.ini_options]
+python_classes = ["Test*", "*Test"]
 addopts = "--doctest-glob='**/*.md'"
 doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"
 markers = [

@@ -745,8 +745,70 @@ UNSHIFTED_LM_HEADS = {
 }
 
 
+class _UnittestCompatMixin:
+    """Temporary bridge: provides unittest-style assert methods as pure pytest equivalents.
+    Remove this class (and its use in ModelTesterMixin) once all self.assert* calls are
+    converted to plain assert statements.
+    """
+
+    @property
+    def _testMethodName(self):
+        import inspect
+
+        for frame_info in inspect.stack():
+            name = frame_info.function
+            if name.startswith("test_"):
+                return name
+        return ""
+
+    def assertEqual(self, a, b, msg=None):
+        assert a == b, msg
+
+    def assertTrue(self, x, msg=None):
+        assert x, msg
+
+    def assertListEqual(self, a, b, msg=None):
+        assert a == b, msg
+
+    def assertIsNotNone(self, x, msg=None):
+        assert x is not None, msg
+
+    def assertFalse(self, x, msg=None):
+        assert not x, msg
+
+    def assertIn(self, a, b, msg=None):
+        assert a in b, msg
+
+    def assertGreater(self, a, b, msg=None):
+        assert a > b, msg
+
+    def assertIsInstance(self, obj, cls, msg=None):
+        assert isinstance(obj, cls), msg
+
+    def assertLessEqual(self, a, b, msg=None):
+        assert a <= b, msg
+
+    def assertRaises(self, exc, *args, **kwargs):
+        return pytest.raises(exc)
+
+    def assertRaisesRegex(self, exc, regex, *args, **kwargs):
+        return pytest.raises(exc, match=regex)
+
+    def skipTest(self, reason):
+        pytest.skip(reason)
+
+    def subTest(self, *args, **kwargs):
+        from contextlib import contextmanager
+
+        @contextmanager
+        def noop():
+            yield
+
+        return noop()
+
+
 @require_torch
-class ModelTesterMixin(ExportTesterMixin):
+class ModelTesterMixin(_UnittestCompatMixin, ExportTesterMixin):
     model_tester = None
     all_model_classes = ()
     test_resize_embeddings = True
