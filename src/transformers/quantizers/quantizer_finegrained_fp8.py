@@ -142,14 +142,25 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     def update_parallel_plan(self, model, plan):
         from ..distributed.parallel_utils import _get_parameter_plan, replace_layer_number_by_wildcard
-        from ..integrations.finegrained_fp8 import FP8Experts
 
         super().update_parallel_plan(model, plan)
         # Per-tensor scales (`activation_scale`, `weight_scale_inv` without blocks) are scalars, not sharded
         scalars = {replace_layer_number_by_wildcard(n) for n, p in model.named_parameters() if p.ndim == 0}
         plan.update({name: "replicate" for name in scalars if _get_parameter_plan(name, plan) is not None})
-        overwrite = FP8Experts._impl_tp_layer_overrides.get(getattr(model.config, "_experts_implementation", None), {})
-        plan.update({key: overwrite.get(style, style) for key, style in plan.items()})
+
+        # DeepGEMM Mega MoE exchanges the tokens inside its kernel, through the `deepgemm_megamoe` implementation's buffers
+        distributed_config = getattr(model.config, "distributed_config", None)
+        if (
+            getattr(model.config, "_experts_implementation", None) == "deepgemm_megamoe"
+            and distributed_config is not None
+        ):
+            if distributed_config.ep_implementation not in ("auto", "deepgemm_megamoe"):
+                raise ValueError(
+                    "DeepGEMM Mega MoE exchanges tokens inside its kernel and only runs with "
+                    f'`ep_implementation="deepgemm_megamoe"`, got '
+                    f"`ep_implementation={distributed_config.ep_implementation!r}`."
+                )
+            distributed_config.ep_implementation = "deepgemm_megamoe"
 
     def is_serializable(self):
         return True

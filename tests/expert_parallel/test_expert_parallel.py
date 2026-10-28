@@ -112,6 +112,10 @@ class TestExpertParallelLayer(TestCasePlus):
             experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), None, ep_implementation="custom")
         torch.testing.assert_close(experts(torch.zeros(2, 4), None, torch.ones(2, 1)), torch.ones(2, 4))
 
+    def test_passthrough_hands_experts_the_shared_batch(self):
+        """`"passthrough"` hands experts the shared batch, global expert ids, unmasked weights and the EP group."""
+        _init_distributed(tp=2, backend="gloo")(_passthrough_hands_experts_the_shared_batch)()
+
 
 class _DummyExperts(torch.nn.Module):
     def __init__(self):
@@ -240,3 +244,27 @@ def _ep_gradient_checkpointing_matches_reference(rank, use_reentrant):
     torch.testing.assert_close(output, reference_output.detach())
     torch.testing.assert_close(h.grad, h_ref.grad)
     torch.testing.assert_close(w.grad, w_ref.grad)
+
+
+class _ExchangingExperts(torch.nn.Module):
+    """Experts that exchange tokens themselves: record what they get and return a per-rank output."""
+
+    num_experts = 2
+
+    def forward(self, hidden_states, top_k_index, top_k_weights, process_group):
+        self.received = (hidden_states, top_k_index, top_k_weights, process_group)
+        return hidden_states * (torch.distributed.get_rank() + 1)
+
+
+def _passthrough_hands_experts_the_shared_batch(rank):
+    mesh = init_device_mesh("cpu", (2,))
+    experts = EpDispatchExpertsParallel().install_forward(
+        _ExchangingExperts(), mesh, tp_mesh=mesh, ep_implementation="passthrough"
+    )
+    output = experts(_HIDDEN_STATES, _TOP_K_INDEX, _TOP_K_WEIGHTS)
+    received_hidden, received_index, received_weights, process_group = experts.received
+    torch.testing.assert_close(received_hidden, _HIDDEN_STATES)
+    torch.testing.assert_close(received_index, _TOP_K_INDEX)
+    torch.testing.assert_close(received_weights, _TOP_K_WEIGHTS)
+    assert torch.distributed.get_process_group_ranks(process_group) == [0, 1]
+    torch.testing.assert_close(output, _HIDDEN_STATES * (rank + 1))
