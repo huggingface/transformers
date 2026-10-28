@@ -2985,6 +2985,8 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
 
         for thread in threading.enumerate():
             if thread.name == "Thread-auto_conversion":
+                # The conversion is spawned as a background thread by from_pretrained. Wait up to 60s for
+                # it to finish (it makes an API call to the conversion Space, which can take several seconds).
                 thread.join(timeout=60)
 
         discussions = self.api.get_repo_discussions(self.repo_name)
