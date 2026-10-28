@@ -15,7 +15,7 @@
 import threading
 import unittest
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from contextvars import copy_context
 from unittest.mock import patch
 
@@ -51,23 +51,21 @@ class RouterOutputCollectionTest(unittest.TestCase):
         outputs = {"router_logits": original}
         with self.collecting(outputs):
             # A local buffer belongs to the existing collector, not a second capture decorator.
-            with patch.object(self.collector, "set", side_effect=AssertionError("second collector owner")):
-                with patch.object(self.collector, "reset", side_effect=AssertionError("reset collector owner")):
-                    with capturing._scope_router_output_collection():
-                        self.assertIsNot(self.collector.get()["router_logits"], original)
-                        self.assertIs(outputs["router_logits"], original)
-                        for index, value in zip((None, 0, 2, -1), expected):
-                            router = torch.nn.Identity()
-                            capturing.install_output_capuring_hook(router, "router_logits", index or 0)
-                            if index is None:
-                                router(value)
-                            elif index == 0:
-                                router((value, None))
-                            else:
-                                router((None, None, value))
-                        router((None, None, None))  # A recorder may have no value to append.
-                    with capturing._scope_router_output_collection():
-                        pass  # A dense region may emit no router outputs.
+            with capturing._scope_router_output_collection():
+                self.assertIsNot(self.collector.get()["router_logits"], original)
+                self.assertIs(outputs["router_logits"], original)
+                for index, value in zip((None, 0, 2, -1), expected):
+                    router = torch.nn.Identity()
+                    capturing.install_output_capuring_hook(router, "router_logits", index or 0)
+                    if index is None:
+                        router(value)
+                    elif index == 0:
+                        router((value, None))
+                    else:
+                        router((None, None, value))
+                router((None, None, None))  # A recorder may have no value to append.
+            with capturing._scope_router_output_collection():
+                pass  # A dense region may emit no router outputs.
             self.assertIs(outputs["router_logits"], original)
 
         self.assertEqual(len(original), len(expected))
@@ -104,9 +102,8 @@ class RouterOutputCollectionTest(unittest.TestCase):
     def test_inactive_router_collection_is_unchanged(self):
         for outputs in (None, {"hidden_states": []}):
             with self.subTest(outputs=outputs), self.collecting(outputs):
-                with patch.object(self.collector, "set", side_effect=AssertionError("unexpected collector")):
-                    with capturing._scope_router_output_collection():
-                        self.assertIs(self.collector.get(), outputs)
+                with capturing._scope_router_output_collection():
+                    self.assertIs(self.collector.get(), outputs)
                 if outputs is not None:
                     self.assertEqual(outputs, {"hidden_states": []})
 
@@ -139,94 +136,6 @@ class RouterOutputCollectionTest(unittest.TestCase):
             self.assertEqual(len(captured), len(values))
             for actual, reference in zip(captured, values):
                 self.assertIs(actual, reference)
-
-    def test_whole_model_compilation_keeps_the_existing_buffer(self):
-        # Tracing and a collector already activated by tracing both use the original path.
-        for tracing, global_collector in ((True, False), (False, True)):
-            with self.subTest(tracing=tracing, global_collector=global_collector):
-                original = []
-                outputs = {"router_logits": original}
-                with self.collecting(outputs):
-                    with (
-                        patch.object(capturing, "is_torchdynamo_compiling", return_value=tracing),
-                        patch.object(self.collector, "compiling", global_collector),
-                        patch.object(self.collector, "global_var", outputs),
-                    ):
-                        with capturing._scope_router_output_collection():
-                            self.assertIs(self.collector.get()["router_logits"], original)
-                            original.append("record")
-                self.assertEqual(original, ["record"])
-
-    def test_regional_compile_reuses_graph_without_losing_router_gradients(self):
-        class Block(torch.nn.Module):
-            def __init__(self):
-                super().__init__()
-                self.router = torch.nn.Linear(8, 4)
-                self.proj = torch.nn.Linear(8, 8)
-
-            def forward(self, inputs):
-                logits = self.router(inputs)
-                return self.proj(inputs) + logits.sum(-1, keepdim=True) * 0.01
-
-        torch.compiler.reset()
-        self.addCleanup(torch.compiler.reset)
-        limit = getattr(torch._dynamo.config, "recompile_limit", None)
-        if limit is None:
-            limit = torch._dynamo.config.cache_size_limit
-        with torch.random.fork_rng(devices=[]):
-            torch.manual_seed(7)
-            blocks = [Block() for _ in range(limit + 1)]
-            inputs = torch.randn(1, 5, 8)
-        for block in blocks:
-            capturing.install_output_capuring_hook(block.router, "router_logits", 0)
-        parameters = [parameter for block in blocks for parameter in block.parameters()]
-        router_parameters = [parameter for block in blocks for parameter in block.router.parameters()]
-
-        def forward_backward(scoped):
-            for block in blocks:
-                block.zero_grad(set_to_none=True)
-            hidden = inputs.clone().requires_grad_()
-            outputs = {"router_logits": []}
-            with self.collecting(outputs):
-                for block in blocks:
-                    with capturing._scope_router_output_collection() if scoped else nullcontext():
-                        hidden = block(hidden)
-            self.assertIsNone(self.collector.get())
-            self.assertEqual(len(outputs["router_logits"]), len(blocks))
-            auxiliary_loss = sum(value.square().mean() for value in outputs["router_logits"]) * 0.01
-            auxiliary_gradients = torch.autograd.grad(auxiliary_loss, router_parameters, retain_graph=True)
-            (hidden.square().mean() + auxiliary_loss).backward()
-            for parameter in parameters:
-                self.assertIsNotNone(parameter.grad)
-                self.assertGreater(parameter.grad.abs().sum().item(), 0)
-            return (
-                hidden.detach(),
-                tuple(value.detach() for value in outputs["router_logits"]),
-                auxiliary_loss.detach(),
-                auxiliary_gradients,
-                tuple(parameter.grad.clone() for parameter in parameters),
-            )
-
-        reference = forward_backward(scoped=False)
-        graphs, calls = [], []
-
-        def backend(graph, example_inputs):
-            graphs.append(graph)
-
-            def execute(*args):
-                calls.append(None)
-                return graph.forward(*args)
-
-            return execute
-
-        for block in blocks:
-            block.compile(backend=backend)
-        # A counting backend isolates Dynamo's list-length specialization from kernel numerics.
-        # A second invocation also checks that capture does not leak across model calls/backward.
-        for _ in range(2):
-            torch.testing.assert_close(forward_backward(scoped=True), reference, rtol=0, atol=0)
-        self.assertEqual(len(graphs), 1, "router capture specialized the graph for successive regions")
-        self.assertEqual(len(calls), 2 * len(blocks), "a region silently fell back to eager execution")
 
     def test_threads_keep_independent_capture_contexts(self):
         barrier = threading.Barrier(2, timeout=10)

@@ -129,7 +129,7 @@ CASES = {
 }
 
 
-def make_model(family):
+def make_model(family, **config_overrides):
     prefix, extra, _ = CASES[family]
     config_kwargs = {
         "vocab_size": 31,
@@ -146,6 +146,7 @@ def make_model(family):
     if family == "switch_transformers":
         config_kwargs = {"vocab_size": 31, "pad_token_id": 0, "use_cache": False}
     config_kwargs.update(extra)
+    config_kwargs.update(config_overrides)
     config = getattr(transformers, prefix + "Config")(**config_kwargs)
     config._attn_implementation = "eager"
     suffix = "ForConditionalGeneration" if family == "switch_transformers" else "ForCausalLM"
@@ -302,6 +303,63 @@ def check_gradients_and_update(family, checkpoint, require_aux_gradients):
         assert any(not torch.equal(left, right) for left, right in zip(before, after))
         results.append((outputs, aux.requires_grad, aux_grads, grads, after, torch.get_rng_state()))
     assert_same(results[1], results[0])
+
+
+@require_torch
+@pytest.mark.torch_compile_test
+def test_regional_compilation_reuses_graph_and_preserves_router_gradients():
+    torch.compiler.reset()
+    try:
+        limit = getattr(torch._dynamo.config, "recompile_limit", None)
+        if limit is None:
+            limit = torch._dynamo.config.cache_size_limit
+        model = make_model("qwen3_moe", num_hidden_layers=limit + 4)
+        inputs = model_inputs("qwen3_moe")
+        named_parameters = tuple(model.named_parameters())
+        params = tuple(parameter for _, parameter in named_parameters)
+
+        def forward_backward():
+            model.zero_grad(set_to_none=True)
+            outputs = model(**inputs, output_router_logits=True)
+            assert len(outputs.router_logits) == model.config.num_hidden_layers
+            aux_grads = torch.autograd.grad(outputs.aux_loss, params, allow_unused=True, retain_graph=True)
+            router_grads = [
+                grad for (name, _), grad in zip(named_parameters, aux_grads) if name.endswith("mlp.gate.weight")
+            ]
+            assert len(router_grads) == model.config.num_hidden_layers
+            assert all(
+                grad is not None and torch.isfinite(grad).all() and torch.count_nonzero(grad) for grad in router_grads
+            )
+            outputs.loss.backward()
+            grads = tuple(None if parameter.grad is None else parameter.grad.clone() for parameter in params)
+            assert all(grad is not None and torch.isfinite(grad).all() for grad in grads)
+            return outputs, aux_grads, grads
+
+        with capture_context("qwen3_moe", scoped=False):
+            reference = forward_backward()  # Also installs the real capture hooks before tracing.
+
+        graphs, calls = [], []
+
+        def backend(graph, example_inputs):
+            graphs.append(graph)
+
+            def execute(*args):
+                calls.append(None)
+                return graph.forward(*args)
+
+            return execute
+
+        for layer in model.model.layers:
+            layer.compile(backend=backend)
+        # The normal model loop must supply the scope: adding one here would
+        # conceal a missing production integration. This backend isolates graph
+        # reuse from kernel numerics; it does not qualify Inductor performance.
+        for _ in range(2):
+            assert_same(forward_backward(), reference)
+        assert len(graphs) == 1, "router collection specialized the graph for successive decoder regions"
+        assert len(calls) == 2 * len(model.model.layers), "a decoder silently fell back to eager execution"
+    finally:
+        torch.compiler.reset()
 
 
 @require_torch
