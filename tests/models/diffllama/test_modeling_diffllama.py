@@ -208,6 +208,34 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_diffllama_question_answering_loads_causal_lm_checkpoint(self):
+        # See `test_question_answering_loads_causal_lm_checkpoint` in `causal_lm_tester.py` (#49973): the
+        # backbone of these heads is stored under a different prefix than in the family checkpoints
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        causal_lm = DiffLlamaForCausalLM(config)
+        causal_lm.eval()
+        with tempfile.TemporaryDirectory() as tmp:
+            causal_lm.save_pretrained(tmp)
+            model, info = DiffLlamaForQuestionAnswering.from_pretrained(tmp, output_loading_info=True)
+
+        base_model = getattr(model, model.base_model_prefix)
+        backbone_keys = {f"{model.base_model_prefix}.{key}" for key in base_model.state_dict()}
+        self.assertTrue(
+            info["missing_keys"].isdisjoint(backbone_keys),
+            f"Backbone parameters missing from the checkpoint: {sorted(info['missing_keys'] & backbone_keys)}",
+        )
+
+        # A clean load report is not enough: the backbone tensors must actually carry the checkpoint values
+        causal_base_model = getattr(causal_lm, causal_lm.base_model_prefix)
+        checked_keys = 0
+        for key, tensor in causal_base_model.state_dict().items():
+            loaded = base_model.state_dict().get(key)
+            if loaded is None or loaded.shape != tensor.shape:
+                continue
+            torch.testing.assert_close(loaded, tensor, msg=f"Backbone tensor {key} was not loaded from checkpoint")
+            checked_keys += 1
+        self.assertGreater(checked_keys, 0)
+
     def test_diffllama_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3

@@ -1991,6 +1991,45 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"^head\.decoder\.", "lm_head."),
             WeightRenaming(r"^head\.", "projection_head."),
         ],
+        # These heads keep the backbone under `transformer` for BC with checkpoints saved by the
+        # pre-modular classes, but every other checkpoint of these families (base and ForCausalLM)
+        # stores the backbone under `model.`, so it has to be renamed on load and reverted on save.
+        "ArceeForQuestionAnswering": [
+            WeightRenaming(r"^model\.", "transformer."),
+        ],
+        "DiffLlamaForQuestionAnswering": [
+            WeightRenaming(r"^model\.", "transformer."),
+        ],
+        "Exaone4ForQuestionAnswering": [
+            WeightRenaming(r"^model\.", "transformer."),
+        ],
+        "LlamaForQuestionAnswering": [
+            WeightRenaming(r"^model\.", "transformer."),
+        ],
+        "MinistralForQuestionAnswering": [
+            WeightRenaming(r"^model\.", "transformer."),
+        ],
+        "NemotronForQuestionAnswering": [
+            WeightRenaming(r"^model\.", "transformer."),
+        ],
+        "Qwen2ForQuestionAnswering": [
+            WeightRenaming(r"^model\.", "transformer."),
+        ],
+        "Qwen3ForQuestionAnswering": [
+            WeightRenaming(r"^model\.", "transformer."),
+        ],
+        "Qwen3MoeForQuestionAnswering": [
+            WeightRenaming(r"^model\.", "transformer."),
+        ],
+        "Qwen3NextForQuestionAnswering": [
+            WeightRenaming(r"^model\.", "transformer."),
+        ],
+        "SeedOssForQuestionAnswering": [
+            WeightRenaming(r"^model\.", "transformer."),
+        ],
+        "SmolLM3ForQuestionAnswering": [
+            WeightRenaming(r"^model\.", "transformer."),
+        ],
     }
 
     mapping["Tipsv2DptForNormalEstimation"] = [
