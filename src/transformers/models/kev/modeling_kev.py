@@ -50,9 +50,11 @@ class KevForDecision(KevPreTrainedModel):
         input_ids: torch.LongTensor,
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
+        question_type_ids: torch.LongTensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        outputs = self.model(input_ids=input_ids[None], use_cache=False, **kwargs)
+        marks, num_options = marks[0], num_options[0]  # a batch of one prompt
+        outputs = self.model(input_ids=input_ids, use_cache=False, **kwargs)
         hidden_states = outputs.last_hidden_state[0].to(self.key.weight.dtype)
         blocks = torch.split(hidden_states[marks - 1], (num_options + 1).tolist())
         scores = torch.cat([self.key(block[:-1]) @ self.query(block[-1]) for block in blocks])
