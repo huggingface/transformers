@@ -100,6 +100,7 @@ if is_torch_available():
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
         AutoModelForCTC,
+        AutoModelForDecision,
         AutoModelForDocumentQuestionAnswering,
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
@@ -260,7 +261,9 @@ SUPPORTED_TASKS = {
     },
     "decision": {
         "impl": DecisionPipeline,
-        "pt": (AutoModelForImageTextToText, AutoModelForCausalLM, AutoModel) if is_torch_available() else (),
+        "pt": (AutoModelForDecision, AutoModelForImageTextToText, AutoModelForCausalLM)
+        if is_torch_available()
+        else (),
         "default": {"model": ("Qwen/Qwen2.5-0.5B-Instruct", "7ae5576")},
         "type": "multimodal",
     },

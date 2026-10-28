@@ -289,7 +289,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("jamba", "JambaModel"),
         ("janus", "JanusModel"),
         ("jetmoe", "JetMoeModel"),
-        ("jev", "JevForDecision"),
         ("jina_embeddings_v3", "JinaEmbeddingsV3Model"),
         ("kimi_k25", "Kimi_K25Model"),
         ("kimi_k25_vision", "Kimi_K25VisionModel"),
@@ -2111,6 +2110,12 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
+    [
+        ("jev", "JevForDecision"),
+    ]
+)
+
 MODEL_FOR_IMAGE_MATTING_MAPPING_NAMES = OrderedDict(
     [
         ("sapiens2", "Sapiens2ForImageMatting"),
@@ -2253,6 +2258,8 @@ MODEL_FOR_TIME_SERIES_PREDICTION_MAPPING = _LazyAutoMapping(
 MODEL_FOR_IMAGE_TO_IMAGE_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES)
 
 MODEL_FOR_AUDIO_TOKENIZATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_TOKENIZATION_NAMES)
+
+MODEL_FOR_DECISION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_DECISION_MAPPING_NAMES)
 
 MODEL_FOR_IMAGE_MATTING_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_IMAGE_MATTING_MAPPING_NAMES)
 MODEL_FOR_NORMAL_ESTIMATION_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_NORMAL_ESTIMATION_MAPPING_NAMES)
@@ -2611,6 +2618,13 @@ AutoModelForAudioTokenization = auto_class_update(
 )
 
 
+class AutoModelForDecision(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_DECISION_MAPPING
+
+
+AutoModelForDecision = auto_class_update(AutoModelForDecision, head_doc="decision")
+
+
 class AutoModelForImageMatting(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_IMAGE_MATTING_MAPPING
 
@@ -2648,6 +2662,7 @@ __all__ = [
     "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
     "MODEL_FOR_CAUSAL_LM_MAPPING",
     "MODEL_FOR_CTC_MAPPING",
+    "MODEL_FOR_DECISION_MAPPING",
     "MODEL_FOR_RNNT_MAPPING",
     "MODEL_FOR_TDT_MAPPING",
     "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
@@ -2702,6 +2717,7 @@ __all__ = [
     "AutoModelForAudioXVector",
     "AutoModelForCausalLM",
     "AutoModelForCTC",
+    "AutoModelForDecision",
     "AutoModelForRNNT",
     "AutoModelForTDT",
     "AutoModelForDepthEstimation",
