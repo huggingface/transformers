@@ -602,7 +602,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vits", "VitsModel"),
         ("vivit", "VivitModel"),
         ("vjepa2", "VJEPA2Model"),
-        ("von", "VonForDecision"),
         ("voxtral", "VoxtralModel"),
         ("voxtral_encoder", "VoxtralEncoder"),
         ("voxtral_realtime", "VoxtralRealtimeModel"),
@@ -2115,6 +2114,7 @@ MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
     [
         ("jev", "JevForDecision"),
         ("kev", "KevForDecision"),
+        ("von", "VonForDecision"),
     ]
 )
 
