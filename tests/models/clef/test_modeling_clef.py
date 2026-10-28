@@ -75,7 +75,7 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         for scores, loaded_scores in zip(self.scores(model), self.scores(loaded)):
             torch.testing.assert_close(loaded_scores, scores)
         self.assertIsInstance(decide.model, ClefForDecision)
-        self.assertTrue(decide.template.config.sort_choices)
+        self.assertTrue(decide.decision_config.sort_choices)
 
 
 @slow
