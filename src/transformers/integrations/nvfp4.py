@@ -57,7 +57,7 @@ def load_finegrained_kernels():
     return kernel
 
 
-def _first_attr(config, *names):
+def _getattr_with_fallback(config, *names):
     return next(getattr(config, name) for name in names if getattr(config, name, None) is not None)
 
 
@@ -170,10 +170,10 @@ class NVFP4Experts(nn.Module):
             raise ValueError("NVFP4 experts do not support biases.")
         self.config = config
         self.has_gate = has_gate
-        self.num_experts = _first_attr(config, "num_local_experts", "num_experts")
-        self.hidden_dim = _first_attr(config, "moe_hidden_size", "hidden_size")
-        self.intermediate_dim = _first_attr(config, "moe_intermediate_size", "intermediate_size")
-        self.act_fn_name = _first_attr(config, "hidden_activation", "hidden_act")
+        self.num_experts = _getattr_with_fallback(config, "num_local_experts", "num_experts")
+        self.hidden_dim = _getattr_with_fallback(config, "moe_hidden_size", "hidden_size")
+        self.intermediate_dim = _getattr_with_fallback(config, "moe_intermediate_size", "intermediate_size")
+        self.act_fn_name = _getattr_with_fallback(config, "hidden_activation", "hidden_act")
         self.act_fn = ACT2FN[self.act_fn_name]
         # an optional clamped SwiGLU, see `_apply_gate`
         self.swiglu_alpha = getattr(config, "swiglu_alpha", None)
@@ -201,14 +201,14 @@ class NVFP4Experts(nn.Module):
         return _fits_swizzled_layout(self.hidden_dim, intermediate // GROUP_SIZE)
 
     def _register_projection(self, proj: str, rows: int, cols: int, pre_quantized: bool, weight_only: bool):
-        scale_shape = (self.num_experts, rows, cols // GROUP_SIZE)
         packed = (
             torch.empty(self.num_experts, rows, cols // 2, dtype=torch.int8)
             if pre_quantized
             else torch.empty(self.num_experts, rows, cols)
         )
+        scale_inv = torch.empty((self.num_experts, rows, cols // GROUP_SIZE), dtype=torch.float8_e4m3fn)
         setattr(self, proj, nn.Parameter(packed, requires_grad=False))
-        setattr(self, f"{proj}_scale_inv", nn.Parameter(torch.empty(scale_shape, dtype=torch.float8_e4m3fn), False))
+        setattr(self, f"{proj}_scale_inv", nn.Parameter(scale_inv, requires_grad=False))
         setattr(
             self, f"{proj}_weight_global_scale", nn.Parameter(torch.ones(self.num_experts, dtype=torch.float32), False)
         )
