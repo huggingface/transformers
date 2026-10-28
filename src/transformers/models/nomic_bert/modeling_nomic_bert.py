@@ -314,7 +314,7 @@ class NomicBertLMPredictionHead(nn.Module):
 
 @auto_docstring
 class NomicBertPreTrainedModel(PreTrainedModel):
-    config_class = NomicBertConfig
+    config: NomicBertConfig
     base_model_prefix = "nomic_bert"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
