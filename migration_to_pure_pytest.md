@@ -169,11 +169,15 @@ Added as a property that walks the call stack to find the active `test_*` frame.
 - All 16 failures are environment issues (Windows C++ compiler missing for `torch.compile`, libuv not available for distributed tests)
 - **Zero migration-related failures**
 
-### Key insight: zero-risk incremental rollout
+### Key insight: zero-risk incremental rollout (CLAIM LATER PROVEN WRONG — see Issue 3 and 4)
 The compat mixin is purely additive. Models still carrying `unittest.TestCase` continue to
 pass unchanged — pytest's unittest handling still calls their `setUp`, and assert methods are
 provided by both `unittest.TestCase` and the compat mixin (compat wins in MRO but both
 do the same thing). Migrated and unmigrated models coexist safely at any point in the rollout.
+
+**NOTE**: This claim was based on testing only 5 migrated models (bert, roberta, llama, gpt2, t5).
+CI revealed that Issue 3 and Issue 4 below break ALL unmigrated models. The rollout is NOT zero-risk
+until both issues are fixed.
 
 ### Phase 3 — Tooling & full rollout (TODO)
 - [ ] Write a script automating the conversion for any model test file
@@ -199,22 +203,171 @@ Out of scope until Phase 3 is complete and stable.
 ## Issues found so far
 
 ### Issue 1: `python_classes` config missing
-**Found**: Step 1.1
+**Found**: Step 1.1 (local experiment)
 Without `unittest.TestCase`, pytest does not collect `*Test`-named classes (its default is `Test*`
 prefix only). Classes like `BertModelTest` become invisible to the test runner.
 **Fix**: Add to `pyproject.toml`:
 ```toml
 python_classes = ["Test*", "*Test"]
 ```
-**Status**: Applied in `transformers-2/pyproject.toml`
+**Status**: Applied in `transformers-2/pyproject.toml`. ✅
 
 ### Issue 2: `setUp` / `tearDown` not called
-**Found**: Step 1.1
+**Found**: Step 1.1 (local experiment)
 pytest does NOT call camelCase `setUp`/`tearDown` in plain (non-unittest) classes.
 Every concrete model test file that defines `setUp` to initialize `self.model_tester` will
 silently leave it as `None`, causing all tests to fail.
 **Fix**: Rename `setUp` → `setup_method`, `tearDown` → `teardown_method` in every affected file.
-**Status**: Not yet applied — next step
+**Status**: Applied to bert, roberta, t5, and `causal_lm_tester.py`. ✅
+
+### Issue 3: `_testMethodName` getter is fragile (pre-push concern, not yet fixed)
+**Found**: Before pushing PR — listed as a blocker for making it a proper proposal
+**Context**: `_testMethodName` is used in `test_training_mixin.py` to log the current test name.
+We implemented it as a `@property` using `inspect.stack()` to walk the call stack and find
+the first frame whose function name starts with `test_`.
+
+**Problem**: The `inspect.stack()` approach is fragile:
+- Could return the wrong result if a helper method name starts with `test_` is anywhere in the call stack
+- Could break in unexpected call patterns (e.g. nested calls, decorators, etc.)
+- Not a hard crash — just silently returns wrong value, making test logging unreliable
+
+**Better alternatives**:
+- Have `setup_method` explicitly set `self._testMethodName = <current test name>` via pytest's
+  `request` fixture, so the value is set at the right time without stack walking
+- Or just not provide it in the compat mixin and instead fix `test_training_mixin.py` to not rely on it
+
+**Status**: Not yet fixed. Issue is correctness/reliability of the getter, not a crash.
+
+### Issue 4: `_testMethodName` property missing setter — crashes ALL unmigrated `unittest.TestCase` models
+**Found**: CI job 123003870110 (PR #50087, shard 1/8) — 2026-10-28
+**Note**: This is a DIFFERENT problem from Issue 3. Issue 3 is about getter reliability. This is about
+a hard crash caused by the missing setter.
+
+**Root cause**: Our `_UnittestCompatMixin._testMethodName` is a `@property` with only a getter —
+no setter. When `unittest.TestCase.__init__` runs for any class that still inherits `unittest.TestCase`,
+it immediately executes `self._testMethodName = methodName`. Since the property has no setter,
+Python raises:
+```
+AttributeError: property '_testMethodName' of '...' object has no setter
+```
+This happens at **collection time**, before any test runs. Every test in the affected file becomes
+an ERROR (hard collection failure, not a test failure).
+
+**Why it wasn't caught locally**: Our local testing only ran 5 already-migrated models (bert, roberta,
+llama, gpt2, t5 — all with `unittest.TestCase` removed). The crash only occurs in classes that
+STILL have `unittest.TestCase`, which was the entire rest of the test suite (hundreds of files).
+
+**Scope**: Every model test file not yet migrated — all classes with `unittest.TestCase` in their
+declaration that also inherit `ModelTesterMixin`. Confirmed from shard 1: CvtModelTest, CwmModelTest,
+DFineModelTest, DPRModelTest, DPTModelTest, DabDetrModelTest, DacModelTest, DbrxModelTest,
+DebertaModelTest, DecisionTransformerModelTest, DeepseekVLHybridModelTest, DeepseekVLModelTest,
+DeformableDetrModelTest, DeiTModelTest, DepthAnythingModelTest, DepthProModelTest, DetrModelTest,
+DiaModelTest, DiffLlamaModelTest, DinatModelTest, DistilBertModelTest, DogeModelTest,
+DonutSwinModelTest, EdgeTamModelTest, EfficientLoFTRModelTest, EfficientNetModelTest,
+ElectraModelTest, EncodecModelTest, EomtForUniversalSegmentationTest, ErnieModelTest,
+EsmFoldModelTest, EsmModelTest, EsmcModelTest, EuroBertModelTest, EvollaModelTest,
+ExaoneMoeModelTest, FalconModelTest … (and hundreds more across all 8 shards)
+
+**Fix**: Add a setter to the property that captures the value set by `unittest.TestCase.__init__`,
+and have the getter return it if available, otherwise fall back to stack walking:
+```python
+@property
+def _testMethodName(self):
+    if hasattr(self, '_testMethodName_storage'):
+        return self._testMethodName_storage
+    import inspect
+    for frame_info in inspect.stack():
+        if frame_info.function.startswith('test_'):
+            return frame_info.function
+    return ''
+
+@_testMethodName.setter
+def _testMethodName(self, value):
+    self._testMethodName_storage = value
+```
+This resolves the hard crash for `unittest.TestCase` subclasses (setter captures value, getter returns it),
+while still providing the stack-walk fallback for pure-pytest classes (where the setter is never called).
+Note: this does NOT fix Issue 3 (getter is still fragile for pure-pytest classes) — that remains open.
+
+**Status**: **FIXED** ✅ — setter added to property in `_UnittestCompatMixin`. Verified: 475 passed, 0 errors across 2 migrated (bert, roberta) + 2 unmigrated (deberta, distilbert) models in a single pytest run.
+
+---
+
+## CI analysis — job 123003870110 (PR #50087, shard 1/8) — 2026-10-28
+
+**Run**: https://github.com/huggingface/transformers/actions/runs/40740916200/job/123003870110?pr=50087
+**Summary**: **6762 total ERRORs** in shard 1 alone. Two distinct root causes found.
+
+---
+
+### CI Issue 5 (= Issue 4 manifesting in CI): `_testMethodName` no setter — see Issue 4 above for full details
+**Confirmed in**: CI job 123003870110, shard 1/8
+**Error count**: ~536 errors in shard 1
+**Status**: Not yet fixed.
+
+---
+
+### CI Issue 6: `setUp` rename in `causal_lm_tester.py` breaks 97 models + leaks as collected class
+**Severity**: CRITICAL — 6226 of 6762 errors (92%) in shard 1 alone are from this issue
+**Discovered**: CI job 123003870110, ERROR lines all tagged `CausalLMModelTest`
+
+**Root cause (two parts)**:
+
+**Part 1 — pytest collects `CausalLMModelTest` from every model file that imports it.**
+After adding `python_classes = ["Test*", "*Test"]` to `pyproject.toml`, pytest now picks up
+any class whose name ends in `Test` that is visible at the top level of a test module.
+`CausalLMModelTest` is imported by 97 model test files. Since the name ends in `Test`, pytest
+collects it as a test class from each of those files — even though it was never meant to be
+run directly. At most 97 × (number of tests in CausalLMModelTest) = thousands of ghost tests.
+
+**Part 2 — `setUp` was renamed to `setup_method` in `causal_lm_tester.py`.**
+The 97 model test files that import `CausalLMModelTest` mostly still have `unittest.TestCase`
+in their own class declarations (e.g. `class FalconModelTest(CausalLMModelTest, unittest.TestCase):`).
+When pytest runs those as unittest-style tests, it calls `setUp` (not `setup_method`). Because
+`setUp` no longer exists on `CausalLMModelTest`, `self.model_tester` stays `None`, and every
+test errors out immediately.
+
+**Scope**: 97 model test files that reference `CausalLMModelTest` (confirmed by grep):
+afmoe, apertus, arcee, axk1, axk2, bailing_hybrid, beam, blt, bloom, cohere2_moe,
+cohere_compass, cwm, dbrx, deepseek_v2, deepseek_v32, deepseek_v4, diffusion_gemma,
+dots1, ernie4_5, ernie4_5_moe, exaone4, exaone_moe, falcon, flex_olmo, flint, gemma,
+gemma2, gemma3, gemma3n, gemma4, gemma4_unified, glm, glm4, glm4_moe, glm4_moe_lite,
+glm_moe_dsa, gpt2 ✓, gpt_oss, granitemoe, granitemoe_swa, granitemoeshared, granite_swa,
+helium, hrm_text, hunyuan_v1_dense, hunyuan_v1_moe, hy_v3, hy_v4, hyperclovax, inkling,
+jais2, jetmoe, kimi_linear, kolibri1, laguna, lfm2, lfm2_moe, lfm2_vl, llama ✓,
+longcat_flash, mellum, mimo_v2_flash, minicpm3, minimax, minimax_m2, ministral,
+ministral3, mistral, mistral4, mixtral, mllama, modernbert_decoder, nanochat, nemotron,
+olmo3, olmo_hybrid, persimmon, phi, phi3, phimoe, qwen2, qwen2_moe, qwen3, qwen3_5,
+qwen3_5_moe, qwen3_moe, qwen3_next, qwen4_exp, recurrent_gemma, seed_oss, smollm3,
+solar_open, stablelm, starcoder2, vaultgemma, youtu, zaya
+(✓ = already migrated to pure pytest; the rest are still unmigratable by this bug)
+
+**Fix strategy**:
+1. **Short-term (prevent leaking)**: Rename `CausalLMModelTest` to `_CausalLMModelTestBase`
+   (with underscore prefix) so pytest does not collect it. OR: add `__test__ = False` class
+   attribute to `CausalLMModelTest` to opt it out of pytest collection.
+2. **For setUp rename**: Keep BOTH `setUp` and `setup_method` during transition:
+   ```python
+   def setup_method(self):           # pure-pytest subclasses call this
+       self.model_tester = ...
+   def setUp(self):                   # unittest.TestCase subclasses still call this
+       self.setup_method()
+   ```
+   This is safe and backwards-compatible.
+
+**Status**: Fix not yet applied (user asked to analyze only, not code).
+
+---
+
+### Summary of CI impact
+
+| Issue | Root cause | Models affected | Error count (shard 1) | Fix complexity |
+|-------|-----------|-----------------|----------------------|----------------|
+| 4 / CI-5 | `_testMethodName` property no setter | All non-migrated models (hundreds) | ~536 | Small — add setter to property ✅ FIXED |
+| CI-6 | `CausalLMModelTest` pytest collection + setUp rename | 97 models × N tests | 6,226 | Small — `__test__ = False` + keep setUp alias |
+| **Total** | | | **6,762** | |
+
+Both fixes are small and safe — they do not require touching any individual model test files.
 
 ---
 

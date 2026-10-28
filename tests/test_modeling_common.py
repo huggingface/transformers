@@ -753,6 +753,15 @@ class _UnittestCompatMixin:
 
     @property
     def _testMethodName(self):
+        # HACK: needed during the transition away from unittest.TestCase.
+        # Some model test classes (e.g. in test_training_mixin.py, clip, dia, etc.) read
+        # self._testMethodName to get the name of the currently running test method.
+        # In pure-pytest classes we walk the call stack as a fallback, but if unittest.TestCase
+        # already set the value via the setter below, return that directly (it's more reliable).
+        # TODO: remove this property entirely once no model test file inherits unittest.TestCase
+        # anymore, and fix callers to use pytest's request fixture or another mechanism instead.
+        if hasattr(self, "_testMethodName_storage"):
+            return self._testMethodName_storage
         import inspect
 
         for frame_info in inspect.stack():
@@ -760,6 +769,16 @@ class _UnittestCompatMixin:
             if name.startswith("test_"):
                 return name
         return ""
+
+    @_testMethodName.setter
+    def _testMethodName(self, value):
+        # HACK: unittest.TestCase.__init__ does `self._testMethodName = methodName`.
+        # Without this setter, that assignment crashes with AttributeError because our
+        # property has no setter, breaking collection of every test class that still
+        # inherits unittest.TestCase. The setter captures the value so the getter above
+        # can return it correctly for those classes.
+        # Once all unittest.TestCase inheritance is removed, this setter (and property) can go.
+        self._testMethodName_storage = value
 
     def assertEqual(self, a, b, msg=None):
         assert a == b, msg
