@@ -19,8 +19,9 @@ The weights are not converted: the model loads NVIDIA's `model.safetensors` as i
 float32), through the `nemotron3_5_transcribe` entry of `src/transformers/conversion_mapping.py`, so that NeMo, vLLM and
 Transformers share one checkpoint. This script only writes the small files, from the export's text files and the
 safetensors header and metadata (no tensor is read but two constants of the word timestamp head):
-- `config.json`: the Transformers config, merged with the top-level keys of NeMo's `config.json` it does not define;
-- `tokenizer.json`, `tokenizer_config.json`: the language model tokenizer, with `<|audio|>` in a reserved slot;
+- `config.json`: NVIDIA's `config.json` with the keys of the Transformers config appended;
+- `tokenizer.json`, `tokenizer_config.json`: NVIDIA's files with `<|audio|>` in a reserved slot and the processor's
+  padding defaults, nothing else changed;
 - `generation_config.json`;
 - `processor_config.json`, `chat_template.jinja`;
 - `alignment_tokenizer/`: the word timestamp head's SentencePiece model, converted to a `tokenizers` tokenizer.
@@ -37,6 +38,7 @@ Converting the alignment tokenizer requires `sentencepiece` and `protobuf`.
 import argparse
 import json
 import math
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -102,8 +104,8 @@ CHAT_TEMPLATE_REPLACEMENTS = [
         '{%- set system_message = render_content(messages[0]["content"]) %}',
     ),
     (
-        "{%- set content = message.content | string %}\n        {{- content }}",
-        "{{- render_content(message.content) }}",
+        "{%- set content = message.content | string %}",
+        "{%- set content = render_content(message.content) %}",
     ),
 ]
 
@@ -308,11 +310,25 @@ def convert_config(nemo_dir: Path, audio_token_id: int) -> Nemotron3_5Transcribe
         word_timestamp_config=convert_word_timestamp_config(nemo_dir),
         dtype="bfloat16",
     )
-    # NeMo and vLLM read the same `config.json`: their keys are kept, but `model_type` and `architectures`
-    nemo_keys = {name: value for name, value in nemo_config.items() if name not in config.to_dict()}
-    config = Nemotron3_5TranscribeConfig(**config.to_dict(), **nemo_keys)
     config.architectures = ["Nemotron3_5TranscribeForConditionalGeneration"]
     return config
+
+
+def write_config(nemo_dir: Path, output_dir: Path, config: Nemotron3_5TranscribeConfig):
+    """
+    NeMo and vLLM read the same `config.json`: NVIDIA's file is kept as is (`model_type` and `architectures` are
+    already the Transformers ones), the keys of the Transformers config it does not have appended, in NVIDIA's
+    formatting for a minimal diff.
+    """
+    nemo_config = json.loads((nemo_dir / "config.json").read_text())
+    for name in ("model_type", "architectures"):
+        if nemo_config.get(name) != getattr(config, name):
+            raise ValueError(
+                f"`{name}` of NVIDIA's `config.json` is {nemo_config.get(name)}, not {getattr(config, name)}."
+            )
+    config_dict = json.loads(config.to_json_string(use_diff=True))
+    nemo_config.update({name: value for name, value in config_dict.items() if name not in nemo_config})
+    (output_dir / "config.json").write_text(json.dumps(nemo_config, indent=2, ensure_ascii=False) + "\n")
 
 
 def convert_chat_template(chat_template: str) -> str:
@@ -327,13 +343,15 @@ def convert_chat_template(chat_template: str) -> str:
     return chat_template[:position] + RENDER_CONTENT + chat_template[position:]
 
 
-def convert_tokenizer(nemo_dir: Path, vocab_size: int):
+def convert_tokenizer(nemo_dir: Path, output_dir: Path, vocab_size: int):
     """
-    Loads the original tokenizer with `<|audio|>` renamed from `AUDIO_TOKEN_SLOT`, a reserved token inside the
-    vocabulary, so that the converted checkpoint keeps the original's weights.
+    Writes the original tokenizer files with `<|audio|>` renamed from `AUDIO_TOKEN_SLOT`, a reserved token inside the
+    vocabulary, so that the converted checkpoint keeps the original's weights, and the processor's padding defaults.
+    Everything else is left as NVIDIA wrote it, the chat template of `tokenizer_config.json` included (Transformers
+    reads the processor's `chat_template.jinja` first).
     """
     tokenizer_config = json.loads((nemo_dir / "tokenizer_config.json").read_text())
-    chat_template = convert_chat_template(tokenizer_config.pop("chat_template"))
+    chat_template = convert_chat_template(tokenizer_config["chat_template"])
     tokenizer = json.loads((nemo_dir / "tokenizer.json").read_text())
     # older exports store the audio token at the top level, newer ones under `extra_special_tokens`
     audio_token = tokenizer_config.get("audio_token") or tokenizer_config["extra_special_tokens"]["audio_token"]
@@ -347,19 +365,21 @@ def convert_tokenizer(nemo_dir: Path, vocab_size: int):
                 f"`{AUDIO_TOKEN_SLOT}` must be a reserved token of both `added_tokens` and `model.vocab`."
             )
         slot["content"] = audio_token
-        vocab[audio_token] = vocab.pop(AUDIO_TOKEN_SLOT)
+        # renamed in place, for a minimal diff
+        tokenizer["model"]["vocab"] = {
+            audio_token if token == AUDIO_TOKEN_SLOT else token: i for token, i in vocab.items()
+        }
         tokenizer["added_tokens"] = [token for token in tokenizer["added_tokens"] if token["id"] != audio_token_id]
         audio_token_id = slot["id"]
 
     # the processor's call defaults, read from the tokenizer's config by `ProcessorMixin`
     tokenizer_config.update(padding=True, padding_side="left")
-    with tempfile.TemporaryDirectory() as tmp_dir:
-        (Path(tmp_dir) / "tokenizer.json").write_text(json.dumps(tokenizer, ensure_ascii=False))
-        (Path(tmp_dir) / "tokenizer_config.json").write_text(json.dumps(tokenizer_config, ensure_ascii=False))
-        tokenizer = AutoTokenizer.from_pretrained(tmp_dir)
-    # loading flags of the original export, not tokenizer settings
-    for key in ("is_local", "local_files_only"):
-        tokenizer.init_kwargs.pop(key, None)
+    # in NVIDIA's formatting, for a minimal diff
+    (output_dir / "tokenizer.json").write_text(json.dumps(tokenizer, indent=2, ensure_ascii=False))
+    (output_dir / "tokenizer_config.json").write_text(
+        json.dumps(tokenizer_config, indent=2, ensure_ascii=False) + "\n"
+    )
+    tokenizer = AutoTokenizer.from_pretrained(output_dir)
     if tokenizer.convert_tokens_to_ids(audio_token) != audio_token_id or len(tokenizer) != vocab_size:
         raise ValueError(
             f"Expected `{audio_token}` at id {audio_token_id} and {vocab_size} tokens, got "
@@ -503,7 +523,12 @@ def write_processor(
         # `asr_config.subsampling_factor` of the converted config
         subsampling_factor=nemo_config["pe_encoder_config"]["asr_encoder_cfg"]["subsampling_factor"],
     )
-    processor.save_pretrained(output_dir)
+    # the tokenizer files are NVIDIA's, edited by `convert_tokenizer`: only the processor's own files are written
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        processor.save_pretrained(tmp_dir)
+        for name in ("processor_config.json", "chat_template.jinja"):
+            shutil.copy(Path(tmp_dir) / name, output_dir / name)
+        shutil.copytree(Path(tmp_dir) / "alignment_tokenizer", output_dir / "alignment_tokenizer", dirs_exist_ok=True)
     return processor
 
 
@@ -522,8 +547,8 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     vocab_size = json.loads((nemo_dir / "llm_backbone" / "config.json").read_text())["vocab_size"]
-    tokenizer, audio_token_id, chat_template = convert_tokenizer(nemo_dir, vocab_size)
-    convert_config(nemo_dir, audio_token_id).save_pretrained(output_dir)
+    tokenizer, audio_token_id, chat_template = convert_tokenizer(nemo_dir, output_dir, vocab_size)
+    write_config(nemo_dir, output_dir, convert_config(nemo_dir, audio_token_id))
     processor = write_processor(nemo_dir, output_dir, tokenizer, convert_alignment_tokenizer(nemo_dir), chat_template)
     generation_config = json.loads((nemo_dir / "generation_config.json").read_text())
     GenerationConfig(
