@@ -274,6 +274,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
             device_map="auto",
             attn_implementation="eager",
             quantization_config=quantization_config,
+            offload_folder=tempfile.mkdtemp(),
         )
 
         inputs = tokenizer(self.prompt, return_tensors="pt").to(model.device)
@@ -392,6 +393,7 @@ class DeepseekV4IntegrationTest(unittest.TestCase):
             device_map="auto",
             attn_implementation="eager",
             quantization_config=quantization_config,
+            offload_folder=tempfile.mkdtemp(),
         )
 
         for i, (prompt, expected) in enumerate(cases, start=1):
