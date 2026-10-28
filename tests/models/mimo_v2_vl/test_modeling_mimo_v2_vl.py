@@ -22,16 +22,22 @@ from parameterized import parameterized
 
 from transformers import (
     AutoConfig,
+    AutoModel,
     AutoModelForImageTextToText,
     MiMoV2VLAudioConfig,
     MiMoV2VLAudioTokenizerConfig,
     MiMoV2VLConfig,
     MiMoV2VLForConditionalGeneration,
+    MiMoV2VLModel,
     MiMoV2VLTextConfig,
+    MiMoV2VLTextModel,
     MiMoV2VLVisionConfig,
 )
-from transformers.testing_utils import require_accelerate, require_torch, require_torch_gpu
+from transformers.testing_utils import require_accelerate, require_torch, require_torch_gpu, torch_device
 from transformers.utils import is_torch_available
+
+from ...generation.test_utils import GenerationTesterMixin
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
@@ -109,6 +115,87 @@ def get_config():
             codebook_size=[16] * 4,
         ),
     )
+
+
+class MiMoV2VLModelTester:
+    def __init__(self, parent, text_only=False):
+        self.parent = parent
+        self.text_only = text_only
+        self.batch_size = 2
+        self.seq_length = 7
+        self.hidden_size = 32
+        self.num_hidden_layers = 2
+        self.num_attention_heads = 4
+        self.vocab_size = 64
+        self.is_training = True
+
+    def get_config(self):
+        config = get_config()
+        config.text_config.max_position_embeddings = 64
+        config.text_config.bos_token_id = 2
+        return config.text_config if self.text_only else config
+
+    def prepare_config_and_inputs_for_common(self):
+        config = self.get_config()
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size - 7) + 7
+        attention_mask = torch.ones_like(input_ids, device=torch_device)
+        return config, {"input_ids": input_ids, "attention_mask": attention_mask}
+
+
+class MiMoV2VLCommonTestMixin:
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("MiMo currently supports default RoPE only; unsupported scaling is tested explicitly.")
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
+    @unittest.skip("MiMo's rotary module takes dimensions rather than a config; partial RoPE has dedicated tests.")
+    def test_model_rope_with_partial_rotation(self):
+        pass
+
+
+@require_torch
+class MiMoV2VLCommonModelTest(MiMoV2VLCommonTestMixin, ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (MiMoV2VLModel, MiMoV2VLForConditionalGeneration) if is_torch_available() else ()
+    _is_composite = True
+    has_attentions = False
+    test_torch_exportable = False
+    # Common API tests use text inputs. Modality-specific gradients and frozen audio encoding are tested below.
+    test_all_params_have_gradient = False
+
+    def setUp(self):
+        self.model_tester = MiMoV2VLModelTester(self)
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        text_config = config.get_text_config()
+        self.assertEqual(len(past_key_values.layers), text_config.num_hidden_layers)
+        for index, layer in enumerate(past_key_values.layers):
+            sliding = text_config.layer_types[index] == "sliding_attention"
+            num_heads = text_config.swa_num_key_value_heads if sliding else text_config.num_key_value_heads
+            key_dim = text_config.swa_head_dim if sliding else text_config.head_dim
+            value_dim = text_config.swa_v_head_dim if sliding else text_config.v_head_dim
+            length = min(seq_length, text_config.sliding_window - 1) if layer.is_sliding else seq_length
+            self.assertEqual(layer.keys.shape, (batch_size, num_heads, length, key_dim))
+            self.assertEqual(layer.values.shape, (batch_size, num_heads, length, value_dim))
+
+    def _image_features_prepare_config_and_inputs(self):
+        self.skipTest("MiMo feature helpers return fused tensors, covered by test_modal_embeddings_are_fused.")
+
+    def _audio_features_prepare_config_and_inputs(self):
+        self.skipTest("MiMo feature helpers return fused tensors, covered by test_modal_embeddings_are_fused.")
+
+    def _video_features_prepare_config_and_inputs(self):
+        self.skipTest("MiMo feature helpers return fused tensors, covered by test_modal_embeddings_are_fused.")
+
+
+@require_torch
+class MiMoV2VLTextCommonModelTest(MiMoV2VLCommonTestMixin, ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (MiMoV2VLTextModel,) if is_torch_available() else ()
+    has_attentions = False
+    test_torch_exportable = False
+    test_all_params_have_gradient = False
+
+    def setUp(self):
+        self.model_tester = MiMoV2VLModelTester(self, text_only=True)
 
 
 @require_torch
@@ -189,6 +276,110 @@ class MiMoV2VLModelTest(unittest.TestCase):
             inputs["pixel_values"] = torch.randn_like(inputs["pixel_values"])
             second = self.model(**inputs).logits
         self.assertFalse(torch.allclose(first, second))
+
+    def test_noncontiguous_image_patches(self):
+        inputs = self.image_inputs()
+        pixels = inputs["pixel_values"]
+        noncontiguous = pixels.repeat_interleave(2, dim=-1)[:, ::2]
+        self.assertFalse(noncontiguous.is_contiguous())
+        with torch.no_grad():
+            expected = self.model(**inputs).logits
+            inputs["pixel_values"] = noncontiguous
+            actual = self.model(**inputs).logits
+        torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+    @parameterized.expand([(False, False), (False, True), (True, False)])
+    def test_return_dict_config_and_call_overrides(self, outer_return_dict, text_return_dict):
+        inputs = self.image_inputs()
+        with torch.no_grad():
+            expected = self.model(**inputs, use_cache=False).logits
+            expected_ids = self.model.generate(**inputs, max_new_tokens=2, do_sample=False)
+            self.model.config.return_dict = outer_return_dict
+            self.model.config.text_config.return_dict = text_return_dict
+            output = self.model(**inputs, use_cache=False)
+            if outer_return_dict:
+                torch.testing.assert_close(output.logits, expected, rtol=0, atol=0)
+            else:
+                self.assertIsInstance(output, tuple)
+                torch.testing.assert_close(output[0], expected, rtol=0, atol=0)
+            explicit_dict = self.model(**inputs, use_cache=False, return_dict=True)
+            explicit_tuple = self.model(**inputs, use_cache=False, return_dict=False)
+            torch.testing.assert_close(explicit_dict.logits, expected, rtol=0, atol=0)
+            torch.testing.assert_close(explicit_tuple[0], expected, rtol=0, atol=0)
+            generated_ids = self.model.generate(**inputs, max_new_tokens=2, do_sample=False)
+            torch.testing.assert_close(generated_ids, expected_ids, rtol=0, atol=0)
+
+    def test_save_load_after_updating_native_config(self):
+        config = get_config()
+        config.text_config.sliding_window = 9
+        config.text_config.layer_types = ["sliding_attention", "full_attention"]
+        config.text_config.rope_parameters = {"rope_type": "default", "rope_theta": 10000.0}
+        config.text_config.rope_theta = 20000.0
+        model = MiMoV2VLForConditionalGeneration(config).eval()
+        inputs = {"input_ids": torch.tensor([[2, 7, 8, 9]])}
+        with tempfile.TemporaryDirectory() as directory, torch.no_grad():
+            expected = model(**inputs, use_cache=False).logits
+            model.save_pretrained(directory)
+            restored = AutoModelForImageTextToText.from_pretrained(directory, local_files_only=True).eval()
+            self.assertEqual(restored.config.text_config.sliding_window, 9)
+            self.assertEqual(restored.config.text_config.layer_types, config.text_config.layer_types)
+            self.assertEqual(restored.config.text_config.rope_theta, 20000.0)
+            torch.testing.assert_close(restored(**inputs, use_cache=False).logits, expected, rtol=0, atol=0)
+
+    @parameterized.expand(
+        [
+            ("audio_feature_lens", [1.5]),
+            ("audio_feature_lens", [2.0]),
+            ("audio_feature_lens", [True]),
+            ("audio_feature_lens", [[1]]),
+            ("audio_feature_lens", 1),
+            ("audio_segment_offsets", [[0, 0.5, 1]]),
+            ("audio_segment_offsets", [[0, 0, 1.0]]),
+            ("audio_segment_offsets", [[True, False, True]]),
+            ("audio_segment_offsets", [0, 0, 1]),
+            ("audio_segment_offsets", [[0, 1]]),
+        ]
+    )
+    def test_audio_metadata_requires_integers(self, name, values):
+        codes = torch.zeros(1, 2, 2, 4, dtype=torch.long)
+        with self.assertRaisesRegex(ValueError, name):
+            self.model.model.get_audio_features(input_audio_codes=codes, **{name: values})
+
+    @parameterized.expand([("bool",), ("complex64",), ("float32",)])
+    def test_audio_codes_require_integer_dtype(self, dtype):
+        codes = torch.zeros(1, 2, 2, 4, dtype=getattr(torch, dtype))
+        with self.assertRaisesRegex(ValueError, "codec IDs must be integers"):
+            self.model.model.get_audio_features(input_audio_codes=codes)
+
+    @parameterized.expand([((1, 9),), ((2, 8),), ((9,),)])
+    def test_audio_feature_mask_shape_must_match(self, mask_shape):
+        features = torch.randn(2, 9, 4)
+        with self.assertRaisesRegex(ValueError, "feature_attention_mask must match"):
+            self.model.model.audio_tokenizer(features, torch.ones(mask_shape, dtype=torch.long), 8)
+
+    @parameterized.expand([(2.0,), (-1.0,), (float("nan"),)])
+    def test_audio_feature_mask_must_be_binary(self, value):
+        with self.assertRaisesRegex(ValueError, "zero and one"):
+            self.model.model.audio_tokenizer(torch.randn(1, 9, 4), torch.full((1, 9), value), 8)
+
+    @parameterized.expand([((0, 9, 4),), ((1, 0, 4),), ((9, 4),), ((1, 9, 5),)])
+    def test_audio_feature_dimensions_are_validated(self, shape):
+        with self.assertRaisesRegex(ValueError, "input_features"):
+            self.model.model.audio_tokenizer(torch.zeros(shape), None, 8)
+
+    def test_float_and_boolean_audio_masks_match_integer_masks(self):
+        tokenizer = self.model.model.audio_tokenizer
+        for layer in tokenizer.encoder.quantizer.layers:
+            layer._codebook.embed.copy_(torch.randn_like(layer._codebook.embed))
+        features = torch.randn(2, 12, 4)
+        mask = torch.tensor([[1] * 9 + [0] * 3, [0] * 3 + [1] * 9])
+        expected = tokenizer(features, mask, 8)
+        self.assertEqual(len(expected), 2)
+        for dtype in (torch.float32, torch.bool):
+            actual = tokenizer(features, mask.to(dtype), 8)
+            self.assertEqual(len(actual), 2)
+            for codes, reference in zip(actual, expected):
+                torch.testing.assert_close(codes, reference, rtol=0, atol=0)
 
     def test_placeholder_mismatch_raises(self):
         inputs = self.image_inputs()
@@ -468,6 +659,25 @@ class MiMoV2VLModelTest(unittest.TestCase):
             self.assertEqual(restored.eos_token_id, [3, 7])
             self.assertEqual(json.loads((root / "generation_config.json").read_text(encoding="utf-8")), source)
 
+    @parameterized.expand(
+        [
+            ({}, "bfloat16"),
+            ({"dtype": None}, "bfloat16"),
+            ({"dtype": None, "torch_dtype": "float32"}, "float32"),
+            ({"dtype": "float16", "torch_dtype": "float32"}, "float16"),
+        ]
+    )
+    def test_original_checkpoint_auto_dtype(self, dtype_config, expected_dtype):
+        with tempfile.TemporaryDirectory() as directory:
+            Path(directory, "config.json").write_text(
+                json.dumps({"model_type": "mimo_v2", "vision_config": {"depth": 1}, **dtype_config}), encoding="utf-8"
+            )
+            with patch(
+                "transformers.modeling_mimo_v2_utils.load_original_checkpoint", return_value=self.model
+            ) as load:
+                MiMoV2VLForConditionalGeneration.from_pretrained(directory, dtype="auto", local_files_only=True)
+            self.assertEqual(load.call_args.kwargs["dtype"], getattr(torch, expected_dtype))
+
     def test_mxfp4_unpacking_and_scaling(self):
         packed = torch.tensor([[0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE]], dtype=torch.uint8)
         scales = torch.tensor([[127, 128]], dtype=torch.uint8)
@@ -512,7 +722,7 @@ class MiMoV2VLModelTest(unittest.TestCase):
     def test_original_checkpoint_loading_round_trip(self, multimodal, split_scales):
         from safetensors.torch import save_file
 
-        from transformers import AutoModelForCausalLM, GenerationConfig, MiMoV2FlashForCausalLM
+        from transformers import AutoModelForCausalLM, GenerationConfig, MiMoV2FlashForCausalLM, MiMoV2FlashModel
 
         model = self.model
         weights = {}
@@ -590,11 +800,12 @@ class MiMoV2VLModelTest(unittest.TestCase):
                 root, device_map="cpu", dtype=torch.float32, trust_remote_code=False, local_files_only=True
             )
             self.assertIsInstance(restored, MiMoV2VLForConditionalGeneration if multimodal else MiMoV2FlashForCausalLM)
+            self.assertEqual(restored.name_or_path, str(root))
             self.assertEqual(restored.generation_config.eos_token_id, [3, 7])
             self.assertEqual(restored.generation_config.max_new_tokens, 13)
             self.assertEqual(restored.generation_config.temperature, 0.7)
             if multimodal and not split_scales:
-                overridden = AutoModelForCausalLM.from_pretrained(
+                overridden = MiMoV2VLForConditionalGeneration.from_pretrained(
                     root,
                     device_map="cpu",
                     dtype=torch.float32,
@@ -604,6 +815,7 @@ class MiMoV2VLModelTest(unittest.TestCase):
                 )
                 self.assertEqual(overridden.generation_config.max_new_tokens, 7)
                 self.assertEqual(overridden.generation_config.eos_token_id, 2)
+                self.assertEqual(overridden.name_or_path, str(root))
             if multimodal:
                 for name, expected in model.state_dict().items():
                     torch.testing.assert_close(restored.state_dict()[name], expected, rtol=0, atol=0)
@@ -612,3 +824,27 @@ class MiMoV2VLModelTest(unittest.TestCase):
                 inputs = {"input_ids": torch.tensor([[2, 7, 8]])}
             with torch.no_grad():
                 torch.testing.assert_close(restored(**inputs).logits, model(**inputs).logits, rtol=1e-4, atol=1e-5)
+            if not split_scales:
+                device_map = {"model": "cpu", "lm_head": "cpu"}
+                expected_map = {"": "cpu"}
+                if multimodal:
+                    expected_map = dict.fromkeys(
+                        ["language_model", "visual", "speech_embeddings", "audio_encoder", "audio_tokenizer"], "cpu"
+                    )
+                    device_map = {
+                        **{f"model.{name}": device for name, device in expected_map.items()},
+                        "lm_head": "cpu",
+                    }
+                backbone = AutoModel.from_pretrained(
+                    root, device_map=device_map, dtype=torch.float32, trust_remote_code=False, local_files_only=True
+                )
+                self.assertIsInstance(backbone, MiMoV2VLModel if multimodal else MiMoV2FlashModel)
+                self.assertEqual(backbone.name_or_path, str(root))
+                self.assertEqual(backbone.hf_device_map, expected_map)
+                with torch.no_grad():
+                    torch.testing.assert_close(
+                        backbone(**inputs).last_hidden_state,
+                        restored.model(**inputs).last_hidden_state,
+                        rtol=0,
+                        atol=0,
+                    )

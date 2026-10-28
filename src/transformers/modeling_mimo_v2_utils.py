@@ -228,6 +228,7 @@ def load_original_checkpoint(
             config_dict["audio_tokenizer_config"] = json.load(reader)
     config_dict["dtype"] = dtype
     config = AutoConfig.for_model("mimo_v2_vl" if is_multimodal else "mimo_v2_flash", **config_dict)
+    config._name_or_path = str(pretrained_model_name_or_path)
     if attn_implementation is not None:
         config._attn_implementation = attn_implementation
     with init_empty_weights():
@@ -437,7 +438,7 @@ def load_original_checkpoint_if_needed(model_class, pretrained_model_name_or_pat
         raise ValueError("Original MiMo V2 checkpoints must be loaded from their root directory.")
     dtype = kwargs.get("dtype") or kwargs.get("torch_dtype") or "auto"
     if dtype == "auto":
-        dtype = getattr(torch, config_dict.get("dtype", config_dict.get("torch_dtype", "bfloat16")))
+        dtype = getattr(torch, config_dict.get("dtype") or config_dict.get("torch_dtype") or "bfloat16")
     elif isinstance(dtype, str):
         dtype = getattr(torch, dtype)
     model = load_original_checkpoint(
@@ -453,7 +454,25 @@ def load_original_checkpoint_if_needed(model_class, pretrained_model_name_or_pat
     )
     if not isinstance(model, model_class):
         if isinstance(model.model, model_class):
-            model = model.model
+            base_model = model.model
+            # Accelerate dispatches the complete generation model. Keep its placement metadata when returning
+            # only the backbone, using the backbone's parameter names rather than the generation-head prefix.
+            device_map = model.hf_device_map
+            prefix = model.base_model_prefix
+            base_device_map = {}
+            if prefix in device_map:
+                base_device_map[""] = device_map[prefix]
+            elif "" in device_map:
+                base_device_map[""] = device_map[""]
+            base_device_map.update(
+                {
+                    name.removeprefix(prefix + "."): device
+                    for name, device in device_map.items()
+                    if name.startswith(prefix + ".")
+                }
+            )
+            base_model.hf_device_map = base_device_map
+            model = base_model
         else:
             raise ValueError(
                 f"Checkpoint configuration selects {type(model).__name__}, not {model_class.__name__}. Use an AutoModel class."

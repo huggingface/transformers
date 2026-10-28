@@ -206,6 +206,17 @@ class MiMoV2ProcessorTest(unittest.TestCase):
         self.assertEqual(out.video_grid_thw.tolist(), [[3, 2, 4]])
         self.assertNotIn("video_metadata", out)
 
+    @parameterized.expand([(False,), (True,)])
+    def test_video_metadata_batch_size_must_match(self, do_sample_frames):
+        with self.assertRaisesRegex(ValueError, "one entry per video"):
+            self.processor(
+                text=[self.processor.video_token] * 2,
+                videos=[self.video, self.video],
+                video_metadata=[self.video_kwargs()["video_metadata"]],
+                do_sample_frames=do_sample_frames,
+                input_data_format="channels_last",
+            )
+
     @parameterized.expand([(-1, False), (0, False), (1, False), (3, False), (3, True)])
     def test_video_audio_interleave(self, duration, per_grid):
         p = make_processor(video_audio_interleave_length=duration, use_per_grid_t_timestamps=per_grid)

@@ -30,8 +30,8 @@ from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import CONFIG_NAME, auto_docstring, cached_file, is_torch_tensor
 from ...video_utils import VideoInput, VideoMetadata
 from .feature_extraction_mimo_v2 import MiMoV2FeatureExtractor
-from .image_processing_mimo_v2 import MiMoV2ImageProcessor
-from .video_processing_mimo_v2 import MiMoV2VideoProcessor
+from .image_processing_mimo_v2_vl import MiMoV2ImageProcessor
+from .video_processing_mimo_v2_vl import MiMoV2VideoProcessor
 
 
 class MiMoV2AudioKwargs(AudioKwargs, total=False):
@@ -372,6 +372,8 @@ class MiMoV2Processor(ProcessorMixin):
             audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
 
         num_videos = len(video_inputs.get("video_grid_thw", []))
+        if len(video_inputs.get("video_metadata", [])) != num_videos:
+            raise ValueError("video_metadata must contain one entry per video.")
         use_audio_in_video = (
             [use_audio_in_video] * num_videos if isinstance(use_audio_in_video, bool) else list(use_audio_in_video)
         )

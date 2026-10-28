@@ -14,6 +14,7 @@
 """Configurations for the MiMo V2.6 multimodal architecture."""
 
 import inspect
+import math
 
 from huggingface_hub.dataclasses import strict
 
@@ -107,6 +108,7 @@ class MiMoV2VLTextConfig(PreTrainedConfig):
     moe_router_dtype: str = "float32"
     use_cache: bool = True
     tie_word_embeddings: bool = False
+    bos_token_id: int | None = None
     pad_token_id: int | None = 151643
     eos_token_id: int | list[int] | None = 151645
 
@@ -115,6 +117,8 @@ class MiMoV2VLTextConfig(PreTrainedConfig):
             self.rms_norm_eps = kwargs.pop("layernorm_epsilon")
         if self.sliding_window_size is None:
             self.sliding_window_size = 128 if self.sliding_window is None else self.sliding_window - 1
+        elif self.sliding_window is not None and self.sliding_window != self.sliding_window_size + 1:
+            raise ValueError("sliding_window must equal sliding_window_size + 1 when both are supplied.")
         if self.sliding_window_size < 0:
             raise ValueError("sliding_window must include at least the current token.")
         self.sliding_window = self.sliding_window_size + 1
@@ -154,16 +158,26 @@ class MiMoV2VLTextConfig(PreTrainedConfig):
             self.partial_rotary_factor = global_rope.get("partial_rotary_factor", self.partial_rotary_factor)
             if sliding_rope.get("partial_rotary_factor", self.partial_rotary_factor) != self.partial_rotary_factor:
                 raise ValueError("MiMo V2 VL requires the same partial_rotary_factor for both attention types.")
-        for num_heads, num_kv_heads, head_dim in (
-            (self.num_attention_heads, self.num_key_value_heads, self.head_dim),
-            (self.swa_num_attention_heads, self.swa_num_key_value_heads, self.swa_head_dim),
+        if not 0 < self.partial_rotary_factor <= 1:
+            raise ValueError("partial_rotary_factor must be in (0, 1].")
+        if any(not math.isfinite(theta) or theta <= 0 for theta in (self.rope_theta, self.swa_rope_theta)):
+            raise ValueError("RoPE bases must be finite and positive.")
+        for num_heads, num_kv_heads, head_dim, value_dim in (
+            (self.num_attention_heads, self.num_key_value_heads, self.head_dim, self.v_head_dim),
+            (self.swa_num_attention_heads, self.swa_num_key_value_heads, self.swa_head_dim, self.swa_v_head_dim),
         ):
+            if min(num_heads, num_kv_heads, head_dim, value_dim) <= 0:
+                raise ValueError("Attention head counts and dimensions must be positive.")
             rotary_dim = int(head_dim * self.partial_rotary_factor)
             if num_heads % num_kv_heads or rotary_dim <= 0 or rotary_dim % 2:
                 raise ValueError(
                     "Query heads must be divisible by KV heads and rotary dimensions must be positive and even."
                 )
-        if self.n_routed_experts % self.n_group or not 1 <= self.topk_group <= self.n_group:
+        if (
+            min(self.n_routed_experts, self.n_group) <= 0
+            or self.n_routed_experts % self.n_group
+            or not 1 <= self.topk_group <= self.n_group
+        ):
             raise ValueError("Expert groups must partition the experts and topk_group must select valid groups.")
         if not 1 <= self.num_experts_per_tok <= self.n_routed_experts:
             raise ValueError("num_experts_per_tok must be between one and n_routed_experts.")
@@ -171,6 +185,27 @@ class MiMoV2VLTextConfig(PreTrainedConfig):
 
     def convert_rope_params_to_dict(self, **kwargs):
         return kwargs
+
+    def to_dict(self) -> dict:
+        """Keep serialized compatibility fields aligned with the settings used by the model."""
+        output = super().to_dict()
+        if self.sliding_window is not None:
+            output["sliding_window_size"] = self.sliding_window - 1
+        if self.layer_types is not None:
+            output["hybrid_layer_pattern"] = [int(kind == "sliding_attention") for kind in self.layer_types]
+        parameters = output.get("rope_parameters")
+        if parameters is not None:
+            if "full_attention" in parameters or "sliding_attention" in parameters:
+                for layer_type, theta in (
+                    ("full_attention", self.rope_theta),
+                    ("sliding_attention", self.swa_rope_theta),
+                ):
+                    parameters.setdefault(layer_type, {}).update(
+                        rope_theta=theta, partial_rotary_factor=self.partial_rotary_factor
+                    )
+            else:
+                parameters.update(rope_theta=self.rope_theta, partial_rotary_factor=self.partial_rotary_factor)
+        return output
 
 
 @auto_docstring(checkpoint="XiaomiMiMo/MiMo-V2.6-Flash-RL")
@@ -234,6 +269,10 @@ class MiMoV2VLVisionConfig(PreTrainedConfig):
             kind not in (-1, 0, 1) for kind in self.vit_window_attn_types
         ):
             raise ValueError("vit_window_attn_types must contain one of -1, 0, or 1 for every vision layer.")
+        if min(self.num_heads, self.num_key_value_heads, self.qk_channels) <= 0:
+            raise ValueError("Vision attention head counts and dimensions must be positive.")
+        if min(self.patch_size, self.temporal_patch_size, self.spatial_merge_size) <= 0:
+            raise ValueError("Vision patch and merge sizes must be positive.")
         if self.num_heads % self.num_key_value_heads or self.qk_channels % 4:
             raise ValueError("Vision heads must be divisible by KV heads and qk_channels must be divisible by four.")
         super().__post_init__(**kwargs)
@@ -302,6 +341,10 @@ class MiMoV2VLAudioConfig(PreTrainedConfig):
     audio_segment_size: int = 6000
 
     def __post_init__(self, **kwargs):
+        if min(self.audio_channels, self.group_size, self.audio_segment_size) <= 0:
+            raise ValueError("Audio channel, group and segment sizes must be positive.")
+        if min(self.input_local_attn_heads, self.input_local_head_dim) <= 0 or self.input_local_head_dim % 2:
+            raise ValueError("Audio attention requires positive head counts and positive even head dimensions.")
         for name in ("speech_vocab_size", "speech_zeroemb_idx"):
             values = getattr(self, name)
             if isinstance(values, str):
@@ -374,10 +417,14 @@ class MiMoV2VLAudioTokenizerConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         if "d_model" in kwargs:
             self.hidden_size = kwargs.pop("d_model")
+        if min(self.hidden_size, self.encoder_attention_heads, self.num_quantizers) <= 0:
+            raise ValueError("Audio tokenizer dimensions, attention heads and quantizer count must be positive.")
         if self.encoder_attn_window_size is None:
             self.encoder_attn_window_size = [128, 0]
         if self.codebook_size is None:
             self.codebook_size = [1024, 1024, 256] + [128] * max(0, self.num_quantizers - 3)
+        if not self.codebook_size or any(size <= 0 for size in self.codebook_size):
+            raise ValueError("codebook_size must be a nonempty list of positive sizes.")
         if len(self.codebook_size) < self.num_quantizers:
             self.codebook_size = self.codebook_size + [self.codebook_size[-1]] * (
                 self.num_quantizers - len(self.codebook_size)
@@ -435,6 +482,9 @@ class MiMoV2VLConfig(PreTrainedConfig):
         if self.text_config is None:
             text_fields = set(inspect.signature(MiMoV2VLTextConfig).parameters) | {"layernorm_epsilon"}
             self.text_config = {key: kwargs.pop(key) for key in text_fields if key in kwargs}
+            # Original flat checkpoints can store both window fields as the preceding-token count.
+            if self.text_config.get("sliding_window_size") is not None:
+                self.text_config["sliding_window"] = self.text_config["sliding_window_size"] + 1
             for name in ("pad_token_id", "eos_token_id"):
                 if getattr(self, name) is not None:
                     self.text_config[name] = getattr(self, name)

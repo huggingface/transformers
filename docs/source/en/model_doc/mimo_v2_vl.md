@@ -32,6 +32,10 @@ For the text-only MiMo-V2-Flash and MiMo-V2.5-Pro checkpoints, see [MiMo-V2-Flas
 
 ## Usage
 
+Use [`AutoModelForImageTextToText`] or [`AutoModelForCausalLM`] for generation. Both select
+[`MiMoV2VLForConditionalGeneration`] and support the same multimodal inputs. [`AutoModel`] selects
+[`MiMoV2VLModel`], which returns hidden states and does not provide `generate()`.
+
 Install Transformers from source with PyTorch, torchvision, Pillow, and Accelerate. For audio and video files,
 install [TorchCodec](https://github.com/pytorch/torchcodec#installing-torchcodec) 0.5 or newer and its FFmpeg dependencies,
 using a TorchCodec version compatible with your PyTorch installation.
@@ -243,11 +247,22 @@ call `processor.save_pretrained()`; the resulting directory can be loaded with [
 
 - Legacy text and multimodal checkpoints may both declare `model_type="mimo_v2"`. [`AutoConfig`] selects
   `mimo_v2_vl` when a nonempty vision/audio encoder configuration is present, and `mimo_v2_flash` otherwise.
+- When customizing the text configuration before constructing a model, use `layer_types` and `sliding_window`.
+  Serialization synchronizes the legacy attention-pattern and window fields with these values. If both window
+  fields are supplied in a native `text_config`, `sliding_window` must equal `sliding_window_size + 1`.
+  Original flat checkpoints are normalized from their `sliding_window_size` preceding-token count.
 - [`AutoProcessor`] recognizes legacy MiMo V2 VL checkpoints whose `preprocessor_config.json` still declares a
   Qwen processor. An explicit `processor_config.json` takes precedence.
+- For individual components of a legacy checkpoint, load [`AutoProcessor`] first and access its `image_processor`,
+  `video_processor`, and `feature_extractor` attributes. Loading these directly with their Auto classes can retain
+  legacy declarations or component defaults. After `processor.save_pretrained()`, the saved component configurations
+  can be loaded independently with their Auto classes.
 - The returned model inputs include `pixel_values` / `image_grid_thw` for images, `pixel_values_videos` /
   `video_grid_thw` for videos, and `input_features` / `feature_attention_mask` for waveforms. `audio_feature_lens`
   counts grouped audio tokens, and `audio_segment_offsets` aligns them with the prompt.
+- Audio lengths and segment offsets must contain integers. `feature_attention_mask` must match the batch and mel
+  time dimensions of `input_features` and contain only zeros and ones; boolean and floating-point binary masks
+  are also accepted.
 - The original `generation_config.json` supplies EOS IDs and generation defaults. When enabling sampling, pass
   the desired options explicitly, such as `do_sample=True, temperature=1.0, top_p=0.95`.
 - Pre-tokenized audio uses `is_tokenized=True` with `(time, codec_channels)` integer arrays. The native model accepts
