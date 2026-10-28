@@ -208,11 +208,11 @@ Out of scope until Phase 3 is complete and stable.
 | 2 | Issue 2 | `setUp` → `setup_method` renamed in bert, roberta, t5, `causal_lm_tester.py` | Phase 1–2 |
 | 3 | Issue 4 | `_testMethodName` setter added to compat mixin — stops crash in unmigrated `unittest.TestCase` models | After CI job 123003870110 analysis |
 | 4 | Issue 6 | `__test__ = False` on `CausalLMModelTest` (prevents unintended standalone collection) + `setUp` alias (keeps unmigrated subclasses working) | After CI job 123003870110 analysis |
+| 5 | Issue 7 | `__test__ = False` on `VLMModelTest` and `ALMModelTest` | After CI run 40759614150 analysis |
 
 **Still open (not yet fixed, in discovery order):**
 - Issue 3: `_testMethodName` getter fragility (inspect.stack)
-- Issue 7: `VLMModelTest` + `ALMModelTest` unintended standalone collection by pytest's `*Test` pattern
-- Issue 8: `setup_method(self)` wrong signature in `unittest.TestCase` subclasses
+- Issue 8: `setup_method(self)` wrong signature in `unittest.TestCase` subclasses (RobertaPreLayerNorm, MT5, UMT5)
 - Issue 9: `VideoPrismModelTest` pre-existing broken declaration (possibly out of scope)
 
 ---
@@ -381,7 +381,7 @@ solar_open, stablelm, starcoder2, vaultgemma, youtu, zaya
 | Issue | Root cause | Models affected | Error count (shard 1) | Fix complexity |
 |-------|-----------|-----------------|----------------------|----------------|
 | 4 / CI-5 | `_testMethodName` property no setter | All non-migrated models (hundreds) | ~536 | Small — add setter to property ✅ FIXED |
-| CI-6 | `CausalLMModelTest` pytest collection + setUp rename | 97 models × N tests | 6,226 | Small — `__test__ = False` + keep setUp alias ✅ FIXED |
+| CI-6 | `CausalLMModelTest` unintended standalone collection + setUp rename | 97 models × N tests | 6,226 | Small — `__test__ = False` + keep setUp alias ✅ FIXED |
 | **Total** | | | **6,762** | |
 
 Both fixes are small and safe — they do not require touching any individual model test files.
@@ -428,7 +428,7 @@ TypeError: 'NoneType' object is not iterable
 `alm_tester.py`. No `setUp` alias needed (unlike Issue 6) — we never renamed `setUp` in
 `multimodal_tester.py`, so unmigrated `unittest.TestCase` subclasses continue to call `setUp`
 correctly via the parent class once the standalone collection is prevented.
-**Status**: Not yet fixed.
+**Status**: **FIXED** ✅ — `__test__ = False` added to `VLMModelTest` in `vlm_tester.py` and `ALMModelTest` in `alm_tester.py`. Verified: 0 standalone collections from gemma3 and glmasr test files.
 
 ---
 
