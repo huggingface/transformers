@@ -90,7 +90,7 @@ def convert(repo_id: str, output_dir: str):
 
     backbone_config = AutoConfig.from_pretrained(repo_id)
     text_config = backbone_config.get_text_config()
-    text_config.use_bidirectional_attention = readout_config.get("attention_mode") == "noncausal_full_attention"
+    text_config.is_causal = readout_config.get("attention_mode") != "noncausal_full_attention"
     codes = readout_config["codes"]
     question_types = ["noul", "choice", "score"]
     config = JevConfig(

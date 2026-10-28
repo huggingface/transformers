@@ -35,7 +35,7 @@ class KevPreTrainedModel(PreTrainedModel):
     one after itself.
     """
 )
-class KevDecisionHead(KevPreTrainedModel):
+class KevForDecision(KevPreTrainedModel):
     def __init__(self, config: KevConfig):
         super().__init__(config)
         self.key = nn.Linear(config.hidden_size, config.head_dim)
@@ -59,4 +59,4 @@ class KevDecisionHead(KevPreTrainedModel):
         return scores / math.sqrt(self.config.head_dim)
 
 
-__all__ = ["KevDecisionHead", "KevPreTrainedModel"]
+__all__ = ["KevForDecision", "KevPreTrainedModel"]

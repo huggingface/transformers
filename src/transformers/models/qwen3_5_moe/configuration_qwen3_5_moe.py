@@ -38,9 +38,6 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
         Number of key heads used in linear attention layers.
     linear_num_value_heads (`int`, *optional*, defaults to 32):
         Number of value heads used in linear attention layers.
-    use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
-        Whether the full attention layers attend to all tokens instead of using a causal mask. The linear attention
-        layers stay causal.
 
     ```python
     >>> from transformers import Qwen3_5MoeTextModel, Qwen3_5MoeTextConfig
@@ -121,7 +118,6 @@ class Qwen3_5MoeTextConfig(PreTrainedConfig):
     eos_token_id: int | list[int] | None = None
     base_config_key = "text_config"
     ignore_keys_at_rope_validation = {"mrope_section", "mrope_interleaved"}
-    use_bidirectional_attention: bool = False
 
     def __post_init__(self, **kwargs):
         kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
