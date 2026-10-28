@@ -207,10 +207,10 @@ Out of scope until Phase 3 is complete and stable.
 | 1 | Issue 1 | `python_classes = ["Test*", "*Test"]` added to `pyproject.toml` | Phase 1, Step 1.1 |
 | 2 | Issue 2 | `setUp` → `setup_method` renamed in bert, roberta, t5, `causal_lm_tester.py` | Phase 1–2 |
 | 3 | Issue 4 | `_testMethodName` setter added to compat mixin — stops crash in unmigrated `unittest.TestCase` models | After CI job 123003870110 analysis |
+| 4 | Issue 6 | `__test__ = False` on `CausalLMModelTest` (stops collection leak) + `setUp` alias (keeps unmigrated subclasses working) | After CI job 123003870110 analysis |
 
 **Still open (not yet fixed, in discovery order):**
 - Issue 3: `_testMethodName` getter fragility (inspect.stack)
-- Issue 6: `CausalLMModelTest` collection leak + setUp rename breaks 97 models
 
 ---
 
@@ -378,7 +378,7 @@ solar_open, stablelm, starcoder2, vaultgemma, youtu, zaya
 | Issue | Root cause | Models affected | Error count (shard 1) | Fix complexity |
 |-------|-----------|-----------------|----------------------|----------------|
 | 4 / CI-5 | `_testMethodName` property no setter | All non-migrated models (hundreds) | ~536 | Small — add setter to property ✅ FIXED |
-| CI-6 | `CausalLMModelTest` pytest collection + setUp rename | 97 models × N tests | 6,226 | Small — `__test__ = False` + keep setUp alias |
+| CI-6 | `CausalLMModelTest` pytest collection + setUp rename | 97 models × N tests | 6,226 | Small — `__test__ = False` + keep setUp alias ✅ FIXED |
 | **Total** | | | **6,762** | |
 
 Both fixes are small and safe — they do not require touching any individual model test files.
