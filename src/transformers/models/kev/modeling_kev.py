@@ -16,27 +16,29 @@ import math
 import torch
 from torch import nn
 
-from ...decision.modeling_utils import ForDecision
-from ...modeling_utils import PreTrainedModel
+from ...decision.modeling_utils import DecisionPreTrainedModel
 from ...utils import auto_docstring
+from ..auto import AutoModel
 from .configuration_kev import KevConfig
 
 
 @auto_docstring
-class KevPreTrainedModel(PreTrainedModel):
+class KevPreTrainedModel(DecisionPreTrainedModel):
     config: KevConfig
+    base_model_prefix = "model"
 
 
 @auto_docstring(
     custom_intro="""
-    Decision head of kev (jaredpalmer/kev-4b): each option is scored by the dot product of the projected hidden states at
-    the end of the option and at the end of the question. Each question has one `<|mark|>` after each of its options and
-    one after itself.
+    kev (jaredpalmer/kev-4b): the model of its repo and a decision head, each option is scored by the dot product of the
+    projected hidden states at the end of the option and at the end of the question. Each question has one `<|mark|>`
+    after each of its options and one after itself.
     """
 )
-class KevDecisionHead(KevPreTrainedModel):
+class KevForDecision(KevPreTrainedModel):
     def __init__(self, config: KevConfig):
         super().__init__(config)
+        self.model = AutoModel.from_config(config.text_config)
         self.key = nn.Linear(config.hidden_size, config.head_dim)
         self.query = nn.Linear(config.hidden_size, config.head_dim)
         self.post_init()
@@ -47,21 +49,13 @@ class KevDecisionHead(KevPreTrainedModel):
         input_ids: torch.LongTensor,
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
-        backbone: PreTrainedModel,
-        backbone_kwargs: dict | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        outputs = backbone.base_model(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
-        hidden_states = outputs.last_hidden_state[0].to(self.dtype)
+        outputs = self.model(input_ids=input_ids[None], use_cache=False, **kwargs)
+        hidden_states = outputs.last_hidden_state[0].to(self.key.weight.dtype)
         blocks = torch.split(hidden_states[marks - 1], (num_options + 1).tolist())
         scores = torch.cat([self.key(block[:-1]) @ self.query(block[-1]) for block in blocks])
         return scores / math.sqrt(self.config.head_dim)
 
 
-class KevForDecision(ForDecision):
-    """Kev: the model of a repo and its [`KevDecisionHead`]."""
-
-    config: KevConfig
-
-
-__all__ = ["KevDecisionHead", "KevForDecision", "KevPreTrainedModel"]
+__all__ = ["KevForDecision", "KevPreTrainedModel"]
