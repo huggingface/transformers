@@ -66,7 +66,6 @@ inputs = processor.apply_chat_template(
 with torch.no_grad():
     outputs = model.generate(
         **inputs,
-        # TODO: Add generation_config.json on the hub
         return_dict_in_generate=True,
         output_hidden_states=[model.config.text_config.num_hidden_layers - 1],
         max_new_tokens=1024,
@@ -81,6 +80,10 @@ results = processor.post_process_grounding(
 )
 print(results[0]["boxes"], results[0]["masks"].shape)
 ```
+
+Set `return_dict_in_generate=True` and `output_hidden_states=[model.config.text_config.num_hidden_layers - 1]`
+to retain the image features and final-layer hidden states needed by `decode_masks`. These options are opt-in;
+ordinary generation returns token IDs.
 
 Tips:
 

@@ -181,7 +181,7 @@ class XiaomiLens0VisionText2TextModelTester:
 class XiaomiLens0ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (XiaomiLens0Model, XiaomiLens0ForConditionalGeneration) if is_torch_available() else ()
     model_split_percents = [0.5, 0.8, 0.9]
-    # The mask decoder only receives gradients from a mask loss, which is not part of the LM loss
+    # Language-only training does not use the mask decoder.
     test_all_params_have_gradient = False
 
     def setUp(self):
