@@ -421,5 +421,7 @@ class ClefDecisionHead(ClefPreTrainedModel):
 class ClefForDecision(ForDecision):
     """Clef: the model of a repo and its [`ClefDecisionHead`]."""
 
+    config: ClefConfig
+
 
 __all__ = ["ClefDecisionHead", "ClefForDecision", "ClefPreTrainedModel"]
