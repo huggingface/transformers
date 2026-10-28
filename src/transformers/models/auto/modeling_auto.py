@@ -290,7 +290,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("janus", "JanusModel"),
         ("jetmoe", "JetMoeModel"),
         ("jina_embeddings_v3", "JinaEmbeddingsV3Model"),
-        ("kev", "KevForDecision"),
         ("kimi_k25", "Kimi_K25Model"),
         ("kimi_k25_vision", "Kimi_K25VisionModel"),
         ("kimi_linear", "KimiLinearModel"),
@@ -2129,6 +2128,7 @@ MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
     [
         ("gemma4", "JevForDecision"),
         ("jev", "JevForDecision"),
+        ("kev", "KevForDecision"),
         ("qwen2", "JevForDecision"),
         ("qwen3_5", "JevForDecision"),
         ("qwen3_5_moe", "JevForDecision"),
