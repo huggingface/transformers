@@ -41,13 +41,7 @@ decide(
 
 [[autodoc]] ClefConfig
 
-## ClefDecisionHead
-
-[[autodoc]] ClefDecisionHead
-    - forward
-
 ## ClefForDecision
 
 [[autodoc]] ClefForDecision
-    - from_pretrained
     - forward

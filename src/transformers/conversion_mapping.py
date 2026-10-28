@@ -2190,6 +2190,9 @@ def _build_checkpoint_conversion_mapping():
             operations=[Chunk(dim=0)],
         ),
     ]
+    # The attention of the head only, not the `self_attn` of the model it reads
+    for converter in mapping["clef"][-3:]:
+        converter.scope_prefix, converter.base_model_prefix = "encoder", ""
 
     # The `readout.safetensors` of the decision models of vLLM (pplx-decider, d3): the weight of the head, no bias
     mapping["jev"] = [WeightRenaming(r"^weight", "proj.weight")]

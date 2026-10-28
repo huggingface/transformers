@@ -21,16 +21,16 @@ from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 
 
 if is_torch_available():
-    from transformers import ClefDecisionHead, ClefForDecision
+    from transformers import ClefForDecision
 
 
 @require_torch
 class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
-    all_model_classes = (ClefDecisionHead,) if is_torch_available() else ()
-    for_decision_class = ClefForDecision if is_torch_available() else None
+    all_model_classes = (ClefForDecision,) if is_torch_available() else ()
     decision_repo = "ArthurZ/clef-flash"
-    # The backbone is wider than the head
+    # The backbone is wider than the head, and the tiny model is in float32, not in the dtype of the original head
     tiny_sizes = {
+        "dtype": "float32",
         "backbone_hidden_size": 24,
         "hidden_size": 16,
         "intermediate_size": 32,
@@ -39,6 +39,13 @@ class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         "num_attention_heads": 2,
         "num_key_value_heads": 2,
     }
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # The output embeddings that the head reads are the input embeddings of the tiny model, which the repo of the
+        # model holds next to the head
+        cls.config.text_config.tie_word_embeddings = cls.config.tie_word_embeddings = True
 
 
 @slow
