@@ -13,21 +13,22 @@
 # limitations under the License.
 """
 Converts a decision model shipped as a Qwen3.5 checkpoint with a `readout.safetensors` of its answer codes
-(perplexity-ai/pplx-decider-v1.1-27b, vllm-sr/d3) to a JEV head in `decision_head/`, next to the decision config:
-`pipeline("decision", model=repo_id, decision_config=output_dir)`.
+(perplexity-ai/pplx-decider-v1.1-27b, vllm-sr/d3) to the files that make it run with `pipeline("decision", model=repo_id)`,
+to add to its repo: the config of the JEV head (`decision_head.json`, reading `readout.safetensors`), the decision config
+(`decision.json`, next to the `decision_config.json` of vLLM) and its template.
 
     python convert_decider_to_hf.py --repo_id vllm-sr/d3 --output_dir d3-jev
 """
 
 import argparse
 import json
+import os
 
-import torch
 from huggingface_hub import hf_hub_download
-from safetensors.torch import load_file, save_file
 
 from transformers import AutoConfig, AutoProcessor, JevConfig
 from transformers.decision import DecisionConfig, Question
+from transformers.decision.configuration_utils import DECISION_HEAD_CONFIG_NAME
 
 
 # One prompt per question, the image of the state before its text, read at the last token
@@ -88,15 +89,14 @@ def convert(repo_id: str, output_dir: str):
 
     text_config = AutoConfig.from_pretrained(repo_id).get_text_config()
     codes = readout_config["codes"]
-    JevConfig(
+    config = JevConfig(
         hidden_size=text_config.hidden_size,
         num_verbalizers=len(codes),
         offsets=dict.fromkeys(Question.questions_types, 0),
-    ).save_pretrained(f"{output_dir}/decision_head")
-
-    weight = load_file(hf_hub_download(repo_id, "readout.safetensors"))["weight"]
-    head = {"proj.weight": weight, "proj.bias": torch.zeros(len(codes), dtype=weight.dtype)}
-    save_file(head, f"{output_dir}/decision_head/model.safetensors", metadata={"format": "pt"})
+    )
+    config.transformers_weights = "readout.safetensors"  # already in the repo, `weight` loads as `proj.weight`
+    os.makedirs(output_dir, exist_ok=True)
+    config.to_json_file(f"{output_dir}/{DECISION_HEAD_CONFIG_NAME}")
 
     processor = AutoProcessor.from_pretrained(repo_id)  # the tokenizer of text-only models
     if (image_processor := getattr(processor, "image_processor", None)) is not None:

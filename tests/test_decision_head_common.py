@@ -17,9 +17,11 @@ import tempfile
 from pathlib import Path
 
 from huggingface_hub import hf_hub_download
+from safetensors.torch import save_file
 
 from transformers import AutoConfig, AutoTokenizer, DecisionConfig, is_torch_available, pipeline
 from transformers.decision import DecisionTemplate
+from transformers.decision.configuration_utils import DECISION_HEAD_CONFIG_NAME
 from transformers.testing_utils import torch_device
 
 
@@ -45,7 +47,9 @@ class DecisionHeadTesterMixin:
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.test["model"], revision=cls.test["revision"])
         cls.decision_config = DecisionConfig.from_pretrained(cls.decision_repo)
         cls.prompts = DecisionTemplate(cls.tokenizer, cls.decision_config)(cls.test["request"])
-        cls.config = AutoConfig.from_pretrained(cls.decision_repo, subfolder="decision_head", **cls.tiny_sizes)
+        cls.config = AutoConfig.from_pretrained(
+            cls.decision_repo, _configuration_file=DECISION_HEAD_CONFIG_NAME, **cls.tiny_sizes
+        )
         backbone_config = cls.backbone_class.config_class(
             vocab_size=len(cls.tokenizer),
             hidden_size=getattr(cls.config, "backbone_hidden_size", cls.config.hidden_size),
@@ -78,12 +82,14 @@ class DecisionHeadTesterMixin:
 
     def test_pipeline_from_pretrained(self):
         with tempfile.TemporaryDirectory() as tmp:
-            # The model, its tokenizer and decision config, and the head in `decision_head/` in another dtype than the
-            # model, like the float32 head of JEV
+            # All in one folder: the model, its tokenizer and decision config, and the head in another dtype than the
+            # model, like the float32 head of JEV, its config naming its weights file
             for component in (self.backbone, self.tokenizer, self.decision_config):
                 component.save_pretrained(tmp)
             head = self.all_model_classes[0](self.config).to(torch.bfloat16)
-            head.save_pretrained(Path(tmp) / "decision_head")
+            save_file(head.state_dict(), f"{tmp}/head.safetensors", metadata={"format": "pt"})
+            head.config.transformers_weights, head.config.dtype = "head.safetensors", torch.bfloat16
+            head.config.to_json_file(f"{tmp}/{DECISION_HEAD_CONFIG_NAME}")
             decide = pipeline("decision", model=tmp, dtype="float32")
             answers = decide(self.test["request"])
         self.assertIsInstance(decide.head, self.all_model_classes[0])
