@@ -25,14 +25,12 @@ from ...masking_utils import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
-from ..auto import AutoModel
 from .configuration_von import VonConfig
 
 
 @auto_docstring
 class VonPreTrainedModel(PreTrainedModel):
     config: VonConfig
-    base_model_prefix = "backbone"
 
 
 @auto_docstring(
@@ -51,7 +49,6 @@ class VonForDecision(VonPreTrainedModel):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size // 2)
         self.norm = nn.LayerNorm(config.hidden_size // 2)
         self.out_proj = nn.Linear(config.hidden_size // 2, 1)
-        self.backbone = AutoModel.from_config(config.backbone_config)
         self.post_init()
 
     def split_marks(self, marks: torch.LongTensor, num_options: torch.LongTensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -60,7 +57,11 @@ class VonForDecision(VonPreTrainedModel):
         return marks[:, :-1] - 1, marks[:, -1].contiguous()
 
     def backbone_inputs(
-        self, input_ids: torch.LongTensor, marks: torch.LongTensor, num_options: torch.LongTensor
+        self,
+        backbone: PreTrainedModel,
+        input_ids: torch.LongTensor,
+        marks: torch.LongTensor,
+        num_options: torch.LongTensor,
     ) -> dict[str, Any]:
         """
         Blocks are mutually invisible, options attend to the prompt of their block and to themselves, and the positions of
@@ -82,7 +83,7 @@ class VonForDecision(VonPreTrainedModel):
 
         rows = torch.stack([input_ids[: len(positions)], block_ids, option_ids, position_ids])
         input_ids, block_ids, option_ids, position_ids = rows[:, None]
-        config, inputs_embeds = self.backbone.config, self.backbone.get_input_embeddings()(input_ids)
+        config, inputs_embeds = backbone.config.get_text_config(), backbone.get_input_embeddings()(input_ids)
         options = and_masks(
             packed_sequence_mask_function(block_ids),
             or_masks(packed_sequence_mask_function(option_ids), padding_mask_function(option_ids == -1)),
@@ -107,10 +108,15 @@ class VonForDecision(VonPreTrainedModel):
 
     @auto_docstring
     def forward(
-        self, input_ids: torch.LongTensor, marks: torch.LongTensor, num_options: torch.LongTensor, **kwargs
+        self,
+        input_ids: torch.LongTensor,
+        marks: torch.LongTensor,
+        num_options: torch.LongTensor,
+        backbone: PreTrainedModel,
+        **kwargs,
     ) -> torch.Tensor:
-        backbone_inputs = self.backbone_inputs(input_ids, marks, num_options)
-        hidden_states = self.backbone(**backbone_inputs, use_cache=False).last_hidden_state[0].to(self.dtype)
+        backbone_inputs = self.backbone_inputs(backbone, input_ids, marks, num_options)
+        hidden_states = backbone.base_model(**backbone_inputs, use_cache=False).last_hidden_state[0].to(self.dtype)
         reads, _ = self.split_marks(marks, num_options)
         hidden_states = self.input_norm(hidden_states[reads])
         logits = self.out_proj(self.norm(nn.functional.gelu(self.dense(hidden_states))))[..., 0]
