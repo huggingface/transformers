@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch DiffusionGemma model."""
 
 import unittest
+from unittest.mock import patch
 
 from parameterized import parameterized
 
@@ -51,6 +52,7 @@ if is_torch_available():
         DiffusionSamplerOutput,
         DynamicCache,
         EntropyBoundSamplerConfig,
+        LinearTemperatureScheduleLogitsProcessor,
         StaticCache,
         TextDiffusionStreamer,
         set_seed,
@@ -745,9 +747,17 @@ class DiffusionGemmaVisionText2TextModelTest(
         model.generation_config.eos_token_id = None  # force generation up to `max_new_tokens`
         sampler = ArgmaxSampler()
 
-        generation_outputs = model.generate(
-            model_inputs["input_ids"], max_new_tokens=16, max_denoising_steps=2, sampler=sampler
-        )
+        # the sampler owns the temperature schedule, so ours is not applied on top
+        with patch.object(LinearTemperatureScheduleLogitsProcessor, "__call__") as temperature:
+            generation_outputs = model.generate(
+                model_inputs["input_ids"],
+                max_new_tokens=16,
+                max_denoising_steps=2,
+                sampler=sampler,
+                t_min=0.5,
+                t_max=0.9,
+            )
+        temperature.assert_not_called()
 
         expected_shape = (model_inputs["input_ids"].shape[0], model_inputs["input_ids"].shape[1] + 16)
         self.assertEqual(generation_outputs.sequences.shape, expected_shape)

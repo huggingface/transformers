@@ -627,7 +627,8 @@ class DiffusionGemmaGenerationMixin:
                 used with AR LLMs.
             sampler ([`DiffusionSampler`], *optional*):
                 Any object with the diffusers scheduler `step` signature (e.g. a diffusers scheduler), used instead of the
-                [`EntropyBoundSampler`] built from `generation_config.sampler_config`.
+                [`EntropyBoundSampler`] built from `generation_config.sampler_config`. The sampler owns the temperature
+                schedule, so `t_min` / `t_max` are not applied to the logits it receives.
             kwargs (`dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generation_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. For instance, you can set the starting canvas with
@@ -717,7 +718,11 @@ class DiffusionGemmaGenerationMixin:
         decoder_attention_mask = torch.nn.functional.pad(attention_mask, (0, canvas_length), value=True)
 
         # 0.e. Initialize samplers, logits processors, and stopping criteria
-        sampler = sampler if sampler is not None else self._prepare_sampler(generation_config)
+        if sampler is None:
+            sampler = self._prepare_sampler(generation_config)
+        else:
+            # A custom sampler (e.g. a diffusers scheduler) owns its temperature schedule: don't apply ours on top
+            generation_config.t_min = generation_config.t_max = None
         logits_processor = self._prepare_logits_processor(generation_config, logits_processor)
         stopping_criteria = self._prepare_ar_stopping_criteria(generation_config, stopping_criteria)
         diffusion_stopping_criteria = self._prepare_diffusion_stopping_criteria(generation_config)
