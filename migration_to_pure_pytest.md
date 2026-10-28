@@ -209,10 +209,11 @@ Out of scope until Phase 3 is complete and stable.
 | 3 | Issue 4 | `_testMethodName` setter added to compat mixin — stops crash in unmigrated `unittest.TestCase` models | After CI job 123003870110 analysis |
 | 4 | Issue 6 | `__test__ = False` on `CausalLMModelTest` (prevents unintended standalone collection) + `setUp` alias (keeps unmigrated subclasses working) | After CI job 123003870110 analysis |
 | 5 | Issue 7 | `__test__ = False` on `VLMModelTest` and `ALMModelTest` | After CI run 40759614150 analysis |
+| 6 | Issue 8 | Remove `unittest.TestCase` from `RobertaPreLayerNormModelTest`, `MT5EncoderOnlyModelTest`, `UMT5EncoderOnlyModelTest` — setUp was already renamed, removing unittest.TestCase makes them pure pytest and eliminates the wrong-signature crash | After CI run 40759614150 analysis |
 
 **Still open (not yet fixed, in discovery order):**
 - Issue 3: `_testMethodName` getter fragility (inspect.stack)
-- Issue 8: `setup_method(self)` wrong signature in `unittest.TestCase` subclasses (RobertaPreLayerNorm, MT5, UMT5)
+- ~~Issue 8: `setup_method(self)` wrong signature in `unittest.TestCase` subclasses (RobertaPreLayerNorm, MT5, UMT5)~~ **FIXED** ✅
 - Issue 9: `VideoPrismModelTest` pre-existing broken declaration (possibly out of scope)
 
 ---
@@ -467,7 +468,12 @@ having BOTH `unittest.TestCase` AND `setup_method` defined on the same class.
 
 Option 2 is cleaner philosophically (don't rename `setUp` in classes that still have
 `unittest.TestCase`), but option 1 is simpler and avoids re-doing the rename later.
-**Status**: Not yet fixed.
+**Fix applied**: Remove `unittest.TestCase` from the 3 affected classes. Since `setUp` had
+already been renamed to `setup_method` in these files (as a consistency side-effect of
+migrating the source classes `RobertaModelTest` and `T5EncoderOnlyModelTest`), removing
+`unittest.TestCase` is all that is needed — the classes are now pure pytest and `setup_method`
+is called with the correct no-extra-argument signature.
+**Status**: **FIXED** ✅ — verified: 341 passed, 0 failed across all 3 classes in a single pytest run.
 
 ---
 

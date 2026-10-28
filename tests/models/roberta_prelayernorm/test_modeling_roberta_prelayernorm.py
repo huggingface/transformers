@@ -360,7 +360,7 @@ class RobertaPreLayerNormModelTester:
 
 
 @require_torch
-class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
     all_model_classes = (
         (
             RobertaPreLayerNormForCausalLM,

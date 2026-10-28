@@ -511,7 +511,7 @@ class UMT5EncoderOnlyModelTester:
 
 
 # Copied from tests.models.t5.test_modeling_t5.T5EncoderOnlyModelTest with T5->UMT5
-class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class UMT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin):
     all_model_classes = (UMT5EncoderModel, UMT5ForTokenClassification) if is_torch_available() else ()
 
     test_resize_embeddings = False
