@@ -470,11 +470,10 @@ class PermuteForRope(ConversionOps):
         self.inverse = inverse
         self.permute_layer_names = permute_layer_names
 
-    def _apply(self, tensor: torch.Tensor) -> torch.Tensor:
+    def _permute_for_rope(self, tensor: torch.Tensor, config) -> torch.Tensor:
         dim0 = tensor.shape[0]
-        config = self.config
         if self.subconfig_key is not None:
-            config = getattr(self.config, self.subconfig_key, self.config)
+            config = getattr(config, self.subconfig_key, config)
         n_heads = getattr(config, "num_attention_heads", 1)
         half_head = dim0 // n_heads // 2
 
@@ -496,20 +495,29 @@ class PermuteForRope(ConversionOps):
         config,
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
-        self.config = config
-        output: dict[str, list[torch.Tensor]] = {}
-        for key, tensors in input_dict.items():
-            # Permute q and key weights back (skip biases) to match original RoPE implementation
-            if not any(name in key for name in self.permute_layer_names):
-                output[key] = tensors
-                continue
-
-            if isinstance(tensors, list):
-                if len(tensors) != 1:
+        output: dict[str, torch.Tensor] = {}
+        for source_pattern, tensors in input_dict.items():
+            target_pattern = self.get_target_pattern(source_pattern, target_patterns)
+            # We only actually permute if the target_pattern matches one of the pre-expected `permute_layer_names`
+            if not any(name in source_pattern for name in self.permute_layer_names):
+                output_tensor = tensors
+            # Here we match one of the keys, so we permute
+            else:
+                if isinstance(tensors, list) and len(tensors) > 1:
                     raise ValueError("PermuteForRope expects a single tensor per key.")
-                tensors = tensors[0]
-            output[key] = self._apply(tensors)
+                tensors = tensors[0] if not isinstance(tensors, torch.Tensor) else tensors
+                output_tensor = self._permute_for_rope(tensors, config)
+
+            output[target_pattern] = output_tensor
         return output
+
+    def get_target_pattern(self, source_pattern: str, target_patterns: list[str]) -> str:
+        # Here it's the last operation of a chain, so return the source
+        if len(target_patterns) > 1:
+            return source_pattern
+        # Here it's the only operation, so return the target
+        else:
+            return target_patterns[0]
 
     @property
     def reverse_op(self) -> ConversionOps:
