@@ -255,6 +255,11 @@ def make_batched_metadata(videos: VideoInput, video_metadata: VideoMetadataType)
     else:
         # Create a batched list from single object
         video_metadata = [VideoMetadata(**video_metadata)]
+    if len(video_metadata) != len(videos):
+        # the clips are paired with their metadata by `zip`, which would silently drop the clips past the last entry
+        raise ValueError(
+            f"Received {len(videos)} videos but {len(video_metadata)} `video_metadata` entries; pass one entry per video"
+        )
     return video_metadata
 
 
