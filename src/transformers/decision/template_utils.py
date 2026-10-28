@@ -32,15 +32,14 @@ A model with a `decision_template.jinja` places two sentinel tokens:
              reads every token between a pair of marks, pooled (hidden states + output embeddings of the span):
              the spans sit mid-sequence, not at the end
 
-- `<|split|>`: the text between two sentinels is tokenized on its own, like the original code did, so the state can't
-  merge into a token with `STATE:\n` around it.
+- `<|split|>`: is added to enforce splitting the encoding and is only there for "safety", ensuring user text never parses any control / special tokens.
 
-Both are dropped from the input ids: a [`DecisionPrompt`] keeps the ids and `marks`, the number of tokens before each
+Both are dropped from the input ids: a [`DecisionPrompt`] keeps the token ids and the number of tokens before each
 `<|mark|>`.
 
-Any other model gets `DECISION_PROMPT` as the user message of its own chat template, and the logits of the option
-labels (`A`, `B`, ... or `Yes`/`No`) are read after the generation prompt, e.g. for `Qwen/Qwen2.5-0.5B-Instruct`:
+We otherwise can turn any model into a decision model with a `DECISION_PROMPT`, where the logits of the option labels (`A`, `B`, ... or `Yes`/`No`) are read after the generation prompt, e.g. for `Qwen/Qwen2.5-0.5B-Instruct`:
 
+```
     <|im_start|>system
     You are Qwen, created by Alibaba Cloud. You are a helpful assistant.<|im_end|>
     <|im_start|>user
@@ -51,6 +50,7 @@ labels (`A`, `B`, ... or `Yes`/`No`) are read after the generation prompt, e.g. 
     B. pushy: Pressures the reader
     Answer with the letter of the option that fits best (A to B) only.<|im_end|>
     <|im_start|>assistant
+``` 
 
 The rest of this file handles the different input validation, escaping user text from the mark/split tokens,
 and replacing images with the corresponding assets.
@@ -288,8 +288,7 @@ def parse_questions(questions: dict[str, Any], config: DecisionConfig) -> list[Q
 
 def _split_at_placeholders(text: str, assets: dict[str, Any], load) -> list[dict[str, Any]]:
     """
-    The content blocks of `text`: its text, with an image block where a placeholder of `assets` is. This goes from the
-    System One way of passing an image (a placeholder in the text, the image in `assets`) to the chat template way (an
+    This goes from the System One way of passing an image (a placeholder in the text, the image in `assets`) to the chat template way (an
     image block in the content), which the processor turns into image tokens, e.g. for Qwen2.5-VL:
 
         "Is <img-1> a cat?", {"img-1": ...}
