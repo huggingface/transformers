@@ -26,10 +26,15 @@ from ..decision.configuration_utils import DECISION_HEAD_CONFIG_NAME
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import FeatureExtractionMixin
 from ..image_processing_utils import BaseImageProcessor
-from ..models.auto.configuration_auto import AutoConfig
+from ..models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
-from ..models.auto.modeling_auto import AutoModelForDepthEstimation, AutoModelForImageToImage
+from ..models.auto.modeling_auto import (
+    MODEL_FOR_DECISION_MAPPING,
+    MODEL_FOR_DECISION_MAPPING_NAMES,
+    AutoModelForDepthEstimation,
+    AutoModelForImageToImage,
+)
 from ..models.auto.processing_auto import PROCESSOR_MAPPING, AutoProcessor
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..models.auto.video_processing_auto import AutoVideoProcessor
@@ -994,6 +999,15 @@ def pipeline(
         ):
             model_kwargs = {**model_kwargs, "config_file_name": DECISION_HEAD_CONFIG_NAME}
         config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        # A checkpoint shipping a decision head next to its weights: the decision model that reads its files
+        if task == "decision" and config.model_type not in MODEL_FOR_DECISION_MAPPING_NAMES:
+            for model_type in MODEL_FOR_DECISION_MAPPING_NAMES:
+                config_class = CONFIG_MAPPING[model_type]
+                if hasattr(config_class, "from_checkpoint") and config_class.from_checkpoint(model, config.to_dict()):
+                    config = config_class.from_pretrained(
+                        model, revision=hub_kwargs["revision"], token=hub_kwargs["token"]
+                    )
+                    break
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
@@ -1094,6 +1108,10 @@ def pipeline(
     # Load the correct model if possible
     if isinstance(model, str):
         model_classes = targeted_task["pt"]
+        # A decision model reading the checkpoint, which builds its config from the files of the checkpoint itself
+        if task == "decision" and type(config) in MODEL_FOR_DECISION_MAPPING:
+            model_classes = (MODEL_FOR_DECISION_MAPPING[type(config)],)
+            hub_kwargs.pop("code_revision", None)  # for remote code, which only the auto classes read
         model = load_model(
             adapter_path if adapter_path is not None else model,
             model_classes=model_classes,

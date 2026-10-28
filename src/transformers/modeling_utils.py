@@ -4259,6 +4259,16 @@ class PreTrainedModel(
                 transformers_explicit_filename=getattr(config, "transformers_weights", None),
                 tqdm_class=tqdm_class,
             )
+            # A model reading the checkpoint of another one finds its own weights next to them (`readout.safetensors`)
+            for filename in getattr(config, "head_files", ()):
+                path = cached_file(
+                    pretrained_model_name_or_path,
+                    filename,
+                    _raise_exceptions_for_missing_entries=False,
+                    **download_kwargs,
+                )
+                if path is not None and checkpoint_files is not None and path not in checkpoint_files:
+                    checkpoint_files.append(path)
 
         is_quantized = hf_quantizer is not None
 

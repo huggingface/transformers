@@ -75,8 +75,9 @@ class DecisionPipeline(Pipeline):
         if not isinstance(decision_config, DecisionConfig):
             try:
                 decision_config = DecisionConfig.from_pretrained(repo)
-            except OSError:
-                decision_config = DecisionConfig()
+            except OSError:  # a checkpoint shipping a decision head next to its weights, or a model without one
+                from_checkpoint = getattr(type(self.model.config), "decision_config", None)
+                decision_config = (from_checkpoint and from_checkpoint(repo)) or DecisionConfig()
         self.template = DecisionTemplate(self.processor or self.tokenizer, decision_config, questions)
         # A decision model (`XxxForDecision`) scores the options itself, any other model by the logits of their labels
         self.reads_marks = "marks" in inspect.signature(self.model.forward).parameters
