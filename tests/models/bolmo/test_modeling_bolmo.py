@@ -123,6 +123,10 @@ class BolmoModelTest(ModelTesterMixin, unittest.TestCase):
         )
         self.assertEqual(beams.shape[0], 2 * greedy.shape[0])
 
+    def test_reverse_loading_mapping(self):
+        # the renames are anchored at `BolmoForCausalLM`'s `model.`, `base_model_prefix` handles `BolmoModel` (as llava)
+        super().test_reverse_loading_mapping(skip_base_model=True)
+
     @unittest.skip("Bolmo embeds bytes and subwords, `inputs_embeds` alone is not enough")
     def test_inputs_embeds(self):
         pass

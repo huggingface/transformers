@@ -652,7 +652,7 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
         "bolmo": [
-            # the original checkpoints keep the global model at the root of `model`
+            # the original checkpoints keep the global model next to the local encoder/decoder
             WeightRenaming(source_patterns=r"^model\.layers\.", target_patterns="model.language_model.layers."),
             WeightRenaming(
                 source_patterns=r"^model\.local_encoder\.subword_embedding",
