@@ -667,7 +667,7 @@ diff = '''
 [rules.TRF032]
 description = "Masked positions must be filled with torch.finfo(dtype).min, not a magic negative number."
 default_enabled = true
-allowlist_models = ["bolmo"]  # mLSTM forget-gate reset: finfo.min cancels in the kernel's log-space cumsum
+allowlist_models = []
 cutoff_date = "2026-06-20"
 
 [rules.TRF032.explanation]

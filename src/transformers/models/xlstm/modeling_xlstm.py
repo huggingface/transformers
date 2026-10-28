@@ -21,14 +21,14 @@ from torch import nn
 
 from ... import initialization as init
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernel_func_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, is_xlstm_available
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from .configuration_xlstm import xLSTMConfig
+from .configuration_xlstm import round_up_to_next_multiple_of, xLSTMConfig
 
 
 def soft_cap(values: torch.Tensor, cap_value: float | None = None) -> torch.Tensor:
@@ -49,7 +49,7 @@ def segment_sum(values: torch.Tensor) -> torch.Tensor:
     return values.cumsum(-2).masked_fill(~causal, -float("inf"))
 
 
-@use_kernel_forward_from_hub("mlstm")
+@use_kernel_func_from_hub("mlstm")
 def eager_mlstm_forward(
     query: torch.Tensor,
     key: torch.Tensor,
@@ -146,371 +146,361 @@ def eager_mlstm_forward(
     return output.to(output_dtype), (memory, normalizer, max_log_gate)
 
 
-if is_xlstm_available():
-    from xlstm.xlstm_large.model import RMSNorm as xLSTMRMSNorm
-    from xlstm.xlstm_large.model import mLSTMBlock, mLSTMStateType
+mLSTMLayerStateType = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+mLSTMStateType = dict[int, mLSTMLayerStateType]
 
-external_xlstm = is_xlstm_available()
 
-if external_xlstm:
+class xLSTMRMSNorm(nn.Module):
+    """Root mean square normalization layer implementation similar
+    to https://pytorch.org/docs/stable/generated/torch.nn.RMSNorm.html.
 
-    class xLSTMBlock(GradientCheckpointingLayer, mLSTMBlock):
-        pass
+    It normalizes the input tensor by the root mean square of the last dimension.
 
-else:
-    from .configuration_xlstm import round_up_to_next_multiple_of
+    Args:
+        num_features: The number of features in the input tensor.
+        eps: A small value to avoid division by zero.
+        use_weight: Whether to use a learnable weight.
+        use_bias: Whether to use a learnable bias.
+        force_float32_reductions: Whether to force float32 reductions.
+    """
 
-    mLSTMLayerStateType = tuple[torch.Tensor, torch.Tensor, torch.Tensor]
-    mLSTMStateType = dict[int, mLSTMLayerStateType]
+    def __init__(
+        self,
+        num_features: int,
+        eps: float = 1e-6,
+        use_weight: bool = True,
+        use_bias: bool = False,
+        force_float32_reductions: bool = True,
+    ):
+        super().__init__()
+        self.num_features = num_features
+        self.eps = eps
+        self.force_float32_reductions = force_float32_reductions
 
-    class xLSTMRMSNorm(nn.Module):
-        """Root mean square normalization layer implementation similar
-        to https://pytorch.org/docs/stable/generated/torch.nn.RMSNorm.html.
+        if use_weight:
+            self.weight = nn.Parameter(torch.ones(num_features))
+        else:
+            self.weight = None
 
-        It normalizes the input tensor by the root mean square of the last dimension.
+        if use_bias:
+            self.bias = nn.Parameter(torch.zeros(num_features))
+        else:
+            self.bias = None
 
-        Args:
-            num_features: The number of features in the input tensor.
-            eps: A small value to avoid division by zero.
-            use_weight: Whether to use a learnable weight.
-            use_bias: Whether to use a learnable bias.
-            force_float32_reductions: Whether to force float32 reductions.
-        """
+    def _apply_weight_bias(self, x: torch.Tensor) -> torch.Tensor:
+        if self.weight is not None:
+            x = x * self.weight
+        if self.bias is not None:
+            x = x + self.bias
+        return x
 
-        def __init__(
-            self,
-            num_features: int,
-            eps: float = 1e-6,
-            use_weight: bool = True,
-            use_bias: bool = False,
-            force_float32_reductions: bool = True,
-        ):
-            super().__init__()
-            self.num_features = num_features
-            self.eps = eps
-            self.force_float32_reductions = force_float32_reductions
+    def _rms_normalize(self, x: torch.Tensor) -> torch.Tensor:
+        # apply rms norm over the last dimension, i.e. HD dimension
+        in_dtype = x.dtype
+        if self.force_float32_reductions:
+            x = x.float()
+        x = x * torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
+        return x.to(in_dtype)
 
-            if use_weight:
-                self.weight = nn.Parameter(torch.ones(num_features))
-            else:
-                self.weight = None
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self._rms_normalize(x)
+        x = self._apply_weight_bias(x)
+        return x
 
-            if use_bias:
-                self.bias = nn.Parameter(torch.zeros(num_features))
-            else:
-                self.bias = None
 
-        def _apply_weight_bias(self, x: torch.Tensor) -> torch.Tensor:
-            if self.weight is not None:
-                x = x * self.weight
-            if self.bias is not None:
-                x = x + self.bias
-            return x
+class xLSTMMultiHeadLayerNorm(nn.Module):
+    """Multi-head version of the LayerNorm layer.
 
-        def _rms_normalize(self, x: torch.Tensor) -> torch.Tensor:
-            # apply rms norm over the last dimension, i.e. HD dimension
-            in_dtype = x.dtype
-            if self.force_float32_reductions:
-                x = x.float()
-            x = x * torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
-            return x.to(in_dtype)
+    It normalizes the last dimension of the input tensor.
 
-        def forward(self, x: torch.Tensor) -> torch.Tensor:
-            x = self._rms_normalize(x)
-            x = self._apply_weight_bias(x)
-            return x
+    The input is assumed to have the shape (batch_size, sequence_length, nh, DH), where:
+    batch_size: batch size
+    sequence_length: sequence length
+    nh: number of heads
+    DH: head dimension
 
-    class xLSTMMultiHeadLayerNorm(nn.Module):
-        """Multi-head version of the LayerNorm layer.
+    The normalization is applied over the last dimension (DH) of the input tensor.
 
-        It normalizes the last dimension of the input tensor.
+    Args:
+        num_heads: The number of heads.
+        head_dim: The head dimension.
+        eps: A small value to avoid division by zero.
+        use_weight: Whether to use a learnable weight.
+        use_bias: Whether to use a learnable bias.
+        force_float32_reductions: Whether to force float32 reductions
 
-        The input is assumed to have the shape (batch_size, sequence_length, nh, DH), where:
-        batch_size: batch size
-        sequence_length: sequence length
-        nh: number of heads
-        DH: head dimension
+    Returns:
+        The normalized tensor with the shape (batch_size, sequence_length, nh * DH).
+    """
 
-        The normalization is applied over the last dimension (DH) of the input tensor.
+    def __init__(
+        self,
+        num_heads: int,
+        head_dim: int,
+        eps: float = 1e-6,
+        use_weight: bool = True,
+        use_bias: bool = False,
+        force_float32_reductions: bool = True,
+    ):
+        super().__init__()
+        self.num_features = num_heads * head_dim
+        self.eps = eps
+        self.force_float32_reductions = force_float32_reductions
 
-        Args:
-            num_heads: The number of heads.
-            head_dim: The head dimension.
-            eps: A small value to avoid division by zero.
-            use_weight: Whether to use a learnable weight.
-            use_bias: Whether to use a learnable bias.
-            force_float32_reductions: Whether to force float32 reductions
+        if use_weight:
+            self.weight = nn.Parameter(torch.ones(self.num_features))
+        else:
+            self.weight = None
 
-        Returns:
-            The normalized tensor with the shape (batch_size, sequence_length, nh * DH).
-        """
+        if use_bias:
+            self.bias = nn.Parameter(torch.zeros(self.num_features))
+        else:
+            self.bias = None
+        self.num_heads = num_heads
+        self.head_dim = head_dim
 
-        def __init__(
-            self,
-            num_heads: int,
-            head_dim: int,
-            eps: float = 1e-6,
-            use_weight: bool = True,
-            use_bias: bool = False,
-            force_float32_reductions: bool = True,
-        ):
-            super().__init__()
-            self.num_features = num_heads * head_dim
-            self.eps = eps
-            self.force_float32_reductions = force_float32_reductions
+    def _apply_weight_bias(self, x: torch.Tensor) -> torch.Tensor:
+        if self.weight is not None:
+            x = x * self.weight
+        if self.bias is not None:
+            x = x + self.bias
+        return x
 
-            if use_weight:
-                self.weight = nn.Parameter(torch.ones(self.num_features))
-            else:
-                self.weight = None
+    def _layer_normalize(self, x: torch.Tensor) -> torch.Tensor:
+        # apply layer norm over the last dimension, i.e. HD dimension
+        in_dtype = x.dtype
+        if self.force_float32_reductions:
+            x = x.float()
+        x_centered = x - x.mean(dim=-1, keepdim=True)
+        y = x_centered * torch.rsqrt(x.var(dim=-1, keepdim=True, unbiased=False) + self.eps)
+        return y.to(in_dtype)
 
-            if use_bias:
-                self.bias = nn.Parameter(torch.zeros(self.num_features))
-            else:
-                self.bias = None
-            self.num_heads = num_heads
-            self.head_dim = head_dim
+    def forward(
+        self,
+        x: torch.Tensor,
+    ) -> torch.Tensor:
+        batch_size, sequence_length, nh, DH = x.shape
+        if nh != self.num_heads:
+            raise ValueError(f"Expected {self.num_heads} heads, got {nh}, input shape: {x.shape}")
+        if self.head_dim != DH:
+            raise ValueError(f"Expected {self.head_dim} head dimension, got {DH}, input shape: {x.shape}")
 
-        def _apply_weight_bias(self, x: torch.Tensor) -> torch.Tensor:
-            if self.weight is not None:
-                x = x * self.weight
-            if self.bias is not None:
-                x = x + self.bias
-            return x
+        x = self._layer_normalize(x)
+        x = x.reshape(batch_size, sequence_length, -1)
+        x = self._apply_weight_bias(x)
+        return x
 
-        def _layer_normalize(self, x: torch.Tensor) -> torch.Tensor:
-            # apply layer norm over the last dimension, i.e. HD dimension
-            in_dtype = x.dtype
-            if self.force_float32_reductions:
-                x = x.float()
-            x_centered = x - x.mean(dim=-1, keepdim=True)
-            y = x_centered * torch.rsqrt(x.var(dim=-1, keepdim=True, unbiased=False) + self.eps)
-            return y.to(in_dtype)
 
-        def forward(
-            self,
-            x: torch.Tensor,
-        ) -> torch.Tensor:
-            batch_size, sequence_length, nh, DH = x.shape
-            if nh != self.num_heads:
-                raise ValueError(f"Expected {self.num_heads} heads, got {nh}, input shape: {x.shape}")
-            if self.head_dim != DH:
-                raise ValueError(f"Expected {self.head_dim} head dimension, got {DH}, input shape: {x.shape}")
+class xLSTMFeedForward(nn.Module):
+    def __init__(self, config: xLSTMConfig):
+        super().__init__()
+        self.config = config
 
-            x = self._layer_normalize(x)
-            x = x.reshape(batch_size, sequence_length, -1)
-            x = self._apply_weight_bias(x)
-            return x
+        self.up_proj_dim = round_up_to_next_multiple_of(
+            config.hidden_size * config.ffn_proj_factor,
+            config.ffn_round_up_to_multiple_of,
+        )
 
-    class xLSTMFeedForward(nn.Module):
-        def __init__(self, config: xLSTMConfig):
-            super().__init__()
-            self.config = config
-
-            self.up_proj_dim = round_up_to_next_multiple_of(
-                config.hidden_size * config.ffn_proj_factor,
-                config.ffn_round_up_to_multiple_of,
+        if self.config.weight_mode == "single":
+            self.proj_up_gate = nn.Linear(
+                in_features=config.hidden_size,
+                out_features=self.up_proj_dim,
+                bias=self.config.use_bias,
             )
-
-            if self.config.weight_mode == "single":
-                self.proj_up_gate = nn.Linear(
-                    in_features=config.hidden_size,
-                    out_features=self.up_proj_dim,
-                    bias=self.config.use_bias,
-                )
-                self.proj_up = nn.Linear(
-                    in_features=config.hidden_size,
-                    out_features=self.up_proj_dim,
-                    bias=self.config.use_bias,
-                )
-            elif self.config.weight_mode == "fused":
-                self.proj_up_gate_z = nn.Linear(
-                    in_features=config.hidden_size,
-                    out_features=2 * self.up_proj_dim,
-                    bias=self.config.use_bias,
-                )
-
-            self.proj_down = nn.Linear(
-                in_features=self.up_proj_dim,
-                out_features=config.hidden_size,
+            self.proj_up = nn.Linear(
+                in_features=config.hidden_size,
+                out_features=self.up_proj_dim,
+                bias=self.config.use_bias,
+            )
+        elif self.config.weight_mode == "fused":
+            self.proj_up_gate_z = nn.Linear(
+                in_features=config.hidden_size,
+                out_features=2 * self.up_proj_dim,
                 bias=self.config.use_bias,
             )
 
-            self.act_fn = nn.SiLU()
+        self.proj_down = nn.Linear(
+            in_features=self.up_proj_dim,
+            out_features=config.hidden_size,
+            bias=self.config.use_bias,
+        )
 
-        def forward(self, x: torch.Tensor) -> torch.Tensor:
-            if self.config.weight_mode == "single":
-                x = self.act_fn(self.proj_up_gate(x)) * self.proj_up(x)
-            elif self.config.weight_mode == "fused":
-                x = self.proj_up_gate_z(x)
-                gate, z = torch.tensor_split(x, (self.up_proj_dim,), dim=-1)
-                x = self.act_fn(gate) * z
+        self.act_fn = nn.SiLU()
 
-            y = self.proj_down(x)
-            return y
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if self.config.weight_mode == "single":
+            x = self.act_fn(self.proj_up_gate(x)) * self.proj_up(x)
+        elif self.config.weight_mode == "fused":
+            x = self.proj_up_gate_z(x)
+            gate, z = torch.tensor_split(x, (self.up_proj_dim,), dim=-1)
+            x = self.act_fn(gate) * z
 
-    @use_kernelized_func(eager_mlstm_forward)
-    class xLSTMLayer(nn.Module):
-        def __init__(self, config: xLSTMConfig):
-            super().__init__()
-            self.config = config
+        y = self.proj_down(x)
+        return y
 
-            self.v_dim = int(config.hidden_size * config.v_dim_factor)
-            self.qk_dim = int(config.hidden_size * config.qk_dim_factor)
 
-            if self.config.weight_mode == "single":
-                self.q = nn.Linear(
-                    in_features=self.config.hidden_size,
-                    out_features=self.qk_dim,
-                    bias=self.config.use_bias,
-                )
-                self.k = nn.Linear(
-                    in_features=self.config.hidden_size,
-                    out_features=self.qk_dim,
-                    bias=self.config.use_bias,
-                )
-                self.v = nn.Linear(
-                    in_features=self.config.hidden_size,
-                    out_features=self.v_dim,
-                    bias=self.config.use_bias,
-                )
+class xLSTMLayer(nn.Module):
+    def __init__(self, config: xLSTMConfig):
+        super().__init__()
+        self.config = config
 
-                self.ogate_preact = nn.Linear(
-                    in_features=self.config.hidden_size,
-                    out_features=self.v_dim,
-                    bias=self.config.use_bias,
-                )
-                self.igate_preact = nn.Linear(
-                    in_features=self.config.hidden_size,
-                    out_features=self.config.num_heads,
-                    bias=True,
-                )
-                self.fgate_preact = nn.Linear(
-                    in_features=self.config.hidden_size,
-                    out_features=self.config.num_heads,
-                    bias=True,
-                )
-            elif self.config.weight_mode == "fused":
-                self.qkv_opreact = nn.Linear(
-                    in_features=self.config.hidden_size,
-                    out_features=2 * self.qk_dim + 2 * self.v_dim,
-                    bias=self.config.use_bias,
-                )
-                self.ifgate_preact = nn.Linear(
-                    in_features=self.config.hidden_size,
-                    out_features=2 * self.config.num_heads,
-                    bias=True,
-                )
+        self.v_dim = int(config.hidden_size * config.v_dim_factor)
+        self.qk_dim = int(config.hidden_size * config.qk_dim_factor)
 
-            self.ogate_act_fn = nn.Sigmoid()
-
-            self.multihead_norm = xLSTMMultiHeadLayerNorm(
-                num_heads=self.config.num_heads,
-                head_dim=self.v_dim // self.config.num_heads,
-                eps=self.config.norm_eps,
-                use_weight=True,
-                use_bias=self.config.use_bias,
-                force_float32_reductions=self.config.norm_reduction_force_float32,
+        if self.config.weight_mode == "single":
+            self.q = nn.Linear(
+                in_features=self.config.hidden_size,
+                out_features=self.qk_dim,
+                bias=self.config.use_bias,
             )
-            self.out_proj = nn.Linear(
-                in_features=self.v_dim,
-                out_features=self.config.hidden_size,
+            self.k = nn.Linear(
+                in_features=self.config.hidden_size,
+                out_features=self.qk_dim,
+                bias=self.config.use_bias,
+            )
+            self.v = nn.Linear(
+                in_features=self.config.hidden_size,
+                out_features=self.v_dim,
                 bias=self.config.use_bias,
             )
 
-        def forward(
-            self, x: torch.Tensor, state: mLSTMLayerStateType | None = None
-        ) -> tuple[torch.Tensor, mLSTMLayerStateType | None]:
-            if x.ndim != 3:
-                raise ValueError(f"Input must have shape [batch_size, sequence_length, HD], got {x.shape}")
-            batch_size, sequence_length, _ = x.shape
-            if self.config.weight_mode == "single":
-                query = self.q(x)
-                key = self.k(x)
-                value = self.v(x)
-                o_preact = self.ogate_preact(x)
-                i_preact = soft_cap(self.igate_preact(x), cap_value=self.config.gate_soft_cap)
-                f_preact = soft_cap(self.fgate_preact(x), cap_value=self.config.gate_soft_cap)
-
-            elif self.config.weight_mode == "fused":
-                qkv_opreact = self.qkv_opreact(x)
-                query, key, value, o_preact = torch.tensor_split(
-                    qkv_opreact,
-                    (
-                        self.qk_dim,
-                        2 * self.qk_dim,
-                        2 * self.qk_dim + self.v_dim,
-                    ),
-                    dim=-1,
-                )
-
-                if_preact = soft_cap(self.ifgate_preact(x), cap_value=self.config.gate_soft_cap)
-                i_preact, f_preact = torch.tensor_split(if_preact, (self.config.num_heads,), dim=-1)
-
-            query = query.reshape(batch_size, sequence_length, self.config.num_heads, -1).transpose(1, 2)
-            key = key.reshape(batch_size, sequence_length, self.config.num_heads, -1).transpose(1, 2)
-            value = value.reshape(batch_size, sequence_length, self.config.num_heads, -1).transpose(1, 2)
-            i_preact = i_preact.transpose(1, 2)
-            f_preact = f_preact.transpose(1, 2)
-            h, state = eager_mlstm_forward(
-                query,
-                key,
-                value,
-                input_gate=i_preact,
-                forget_gate=f_preact,
-                state=state,
-                chunk_size=self.config.chunk_size,
-                eps=self.config.eps,
+            self.ogate_preact = nn.Linear(
+                in_features=self.config.hidden_size,
+                out_features=self.v_dim,
+                bias=self.config.use_bias,
             )
-            expected_h_shape = (
-                batch_size,
-                self.config.num_heads,
-                sequence_length,
-                self.v_dim // self.config.num_heads,
+            self.igate_preact = nn.Linear(
+                in_features=self.config.hidden_size,
+                out_features=self.config.num_heads,
+                bias=True,
             )
-            if h.shape != expected_h_shape:
-                raise ValueError(f"Got {h.shape}, expected {expected_h_shape}")
-
-            h = h.transpose(1, 2)
-            h_norm = self.multihead_norm(h)
-            h_norm = h_norm.reshape(batch_size, sequence_length, -1)
-
-            h_out = self.ogate_act_fn(o_preact) * h_norm
-
-            y = self.out_proj(h_out)
-            return y, state
-
-    class xLSTMBlock(GradientCheckpointingLayer):
-        def __init__(self, config: xLSTMConfig):
-            super().__init__()
-            self.config = config
-            self.norm_mlstm = xLSTMRMSNorm(
-                num_features=config.hidden_size,
-                eps=config.norm_eps,
-                use_weight=True,
-                use_bias=config.use_bias,
-                force_float32_reductions=config.norm_reduction_force_float32,
+            self.fgate_preact = nn.Linear(
+                in_features=self.config.hidden_size,
+                out_features=self.config.num_heads,
+                bias=True,
             )
-            self.mlstm_layer = xLSTMLayer(config)
-            self.norm_ffn = xLSTMRMSNorm(
-                num_features=config.hidden_size,
-                eps=config.norm_eps,
-                use_weight=True,
-                use_bias=config.use_bias,
-                force_float32_reductions=config.norm_reduction_force_float32,
+        elif self.config.weight_mode == "fused":
+            self.qkv_opreact = nn.Linear(
+                in_features=self.config.hidden_size,
+                out_features=2 * self.qk_dim + 2 * self.v_dim,
+                bias=self.config.use_bias,
             )
-            self.ffn = xLSTMFeedForward(config)
+            self.ifgate_preact = nn.Linear(
+                in_features=self.config.hidden_size,
+                out_features=2 * self.config.num_heads,
+                bias=True,
+            )
 
-        def forward(self, x: torch.Tensor, state: mLSTMStateType | None = None) -> tuple[torch.Tensor, mLSTMStateType]:
-            x_mlstm = self.norm_mlstm(x)
-            x_mlstm, state = self.mlstm_layer(x_mlstm, state)
-            x = x + x_mlstm
+        self.ogate_act_fn = nn.Sigmoid()
 
-            x_ffn = self.norm_ffn(x)
-            x_ffn = self.ffn(x_ffn)
-            x = x + x_ffn
+        self.multihead_norm = xLSTMMultiHeadLayerNorm(
+            num_heads=self.config.num_heads,
+            head_dim=self.v_dim // self.config.num_heads,
+            eps=self.config.norm_eps,
+            use_weight=True,
+            use_bias=self.config.use_bias,
+            force_float32_reductions=self.config.norm_reduction_force_float32,
+        )
+        self.out_proj = nn.Linear(
+            in_features=self.v_dim,
+            out_features=self.config.hidden_size,
+            bias=self.config.use_bias,
+        )
 
-            return x, state
+    def forward(
+        self, x: torch.Tensor, state: mLSTMLayerStateType | None = None
+    ) -> tuple[torch.Tensor, mLSTMLayerStateType | None]:
+        if x.ndim != 3:
+            raise ValueError(f"Input must have shape [batch_size, sequence_length, HD], got {x.shape}")
+        batch_size, sequence_length, _ = x.shape
+        if self.config.weight_mode == "single":
+            query = self.q(x)
+            key = self.k(x)
+            value = self.v(x)
+            o_preact = self.ogate_preact(x)
+            i_preact = soft_cap(self.igate_preact(x), cap_value=self.config.gate_soft_cap)
+            f_preact = soft_cap(self.fgate_preact(x), cap_value=self.config.gate_soft_cap)
+
+        elif self.config.weight_mode == "fused":
+            qkv_opreact = self.qkv_opreact(x)
+            query, key, value, o_preact = torch.tensor_split(
+                qkv_opreact,
+                (
+                    self.qk_dim,
+                    2 * self.qk_dim,
+                    2 * self.qk_dim + self.v_dim,
+                ),
+                dim=-1,
+            )
+
+            if_preact = soft_cap(self.ifgate_preact(x), cap_value=self.config.gate_soft_cap)
+            i_preact, f_preact = torch.tensor_split(if_preact, (self.config.num_heads,), dim=-1)
+
+        query = query.reshape(batch_size, sequence_length, self.config.num_heads, -1).transpose(1, 2)
+        key = key.reshape(batch_size, sequence_length, self.config.num_heads, -1).transpose(1, 2)
+        value = value.reshape(batch_size, sequence_length, self.config.num_heads, -1).transpose(1, 2)
+        i_preact = i_preact.transpose(1, 2)
+        f_preact = f_preact.transpose(1, 2)
+        h, state = eager_mlstm_forward(
+            query,
+            key,
+            value,
+            input_gate=i_preact,
+            forget_gate=f_preact,
+            state=state,
+            chunk_size=self.config.chunk_size,
+            eps=self.config.eps,
+        )
+        expected_h_shape = (
+            batch_size,
+            self.config.num_heads,
+            sequence_length,
+            self.v_dim // self.config.num_heads,
+        )
+        if h.shape != expected_h_shape:
+            raise ValueError(f"Got {h.shape}, expected {expected_h_shape}")
+
+        h = h.transpose(1, 2)
+        h_norm = self.multihead_norm(h)
+        h_norm = h_norm.reshape(batch_size, sequence_length, -1)
+
+        h_out = self.ogate_act_fn(o_preact) * h_norm
+
+        y = self.out_proj(h_out)
+        return y, state
+
+
+class xLSTMBlock(GradientCheckpointingLayer):
+    def __init__(self, config: xLSTMConfig):
+        super().__init__()
+        self.config = config
+        self.norm_mlstm = xLSTMRMSNorm(
+            num_features=config.hidden_size,
+            eps=config.norm_eps,
+            use_weight=True,
+            use_bias=config.use_bias,
+            force_float32_reductions=config.norm_reduction_force_float32,
+        )
+        self.mlstm_layer = xLSTMLayer(config)
+        self.norm_ffn = xLSTMRMSNorm(
+            num_features=config.hidden_size,
+            eps=config.norm_eps,
+            use_weight=True,
+            use_bias=config.use_bias,
+            force_float32_reductions=config.norm_reduction_force_float32,
+        )
+        self.ffn = xLSTMFeedForward(config)
+
+    def forward(self, x: torch.Tensor, state: mLSTMStateType | None = None) -> tuple[torch.Tensor, mLSTMStateType]:
+        x_mlstm = self.norm_mlstm(x)
+        x_mlstm, state = self.mlstm_layer(x_mlstm, state)
+        x = x + x_mlstm
+
+        x_ffn = self.norm_ffn(x)
+        x_ffn = self.ffn(x_ffn)
+        x = x + x_ffn
+
+        return x, state
 
 
 def small_init_method(dim):

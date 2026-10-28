@@ -25,7 +25,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import DynamicCache, LinearAttentionLayer
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
@@ -143,7 +143,7 @@ def segment_sum(values: torch.Tensor) -> torch.Tensor:
     return values.cumsum(-2).masked_fill(~causal, -float("inf"))
 
 
-@use_kernel_forward_from_hub("mlstm")
+@use_kernel_func_from_hub("mlstm")
 def eager_mlstm_forward(
     query: torch.Tensor,
     key: torch.Tensor,
@@ -240,7 +240,6 @@ def eager_mlstm_forward(
     return output.to(output_dtype), (memory, normalizer, max_log_gate)
 
 
-@use_kernelized_func(eager_mlstm_forward)
 class BolmoMLSTMLayer(nn.Module):
     """
     xLSTM-large mLSTM layer (`weight_mode="single"`). Every released checkpoint
@@ -277,11 +276,9 @@ class BolmoMLSTMLayer(nn.Module):
         igate = soft_cap(self.igate_preact(hidden_states), self.gate_soft_cap).transpose(1, 2)
         fgate = soft_cap(self.fgate_preact(hidden_states), self.gate_soft_cap)
         if sequence_start is not None:
-            # closing the forget gate on the first real byte drops the left padding from the state. Not
-            # `finfo.min`: chunkwise kernels cumsum log forget gates, so `min + x - min` would cancel.
-            # -100_000 is the original implementation's value.
+            # closing the forget gate on the first real byte drops the left padding from the state
             is_start = torch.arange(seq_len, device=fgate.device) == sequence_start[:, None]
-            fgate = fgate.masked_fill(is_start[..., None], -100_000)
+            fgate = fgate.masked_fill(is_start[..., None], torch.finfo(fgate.dtype).min)
         fgate = fgate.transpose(1, 2)
 
         mlstm_output, state = eager_mlstm_forward(query, key, value, input_gate=igate, forget_gate=fgate, state=state)
@@ -454,13 +451,12 @@ class BolmoModel(BolmoPreTrainedModel):
             past_key_values.patch_mask = patch_mask.long()
         return hidden_states, global_outputs
 
-    def _decode_step(self, input_ids, expanded_input_ids, past_key_values, **kwargs):
+    def _decode_step(self, input_ids, expanded_input_ids, cache, **kwargs):
         # rows that emitted `bpe_token_end` (or are finished) wait, rows on a boundary need a new patch
         last_token = input_ids[:, -1]
         waiting = (last_token == self.config.bpe_token_end_id) | (last_token == self.config.pad_token_id)
         at_boundary = waiting | (last_token >= self.boundary_offset)
 
-        cache = past_key_values
         byte_hidden_states, encoder_states = self.local_encoder(
             self._embed(input_ids, expanded_input_ids),
             states=cache.get_states(cache.encoder_start, len(self.local_encoder.layers)),
@@ -537,9 +533,6 @@ class BolmoModel(BolmoPreTrainedModel):
 
 @auto_docstring
 class BolmoForCausalLM(BolmoPreTrainedModel, BolmoGenerationMixin):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-
     def __init__(self, config: BolmoConfig):
         super().__init__(config)
         self.model = BolmoModel(config)

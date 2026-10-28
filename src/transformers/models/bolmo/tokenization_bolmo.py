@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import json
-import os
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
@@ -113,17 +112,6 @@ class BolmoTokenizer(TokenizersBackend):
             encoding["expanded_input_ids"] = self.expand_byte_ids(rows)
         encoding.convert_to_tensors(kwargs.get("return_tensors"))
         return encoding
-
-    def _save_pretrained(self, save_directory, file_names, legacy_format=None, filename_prefix=None):
-        # `tokenizer.json` holds the byte pipeline, the subword vocab is a separate file
-        file_names = super()._save_pretrained(save_directory, file_names, legacy_format, filename_prefix)
-        return file_names + self.save_vocabulary(save_directory, filename_prefix)
-
-    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
-        vocab_file = os.path.join(save_directory, (filename_prefix + "-" if filename_prefix else "") + "vocab.json")
-        with open(vocab_file, "w", encoding="utf-8") as f:
-            json.dump(self.subword_vocab, f, ensure_ascii=False)
-        return (vocab_file,)
 
 
 __all__ = ["BolmoTokenizer"]

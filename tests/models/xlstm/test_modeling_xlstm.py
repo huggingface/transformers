@@ -362,7 +362,7 @@ class xLSTMIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
         with torch.amp.autocast(device_type="cuda", dtype=dtype):
             with torch.no_grad():
-                block = xLSTMBlock(config.to_xlstm_block_config()).to("cuda")
+                block = xLSTMBlock(config).to("cuda")
                 hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device="cuda")
 
                 block.train()

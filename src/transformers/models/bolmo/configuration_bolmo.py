@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring
-from ..auto import AutoConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 @auto_docstring(checkpoint="allenai/Bolmo-7B")
@@ -80,7 +80,7 @@ class BolmoConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         # TODO: remove once the Hub configs nest the global model under `text_config`
         if self.text_config is None:
-            olmo3_keys = set(Olmo3Config.__dataclass_fields__) | {"rope_scaling", "rope_theta"}
+            olmo3_keys = set(CONFIG_MAPPING["olmo3"].__dataclass_fields__) | {"rope_scaling", "rope_theta"}
             self.text_config = {
                 "model_type": "olmo3",
                 "vocab_size": kwargs.pop("subword_vocab_size", 100278),

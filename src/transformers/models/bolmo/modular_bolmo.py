@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import json
-import os
 
 import torch
 import torch.nn.functional as F
@@ -25,7 +24,6 @@ from torch import nn
 from ...cache_utils import DynamicCache, LinearAttentionLayer
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...convert_slow_tokenizer import bytes_to_unicode
-from ...integrations import use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
@@ -34,8 +32,7 @@ from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ..auto import AutoConfig, AutoModel
-from ..olmo3.configuration_olmo3 import Olmo3Config
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..olmo3.modeling_olmo3 import Olmo3RMSNorm
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from ..xlstm.modeling_xlstm import eager_mlstm_forward, soft_cap
@@ -97,7 +94,7 @@ class BolmoConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         # TODO: remove once the Hub configs nest the global model under `text_config`
         if self.text_config is None:
-            olmo3_keys = set(Olmo3Config.__dataclass_fields__) | {"rope_scaling", "rope_theta"}
+            olmo3_keys = set(CONFIG_MAPPING["olmo3"].__dataclass_fields__) | {"rope_scaling", "rope_theta"}
             self.text_config = {
                 "model_type": "olmo3",
                 "vocab_size": kwargs.pop("subword_vocab_size", 100278),
@@ -169,7 +166,6 @@ class BolmoMultiHeadLayerNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype).flatten(2)
 
 
-@use_kernelized_func(eager_mlstm_forward)
 class BolmoMLSTMLayer(nn.Module):
     """
     xLSTM-large mLSTM layer (`weight_mode="single"`). Every released checkpoint
@@ -206,11 +202,9 @@ class BolmoMLSTMLayer(nn.Module):
         igate = soft_cap(self.igate_preact(hidden_states), self.gate_soft_cap).transpose(1, 2)
         fgate = soft_cap(self.fgate_preact(hidden_states), self.gate_soft_cap)
         if sequence_start is not None:
-            # closing the forget gate on the first real byte drops the left padding from the state. Not
-            # `finfo.min`: chunkwise kernels cumsum log forget gates, so `min + x - min` would cancel.
-            # -100_000 is the original implementation's value.
+            # closing the forget gate on the first real byte drops the left padding from the state
             is_start = torch.arange(seq_len, device=fgate.device) == sequence_start[:, None]
-            fgate = fgate.masked_fill(is_start[..., None], -100_000)
+            fgate = fgate.masked_fill(is_start[..., None], torch.finfo(fgate.dtype).min)
         fgate = fgate.transpose(1, 2)
 
         mlstm_output, state = eager_mlstm_forward(query, key, value, input_gate=igate, forget_gate=fgate, state=state)
@@ -383,13 +377,12 @@ class BolmoModel(BolmoPreTrainedModel):
             past_key_values.patch_mask = patch_mask.long()
         return hidden_states, global_outputs
 
-    def _decode_step(self, input_ids, expanded_input_ids, past_key_values, **kwargs):
+    def _decode_step(self, input_ids, expanded_input_ids, cache, **kwargs):
         # rows that emitted `bpe_token_end` (or are finished) wait, rows on a boundary need a new patch
         last_token = input_ids[:, -1]
         waiting = (last_token == self.config.bpe_token_end_id) | (last_token == self.config.pad_token_id)
         at_boundary = waiting | (last_token >= self.boundary_offset)
 
-        cache = past_key_values
         byte_hidden_states, encoder_states = self.local_encoder(
             self._embed(input_ids, expanded_input_ids),
             states=cache.get_states(cache.encoder_start, len(self.local_encoder.layers)),
@@ -466,9 +459,6 @@ class BolmoModel(BolmoPreTrainedModel):
 
 @auto_docstring
 class BolmoForCausalLM(BolmoPreTrainedModel, BolmoGenerationMixin):
-    _tp_plan = {"lm_head": "colwise_gather_output"}
-    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
-
     def __init__(self, config: BolmoConfig):
         super().__init__(config)
         self.model = BolmoModel(config)
@@ -617,17 +607,6 @@ class BolmoTokenizer(TokenizersBackend):
             encoding["expanded_input_ids"] = self.expand_byte_ids(rows)
         encoding.convert_to_tensors(kwargs.get("return_tensors"))
         return encoding
-
-    def _save_pretrained(self, save_directory, file_names, legacy_format=None, filename_prefix=None):
-        # `tokenizer.json` holds the byte pipeline, the subword vocab is a separate file
-        file_names = super()._save_pretrained(save_directory, file_names, legacy_format, filename_prefix)
-        return file_names + self.save_vocabulary(save_directory, filename_prefix)
-
-    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
-        vocab_file = os.path.join(save_directory, (filename_prefix + "-" if filename_prefix else "") + "vocab.json")
-        with open(vocab_file, "w", encoding="utf-8") as f:
-            json.dump(self.subword_vocab, f, ensure_ascii=False)
-        return (vocab_file,)
 
 
 __all__ = ["BolmoConfig", "BolmoForCausalLM", "BolmoModel", "BolmoPreTrainedModel", "BolmoTokenizer"]
