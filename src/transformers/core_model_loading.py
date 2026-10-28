@@ -497,7 +497,7 @@ class PermuteForRope(ConversionOps):
     ) -> dict[str, list[torch.Tensor]]:
         output: dict[str, torch.Tensor] = {}
         for source_pattern, tensors in input_dict.items():
-            target_pattern = self.get_target_pattern(source_pattern, target_patterns)
+            target_pattern = self.get_target_pattern(source_pattern, source_patterns, target_patterns)
             # We only actually permute if the target_pattern matches one of the pre-expected `permute_layer_names`
             if not any(name in source_pattern for name in self.permute_layer_names):
                 output_tensor = tensors
