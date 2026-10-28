@@ -19,9 +19,9 @@ rendered properly in your Markdown viewer.
 
 JEV is a decision head that scores single-token labels with a linear layer at the last token of the prompt, soft-capped like the logits of a language model head. It was introduced by [JEV](https://huggingface.co/autotrust/JEV-9B) and is also used by [GEV](https://huggingface.co/autotrust/GEV-26B-Decide).
 
-[`JevForDecision`] is the model of the checkpoint and its head, like a `ForCausalLM` is the model and its `lm_head`. Its
-files sit next to the ones of the checkpoint, in its repo: its config (`decision_head.json`), which names its weights,
-and the decision config with its chat template (`decision.json`, `decision_template.jinja`).
+[`JevForDecision`] is the model of the checkpoint and its head, like a `ForCausalLM` is the model and its `lm_head`. It
+reads the files that the checkpoint ships its head with, next to its weights (`readout.safetensors` and
+`decision_config.json` for vLLM decision models, `head.safetensors` and `judge_config.json` for JEV).
 
 ```python
 from transformers import pipeline
@@ -47,8 +47,8 @@ from transformers import AutoTokenizer, JevForDecision
 from transformers.decision import DecisionConfig, DecisionTemplate
 
 repo = "autotrust/JEV-9B"
-model = JevForDecision.from_pretrained(repo, config_file_name="decision_head.json", dtype=torch.bfloat16, device_map="auto")
-config = DecisionConfig.from_pretrained(repo)
+model = JevForDecision.from_pretrained(repo, dtype=torch.bfloat16, device_map="auto")
+config = JevForDecision.config_class.decision_config(repo)  # the labels, temperature and prompt of the checkpoint
 if config.adapter:  # JEV keeps its LoRA in a subfolder
     model.load_adapter(repo, adapter_kwargs={"subfolder": config.adapter})
 template = DecisionTemplate(AutoTokenizer.from_pretrained(repo), config)
