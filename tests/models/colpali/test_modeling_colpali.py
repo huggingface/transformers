@@ -189,6 +189,16 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester = ColPaliForRetrievalModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ColPaliConfig, has_text_modality=False)
 
+    @staticmethod
+    def _prepare_config_headdim(config, requested_dim):
+        config = ModelTesterMixin._prepare_config_headdim(config, requested_dim)
+
+        vlm_config = config.vlm_config
+        vlm_config.projection_dim = vlm_config.text_config.hidden_size
+        vlm_config.vision_config.projection_dim = vlm_config.projection_dim
+
+        return config
+
     @slow
     @require_vision
     def test_colpali_forward_inputs(self):
