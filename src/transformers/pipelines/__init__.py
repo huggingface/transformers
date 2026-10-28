@@ -994,8 +994,8 @@ def pipeline(
         if task == "decision" and config.model_type not in MODEL_FOR_DECISION_MAPPING_NAMES:
             files_kwargs = {"revision": hub_kwargs["revision"], "token": hub_kwargs["token"]}
             for model_class in MODEL_FOR_DECISION_MAPPING.values():
-                if (decision_config := model_class.checkpoint_config(model, **files_kwargs)) is not None:
-                    config = decision_config
+                if (checkpoint_config := model_class.checkpoint_config(model, **files_kwargs)[0]) is not None:
+                    config = checkpoint_config
                     break
 
     custom_tasks = {}

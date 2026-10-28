@@ -34,7 +34,7 @@ A model with a `decision_template.jinja` places two sentinel tokens:
 
 - `<|split|>`: is added to enforce splitting the encoding and is only there for "safety", ensuring user text never parses any control / special tokens.
 
-Both are dropped from the input ids: a [`DecisionPrompt`] keeps the token ids and the number of tokens before each
+Both are dropped from the input ids: [`~DecisionMixin.decide`] keeps the token ids and the number of tokens before each
 `<|mark|>`.
 
 We otherwise can turn any model into a decision model with a `DECISION_PROMPT`, where the logits of the option labels (`A`, `B`, ... or `Yes`/`No`) are read after the generation prompt, e.g. for `Qwen/Qwen2.5-0.5B-Instruct`:
