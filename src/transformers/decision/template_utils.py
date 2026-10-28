@@ -182,7 +182,7 @@ class Question:
         if kind == "noul":
             criteria = {option: (criteria or {}).get(option) for option in config.noul_options}
         elif kind == "choice":
-            criteria = dict(criteria)
+            criteria = dict(sorted(criteria.items()) if config.sort_choices else criteria.items())
         else:
             criteria = {str(index): level for index, level in enumerate(criteria)}
 
