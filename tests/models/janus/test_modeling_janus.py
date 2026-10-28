@@ -414,6 +414,8 @@ class JanusVQModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class JanusIntegrationTest(unittest.TestCase):
+    maxDiff = None
+
     def setUp(self):
         self.model_id = "deepseek-community/Janus-Pro-1B"
 
