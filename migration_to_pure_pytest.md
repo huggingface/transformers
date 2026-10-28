@@ -388,15 +388,17 @@ Both fixes are small and safe — they do not require touching any individual mo
 
 ---
 
-### Issue 7: `VLMModelTest` and `ALMModelTest` collection leak — same root cause as Issue 6
+### Issue 7: `VLMModelTest` and `ALMModelTest` collection leak
 **Found**: CI run 40759614150 (PR #50087, all 8 shards) — 2026-10-28
 **Confirmed**: 100%
 
-**Root cause**: Identical to Issue 6. `VLMModelTest` (in `vlm_tester.py`) and `ALMModelTest`
-(in `alm_tester.py`) both end in `Test` → our `python_classes = ["Test*", "*Test"]` change causes
-pytest to collect them as standalone test classes from every model file that imports them.
+**Root cause**: Same **collection leak mechanism** as Issue 6 Part 1, but WITHOUT the setUp
+rename problem. `VLMModelTest` (in `vlm_tester.py`) and `ALMModelTest` (in `alm_tester.py`)
+both end in `Test` → our `python_classes = ["Test*", "*Test"]` change causes pytest to collect
+them as standalone test classes from every model file that imports them.
 `MultiModalModelTest` (their parent, in `multimodal_tester.py`) still uses `setUp` and was NOT
-renamed, so when collected standalone (as plain pytest classes), `setUp` is never called →
+renamed — so this is purely a collection leak, no setUp alias complication.
+When collected standalone as plain pytest classes, `setUp` is never called →
 `config_tester`/`model_tester` stay None → every test fails.
 
 **Error signatures** (identical to Issue 6):
@@ -420,9 +422,9 @@ TypeError: 'NoneType' object is not iterable
 | **Total** | **~4,760** | **~1,781** |
 
 **Fix**: Add `__test__ = False` to `VLMModelTest` in `vlm_tester.py` and `ALMModelTest` in
-`alm_tester.py`. No `setUp` alias needed — unlike `causal_lm_tester.py`, we did NOT rename
-`setUp` in `multimodal_tester.py`, so unmigrated `unittest.TestCase` subclasses still call
-`setUp` correctly via the parent class.
+`alm_tester.py`. No `setUp` alias needed (unlike Issue 6) — we never renamed `setUp` in
+`multimodal_tester.py`, so unmigrated `unittest.TestCase` subclasses continue to call `setUp`
+correctly via the parent class once the standalone collection is prevented.
 **Status**: Not yet fixed.
 
 ---
