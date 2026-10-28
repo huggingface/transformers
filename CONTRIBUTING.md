@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 -->
 
-# Contribute to 🤗 Transformers
+# Contribute to 🤗 Transformer
 
 > [!WARNING]
 > The Transformers repo is currently being overwhelmed by a large number of PRs and issue comments written by
