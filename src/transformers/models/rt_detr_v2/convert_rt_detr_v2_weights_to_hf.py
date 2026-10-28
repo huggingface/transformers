@@ -255,8 +255,7 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
     del state_dict["decoder.anchors"]
     del state_dict["decoder.valid_mask"]
     # finally, create HuggingFace model and load state dict
-    model = RTDetrV2ForObjectDetection(config)
-    model.load_state_dict(state_dict)
+    model = RTDetrV2ForObjectDetection.from_pretrained(None, config=config, state_dict=state_dict)
     model.eval()
 
     # load image processor

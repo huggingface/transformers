@@ -228,6 +228,7 @@ IGNORE_NON_TESTED = (
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
         "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
         "MiniCPMV4_7VisionModel",  # Building part of bigger (tested) model - FIXME: raushan; adding each VLM backbone here is annoying!
+        "MiniCPMOcrVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MiniCPMOcrForConditionalGeneration.
         "MiniMaxM3VLForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
         "MiniMaxM3VLTextModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
         "MiniMaxM3VLVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MiniMaxM3SparseForConditionalGeneration.
@@ -302,6 +303,10 @@ IGNORE_NON_TESTED = (
         "Ernie4_5_VL_MoeTextModel",  # BC alias
         "PeAudioFrameLevelModel",
         "PeAudioVideoModel",
+        "MimiEncoderModel",  # Tested through MimiModel
+        "MimiDecoderModel",  # Tested through MimiModel
+        "PocketTTSAudioTokenizerEncoderModel",  # Tested through PocketTTSAudioTokenizerModel
+        "PocketTTSAudioTokenizerDecoderModel",  # Tested through PocketTTSAudioTokenizerModel
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration

@@ -165,6 +165,7 @@ if TYPE_CHECKING:
     from .flaubert import *
     from .flava import *
     from .flex_olmo import *
+    from .flint import *
     from .florence2 import *
     from .fnet import *
     from .focalnet import *
@@ -204,6 +205,7 @@ if TYPE_CHECKING:
     from .gpt_oss import *
     from .gpt_sw3 import *
     from .gptj import *
+    from .gradium_phonon_tts import *
     from .granite import *
     from .granite4_vision import *
     from .granite_speech import *
@@ -298,6 +300,7 @@ if TYPE_CHECKING:
     from .mimi import *
     from .mimo_v2_flash import *
     from .minicpm3 import *
+    from .minicpm_ocr import *
     from .minicpmv4_6 import *
     from .minicpmv4_7 import *
     from .minimax import *
@@ -388,6 +391,8 @@ if TYPE_CHECKING:
     from .pixio import *
     from .pixtral import *
     from .plbart import *
+    from .pocket_tts import *
+    from .pocket_tts_audio_tokenizer import *
     from .poolformer import *
     from .pop2piano import *
     from .pp_chart2table import *
@@ -500,6 +505,7 @@ if TYPE_CHECKING:
     from .tvp import *
     from .udop import *
     from .ultrabert import *
+    from .ultravbert import *
     from .umt5 import *
     from .unispeech import *
     from .unispeech_sat import *

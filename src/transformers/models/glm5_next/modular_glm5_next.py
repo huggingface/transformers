@@ -25,7 +25,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -50,7 +50,7 @@ from ...modeling_outputs import (
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -290,8 +290,8 @@ class Glm5NextConfig(PreTrainedConfig):
 
     model_type = "glm5_next"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Glm5NextVisionConfig),
-        "text_config": SubConfigSpec(config_class=Glm5NextTextConfig),
+        "vision_config": Glm5NextVisionConfig,
+        "text_config": Glm5NextTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -662,13 +662,14 @@ class Glm5NextTextLinearAttention(nn.Module):
         ).transpose(1, 2)
 
         # Acts for normal prefill but also for multi-token prefill continue
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
+        if cache_params is not None:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         # Single token decode path
-        if use_precomputed_states and seq_len == 1:
+        if conv_state is not None and seq_len == 1:
             mixed_qkv = causal_conv1d_update(
                 mixed_qkv,
                 conv_state,
@@ -710,7 +711,7 @@ class Glm5NextTextLinearAttention(nn.Module):
         beta = torch.sigmoid(self.b_proj(hidden_states))
 
         # KDA
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             core_attn_out, last_recurrent_state = recurrent_kimi_delta_attention(
                 query,
                 key,
@@ -729,7 +730,7 @@ class Glm5NextTextLinearAttention(nn.Module):
                 value,
                 g=g,
                 beta=beta,
-                initial_state=recurrent_state if use_precomputed_states else None,
+                initial_state=recurrent_state,
                 output_final_state=cache_params is not None,
                 use_qk_l2norm_in_kernel=True,
                 **kwargs,
@@ -1661,8 +1662,8 @@ class Glm5NextForConditionalGeneration(Glm46VForConditionalGeneration, Glm5NextP
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:
