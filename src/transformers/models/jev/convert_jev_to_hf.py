@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Converts a JEV checkpoint (autotrust/JEV-9B, JEV-27B, JEV-27B-VL, JEV-35B, JEV-Gemma4-26B-A4B) to a JEV head, which reads
-the checkpoint from its own repo. System 1 reads the log-probabilities of the slot tokens at the last prompt token, adds
+Converts a JEV checkpoint (autotrust/JEV-9B, JEV-27B, JEV-27B-VL, JEV-35B, JEV-Gemma4-26B-A4B) to a JEV head in
+`decision_head/`, next to the decision config. System 1 reads the log-probabilities of the slot tokens at the last prompt token, adds
 the bias of each slot and divides by the temperature of the question type: the log-softmax normalizer is the same for
 every slot, so the head is the `lm_head` rows of the slot tokens (with their LoRA) and their bias, or the trained head
-of `head.safetensors`. The LoRA of the backbone (`adapter_vllm/` or `adapter/`) is saved in `backbone/`, where
-`from_pretrained` reads it for the backbone.
+of `head.safetensors`. The LoRA of the backbone (`adapter_vllm/` or `adapter/`) is saved at the root, so that
+`pipeline("decision", model=output_dir)` loads the checkpoint with it.
 
     python convert_jev_to_hf.py --repo_id autotrust/JEV-27B --output_dir JEV-27B
 """
@@ -85,17 +85,14 @@ def convert(repo_id: str, output_dir: str):
             lora_b = lora.pop("base_model.model.lm_head.lora_B.weight")[spec["verbalizer_ids"]]
             scaling = lora_config["lora_alpha"] / lora_config["r"]
             state_dict["proj.weight"] += scaling * lora_b.float() @ lora_a.float()
-        # The LoRA of the `ForXxx` model, on the backbone of the head: its base model
-        lora = {key.replace("base_model.model.model.", "base_model.model.", 1): value for key, value in lora.items()}
-        targets = lora_config["target_modules"]
-        lora_config["target_modules"] = (
-            targets.removeprefix("model\\.") if isinstance(targets, str) else [t for t in targets if t != "lm_head"]
-        )
+        # The `lm_head` LoRA is folded in the head above
+        if isinstance(lora_config["target_modules"], list):
+            lora_config["target_modules"] = [target for target in lora_config["target_modules"] if target != "lm_head"]
         lora_config["base_model_name_or_path"] = repo_id
-        os.makedirs(f"{output_dir}/backbone", exist_ok=True)
-        with open(f"{output_dir}/backbone/adapter_config.json", "w", encoding="utf-8") as file:
+        os.makedirs(output_dir, exist_ok=True)
+        with open(f"{output_dir}/adapter_config.json", "w", encoding="utf-8") as file:
             json.dump(lora_config, file, indent=2)
-        save_file(lora, f"{output_dir}/backbone/adapter_model.safetensors", metadata={"format": "pt"})
+        save_file(lora, f"{output_dir}/adapter_model.safetensors", metadata={"format": "pt"})
 
     slots, ranges = spec["slots"], spec["slots"]["ranges"]
     JevConfig(
@@ -103,14 +100,9 @@ def convert(repo_id: str, output_dir: str):
         num_verbalizers=slots["num_slots"],
         offsets={question_type: start for question_type, (start, _) in ranges.items()},
         softcap=spec.get("softcap"),
-        backbone_config=backbone_config,
-        # System 1 adds the float32 bias to float32 log-probabilities
-        keep_in_fp32_modules=["^proj"],
-        # The dtype of the backbone, which some checkpoints only give in their text config: without it the head would
-        # load in the dtype of its float32 weights
-        dtype=text_config.dtype,
-    ).save_pretrained(output_dir)
-    save_file(state_dict, f"{output_dir}/model.safetensors", metadata={"format": "pt"})
+    ).save_pretrained(f"{output_dir}/decision_head")
+    # float32: System 1 adds the float32 bias to float32 log-probabilities
+    save_file(state_dict, f"{output_dir}/decision_head/model.safetensors", metadata={"format": "pt"})
 
     AutoProcessor.from_pretrained(repo_id).save_pretrained(output_dir)
     verbalizers = slots["verbalizers"]

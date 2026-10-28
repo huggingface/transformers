@@ -150,4 +150,4 @@ class JevIntegrationTest(unittest.TestCase):
     def test_deciders(self):
         for repo, expected in DECIDERS.items():
             with self.subTest(repo):
-                check_decision(self, repo, repo, expected, atol=1e-2)
+                check_decision(self, None, repo, expected, atol=1e-2)

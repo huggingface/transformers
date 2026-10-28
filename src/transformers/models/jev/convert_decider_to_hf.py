@@ -13,7 +13,8 @@
 # limitations under the License.
 """
 Converts a decision model shipped as a Qwen3.5 checkpoint with a `readout.safetensors` of its answer codes
-(perplexity-ai/pplx-decider-v1.1-27b, vllm-sr/d3) to a JEV head, which reads the checkpoint from its own repo.
+(perplexity-ai/pplx-decider-v1.1-27b, vllm-sr/d3) to a JEV head in `decision_head/`, next to the decision config:
+`pipeline("decision", model=repo_id, decision_config=output_dir)`.
 
     python convert_decider_to_hf.py --repo_id vllm-sr/d3 --output_dir d3-jev
 """
@@ -88,24 +89,19 @@ def convert(repo_id: str, output_dir: str):
         raise ValueError(f"The JEV head reads the last token, {repo_id} pools with {pooling!r}.")
     prompt = PROMPTS[readout_config.get("prompt", "pplx")]
 
-    backbone_config = AutoConfig.from_pretrained(repo_id)
-    text_config = backbone_config.get_text_config()
-    text_config.is_causal = readout_config.get("attention_mode") != "noncausal_full_attention"
+    text_config = AutoConfig.from_pretrained(repo_id).get_text_config()
     codes = readout_config["codes"]
     question_types = ["noul", "choice", "score"]
     config = JevConfig(
         hidden_size=text_config.hidden_size,
         num_verbalizers=len(codes),
         offsets=dict.fromkeys(question_types, 0),
-        backbone_config=backbone_config,
-        keep_in_fp32_modules=["^proj"] if readout_config.get("readout_dtype") == "float32" else None,
-        dtype=backbone_config.dtype,
     )
-    config.save_pretrained(output_dir)
+    config.save_pretrained(f"{output_dir}/decision_head")
 
     weight = load_file(hf_hub_download(repo_id, "readout.safetensors"))["weight"]
     head = {"proj.weight": weight, "proj.bias": torch.zeros(len(codes), dtype=weight.dtype)}
-    save_file(head, f"{output_dir}/model.safetensors", metadata={"format": "pt"})
+    save_file(head, f"{output_dir}/decision_head/model.safetensors", metadata={"format": "pt"})
 
     processor = AutoProcessor.from_pretrained(repo_id)  # the tokenizer of text-only models
     if (image_processor := getattr(processor, "image_processor", None)) is not None:
@@ -120,6 +116,8 @@ def convert(repo_id: str, output_dir: str):
         temperature=dict.fromkeys(question_types, readout_config["temperature"]),
         chat_template=template,
         noul_options=["false", "true"],
+        # The backbone attends to the whole prompt
+        is_causal=readout_config.get("attention_mode") != "noncausal_full_attention",
     ).save_pretrained(output_dir)
 
 

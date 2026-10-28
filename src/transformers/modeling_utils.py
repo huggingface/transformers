@@ -108,7 +108,6 @@ from .utils import (
     cached_file,
     check_torch_load_is_safe,
     copy_func,
-    find_adapter_config_file,
     get_current_accelerator,
     get_device_type,
     has_file,
@@ -188,8 +187,6 @@ class LoadStateDictConfig:
     weights_only: bool = True
     weight_mapping: list[WeightConverter | WeightRenaming] | None = None
     disable_mmap: bool | None = None
-    # Checkpoint file -> prefix of its keys, for the files of a sub-model read from its own repo
-    checkpoint_prefixes: dict[str, str] = field(default_factory=dict)
 
     @property
     def is_quantized(self) -> bool:
@@ -1303,9 +1300,7 @@ class PreTrainedModel(
         self.all_tied_weights_keys = self.get_expanded_tied_weights_keys(all_submodels=False)
         # Current submodel should register its `_keep_in_fp32_modules`
         self._keep_in_fp32_modules = set(self._keep_in_fp32_modules or [])
-        self._keep_in_fp32_modules_strict = set(self._keep_in_fp32_modules_strict or []) | set(
-            self.config.keep_in_fp32_modules or []
-        )
+        self._keep_in_fp32_modules_strict = set(self._keep_in_fp32_modules_strict or [])
         # Current submodel must register its `_no_split_modules`/`_skip_keys_device_placement` as well for device_map
         self._no_split_modules = set(self._no_split_modules or [])
         self._skip_keys_device_placement = set(self._skip_keys_device_placement or [])
@@ -1313,7 +1308,6 @@ class PreTrainedModel(
         self._keys_to_ignore_on_load_unexpected = set(self._keys_to_ignore_on_load_unexpected or [])
         self._keys_to_ignore_on_load_missing = set(self._keys_to_ignore_on_load_missing or [])
         self._keys_to_ignore_on_save = set(self._keys_to_ignore_on_save or [])
-        self._sub_models = [name for name, module in self.named_children() if isinstance(module, PreTrainedModel)]
 
         # Iterate over children only: as the final model is created, this is enough to gather the properties from all submodels.
         # This works because the way the `__init__` and `post_init` are called on all submodules is depth-first in the graph
@@ -4332,29 +4326,6 @@ class PreTrainedModel(
         if device_map is not None:
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
-        # Sub-models without weights in the checkpoint are read from the repo saved in their config (or the cache)
-        checkpoint_prefixes, sub_models_from_repo = {}, []
-        if checkpoint_files and checkpoint_files[0].endswith(".safetensors"):
-            keys = [key for file in checkpoint_files for key in safe_open(file, "pt").keys()]
-            for name in model._sub_models:
-                sub_model = model.get_submodule(name)
-                path = sub_model.config.name_or_path
-                if path in ("", config.name_or_path) or any(key.startswith(f"{name}.") for key in keys):
-                    continue
-                files, _ = _get_resolved_checkpoint_files(
-                    pretrained_model_name_or_path=path,
-                    variant=None,
-                    gguf_file=None,
-                    use_safetensors=use_safetensors,
-                    download_kwargs={**download_kwargs, "revision": None, "subfolder": ""},
-                    user_agent=user_agent,
-                    is_remote_code=False,
-                    transformers_explicit_filename=None,
-                )
-                checkpoint_prefixes.update(dict.fromkeys(files, f"{name}."))
-                checkpoint_files = checkpoint_files + files
-                sub_models_from_repo.append(name)
-
         # Finalize model weight initialization
         load_config = LoadStateDictConfig(
             pretrained_model_name_or_path=pretrained_model_name_or_path,
@@ -4372,7 +4343,6 @@ class PreTrainedModel(
             use_safetensors=use_safetensors,
             download_kwargs=download_kwargs,
             disable_mmap=disable_mmap,
-            checkpoint_prefixes=checkpoint_prefixes,
         )
         if distributed_checkpoint_dir is not None:
             loading_info = model._load_and_finalize_distributed_pretrained_model(
@@ -4409,13 +4379,6 @@ class PreTrainedModel(
             hf_quantizer.postprocess_model(
                 model
             )  # usually a no-op but sometimes needed, e.g to remove the quant config when dequantizing
-
-        # Sub-models read from another repo find their adapter (like the LoRA of the backbone of a decision head) in
-        # the subfolder named after them
-        for name in sub_models_from_repo:
-            sub_kwargs = {**download_kwargs, "subfolder": "/".join(filter(None, (subfolder, name)))}
-            if find_adapter_config_file(pretrained_model_name_or_path, **sub_kwargs) is not None:
-                model.get_submodule(name).load_adapter(pretrained_model_name_or_path, adapter_kwargs=sub_kwargs)
 
         if _adapter_model_path is not None:
             if token is not None:
@@ -4503,11 +4466,9 @@ class PreTrainedModel(
             elif checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors") and state_dict is None:
                 merged_state_dict = {}
                 for file in checkpoint_files:
-                    prefix = load_config.checkpoint_prefixes.get(file, "")
                     if load_config.disable_mmap or _is_on_hf_mount(file):
                         with open(file, "rb") as _fh:
-                            tensors = _safe_load_bytes(_fh.read())
-                        merged_state_dict.update({prefix + k: v for k, v in tensors.items()})
+                            merged_state_dict.update(_safe_load_bytes(_fh.read()))
                         continue
                     is_mps = load_config.device_map is not None and any(
                         (d.type if isinstance(d, torch.device) else d) == "mps"
@@ -4525,7 +4486,7 @@ class PreTrainedModel(
                     file_pointer = safe_open(file, framework="pt", device=device, backend=backend)
                     all_pointer.add(file_pointer)
                     for k in file_pointer.keys():
-                        merged_state_dict[prefix + k] = file_pointer.get_slice(k)  # lazy
+                        merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
             # Checkpoints are .bin
             elif checkpoint_files is not None:
                 merged_state_dict = {}
