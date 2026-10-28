@@ -202,6 +202,16 @@ def _refine_word_timestamps(
     return words
 
 
+def _resample_frames(probabilities: "torch.Tensor", num_frames: int) -> "torch.Tensor":
+    """Linear interpolation of `probabilities` `(frames, speakers)` onto `num_frames` frames, first and last aligned."""
+    if probabilities.shape[0] == num_frames:
+        return probabilities
+    positions = torch.linspace(0, probabilities.shape[0] - 1, num_frames)
+    lower, upper = positions.floor().long(), positions.ceil().long()
+    fraction = (positions - lower)[:, None]
+    return probabilities[lower] * (1 - fraction) + probabilities[upper] * fraction
+
+
 def _diarization_segments(is_active: "torch.Tensor", frame_duration: float, audio_duration: float) -> list[dict]:
     """Each run of activity of `is_active` `(speakers, frames)` as `{"speaker", "start", "end"}`, sorted by time."""
     transitions = torch.nn.functional.pad(is_active.to(torch.int8), (1, 1)).diff(dim=1)
@@ -462,10 +472,11 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
         Args:
             transcriptions (`str` or `list[str]`):
                 Generated text of each recording, decoded with `skip_special_tokens=False` to keep the `<spk:N>` tags.
-            word_timestamp_logits (`torch.Tensor` of shape `(batch_size, num_frames, vocab_size)`):
+            word_timestamp_logits (`torch.Tensor` of shape `(batch_size, num_frames * upsampling_factor, vocab_size)`):
                 Logits of the word timestamp head (`word_timestamp_logits` of `generate(...,
                 return_word_timestamp_logits=True)` or `model.get_word_timestamp_logits(...)`), the last class being the
-                CTC blank.
+                CTC blank. Their number of frames per encoder frame, the head's `upsampling_factor`, is read from their
+                shape.
             input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
                 Mask of the valid spectrogram frames of each recording, as returned by the processor: their number
                 sets the duration of the recording, hence the time step of the head's frames.
@@ -481,7 +492,8 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
             max_word_duration (`float`, *optional*, defaults to 1.0):
                 Maximum duration of an aligned word, in seconds.
             max_word_frames (`int`, *optional*, defaults to 12):
-                Maximum shift and duration of a word snapped to a diarization segment, in frames of at most 80 ms.
+                Maximum shift and duration of a word snapped to a diarization segment, in encoder frames of at most 80
+                ms.
 
         Returns:
             `dict` or `list[dict]`: for the recording (or for each recording of a list of transcripts), as the word timestamps of the speech recognition pipeline, `"chunks"`
@@ -510,6 +522,14 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
         transcriptions = [transcriptions] if is_single else transcriptions
         languages = language if isinstance(language, list) else [language] * len(transcriptions)
         blank_id = word_timestamp_logits.shape[-1] - 1
+        # the head's frames per encoder frame: the logits span the encoder frames of the padded spectrograms
+        num_padded_frames = self._get_audio_token_length(input_features_mask.shape[-1])
+        upsampling_factor, remainder = divmod(word_timestamp_logits.shape[1], num_padded_frames)
+        if remainder or not upsampling_factor:
+            raise ValueError(
+                f"`word_timestamp_logits` has {word_timestamp_logits.shape[1]} frames, not a multiple of the "
+                f"{num_padded_frames} encoder frames of `input_features_mask`."
+            )
         hop_length, sampling_rate = self.feature_extractor.hop_length, self.feature_extractor.sampling_rate
         dropped_tokens = [
             token for token in self.tokenizer.all_special_tokens if not KEPT_TAG_PATTERN.fullmatch(token)
@@ -519,7 +539,8 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
         for i, (transcription, language, num_spectrogram_frames) in enumerate(
             zip(transcriptions, languages, input_features_mask.sum(-1).tolist(), strict=True)
         ):
-            num_frames = self._get_audio_token_length(num_spectrogram_frames)
+            num_encoder_frames = self._get_audio_token_length(num_spectrogram_frames)
+            num_frames = num_encoder_frames * upsampling_factor
             # the recording's duration to the spectrogram hop below, which NeMo takes from the audio samples
             audio_duration = num_spectrogram_frames * hop_length / sampling_rate
             frame_duration = audio_duration / num_frames
@@ -535,8 +556,10 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
             if speaker_logits is not None:
                 logits = speaker_logits[i].detach().float().cpu()
                 # as the model: the mean of the probabilities over the spectrogram frames of each frame
-                frame_logits = logits[: num_frames * self.subsampling_factor].unflatten(0, (num_frames, -1))
-                speaker_probabilities = frame_logits.sigmoid().mean(1)
+                frame_logits = logits[: num_encoder_frames * self.subsampling_factor].unflatten(
+                    0, (num_encoder_frames, -1)
+                )
+                speaker_probabilities = _resample_frames(frame_logits.sigmoid().mean(1), num_frames)
                 tag_to_speaker = _match_tags_to_speakers(
                     log_probs, streams, speaker_probabilities, speaker_activity_threshold, blank_id
                 )
@@ -559,7 +582,9 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
                     failed_tags.append(tag)
                     continue
                 segments = [(s["start"], s["end"]) for s in diarization if s["speaker"] == speaker]
-                timestamps = _refine_word_timestamps(timestamps, segments, frame_duration, max_word_frames)
+                timestamps = _refine_word_timestamps(
+                    timestamps, segments, frame_duration, max_word_frames * upsampling_factor
+                )
                 words += [{**word, "speaker": tag} for word in timestamps]
 
             words = sorted(words, key=lambda word: (word["start"], word["end"]))

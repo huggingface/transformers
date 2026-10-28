@@ -218,6 +218,16 @@ class Nemotron3_5TranscribeWordTimestampAlignmentTest(unittest.TestCase):
         result = self.processor.align_word_timestamps("a", **inputs)
         self.assertAlmostEqual(result["chunks"][0]["timestamp"][0], 3 * 0.07)
 
+    def test_upsampled_head_frames(self):
+        """Head logits with 2 frames per encoder frame, read from their shape, give 40 ms frames."""
+        inputs = self.make_inputs([None, None, None, "▁a", None, None])
+        inputs["input_features_mask"] = inputs["input_features_mask"][:, :24]  # 3 encoder frames, 6 head frames
+        result = self.processor.align_word_timestamps("a", **inputs)
+        self.assertAlmostEqual(result["chunks"][0]["timestamp"][0], 3 * 0.04)
+        inputs["input_features_mask"] = torch.ones(1, 32, dtype=torch.long)  # 4 encoder frames
+        with self.assertRaisesRegex(ValueError, "not a multiple"):
+            self.processor.align_word_timestamps("a", **inputs)
+
     def test_overlapping_speakers(self):
         """
         Each speaker stream is aligned on the frames where its diarization speaker is active, so overlapping speech

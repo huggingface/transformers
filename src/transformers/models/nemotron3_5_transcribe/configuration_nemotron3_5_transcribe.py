@@ -93,6 +93,9 @@ class Nemotron3_5TranscribeWordTimestampConfig(PreTrainedConfig):
         Index of the blank class, after the pieces of the alignment tokenizer.
     residual_scale (`float`, *optional*, defaults to 0.1):
         Scale of the transformer output added to the speech recognition encoder states before the classifier.
+    upsampling_factor (`int`, *optional*, defaults to 2):
+        Number of head frames per encoder frame, made by a transposed convolution before the transformer: 2 gives
+        40 ms frames from the 80 ms encoder frames.
 
     Example:
 
@@ -123,6 +126,7 @@ class Nemotron3_5TranscribeWordTimestampConfig(PreTrainedConfig):
     vocab_size: int = 23863
     blank_token_id: int = 23862
     residual_scale: float = interval(min=0.0)(default=0.1)
+    upsampling_factor: int = interval(min=1)(default=2)
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -240,7 +244,7 @@ class Nemotron3_5TranscribeConfig(PreTrainedConfig):
     ```
     """
 
-    model_type = "nemotron3_5_transcribe"
+    model_type = "nemo_speechlm"
     sub_configs_defaults = {
         "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="nemotron3_5_transcribe_audio"),
         "text_config": SubConfigSpec(

@@ -176,7 +176,8 @@ def convert_word_timestamp_config(nemo_dir: Path) -> dict:
         "residual": (True, False),
         "learnable_residual_scale": (False, False),
         "add_blank": (True, True),
-        "upsampling_factor": (1, 1),
+        "upsampling_factor": (2, 1),
+        "upsampling_mode": ("conv_transpose", "conv_transpose"),
     }
     for name, (value, default) in expected.items():
         if decoder.get(name, default) != value:
@@ -207,6 +208,7 @@ def convert_word_timestamp_config(nemo_dir: Path) -> dict:
         "vocab_size": decoder["num_classes"] + 1,
         "blank_token_id": decoder["num_classes"],
         "residual_scale": decoder["residual_scale"],
+        "upsampling_factor": decoder["upsampling_factor"],
     }
 
 

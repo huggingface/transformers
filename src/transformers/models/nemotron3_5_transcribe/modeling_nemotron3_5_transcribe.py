@@ -122,6 +122,7 @@ class Nemotron3_5TranscribePreTrainedModel(PreTrainedModel):
         r"^perception\.encoder\.diarization_model\.sortformer_modules\.hidden_to_spks\.",
         r"\._extra_state$",
         r"^ctc_timestamp\.decoder\.residual_scale$",
+        r"^ctc_timestamp\.decoder\.upsample_factor$",
         r"^ctc_timestamp\.tokenizer\.model_proto$",
     ]
 
@@ -452,6 +453,12 @@ class Nemotron3_5TranscribeWordTimestampModel(Nemotron3_5TranscribePreTrainedMod
 
     def __init__(self, config: Nemotron3_5TranscribeWordTimestampConfig):
         super().__init__(config)
+        self.upsampler = nn.ConvTranspose1d(
+            config.hidden_size,
+            config.hidden_size,
+            kernel_size=config.upsampling_factor,
+            stride=config.upsampling_factor,
+        )
         self.input_layer_norm = nn.LayerNorm(config.hidden_size)
         self.layers = nn.ModuleList(
             [Nemotron3_5TranscribeAsrAudioLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -474,7 +481,12 @@ class Nemotron3_5TranscribeWordTimestampModel(Nemotron3_5TranscribePreTrainedMod
             Speech recognition encoder states, before the audio model's `asr_norm` and speaker embeddings.
         attention_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Mask of the valid encoder frames.
+
+        Returns `num_frames * upsampling_factor` frames.
         """
+        inputs_embeds = self.upsampler(inputs_embeds.transpose(1, 2)).transpose(1, 2)
+        if attention_mask is not None:
+            attention_mask = attention_mask.repeat_interleave(self.config.upsampling_factor, dim=1)
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)[None, :]
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
         attention_mask = create_bidirectional_mask(
@@ -751,14 +763,18 @@ class Nemotron3_5TranscribeModel(Nemotron3_5TranscribePreTrainedModel):
             Mask of the valid spectrogram frames. Padding must be on the right.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`: one frame per encoder
-            frame, in the dtype of the word timestamp encoder.
+            `torch.FloatTensor` of shape `(batch_size, num_frames * word_timestamp_config.upsampling_factor,
+            audio_config.hidden_size)`: `upsampling_factor` frames per encoder frame, in the dtype of the word timestamp
+            encoder.
         """
         states = asr_last_hidden_state.to(self.word_timestamp_encoder.dtype)
         frame_mask = input_features_mask[:, :: self.config.audio_config.subsampling_factor].bool()
+        factor = self.config.word_timestamp_config.upsampling_factor
         return torch.cat(
             [
-                self.word_timestamp_encoder(states[:, context], frame_mask[:, context]).last_hidden_state[:, chunk]
+                self.word_timestamp_encoder(states[:, context], frame_mask[:, context]).last_hidden_state[
+                    :, chunk.start * factor : chunk.stop * factor
+                ]
                 for context, chunk in self.audio_tower._get_chunks(states.shape[1])
             ],
             dim=1,
@@ -870,9 +886,9 @@ class Nemotron3_5TranscribeForConditionalGeneration(Nemotron3_5TranscribePreTrai
             Mask of the valid spectrogram frames. Padding must be on the right.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_frames, word_timestamp_config.vocab_size)`: raw logits over
-            the pieces of the alignment tokenizer and the blank, one frame per encoder frame (the processor applies the
-            log-softmax).
+            `torch.FloatTensor` of shape `(batch_size, num_frames * word_timestamp_config.upsampling_factor,
+            word_timestamp_config.vocab_size)`: raw logits over the pieces of the alignment tokenizer and the blank,
+            `upsampling_factor` frames per encoder frame (the processor applies the log-softmax).
         """
         hidden_states = self.model.get_word_timestamp_hidden_states(asr_last_hidden_state, input_features_mask)
         return self.word_timestamp_head(hidden_states.transpose(1, 2)).transpose(1, 2)

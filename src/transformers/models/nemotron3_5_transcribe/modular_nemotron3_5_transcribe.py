@@ -99,6 +99,9 @@ class Nemotron3_5TranscribeWordTimestampConfig(PreTrainedConfig):
         Index of the blank class, after the pieces of the alignment tokenizer.
     residual_scale (`float`, *optional*, defaults to 0.1):
         Scale of the transformer output added to the speech recognition encoder states before the classifier.
+    upsampling_factor (`int`, *optional*, defaults to 2):
+        Number of head frames per encoder frame, made by a transposed convolution before the transformer: 2 gives
+        40 ms frames from the 80 ms encoder frames.
 
     Example:
 
@@ -129,6 +132,7 @@ class Nemotron3_5TranscribeWordTimestampConfig(PreTrainedConfig):
     vocab_size: int = 23863
     blank_token_id: int = 23862
     residual_scale: float = interval(min=0.0)(default=0.1)
+    upsampling_factor: int = interval(min=1)(default=2)
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
@@ -246,7 +250,7 @@ class Nemotron3_5TranscribeConfig(PreTrainedConfig):
     ```
     """
 
-    model_type = "nemotron3_5_transcribe"
+    model_type = "nemo_speechlm"
     sub_configs_defaults = {
         "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="nemotron3_5_transcribe_audio"),
         "text_config": SubConfigSpec(
@@ -321,6 +325,7 @@ class Nemotron3_5TranscribePreTrainedModel(AudioFlamingo3PreTrainedModel):
         r"^perception\.encoder\.diarization_model\.sortformer_modules\.hidden_to_spks\.",
         r"\._extra_state$",
         r"^ctc_timestamp\.decoder\.residual_scale$",
+        r"^ctc_timestamp\.decoder\.upsample_factor$",
         r"^ctc_timestamp\.tokenizer\.model_proto$",
     ]
 
@@ -436,6 +441,12 @@ class Nemotron3_5TranscribeWordTimestampModel(Nemotron3_5TranscribePreTrainedMod
 
     def __init__(self, config: Nemotron3_5TranscribeWordTimestampConfig):
         super().__init__(config)
+        self.upsampler = nn.ConvTranspose1d(
+            config.hidden_size,
+            config.hidden_size,
+            kernel_size=config.upsampling_factor,
+            stride=config.upsampling_factor,
+        )
         self.input_layer_norm = nn.LayerNorm(config.hidden_size)
         self.layers = nn.ModuleList(
             [Nemotron3_5TranscribeAsrAudioLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
@@ -458,7 +469,12 @@ class Nemotron3_5TranscribeWordTimestampModel(Nemotron3_5TranscribePreTrainedMod
             Speech recognition encoder states, before the audio model's `asr_norm` and speaker embeddings.
         attention_mask (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
             Mask of the valid encoder frames.
+
+        Returns `num_frames * upsampling_factor` frames.
         """
+        inputs_embeds = self.upsampler(inputs_embeds.transpose(1, 2)).transpose(1, 2)
+        if attention_mask is not None:
+            attention_mask = attention_mask.repeat_interleave(self.config.upsampling_factor, dim=1)
         position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)[None, :]
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
         attention_mask = create_bidirectional_mask(
@@ -626,14 +642,18 @@ class Nemotron3_5TranscribeModel(AudioFlamingo3Model):
             Mask of the valid spectrogram frames. Padding must be on the right.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_frames, audio_config.hidden_size)`: one frame per encoder
-            frame, in the dtype of the word timestamp encoder.
+            `torch.FloatTensor` of shape `(batch_size, num_frames * word_timestamp_config.upsampling_factor,
+            audio_config.hidden_size)`: `upsampling_factor` frames per encoder frame, in the dtype of the word timestamp
+            encoder.
         """
         states = asr_last_hidden_state.to(self.word_timestamp_encoder.dtype)
         frame_mask = input_features_mask[:, :: self.config.audio_config.subsampling_factor].bool()
+        factor = self.config.word_timestamp_config.upsampling_factor
         return torch.cat(
             [
-                self.word_timestamp_encoder(states[:, context], frame_mask[:, context]).last_hidden_state[:, chunk]
+                self.word_timestamp_encoder(states[:, context], frame_mask[:, context]).last_hidden_state[
+                    :, chunk.start * factor : chunk.stop * factor
+                ]
                 for context, chunk in self.audio_tower._get_chunks(states.shape[1])
             ],
             dim=1,
@@ -679,9 +699,9 @@ class Nemotron3_5TranscribeForConditionalGeneration(AudioFlamingo3ForConditional
             Mask of the valid spectrogram frames. Padding must be on the right.
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, num_frames, word_timestamp_config.vocab_size)`: raw logits over
-            the pieces of the alignment tokenizer and the blank, one frame per encoder frame (the processor applies the
-            log-softmax).
+            `torch.FloatTensor` of shape `(batch_size, num_frames * word_timestamp_config.upsampling_factor,
+            word_timestamp_config.vocab_size)`: raw logits over the pieces of the alignment tokenizer and the blank,
+            `upsampling_factor` frames per encoder frame (the processor applies the log-softmax).
         """
         hidden_states = self.model.get_word_timestamp_hidden_states(asr_last_hidden_state, input_features_mask)
         return self.word_timestamp_head(hidden_states.transpose(1, 2)).transpose(1, 2)

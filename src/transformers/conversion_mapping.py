@@ -2252,13 +2252,14 @@ def _build_checkpoint_conversion_mapping():
     # feature extractor constants, an unused speaker head, the TransformerEngine metadata and the word timestamp head's
     # constants are left unexpected (see `Nemotron3_5TranscribePreTrainedModel._keys_to_ignore_on_load_unexpected`).
     diarization = r"^perception\.encoder\.diarization_model\.sortformer_modules\."
-    mapping["nemotron3_5_transcribe"] = [
+    mapping["nemo_speechlm"] = [
         WeightRenaming(r"^perception\.encoder\.asr_encoder\.", r"^model\.audio_tower\.asr_encoder\."),
         WeightRenaming(
             r"^perception\.encoder\.diarization_model\.encoder\.",
             r"^model\.audio_tower\.diarization_model\.model\.audio_tower\.",
         ),
         WeightRenaming(r"^ctc_timestamp\.decoder\.transformer\.", r"^model\.word_timestamp_encoder\."),
+        WeightRenaming(r"^ctc_timestamp\.decoder\.upsample\.", r"^model\.word_timestamp_encoder\.upsampler\."),
         WeightRenaming(r"^ctc_timestamp\.decoder\.decoder_layers\.0\.", r"^word_timestamp_head\."),
         WeightRenaming(diarization + r"encoder_proj\.", r"^model\.audio_tower\.diarization_model\.model\.proj\."),
         WeightRenaming(

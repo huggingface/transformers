@@ -233,7 +233,7 @@ class Nemotron3_5TranscribeForConditionalGenerationModelTest(ALMModelTest, unitt
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         reference = Nemotron3_5TranscribeForConditionalGeneration(config)
         # a checkpoint in NVIDIA's layout: the conversions `from_pretrained` records for it
-        reference._weight_conversions = get_checkpoint_conversion_mapping("nemotron3_5_transcribe")
+        reference._weight_conversions = get_checkpoint_conversion_mapping("nemo_speechlm")
         with tempfile.TemporaryDirectory() as nemo_dir, tempfile.TemporaryDirectory() as tmp_dir:
             reference.save_pretrained(nemo_dir)
             model, loading_info = Nemotron3_5TranscribeForConditionalGeneration.from_pretrained(
