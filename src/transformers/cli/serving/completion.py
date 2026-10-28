@@ -151,7 +151,8 @@ class CompletionHandler(BaseHandler):
                             done = True
                             break
                         if isinstance(text, _StreamError):
-                            sse_parts.append(f'data: {{"error": "{text.msg}"}}\n\n')
+                            import json
+                            sse_parts.append(f"data: {json.dumps({'error': text.msg})}\n\n")
                             yield "".join(sse_parts)
                             return
 
