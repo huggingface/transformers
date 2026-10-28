@@ -390,7 +390,7 @@ class CsmBackboneModelEmbeddings(nn.Module):
 
 @auto_docstring
 class CsmBackboneModel(LlamaModel):
-    def __init__(self, config):
+    def __init__(self, config: CsmConfig):
         super().__init__(config)
         self.embed_tokens = CsmBackboneModelEmbeddings(config)
 
