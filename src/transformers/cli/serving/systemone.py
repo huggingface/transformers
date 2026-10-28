@@ -116,7 +116,7 @@ class SystemOneHandler(BaseHandler):
         """The pipeline's steps, in the inference thread: the answers and the number of input tokens."""
         model_inputs = pipe.preprocess(request)
         answers = pipe.postprocess(pipe.forward(model_inputs))
-        return answers, sum(len(prompt.input_ids) for prompt in model_inputs["prompts"])
+        return answers, sum(inputs["input_ids"].shape[-1] for inputs, _ in model_inputs["prompts"])
 
     async def handle_request(self, body: dict, request_id: str) -> "JSONResponse":
         """Validate the request, load the model, and answer every question.
