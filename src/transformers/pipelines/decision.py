@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any
 
 from ..decision import DecisionConfig, DecisionTemplate, Question, label_token_ids
+from ..decision.configuration_utils import DECISION_HEAD_CONFIG_NAME
 from ..utils import add_end_docstrings, cached_file, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
@@ -10,7 +11,7 @@ from .base import Pipeline, build_pipeline_init_args
 if is_torch_available():
     import torch
 
-    from ..models.auto import AutoModel
+    from ..models.auto import AutoConfig, AutoModel
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
@@ -18,7 +19,7 @@ class DecisionPipeline(Pipeline):
     """
     Decision pipeline: answers typed questions (`choice`, `score`, `noul`) about a `state` with a probability for every
     option, from one forward pass per prompt (the System One API of Jev-like models). The decision config (see
-    [`DecisionConfig`]) and the decision head (`decision_head/`) live next to the model or in the repo given as
+    [`DecisionConfig`]) and the decision head (`decision_head.json`) live next to the model or in the repo given as
     `decision_config`. The head scores the options from the model it is given; without a head, the options are scored
     by the next-token logits of their labels, so any chat model can answer.
 
@@ -81,11 +82,13 @@ class DecisionPipeline(Pipeline):
         self.template = DecisionTemplate(self.processor or self.tokenizer, decision_config, questions)
         if not decision_config.is_causal:
             self.model.config.get_text_config().is_causal = False
+        if decision_config.adapter:
+            self.model.load_adapter(repo, adapter_kwargs={"subfolder": decision_config.adapter})
         self.head = None
-        if repo and cached_file(
-            repo, "config.json", subfolder="decision_head", _raise_exceptions_for_missing_entries=False
-        ):
-            self.head = AutoModel.from_pretrained(repo, subfolder="decision_head").to(self.device).eval()
+        if repo and cached_file(repo, DECISION_HEAD_CONFIG_NAME, _raise_exceptions_for_missing_entries=False):
+            # Next to the model: the config of the head names its weights file (`transformers_weights`)
+            config = AutoConfig.from_pretrained(repo, _configuration_file=DECISION_HEAD_CONFIG_NAME)
+            self.head = AutoModel.from_pretrained(repo, config=config).to(self.device).eval()
         self.logits_processors = {
             kind: decision_config.get_logits_processor(kind) for kind in Question.questions_types
         }

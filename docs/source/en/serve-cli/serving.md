@@ -1818,7 +1818,7 @@ A custom template, here for Gemma 3, writes the whole prompt and `<|mark|>` wher
 <|mark|>
 ```
 
-Inline it as `chat_template` in the `--decision-config` file, or ship it as `decision_template.jinja` next to `decision_config.json` in a model repo.
+Inline it as `chat_template` in the `--decision-config` file, or ship it as `decision_template.jinja` next to `decision.json` in a model repo.
 
 ## v1/audio/transcriptions
 

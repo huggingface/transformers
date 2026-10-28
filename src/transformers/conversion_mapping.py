@@ -2152,6 +2152,9 @@ def _build_checkpoint_conversion_mapping():
         ),
     ]
 
+    # The `readout.safetensors` of the decision models of vLLM (pplx-decider, d3): the weight of the head, no bias
+    mapping["jev"] = [WeightRenaming(r"^weight", "proj.weight")]
+
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
             continue
