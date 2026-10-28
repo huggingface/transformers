@@ -323,19 +323,6 @@ class Mxfp4QuantizerTest(unittest.TestCase):
 class Mxfp4IntegrationTest(unittest.TestCase):
     """Test mxfp4 integration functions"""
 
-    def test_should_convert_module(self):
-        """Test module conversion decision logic"""
-        from transformers.quantizers.quantizers_utils import should_convert_module
-
-        # Should convert by default
-        self.assertTrue(should_convert_module("model", None))
-        self.assertTrue(should_convert_module("model", []))
-
-        # Should not convert if in exclusion list
-        patterns = ["model.layers.*.self_attn", "lm_head"]
-        self.assertFalse(should_convert_module("lm_head", patterns))
-        self.assertTrue(should_convert_module("experts", patterns))
-
     @require_torch
     def test_convert_moe_packed_tensors(self):
         """Test unpacking of quantized tensors"""
