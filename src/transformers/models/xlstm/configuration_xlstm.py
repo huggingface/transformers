@@ -14,23 +14,10 @@
 
 """xLSTM configuration."""
 
-from typing import Literal
-
 from huggingface_hub.dataclasses import strict
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
-
-
-BackendModeType = Literal["train", "train_with_padding", "inference"]
-ChunkwiseKernelType = Literal[
-    "chunkwise--native_autograd",
-    "parallel--native_autograd",
-]
-DtypeType = Literal["float32", "bfloat16", "float16"]
-SequenceKernelType = Literal["native_sequence__native"]
-StepKernelType = Literal["native"]
-WeightModeType = Literal["single", "fused"]
 
 
 def round_up_to_next_multiple_of(x: int, multiple_of: int) -> int:
@@ -42,48 +29,22 @@ def round_up_to_next_multiple_of(x: int, multiple_of: int) -> int:
 @strict
 class xLSTMConfig(PreTrainedConfig):
     r"""
-    num_blocks (int, optional, *optional*, defaults to 32):
-        Number of blocks of the xLSTM model, use num_hidden_layers if None.
-    num_heads (int, optional, *optional*, defaults to 8):
-        Number of heads for the xLSTM Layer/Cell.
-    use_bias (bool, optional, *optional*, defaults to `False`):
-        Whether to use biases in the xLSTM model.
-    norm_reduction_force_float32 (bool, optional, *optional*, defaults to `True`):
-        Whether to force the float32 norm reduction op to be done in fp32 precision.
-    add_out_norm (bool, optional, *optional*, defaults to `True`):
-        Whether to add an output norm after the blocks before the LMHead.
-    qk_dim_factor (float, optional, *optional*, defaults to 0.5):
-        Scale factor for the query and key dimension.
-    v_dim_factor (float, optional, *optional*, defaults to 1.0):
-        Scale factor for the value dimension.
-    chunkwise_kernel (ChunkwiseKernelType, optional, *optional*, defaults to `"chunkwise--native_autograd"`):
-        Kernel type for chunkwise processing mode.
-    sequence_kernel (SequenceKernelType, optional, *optional*, defaults to `"native_sequence__native"`):
-        Kernel type for sequence processing mode.
-    step_kernel (StepKernelType, optional, *optional*, defaults to `"native"`):
-        Kernel type for step processing mode.
-    mode (BackendModeType, optional, *optional*, defaults to `"inference"`):
-        Operation mode (inference is needed for generation).
-    chunk_size (int, optional, *optional*, defaults to 64):
-        Internal chunk size.
-    return_last_states (bool, optional, *optional*, defaults to `True`):
-        If to return the last states / cache internally. Needed as True for generation.
-    autocast_kernel_dtype (DtypeType, optional, *optional*, defaults to `"bfloat16"`):
-        Kernel dtype for the states.
-    inference_state_dtype (DtypeType, optional, *optional*, defaults to `"float32"`):
-        Kernel dtype for states in inference.
-    ffn_proj_factor (float, optional, *optional*, defaults to 2.667):
-        Size factor of the post-up projection gated Feed Forward network.
-    ffn_round_up_to_multiple_of (int, optional, *optional*, defaults to 64):
-        Size factor round value of the post-up projection gated Feed Forward network.
-    gate_soft_cap (float, optional, *optional*, defaults to 15.0):
-        Gate soft cap scale.
-    output_logit_soft_cap (float, optional, *optional*, defaults to 30.0):
-        Output logit soft cap scale.
-    weight_mode (`Literal`, *optional*, defaults to `"single"`):
-        Whether parallel linear layers are separated or fused (single).
-    max_inference_chunksize (int, optional, *optional*, defaults to 16384):
-        Limit the chunk size for inference to save memory.
+    num_heads (`int`, *optional*, defaults to 8):
+        Number of heads of the mLSTM layers.
+    norm_eps (`float`, *optional*, defaults to 1e-06):
+        Epsilon of the normalization layers.
+    qk_dim_factor (`float`, *optional*, defaults to 0.5):
+        Size of the query and key projections, as a fraction of `hidden_size` rounded up to a multiple of 64.
+    v_dim_factor (`float`, *optional*, defaults to 1.0):
+        Size of the value projection, as a fraction of `hidden_size` rounded up to a multiple of 64.
+    ffn_proj_factor (`float`, *optional*, defaults to 2.667):
+        Size of the feed forward network, as a fraction of `hidden_size`.
+    ffn_round_up_to_multiple_of (`int`, *optional*, defaults to 64):
+        The size of the feed forward network is rounded up to a multiple of this value.
+    gate_soft_cap (`float`, *optional*, defaults to 15.0):
+        Soft cap of the input and forget gate pre-activations.
+    output_logit_soft_cap (`float`, *optional*, defaults to 30.0):
+        Soft cap of the output logits.
 
     Example:
 
@@ -101,67 +62,40 @@ class xLSTMConfig(PreTrainedConfig):
     ```"""
 
     model_type = "xlstm"
+    # the original configs name them `embedding_dim` and `num_blocks`
+    attribute_map = {"embedding_dim": "hidden_size", "num_blocks": "num_hidden_layers"}
 
     vocab_size: int = 50304
     hidden_size: int = 4096
-    embedding_dim: int | None = None
     num_hidden_layers: int = 32
-    num_blocks: int | None = None
     num_heads: int = 8
-    use_bias: bool = False
-    norm_reduction_force_float32: bool = True
-    tie_word_embeddings: bool = False
-    add_out_norm: bool = True
     norm_eps: float = 1e-6
     qk_dim_factor: float = 0.5
     v_dim_factor: float = 1.0
-    chunkwise_kernel: ChunkwiseKernelType = "chunkwise--native_autograd"
-    sequence_kernel: SequenceKernelType = "native_sequence__native"
-    step_kernel: StepKernelType = "native"
-    mode: BackendModeType = "inference"
-    chunk_size: int = 64
-    return_last_states: bool = True
-    autocast_kernel_dtype: DtypeType = "bfloat16"
-    eps: float = 1e-6
-    inference_state_dtype: DtypeType = "float32"
     ffn_proj_factor: float = 2.667
     ffn_round_up_to_multiple_of: int = 64
     gate_soft_cap: float = 15.0
     output_logit_soft_cap: float = 30.0
-    weight_mode: WeightModeType = "single"
+    tie_word_embeddings: bool = False
     use_cache: bool = True
     pad_token_id: int | None = 1
     bos_token_id: int | None = 0
     eos_token_id: int | list[int] | None = 2
-    max_inference_chunksize: int = 16384
-
-    def __post_init__(self, **kwargs):
-        self.hidden_size = self.hidden_size if self.hidden_size is not None else self.embedding_dim
-        self.embedding_dim = self.embedding_dim if self.embedding_dim is not None else self.hidden_size
-        self.num_hidden_layers = self.num_hidden_layers if self.num_hidden_layers is not None else self.num_blocks
-        self.num_blocks = self.num_blocks if self.num_blocks is not None else self.num_hidden_layers
-        super().__post_init__(**kwargs)
 
     @property
-    def qk_dim(self):
-        return round_up_to_next_multiple_of(
-            self.hidden_size * self.qk_dim_factor,
-            multiple_of=64,
-        )
+    def qk_dim(self) -> int:
+        return round_up_to_next_multiple_of(self.hidden_size * self.qk_dim_factor, multiple_of=64)
 
     @property
-    def v_dim(self):
-        return round_up_to_next_multiple_of(
-            self.hidden_size * self.v_dim_factor,
-            multiple_of=64,
-        )
+    def v_dim(self) -> int:
+        return round_up_to_next_multiple_of(self.hidden_size * self.v_dim_factor, multiple_of=64)
 
     @property
-    def qk_head_dim(self):
+    def qk_head_dim(self) -> int:
         return self.qk_dim // self.num_heads
 
     @property
-    def v_head_dim(self):
+    def v_head_dim(self) -> int:
         return self.v_dim // self.num_heads
 
 

@@ -98,7 +98,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "LagunaConfig": ["moe_apply_router_weight_on_input"],
     # Consumed by `get_mtp_config()` in its config, not used directly by the modeling forward.
     "MellumConfig": ["mtp_layer_types", "mtp_mlp_layer_types"],
-    "xLSTMConfig": ["add_out_norm", "chunkwise_kernel", "sequence_kernel", "step_kernel"],
+    # Read through the `qk_dim` / `v_dim` config properties
+    "xLSTMConfig": ["qk_dim_factor", "v_dim_factor"],
     "Lfm2Config": ["full_attn_idxs"],
     "DiaConfig": ["delay_pattern"],
     "BambaConfig": ["attn_layer_indices"],

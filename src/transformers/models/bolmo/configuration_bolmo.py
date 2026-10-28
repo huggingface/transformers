@@ -58,6 +58,11 @@ class BolmoConfig(PreTrainedConfig):
 
     model_type = "bolmo"
     sub_configs_defaults = {"text_config": SubConfigSpec(config_class=AutoConfig, model_type="olmo3")}
+    # the byte-level mLSTM layers are xLSTM's
+    attribute_map = {"num_heads": "num_local_heads"}
+    # every released checkpoint uses the xLSTM-large mLSTM
+    gate_soft_cap = 15.0
+    norm_eps = 1e-6
 
     text_config: dict | PreTrainedConfig | None = None
     vocab_size: int = 520
@@ -91,6 +96,14 @@ class BolmoConfig(PreTrainedConfig):
                 "rms_norm_eps": self.rms_norm_eps,
             }
         super().__post_init__(**kwargs)
+
+    @property
+    def qk_dim(self) -> int:
+        return self.hidden_size // 2
+
+    @property
+    def v_dim(self) -> int:
+        return self.hidden_size
 
 
 __all__ = ["BolmoConfig"]

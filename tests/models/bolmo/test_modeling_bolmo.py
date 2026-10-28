@@ -28,7 +28,7 @@ if is_torch_available():
     import torch
 
     from transformers import AutoTokenizer, BolmoForCausalLM, BolmoModel
-    from transformers.models.bolmo.modeling_bolmo import BolmoCache, BolmoMLSTMLayer
+    from transformers.models.bolmo.modeling_bolmo import BolmoCache
 
 
 class BolmoModelTester:
@@ -94,20 +94,6 @@ class BolmoModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_mlstm_matches_xlstm(self):
-        from transformers import xLSTMConfig
-        from transformers.models.xlstm.modeling_xlstm import external_xlstm, xLSTMLayer
-
-        if external_xlstm:
-            self.skipTest("native xLSTM layer is replaced by the `xlstm` package")
-        config = self.model_tester.get_config()
-        bolmo_layer = BolmoMLSTMLayer(config).eval()
-        xlstm_config = xLSTMConfig(hidden_size=32, num_heads=4, autocast_kernel_dtype="float32", mode="inference")
-        xlstm_layer = xLSTMLayer(xlstm_config).eval()
-        xlstm_layer.load_state_dict(bolmo_layer.state_dict())
-        hidden_states = torch.randn(2, 70, 32)
-        torch.testing.assert_close(bolmo_layer(hidden_states)[0], xlstm_layer(hidden_states)[0])
 
     def test_decode_matches_full_forward(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()

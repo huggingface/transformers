@@ -35,7 +35,7 @@ from ...utils.generic import merge_with_config_defaults
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..olmo3.modeling_olmo3 import Olmo3RMSNorm
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
-from ..xlstm.modeling_xlstm import eager_mlstm_forward, soft_cap
+from ..xlstm.modeling_xlstm import eager_mlstm_forward, soft_cap, xLSTMLayer, xLSTMMultiHeadLayerNorm
 from .generation_bolmo import BolmoGenerationMixin
 
 
@@ -72,6 +72,11 @@ class BolmoConfig(PreTrainedConfig):
 
     model_type = "bolmo"
     sub_configs_defaults = {"text_config": SubConfigSpec(config_class=AutoConfig, model_type="olmo3")}
+    # the byte-level mLSTM layers are xLSTM's
+    attribute_map = {"num_heads": "num_local_heads"}
+    # every released checkpoint uses the xLSTM-large mLSTM
+    gate_soft_cap = 15.0
+    norm_eps = 1e-6
 
     text_config: dict | PreTrainedConfig | None = None
     vocab_size: int = 520
@@ -105,6 +110,14 @@ class BolmoConfig(PreTrainedConfig):
                 "rms_norm_eps": self.rms_norm_eps,
             }
         super().__post_init__(**kwargs)
+
+    @property
+    def qk_dim(self) -> int:
+        return self.hidden_size // 2
+
+    @property
+    def v_dim(self) -> int:
+        return self.hidden_size
 
 
 class BolmoCache(DynamicCache):
@@ -152,62 +165,29 @@ class BolmoMLP(Qwen2MoeMLP):
     pass
 
 
-class BolmoMultiHeadLayerNorm(nn.Module):
-    """Per-head layer norm (no bias) of the mLSTM output."""
-
-    def __init__(self, hidden_size: int, eps: float = 1e-6):
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.eps = eps
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        input_dtype = hidden_states.dtype
-        hidden_states = F.layer_norm(hidden_states.float(), hidden_states.shape[-1:], eps=self.eps)
-        return self.weight * hidden_states.to(input_dtype).flatten(2)
+class BolmoMultiHeadLayerNorm(xLSTMMultiHeadLayerNorm):
+    pass
 
 
-class BolmoMLSTMLayer(nn.Module):
-    """
-    xLSTM-large mLSTM layer (`weight_mode="single"`). Every released checkpoint
-    (Bolmo-1B, Bolmo-7B and their Stage1) uses the xLSTM-large defaults, hence the constants: gate soft cap 15,
-    `qk_dim = hidden_size // 2`, `v_dim = hidden_size`.
-    """
-
-    gate_soft_cap = 15.0
-
-    def __init__(self, config: BolmoConfig):
-        super().__init__()
-        self.num_heads = config.num_local_heads
-        hidden_size = config.hidden_size
-        self.q = nn.Linear(hidden_size, hidden_size // 2, bias=False)
-        self.k = nn.Linear(hidden_size, hidden_size // 2, bias=False)
-        self.v = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.ogate_preact = nn.Linear(hidden_size, hidden_size, bias=False)
-        self.igate_preact = nn.Linear(hidden_size, self.num_heads, bias=True)
-        self.fgate_preact = nn.Linear(hidden_size, self.num_heads, bias=True)
-        self.multihead_norm = BolmoMultiHeadLayerNorm(hidden_size)
-        self.out_proj = nn.Linear(hidden_size, hidden_size, bias=False)
-
+class BolmoMLSTMLayer(xLSTMLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
         state: tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None = None,
         sequence_start: torch.LongTensor | None = None,
     ) -> tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
-        batch_size, seq_len, _ = hidden_states.shape
-        head_shape = (batch_size, seq_len, self.num_heads, -1)
+        head_shape = (*hidden_states.shape[:-1], self.num_heads, -1)
         query = self.q(hidden_states).view(head_shape).transpose(1, 2)
         key = self.k(hidden_states).view(head_shape).transpose(1, 2)
         value = self.v(hidden_states).view(head_shape).transpose(1, 2)
-        igate = soft_cap(self.igate_preact(hidden_states), self.gate_soft_cap).transpose(1, 2)
-        fgate = soft_cap(self.fgate_preact(hidden_states), self.gate_soft_cap)
+        input_gate = soft_cap(self.igate_preact(hidden_states), self.gate_soft_cap).transpose(1, 2)
+        forget_gate = soft_cap(self.fgate_preact(hidden_states), self.gate_soft_cap).transpose(1, 2)
         if sequence_start is not None:
             # closing the forget gate on the first real byte drops the left padding from the state
-            is_start = torch.arange(seq_len, device=fgate.device) == sequence_start[:, None]
-            fgate = fgate.masked_fill(is_start[..., None], torch.finfo(fgate.dtype).min)
-        fgate = fgate.transpose(1, 2)
+            is_start = torch.arange(hidden_states.shape[1], device=forget_gate.device) == sequence_start[:, None]
+            forget_gate = forget_gate.masked_fill(is_start[:, None], torch.finfo(forget_gate.dtype).min)
 
-        mlstm_output, state = eager_mlstm_forward(query, key, value, input_gate=igate, forget_gate=fgate, state=state)
+        mlstm_output, state = eager_mlstm_forward(query, key, value, input_gate, forget_gate, state=state)
         mlstm_output = self.multihead_norm(mlstm_output.transpose(1, 2))
         output = self.out_proj(torch.sigmoid(self.ogate_preact(hidden_states)) * mlstm_output)
         return output, state
