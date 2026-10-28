@@ -130,7 +130,7 @@ class JevConfig(PreTrainedConfig):
     initializer_range: float = 0.02
 
     # The files of a checkpoint that holds a JEV head next to its weights, read with them
-    head_files = ("head.safetensors", "readout.safetensors")
+    extra_files = ("head.safetensors", "readout.safetensors")
 
     @classmethod
     def from_checkpoint(cls, pretrained_model_name_or_path, text_config: dict, **kwargs) -> dict | None:
