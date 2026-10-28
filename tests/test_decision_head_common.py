@@ -59,7 +59,7 @@ class DecisionHeadTesterMixin:
             num_key_value_heads=1,
         )
         # Against sdpa: heads whose questions attend to each other would get different scores from a causal mask
-        cls.config._attn_implementation = "eager"
+        cls.config._attn_implementation, cls.config.dtype = "eager", torch.float32
 
     def test_chat_template_reproduces_the_model_code(self):
         sequences = [{"input_ids": prompt.input_ids, "marks": prompt.marks} for prompt in self.prompts]
@@ -86,12 +86,16 @@ class DecisionHeadTesterMixin:
         torch.manual_seed(0)
         model = self.all_model_classes[0](self.config).eval()
         with tempfile.TemporaryDirectory() as tmp:
+            # The weights the backbone has (its model, and the `lm_head` of the heads reading it) are in its file
             backbone = self.backbone_class(self.config.text_config)
-            backbone.base_model.load_state_dict(model.model.state_dict())
+            backbone_keys = backbone.state_dict().keys()
+            backbone.load_state_dict(
+                {key: value for key, value in model.state_dict().items() if key in backbone_keys}, strict=False
+            )
             backbone.save_pretrained(tmp)
             for component in (self.tokenizer, self.decision_config):
                 component.save_pretrained(tmp)
-            head = {key: value for key, value in model.state_dict().items() if not key.startswith("model.")}
+            head = {key: value for key, value in model.state_dict().items() if key not in backbone_keys}
             save_file(head, f"{tmp}/head.safetensors", metadata={"format": "pt"})
             index = dict.fromkeys(backbone.state_dict(), "model.safetensors") | dict.fromkeys(head, "head.safetensors")
             Path(tmp, "decision.safetensors.index.json").write_text(

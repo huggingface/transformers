@@ -27,6 +27,9 @@ class DecisionPreTrainedModel(PreTrainedModel):
     shards of the model and of the file of the head), and `decision.json` can name the subfolder of a LoRA to load.
     """
 
+    # Like the composite models: the model they read is loaded with its own attention implementation, and checked for it
+    _supports_sdpa = _supports_flash_attn = _supports_flex_attn = True
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: str | Path, *args, **kwargs):
         if kwargs.get("config") is None and cached_file(

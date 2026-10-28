@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import unittest
 
 from transformers import is_torch_available
@@ -24,13 +25,12 @@ from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 if is_torch_available():
     import torch
 
-    from transformers import ModernBertConfig, ModernBertModel, VonDecisionHead, VonForDecision
+    from transformers import ModernBertConfig, ModernBertModel, VonForDecision
 
 
 @require_torch
 class VonForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
-    all_model_classes = (VonDecisionHead,) if is_torch_available() else ()
-    for_decision_class = VonForDecision if is_torch_available() else None
+    all_model_classes = (VonForDecision,) if is_torch_available() else ()
     decision_repo = "ArthurZ/von"
     tiny_sizes = {"hidden_size": 16}
     backbone_class = ModernBertModel if is_torch_available() else None
@@ -39,7 +39,8 @@ class VonForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         # Two blocks of a prompt `3 4 5 6`, a `[MASK]` (1) before each option and `[SEP]` (2), where the option `7 8`
         # comes second then first: the prompt, `[SEP]` and that option keep their states if options only attend to the
         # prompt of their block and to themselves, at positions that restart after it (also for the sliding window)
-        config = ModernBertConfig(
+        config = copy.deepcopy(self.config)
+        config.text_config = ModernBertConfig(
             vocab_size=len(self.tokenizer),
             hidden_size=16,
             intermediate_size=32,
@@ -47,19 +48,17 @@ class VonForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
             num_attention_heads=2,
             local_attention=8,
         )
-        backbone, head = ModernBertModel(config).eval(), VonDecisionHead(self.config)
+        model = VonForDecision(config).eval()
         input_ids = [3, 4, 5, 6, 1, 9, 1, 7, 8, 2] + [3, 4, 5, 6, 1, 7, 8, 1, 10, 2]
         # The first question of the request has two options
         prompt = DecisionPrompt(input_ids, [5, 7, 10, 15, 18, 20], self.prompts[0].questions)
         states = []
         for implementation in ("sdpa", "eager"):
-            backbone.set_attn_implementation(implementation)
+            model.model.set_attn_implementation(implementation)
             with torch.no_grad():
                 inputs = prompt.model_inputs()
-                backbone_inputs = head.backbone_inputs(
-                    backbone, inputs["input_ids"], inputs["marks"], inputs["num_options"]
-                )
-                states.append(backbone(**backbone_inputs).last_hidden_state[0])
+                backbone_inputs = model.backbone_inputs(inputs["input_ids"], inputs["marks"], inputs["num_options"])
+                states.append(model.model(**backbone_inputs).last_hidden_state[0])
             first, second = states[-1].split(10)
             torch.testing.assert_close(first[[0, 1, 2, 3, 6, 7, 8, 9]], second[[0, 1, 2, 3, 4, 5, 6, 9]])
         torch.testing.assert_close(*states)
