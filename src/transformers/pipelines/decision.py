@@ -113,7 +113,7 @@ class DecisionPipeline(Pipeline):
             tail = inputs["input_ids"][0, int(marks[-1]) :]
             scores.append(
                 [
-                    self.decision_config.get_logits_processor(question.type)(
+                    self.decision_config.logits_processors[question.type](
                         tail, logits[index, self.label_token_ids(tuple(question.labels))].float()
                     )
                     for index, question in enumerate(questions)
