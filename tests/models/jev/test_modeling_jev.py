@@ -36,7 +36,7 @@ if is_torch_available():
 @require_torch
 class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (JevForDecision,) if is_torch_available() else ()
-    decision_repo = "ArthurZ/GEV-26B-Decide"
+    decision_repo = "hf-internal-testing/decision-gev"
     tiny_sizes = {"hidden_size": 16}
 
     @require_vision

@@ -27,7 +27,7 @@ if is_torch_available():
 @require_torch
 class KevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (KevForDecision,) if is_torch_available() else ()
-    decision_repo = "ArthurZ/kev-4b"
+    decision_repo = "hf-internal-testing/decision-kev"
     tiny_sizes = {"hidden_size": 16, "head_dim": 8}
 
 
