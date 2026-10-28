@@ -19,6 +19,7 @@ This mostly describe the hooks used and the logic to make capture thread/context
 from __future__ import annotations
 
 import threading
+from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from functools import wraps
@@ -92,9 +93,51 @@ class CompileableContextVar:
         else:
             self.context_var.reset(token)
 
+    @contextmanager
+    def eager_scope(self, value):
+        """Temporarily bind an eager region's buffer without activating a new compiled collector.
+
+        Unlike model-level `set`/`reset`, this binding does not change compilation
+        state. Call only outside tracing, while the enclosing collector is eager.
+        A context-local token also isolates overlapping copied Python contexts.
+        """
+        token = self.context_var.set(value)
+        try:
+            yield
+        finally:
+            self.context_var.reset(token)
+
 
 # Thread/context-safe global variable
 _active_collector = CompileableContextVar("output_collector")
+
+
+@contextmanager
+def _scope_router_output_collection():
+    """Collect a region's router outputs without specializing on previous regions.
+
+    Enter from the eager caller, outside the region selected for compilation. The
+    model invocation still owns the collector; only its router buffer is local.
+    Hidden-state and attention buffers keep their identity and layer indexing.
+    Whole-model compilation keeps the ordinary capture path.
+    """
+    if is_torchdynamo_compiling() or _active_collector.compiling:
+        yield
+        return
+
+    collector = _active_collector.get()
+    if collector is None or "router_logits" not in collector:
+        yield
+        return
+
+    local_router_logits = []
+    local_collector = dict(collector)
+    local_collector["router_logits"] = local_router_logits
+    try:
+        with _active_collector.eager_scope(local_collector):
+            yield
+    finally:
+        collector["router_logits"].extend(local_router_logits)
 
 
 def install_output_capuring_hook(
