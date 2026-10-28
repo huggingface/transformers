@@ -13,12 +13,14 @@
 # limitations under the License.
 
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
 from huggingface_hub import hf_hub_download
+from safetensors.torch import save_file
 
-from transformers import AutoProcessor, is_torch_available
+from transformers import AutoProcessor, is_torch_available, pipeline
 from transformers.decision import DecisionConfig, DecisionTemplate
 from transformers.testing_utils import require_torch, require_torch_accelerator, require_vision, slow
 
@@ -26,6 +28,8 @@ from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 
 
 if is_torch_available():
+    import torch
+
     from transformers import JevForDecision
 
 
@@ -47,9 +51,33 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
                 sequences = [{"input_ids": prompt.input_ids, "marks": prompt.marks} for prompt in prompts]
                 self.assertEqual(sequences, test["sequences"])
 
+    def test_from_a_vllm_decision_checkpoint(self):
+        # A vLLM decision model ships its head (`readout.safetensors`) and settings (`decision_config.json`) next to the
+        # weights of its model: read as they are, without any file of ours
+        with tempfile.TemporaryDirectory() as tmp:
+            torch.manual_seed(0)
+            backbone = self.backbone_class(self.config.text_config)
+            backbone.save_pretrained(tmp)
+            self.tokenizer.save_pretrained(tmp)
+            codes, readout = ["A", "B", "C"], torch.randn(3, self.config.text_config.hidden_size)
+            settings = {
+                "codes": codes,
+                "temperature": 2.0,
+                "attention_mode": "noncausal_full_attention",
+                "prompt": "d3",
+            }
+            Path(tmp, "decision_config.json").write_text(json.dumps(settings), encoding="utf-8")
+            save_file({"weight": readout}, f"{tmp}/readout.safetensors", metadata={"format": "pt"})
+            model = JevForDecision.from_pretrained(tmp)
+            decide = pipeline("decision", model=tmp)
+        self.assertEqual(model.config.num_verbalizers, 3)
+        self.assertFalse(model.config.text_config.is_causal)
+        torch.testing.assert_close(model.proj.weight, readout)
+        self.assertIsInstance(decide.model, JevForDecision)
+        self.assertEqual(decide.template.config.temperature, dict.fromkeys(["noul", "choice", "score"], 2.0))
 
-# Code readouts of a Qwen3.5 checkpoint, converted with `convert_decider_to_hf.py`: the backbone loads from the
-# original repo. The answers each converted head gives to the request of its `decision_test.json`. One per prompt and
+
+# Code readouts of a Qwen3.5 checkpoint, read with the files of its repo. The answers each converted head gives to the request of its `decision_test.json`. One per prompt and
 # attention mode: the other fine-tunes (d3-*, Darwin-*, PhysicalEye) share them
 DECIDERS = {
     "ArthurZ/pplx-decider-v1.1-27b": {
@@ -85,7 +113,7 @@ class JevIntegrationTest(unittest.TestCase):
         check_decision(self, "ArthurZ/JEV-9B", "ArthurZ/JEV-9B", expected, atol=1e-2, dtype="bfloat16")
 
     def test_jev_35b(self):
-        # System 1 merged into the weights, converted with `convert_jev_to_hf.py`
+        # System 1 merged into the weights: its head is rows of the `lm_head`, written to `decision_head.json` next to them
         expected = {
             "intent": {"refund": 0.9981, "track": 0.0001, "other": 0.0018},
             "urgent": 0.7539,
