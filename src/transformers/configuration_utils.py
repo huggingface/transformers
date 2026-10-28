@@ -889,6 +889,17 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin, Heterogeneous
                 if isinstance(v, dict) and v.get("model_type") == cls.model_type:
                     config_dict = v
 
+            # A model reading the checkpoint of another one, like a decision head next to its weights: the config of
+            # that checkpoint is its `text_config`, and the files of the checkpoint give the rest
+            if config_dict["model_type"] != cls.model_type and hasattr(cls, "from_checkpoint"):
+                hub_kwargs = {
+                    key: kwargs[key] for key in ("cache_dir", "local_files_only", "revision", "token") if key in kwargs
+                }
+                if (
+                    fields := cls.from_checkpoint(pretrained_model_name_or_path, config_dict, **hub_kwargs)
+                ) is not None:
+                    config_dict = {**fields, "model_type": cls.model_type, "text_config": config_dict}
+
             # raise warning only if we still can't see a match in `model_type`
             if config_dict["model_type"] != cls.model_type:
                 logger.warning(
