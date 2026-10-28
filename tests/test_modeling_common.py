@@ -4569,14 +4569,19 @@ class ModelTesterMixin(ExportTesterMixin):
 
             # 3d rope also depends on the head dim
             # (we assume easy shapes here where we get to the requested head dim at least)
-            if (
-                getattr(config, "rope_parameters", None) is not None
-                and len(config.rope_parameters.get("mrope_section", [])) > 0
-            ):
-                scaling_factor = max(requested_dim // (sum(config.rope_parameters["mrope_section"]) * 2), 1)
-                config.rope_parameters["mrope_section"] = [
-                    section * scaling_factor for section in config.rope_parameters["mrope_section"]
-                ]
+            rope_parameters = config._getattr_without_heterogeneous_validation("rope_parameters", None)
+            if rope_parameters is not None:
+                rope_configs = (
+                    [rope_parameters]
+                    if "mrope_section" in rope_parameters
+                    else [params for params in rope_parameters.values() if isinstance(params, dict)]
+                )
+
+                for rope_config in rope_configs:
+                    sections = rope_config.get("mrope_section", [])
+                    if sections:
+                        scaling_factor = max(requested_dim // (sum(sections) * 2), 1)
+                        rope_config["mrope_section"] = [section * scaling_factor for section in sections]
 
         def update_config_headdim_recursive(config, requested_dim):
             # Needs to recurse since we have some models with 3-level nesting
