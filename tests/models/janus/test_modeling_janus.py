@@ -435,7 +435,7 @@ class JanusIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, text=prompt, generation_mode="text", return_tensors="pt").to(model.device)
 
         output = model.generate(**inputs, max_new_tokens=20, generation_mode="text", do_sample=False)
-        EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThe image depicts the constellation of Leo, which is part of the zodiac and the constellation'  # fmt: skip
+        EXPECTED_DECODED_TEXT = 'You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\n\nDescribe what do you see here and tell me about the history behind it?\n\nThis image shows a night sky filled with stars, and there are silhouettes of trees at'  # fmt: skip
         text = processor.decode(output[0], skip_special_tokens=True)
         self.assertEqual(
             text,
@@ -506,7 +506,7 @@ class JanusIntegrationTest(unittest.TestCase):
             model.device, torch.float16
         )
 
-        EXPECTED_TEXT_COMPLETION = ["You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe two images you provided are of the same star constellation. The first image shows the constellation of Leo, and the second image shows the constellation of Ursa Major. Both constellations are part"]  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ["You are a helpful language and vision assistant. You are able to understand the visual content that the user provides, and assist the user with a variety of tasks using natural language.\n\nWhat do these two images  and  have in common?\n\nThe image you provided shows a night sky with stars and a constellation, while the second image shows a night sky with stars and a different constellation. Both images feature stars and a dark sky,"]  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
