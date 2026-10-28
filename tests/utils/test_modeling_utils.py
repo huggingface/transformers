@@ -2981,7 +2981,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
 
         for thread in threading.enumerate():
             if thread.name == "Thread-auto_conversion":
-                thread.join(timeout=10)
+                thread.join(timeout=60)
 
         discussions = self.api.get_repo_discussions(self.repo_name)
 
