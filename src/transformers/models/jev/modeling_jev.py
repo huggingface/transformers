@@ -16,14 +16,12 @@ from torch import nn
 
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
-from ..auto import AutoModel
 from .configuration_jev import JevConfig
 
 
 @auto_docstring
 class JevPreTrainedModel(PreTrainedModel):
     config: JevConfig
-    base_model_prefix = "backbone"
 
 
 @auto_docstring(
@@ -36,7 +34,6 @@ class JevForDecision(JevPreTrainedModel):
     def __init__(self, config: JevConfig):
         super().__init__(config)
         self.proj = nn.Linear(config.hidden_size, config.num_verbalizers)
-        self.backbone = AutoModel.from_config(config.backbone_config)
         self.post_init()
 
     @auto_docstring
@@ -46,10 +43,11 @@ class JevForDecision(JevPreTrainedModel):
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor,
+        backbone: PreTrainedModel,
         backbone_kwargs: dict | None = None,
         **kwargs,
     ) -> torch.Tensor:
-        outputs = self.backbone(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
+        outputs = backbone.base_model(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
         hidden_states = outputs.last_hidden_state[0]
         logits = self.proj(hidden_states[marks - 1].to(self.proj.weight.dtype))
         if self.config.softcap is not None:
