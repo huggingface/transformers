@@ -95,11 +95,10 @@ class CompileableContextVar:
 
     @contextmanager
     def eager_scope(self, value):
-        """Temporarily bind an eager region's buffer without activating a new compiled collector.
+        """
+        Temporarily bind a value in the current Python context without changing compilation state.
 
-        Unlike model-level `set`/`reset`, this binding does not change compilation
-        state. Call only outside tracing, while the enclosing collector is eager.
-        A context-local token also isolates overlapping copied Python contexts.
+        Call only outside tracing, while this wrapper is using its ContextVar.
         """
         token = self.context_var.set(value)
         try:
@@ -114,12 +113,13 @@ _active_collector = CompileableContextVar("output_collector")
 
 @contextmanager
 def _scope_router_output_collection():
-    """Collect a region's router outputs without specializing on previous regions.
+    """
+    Collect router outputs in a fresh list for each region.
 
-    Enter from the eager caller, outside the region selected for compilation. The
-    model invocation still owns the collector; only its router buffer is local.
-    Hidden-state and attention buffers keep their identity and layer indexing.
-    Whole-model compilation keeps the ordinary capture path.
+    Enter from eager code around the call to a compiled region. A fresh list prevents Dynamo from specializing on
+    the number of router outputs collected by earlier regions. Merge the outputs into the enclosing collector on
+    exit, including when the region raises. Other buffers remain shared to preserve hidden-state layer indices.
+    During whole-model compilation, use the existing collector unchanged.
     """
     if is_torchdynamo_compiling() or _active_collector.compiling:
         yield

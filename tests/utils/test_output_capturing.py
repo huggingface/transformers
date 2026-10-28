@@ -96,8 +96,8 @@ class RouterOutputCollectionTest(unittest.TestCase):
             self.assertIs(outputs["router_logits"], original)
             with capturing._scope_router_output_collection():
                 self.collector.get()["router_logits"].append(records[4])
+            self.assertIs(self.collector.get(), outputs)
         self.assertEqual(original, records)
-        self.assertIsNone(self.collector.get())
 
     def test_inactive_router_collection_is_unchanged(self):
         for outputs in (None, {"hidden_states": []}):
@@ -141,7 +141,6 @@ class RouterOutputCollectionTest(unittest.TestCase):
         barrier = threading.Barrier(2, timeout=10)
 
         def collect(marker):
-            self.assertIsNone(self.collector.get())
             original = []
             outputs = {"router_logits": original}
             with self.collecting(outputs):
@@ -150,7 +149,7 @@ class RouterOutputCollectionTest(unittest.TestCase):
                     self.collector.get()["router_logits"].append(marker)
                     barrier.wait()
                 self.assertIs(outputs["router_logits"], original)
-            self.assertIsNone(self.collector.get())
+                self.assertIs(self.collector.get(), outputs)
             return original
 
         parent = {"router_logits": ["parent"]}

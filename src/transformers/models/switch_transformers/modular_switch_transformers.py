@@ -42,7 +42,7 @@ from ...utils.generic import (
     can_return_tuple,
     merge_with_config_defaults,
 )
-from ...utils.output_capturing import _scope_router_output_collection, OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
 from ..t5.modeling_t5 import T5Attention, T5DenseActDense, T5LayerCrossAttention, T5LayerNorm, T5LayerSelfAttention
 from .configuration_switch_transformers import SwitchTransformersConfig
 

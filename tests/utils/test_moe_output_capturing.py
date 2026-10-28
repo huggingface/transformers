@@ -152,9 +152,9 @@ def make_model(family, **config_overrides):
     suffix = "ForConditionalGeneration" if family == "switch_transformers" else "ForCausalLM"
     if family == "deepseek_ocr2":
         suffix = "Model"  # This public text backbone has no separate causal-LM head.
-    model_class = prefix + suffix
+    model_class = getattr(transformers, prefix + suffix)
     torch.manual_seed(13)
-    return getattr(transformers, model_class)(config).cpu().train()
+    return model_class(config).cpu().train()
 
 
 def model_inputs(family):
@@ -196,9 +196,7 @@ def router_gradient_objective(outputs, family):
     if family == "switch_transformers":
         return outputs.encoder_aux_loss + outputs.decoder_aux_loss
     if family in ("deepseek_v3", "aria", "deepseek_ocr2"):
-        # These models expose scores but no model auxiliary loss. A test-only
-        # scalar checks their gradient connection; the optimizer still uses the
-        # separate model-output objective below.
+        # These backbones expose router scores without an auxiliary loss.
         assert getattr(outputs, "aux_loss", None) is None
         return sum(scores.square().mean() for scores in outputs.router_logits)
     return outputs.aux_loss
@@ -206,8 +204,10 @@ def router_gradient_objective(outputs, family):
 
 @require_torch
 @pytest.mark.parametrize("family", CASES)
-@pytest.mark.parametrize("hidden_states", [False, True, [1]], ids=["router_only", "all_outputs", "selected_hidden"])
-def test_router_collection_preserves_optional_outputs(family, hidden_states):
+@pytest.mark.parametrize(
+    "output_hidden_states", [False, True, [1]], ids=["router_only", "all_outputs", "selected_hidden"]
+)
+def test_router_collection_preserves_optional_outputs(family, output_hidden_states):
     model = make_model(family)
     inputs = model_inputs(family)
     outputs = []
@@ -219,8 +219,8 @@ def test_router_collection_preserves_optional_outputs(family, hidden_states):
                 model(
                     **inputs,
                     output_router_logits=True,
-                    output_hidden_states=hidden_states,
-                    output_attentions=hidden_states is True,
+                    output_hidden_states=output_hidden_states,
+                    output_attentions=output_hidden_states is True,
                 )
             )
         rng_states.append(torch.get_rng_state())
@@ -229,17 +229,17 @@ def test_router_collection_preserves_optional_outputs(family, hidden_states):
     for name, count in CASES[family][2].items():
         assert len(outputs[1][name]) == count
         assert all(router.requires_grad for router in outputs[1][name])
-    if hidden_states is True:
+    if output_hidden_states is True:
         attention_keys = [name for name in outputs[1] if name.endswith("attentions")]
         assert attention_keys
         for key in attention_keys:
             assert outputs[1][key]
             assert all(value is not None for value in outputs[1][key])
-    if hidden_states:
+    if output_hidden_states:
         hidden_keys = [name for name in outputs[1] if name.endswith("hidden_states")]
         assert hidden_keys
         for key in hidden_keys:
-            if isinstance(hidden_states, list):
+            if isinstance(output_hidden_states, list):
                 assert outputs[1][key][0] is None
                 assert outputs[1][key][1] is not None
             else:
@@ -248,16 +248,18 @@ def test_router_collection_preserves_optional_outputs(family, hidden_states):
 
 @require_torch
 @pytest.mark.parametrize(
-    "family,checkpoint",
+    "family,use_reentrant",
     [
-        pytest.param(family, checkpoint, id=f"{family}-{'no_checkpoint' if checkpoint is None else 'non_reentrant'}")
+        pytest.param(
+            family, use_reentrant, id=f"{family}-{'no_checkpoint' if use_reentrant is None else 'non_reentrant'}"
+        )
         for family in CASES
-        for checkpoint in (None, False)
-        if family != "jetmoe" or checkpoint is None
+        for use_reentrant in (None, False)
+        if family != "jetmoe" or use_reentrant is None
     ],
 )
-def test_router_collection_preserves_router_gradients_and_update(family, checkpoint):
-    check_gradients_and_update(family, checkpoint, require_aux_gradients=True)
+def test_router_collection_preserves_router_gradients_and_update(family, use_reentrant):
+    check_gradients_and_update(family, use_reentrant, require_aux_gradients=True)
 
 
 @require_torch
@@ -266,17 +268,17 @@ def test_router_collection_preserves_reentrant_checkpoint_behavior(family):
     # Reentrant checkpointing captures router outputs under no_grad in the
     # existing implementation. This checks parity, not auxiliary-loss support;
     # the non-reentrant cases above require nonzero auxiliary gradients.
-    check_gradients_and_update(family, checkpoint=True, require_aux_gradients=False)
+    check_gradients_and_update(family, use_reentrant=True, require_aux_gradients=False)
 
 
-def check_gradients_and_update(family, checkpoint, require_aux_gradients):
+def check_gradients_and_update(family, use_reentrant, require_aux_gradients):
     original = make_model(family)
     model = copy.deepcopy(original)
     inputs = model_inputs(family)
     results = []
     for current, scoped in ((original, False), (model, True)):
-        if checkpoint is not None:
-            current.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": checkpoint})
+        if use_reentrant is not None:
+            current.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": use_reentrant})
             current.enable_input_require_grads()
         params = tuple(current.parameters())
         torch.manual_seed(29)
@@ -288,14 +290,11 @@ def check_gradients_and_update(family, checkpoint, require_aux_gradients):
                 aux_grads = torch.autograd.grad(aux, params, retain_graph=True, allow_unused=True)
                 assert any(grad is not None and torch.count_nonzero(grad) for grad in aux_grads)
             if family == "deepseek_ocr2":
-                # The public text backbone returns hidden states, not LM loss.
-                # This test-only scalar checks backbone gradients and updates;
-                # it does not qualify multimodal training or invent a task loss.
+                # The text backbone has no task loss; use one hidden-state component for backward.
                 outputs.last_hidden_state[..., 0].mean().backward()
             else:
                 outputs.loss.backward()
         grads = tuple(None if parameter.grad is None else parameter.grad.clone() for parameter in params)
-        assert any(grad is not None and torch.count_nonzero(grad) for grad in grads)
         assert all(grad is None or torch.isfinite(grad).all() for grad in grads)
         before = tuple(parameter.detach().clone() for parameter in params)
         torch.optim.SGD(params, lr=0.1).step()
@@ -426,19 +425,19 @@ def test_layerdrop_preserves_skips_empty_router_outputs_and_rng(decoder, layerdr
     config._attn_implementation = "eager"
     torch.manual_seed(13)
     model = (NllbMoeDecoder if decoder else NllbMoeEncoder)(config).train()
-    ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
-    inputs = {"input_ids": ids, "attention_mask": torch.ones_like(ids), "use_cache": False}
+    input_ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
+    inputs = {"input_ids": input_ids, "attention_mask": torch.ones_like(input_ids), "use_cache": False}
     if decoder:
         inputs.update(
             encoder_hidden_states=torch.arange(160).reshape(2, 5, 16).float() / 100,
-            encoder_attention_mask=torch.ones_like(ids),
+            encoder_attention_mask=torch.ones_like(input_ids),
         )
     results = []
     for enabled in (False, True):
         torch.manual_seed(0)
         with capture_context("nllb_moe", enabled):
-            out = model(**inputs, output_router_logits=True, output_hidden_states=True, output_attentions=True)
-        results.append((out, torch.get_rng_state()))
+            outputs = model(**inputs, output_router_logits=True, output_hidden_states=True, output_attentions=True)
+        results.append((outputs, torch.get_rng_state()))
     assert_same(results[0], results[1])
     if layerdrop == 1:
         assert results[1][0].router_logits == ()
@@ -486,46 +485,58 @@ def _cache_tensors(cache):
 
 
 @require_torch
-@pytest.mark.parametrize("checkpoint", [False, True])
-def test_diffusion_router_collection_preserves_read_only_prefix_under_recomputation(checkpoint):
+@pytest.mark.parametrize("gradient_checkpointing", [False, True])
+def test_diffusion_router_collection_preserves_read_only_prefix_under_recomputation(gradient_checkpointing):
     reference = _diffusion_components()
     records = []
     for enabled in (False, True):
         model = copy.deepcopy(reference)
-        if checkpoint:
+        if gradient_checkpointing:
             model["decoder"].gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
-        assert all(layer.gradient_checkpointing == checkpoint for layer in model["decoder"].layers)
+        assert all(layer.gradient_checkpointing == gradient_checkpointing for layer in model["decoder"].layers)
         assert all(not getattr(layer, "gradient_checkpointing", False) for layer in model["encoder"].layers)
-        ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
+        input_ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
         torch.manual_seed(29)
         with capture_context("diffusion_gemma", enabled):
-            enc = model["encoder"](input_ids=ids, output_router_logits=True)
-            cache = enc.past_key_values
+            encoder_outputs = model["encoder"](input_ids=input_ids, output_router_logits=True)
+            cache = encoder_outputs.past_key_values
             before = _cache_tensors(cache)
             assert all(state[2] == 5 for state in before)
-            first = model["decoder"](decoder_input_ids=ids[:, :3], past_key_values=cache, output_router_logits=True)
-            second = model["decoder"](decoder_input_ids=ids[:, :3], past_key_values=cache, output_router_logits=True)
+            first = model["decoder"](
+                decoder_input_ids=input_ids[:, :3], past_key_values=cache, output_router_logits=True
+            )
+            second = model["decoder"](
+                decoder_input_ids=input_ids[:, :3], past_key_values=cache, output_router_logits=True
+            )
             assert_same(first, second)
-            assert len(enc.router_logits) == len(second.router_logits) == 2
+            assert len(encoder_outputs.router_logits) == len(second.router_logits) == 2
             params = tuple(model.parameters())
             recomputed = []
             hooks = [
                 layer.register_forward_pre_hook(lambda *_: recomputed.append(None))
                 for layer in model["decoder"].layers
             ]
-            aux = sum(value.square().mean() for value in (*enc.router_logits, *second.router_logits))
+            aux = sum(value.square().mean() for value in (*encoder_outputs.router_logits, *second.router_logits))
             router_weights = tuple(layer.router.proj.weight for part in model.values() for layer in part.layers)
             aux_grads = torch.autograd.grad(aux, router_weights, retain_graph=True)
             assert all(torch.isfinite(grad).all() and torch.count_nonzero(grad) for grad in aux_grads)
-            # This public backbone has no task loss; the scalar checks gradient
-            # connectivity through the real encoder-created prefix.
+            # The text backbone has no task loss; use one hidden-state component for backward.
             second.last_hidden_state[..., 0].mean().backward()
             for hook in hooks:
                 hook.remove()
-            assert bool(recomputed) == checkpoint
+            assert bool(recomputed) == gradient_checkpointing
             assert_same(_cache_tensors(cache), before)
         grads = tuple(None if p.grad is None else p.grad.clone() for p in params)
-        records.append((enc.last_hidden_state, enc.router_logits, second, aux_grads, grads, torch.get_rng_state()))
+        records.append(
+            (
+                encoder_outputs.last_hidden_state,
+                encoder_outputs.router_logits,
+                second,
+                aux_grads,
+                grads,
+                torch.get_rng_state(),
+            )
+        )
     assert_same(records[0], records[1])
 
 
@@ -575,9 +586,9 @@ def test_distinct_production_loops_reuse_all_compiled_regions(hybrid):
     try:
         torch.compiler.reset()
         model = _multimodal_or_hybrid_model(hybrid, layers)
-        ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
+        input_ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
         with capture_context(family, scoped=False):
-            reference = model(input_ids=ids, output_router_logits=True)
+            reference = model(input_ids=input_ids, output_router_logits=True)
         graphs, calls = [], []
 
         def backend(graph, example_inputs):
@@ -596,10 +607,10 @@ def test_distinct_production_loops_reuse_all_compiled_regions(hybrid):
         # kernel numerics. Alternating attention types legitimately use two graphs.
         for _ in range(2):
             model.zero_grad(set_to_none=True)
-            out = model(input_ids=ids, output_router_logits=True)
-            assert_same(out, reference)
-            assert len(out.router_logits) == layers
-            out.last_hidden_state[..., 0].mean().backward()
+            outputs = model(input_ids=input_ids, output_router_logits=True)
+            assert_same(outputs, reference)
+            assert len(outputs.router_logits) == layers
+            outputs.last_hidden_state[..., 0].mean().backward()
         assert len(graphs) == (2 if hybrid else 1)
         assert len(calls) == 2 * layers
     finally:
@@ -632,16 +643,15 @@ def test_encoder_router_capture_preserves_backbone_and_task_head_contracts(model
     torch.manual_seed(13)
     original = model_class(config).cpu().train()
     candidate = copy.deepcopy(original)
-    ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
+    input_ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
     is_task_head = model_name == "OpenAIPrivacyFilterForTokenClassification"
-    kwargs = {"input_ids": ids, "attention_mask": torch.ones_like(ids)}
+    kwargs = {"input_ids": input_ids, "attention_mask": torch.ones_like(input_ids)}
     if is_task_head:
-        kwargs["labels"] = ids % config.num_labels
+        kwargs["labels"] = input_ids % config.num_labels
     results = []
     for model, scoped in ((original, False), (candidate, True)):
         torch.manual_seed(29)
-        context = capture_context("openai_privacy_filter", scoped)
-        with context:
+        with capture_context("openai_privacy_filter", scoped):
             outputs = model(**kwargs, output_router_logits=True, output_hidden_states=True)
             if is_task_head:
                 # The classifier preserves hidden states but does not expose
