@@ -259,8 +259,8 @@ class Sam2Config(PreTrainedConfig):
             config_class=AutoConfig,
             model_type="sam2_vision_model",
         ),
-        "prompt_encoder_config": SubConfigSpec(config_class=Sam2PromptEncoderConfig),
-        "mask_decoder_config": SubConfigSpec(config_class=Sam2MaskDecoderConfig),
+        "prompt_encoder_config": Sam2PromptEncoderConfig,
+        "mask_decoder_config": Sam2MaskDecoderConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

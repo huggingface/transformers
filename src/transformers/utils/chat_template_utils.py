@@ -604,6 +604,22 @@ def _cached_compile_jinja_template(chat_template):
     return jinja_env.from_string(chat_template)
 
 
+# Names a message's reasoning is passed under. The first is the standard one that chat templates read.
+_REASONING_FIELDS = ("reasoning_content", "thinking", "reasoning")
+
+
+def _alias_reasoning_fields(chat: ChatType) -> ChatType:
+    # Fill `reasoning_content` from older names for it, and fill `thinking` for gpt-oss templates, which read that
+    aliased_chat = []
+    for message in chat:
+        if isinstance(message, dict):
+            reasoning = next((message[key] for key in _REASONING_FIELDS if message.get(key) is not None), None)
+            if reasoning is not None:
+                message = {"thinking": reasoning, **message, "reasoning_content": reasoning}
+        aliased_chat.append(message)
+    return aliased_chat
+
+
 def render_jinja_template(
     conversations: list[ChatType],
     tools: list[dict | Callable] | None = None,
@@ -650,6 +666,7 @@ def render_jinja_template(
         if hasattr(chat, "messages"):
             # Indicates it's a Conversation object
             chat = chat.messages
+        chat = _alias_reasoning_fields(chat)
         if continue_final_message:
             chat = deepcopy(chat)
             continue_final_message = continue_final_message if isinstance(continue_final_message, str) else "content"
@@ -658,7 +675,11 @@ def render_jinja_template(
                 raise ValueError(
                     f'continue_final_message is set but the final message has no "{continue_final_message}" to continue!'
                 )
-            if continue_final_message not in chat_template:
+            continue_fields = [continue_final_message]
+            if continue_final_message in _REASONING_FIELDS:
+                # Reasoning is copied under several names, so tag every copy and accept whichever one the template reads
+                continue_fields = [field for field in _REASONING_FIELDS if chat[-1].get(field) == final_message]
+            if not any(field in chat_template for field in continue_fields):
                 raise ValueError(
                     f'continue_final_message is set to "{continue_final_message}" but this is not an accepted field in the chat_template'
                 )
@@ -675,7 +696,8 @@ def render_jinja_template(
                         "continue_final_message is set but we could not find any text to continue in the final message!"
                     )
             else:
-                chat[-1][continue_final_message] = chat[-1][continue_final_message] + continue_final_message_tag
+                for field in continue_fields:
+                    chat[-1][field] = chat[-1][field] + continue_final_message_tag
         if return_assistant_tokens_mask:
             rendered_chat, generation_indices = _render_with_assistant_indices(
                 compiled_template=compiled_template,

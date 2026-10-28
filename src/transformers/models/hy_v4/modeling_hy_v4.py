@@ -34,7 +34,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import maybe_autocast, merge_with_config_defaults
@@ -310,9 +310,8 @@ def yarn_get_mscale(scale=1, mscale=1):
 def yarn_apply_mscale(rope_parameters, scaling):
     if rope_parameters.get("rope_type", "default") != "default":
         mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        scaling_factor = rope_parameters["factor"]
         if mscale_all_dim:
-            mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+            mscale = yarn_get_mscale(rope_parameters["factor"], mscale_all_dim)
             scaling = scaling * mscale * mscale
     return scaling
 
@@ -933,10 +932,9 @@ class HYV4ForCausalLM(HYV4PreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         # Key difference of the lm_head being kept in float
-        logits = self.lm_head(hidden_states[:, slice_indices, :].to(dtype=self.lm_head.weight.dtype))
+        logits = self.lm_head(hidden_states.to(dtype=self.lm_head.weight.dtype))
 
         loss = None
         if labels is not None:

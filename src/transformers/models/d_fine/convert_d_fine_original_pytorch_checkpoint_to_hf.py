@@ -396,7 +396,6 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     state_dict = load_original_state_dict(repo_id, model_name)
     state_dict.pop("decoder.valid_mask", None)
     state_dict.pop("decoder.anchors", None)
-    model = DFineForObjectDetection(config)
     logger.info(f"Converting model {model_name}...")
 
     state_dict = convert_old_keys_to_new_keys(state_dict)
@@ -414,7 +413,7 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
             state_dict[key.split("model.decoder.")[-1]] = state_dict[key]
 
     # finally, create HuggingFace model and load state dict
-    model.load_state_dict(state_dict)
+    model = DFineForObjectDetection.from_pretrained(None, config=config, state_dict=state_dict)
     model.eval()
 
     # load image processor

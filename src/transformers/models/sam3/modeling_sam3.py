@@ -806,7 +806,7 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
 @auto_docstring
 @requires(backends=("torch", "torchvision"))
 class Sam3PreTrainedModel(PreTrainedModel):
-    config_class = Sam3Config
+    config: Sam3Config
     base_model_prefix = "sam3"
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
@@ -1086,7 +1086,7 @@ class Sam3VisionNeck(nn.Module):
     """
 )
 class Sam3VisionModel(Sam3PreTrainedModel):
-    config_class = Sam3VisionConfig
+    config: Sam3VisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: Sam3VisionConfig):

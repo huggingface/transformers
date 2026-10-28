@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
@@ -501,7 +501,7 @@ class ElectraGeneratorPredictions(nn.Module):
 
 @auto_docstring
 class ElectraPreTrainedModel(PreTrainedModel):
-    config_class = ElectraConfig
+    config: ElectraConfig
     base_model_prefix = "electra"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -1079,7 +1079,7 @@ class ElectraForTokenClassification(ElectraPreTrainedModel):
 
 @auto_docstring
 class ElectraForQuestionAnswering(ElectraPreTrainedModel):
-    config_class = ElectraConfig
+    config: ElectraConfig
     base_model_prefix = "electra"
 
     def __init__(self, config):
@@ -1322,9 +1322,8 @@ class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.generator_lm_head(self.generator_predictions(hidden_states[:, slice_indices, :]))
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.generator_lm_head(self.generator_predictions(hidden_states))
 
         loss = None
         if labels is not None:
