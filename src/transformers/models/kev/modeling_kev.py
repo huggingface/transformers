@@ -61,5 +61,7 @@ class KevDecisionHead(KevPreTrainedModel):
 class KevForDecision(ForDecision):
     """Kev: the model of a repo and its [`KevDecisionHead`]."""
 
+    config: KevConfig
+
 
 __all__ = ["KevDecisionHead", "KevForDecision", "KevPreTrainedModel"]
