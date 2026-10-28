@@ -170,8 +170,9 @@ class DecisionPipelineTest(unittest.TestCase):
             return_tensors="pt",
         )
         self.assertEqual(prompt.input_ids, expected["input_ids"][0].tolist())
-        for key, value in prompt.backbone_inputs().items():
-            torch.testing.assert_close(value, expected[key])
+        for key, value in prompt.model_inputs().items():
+            if key in expected:  # the inputs of the model it reads, next to the marks and questions
+                torch.testing.assert_close(value, expected[key])
         # Remembered questions keep their image, the bare state brings its own
         (prompt,) = template("img-1 again", assets={"img-1": red})
         (expected,) = template({**request, "state": "img-1 again"})
@@ -191,7 +192,7 @@ class DecisionPipelineTest(unittest.TestCase):
         self.assertEqual(prompt.input_ids, expected["input_ids"][0].tolist())
         self.assertEqual(prompt.marks, [len(prompt.input_ids)])
         for key in ("mm_token_type_ids", "pixel_values", "image_grid_thw"):
-            torch.testing.assert_close(prompt.backbone_inputs()[key], expected[key])
+            torch.testing.assert_close(prompt.model_inputs()[key], expected[key])
         # An image token written in the request is text, not an image
         (prompt,) = template({**request, "state": "<|image_pad|> img-1"})
         (expected,) = template({**request, "state": "img-1"})
