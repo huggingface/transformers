@@ -148,9 +148,12 @@ class BolmoMultiHeadLayerNorm(nn.Module):
 
 
 class BolmoMLSTMLayer(nn.Module):
-    """xLSTM-large mLSTM layer (`weight_mode="single"`) running the native PyTorch kernels."""
+    """
+    xLSTM-large mLSTM layer (`weight_mode="single"`) on the native PyTorch kernels. Every released checkpoint
+    (Bolmo-1B, Bolmo-7B and their Stage1) uses the xLSTM-large defaults, hence the constants: gate soft cap 15,
+    `qk_dim = hidden_size // 2`, `v_dim = hidden_size`.
+    """
 
-    # xLSTM-large defaults, shared by every Bolmo checkpoint
     gate_soft_cap = 15.0
 
     def __init__(self, config: BolmoConfig):
@@ -180,7 +183,9 @@ class BolmoMLSTMLayer(nn.Module):
         igate = soft_cap(self.igate_preact(hidden_states), self.gate_soft_cap).transpose(1, 2)
         fgate = soft_cap(self.fgate_preact(hidden_states), self.gate_soft_cap)
         if sequence_start is not None:
-            # closing the forget gate on the first real byte drops the left padding from the state
+            # closing the forget gate on the first real byte drops the left padding from the state. Not
+            # `finfo.min`: the chunkwise kernel cumsums log forget gates, so `min + x - min` would cancel.
+            # -100_000 is the original implementation's value.
             is_start = torch.arange(seq_len, device=fgate.device) == sequence_start[:, None]
             fgate = fgate.masked_fill(is_start[..., None], -100_000)
         fgate = fgate.transpose(1, 2)
@@ -307,6 +312,7 @@ class BolmoModel(BolmoPreTrainedModel):
         )
         self.norm = BolmoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = BolmoRotaryEmbedding(config=config)
+        self.has_sliding_layers = "sliding_attention" in config.layer_types
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -336,10 +342,10 @@ class BolmoModel(BolmoPreTrainedModel):
             "past_key_values": past_key_values,
             "position_ids": position_ids,
         }
-        causal_mask_mapping = {
-            "full_attention": create_causal_mask(**mask_kwargs),
-            "sliding_attention": create_sliding_window_causal_mask(**mask_kwargs),
-        }
+        causal_mask_mapping = {"full_attention": create_causal_mask(**mask_kwargs)}
+        # Bolmo-1B is full attention only
+        if self.has_sliding_layers:
+            causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
         position_embeddings = {
             layer_type: self.rotary_emb(patch_embeds, position_ids, layer_type)
             for layer_type in set(self.config.layer_types)
@@ -461,6 +467,7 @@ class BolmoModel(BolmoPreTrainedModel):
         return BaseModelOutputWithPast(last_hidden_state=self.norm(hidden_states), past_key_values=past_key_values)
 
 
+@auto_docstring
 class BolmoForCausalLM(BolmoPreTrainedModel, BolmoGenerationMixin):
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
@@ -549,19 +556,18 @@ class BolmoTokenizer(ByT5Tokenizer):
         pad_token="<pad>",
         bos_token="<bos>",
         eos_token="<bos>",
-        bpe_token_end_token="<bpe_token_end>",
         **kwargs,
     ):
-        special_tokens = [str(pad_token), str(bos_token), "<eos>", str(bpe_token_end_token)]
+        special_tokens = [str(pad_token), str(bos_token), "<eos>", "<bpe_token_end>"]
         self._added_tokens_decoder = {i: AddedToken(token, special=True) for i, token in enumerate(special_tokens)}
         self.offset = len(special_tokens)
         self._utf_vocab_size = 2**8
         self.boundary_offset = self.offset + self._utf_vocab_size
-        self.bpe_token_end_id = special_tokens.index(str(bpe_token_end_token))
+        self.bpe_token_end_id = 3
         with open(vocab_file, encoding="utf-8") as f:
             self.subword_vocab = json.load(f)
         self._subword_trie = None
-        kwargs.setdefault("extra_special_tokens", [str(bpe_token_end_token)])
+        kwargs.setdefault("extra_special_tokens", ["<bpe_token_end>"])
         PreTrainedTokenizer.__init__(self, pad_token=pad_token, bos_token=bos_token, eos_token=eos_token, **kwargs)
 
     @property

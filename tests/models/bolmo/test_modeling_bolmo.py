@@ -63,6 +63,8 @@ class BolmoModelTester:
             "input_ids": input_ids,
             "expanded_input_ids": ids_tensor([self.batch_size, self.seq_length], config.subword_vocab_size),
             "attention_mask": torch.ones_like(input_ids),
+            # one patch per byte, so per-patch outputs have `seq_length` and batches have no patch padding
+            "boundary_mask": torch.ones_like(input_ids, dtype=torch.bool),
         }
         return config, inputs_dict
 
@@ -123,20 +125,6 @@ class BolmoModelTest(ModelTesterMixin, unittest.TestCase):
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Calls the model without `expanded_input_ids`; attention is Olmo3's, tested there")
     def test_eager_matches_sdpa_inference(self, *args):
-        pass
-
-    @unittest.skip("Global hidden states are per patch, and the number of patches is data dependent")
-    def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip("Global attentions are per patch, and the number of patches is data dependent")
-    def test_attention_outputs(self):
-        pass
-
-    @unittest.skip(
-        "Patches are left-padded per batch, so per-patch hidden states shift between batched and single rows"
-    )
-    def test_batching_equivalence(self):
         pass
 
     @unittest.skip("The boundary predictor is thresholded, it is trained by an auxiliary loss outside of this forward")

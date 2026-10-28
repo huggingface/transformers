@@ -48,19 +48,18 @@ class BolmoTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         bos_token="<bos>",
         eos_token="<bos>",
-        bpe_token_end_token="<bpe_token_end>",
         **kwargs,
     ) -> None:
-        special_tokens = [str(pad_token), str(bos_token), "<eos>", str(bpe_token_end_token)]
+        special_tokens = [str(pad_token), str(bos_token), "<eos>", "<bpe_token_end>"]
         self._added_tokens_decoder = {i: AddedToken(token, special=True) for i, token in enumerate(special_tokens)}
         self.offset = len(special_tokens)
         self._utf_vocab_size = 2**8
         self.boundary_offset = self.offset + self._utf_vocab_size
-        self.bpe_token_end_id = special_tokens.index(str(bpe_token_end_token))
+        self.bpe_token_end_id = 3
         with open(vocab_file, encoding="utf-8") as f:
             self.subword_vocab = json.load(f)
         self._subword_trie = None
-        kwargs.setdefault("extra_special_tokens", [str(bpe_token_end_token)])
+        kwargs.setdefault("extra_special_tokens", ["<bpe_token_end>"])
         super().__init__(pad_token=pad_token, bos_token=bos_token, eos_token=eos_token, **kwargs)
 
     @property
