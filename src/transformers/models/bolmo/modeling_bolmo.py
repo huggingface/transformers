@@ -27,7 +27,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache, DynamicCache, LinearAttentionLayer
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...integrations.mlstm import (
     mlstm_chunkwise_native_autograd,
@@ -50,15 +50,40 @@ from .generation_bolmo import BolmoGenerationMixin
 
 
 class BolmoCache(DynamicCache):
-    """`DynamicCache` of the global layers, plus the recurrent state of the byte-level encoder and decoder."""
+    """
+    `DynamicCache` of the global layers, followed by one `LinearAttentionLayer` per mLSTM layer (its `(c, n, m)`
+    state) and one holding the last encoded byte and the last patch:
+
+        layers: [global 0 .. N-1][encoder mLSTM][decoder mLSTM][last byte hidden state, last patch]
+
+    `patch_mask` is the attention mask of the (left-padded) patches seen by the global layers.
+    """
 
     def __init__(self, config: BolmoConfig):
         super().__init__(config=config)
-        self.encoder_states = None
-        self.decoder_states = None
-        self.last_byte_hidden = None
-        self.last_patch = None
+        self.encoder_start = config.num_hidden_layers
+        self.decoder_start = self.encoder_start + config.num_local_encoder_layers
+        self.byte_state_idx = self.decoder_start + config.num_local_decoder_layers
+        num_mlstm_layers = config.num_local_encoder_layers + config.num_local_decoder_layers
+        self.layers += [LinearAttentionLayer(number_of_states=3) for _ in range(num_mlstm_layers)]
+        self.layers.append(LinearAttentionLayer(number_of_states=2))
         self.patch_mask = None
+
+    def get_states(self, start: int, num_layers: int = 1) -> list[tuple[torch.Tensor, ...]]:
+        return [tuple(layer.recurrent_states.values()) for layer in self.layers[start : start + num_layers]]
+
+    def update_states(self, start: int, states: list, keep: torch.BoolTensor | None = None) -> None:
+        """Store `states` from layer `start` on, keeping the old state of the batch rows where `keep` is set."""
+        for layer_idx, layer_states in enumerate(states, start=start):
+            for state_idx, state in enumerate(layer_states):
+                if keep is not None:
+                    old_state = self.layers[layer_idx].recurrent_states[state_idx]
+                    state = torch.where(keep.view(-1, *[1] * (state.dim() - 1)), old_state, state)
+                self.update_recurrent_state(state, layer_idx, state_idx)
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        super().reorder_cache(beam_idx)
+        self.patch_mask = self.patch_mask.index_select(0, beam_idx.to(self.patch_mask.device))
 
 
 @use_kernel_forward_from_hub("RMSNorm")
@@ -533,14 +558,6 @@ class BolmoPreTrainedModel(PreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
 
-def keep_where(keep: torch.BoolTensor, old_states: list, new_states: list) -> list:
-    """Per batch row, keep the old recurrent state where `keep` is set."""
-    return [
-        tuple(torch.where(keep.view(-1, *[1] * (old.dim() - 1)), old, new) for old, new in zip(old_layer, new_layer))
-        for old_layer, new_layer in zip(old_states, new_states)
-    ]
-
-
 @auto_docstring
 class BolmoModel(BolmoPreTrainedModel):
     def __init__(self, config: BolmoConfig):
@@ -635,10 +652,11 @@ class BolmoModel(BolmoPreTrainedModel):
         hidden_states, decoder_states = self.local_decoder(byte_hidden_states, depooled, sequence_start=sequence_start)
 
         if past_key_values is not None:
-            past_key_values.encoder_states = encoder_states
-            past_key_values.decoder_states = decoder_states
-            past_key_values.last_byte_hidden = byte_hidden_states[:, -1]
-            past_key_values.last_patch = patch_hidden_states[:, -1]
+            past_key_values.update_states(past_key_values.encoder_start, encoder_states)
+            past_key_values.update_states(past_key_values.decoder_start, decoder_states)
+            past_key_values.update_states(
+                past_key_values.byte_state_idx, [(byte_hidden_states[:, -1], patch_hidden_states[:, -1])]
+            )
             past_key_values.patch_mask = patch_mask.long()
         return hidden_states
 
@@ -648,32 +666,33 @@ class BolmoModel(BolmoPreTrainedModel):
         waiting = (last_token == self.config.bpe_token_end_id) | (last_token == self.config.pad_token_id)
         at_boundary = waiting | (last_token >= self.boundary_offset)
 
+        cache = past_key_values
         byte_hidden_states, encoder_states = self.local_encoder(
-            self._unfuse(input_ids), expanded_input_ids, states=past_key_values.encoder_states
+            self._unfuse(input_ids),
+            expanded_input_ids,
+            states=cache.get_states(cache.encoder_start, len(self.local_encoder.layers)),
         )
-        past_key_values.encoder_states = keep_where(waiting, past_key_values.encoder_states, encoder_states)
-        past_key_values.last_byte_hidden = torch.where(
-            waiting[:, None], past_key_values.last_byte_hidden, byte_hidden_states[:, -1]
-        )
-        byte_hidden_states = past_key_values.last_byte_hidden[:, None]
+        cache.update_states(cache.encoder_start, encoder_states, keep=waiting)
+        ((last_byte_hidden, last_patch),) = cache.get_states(cache.byte_state_idx)
+        last_byte_hidden = torch.where(waiting[:, None], last_byte_hidden, byte_hidden_states[:, -1])
+        byte_hidden_states = last_byte_hidden[:, None]
 
         # the global model only steps once every row closed its patch
         decoder_waits = at_boundary
         if at_boundary.all():
-            patch_mask = F.pad(past_key_values.patch_mask, (0, 1), value=1)
-            past_key_values.patch_mask = patch_mask
-            position_ids = patch_mask.sum(-1, keepdim=True) - 1
+            cache.patch_mask = F.pad(cache.patch_mask, (0, 1), value=1)
+            position_ids = cache.patch_mask.sum(-1, keepdim=True) - 1
             patch_embeds = self.local_encoder.out_projection(byte_hidden_states)
-            patch_hidden_states = self._global_forward(
-                patch_embeds, patch_mask, position_ids, past_key_values, **kwargs
-            )
-            past_key_values.last_patch = patch_hidden_states[:, -1]
+            last_patch = self._global_forward(patch_embeds, cache.patch_mask, position_ids, cache, **kwargs)[:, -1]
             decoder_waits = torch.zeros_like(at_boundary)
+        cache.update_states(cache.byte_state_idx, [(last_byte_hidden, last_patch)])
 
         hidden_states, decoder_states = self.local_decoder(
-            byte_hidden_states, past_key_values.last_patch[:, None], states=past_key_values.decoder_states
+            byte_hidden_states,
+            last_patch[:, None],
+            states=cache.get_states(cache.decoder_start, len(self.local_decoder.layers)),
         )
-        past_key_values.decoder_states = keep_where(decoder_waits, past_key_values.decoder_states, decoder_states)
+        cache.update_states(cache.decoder_start, decoder_states, keep=decoder_waits)
         return hidden_states
 
     @merge_with_config_defaults
@@ -698,7 +717,7 @@ class BolmoModel(BolmoPreTrainedModel):
         if use_cache and not isinstance(past_key_values, BolmoCache):
             past_key_values = BolmoCache(config=self.config)
 
-        if past_key_values is not None and past_key_values.last_patch is not None:
+        if past_key_values is not None and past_key_values.get_seq_length() > 0:
             hidden_states = self._decode_step(input_ids, expanded_input_ids, past_key_values, **kwargs)
         else:
             hidden_states = self._prefill(

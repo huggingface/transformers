@@ -43,7 +43,9 @@ class BolmoLogitsProcessor(LogitsProcessor):
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
         if input_ids.shape[1] == self.prompt_length:
-            allowed = self.allowed_first_bytes.to(scores.device)
+            # rows are repeated `num_beams` / `num_return_sequences` times by `generate`
+            repeats = scores.shape[0] // self.allowed_first_bytes.shape[0]
+            allowed = self.allowed_first_bytes.repeat_interleave(repeats, dim=0).to(scores.device)
             return torch.full_like(scores, -float("inf")).scatter(1, allowed, scores.gather(1, allowed))
 
         last_token = input_ids[:, -1]
@@ -102,7 +104,6 @@ class BolmoGenerationMixin(GenerationMixin):
         )
         eos_token_id = self.config.eos_token_id
         kwargs.setdefault("eos_token_id", [eos_token_id, eos_token_id + boundary_offset])
-        # ponytail: the extra recurrent state in `BolmoCache` is not reordered, so beam search is not supported
         return super().generate(
             input_ids[:, :-1],
             attention_mask=attention_mask[:, :-1] if attention_mask is not None else None,

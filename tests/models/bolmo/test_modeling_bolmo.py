@@ -69,6 +69,13 @@ class BolmoModelTester:
         return config, inputs_dict
 
 
+class _DummyExpander:
+    """Stands in for `BolmoTokenizer`: maps every byte to subword id 0."""
+
+    def expand_byte_ids(self, byte_ids, n_last=None):
+        return [0] * (n_last or len(byte_ids))
+
+
 @require_torch
 class BolmoModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (BolmoModel, BolmoForCausalLM) if is_torch_available() else ()
@@ -114,6 +121,17 @@ class BolmoModelTest(ModelTesterMixin, unittest.TestCase):
                 step_logits = model(step_ids, expanded_input_ids[:, i : i + 1], past_key_values=cache).logits
                 torch.testing.assert_close(step_logits[:, -1], full_logits[:, i])
 
+    def test_beam_search_reorders_local_states(self):
+        config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs.pop("boundary_mask")  # `generate` predicts it
+        model = BolmoForCausalLM(config).to(torch_device).eval()
+        tokenizer = _DummyExpander()
+        greedy = model.generate(**inputs, tokenizer=tokenizer, max_new_tokens=6, do_sample=False)
+        beams = model.generate(
+            **inputs, tokenizer=tokenizer, max_new_tokens=6, do_sample=False, num_beams=2, num_return_sequences=2
+        )
+        self.assertEqual(beams.shape[0], 2 * greedy.shape[0])
+
     @unittest.skip("Bolmo embeds bytes and subwords, `inputs_embeds` alone is not enough")
     def test_inputs_embeds(self):
         pass
@@ -144,10 +162,15 @@ class BolmoModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class BolmoIntegrationTest(unittest.TestCase):
     def test_model_1b_greedy_generation(self):
-        # TODO: expected text from the original implementation (`trust_remote_code=True`), run on HF Jobs
+        # the original implementation (`trust_remote_code=True`, fp32) generates these texts and continues past them
+        prompts_and_texts = [
+            ("Language modeling is ", "Language modeling is a subfield of natural language processing that "),
+            ("The capital of France is", "The capital of France is Paris, France.\n\nThe capital of France is Paris"),
+            ("def fibonacci(n):", "def fibonacci(n):\n    if n == 1:\n        return 1\n    elif n == "),
+        ]
         tokenizer = AutoTokenizer.from_pretrained("allenai/Bolmo-1B")
-        model = BolmoForCausalLM.from_pretrained("allenai/Bolmo-1B", device_map="auto")
-        inputs = tokenizer("Language modeling is ", return_tensors="pt").to(model.device)
-        output = model.generate(**inputs, tokenizer=tokenizer, max_new_tokens=32, do_sample=False)
-        text = tokenizer.decode(output[0], skip_special_tokens=True)
-        self.assertTrue(text.startswith("Language modeling is "))
+        model = BolmoForCausalLM.from_pretrained("allenai/Bolmo-1B", dtype=torch.float32)
+        for prompt, expected_text in prompts_and_texts:
+            inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+            output = model.generate(**inputs, tokenizer=tokenizer, max_new_tokens=48, do_sample=False)
+            self.assertEqual(tokenizer.decode(output[0], skip_special_tokens=True), expected_text)
