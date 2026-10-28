@@ -24,6 +24,7 @@ from tokenizers.models import BPE
 from torch import nn
 
 from ...cache_utils import DynamicCache, LinearAttentionLayer
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...convert_slow_tokenizer import bytes_to_unicode
 from ...integrations.mlstm import (
     mlstm_chunkwise_native_autograd,
@@ -32,34 +33,28 @@ from ...integrations.mlstm import (
     soft_cap,
     wrap_chunkwise_arbitrary_sequence_length,
 )
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_utils import slice_logits_to_keep
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ..auto import AutoConfig, AutoModel
 from ..olmo3.configuration_olmo3 import Olmo3Config
-from ..olmo3.modeling_olmo3 import (
-    Olmo3Attention,
-    Olmo3DecoderLayer,
-    Olmo3PreTrainedModel,
-    Olmo3RMSNorm,
-    Olmo3RotaryEmbedding,
-)
+from ..olmo3.modeling_olmo3 import Olmo3RMSNorm
 from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 from .generation_bolmo import BolmoGenerationMixin
 
 
 @auto_docstring(checkpoint="allenai/Bolmo-7B")
 @strict
-class BolmoConfig(Olmo3Config):
+class BolmoConfig(PreTrainedConfig):
     r"""
-    subword_vocab_size (`int`, *optional*, defaults to 100278):
-        Size of the subword vocabulary whose embeddings are added to the byte embeddings.
+    text_config (`dict` or `PreTrainedConfig`, *optional*):
+        Config of the global model running on patches, an [`Olmo3Config`] by default. Its `vocab_size` is the subword
+        vocabulary whose embeddings are added to the byte embeddings.
     num_local_encoder_layers (`int`, *optional*, defaults to 1):
         Number of mLSTM layers in the byte-level encoder.
     num_local_decoder_layers (`int`, *optional*, defaults to 4):
@@ -69,7 +64,7 @@ class BolmoConfig(Olmo3Config):
     local_intermediate_size (`int`, *optional*, defaults to 5504):
         Dimension of the MLPs of the byte-level layers.
     local_rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-        Epsilon of the norms around the patch pooling.
+        Epsilon of the norm closing the byte-level encoder.
     bpe_token_end_id (`int`, *optional*, defaults to 3):
         Id emitted by rows that wait for the rest of the batch to reach a patch boundary.
 
@@ -85,21 +80,40 @@ class BolmoConfig(Olmo3Config):
     """
 
     model_type = "bolmo"
-    base_model_pp_plan = AttributeError()
+    sub_configs_defaults = {"text_config": SubConfigSpec(config_class=AutoConfig, model_type="olmo3")}
 
+    text_config: dict | PreTrainedConfig | None = None
     vocab_size: int = 520
-    max_position_embeddings: int = 65536
+    hidden_size: int = 4096
+    hidden_act: str = "silu"
     rms_norm_eps: float = 1e-6
-    pad_token_id: int | None = 0
-    bos_token_id: int | None = 1
-    eos_token_id: int | list[int] | None = 1
-    subword_vocab_size: int = 100278
+    initializer_range: float = 0.02
     num_local_encoder_layers: int = 1
     num_local_decoder_layers: int = 4
     num_local_heads: int = 16
     local_intermediate_size: int = 5504
     local_rms_norm_eps: float = 1e-5
     bpe_token_end_id: int = 3
+    pad_token_id: int | None = 0
+    bos_token_id: int | None = 1
+    eos_token_id: int | list[int] | None = 1
+    tie_word_embeddings: bool = False
+    use_cache: bool = True
+
+    def __post_init__(self, **kwargs):
+        # TODO: remove once the Hub configs nest the global model under `text_config`
+        if self.text_config is None:
+            olmo3_keys = set(Olmo3Config.__dataclass_fields__) | {"rope_scaling", "rope_theta"}
+            self.text_config = {
+                "model_type": "olmo3",
+                "vocab_size": kwargs.pop("subword_vocab_size", 100278),
+                "max_position_embeddings": 65536,
+                **{key: kwargs.pop(key) for key in list(kwargs) if key in olmo3_keys},
+                "hidden_size": self.hidden_size,
+                "hidden_act": self.hidden_act,
+                "rms_norm_eps": self.rms_norm_eps,
+            }
+        super().__post_init__(**kwargs)
 
 
 class BolmoCache(DynamicCache):
@@ -114,7 +128,7 @@ class BolmoCache(DynamicCache):
 
     def __init__(self, config: BolmoConfig):
         super().__init__(config=config)
-        self.encoder_start = config.num_hidden_layers
+        self.encoder_start = len(self.layers)
         self.decoder_start = self.encoder_start + config.num_local_encoder_layers
         self.byte_state_idx = self.decoder_start + config.num_local_decoder_layers
         num_mlstm_layers = config.num_local_encoder_layers + config.num_local_decoder_layers
@@ -143,19 +157,7 @@ class BolmoRMSNorm(Olmo3RMSNorm):
     pass
 
 
-class BolmoAttention(Olmo3Attention):
-    pass
-
-
 class BolmoMLP(Qwen2MoeMLP):
-    pass
-
-
-class BolmoDecoderLayer(Olmo3DecoderLayer):
-    pass
-
-
-class BolmoRotaryEmbedding(Olmo3RotaryEmbedding):
     pass
 
 
@@ -281,14 +283,12 @@ class BolmoLocalEncoder(nn.Module):
     def __init__(self, config: BolmoConfig):
         super().__init__()
         self.byte_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.subword_embedding = nn.Embedding(config.subword_vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([BolmoLocalLayer(config) for _ in range(config.num_local_encoder_layers)])
         self.post_last_block_norm = BolmoRMSNorm(config.hidden_size, eps=config.local_rms_norm_eps)
         self.out_projection = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
         self.boundary_predictor_module = BolmoBoundaryPredictor(config)
 
-    def forward(self, input_ids, expanded_input_ids, states=None, sequence_start=None):
-        hidden_states = self.byte_embedding(input_ids) + self.subword_embedding(expanded_input_ids)
+    def forward(self, hidden_states, states=None, sequence_start=None):
         new_states = []
         for i, layer in enumerate(self.layers):
             hidden_states, state = layer(hidden_states, states[i] if states else None, sequence_start)
@@ -299,7 +299,6 @@ class BolmoLocalEncoder(nn.Module):
 class BolmoLocalDecoder(nn.Module):
     def __init__(self, config: BolmoConfig):
         super().__init__()
-        self.initial_norm = BolmoRMSNorm(config.hidden_size, eps=config.local_rms_norm_eps)
         self.in_projection = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
         self.layers = nn.ModuleList([BolmoLocalLayer(config) for _ in range(config.num_local_decoder_layers)])
 
@@ -312,8 +311,16 @@ class BolmoLocalDecoder(nn.Module):
         return hidden_states, new_states
 
 
-class BolmoPreTrainedModel(Olmo3PreTrainedModel):
-    _no_split_modules = ["BolmoDecoderLayer", "BolmoLocalLayer"]
+class BolmoPreTrainedModel(PreTrainedModel):
+    config: BolmoConfig
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["BolmoLocalLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
     _can_compile_fullgraph = False  # patching is data-dependent
     _is_stateful = True
 
@@ -324,14 +331,9 @@ class BolmoModel(BolmoPreTrainedModel):
         super().__init__(config)
         self.boundary_offset = config.vocab_size // 2
         self.local_encoder = BolmoLocalEncoder(config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.local_decoder = BolmoLocalDecoder(config)
-        self.layers = nn.ModuleList(
-            [BolmoDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
         self.norm = BolmoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = BolmoRotaryEmbedding(config=config)
-        self.has_sliding_layers = "sliding_attention" in config.layer_types
-        self.gradient_checkpointing = False
         self.post_init()
 
     def get_input_embeddings(self):
@@ -340,50 +342,24 @@ class BolmoModel(BolmoPreTrainedModel):
     def set_input_embeddings(self, value):
         self.local_encoder.byte_embedding = value
 
+    def _embed(self, input_ids, expanded_input_ids):
+        """Bytes (ids at or above `boundary_offset` also close a patch) plus the subword ending at each byte."""
+        byte_ids = torch.where(input_ids >= self.boundary_offset, input_ids - self.boundary_offset, input_ids)
+        subword_embeds = self.language_model.get_input_embeddings()(expanded_input_ids)
+        return self.local_encoder.byte_embedding(byte_ids) + subword_embeds
+
     def predict_boundaries(self, input_ids, expanded_input_ids, attention_mask=None) -> torch.BoolTensor:
         """Patch boundaries of a byte sequence, `True` on the last byte of every patch."""
         sequence_start = (attention_mask == 0).sum(-1) if attention_mask is not None else None
         byte_hidden_states, _ = self.local_encoder(
-            self._unfuse(input_ids), expanded_input_ids, sequence_start=sequence_start
+            self._embed(input_ids, expanded_input_ids), sequence_start=sequence_start
         )
         return self.local_encoder.boundary_predictor_module(byte_hidden_states, sequence_start)
-
-    def _unfuse(self, input_ids):
-        """Byte ids at or above `boundary_offset` also mark a boundary, the encoder only reads the byte."""
-        return torch.where(input_ids >= self.boundary_offset, input_ids - self.boundary_offset, input_ids)
-
-    def _global_forward(self, patch_embeds, patch_mask, position_ids, past_key_values, **kwargs):
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": patch_embeds,
-            "attention_mask": patch_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        causal_mask_mapping = {"full_attention": create_causal_mask(**mask_kwargs)}
-        # Bolmo-1B is full attention only
-        if self.has_sliding_layers:
-            causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
-        position_embeddings = {
-            layer_type: self.rotary_emb(patch_embeds, position_ids, layer_type)
-            for layer_type in set(self.config.layer_types)
-        }
-        hidden_states = patch_embeds
-        for i, decoder_layer in enumerate(self.layers):
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                position_embeddings=position_embeddings[self.config.layer_types[i]],
-                **kwargs,
-            )
-        return self.local_decoder.initial_norm(hidden_states)
 
     def _prefill(self, input_ids, expanded_input_ids, attention_mask, boundary_mask, past_key_values, **kwargs):
         sequence_start = (attention_mask == 0).sum(-1) if attention_mask is not None else None
         byte_hidden_states, encoder_states = self.local_encoder(
-            self._unfuse(input_ids), expanded_input_ids, sequence_start=sequence_start
+            self._embed(input_ids, expanded_input_ids), sequence_start=sequence_start
         )
         if boundary_mask is None:
             boundary_mask = self.local_encoder.boundary_predictor_module(byte_hidden_states, sequence_start)
@@ -401,9 +377,15 @@ class BolmoModel(BolmoPreTrainedModel):
         )
         patch_embeds = self.local_encoder.out_projection(patch_embeds)
         position_ids = (patch_mask.cumsum(-1) - 1).clamp(min=0)
-        patch_hidden_states = self._global_forward(
-            patch_embeds, patch_mask.long(), position_ids, past_key_values, **kwargs
+        global_outputs = self.language_model(
+            inputs_embeds=patch_embeds,
+            attention_mask=patch_mask.long(),
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=past_key_values is not None,
+            **kwargs,
         )
+        patch_hidden_states = global_outputs.last_hidden_state
 
         # depool: every byte reads the patch it closes, or the last one closed before it
         patch_index = (boundary_mask.cumsum(-1) - 1).clamp(min=0) + patch_padding[:, None]
@@ -418,7 +400,7 @@ class BolmoModel(BolmoPreTrainedModel):
                 past_key_values.byte_state_idx, [(byte_hidden_states[:, -1], patch_hidden_states[:, -1])]
             )
             past_key_values.patch_mask = patch_mask.long()
-        return hidden_states
+        return hidden_states, global_outputs
 
     def _decode_step(self, input_ids, expanded_input_ids, past_key_values, **kwargs):
         # rows that emitted `bpe_token_end` (or are finished) wait, rows on a boundary need a new patch
@@ -428,8 +410,7 @@ class BolmoModel(BolmoPreTrainedModel):
 
         cache = past_key_values
         byte_hidden_states, encoder_states = self.local_encoder(
-            self._unfuse(input_ids),
-            expanded_input_ids,
+            self._embed(input_ids, expanded_input_ids),
             states=cache.get_states(cache.encoder_start, len(self.local_encoder.layers)),
         )
         cache.update_states(cache.encoder_start, encoder_states, keep=waiting)
@@ -439,11 +420,20 @@ class BolmoModel(BolmoPreTrainedModel):
 
         # the global model only steps once every row closed its patch
         decoder_waits = at_boundary
+        global_outputs = None
         if at_boundary.all():
             cache.patch_mask = F.pad(cache.patch_mask, (0, 1), value=1)
             position_ids = cache.patch_mask.sum(-1, keepdim=True) - 1
             patch_embeds = self.local_encoder.out_projection(byte_hidden_states)
-            last_patch = self._global_forward(patch_embeds, cache.patch_mask, position_ids, cache, **kwargs)[:, -1]
+            global_outputs = self.language_model(
+                inputs_embeds=patch_embeds,
+                attention_mask=cache.patch_mask,
+                position_ids=position_ids,
+                past_key_values=cache,
+                use_cache=True,
+                **kwargs,
+            )
+            last_patch = global_outputs.last_hidden_state[:, -1]
             decoder_waits = torch.zeros_like(at_boundary)
         cache.update_states(cache.byte_state_idx, [(last_byte_hidden, last_patch)])
 
@@ -453,10 +443,10 @@ class BolmoModel(BolmoPreTrainedModel):
             states=cache.get_states(cache.decoder_start, len(self.local_decoder.layers)),
         )
         cache.update_states(cache.decoder_start, decoder_states, keep=decoder_waits)
-        return hidden_states
+        return hidden_states, global_outputs
 
     @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -478,13 +468,21 @@ class BolmoModel(BolmoPreTrainedModel):
             past_key_values = BolmoCache(config=self.config)
 
         if past_key_values is not None and past_key_values.get_seq_length() > 0:
-            hidden_states = self._decode_step(input_ids, expanded_input_ids, past_key_values, **kwargs)
+            hidden_states, global_outputs = self._decode_step(
+                input_ids, expanded_input_ids, past_key_values, **kwargs
+            )
         else:
-            hidden_states = self._prefill(
+            hidden_states, global_outputs = self._prefill(
                 input_ids, expanded_input_ids, attention_mask, boundary_mask, past_key_values, **kwargs
             )
 
-        return BaseModelOutputWithPast(last_hidden_state=self.norm(hidden_states), past_key_values=past_key_values)
+        # hidden states and attentions are the global model's, one per patch
+        return BaseModelOutputWithPast(
+            last_hidden_state=self.norm(hidden_states),
+            past_key_values=past_key_values,
+            hidden_states=global_outputs.hidden_states if global_outputs is not None else None,
+            attentions=global_outputs.attentions if global_outputs is not None else None,
+        )
 
 
 @auto_docstring

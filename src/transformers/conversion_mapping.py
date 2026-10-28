@@ -651,6 +651,17 @@ def _build_checkpoint_conversion_mapping():
         "LlavaModel": [
             WeightRenaming(source_patterns=r"^language_model.model", target_patterns="language_model"),
         ],
+        "bolmo": [
+            # the original checkpoints keep the global model at the root of `model`
+            WeightRenaming(source_patterns=r"^model\.layers\.", target_patterns="model.language_model.layers."),
+            WeightRenaming(
+                source_patterns=r"^model\.local_encoder\.subword_embedding",
+                target_patterns="model.language_model.embed_tokens",
+            ),
+            WeightRenaming(
+                source_patterns=r"^model\.local_decoder\.initial_norm", target_patterns="model.language_model.norm"
+            ),
+        ],
         "llava": [
             WeightRenaming(source_patterns=r"^language_model.lm_head", target_patterns="lm_head"),
             WeightRenaming(source_patterns=r"^language_model", target_patterns="model.language_model"),

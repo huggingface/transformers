@@ -43,17 +43,22 @@ class BolmoModelTester:
         self.vocab_size = 520
 
     def get_config(self):
+        text_config = {
+            "model_type": "olmo3",
+            "vocab_size": 99,
+            "hidden_size": self.hidden_size,
+            "intermediate_size": 64,
+            "num_hidden_layers": self.num_hidden_layers,
+            "num_attention_heads": self.num_attention_heads,
+            "sliding_window": 8,
+            "layer_types": ["sliding_attention", "full_attention"],
+        }
         return BolmoConfig(
+            text_config=text_config,
             hidden_size=self.hidden_size,
-            intermediate_size=64,
             local_intermediate_size=48,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
             num_local_heads=4,
             num_local_decoder_layers=2,
-            subword_vocab_size=99,
-            sliding_window=8,
-            layer_types=["sliding_attention", "full_attention"],
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -61,7 +66,7 @@ class BolmoModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.vocab_size // 2 - 4) + 4
         inputs_dict = {
             "input_ids": input_ids,
-            "expanded_input_ids": ids_tensor([self.batch_size, self.seq_length], config.subword_vocab_size),
+            "expanded_input_ids": ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size),
             "attention_mask": torch.ones_like(input_ids),
             # one patch per byte, so per-patch outputs have `seq_length` and batches have no patch padding
             "boundary_mask": torch.ones_like(input_ids, dtype=torch.bool),

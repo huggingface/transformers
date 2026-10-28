@@ -18,17 +18,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from collections.abc import Callable
 from functools import partial
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
-from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, LinearAttentionLayer
-from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...cache_utils import DynamicCache, LinearAttentionLayer
+from ...integrations import use_kernel_forward_from_hub
 from ...integrations.mlstm import (
     mlstm_chunkwise_native_autograd,
     mlstm_recurrent_sequence_native,
@@ -36,15 +34,13 @@ from ...integrations.mlstm import (
     soft_cap,
     wrap_chunkwise_arbitrary_sequence_length,
 )
-from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import capture_outputs
+from ..auto import AutoModel
 from .configuration_bolmo import BolmoConfig
 from .generation_bolmo import BolmoGenerationMixin
 
@@ -61,7 +57,7 @@ class BolmoCache(DynamicCache):
 
     def __init__(self, config: BolmoConfig):
         super().__init__(config=config)
-        self.encoder_start = config.num_hidden_layers
+        self.encoder_start = len(self.layers)
         self.decoder_start = self.encoder_start + config.num_local_encoder_layers
         self.byte_state_idx = self.decoder_start + config.num_local_decoder_layers
         num_mlstm_layers = config.num_local_encoder_layers + config.num_local_decoder_layers
@@ -107,154 +103,6 @@ class BolmoRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-@use_kernel_forward_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    q_type, k_type = q.dtype, k.dtype
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed.to(q_type), k_embed.to(k_type)
-
-
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-@use_kernelized_func(apply_rotary_pos_emb)
-class BolmoAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config: BolmoConfig, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = config.attention_dropout
-        self.is_causal = True
-
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-        self.q_norm = BolmoRMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
-        self.k_norm = BolmoRMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
-        self.attention_type = config.layer_types[layer_idx]
-        self.sliding_window = config.sliding_window if self.attention_type == "sliding_attention" else None
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
-        past_key_values: Cache | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        query_states = self.q_norm(self.q_proj(hidden_states))
-        key_states = self.k_norm(self.k_proj(hidden_states))
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(hidden_shape).transpose(1, 2)
-        key_states = key_states.view(hidden_shape).transpose(1, 2)
-        value_states = value_states.view(hidden_shape).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_values is not None:
-            key_states, value_states = past_key_values.update(key_states, value_states, self.layer_idx)
-
-        attention_interface: Callable = ALL_ATTENTION_FUNCTIONS.get_interface(
-            self.config._attn_implementation, eager_attention_forward
-        )
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.attention_dropout,
-            scaling=self.scaling,
-            sliding_window=self.sliding_window,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-        return attn_output, attn_weights
-
-
 class BolmoMLP(nn.Module):
     def __init__(self, config, intermediate_size=None):
         super().__init__()
@@ -269,110 +117,6 @@ class BolmoMLP(nn.Module):
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
-
-
-class BolmoDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: BolmoConfig, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.self_attn = BolmoAttention(config=config, layer_idx=layer_idx)
-
-        self.mlp = BolmoMLP(config)
-        self.post_attention_layernorm = BolmoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_feedforward_layernorm = BolmoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: Cache | None = None,
-        use_cache: bool | None = False,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        residual = hidden_states
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.post_feedforward_layernorm(hidden_states)
-        hidden_states = residual + hidden_states
-        return hidden_states
-
-
-class BolmoRotaryEmbedding(nn.Module):
-    def __init__(self, config: BolmoConfig, device=None):
-        super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-        self.config = config
-        self.layer_types = sorted(set(config.layer_types))
-        self.rope_type = {}
-        for layer_type in self.layer_types:
-            rope_params = self.config.rope_parameters[layer_type]
-            if rope_params is None:
-                continue
-
-            self.rope_type[layer_type] = rope_params["rope_type"]
-            rope_init_fn: Callable = self.compute_default_rope_parameters
-            if self.rope_type[layer_type] != "default":
-                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
-            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
-            setattr(self, f"{layer_type}_inv_freq", nn.Buffer(curr_inv_freq, persistent=False))
-            setattr(self, f"{layer_type}_original_inv_freq", nn.Buffer(curr_inv_freq.clone(), persistent=False))
-            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: BolmoConfig, device=None, layer_type: str | None = None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            layer_type (`str`):
-                The current layer type if the model has different RoPE parameters per type.
-                Should not be used unless `config.layer_types is not None`
-
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
-        base = config.rope_parameters[layer_type]["rope_theta"]
-        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
-
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids, layer_type):
-        # diff -> returns cos/sin in fp32 without casting to `x.dtype`
-        inv_freq = getattr(self, f"{layer_type}_inv_freq")
-        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
-
-        freqs = position_ids[..., None].float() * inv_freq.to(device=x.device, dtype=torch.float)
-        emb = torch.cat((freqs, freqs), dim=-1)
-        cos = emb.cos() * attention_scaling
-        sin = emb.sin() * attention_scaling
-
-        return cos, sin
 
 
 class BolmoMultiHeadLayerNorm(nn.Module):
@@ -497,14 +241,12 @@ class BolmoLocalEncoder(nn.Module):
     def __init__(self, config: BolmoConfig):
         super().__init__()
         self.byte_embedding = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.subword_embedding = nn.Embedding(config.subword_vocab_size, config.hidden_size)
         self.layers = nn.ModuleList([BolmoLocalLayer(config) for _ in range(config.num_local_encoder_layers)])
         self.post_last_block_norm = BolmoRMSNorm(config.hidden_size, eps=config.local_rms_norm_eps)
         self.out_projection = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
         self.boundary_predictor_module = BolmoBoundaryPredictor(config)
 
-    def forward(self, input_ids, expanded_input_ids, states=None, sequence_start=None):
-        hidden_states = self.byte_embedding(input_ids) + self.subword_embedding(expanded_input_ids)
+    def forward(self, hidden_states, states=None, sequence_start=None):
         new_states = []
         for i, layer in enumerate(self.layers):
             hidden_states, state = layer(hidden_states, states[i] if states else None, sequence_start)
@@ -515,7 +257,6 @@ class BolmoLocalEncoder(nn.Module):
 class BolmoLocalDecoder(nn.Module):
     def __init__(self, config: BolmoConfig):
         super().__init__()
-        self.initial_norm = BolmoRMSNorm(config.hidden_size, eps=config.local_rms_norm_eps)
         self.in_projection = nn.Linear(config.hidden_size, config.hidden_size, bias=True)
         self.layers = nn.ModuleList([BolmoLocalLayer(config) for _ in range(config.num_local_decoder_layers)])
 
@@ -528,34 +269,18 @@ class BolmoLocalDecoder(nn.Module):
         return hidden_states, new_states
 
 
-@auto_docstring
 class BolmoPreTrainedModel(PreTrainedModel):
     config: BolmoConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["BolmoDecoderLayer", "BolmoLocalLayer"]
+    _no_split_modules = ["BolmoLocalLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False  # patching is data-dependent
     _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": BolmoDecoderLayer,
-        "attentions": BolmoAttention,
-    }
+    _can_compile_fullgraph = False  # patching is data-dependent
     _is_stateful = True
-
-    def _init_weights(self, module):
-        super()._init_weights(module)
-        if isinstance(module, BolmoRotaryEmbedding):
-            for layer_type in module.layer_types:
-                rope_init_fn = module.compute_default_rope_parameters
-                if module.rope_type[layer_type] != "default":
-                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
-                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
-                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
-                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
 
 @auto_docstring
@@ -564,14 +289,9 @@ class BolmoModel(BolmoPreTrainedModel):
         super().__init__(config)
         self.boundary_offset = config.vocab_size // 2
         self.local_encoder = BolmoLocalEncoder(config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.local_decoder = BolmoLocalDecoder(config)
-        self.layers = nn.ModuleList(
-            [BolmoDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
         self.norm = BolmoRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = BolmoRotaryEmbedding(config=config)
-        self.has_sliding_layers = "sliding_attention" in config.layer_types
-        self.gradient_checkpointing = False
         self.post_init()
 
     def get_input_embeddings(self):
@@ -580,50 +300,24 @@ class BolmoModel(BolmoPreTrainedModel):
     def set_input_embeddings(self, value):
         self.local_encoder.byte_embedding = value
 
+    def _embed(self, input_ids, expanded_input_ids):
+        """Bytes (ids at or above `boundary_offset` also close a patch) plus the subword ending at each byte."""
+        byte_ids = torch.where(input_ids >= self.boundary_offset, input_ids - self.boundary_offset, input_ids)
+        subword_embeds = self.language_model.get_input_embeddings()(expanded_input_ids)
+        return self.local_encoder.byte_embedding(byte_ids) + subword_embeds
+
     def predict_boundaries(self, input_ids, expanded_input_ids, attention_mask=None) -> torch.BoolTensor:
         """Patch boundaries of a byte sequence, `True` on the last byte of every patch."""
         sequence_start = (attention_mask == 0).sum(-1) if attention_mask is not None else None
         byte_hidden_states, _ = self.local_encoder(
-            self._unfuse(input_ids), expanded_input_ids, sequence_start=sequence_start
+            self._embed(input_ids, expanded_input_ids), sequence_start=sequence_start
         )
         return self.local_encoder.boundary_predictor_module(byte_hidden_states, sequence_start)
-
-    def _unfuse(self, input_ids):
-        """Byte ids at or above `boundary_offset` also mark a boundary, the encoder only reads the byte."""
-        return torch.where(input_ids >= self.boundary_offset, input_ids - self.boundary_offset, input_ids)
-
-    def _global_forward(self, patch_embeds, patch_mask, position_ids, past_key_values, **kwargs):
-        mask_kwargs = {
-            "config": self.config,
-            "inputs_embeds": patch_embeds,
-            "attention_mask": patch_mask,
-            "past_key_values": past_key_values,
-            "position_ids": position_ids,
-        }
-        causal_mask_mapping = {"full_attention": create_causal_mask(**mask_kwargs)}
-        # Bolmo-1B is full attention only
-        if self.has_sliding_layers:
-            causal_mask_mapping["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
-        position_embeddings = {
-            layer_type: self.rotary_emb(patch_embeds, position_ids, layer_type)
-            for layer_type in set(self.config.layer_types)
-        }
-        hidden_states = patch_embeds
-        for i, decoder_layer in enumerate(self.layers):
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                position_embeddings=position_embeddings[self.config.layer_types[i]],
-                **kwargs,
-            )
-        return self.local_decoder.initial_norm(hidden_states)
 
     def _prefill(self, input_ids, expanded_input_ids, attention_mask, boundary_mask, past_key_values, **kwargs):
         sequence_start = (attention_mask == 0).sum(-1) if attention_mask is not None else None
         byte_hidden_states, encoder_states = self.local_encoder(
-            self._unfuse(input_ids), expanded_input_ids, sequence_start=sequence_start
+            self._embed(input_ids, expanded_input_ids), sequence_start=sequence_start
         )
         if boundary_mask is None:
             boundary_mask = self.local_encoder.boundary_predictor_module(byte_hidden_states, sequence_start)
@@ -641,9 +335,15 @@ class BolmoModel(BolmoPreTrainedModel):
         )
         patch_embeds = self.local_encoder.out_projection(patch_embeds)
         position_ids = (patch_mask.cumsum(-1) - 1).clamp(min=0)
-        patch_hidden_states = self._global_forward(
-            patch_embeds, patch_mask.long(), position_ids, past_key_values, **kwargs
+        global_outputs = self.language_model(
+            inputs_embeds=patch_embeds,
+            attention_mask=patch_mask.long(),
+            position_ids=position_ids,
+            past_key_values=past_key_values,
+            use_cache=past_key_values is not None,
+            **kwargs,
         )
+        patch_hidden_states = global_outputs.last_hidden_state
 
         # depool: every byte reads the patch it closes, or the last one closed before it
         patch_index = (boundary_mask.cumsum(-1) - 1).clamp(min=0) + patch_padding[:, None]
@@ -658,7 +358,7 @@ class BolmoModel(BolmoPreTrainedModel):
                 past_key_values.byte_state_idx, [(byte_hidden_states[:, -1], patch_hidden_states[:, -1])]
             )
             past_key_values.patch_mask = patch_mask.long()
-        return hidden_states
+        return hidden_states, global_outputs
 
     def _decode_step(self, input_ids, expanded_input_ids, past_key_values, **kwargs):
         # rows that emitted `bpe_token_end` (or are finished) wait, rows on a boundary need a new patch
@@ -668,8 +368,7 @@ class BolmoModel(BolmoPreTrainedModel):
 
         cache = past_key_values
         byte_hidden_states, encoder_states = self.local_encoder(
-            self._unfuse(input_ids),
-            expanded_input_ids,
+            self._embed(input_ids, expanded_input_ids),
             states=cache.get_states(cache.encoder_start, len(self.local_encoder.layers)),
         )
         cache.update_states(cache.encoder_start, encoder_states, keep=waiting)
@@ -679,11 +378,20 @@ class BolmoModel(BolmoPreTrainedModel):
 
         # the global model only steps once every row closed its patch
         decoder_waits = at_boundary
+        global_outputs = None
         if at_boundary.all():
             cache.patch_mask = F.pad(cache.patch_mask, (0, 1), value=1)
             position_ids = cache.patch_mask.sum(-1, keepdim=True) - 1
             patch_embeds = self.local_encoder.out_projection(byte_hidden_states)
-            last_patch = self._global_forward(patch_embeds, cache.patch_mask, position_ids, cache, **kwargs)[:, -1]
+            global_outputs = self.language_model(
+                inputs_embeds=patch_embeds,
+                attention_mask=cache.patch_mask,
+                position_ids=position_ids,
+                past_key_values=cache,
+                use_cache=True,
+                **kwargs,
+            )
+            last_patch = global_outputs.last_hidden_state[:, -1]
             decoder_waits = torch.zeros_like(at_boundary)
         cache.update_states(cache.byte_state_idx, [(last_byte_hidden, last_patch)])
 
@@ -693,10 +401,10 @@ class BolmoModel(BolmoPreTrainedModel):
             states=cache.get_states(cache.decoder_start, len(self.local_decoder.layers)),
         )
         cache.update_states(cache.decoder_start, decoder_states, keep=decoder_waits)
-        return hidden_states
+        return hidden_states, global_outputs
 
     @merge_with_config_defaults
-    @capture_outputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -718,13 +426,19 @@ class BolmoModel(BolmoPreTrainedModel):
             past_key_values = BolmoCache(config=self.config)
 
         if past_key_values is not None and past_key_values.get_seq_length() > 0:
-            hidden_states = self._decode_step(input_ids, expanded_input_ids, past_key_values, **kwargs)
+            hidden_states, global_outputs = self._decode_step(input_ids, expanded_input_ids, past_key_values, **kwargs)
         else:
-            hidden_states = self._prefill(
+            hidden_states, global_outputs = self._prefill(
                 input_ids, expanded_input_ids, attention_mask, boundary_mask, past_key_values, **kwargs
             )
 
-        return BaseModelOutputWithPast(last_hidden_state=self.norm(hidden_states), past_key_values=past_key_values)
+        # hidden states and attentions are the global model's, one per patch
+        return BaseModelOutputWithPast(
+            last_hidden_state=self.norm(hidden_states),
+            past_key_values=past_key_values,
+            hidden_states=global_outputs.hidden_states if global_outputs is not None else None,
+            attentions=global_outputs.attentions if global_outputs is not None else None,
+        )
 
 
 @auto_docstring
