@@ -58,19 +58,18 @@ and replacing images with the corresponding assets.
 We support arbitrary kind of inputs, users should be able to expand it to his needs.
 """
 
-import copy
 import functools
 import json
 import re
 import string
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 from huggingface_hub.dataclasses import strict
 from huggingface_hub.errors import StrictDataclassError
 
 from ..image_utils import load_image
-from ..tokenization_utils_base import AddedToken, BatchEncoding
+from ..tokenization_utils_base import AddedToken
 from ..utils.chat_template_utils import _compile_jinja_template, _get_template_variables
 from .configuration_utils import DecisionConfig
 
@@ -226,45 +225,6 @@ def label_token_ids(tokenizer, labels: tuple[str, ...]) -> list[int]:
     return label_ids
 
 
-@dataclass
-class DecisionPrompt:
-    """
-    A rendered prompt, without its sentinels.
-
-    Args:
-        input_ids (`list[int]`):
-            The token ids, without `<|mark|>` and `<|split|>`.
-        marks (`list[int]`):
-            The number of tokens before each `<|mark|>`: the lm_head reads at `marks[i] - 1` (the token right before the
-            mark), or the span between two marks. Without marks in the template, `[len(input_ids)]`, the last token.
-        questions (`list[Question]`):
-            The questions the prompt asks, one or all of them.
-        backbone_kwargs (`dict`, *optional*):
-            The backbone's other inputs: per-token ones like `token_type_ids`, and the processor's tensors like
-            `pixel_values`.
-    """
-
-    input_ids: list[int]
-    marks: list[int]
-    questions: list[Question]
-    backbone_kwargs: dict[str, Any] = field(default_factory=dict)
-
-    def model_inputs(self) -> BatchEncoding:
-        """
-        The inputs of a decision model for the prompt, as a batch of one: `input_ids`, `marks` (the number of tokens
-        before each `<|mark|>`), the `num_options` and `question_type_ids` (index in `Question.questions_types`) of each
-        question, and the other inputs of the model it reads (`backbone_kwargs`, like `pixel_values`).
-        """
-        inputs = {
-            "input_ids": [self.input_ids],
-            "marks": [self.marks],
-            "num_options": [[len(question.options) for question in self.questions]],
-            "question_type_ids": [[Question.questions_types.index(question.type) for question in self.questions]],
-        }
-        kwargs = {key: [value] if isinstance(value, list) else value for key, value in self.backbone_kwargs.items()}
-        return BatchEncoding(inputs | kwargs, tensor_type="pt")
-
-
 def parse_questions(questions: dict[str, Any], config: DecisionConfig) -> list[Question]:
     """
     Validates the `questions` of a System One request and puts them in template order, raising one `ValueError` that
@@ -341,141 +301,72 @@ def _insert_images(template_inputs: dict[str, Any], assets: dict[str, Any], load
     return insert(template_inputs), images
 
 
-class DecisionTemplate:
+def chat_template_kwargs(config: DecisionConfig, request: dict[str, Any] | str, processor) -> list[dict[str, Any]]:
     """
-    Renders a System One request into [`DecisionPrompt`]s with `apply_chat_template`: one per question, or one for all
-    when the decision template uses `questions`. A decision template gets the request as `state` and `question` (or
-    `questions`), with the images of its `assets` as `{"type": "image", "image": ...}` parts of `state`, and writes
-    `<|mark|>` where a head reads and `<|split|>` where the prompt is tokenized in pieces. Without one, the generic
-    `DECISION_PROMPT` is the user message of the model's chat template, read after the generation prompt.
+    The keyword arguments of `processor.apply_chat_template` for each prompt of a System One `request` (`{"state": ...,
+    "questions": ..., "assets": ...}`, or its JSON): one per question, or one for all of them when the decision template
+    reads `questions`. Each also has the parsed questions of its prompt (`decision_questions`), which [`~DecisionMixin.decide`] and
+    `decode_decision` read. Adds the sentinels to the tokenizer of `processor`, once, and keeps their ids in `config`.
 
-    Args:
-        processor (`PreTrainedTokenizerBase` or `ProcessorMixin`):
-            The tokenizer, or the processor of models that see images.
-        config ([`DecisionConfig`], *optional*):
-            The settings of the decision model.
+    `assets` map placeholders to images, as in the System One API: each placeholder in a string of the state, the
+    instructions or the criteria is replaced with its image. An image is an asset (`{"type": "image", "format": "png",
+    "data_base64": ...}`), or anything [`~image_utils.load_image`] takes, like a PIL image, a path or a URL.
     """
+    tokenizer = getattr(processor, "tokenizer", processor)
+    if MARK not in tokenizer.get_vocab():  # special: they split the text they're in, and requests can't write them
+        tokenizer.add_tokens([AddedToken(token, special=True, normalized=False) for token in (MARK, SPLIT)])
+    config._sentinel_ids = tuple(tokenizer.convert_tokens_to_ids([MARK, SPLIT]))
 
-    def __init__(self, processor, config: DecisionConfig | None = None):
-        # A copy with the sentinels as special tokens: they split the text they're in, and requests can't write them
-        processor = copy.deepcopy(processor)
-        self.tokenizer = getattr(processor, "tokenizer", processor)
-        self.tokenizer.add_tokens([AddedToken(token, special=True, normalized=False) for token in (MARK, SPLIT)])
-        self.mark_id, self.split_id = self.tokenizer.convert_tokens_to_ids([MARK, SPLIT])
-        self.processor = processor if getattr(processor, "image_processor", None) is not None else None
-        self.config = config or DecisionConfig()
-        self.decision_template = self.config.chat_template
-        template = self.decision_template or DECISION_PROMPT
-        self.prompt, self.template_input_names = _compile_jinja_template(template), _get_template_variables(template)
-        self.one_prompt = "questions" in self.template_input_names
-        self.chat_kwargs = {"enable_thinking": False}
-        if self.processor is not None and "enable_thinking" not in _get_template_variables(processor.chat_template):
-            self.chat_kwargs = {}  # processors pass the variables their template doesn't use to the processor
+    if isinstance(request, str):  # parsed, so that `\u` escapes can't hide control tokens
+        request = json.loads(request)
+    if not isinstance(request, dict) or "questions" not in request or "state" not in request:
+        raise ValueError('A request is {"state": ..., "questions": {name: question, ...}}, as a dict or its JSON.')
+    if not config.sanitize_control_tokens:  # templates that escape control tokens still get no sentinels
+        assets = request.get("assets")  # images aren't JSON, and have no sentinels
+        request = {key: value for key, value in request.items() if key != "assets"}
+        request = json.loads(json.dumps(request, ensure_ascii=False).replace(MARK, "").replace(SPLIT, ""))
+        request["assets"] = assets
+    questions, state, assets = parse_questions(request["questions"], config), request["state"], request.get("assets")
+    has_images = getattr(processor, "image_processor", None) is not None
+    if assets and not has_images:
+        raise ValueError("Images need a model whose processor handles them.")
 
-        # Each distinct set of questions is validated once: keyed by its JSON, a repeated set is a cache hit
-        self._parse_questions = functools.lru_cache(maxsize=256)(
-            lambda questions: parse_questions(json.loads(questions), self.config)
-        )
+    template = config.chat_template or DECISION_PROMPT
+    template_input_names = _get_template_variables(template)
+    chat_kwargs = {"enable_thinking": False}
+    if has_images and "enable_thinking" not in _get_template_variables(processor.chat_template):
+        chat_kwargs = {}  # processors pass the variables their template doesn't use to the processor
+    load = functools.cache(lambda name: _load_asset(assets[name]))
+    prompts = []
+    one_prompt = "questions" in template_input_names
+    for group in [questions] if one_prompt else [[question] for question in questions]:
+        kwargs = {"add_generation_prompt": True, "sanitize_control_tokens": config.sanitize_control_tokens}
+        if config.chat_template is None:  # the generic prompt, as the user message of the model's chat template
+            text = _compile_jinja_template(DECISION_PROMPT).render(state=state, question=group[0])
+            content = _split_at_placeholders(text, assets, load) if has_images else text
+        else:
+            template_inputs = {"state": state, "question": asdict(group[0]), "questions": [asdict(q) for q in group]}
+            template_inputs = {name: value for name, value in template_inputs.items() if name in template_input_names}
+            if assets:
+                template_inputs, images = _insert_images(template_inputs, assets, load)
+                kwargs["processor_kwargs"] = {"images": images} if images else {}
+            content = ""
+            kwargs |= {"chat_template": config.chat_template, **template_inputs}
+        conversation = [{"role": "user", "content": content}]
+        prompts.append({"conversation": conversation, **chat_kwargs, **kwargs, "decision_questions": group})
+    return prompts
 
-    def parse_questions(self, questions: dict[str, Any]) -> list[Question]:
-        """[`parse_questions`], cached: the returned list is shared between calls and must not be modified."""
-        return self._parse_questions(json.dumps(questions, ensure_ascii=False))
 
-    def __call__(
-        self, request: dict[str, Any] | str | Any, assets: dict[str, Any] | None = None
-    ) -> list[DecisionPrompt]:
-        """
-        Answers a decision `request`: a `{"state": ..., "questions": ..., "assets": ...}` as a dict or a JSON.
-
-        `assets` map placeholders to images, as in the System One API: each placeholder in a string of the state, the
-        instructions or the criteria is replaced with its image. An image is an asset (`{"type": "image", "format":
-        "png", "data_base64": ...}`), or anything [`~image_utils.load_image`] takes, like a PIL image, a path or a URL.
-        """
-        if isinstance(request, str):  # a request as JSON, parsed so that `\u` escapes can't hide control tokens
-            try:
-                parsed = json.loads(request)
-            except json.JSONDecodeError:
-                parsed = None
-            request = parsed if isinstance(parsed, dict) and "questions" in parsed else request
-
-        if not self.config.sanitize_control_tokens:  # templates that escape control tokens still get no sentinels
-            # images aren't JSON, and have no sentinels
-            request_assets = request.get("assets") if isinstance(request, dict) else None
-            request = {k: v for k, v in request.items() if k != "assets"} if request_assets is not None else request
-            request = json.loads(json.dumps(request, ensure_ascii=False).replace(MARK, "").replace(SPLIT, ""))
-            if request_assets is not None:
-                request["assets"] = request_assets
-
-        if not isinstance(request, dict) or "questions" not in request or "state" not in request:
-            raise ValueError('A request is {"state": ..., "questions": {name: question, ...}}, as a dict or its JSON.')
-        assets = {**request.get("assets", {}), **(assets or {})}
-        questions, state = self.parse_questions(request["questions"]), request["state"]
-
-        if assets and self.processor is None:
-            raise ValueError("Images need a model whose processor handles them.")
-
-        load = functools.cache(lambda name: _load_asset(assets[name]))
-        sanitize = self.config.sanitize_control_tokens
-        prompts = []
-        for group in [questions] if self.one_prompt else [[question] for question in questions]:
-            if self.decision_template is None:
-                text = self.prompt.render(state=state, question=group[0])
-                content = _split_at_placeholders(text, assets, load) if self.processor is not None else text
-                kwargs = {"sanitize_control_tokens": sanitize}
-            else:
-                template_inputs = {
-                    name: value
-                    for name, value in (
-                        ("state", state),
-                        ("question", asdict(group[0])),
-                        ("questions", [asdict(q) for q in group]),
-                    )
-                    if name in self.template_input_names
-                }
-                images = []
-                if assets:
-                    template_inputs, images = _insert_images(template_inputs, assets, load)
-                content, kwargs = "", {"chat_template": self.decision_template, **template_inputs}
-                kwargs["sanitize_control_tokens"] = sanitize
-                if images:
-                    kwargs["processor_kwargs"] = {"images": images}
-            inputs = (self.processor or self.tokenizer).apply_chat_template(
-                [{"role": "user", "content": content}],
-                add_generation_prompt=True,
-                tokenize=True,
-                return_dict=True,
-                return_tensors="pt",
-                **self.chat_kwargs,
-                **kwargs,
-            )
-            prompts.append(self._prompt(inputs, group))
-        return prompts
-
-    def _prompt(self, inputs: dict[str, Any], questions: list[Question]) -> DecisionPrompt:
-        """
-        Drops the sentinels from the inputs: the marks are the number of tokens before each `<|mark|>`.
-        Creates the `DecisionPrompt` object
-        """
-        ids = inputs["input_ids"][0]
-        token_to_keep = (ids != self.mark_id) & (ids != self.split_id)
-        marks = token_to_keep.cumsum(0)[ids == self.mark_id].tolist()
-        per_token = {
-            key: value[:, token_to_keep]
-            for key, value in inputs.items()
-            if getattr(value, "shape", ())[-1:] == ids.shape
-        }
-        tensors = {key: value for key, value in inputs.items() if key not in per_token}
-        input_ids = per_token.pop("input_ids")[0].tolist()
-        per_token.pop("attention_mask", None)
-        # The default prompt is read after the generation prompt
-        return DecisionPrompt(input_ids, marks or [len(input_ids)], questions, {**per_token, **tensors})
+def decode_decision(scores: list, questions: list[Question]) -> dict[str, dict[str, Any]]:
+    """The System One answers to `questions`, from the option scores [`~DecisionMixin.decide`] returns for them."""
+    return {question.name: question.answer(scores.softmax(-1).tolist()) for question, scores in zip(questions, scores)}
 
 
 __all__ = [
     "DECISION_PROMPT",
-    "DecisionPrompt",
-    "DecisionTemplate",
     "Question",
+    "chat_template_kwargs",
+    "decode_decision",
     "label_token_ids",
     "parse_questions",
 ]

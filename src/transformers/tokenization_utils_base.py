@@ -2929,6 +2929,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             **kwargs,
         )
 
+    def decode_decision(self, scores, decision_questions) -> dict[str, dict]:
+        """
+        The System One answers to the questions of a decision prompt (`decision_questions`, from
+        [`DecisionConfig.chat_template_kwargs`]), from the option scores that `model.decide` returns for them.
+        """
+        from .decision import decode_decision
+
+        return decode_decision(scores, decision_questions)
+
     def batch_decode(
         self,
         sequences: list[int] | list[list[int]] | np.ndarray | torch.Tensor,

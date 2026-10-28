@@ -15,11 +15,11 @@
 import json
 import tempfile
 from pathlib import Path
+from types import SimpleNamespace
 
 from huggingface_hub import hf_hub_download
 
 from transformers import AutoConfig, AutoTokenizer, DecisionConfig, is_torch_available, pipeline
-from transformers.decision import DecisionTemplate
 from transformers.testing_utils import torch_device
 
 
@@ -27,6 +27,24 @@ if is_torch_available():
     import torch
 
     from transformers import AutoModelForDecision, Qwen2ForCausalLM
+    from transformers.decision.modeling_utils import read_marks
+
+
+def render(processor, request, config=None):
+    """
+    The prompts of a decision `request`, as `apply_chat_template` renders them: their ids and marks without the
+    sentinels (and their inputs without them, `stripped`), their inputs with them (what `decide` takes) and questions.
+    """
+    config = config or DecisionConfig()
+    prompts = []
+    for kwargs in config.chat_template_kwargs(request, processor):
+        questions = kwargs.pop("decision_questions")
+        inputs = processor.apply_chat_template(**kwargs, tokenize=True, return_dict=True, return_tensors="pt")
+        stripped, marks = read_marks(dict(inputs), config._sentinel_ids)
+        ids = stripped["input_ids"][0].tolist()
+        prompt = {"input_ids": ids, "marks": marks.tolist(), "questions": questions, "stripped": stripped}
+        prompts.append(SimpleNamespace(**prompt, inputs=dict(inputs)))
+    return prompts
 
 
 class DecisionHeadTesterMixin:
@@ -44,7 +62,8 @@ class DecisionHeadTesterMixin:
         cls.test = json.loads(Path(hf_hub_download(cls.decision_repo, "decision_test.json")).read_bytes())
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.test["model"], revision=cls.test["revision"])
         cls.decision_config = DecisionConfig.from_pretrained(cls.decision_repo)
-        cls.prompts = DecisionTemplate(cls.tokenizer, cls.decision_config)(cls.test["request"])
+        # The prompts of the request: the inputs `apply_chat_template` renders, and their questions
+        cls.prompts = render(cls.tokenizer, cls.test["request"], cls.decision_config)
         config = json.loads(Path(hf_hub_download(cls.decision_repo, "decision_head.json")).read_bytes())
         cls.config = AutoConfig.for_model(**{**config, **cls.tiny_sizes})
         cls.config.text_config = cls.backbone_class.config_class(
@@ -64,7 +83,12 @@ class DecisionHeadTesterMixin:
 
     def scores(self, model):
         with torch.no_grad():
-            return [model(**prompt.model_inputs()) for prompt in self.prompts]
+            return [
+                model.decide(
+                    **prompt.inputs, decision_questions=prompt.questions, decision_config=self.decision_config
+                )
+                for prompt in self.prompts
+            ]
 
     def test_scores_and_save_load(self):
         for model_class in self.all_model_classes:
@@ -75,7 +99,7 @@ class DecisionHeadTesterMixin:
                 loaded = AutoModelForDecision.from_pretrained(tmp, attn_implementation="eager").eval()
             for prompt, scores, loaded_scores in zip(self.prompts, self.scores(model), self.scores(loaded)):
                 torch.testing.assert_close(loaded_scores, scores)
-                self.assertEqual(len(scores), sum(len(question.options) for question in prompt.questions))
+                self.assertEqual([len(s) for s in scores], [len(question.options) for question in prompt.questions])
 
 
 def check_decision(

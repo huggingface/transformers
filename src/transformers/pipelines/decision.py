@@ -1,15 +1,15 @@
 import functools
-import inspect
+import json
 from pathlib import Path
 from typing import Any
 
-from ..decision import DecisionConfig, DecisionTemplate, Question, label_token_ids
+from ..decision import DecisionConfig, decode_decision, label_token_ids
 from ..utils import add_end_docstrings, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    import torch
+    from ..decision.modeling_utils import DecisionMixin, read_marks
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
@@ -67,20 +67,19 @@ class DecisionPipeline(Pipeline):
     ):
         super().__init__(*args, **kwargs)
         repo = decision_config if isinstance(decision_config, (str, Path)) else self.model.name_or_path
-        if not isinstance(decision_config, DecisionConfig):
-            try:
-                decision_config = DecisionConfig.from_pretrained(repo)
-            except OSError:  # a checkpoint shipping a decision head next to its weights, or a model without one
-                from_checkpoint = getattr(type(self.model.config), "decision_config", None)
-                decision_config = (from_checkpoint and from_checkpoint(repo)) or DecisionConfig()
-        self.template = DecisionTemplate(self.processor or self.tokenizer, decision_config)
         # A decision model (`XxxForDecision`) scores the options itself, any other model by the logits of their labels
-        self.reads_marks = "marks" in inspect.signature(self.model.forward).parameters
-        if decision_config.adapter:  # a LoRA in a subfolder of the repo
-            self.model.load_adapter(repo, adapter_kwargs={"subfolder": decision_config.adapter})
-        self.logits_processors = {
-            kind: decision_config.get_logits_processor(kind) for kind in Question.questions_types
-        }
+        self.is_decision_model = isinstance(self.model, DecisionMixin)
+        if isinstance(decision_config, DecisionConfig):
+            self.decision_config = decision_config
+        elif self.is_decision_model and decision_config is None:
+            self.decision_config = self.model.decision_config
+        else:
+            try:
+                self.decision_config = DecisionConfig.from_pretrained(repo)
+            except OSError:
+                self.decision_config = DecisionConfig()
+        if self.decision_config.adapter:  # a LoRA in a subfolder of the repo
+            self.model.load_adapter(repo, adapter_kwargs={"subfolder": self.decision_config.adapter})
         self.label_token_ids = functools.cache(functools.partial(label_token_ids, self.tokenizer))
 
     def _sanitize_parameters(self, questions: dict[str, Any] | None = None, assets: dict[str, Any] | None = None):
@@ -88,31 +87,42 @@ class DecisionPipeline(Pipeline):
         return preprocess_params, {}, {}
 
     def preprocess(self, inputs, questions: dict[str, Any] | None = None, assets: dict[str, Any] | None = None):
-        prompts = self.template(inputs if questions is None else {"state": inputs, "questions": questions}, assets)
-        return {"prompts": prompts, "inputs": [prompt.model_inputs() for prompt in prompts]}
+        request = inputs if questions is None else {"state": inputs, "questions": questions}
+        if assets:
+            request = (json.loads(request) if isinstance(request, str) else request) | {"assets": assets}
+        processor = self.processor or self.tokenizer
+        prompts = []
+        for kwargs in self.decision_config.chat_template_kwargs(request, processor):
+            questions = kwargs.pop("decision_questions")
+            inputs = processor.apply_chat_template(**kwargs, tokenize=True, return_dict=True, return_tensors="pt")
+            prompts.append((inputs, questions))
+        return {"prompts": prompts}
 
     def _forward(self, model_inputs):
         # TODO: batch / continious batching
         scores = []
-        for prompt, inputs in zip(model_inputs["prompts"], model_inputs["inputs"]):
-            if self.reads_marks:
-                scores.append(self.model(**inputs).split(inputs["num_options"][0].tolist()))
-            else:  # the logits of the labels before each mark
-                marks = inputs.pop("marks")[0]
-                inputs = {
-                    key: value for key, value in inputs.items() if key not in ("num_options", "question_type_ids")
-                }
-                logits = self.model(**inputs, use_cache=False, logits_to_keep=marks - 1).logits[0]
-                labels = [self.label_token_ids(tuple(question.labels)) for question in prompt.questions]
-                scores.append([logits[index, label_ids] for index, label_ids in enumerate(labels)])
+        for inputs, questions in model_inputs["prompts"]:
+            if self.is_decision_model:
+                scores.append(
+                    self.model.decide(**inputs, decision_questions=questions, decision_config=self.decision_config)
+                )
+                continue
+            # the logits of the labels before each mark
+            inputs, marks = read_marks(inputs, self.decision_config._sentinel_ids)
+            logits = self.model(**inputs, use_cache=False, logits_to_keep=marks - 1).logits[0]
+            tail = inputs["input_ids"][0, int(marks[-1]) :]
+            scores.append(
+                [
+                    self.decision_config.get_logits_processor(question.type)(
+                        tail, logits[index, self.label_token_ids(tuple(question.labels))].float()
+                    )
+                    for index, question in enumerate(questions)
+                ]
+            )
         return {"prompts": model_inputs["prompts"], "scores": scores}
 
     def postprocess(self, model_outputs):
         answers = {}
-        for prompt, prompt_scores in zip(model_outputs["prompts"], model_outputs["scores"]):
-            # the tokens after the last mark, where the template writes the state
-            input_ids = torch.tensor(prompt.input_ids[prompt.marks[-1] :])
-            for question, scores in zip(prompt.questions, prompt_scores):
-                scores = self.logits_processors[question.type](input_ids, scores.float())
-                answers[question.name] = question.answer(scores.softmax(-1).tolist())
+        for (_, questions), scores in zip(model_outputs["prompts"], model_outputs["scores"]):
+            answers |= decode_decision(scores, questions)
         return answers
