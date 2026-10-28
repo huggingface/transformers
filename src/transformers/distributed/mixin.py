@@ -75,6 +75,11 @@ def _apply_dtype_plan(model: nn.Module, dtype_plan: dict[str, torch.dtype] | Non
             param.data = param.data.to(dtype)
 
 
+def _trainable_dtypes(module: nn.Module, recurse: bool = True) -> list[torch.dtype]:
+    """The dtypes FSDP2 checks for uniformity: frozen parameters are left out of its check, so leave them out here."""
+    return [param.dtype for param in module.parameters(recurse=recurse) if param.requires_grad]
+
+
 class DistributedMixin:
     """Distributed orchestration and save/load hooks for [`PreTrainedModel`]."""
 
@@ -316,41 +321,29 @@ class DistributedMixin:
     def _split_fsdp_groups_by_dtype(self, fsdp_plan: dict[str, str]) -> dict[str, str]:
         """Carve the modules that break a planned FSDP group's dtype uniformity into groups of their own.
 
-        FSDP2 flattens the parameters of a group into one all-gather buffer, so it requires a single original dtype per
-        group. A model that keeps some parameters in another dtype (`_keep_in_fp32_modules_strict`, e.g. a router) would
-        otherwise trip that check at the first forward. A group holding more than one dtype therefore keeps its dominant
-        dtype, and every submodule owning a parameter of another dtype becomes a group of its own, listed ahead of its
-        parent (FSDP2 requires children to be sharded first).
+        FSDP2 flattens a group's parameters into one all-gather buffer, so it requires a single dtype per group -- of
+        its *trainable* parameters, which is why LoRA is unaffected. A model that keeps some of them in another dtype
+        (`_keep_in_fp32_modules_strict`, e.g. a router) would otherwise trip that check at the first forward. Such a
+        group keeps its dominant dtype, and every submodule directly owning a parameter of another dtype becomes a
+        group of its own, listed ahead of its parent (FSDP2 requires children to be sharded first).
 
         `maybe_distribute_model` has already applied the loader's dtype plan, so the dtypes read here are the ones the
         parameters will have once the weights land.
         """
         carved: dict[str, str] = {}
         for group_name, style in fsdp_plan.items():
-            group = self.get_submodule(group_name)
-            dtypes = Counter(param.dtype for param in group.parameters())
+            dtypes = Counter(_trainable_dtypes(self.get_submodule(group_name)))
             if len(dtypes) < 2:
                 continue
             dominant = dtypes.most_common(1)[0][0]
-            # `named_modules` is a pre-order walk, so reversing it visits children before their parents.
-            for sub_name, submodule in reversed(list(group.named_modules())):
-                owned = [param for _, param in submodule.named_parameters(recurse=False)]
-                # A group that owns mixed dtypes directly cannot be split any further; FSDP2 will report it.
-                if sub_name and owned and any(param.dtype != dominant for param in owned):
+            # `named_modules` is a pre-order walk, so reversing it lists children ahead of their parents.
+            for sub_name, submodule in reversed(list(self.get_submodule(group_name).named_modules())):
+                if sub_name and any(dtype != dominant for dtype in _trainable_dtypes(submodule, recurse=False)):
                     carved[f"{group_name}.{sub_name}"] = style
-
-        # A carved module nested in another carved module of the same dtype is already in a uniform group: drop it,
-        # so a float32 router and the statics it holds share one group instead of two.
-        for name in list(carved):
-            ancestor = next((other for other in carved if name.startswith(f"{other}.")), None)
-            if ancestor is not None and {p.dtype for p in self.get_submodule(ancestor).parameters()} == {
-                p.dtype for p in self.get_submodule(name).parameters()
-            }:
-                del carved[name]
 
         if carved:
             logger.info(f"Split {len(carved)} module(s) into their own FSDP group to keep each group dtype-uniform.")
-        return carved | {name: style for name, style in fsdp_plan.items() if name not in carved}
+        return carved | fsdp_plan
 
     @classmethod
     def maybe_distribute_model(

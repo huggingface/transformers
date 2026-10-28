@@ -28,6 +28,7 @@ from contextlib import contextmanager
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_available
+from transformers.core_model_loading import build_glob_alternation
 from transformers.distributed.utils import get_distributed_backend
 from transformers.testing_utils import (
     SINGLE_PROCESS_DEVICES,
@@ -390,15 +391,20 @@ def _test_fsdp2_bf16_training_impl(rank, config_class, config_dict):
             init_dir, torch_dtype=torch.bfloat16, distributed_config=distributed_config
         )
         # The loader upcasts these after sharding; they must have landed in a float32 group rather than being folded
-        # into a bfloat16 one (which FSDP2 rejects) or quietly cast back down.
+        # into a bfloat16 one (which FSDP2 rejects) or quietly cast back down. Match the plan the way the loader does:
+        # a substring test would read "gate.weight" as "gate" and catch every `gate_up_proj` as well.
         dtype_plan = model._get_dtype_plan(torch.bfloat16)
-        kept_in_fp32 = {
-            name: param.dtype
-            for name, param in model.named_parameters()
-            if any(pattern.split(".")[0] in name for pattern in dtype_plan)
-        }
-        for name, dtype in kept_in_fp32.items():
-            assert dtype == torch.float32, f"{name} should be kept in float32 after sharding, got {dtype}"
+        pattern, group_to_glob, _ = build_glob_alternation(list(dtype_plan))
+        kept_in_fp32 = {}
+        for name, param in model.named_parameters():
+            match = pattern.search(name)
+            if match is not None:
+                kept_in_fp32[name] = param.dtype
+                expected = dtype_plan[group_to_glob[match.lastgroup]]
+                assert param.dtype == expected, (
+                    f"{name} should be kept in {expected} after sharding, got {param.dtype}"
+                )
+        assert kept_in_fp32, "the model has no parameter the loader keeps in another dtype"
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
         batches = _build_repeated_training_batches(config, _get_rank_device(rank), num_steps=2)

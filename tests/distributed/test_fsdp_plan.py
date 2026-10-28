@@ -146,6 +146,16 @@ class FSDPDtypePlanTest(unittest.TestCase):
         after = _resolve(model)
         self.assertEqual(before, after)
 
+    def test_a_frozen_parameter_of_another_dtype_does_not_split_a_group(self):
+        """FSDP2 checks dtype uniformity over trainable parameters only, so a frozen outlier needs no group."""
+        model = _llama_model(torch.bfloat16)
+        frozen = model.model.layers[0].mlp.down_proj.weight
+        frozen.data = frozen.data.to(torch.float32)
+        frozen.requires_grad_(False)
+
+        plan = _resolve(model)
+        self.assertFalse([name for name in plan if name.endswith("down_proj")])
+
     def test_a_float32_model_is_not_split(self):
         """`_keep_in_fp32_modules_strict` is inert in float32: the model stays uniform and the plan untouched."""
         model = _ernie_moe_model(torch.float32)
@@ -155,10 +165,9 @@ class FSDPDtypePlanTest(unittest.TestCase):
 
 @require_torch
 class FSDPGroupPolicyTest(unittest.TestCase):
-    def _policy(self, model, group_name, mesh_size=2, **config_kwargs):
+    def _policy(self, model, group_name, **config_kwargs):
         base = _get_fsdp_policy_kwargs(DistributedConfig(fsdp_size=2, **config_kwargs))
-        dominant = torch.bfloat16
-        return _get_group_policy_kwargs(model.get_submodule(group_name), base, dominant, mesh_size)
+        return _get_group_policy_kwargs(model.get_submodule(group_name), base)
 
     def test_a_carved_group_is_gathered_in_its_own_dtype(self):
         """Gathering it in `param_dtype` would silently undo the upcast `_keep_in_fp32_modules_strict` asked for."""
@@ -166,14 +175,14 @@ class FSDPGroupPolicyTest(unittest.TestCase):
         plan = _resolve(model)
         router = next(name for name in plan if name.endswith("mlp.gate"))
 
-        kwargs, _ = self._policy(model, router, fsdp_mixed_precision=True)
+        kwargs = self._policy(model, router, fsdp_mixed_precision=True)
         self.assertEqual(kwargs["mp_policy"].param_dtype, torch.float32)
 
     def test_an_ordinary_group_keeps_the_configured_policy(self):
         model = _ernie_moe_model(torch.bfloat16)
         _resolve(model)
 
-        kwargs, _ = self._policy(model, "model.layers.0", fsdp_mixed_precision=True)
+        kwargs = self._policy(model, "model.layers.0", fsdp_mixed_precision=True)
         self.assertEqual(kwargs["mp_policy"].param_dtype, torch.bfloat16)
 
     def test_mixed_precision_off_adds_no_policy(self):
@@ -181,36 +190,5 @@ class FSDPGroupPolicyTest(unittest.TestCase):
         plan = _resolve(model)
         router = next(name for name in plan if name.endswith("mlp.gate"))
 
-        kwargs, _ = self._policy(model, router)
+        kwargs = self._policy(model, router)
         self.assertNotIn("mp_policy", kwargs)
-
-    def test_a_frozen_parameter_smaller_than_the_mesh_is_not_sharded(self):
-        """`moe_statics` is frozen and has a single row: sharding it costs a collective and saves nothing."""
-        model = _ernie_moe_model(torch.bfloat16)
-        plan = _resolve(model)
-        router = next(name for name in plan if name.endswith("mlp.gate"))
-
-        kwargs, managed = self._policy(model, router, mesh_size=2)
-        ignored = kwargs.get("ignored_params", set())
-        self.assertEqual(len(ignored), 1)
-        self.assertTrue(all(not param.requires_grad for param in ignored))
-        self.assertEqual(managed, 1, "the router weight itself must stay sharded")
-
-    def test_a_trainable_parameter_is_always_sharded(self):
-        """An ignored parameter has no gradient reduced in backward, so a trainable one can never be ignored."""
-        model = _ernie_moe_model(torch.bfloat16)
-        plan = _resolve(model)
-        router = next(name for name in plan if name.endswith("mlp.gate"))
-
-        kwargs, _ = self._policy(model, router, mesh_size=1024)
-        ignored = kwargs.get("ignored_params", set())
-        self.assertTrue(all(not param.requires_grad for param in ignored))
-
-    def test_a_large_frozen_parameter_is_still_sharded(self):
-        """Freezing the base weights (LoRA) must not stop FSDP from sharding them."""
-        model = _llama_model(torch.bfloat16)
-        model.requires_grad_(False)
-
-        kwargs, managed = self._policy(model, "model.layers.0", mesh_size=2)
-        self.assertNotIn("ignored_params", kwargs)
-        self.assertGreater(managed, 0)

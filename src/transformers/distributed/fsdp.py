@@ -16,7 +16,7 @@ from __future__ import annotations
 import inspect
 import os
 import warnings
-from collections import Counter
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, is_torch_distributed_available, logging, strtobool
@@ -84,38 +84,22 @@ def _get_fsdp_policy_kwargs(distributed_config: DistributedConfig | None) -> dic
     return fsdp_policy_kwargs
 
 
-def _get_group_policy_kwargs(
-    module: nn.Module, policy_kwargs: dict[str, Any], model_dtype: torch.dtype, mesh_size: int
-) -> tuple[dict[str, Any], int]:
-    """Specialize the shared `fully_shard` policy for one group, and report how many parameters it will manage.
+def _get_group_policy_kwargs(module: nn.Module, policy_kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Keep a group that the loader holds in its own dtype from being all-gathered in the mixed-precision one.
 
-    Two adjustments, both for the groups that `_split_fsdp_groups_by_dtype` carved out because the loader keeps them in
-    another dtype:
-
-    - mixed precision would all-gather them in `param_dtype` and silently undo that upcast, so the group is gathered in
-      its own dtype instead;
-    - a frozen parameter whose first dimension is smaller than the mesh cannot be sharded usefully (FSDP2 pads, so every
-      rank stores a full row either way) and has no gradient to reduce, so it is left out of the group altogether.
+    `_split_fsdp_groups_by_dtype` carves out the modules the loader keeps in another dtype
+    (`_keep_in_fp32_modules{_strict}`). Gathering those in `param_dtype` would silently undo the upcast, so they are
+    gathered in their own dtype instead.
     """
-    group_kwargs = dict(policy_kwargs)
-    dtypes = {param.dtype for param in module.parameters()}
+    mp_policy = policy_kwargs.get("mp_policy")
+    if mp_policy is None:
+        return policy_kwargs
 
-    mp_policy = group_kwargs.get("mp_policy")
-    if mp_policy is not None and len(dtypes) == 1 and (dtype := next(iter(dtypes))) != model_dtype:
-        group_kwargs["mp_policy"] = MixedPrecisionPolicy(
-            param_dtype=dtype, reduce_dtype=mp_policy.reduce_dtype, output_dtype=mp_policy.output_dtype
-        )
+    dtypes = {param.dtype for param in module.parameters() if param.requires_grad}
+    if len(dtypes) != 1 or (dtype := dtypes.pop()) == mp_policy.param_dtype:
+        return policy_kwargs
 
-    ignored_params = {
-        param
-        for param in module.parameters()
-        if not param.requires_grad and param.ndim > 0 and param.shape[0] < mesh_size
-    }
-    managed = sum(1 for param in module.parameters() if param not in ignored_params)
-    if ignored_params:
-        group_kwargs["ignored_params"] = ignored_params
-
-    return group_kwargs, managed
+    return policy_kwargs | {"mp_policy": replace(mp_policy, param_dtype=dtype)}
 
 
 def _get_input_output_embeddings(model: nn.Module) -> tuple[nn.Module | None, nn.Module | None]:
@@ -264,47 +248,37 @@ def apply_fully_sharded_data_parallelism(
                 # reject and NCCL zeroes in bfloat16 up to torch 2.13 (pytorch/pytorch#190747): sum, divide locally.
                 module.set_force_sum_reduction_for_comms(True)
 
-    # The dominant dtype is the one the plan kept in the untouched groups; the carved groups differ from it.
-    model_dtype = Counter(param.dtype for param in model.parameters()).most_common(1)[0][0]
-    mesh_size = fsdp_mesh.size()
-
     reshard_targets, no_reshard_targets = [], []
     for name, style in fsdp_plan.items():
-        module = model.get_submodule(name)
-        group_kwargs, managed = _get_group_policy_kwargs(module, fsdp_policy_kwargs, model_dtype, mesh_size)
-        if not managed:
-            # Everything this group owns is left unsharded: wrapping it would create an empty group.
-            logger.debug(f"Skipped fully_shard for {name} (no parameter left to shard)")
-            continue
         if style == "keep_full_weight":
-            no_reshard_targets.append((name, module, group_kwargs))
+            no_reshard_targets.append((name, model.get_submodule(name)))
         else:
-            reshard_targets.append((name, module, group_kwargs))
+            reshard_targets.append((name, model.get_submodule(name)))
 
-    for name, module, group_kwargs in reshard_targets:
-        fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **group_kwargs)
+    for name, module in reshard_targets:
+        fully_shard(
+            module, mesh=fsdp_mesh, reshard_after_forward=True, **_get_group_policy_kwargs(module, fsdp_policy_kwargs)
+        )
         logger.debug(f"Applied fully_shard to {name} (reshard=True)")
 
     # Optimization: when the keep buffer is exactly the (final_norm, lm_head/embed)
     # tail pair, bundle them into one fully_shard so that we dont need to do all-gather during backward pass.
-    # Bundling merges the pair into a single group, so it is only safe when they share a mixed-precision policy.
-    tail_policies = {id(kwargs.get("mp_policy")) for _, _, kwargs in no_reshard_targets}
-    if len(tail_policies) == 1 and is_norm_and_head_pair([(n, m) for n, m, _ in no_reshard_targets], model):
-        names, modules, tail_kwargs = zip(*no_reshard_targets)
-        bundled_kwargs = dict(tail_kwargs[0])
-        if ignored := set().union(*(kwargs.get("ignored_params", set()) for kwargs in tail_kwargs)):
-            bundled_kwargs["ignored_params"] = ignored
-        fully_shard(list(modules), mesh=fsdp_mesh, reshard_after_forward=False, **bundled_kwargs)
+    if is_norm_and_head_pair(no_reshard_targets, model):
+        names, modules = zip(*no_reshard_targets)
+        fully_shard(list(modules), mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
         logger.debug(f"Grouped tail {names} (reshard=False)")
     else:
-        for name, module, group_kwargs in no_reshard_targets:
-            fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=False, **group_kwargs)
+        for name, module in no_reshard_targets:
+            fully_shard(
+                module,
+                mesh=fsdp_mesh,
+                reshard_after_forward=False,
+                **_get_group_policy_kwargs(module, fsdp_policy_kwargs),
+            )
             logger.debug(f"Applied fully_shard to {name} (reshard=False)")
 
-    # Apply FSDP2 to the root module. It must ignore the same parameters as the groups below it, otherwise it would
-    # pick up the ones they deliberately left unsharded.
-    root_kwargs, _ = _get_group_policy_kwargs(model, fsdp_policy_kwargs, model_dtype, mesh_size)
-    fully_shard(model, mesh=fsdp_mesh, **root_kwargs)
+    # Apply FSDP2 to the root module. Its own group holds only what the groups above did not take, which is uniform.
+    fully_shard(model, mesh=fsdp_mesh, **fsdp_policy_kwargs)
 
     logger.info(f"FSDP2 applied to model via _fsdp_plan: {len(fsdp_plan)} entries")
 
