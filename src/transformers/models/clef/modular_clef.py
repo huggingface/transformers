@@ -18,12 +18,11 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ... import initialization as init
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ..auto import AutoConfig, AutoModelForCausalLM
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere_asr.modeling_cohere_asr import CohereAsrDecoderLayer
 from ..molmo2.modeling_molmo2 import Molmo2VisionAttention
@@ -46,7 +45,6 @@ class ClefConfig(PreTrainedConfig):
     ```"""
 
     model_type = "clef"
-    sub_configs_defaults = {"backbone_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5")}
 
     backbone_hidden_size: int = 4096
     hidden_size: int = 1024
@@ -58,7 +56,6 @@ class ClefConfig(PreTrainedConfig):
     hidden_act: str = "gelu"
     attention_bias: bool = True
     attention_dropout: float = 0.0
-    backbone_config: dict | PreTrainedConfig | None = None
     initializer_range: float = 0.02
     question_types: list[str] | None = None
 
@@ -256,7 +253,6 @@ class ClefScorer(nn.Module):
 @auto_docstring
 class ClefPreTrainedModel(PreTrainedModel):
     config: ClefConfig
-    base_model_prefix = "backbone"
     _supports_sdpa = True
 
     def _init_weights(self, module):
@@ -282,7 +278,6 @@ class ClefForDecision(ClefPreTrainedModel):
         self.embeddings = ClefEmbeddings(config)
         self.encoder = ClefEncoder(config)
         self.scorer = ClefScorer(config)
-        self.backbone = AutoModelForCausalLM.from_config(config.backbone_config)
         self.post_init()
 
     @auto_docstring
@@ -292,13 +287,14 @@ class ClefForDecision(ClefPreTrainedModel):
         marks: torch.LongTensor,
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor,
+        backbone: PreTrainedModel,
         backbone_kwargs: dict | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        outputs = self.backbone.base_model(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
+        outputs = backbone.base_model(input_ids=input_ids[None], use_cache=False, **(backbone_kwargs or {}))
         hidden_states = outputs.last_hidden_state.to(self.dtype)
         # The output embeddings of the tokens of each option give its lexical prior
-        output_embeddings = self.backbone.get_output_embeddings().weight
+        output_embeddings = backbone.get_output_embeddings().weight
         option_question_ids = torch.repeat_interleave(num_options)
         memory, options, fields, priors = self.embeddings(
             hidden_states, input_ids[None], marks, num_options, question_type_ids, output_embeddings
