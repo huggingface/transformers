@@ -96,10 +96,10 @@ class BolmoConfig(PreTrainedConfig):
         if self.text_config is None:
             olmo3_keys = set(CONFIG_MAPPING["olmo3"].__dataclass_fields__) | {"rope_scaling", "rope_theta"}
             self.text_config = {
-                "model_type": "olmo3",
                 "vocab_size": kwargs.pop("subword_vocab_size", 100278),
                 "max_position_embeddings": 65536,
                 **{key: kwargs.pop(key) for key in list(kwargs) if key in olmo3_keys},
+                "model_type": "olmo3",
                 "hidden_size": self.hidden_size,
                 "hidden_act": self.hidden_act,
                 "rms_norm_eps": self.rms_norm_eps,
