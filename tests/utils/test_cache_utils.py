@@ -1577,6 +1577,31 @@ class SyntheticCacheTest(unittest.TestCase):
             static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
         )
 
+    def test_static_cache_keys_and_values_dtypes(self):
+        """Test StaticCache when keys and values have different dtypes.
+
+        Under autocast with a float32 model, RoPE returns float32 keys while the values stay in the autocast dtype.
+        """
+        static_cache = StaticCache(config=self.config, max_cache_len=self.max_cache_len)
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
+        static_cache.update(key_states=prefill, value_states=prefill.bfloat16(), layer_idx=0)
+        static_cache.update(
+            key_states=torch.tensor(3.0)[None, None, None, None],
+            value_states=torch.tensor(3.0, dtype=torch.bfloat16)[None, None, None, None],
+            layer_idx=0,
+        )
+        self.assertEqual(static_cache.layers[0].keys.dtype, torch.float32)
+        self.assertEqual(static_cache.layers[0].values.dtype, torch.bfloat16)
+        self.assertEqual(static_cache.layers[0].values[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 0.0])
+
+    def test_dynamic_cache_keys_and_values_dtypes(self):
+        """Test DynamicCache when keys and values have different dtypes, as in `test_static_cache_keys_and_values_dtypes`."""
+        dynamic_cache = DynamicCache(config=self.config)
+        prefill = torch.tensor([1.0, 2.0])[None, None, :, None]
+        dynamic_cache.update(key_states=prefill, value_states=prefill.bfloat16(), layer_idx=0)
+        self.assertEqual(dynamic_cache.layers[0].keys.dtype, torch.float32)
+        self.assertEqual(dynamic_cache.layers[0].values.dtype, torch.bfloat16)
+
     def test_sliding_window_cache(self):
         """Test fully sliding StaticCache with manually prefilled states and hardcoded assertions.
 
