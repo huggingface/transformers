@@ -26,7 +26,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPa
 from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.output_capturing import OutputRecorder
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection
 from ..qwen3_moe.configuration_qwen3_moe import Qwen3MoeConfig
 from ..qwen3_moe.modeling_qwen3_moe import (
     Qwen3MoeDecoderLayer,
@@ -299,14 +299,15 @@ class Qwen3VLMoeTextModel(Qwen3VLTextModel):
 
         # decoder layers
         for layer_idx, decoder_layer in enumerate(self.layers):
-            layer_outputs = decoder_layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                position_ids=text_position_ids,
-                past_key_values=past_key_values,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_ids=text_position_ids,
+                    past_key_values=past_key_values,
+                    position_embeddings=position_embeddings,
+                    **kwargs,
+                )
             hidden_states = layer_outputs
 
             # add visual features to the hidden states of first several layers

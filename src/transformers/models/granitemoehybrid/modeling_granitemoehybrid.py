@@ -44,7 +44,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
 from .configuration_granitemoehybrid import GraniteMoeHybridConfig
 
 
@@ -1105,14 +1105,15 @@ class GraniteMoeHybridModel(GraniteMoeHybridPreTrainedModel):
             position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
         for i, decoder_layer in enumerate(self.layers):
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layers_block_type[i]],
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask_mapping[self.config.layers_block_type[i]],
+                    past_key_values=past_key_values,
+                    use_cache=use_cache,
+                    position_embeddings=position_embeddings,
+                    **kwargs,
+                )
         hidden_states = self.norm(hidden_states)
 
         return MoeModelOutputWithPast(

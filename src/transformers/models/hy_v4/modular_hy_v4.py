@@ -31,6 +31,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import maybe_autocast
+from ...utils.output_capturing import _scope_router_output_collection
 from ..deepseek_v4.modeling_deepseek_v4 import (
     DeepseekV4DecoderLayer,
     DeepseekV4HyperConnection,
@@ -560,16 +561,17 @@ class HYV4Model(Glm4MoeLiteModel):
 
         topk_indices = None
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states, topk_indices = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping["indexed_attention"],
-                position_embeddings=position_embeddings,
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                use_cache=use_cache,
-                prev_topk_indices=topk_indices,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states, topk_indices = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask_mapping["indexed_attention"],
+                    position_embeddings=position_embeddings,
+                    position_ids=position_ids,
+                    past_key_values=past_key_values,
+                    use_cache=use_cache,
+                    prev_topk_indices=topk_indices,
+                    **kwargs,
+                )
 
         # Difference with the HC head at the end
         hidden_states = self.norm(self.hc_head(hidden_states))

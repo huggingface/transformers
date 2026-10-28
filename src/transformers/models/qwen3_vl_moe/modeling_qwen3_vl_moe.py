@@ -50,7 +50,7 @@ from ...utils.generic import (
     is_flash_attention_requested,
     merge_with_config_defaults,
 )
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
 from ...vision_utils import (
     get_vision_attention_seqlens,
     get_vision_interpolation_indices_and_weights,
@@ -904,14 +904,15 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
 
         # decoder layers
         for layer_idx, decoder_layer in enumerate(self.layers):
-            layer_outputs = decoder_layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                position_ids=text_position_ids,
-                past_key_values=past_key_values,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                layer_outputs = decoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    position_ids=text_position_ids,
+                    past_key_values=past_key_values,
+                    position_embeddings=position_embeddings,
+                    **kwargs,
+                )
             hidden_states = layer_outputs
 
             # add visual features to the hidden states of first several layers

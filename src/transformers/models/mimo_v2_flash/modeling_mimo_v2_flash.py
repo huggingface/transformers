@@ -38,7 +38,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_lo
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
-from ...utils.output_capturing import OutputRecorder, capture_outputs
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
 from .configuration_mimo_v2_flash import MiMoV2FlashConfig
 
 
@@ -559,14 +559,15 @@ class MiMoV2FlashModel(MiMoV2FlashPreTrainedModel):
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
-                position_embeddings=position_embeddings[self.config.layer_types[i]],
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                    position_embeddings=position_embeddings[self.config.layer_types[i]],
+                    position_ids=position_ids,
+                    past_key_values=past_key_values,
+                    **kwargs,
+                )
 
         hidden_states = self.norm(hidden_states)
 

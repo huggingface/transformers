@@ -394,3 +394,275 @@ def test_whole_model_compilation_preserves_router_capture_and_auxiliary_gradient
         assert_same(results[1], results[0])
     finally:
         torch._dynamo.reset()
+
+
+@require_torch
+@pytest.mark.parametrize("decoder", [False, True])
+@pytest.mark.parametrize("layerdrop", [0.5, 1.0])
+def test_layerdrop_preserves_skips_empty_router_outputs_and_rng(decoder, layerdrop):
+    from transformers.models.nllb_moe.modeling_nllb_moe import NllbMoeDecoder, NllbMoeEncoder
+
+    config = transformers.NllbMoeConfig(
+        vocab_size=31,
+        d_model=16,
+        encoder_layers=4,
+        decoder_layers=4,
+        encoder_attention_heads=4,
+        decoder_attention_heads=4,
+        encoder_ffn_dim=24,
+        decoder_ffn_dim=24,
+        dropout=0.1,
+        attention_dropout=0.0,
+        encoder_layerdrop=layerdrop,
+        decoder_layerdrop=layerdrop,
+        max_position_embeddings=32,
+        num_experts=4,
+        encoder_sparse_step=2,
+        decoder_sparse_step=2,
+        expert_capacity=100,
+        router_jitter_noise=0.01,
+        use_cache=False,
+    )
+    config._attn_implementation = "eager"
+    torch.manual_seed(13)
+    model = (NllbMoeDecoder if decoder else NllbMoeEncoder)(config).train()
+    ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
+    inputs = {"input_ids": ids, "attention_mask": torch.ones_like(ids), "use_cache": False}
+    if decoder:
+        inputs.update(
+            encoder_hidden_states=torch.arange(160).reshape(2, 5, 16).float() / 100,
+            encoder_attention_mask=torch.ones_like(ids),
+        )
+    results = []
+    for enabled in (False, True):
+        torch.manual_seed(0)
+        with capture_context("nllb_moe", enabled):
+            out = model(**inputs, output_router_logits=True, output_hidden_states=True, output_attentions=True)
+        results.append((out, torch.get_rng_state()))
+    assert_same(results[0], results[1])
+    if layerdrop == 1:
+        assert results[1][0].router_logits == ()
+    else:
+        assert 0 < len(results[1][0].hidden_states) - 1 < 4
+
+
+def _diffusion_components():
+    from transformers.models.diffusion_gemma.modeling_diffusion_gemma import (
+        DiffusionGemmaDecoderModel,
+        DiffusionGemmaEncoderTextModel,
+    )
+
+    config = transformers.DiffusionGemmaConfig(
+        text_config={
+            "vocab_size": 31,
+            "hidden_size": 32,
+            "intermediate_size": 32,
+            "num_attention_heads": 2,
+            "num_key_value_heads": 2,
+            "head_dim": 16,
+            "max_position_embeddings": 64,
+            "num_hidden_layers": 2,
+            "layer_types": ["sliding_attention", "full_attention"],
+            "per_layer_config": {1: {"head_dim": 16}},
+            "sliding_window": 16,
+            "num_experts": 4,
+            "top_k_experts": 2,
+            "moe_intermediate_size": 8,
+        }
+    )
+    config._attn_implementation = "eager"
+    config.text_config._attn_implementation = "eager"
+    torch.manual_seed(13)
+    return torch.nn.ModuleDict(
+        {"encoder": DiffusionGemmaEncoderTextModel(config.text_config), "decoder": DiffusionGemmaDecoderModel(config)}
+    ).train()
+
+
+def _cache_tensors(cache):
+    return tuple(
+        (layer.keys.detach().clone(), layer.values.detach().clone(), cache.get_seq_length(i))
+        for i, layer in enumerate(cache.layers)
+    )
+
+
+@require_torch
+@pytest.mark.parametrize("checkpoint", [False, True])
+def test_diffusion_router_collection_preserves_read_only_prefix_under_recomputation(checkpoint):
+    reference = _diffusion_components()
+    records = []
+    for enabled in (False, True):
+        model = copy.deepcopy(reference)
+        if checkpoint:
+            model["decoder"].gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+        assert all(layer.gradient_checkpointing == checkpoint for layer in model["decoder"].layers)
+        assert all(not getattr(layer, "gradient_checkpointing", False) for layer in model["encoder"].layers)
+        ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
+        torch.manual_seed(29)
+        with capture_context("diffusion_gemma", enabled):
+            enc = model["encoder"](input_ids=ids, output_router_logits=True)
+            cache = enc.past_key_values
+            before = _cache_tensors(cache)
+            assert all(state[2] == 5 for state in before)
+            first = model["decoder"](decoder_input_ids=ids[:, :3], past_key_values=cache, output_router_logits=True)
+            second = model["decoder"](decoder_input_ids=ids[:, :3], past_key_values=cache, output_router_logits=True)
+            assert_same(first, second)
+            assert len(enc.router_logits) == len(second.router_logits) == 2
+            params = tuple(model.parameters())
+            recomputed = []
+            hooks = [
+                layer.register_forward_pre_hook(lambda *_: recomputed.append(None))
+                for layer in model["decoder"].layers
+            ]
+            aux = sum(value.square().mean() for value in (*enc.router_logits, *second.router_logits))
+            router_weights = tuple(layer.router.proj.weight for part in model.values() for layer in part.layers)
+            aux_grads = torch.autograd.grad(aux, router_weights, retain_graph=True)
+            assert all(torch.isfinite(grad).all() and torch.count_nonzero(grad) for grad in aux_grads)
+            # This public backbone has no task loss; the scalar checks gradient
+            # connectivity through the real encoder-created prefix.
+            second.last_hidden_state[..., 0].mean().backward()
+            for hook in hooks:
+                hook.remove()
+            assert bool(recomputed) == checkpoint
+            assert_same(_cache_tensors(cache), before)
+        grads = tuple(None if p.grad is None else p.grad.clone() for p in params)
+        records.append((enc.last_hidden_state, enc.router_logits, second, aux_grads, grads, torch.get_rng_state()))
+    assert_same(records[0], records[1])
+
+
+def _multimodal_or_hybrid_model(hybrid, layers):
+    kwargs = {
+        "vocab_size": 31,
+        "hidden_size": 32,
+        "intermediate_size": 48,
+        "num_hidden_layers": layers,
+        "num_attention_heads": 4,
+        "num_key_value_heads": 2,
+        "head_dim": 8,
+        "max_position_embeddings": 64,
+        "num_experts": 4,
+        "num_experts_per_tok": 2,
+        "moe_intermediate_size": 16,
+        "shared_expert_intermediate_size": 16,
+        "use_cache": False,
+    }
+    if hybrid:
+        kwargs.update(
+            layer_types=["linear_attention", "full_attention"] * (layers // 2),
+            linear_conv_kernel_dim=2,
+            linear_key_head_dim=8,
+            linear_value_head_dim=8,
+            linear_num_key_heads=2,
+            linear_num_value_heads=4,
+        )
+        config, cls = transformers.Qwen3NextConfig(**kwargs), transformers.Qwen3NextModel
+    else:
+        kwargs["rope_parameters"] = {"rope_type": "default", "mrope_section": [1, 1, 2], "mrope_interleaved": True}
+        config, cls = transformers.Qwen3VLMoeTextConfig(**kwargs), transformers.Qwen3VLMoeTextModel
+    config._attn_implementation = "eager"
+    torch.manual_seed(13)
+    return cls(config).eval()
+
+
+@require_torch
+@pytest.mark.torch_compile_test
+@pytest.mark.parametrize("hybrid", [False, True], ids=["multimodal_text", "hybrid_attention"])
+def test_distinct_production_loops_reuse_all_compiled_regions(hybrid):
+    family = "qwen3_next" if hybrid else "qwen3_vl_moe"
+    limit = getattr(torch._dynamo.config, "recompile_limit", None)
+    if limit is None:
+        limit = torch._dynamo.config.cache_size_limit
+    layers = 2 * ((limit + 5) // 2)
+    try:
+        torch.compiler.reset()
+        model = _multimodal_or_hybrid_model(hybrid, layers)
+        ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
+        with capture_context(family, scoped=False):
+            reference = model(input_ids=ids, output_router_logits=True)
+        graphs, calls = [], []
+
+        def backend(graph, example_inputs):
+            graphs.append(graph)
+
+            def execute(*args):
+                calls.append(None)
+                return graph.forward(*args)
+
+            return execute
+
+        for layer in model.layers:
+            layer.compile(backend=backend)
+        # Require the production loop to keep every region compiled. The backend
+        # executes the captured operations unchanged, isolating graph reuse from
+        # kernel numerics. Alternating attention types legitimately use two graphs.
+        for _ in range(2):
+            model.zero_grad(set_to_none=True)
+            out = model(input_ids=ids, output_router_logits=True)
+            assert_same(out, reference)
+            assert len(out.router_logits) == layers
+            out.last_hidden_state[..., 0].mean().backward()
+        assert len(graphs) == (2 if hybrid else 1)
+        assert len(calls) == 2 * layers
+    finally:
+        torch.compiler.reset()
+
+
+@require_torch
+@pytest.mark.parametrize("model_name", ["OpenAIPrivacyFilterModel", "OpenAIPrivacyFilterForTokenClassification"])
+def test_encoder_router_capture_preserves_backbone_and_task_head_contracts(model_name):
+    model_class = getattr(transformers, model_name)
+    config = transformers.OpenAIPrivacyFilterConfig(
+        vocab_size=31,
+        hidden_size=16,
+        intermediate_size=24,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        head_dim=4,
+        num_local_experts=4,
+        num_experts_per_tok=2,
+        sliding_window=2,
+        max_position_embeddings=32,
+        pad_token_id=0,
+        eos_token_id=2,
+        num_labels=3,
+        classifier_dropout=0.0,
+        rope_parameters={"rope_type": "default", "rope_theta": 10000.0},
+    )
+    config._attn_implementation = "eager"
+    torch.manual_seed(13)
+    original = model_class(config).cpu().train()
+    candidate = copy.deepcopy(original)
+    ids = torch.tensor([[2, 5, 9, 7, 3], [4, 8, 6, 3, 2]])
+    is_task_head = model_name == "OpenAIPrivacyFilterForTokenClassification"
+    kwargs = {"input_ids": ids, "attention_mask": torch.ones_like(ids)}
+    if is_task_head:
+        kwargs["labels"] = ids % config.num_labels
+    results = []
+    for model, scoped in ((original, False), (candidate, True)):
+        torch.manual_seed(29)
+        context = capture_context("openai_privacy_filter", scoped)
+        with context:
+            outputs = model(**kwargs, output_router_logits=True, output_hidden_states=True)
+            if is_task_head:
+                # The classifier preserves hidden states but does not expose
+                # router scores in its public TokenClassifierOutput contract.
+                assert "router_logits" not in outputs
+                router_gradients = None
+                objective = outputs.loss
+            else:
+                assert len(outputs.router_logits) == config.num_hidden_layers
+                router_weights = tuple(layer.mlp.router.weight for layer in model.layers)
+                router_objective = sum(scores.square().mean() for scores in outputs.router_logits)
+                router_gradients = torch.autograd.grad(router_objective, router_weights, retain_graph=True)
+                assert all(torch.isfinite(g).all() and torch.count_nonzero(g) for g in router_gradients)
+                objective = outputs.last_hidden_state[..., 0].mean()
+            objective.backward()
+        params = tuple(model.parameters())
+        grads = tuple(None if p.grad is None else p.grad.clone() for p in params)
+        assert all(g is None or torch.isfinite(g).all() for g in grads)
+        before = tuple(p.detach().clone() for p in params)
+        torch.optim.SGD(params, lr=0.1).step()
+        after = tuple(p.detach().clone() for p in params)
+        assert any(not torch.equal(a, b) for a, b in zip(before, after))
+        results.append((outputs, router_gradients, grads, after, torch.get_rng_state()))
+    assert_same(results[1], results[0])

@@ -23,7 +23,7 @@ from ...modeling_outputs import MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.output_capturing import OutputRecorder
+from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection
 from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2ForCausalLM
 from ..lfm2.modeling_lfm2 import (
     Lfm2Attention,
@@ -192,14 +192,15 @@ class Lfm2MoeModel(MixtralModel):
 
         # decoder layers
         for i, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            hidden_states = decoder_layer(
-                hidden_states,
-                attention_mask=causal_mask_mapping[self.config.layer_types[i]],
-                position_ids=position_ids,
-                past_key_values=past_key_values,
-                position_embeddings=position_embeddings,
-                **kwargs,
-            )
+            with _scope_router_output_collection():
+                hidden_states = decoder_layer(
+                    hidden_states,
+                    attention_mask=causal_mask_mapping[self.config.layer_types[i]],
+                    position_ids=position_ids,
+                    past_key_values=past_key_values,
+                    position_embeddings=position_embeddings,
+                    **kwargs,
+                )
 
         hidden_states = self.embedding_norm(hidden_states)
 
