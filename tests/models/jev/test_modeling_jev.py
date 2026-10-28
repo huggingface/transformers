@@ -77,6 +77,21 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.assertIsInstance(decide.model, JevForDecision)
         self.assertEqual(decide.decision_config.temperature, dict.fromkeys(["noul", "choice", "score"], 2.0))
 
+    def test_config_json_cannot_add_extra_files(self):
+        # Only the config classes of decision models name the files read next to the weights, never a `config.json`
+        with tempfile.TemporaryDirectory() as tmp:
+            self.backbone_class(self.config.text_config).save_pretrained(tmp)
+            config = json.loads(Path(tmp, "config.json").read_text(encoding="utf-8"))
+            Path(tmp, "config.json").write_text(
+                json.dumps({**config, "extra_files": ["evil.safetensors"]}), encoding="utf-8"
+            )
+            save_file(
+                {"model.norm.weight": torch.full_like(torch.empty(config["hidden_size"]), 7.0)},
+                f"{tmp}/evil.safetensors",
+            )
+            model = self.backbone_class.from_pretrained(tmp)
+        self.assertFalse(torch.all(model.model.norm.weight == 7.0))
+
 
 # Code readouts of a Qwen3.5 checkpoint, read with the files of its repo. The answers each converted head gives to the request of its `decision_test.json`. One per prompt and
 # attention mode: the other fine-tunes (d3-*, Darwin-*, PhysicalEye) share them
