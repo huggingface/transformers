@@ -129,8 +129,8 @@ class Nemotron3_5TranscribePreTrainedModel(PreTrainedModel):
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
-        if isinstance(module, Nemotron3_5TranscribeAudioModel):
-            init.copy_(module.speaker_embeddings, module.compute_speaker_embeddings(module.config))
+        if isinstance(module, Nemotron3_5TranscribeSpeakerEmbedding):
+            init.copy_(module.weight, module.compute_embeddings(module.config))
 
 
 class Nemotron3_5TranscribeFeatureStacking(nn.Module):
@@ -502,6 +502,30 @@ class Nemotron3_5TranscribeWordTimestampModel(Nemotron3_5TranscribePreTrainedMod
         return BaseModelOutput(last_hidden_state=inputs_embeds + residual_scale * self.layer_norm(hidden_states))
 
 
+class Nemotron3_5TranscribeSpeakerEmbedding(nn.Module):
+    """Fixed sinusoidal embedding of each speaker slot, which the speaker activities select."""
+
+    def __init__(self, config: Nemotron3_5TranscribeAudioConfig):
+        super().__init__()
+        self.config = config
+        self.weight = nn.Buffer(self.compute_embeddings(config), persistent=False)
+
+    @staticmethod
+    def compute_embeddings(config: Nemotron3_5TranscribeAudioConfig) -> torch.Tensor:
+        position = torch.arange(config.num_speakers, dtype=torch.float32)[:, None]
+        inv_freq = torch.exp(
+            torch.arange(0, config.hidden_size, 2, dtype=torch.float32) * -(math.log(10000.0) / config.hidden_size)
+        )
+        # float32 whatever the default dtype of the loading context: the buffer is a fixed table, not a weight
+        embeddings = torch.zeros(config.num_speakers, config.hidden_size, dtype=torch.float32)
+        embeddings[:, 0::2] = torch.sin(position * inv_freq)
+        embeddings[:, 1::2] = torch.cos(position * inv_freq)
+        return embeddings
+
+    def forward(self, speaker_activity: torch.Tensor) -> torch.Tensor:
+        return speaker_activity @ self.weight.to(speaker_activity.dtype)
+
+
 def normalize_per_feature(input_features: torch.Tensor, input_features_mask: torch.Tensor) -> torch.Tensor:
     """Normalizes each mel bin to zero mean and unit variance over the valid frames of each sample."""
     mask = input_features_mask.bool()[..., None]
@@ -527,25 +551,12 @@ class Nemotron3_5TranscribeAudioModel(Nemotron3_5TranscribePreTrainedModel):
 
     def __init__(self, config: Nemotron3_5TranscribeAudioConfig):
         super().__init__(config)
-        self.asr_encoder = AutoModel.from_config(config.asr_config)
+        self.asr_encoder = Nemotron3_5TranscribeAsrAudioModel(config.asr_config)
         self.diarization_model = AutoModelForAudioFrameClassification.from_config(config.diarization_config)
         self.asr_norm = nn.LayerNorm(config.hidden_size)
         self.speaker_norm = nn.LayerNorm(config.num_speakers)
-        self.speaker_embeddings = nn.Buffer(self.compute_speaker_embeddings(config), persistent=False)
+        self.speaker_embedding = Nemotron3_5TranscribeSpeakerEmbedding(config)
         self.post_init()
-
-    @staticmethod
-    def compute_speaker_embeddings(config: Nemotron3_5TranscribeAudioConfig) -> torch.Tensor:
-        """Fixed sinusoidal embedding of each speaker slot, which the speaker activities select."""
-        position = torch.arange(config.num_speakers, dtype=torch.float32)[:, None]
-        inv_freq = torch.exp(
-            torch.arange(0, config.hidden_size, 2, dtype=torch.float32) * -(math.log(10000.0) / config.hidden_size)
-        )
-        # float32 whatever the default dtype of the loading context: the buffer is a fixed table, not a weight
-        embeddings = torch.zeros(config.num_speakers, config.hidden_size, dtype=torch.float32)
-        embeddings[:, 0::2] = torch.sin(position * inv_freq)
-        embeddings[:, 1::2] = torch.cos(position * inv_freq)
-        return embeddings
 
     @can_return_tuple
     @auto_docstring
@@ -573,19 +584,16 @@ class Nemotron3_5TranscribeAudioModel(Nemotron3_5TranscribePreTrainedModel):
             input_features_mask = torch.ones(input_features.shape[:2], dtype=torch.long, device=input_features.device)
 
         num_frames = input_features.shape[1] // subsampling_factor
-        spectrogram_chunks = [
-            (slice(context.start * subsampling_factor, context.stop * subsampling_factor), chunk)
-            for context, chunk in self._get_chunks(num_frames)
-        ]
-
         asr_input = normalize_per_feature(input_features, input_features_mask).to(self.asr_encoder.dtype)
-        hidden_states = torch.cat(
-            [
-                self.asr_encoder(asr_input[:, context], input_features_mask[:, context]).last_hidden_state[:, chunk]
-                for context, chunk in spectrogram_chunks
-            ],
-            dim=1,
-        )
+        hidden_states = asr_input.new_empty(asr_input.shape[0], num_frames, self.config.asr_config.hidden_size)
+        for context, chunk in self._get_chunks(num_frames):
+            spectrogram_context = slice(context.start * subsampling_factor, context.stop * subsampling_factor)
+            chunk_states = self.asr_encoder(
+                asr_input[:, spectrogram_context], input_features_mask[:, spectrogram_context]
+            )
+            hidden_states[:, context.start + chunk.start : context.start + chunk.stop] = (
+                chunk_states.last_hidden_state[:, chunk]
+            )
 
         speaker_logits = self.diarization_model(
             input_features.to(self.diarization_model.dtype), attention_mask=input_features_mask
@@ -593,10 +601,11 @@ class Nemotron3_5TranscribeAudioModel(Nemotron3_5TranscribePreTrainedModel):
         speaker_probabilities = speaker_logits.sigmoid().unflatten(1, (num_frames, -1)).mean(2)
         speaker_probs = speaker_probabilities.to(hidden_states.dtype)
         speaker_activity = (speaker_probs > self.config.speaker_activity_threshold).to(hidden_states.dtype)
-        speaker_states = self.speaker_norm(speaker_activity) @ self.speaker_embeddings.to(hidden_states.dtype)
+        speaker_states = self.speaker_embedding(self.speaker_norm(speaker_activity))
+        last_hidden_state = self.asr_norm(hidden_states) + speaker_states
 
         return Nemotron3_5TranscribeAudioModelOutput(
-            last_hidden_state=self.asr_norm(hidden_states) + speaker_states,
+            last_hidden_state=last_hidden_state,
             asr_last_hidden_state=hidden_states,
             speaker_logits=speaker_logits,
         )
@@ -639,7 +648,7 @@ class Nemotron3_5TranscribeModel(Nemotron3_5TranscribePreTrainedModel):
         self.audio_tower = AutoModel.from_config(config.audio_config)
         self.language_model = AutoModel.from_config(config.text_config)
         self.multi_modal_projector = nn.Linear(config.audio_config.hidden_size, config.text_config.hidden_size)
-        self.word_timestamp_encoder = AutoModel.from_config(config.word_timestamp_config)
+        self.word_timestamp_encoder = Nemotron3_5TranscribeWordTimestampModel(config.word_timestamp_config)
         self.post_init()
 
     @can_return_tuple
@@ -770,15 +779,15 @@ class Nemotron3_5TranscribeModel(Nemotron3_5TranscribePreTrainedModel):
         states = asr_last_hidden_state.to(self.word_timestamp_encoder.dtype)
         frame_mask = input_features_mask[:, :: self.config.audio_config.subsampling_factor].bool()
         factor = self.config.word_timestamp_config.upsampling_factor
-        return torch.cat(
-            [
-                self.word_timestamp_encoder(states[:, context], frame_mask[:, context]).last_hidden_state[
-                    :, chunk.start * factor : chunk.stop * factor
-                ]
-                for context, chunk in self.audio_tower._get_chunks(states.shape[1])
-            ],
-            dim=1,
+        hidden_states = states.new_empty(
+            states.shape[0], states.shape[1] * factor, self.config.word_timestamp_config.hidden_size
         )
+        for context, chunk in self.audio_tower._get_chunks(states.shape[1]):
+            chunk_states = self.word_timestamp_encoder(states[:, context], frame_mask[:, context])
+            hidden_states[:, (context.start + chunk.start) * factor : (context.start + chunk.stop) * factor] = (
+                chunk_states.last_hidden_state[:, chunk.start * factor : chunk.stop * factor]
+            )
+        return hidden_states
 
 
 @auto_docstring(
