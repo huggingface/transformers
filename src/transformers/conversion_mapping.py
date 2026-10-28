@@ -2174,22 +2174,19 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(
             r"^(option_norm|residual_scorer|prior_logit_scale|joint_logit_scale|residual_gate)", r"scorer.\1"
         ),
-        WeightConverter(
-            r"^(encoder.evidence_layers.\d+).attention.in_proj_",
-            [r"\1.cross_attn.q_proj.", r"\1.cross_attn.k_proj.", r"\1.cross_attn.v_proj."],
-            operations=[Chunk(dim=0)],
-        ),
-        WeightConverter(
-            r"^(encoder.layers.\d+).self_attn.in_proj_",
-            [r"\1.self_attn.q_proj.", r"\1.self_attn.k_proj.", r"\1.self_attn.v_proj."],
-            operations=[Chunk(dim=0)],
-        ),
-        WeightConverter(
-            r"^(encoder.layers.\d+).multihead_attn.in_proj_",
-            [r"\1.encoder_attn.q_proj.", r"\1.encoder_attn.k_proj.", r"\1.encoder_attn.v_proj."],
-            operations=[Chunk(dim=0)],
-        ),
     ]
+    # The head's attention projections: scoped to its `encoder`, so the reverse (on save) leaves the backbone's
+    # `self_attn` alone
+    for source, target in [
+        ("attention", "cross_attn"),
+        ("self_attn", "self_attn"),
+        ("multihead_attn", "encoder_attn"),
+    ]:
+        converter = WeightConverter(
+            f"{source}.in_proj_", [f"{target}.{proj}_proj." for proj in "qkv"], operations=[Chunk(dim=0)]
+        )
+        converter.scope_prefix, converter.base_model_prefix = "encoder", ""
+        mapping["clef"].append(converter)
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:
