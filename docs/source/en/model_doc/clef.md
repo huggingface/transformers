@@ -41,7 +41,7 @@ decide(
 
 [[autodoc]] ClefConfig
 
-## ClefDecisionHead
+## ClefForDecision
 
-[[autodoc]] ClefDecisionHead
+[[autodoc]] ClefForDecision
     - forward

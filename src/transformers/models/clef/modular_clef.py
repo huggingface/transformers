@@ -40,9 +40,9 @@ class ClefConfig(PreTrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import ClefConfig, ClefDecisionHead
+    >>> from transformers import ClefConfig, ClefForDecision
 
-    >>> head = ClefDecisionHead(ClefConfig(backbone_hidden_size=4096))
+    >>> head = ClefForDecision(ClefConfig(backbone_hidden_size=4096))
     ```"""
 
     model_type = "clef"
@@ -276,7 +276,7 @@ class ClefPreTrainedModel(PreTrainedModel):
     attend to each other and to the prompt, and each option is scored against the field of its question.
     """
 )
-class ClefDecisionHead(ClefPreTrainedModel):
+class ClefForDecision(ClefPreTrainedModel):
     def __init__(self, config: ClefConfig):
         super().__init__(config)
         self.embeddings = ClefEmbeddings(config)
@@ -308,4 +308,4 @@ class ClefDecisionHead(ClefPreTrainedModel):
         return scores[0]
 
 
-__all__ = ["ClefConfig", "ClefDecisionHead", "ClefPreTrainedModel"]
+__all__ = ["ClefConfig", "ClefForDecision", "ClefPreTrainedModel"]
