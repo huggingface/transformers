@@ -133,11 +133,14 @@ class NVFP4HfQuantizer(HfQuantizer):
                 formats[name] = entries[0]
         return formats
 
-    def _process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs):
+    def _process_model_before_weight_loading(self, model: PreTrainedModel, checkpoint_files=None, **kwargs):
         from ..conversion_mapping import get_model_conversion_mapping
         from ..core_model_loading import WeightRenaming
-        from ..integrations.nvfp4 import replace_with_nvfp4
+        from ..integrations.nvfp4 import checkpoint_format, replace_with_nvfp4
 
+        # read the layout from the tensor names before the renames hide them, and keep it so a save records it
+        if self.pre_quantized and self.quantization_config.checkpoint_format is None and checkpoint_files:
+            self.quantization_config.checkpoint_format = checkpoint_format(checkpoint_files)
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )

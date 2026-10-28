@@ -31,11 +31,11 @@ from .checkpoint import (
     consolidate_distributed_checkpoint,
 )
 from .configuration_utils import DistributedConfig
+from .expert_parallel import apply_expert_parallelism
 from .fsdp import apply_fully_sharded_data_parallelism
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     _validate_parallel_plan_styles,
-    apply_expert_parallelism,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
     resolve_parallel_plans,

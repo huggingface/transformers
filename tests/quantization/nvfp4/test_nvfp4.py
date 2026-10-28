@@ -38,6 +38,7 @@ if is_torch_available():
         NVFP4Experts,
         NVFP4Linear,
         NVFP4SwizzleScales,
+        checkpoint_format,
         replace_with_nvfp4,
     )
 
@@ -208,8 +209,7 @@ def _mxfp8_checkpoint(path):
         "quant_method": "mxfp8",
         "weight_block_size": [1, 32],
         "ignored_layers": ["lm_head", *(f"model.layers.{i}.block_sparse_moe.gate" for i in range(2))],
-        "moe_quant_algo": "NVFP4",
-        "moe_quant_format": "nvfp4-pack-quantized",
+        "expert_dtype": "nvfp4",
     }
     with open(f"{path}/config.json", "w", encoding="utf-8") as file:
         json.dump(saved, file)
@@ -255,15 +255,36 @@ class NVFP4ConfigTest(unittest.TestCase):
     def test_an_mxfp8_checkpoint_with_nvfp4_experts_reads_as_nvfp4(self):
         shipped = {"quant_method": "mxfp8", "weight_block_size": [1, 32], "ignored_layers": ["lm_head"]}
         self.assertIsInstance(AutoQuantizationConfig.from_dict(shipped), FineGrainedFP8Config)
-        shipped.update({"moe_quant_algo": "NVFP4", "moe_quant_format": "nvfp4-pack-quantized"})
+        shipped["expert_dtype"] = "nvfp4"
         config = AutoQuantizationConfig.from_dict(shipped)
         self.assertIsInstance(config, NVFP4Config)
-        self.assertEqual(config.checkpoint_format, "nvfp4-pack-quantized")
+        # the tensor names say which layout the experts ship in
+        self.assertIsNone(config.checkpoint_format)
         self.assertEqual(
             config.quantized_layers, {r"lm_head(\..*)?": None, r".*\.experts": "nvfp4", r".*": "dequantize"}
         )
-        with self.assertRaises(ValueError):
-            AutoQuantizationConfig.from_dict({**shipped, "moe_quant_format": "unknown"})
+
+    @parameterized.expand(
+        [
+            (
+                "compressed_tensors",
+                ["w1.weight_packed", "w1.weight_scale", "w1.weight_global_scale"],
+                "nvfp4-pack-quantized",
+            ),
+            ("modelopt", ["w1.weight", "w1.weight_scale", "w1.weight_scale_2"], "modelopt"),
+            ("fused_modelopt", ["experts.gate_up_proj", "experts.gate_up_proj_weight_scale_2"], "modelopt"),
+            ("transformers_save", ["w1.weight", "w1.weight_scale_inv", "w1.weight_global_scale"], None),
+        ]
+    )
+    def test_the_checkpoint_format_is_read_from_the_tensor_names(self, _, names, expected):
+        from safetensors.torch import save_file
+
+        with tempfile.TemporaryDirectory() as path:
+            files = [f"{path}/model-0000{i}.safetensors" for i in range(len(names))]
+            # one tensor per shard, so the format is found past the first file
+            for file, name in zip(files, names):
+                save_file({f"model.layers.0.mlp.experts.0.{name}": torch.zeros(1)}, file)
+            self.assertEqual(checkpoint_format(files), expected)
 
     @parameterized.expand([("without_nvfp4", ["FP8"]), ("with_another_format", ["NVFP4", "W4A8_AWQ"])])
     def test_a_modelopt_export_raises(self, _, algos):

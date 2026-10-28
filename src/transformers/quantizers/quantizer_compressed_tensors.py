@@ -170,12 +170,16 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
     @property
     def serialized_names(self):
-        if self.quantization_config.quantization_config is None:  # e.g. sparsity only
+        ct_config = self.quantization_config.quantization_config
+        if ct_config is None or not ct_config.config_groups:  # e.g. sparsity only, kv cache only
             return {}
-        if _is_fp8_scheme(get_experts_scheme(self.quantization_config.quantization_config)):
+        if _is_fp8_scheme(get_experts_scheme(ct_config)):
             return {"weight": ["weight", "weight_scale"]}
         return {"weight": ["weight_packed", "weight_scale", "weight_shape"]}
 
     def get_load_operations(self):
-        scheme = get_experts_scheme(self.quantization_config.quantization_config)
+        ct_config = self.quantization_config.quantization_config
+        if ct_config is None or not ct_config.config_groups:  # e.g. sparsity only, kv cache only
+            return {}
+        scheme = get_experts_scheme(ct_config)
         return {"dequantize": partial(CompressedTensorsDequantize, scheme=scheme)}

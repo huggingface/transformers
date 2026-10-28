@@ -25,7 +25,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2CLS
 from ...backbone_utils import filter_output_hidden_states
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -78,7 +78,7 @@ class SLANeXtConfig(PreTrainedConfig):
 
     model_type = "slanext"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=SLANeXtVisionConfig),
+        "vision_config": SLANeXtVisionConfig,
     }
 
     vision_config: dict | SLANeXtVisionConfig | None = None

@@ -43,7 +43,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
@@ -556,6 +556,7 @@ class DeepseekOcr2SamVisionProj(nn.Module):
 class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
     _can_record_outputs = {"hidden_states": DeepseekOcr2SamVisionLayer, "attentions": DeepseekOcr2SamVisionAttention}
     _input_embed_layer = "patch_embed"
+    config: DeepseekOcr2SamVisionConfig
 
     def __init__(self, config: DeepseekOcr2SamVisionConfig):
         super().__init__(config)
@@ -889,6 +890,7 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
         "hidden_states": DeepseekOcr2VisionEncoderLayer,
         "attentions": DeepseekOcr2VisionAttention,
     }
+    config: DeepseekOcr2VisionConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -952,6 +954,8 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
 
 @auto_docstring(custom_intro="Vision pipeline: SAM ViT-B (with neck)")
 class DeepseekOcr2VisionModel(DeepseekOcr2PreTrainedModel):
+    config: DeepseekOcr2VisionConfig
+
     def __init__(self, config: DeepseekOcr2VisionConfig):
         super().__init__(config)
         self.sam_encoder = DeepseekOcr2SamVisionEncoder(config.sam_config)
@@ -1629,8 +1633,7 @@ class DeepseekOcr2ForConditionalGeneration(DeepseekOcr2PreTrainedModel, Generati
         )
 
         hidden_states = outputs[0]
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        hidden_states = hidden_states[:, slice_indices, :]
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         logits = self.lm_head(hidden_states)
 
         loss = None
