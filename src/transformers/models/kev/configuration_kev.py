@@ -26,9 +26,9 @@ class KevConfig(PreTrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import KevConfig, KevForDecision
+    >>> from transformers import KevConfig, KevDecisionHead
 
-    >>> head = KevForDecision(KevConfig(hidden_size=2560))
+    >>> head = KevDecisionHead(KevConfig(hidden_size=2560))
     ```"""
 
     model_type = "kev"
