@@ -1221,6 +1221,22 @@ def is_bitsandbytes_available(min_version: str = BITSANDBYTES_MIN_VERSION) -> bo
     return is_available and version.parse(bitsandbytes_version) >= version.parse(min_version)
 
 
+def is_flash_attn_kernel_fallback_available(fa_version):
+    if is_kernels_available():
+        try:
+            from kernels import get_kernel
+
+            from transformers.integrations.hub_kernels import get_attn_kernel_version
+            from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
+
+            repo_id = FLASH_ATTN_KERNEL_FALLBACK[f"flash_attention_{fa_version}"]
+            get_kernel(repo_id, version=get_attn_kernel_version(repo_id))
+            return True
+        except Exception:  # noqa: S110  # we don't care about the Exception here: we just want to check availability
+            pass
+    return False
+
+
 @lru_cache
 @_make_compile_constant
 def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
@@ -1238,19 +1254,7 @@ def is_flash_attn_2_available(kernels_fallback_ok: bool = False) -> bool:
             return False
 
     # If the kernels fallback is allowed, check if it is available
-    if kernels_fallback_ok and is_kernels_available():
-        try:
-            from kernels import get_kernel
-
-            from transformers.integrations.hub_kernels import get_attn_kernel_version
-            from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
-
-            repo_id = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_2"]
-            get_kernel(repo_id, version=get_attn_kernel_version(repo_id))
-            return True
-        except Exception:  # noqa: S110  # we don't care about the Exception here: we just want to check availability
-            pass
-    return False
+    return kernels_fallback_ok and is_flash_attn_kernel_fallback_available(fa_version=2)
 
 
 @lru_cache
@@ -1266,24 +1270,12 @@ def is_flash_attn_3_available(kernels_fallback_ok: bool = False) -> bool:
         return True
 
     # If the kernels fallback is allowed, check if it is available
-    if kernels_fallback_ok and is_kernels_available():
-        try:
-            from kernels import get_kernel
-
-            from transformers.integrations.hub_kernels import get_attn_kernel_version
-            from transformers.modeling_flash_attention_utils import FLASH_ATTN_KERNEL_FALLBACK
-
-            repo_id = FLASH_ATTN_KERNEL_FALLBACK["flash_attention_3"]
-            get_kernel(repo_id, version=get_attn_kernel_version(repo_id))
-            return True
-        except Exception:  # noqa: S110  # we don't care about the Exception here: we just want to check availability
-            pass
-    return False
+    return kernels_fallback_ok and is_flash_attn_kernel_fallback_available(fa_version=3)
 
 
 @lru_cache
 @_make_compile_constant
-def is_flash_attn_4_available() -> bool:
+def is_flash_attn_4_available(kernels_fallback_ok: bool = False) -> bool:
     is_available = _is_package_available("flash_attn")[0]
     # FA2 is also distributed under "flash_attn", hence we need to check the naming here
     # NOTE: FA2 seems to distribute the `cute` subdirectory even if only FA2 has been installed
@@ -1291,8 +1283,11 @@ def is_flash_attn_4_available() -> bool:
     is_available = is_available and "flash-attn-4" in [
         pkg.replace("_", "-") for pkg in PACKAGE_DISTRIBUTION_MAPPING.get("flash_attn", [])
     ]
+    if is_available and is_torch_cuda_available():
+        return True
 
-    return is_available and is_torch_cuda_available()
+    # If the kernels fallback is allowed, check if it is available
+    return kernels_fallback_ok and is_flash_attn_kernel_fallback_available(fa_version=4)
 
 
 @lru_cache
