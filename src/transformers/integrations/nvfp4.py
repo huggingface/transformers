@@ -67,11 +67,8 @@ def _is_blackwell() -> bool:
 
 def _fits_swizzled_layout(rows: int, scale_cols: int) -> bool:
     """Check whether `(rows, scale_cols)` scales can be swizzled. Only Blackwell GPUs read that layout.
-
-    A weight has one scale per 16 values, so its scales form a `(rows, cols / 16)` table. The layout cuts that table
-    into blocks of 128 rows by 4 columns. So the rows must be a multiple of 128 and the columns a multiple of 4. The
-    kernels also read at least two blocks across, so the scales need 8 columns or more.
-
+    The rows must be a multiple of 128 and the columns a multiple of 4. The kernels also read at least two blocks across,
+    so the scales need 8 columns or more.
     The scales of a whole weight usually fit. Tensor parallelism gives each rank a smaller piece, which may not fit.
     So the check runs on each rank's piece.
     """
