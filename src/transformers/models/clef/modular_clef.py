@@ -11,7 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
 import math
+from pathlib import Path
 
 import torch
 from huggingface_hub.dataclasses import strict
@@ -23,11 +25,35 @@ from ...decision import Question
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, cached_file
 from ..auto import AutoConfig, AutoModel
 from ..clip.modeling_clip import CLIPMLP
 from ..cohere_asr.modeling_cohere_asr import CohereAsrDecoderLayer
 from ..molmo2.modeling_molmo2 import Molmo2VisionAttention
+
+
+# The prompt of clef (`joint_schema_model.encode_record`), for its checkpoints: one sequence per request
+CLEF_TEMPLATE = r"""{#- Cloudflare/clef, clef-flash (joint_schema_model.encode_record): ONE sequence per request.
+    Every text piece the original tokenizes on its own sits between sentinels; <|mark|> pairs give the spans the joint head
+    pools: per question (instruction start, end) then (option start, end) for each option in question.options order
+    (decision_config: noul_options = ["true", "false"], sort_choices = true). -#}
+{%- macro r(x) %}{{ x if x is string else x|tojson(sort_keys=true, separators=(",", ":")) }}{% endmacro -%}
+{{- "<|im_start|>system\nRead the complete state and schema. Decide every field jointly. Each answer must be exactly one of that field's allowed options.<|im_end|>\n<|im_start|>user\nSTATE:\n<|split|>" ~ r(state) ~ "<|split|>\n\nSCHEMA FIELDS:\n" -}}
+{%- for q in questions -%}
+{{- "<|split|>\nFIELD " ~ loop.index ~ "\nID: " ~ q.name ~ "\nTYPE: " ~ q.type ~ "\nINSTRUCTION: <|mark|>" ~ r(q.name if q.instructions is none or q.instructions == "" else q.instructions) ~ "<|mark|>\nALLOWED OPTIONS:\n" -}}
+{%- for key in q.options -%}
+{%- set d = q.descriptions[loop.index0] -%}
+{%- if q.type == "noul" and d is none %}{% set d = {"true": "The proposition is true or the answer is yes.", "false": "The proposition is false or the answer is no."}[key] %}{% endif -%}
+{{- "OPTION " ~ loop.index ~ ": <|mark|>" ~ r({"option_id": key} if d is none else {"option_id": key, "description": d}) ~ "<|mark|>\n" -}}
+{%- endfor -%}
+{{- "END FIELD\n" -}}
+{%- endfor -%}
+{{- "<|split|>\n<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\nJOINT SCHEMA DECISIONS:" -}}"""
+
+
+def _read_json(pretrained_model_name_or_path, filename: str, **kwargs) -> dict | None:
+    path = cached_file(pretrained_model_name_or_path, filename, _raise_exceptions_for_missing_entries=False, **kwargs)
+    return None if path is None else json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 @auto_docstring(checkpoint="Cloudflare/clef")
@@ -64,6 +90,33 @@ class ClefConfig(PreTrainedConfig):
     initializer_range: float = 0.02
     text_config: dict | PreTrainedConfig | None = None
     tie_word_embeddings: bool = False
+
+    # The file of a clef checkpoint that holds its head next to its weights, read with them
+    extra_files = ("joint_head.safetensors",)
+
+    @classmethod
+    def from_checkpoint(cls, pretrained_model_name_or_path, text_config: dict, **kwargs) -> dict | None:
+        """The fields of the head of a clef checkpoint (`joint_head_config.json`), or `None` for any other checkpoint."""
+        if (head := _read_json(pretrained_model_name_or_path, "joint_head_config.json", **kwargs)) is None:
+            return None
+        return {
+            "backbone_hidden_size": head["hidden_size"],
+            "hidden_size": head["width"],
+            "num_evidence_layers": head["routing_layers"],
+            "num_hidden_layers": head["layers"],
+            "num_attention_heads": head["heads"],
+            "num_key_value_heads": head["heads"],
+            "intermediate_size": head["feedforward"],
+        }
+
+    @classmethod
+    def decision_config(cls, pretrained_model_name_or_path, **kwargs):
+        """The decision config of a clef checkpoint, or `None` for any other checkpoint."""
+        from ...decision import DecisionConfig
+
+        if _read_json(pretrained_model_name_or_path, "joint_head_config.json", **kwargs) is None:
+            return None
+        return DecisionConfig(noul_options=["true", "false"], sort_choices=True, chat_template=CLEF_TEMPLATE)
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
