@@ -17,14 +17,12 @@ Spawning the ranks (and importing torch in each of them) takes longer than most 
 them once per (world_size, backend) and pytest(-xdist worker) process, and sends every test function to them.
 """
 
-import atexit
-import multiprocessing
 import os
-import queue
 import sys
 import time
 import traceback
 from datetime import timedelta
+from multiprocessing.connection import wait
 
 from transformers import set_seed
 from transformers.distributed.utils import get_distributed_backend
@@ -66,130 +64,106 @@ def _set_rank_device(rank, backend=None):
         torch.accelerator.set_device_index(rank)
 
 
-def _persistent_rank(rank, world_size, store_host, store_port, backend, tasks, results):
-    """A rank kept alive across tests: it initializes the process group once, then runs every test function it receives."""
+def _rank_main(rank, world_size, store_port, backend, conn):
+    """Initializes the process group, then runs every function received on `conn` until pytest exits."""
+    # pytest captures our output under the test running when it is written, and a rank may be killed (after another
+    # rank failed) before it flushes a block-buffered stdout
+    sys.stdout.reconfigure(line_buffering=True)
     os.environ.update(
         WORLD_SIZE=str(world_size),
         RANK=str(rank),
         LOCAL_RANK=str(rank),
-        MASTER_ADDR=store_host,
+        MASTER_ADDR="localhost",
         MASTER_PORT=str(store_port),
     )
     # some backends, e.g. tpu, require the rank to be set before initializing the process group
     _set_rank_device(rank, backend)
-    store = dist.TCPStore(store_host, store_port, world_size=None, is_master=False)
-    dist.init_process_group(
-        backend=backend, store=store, rank=rank, world_size=world_size, timeout=_COLLECTIVE_TIMEOUT
-    )
-    results.put(None)
+    store = dist.TCPStore("localhost", store_port, world_size=None, is_master=False)
+    dist.init_process_group(backend, store=store, rank=rank, world_size=world_size, timeout=_COLLECTIVE_TIMEOUT)
 
     while True:
         try:
-            func, args, kwargs = tasks.get(timeout=5)
-        except queue.Empty:
-            # exit if pytest died without killing us
-            if not multiprocessing.parent_process().is_alive():
-                return
-            continue
-        # so a test's random numbers do not depend on the tests that ran before it
-        set_seed(42)
+            func, args, kwargs = conn.recv()
+        except EOFError:  # pytest exited
+            return
+        _reset_rank()
         try:
             func(rank, *args, **kwargs)
             dist.barrier()
             error = None
         except BaseException:
             error = f"Rank {rank} failed:\n{traceback.format_exc()}"
-        # pytest captures our output under the test running when it is written, and stdout is block-buffered
-        sys.stdout.flush()
-        sys.stderr.flush()
-        results.put(error)
-
-        # free what the test left behind: its models, its compiled graphs, and the process groups of its device meshes
-        del func, args, kwargs
-        cleanup(_get_distributed_device_type(), gc_collect=True)
-        for group in list(_world.pg_map):
-            if group is not GroupMember.WORLD:
-                dist.destroy_process_group(group)
+        conn.send(error)
 
 
-class _PersistentRanks:
-    """`world_size` ranks with an initialized process group, which run the functions passed to `run`."""
+def _reset_rank():
+    """Undo what the previous test left behind: its models, compiled graphs, device mesh groups and RNG state."""
+    cleanup(_get_distributed_device_type(), gc_collect=True)
+    for group in list(_world.pg_map):
+        if group is not GroupMember.WORLD:
+            dist.destroy_process_group(group)
+    set_seed(42)
+
+
+class _Ranks:
+    """`world_size` processes with an initialized process group, kept alive across tests."""
 
     def __init__(self, world_size: int, backend: str):
         ctx = mp.get_context("spawn")
         # held for as long as the ranks live, so another xdist worker cannot claim its port
         self.store = dist.TCPStore("localhost", 0, world_size=None, is_master=True, wait_for_workers=False)
-        self.results = ctx.Queue()
-        self.tasks = [ctx.Queue() for _ in range(world_size)]
-        self.processes = [
-            ctx.Process(
-                target=_persistent_rank,
-                args=(rank, world_size, self.store.host, self.store.port, backend, self.tasks[rank], self.results),
+        self.conns, self.processes = [], []
+        for rank in range(world_size):
+            conn, rank_conn = ctx.Pipe()
+            # daemon: multiprocessing kills the ranks when pytest exits
+            process = ctx.Process(
+                target=_rank_main, args=(rank, world_size, self.store.port, backend, rank_conn), daemon=True
             )
-            for rank in range(world_size)
-        ]
-        for process in self.processes:
             process.start()
-        try:
-            self._wait()
-        except RuntimeError:
-            self.kill()
-            raise
+            # the rank now holds the only copy of its end, so `conn` reads EOF once the rank dies
+            rank_conn.close()
+            self.conns.append(conn)
+            self.processes.append(process)
 
     def run(self, func, args, kwargs):
-        for tasks in self.tasks:
-            tasks.put((func, args, kwargs))
-        self._wait()
-
-    def _wait(self):
-        """Wait for every rank to report, raising on the first error or after `_TEST_TIMEOUT`."""
+        for conn in self.conns:
+            conn.send((func, args, kwargs))
+        pending = list(self.conns)
         deadline = time.monotonic() + _TEST_TIMEOUT.total_seconds()
-        for _ in self.processes:
-            while True:
+        while pending:
+            ready = wait(pending, timeout=max(0, deadline - time.monotonic()))
+            if not ready:
+                raise TimeoutError(f"The distributed ranks did not finish within {_TEST_TIMEOUT}")
+            for conn in ready:
+                pending.remove(conn)
                 try:
-                    error = self.results.get(timeout=1)
-                    break
-                except queue.Empty:
-                    if not all(process.is_alive() for process in self.processes):
-                        raise RuntimeError("A distributed test rank died, see its output above")
-                    if time.monotonic() > deadline:
-                        raise RuntimeError(f"The distributed ranks did not finish within {_TEST_TIMEOUT}")
-            if error is not None:
-                raise RuntimeError(error)
-
-    def kill(self):
-        for process in self.processes:
-            process.kill()
-            process.join()
+                    error = conn.recv()
+                except EOFError:
+                    raise RuntimeError("A distributed test rank died, see its output above") from None
+                if error is not None:
+                    raise RuntimeError(error)
 
 
-_PERSISTENT_RANKS: dict[tuple[int, str], _PersistentRanks] = {}
-
-
-@atexit.register
-def _kill_persistent_ranks():
-    for ranks in _PERSISTENT_RANKS.values():
-        ranks.kill()
+_RANKS: dict[tuple[int, str], _Ranks] = {}
 
 
 def run_distributed(world_size: int, backend: str | None = None):
-    """Decorator to run a function on `world_size` ranks, reusing the ranks (and their process group) across calls."""
+    """Decorator running `func(rank, *args, **kwargs)` on `world_size` ranks, which are reused across calls."""
     # default to the current accelerator's backend, as "gloo" cannot carry every accelerator's tensors
-    if backend is None:
-        backend = _get_distributed_backend()
+    key = (world_size, backend or _get_distributed_backend())
 
-    def run_distributed_inner(func):
+    def decorator(func):
         def wrapper(*args, **kwargs):
-            key = (world_size, backend)
-            if key not in _PERSISTENT_RANKS:
-                _PERSISTENT_RANKS[key] = _PersistentRanks(world_size, backend)
+            if key not in _RANKS:
+                _RANKS[key] = _Ranks(*key)
             try:
-                _PERSISTENT_RANKS[key].run(func, args, kwargs)
+                _RANKS[key].run(func, args, kwargs)
             except BaseException:
-                # the other ranks may be stuck in a collective, the next call starts from fresh ranks
-                _PERSISTENT_RANKS.pop(key).kill()
+                # the other ranks may be stuck in a collective: kill them, so the next call starts from fresh ranks
+                for process in _RANKS.pop(key).processes:
+                    process.kill()
                 raise
 
         return wrapper
 
-    return run_distributed_inner
+    return decorator
