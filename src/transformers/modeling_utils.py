@@ -4320,7 +4320,7 @@ class PreTrainedModel(
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         if distributed_config is not None:
-            model = cls.maybe_distribute_model(model, distributed_config, mesh_manager)
+            model = cls.maybe_distribute_model(model, distributed_config, mesh_manager, dtype_plan)
 
         # Prepare the full device map
         if device_map is not None:

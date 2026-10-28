@@ -73,6 +73,8 @@ BF16_GRAD_RTOL = 2e-2
 # Set to None to run distributed FSDP tests for every model with a plan.
 FSDP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "cohere2_moe",
+    # Keeps its router weight in float32 (`_keep_in_fp32_modules_strict`)
+    "ernie4_5_moe",
     "llama",
     "mistral",
     "mixtral",
@@ -373,6 +375,39 @@ def _test_fsdp2_save_load_impl(rank, config_class, config_dict):
 
         if rank == 0:
             logger.debug(f"FSDP2 save/load test passed: all {len(state_dict_before)} parameters match exactly.")
+
+
+def _test_fsdp2_bf16_training_impl(rank, config_class, config_dict):
+    """Train in bfloat16 with the model sharded at load time, float32-kept parameters included."""
+    init_test_logger()
+
+    config = config_class.from_dict(config_dict)
+    distributed_config = DistributedConfig(fsdp_size=dist.get_world_size())
+
+    with _deterministic_init_model_dir(rank, config, torch.bfloat16) as init_dir:
+        _set_determinism(SEED)
+        model = AutoModelForCausalLM.from_pretrained(
+            init_dir, torch_dtype=torch.bfloat16, distributed_config=distributed_config
+        )
+        # The loader upcasts these after sharding; they must have landed in a float32 group rather than being folded
+        # into a bfloat16 one (which FSDP2 rejects) or quietly cast back down.
+        dtype_plan = model._get_dtype_plan(torch.bfloat16)
+        kept_in_fp32 = {
+            name: param.dtype
+            for name, param in model.named_parameters()
+            if any(pattern.split(".")[0] in name for pattern in dtype_plan)
+        }
+        for name, dtype in kept_in_fp32.items():
+            assert dtype == torch.float32, f"{name} should be kept in float32 after sharding, got {dtype}"
+
+        optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
+        batches = _build_repeated_training_batches(config, _get_rank_device(rank), num_steps=2)
+        losses, _ = _run_training_steps(model, optimizer, batches, track_grad_norms=False)
+        assert all(torch.isfinite(torch.tensor(losses))), f"Non-finite losses: {losses}"
+
+        for name, param in model.named_parameters():
+            if name in kept_in_fp32:
+                assert param.dtype == torch.float32, f"{name} lost float32 during training, got {param.dtype}"
 
 
 def _test_fsdp2_save_load_dcp_impl(rank, config_class, config_dict):
@@ -792,6 +827,11 @@ class FSDPTesterMixin(ABC):
     @is_fsdp_test
     def test_fsdp2_save_load(self):
         self._run_fsdp2_distributed_test("test_fsdp2_save_load", _test_fsdp2_save_load_impl)
+
+    @require_torch_greater_or_equal("2.7")
+    @is_fsdp_test
+    def test_fsdp2_bf16_training(self):
+        self._run_fsdp2_distributed_test("test_fsdp2_bf16_training", _test_fsdp2_bf16_training_impl)
 
     @require_torch_greater_or_equal("2.7")
     @is_fsdp_test
