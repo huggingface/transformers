@@ -392,28 +392,28 @@ def _test_fsdp2_bf16_training_impl(rank, config_class, config_dict):
         )
         # The loader upcasts these after sharding; they must have landed in a float32 group rather than being folded
         # into a bfloat16 one (which FSDP2 rejects) or quietly cast back down. Match the plan the way the loader does:
-        # a substring test would read "gate.weight" as "gate" and catch every `gate_up_proj` as well.
-        dtype_plan = model._get_dtype_plan(torch.bfloat16)
-        pattern, group_to_glob, _ = build_glob_alternation(list(dtype_plan))
+        # a substring test would read "gate.weight" as "gate" and catch every `gate_up_proj` too. Most models have an
+        # empty plan, and for them this is a plain bfloat16 training step.
         kept_in_fp32 = {}
-        for name, param in model.named_parameters():
-            match = pattern.search(name)
-            if match is not None:
-                kept_in_fp32[name] = param.dtype
-                expected = dtype_plan[group_to_glob[match.lastgroup]]
-                assert param.dtype == expected, (
-                    f"{name} should be kept in {expected} after sharding, got {param.dtype}"
-                )
-        assert kept_in_fp32, "the model has no parameter the loader keeps in another dtype"
+        if dtype_plan := model._get_dtype_plan(torch.bfloat16):
+            pattern, group_to_glob, _ = build_glob_alternation(list(dtype_plan))
+            for name in dict(model.named_parameters()):
+                if (match := pattern.search(name)) is not None:
+                    kept_in_fp32[name] = dtype_plan[group_to_glob[match.lastgroup]]
+
+        def assert_kept_dtypes(when):
+            for name, expected in kept_in_fp32.items():
+                dtype = model.get_parameter(name).dtype
+                assert dtype == expected, f"{name} should be {expected} {when}, got {dtype}"
+
+        assert_kept_dtypes("after sharding")
 
         optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
         batches = _build_repeated_training_batches(config, _get_rank_device(rank), num_steps=2)
         losses, _ = _run_training_steps(model, optimizer, batches, track_grad_norms=False)
         assert all(torch.isfinite(torch.tensor(losses))), f"Non-finite losses: {losses}"
 
-        for name, param in model.named_parameters():
-            if name in kept_in_fp32:
-                assert param.dtype == torch.float32, f"{name} lost float32 during training, got {param.dtype}"
+        assert_kept_dtypes("after training")
 
 
 def _test_fsdp2_save_load_dcp_impl(rank, config_class, config_dict):
