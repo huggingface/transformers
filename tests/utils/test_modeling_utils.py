@@ -2748,10 +2748,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.user = "hf-internal-testing"
-        cls.token = os.getenv("HF_TOKEN_TRANSFORMERS_BOT", None)
+        cls.token = os.getenv("TRANSFORMERS_HUB_BOT_HF_TOKEN") or os.getenv("HF_TOKEN")
 
-        if cls.token is None:
-            raise unittest.SkipTest("HF_TOKEN_TRANSFORMERS_BOT not set, skipping.")
+        if not cls.token:
+            raise unittest.SkipTest("TRANSFORMERS_HUB_BOT_HF_TOKEN not set, skipping.")
 
         cls.api = HfApi(token=cls.token)
 
