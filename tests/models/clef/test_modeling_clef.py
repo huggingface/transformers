@@ -34,7 +34,7 @@ if is_torch_available():
 @require_torch
 class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
     all_model_classes = (ClefForDecision,) if is_torch_available() else ()
-    decision_repo = "ArthurZ/clef-flash"
+    decision_repo = "hf-internal-testing/decision-clef"
     # The backbone is wider than the head
     tiny_sizes = {
         "backbone_hidden_size": 24,
