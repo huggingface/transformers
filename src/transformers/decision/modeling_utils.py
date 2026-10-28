@@ -129,7 +129,7 @@ class DecisionMixin:
         # The tokens after the last mark, where the templates write the state
         tail = inputs["input_ids"][0, int(marks[-1]) :]
         return [
-            decision_config.get_logits_processor(question.type)(tail, question_scores.float())
+            decision_config.logits_processors[question.type](tail, question_scores.float())
             for question, question_scores in zip(decision_questions, scores.split(num_options[0].tolist()))
         ]
 
