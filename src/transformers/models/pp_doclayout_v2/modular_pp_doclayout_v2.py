@@ -636,13 +636,15 @@ class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
     """
 )
 class PPDocLayoutV2ReadingOrder(PPDocLayoutV2PreTrainedModel):
+    config: PPDocLayoutV2ReadingOrderConfig
+
     # Attention is based on LayoutLMv3 (no interface)
     _supports_sdpa = False
     _supports_flash_attn = False
     _supports_attention_backend = False
     _supports_flex_attn = False
 
-    def __init__(self, config: PPDocLayoutV2Config):
+    def __init__(self, config: PPDocLayoutV2ReadingOrderConfig):
         super().__init__(config)
         self.embeddings = PPDocLayoutV2TextEmbeddings(config)
         self.label_embeddings = nn.Embedding(config.num_classes, config.hidden_size)

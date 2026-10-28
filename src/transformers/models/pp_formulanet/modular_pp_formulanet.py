@@ -348,7 +348,10 @@ class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
 
 @auto_docstring
 class PPFormulaNetTextModel(MBartDecoder):
-    pass
+    config: PPFormulaNetTextConfig
+
+    def __init__(self, config: PPFormulaNetTextConfig):
+        super().__init__(config)
 
 
 class PPFormulaNetModel(PPFormulaNetPreTrainedModel):

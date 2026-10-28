@@ -53,6 +53,7 @@ from .configuration_deepseek_ocr2 import (
     DeepseekOcr2SamVisionConfig,
     DeepseekOcr2TextConfig,
     DeepseekOcr2VisionConfig,
+    DeepseekOcr2VisionEncoderConfig,
 )
 
 
@@ -890,9 +891,9 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
         "hidden_states": DeepseekOcr2VisionEncoderLayer,
         "attentions": DeepseekOcr2VisionAttention,
     }
-    config: DeepseekOcr2VisionConfig
+    config: DeepseekOcr2VisionEncoderConfig
 
-    def __init__(self, config: DeepseekOcr2VisionConfig):
+    def __init__(self, config: DeepseekOcr2VisionEncoderConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
