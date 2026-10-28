@@ -123,17 +123,11 @@ class WorkerGroup:
     # one running group per (world_size, backend)
     _running: dict[tuple[int, str], "WorkerGroup"] = {}
 
-    @classmethod
-    def get_or_start(cls, world_size: int, backend: str) -> "WorkerGroup":
-        if (world_size, backend) not in cls._running:
-            cls._running[world_size, backend] = cls(world_size, backend)
-        return cls._running[world_size, backend]
-
     def __init__(self, world_size: int, backend: str):
-        self.key = (world_size, backend)
+        self.world_size, self.backend = world_size, backend
         ctx = mp.get_context("spawn")
         # held for as long as the workers live, so another xdist worker cannot claim its port
-        self.store = dist.TCPStore("localhost", 0, world_size=None, is_master=True, wait_forWorkers=False)
+        self.store = dist.TCPStore("localhost", 0, world_size=None, is_master=True, wait_for_workers=False)
         self.pipes, self.processes = [], []
         for rank in range(world_size):
             pipe, worker_pipe = ctx.Pipe()
@@ -168,19 +162,23 @@ class WorkerGroup:
 
     def kill(self):
         """Kill the workers, e.g. when some may be stuck in a collective; the next `get_or_start` starts new ones."""
-        del self._running[self.key]
+        del self._running[self.world_size, self.backend]
         for process in self.processes:
             process.kill()
 
+    @classmethod
+    def get_or_start(cls, world_size: int, backend: str) -> "WorkerGroup":
+        if (world_size, backend) not in cls._running:
+            cls._running[world_size, backend] = cls(world_size, backend)
+        return cls._running[world_size, backend]
+
 
 def run_distributed(world_size: int, backend: str | None = None):
-    """Decorator running `func(rank, *args, **kwargs)` on `world_size` workers, which are reused across calls."""
-    # default to the current accelerator's backend, as "gloo" cannot carry every accelerator's tensors
-    key = (world_size, backend or _get_distributed_backend())
+    backend = backend or _get_distributed_backend()
 
     def decorator(func):
         def wrapper(*args, **kwargs):
-            workers = WorkerGroup.get_or_start(*key)
+            workers = WorkerGroup.get_or_start(world_size, backend)
             try:
                 workers.run_test(func, *args, **kwargs)
             except BaseException:
