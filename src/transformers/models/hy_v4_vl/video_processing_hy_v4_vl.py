@@ -18,6 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
 import numpy as np
 import torch
 from torchvision.transforms.v2 import functional as tvF
@@ -58,6 +60,42 @@ class HYV4VLVideoProcessorInitKwargs(VideosKwargs, total=False):
     min_frames: int
     max_frames: int
     max_image_size: dict[str, int]
+
+
+def smart_resize(
+    num_frames: int,
+    height: int,
+    width: int,
+    temporal_factor: int = 2,
+    factor: int = 28,
+    min_pixels: int = 112 * 112,
+    max_pixels: int = 14 * 14 * 2 * 2 * 2 * 6144,
+):
+    if num_frames < temporal_factor:
+        raise ValueError(f"t:{num_frames} must be larger than temporal_factor:{temporal_factor}")
+    if height < factor or width < factor:
+        scale = max(factor / height, factor / width)
+        height = int(height * scale)
+        width = int(width * scale)
+
+    if max(height, width) / min(height, width) > 200:
+        raise ValueError(
+            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
+        )
+    h_bar = round(height / factor) * factor
+    w_bar = round(width / factor) * factor
+    t_bar = round(num_frames / temporal_factor) * temporal_factor
+
+    if t_bar * h_bar * w_bar > max_pixels:
+        beta = math.sqrt((num_frames * height * width) / max_pixels)
+        h_bar = max(factor, math.floor(height / beta / factor) * factor)
+        w_bar = max(factor, math.floor(width / beta / factor) * factor)
+    elif t_bar * h_bar * w_bar < min_pixels:
+        beta = math.sqrt(min_pixels / (num_frames * height * width))
+        h_bar = math.ceil(height * beta / factor) * factor
+        w_bar = math.ceil(width * beta / factor) * factor
+
+    return h_bar, w_bar
 
 
 @auto_docstring
@@ -147,7 +185,7 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
         # `shortest_edge` is part of the size contract but is never a lower bound: frames are not upscaled.
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-        height, width = self._adaptive_resize(
+        height, width = self.smart_resize(
             frame_height=videos.shape[-2],
             frame_width=videos.shape[-1],
             num_frames=videos.shape[1],
@@ -287,7 +325,7 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
 
         factor = patch_size * merge_size
         if do_resize:
-            height, width = self._adaptive_resize(
+            height, width = self.smart_resize(
                 frame_height=height,
                 frame_width=width,
                 num_frames=num_frames,
@@ -303,7 +341,7 @@ class HYV4VLVideoProcessor(BaseVideoProcessor):
         return (num_patches, grid_t, grid_h, grid_w) if return_grid else num_patches
 
     @staticmethod
-    def _adaptive_resize(
+    def smart_resize(
         frame_height: int,
         frame_width: int,
         num_frames: int,

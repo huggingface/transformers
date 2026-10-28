@@ -766,7 +766,7 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
     valid_kwargs = HYV4VLVideoProcessorInitKwargs
 
     @staticmethod
-    def _adaptive_resize(
+    def smart_resize(
         frame_height: int,
         frame_width: int,
         num_frames: int,
@@ -816,7 +816,7 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
         # `shortest_edge` is part of the size contract but is never a lower bound: frames are not upscaled.
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
-        height, width = self._adaptive_resize(
+        height, width = self.smart_resize(
             frame_height=videos.shape[-2],
             frame_width=videos.shape[-1],
             num_frames=videos.shape[1],
@@ -957,7 +957,7 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
 
         factor = patch_size * merge_size
         if do_resize:
-            height, width = self._adaptive_resize(
+            height, width = self.smart_resize(
                 frame_height=height,
                 frame_width=width,
                 num_frames=num_frames,
