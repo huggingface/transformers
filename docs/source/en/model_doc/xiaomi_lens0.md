@@ -37,7 +37,7 @@ The original code can be found [here](https://github.com/SeerRay-Lab/Xiaomi-Lens
 
 ## Usage
 
-Boxes are written as `<bbox>[x1, y1, x2, y2]</bbox>` with coordinates normalized to `[0, 1000]`, and masks as `<mask><|mask|></mask>`. A grounded instance is written as `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|></mask>`. Encode the image once, generate text while collecting final-layer hidden states, then call `decode_masks` to reuse those features without rerunning either backbone. [`~XiaomiLens0Processor.post_process_grounding`] extracts boxes and resizes masks to the original image. Decoding and postprocessing exclude thinking tokens by default.
+Boxes are written as `<bbox>[x1, y1, x2, y2]</bbox>` with coordinates normalized to `[0, 1000]`, and masks as `<mask><|mask|></mask>`. A grounded instance is written as `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|></mask>`. Generate text while collecting final-layer hidden states and image features, then call `decode_masks` to reuse those features without rerunning either backbone. [`~XiaomiLens0Processor.post_process_grounding`] extracts boxes and resizes masks to the original image. Decoding and postprocessing exclude thinking tokens by default.
 
 ```python
 import torch
@@ -64,26 +64,20 @@ inputs = processor.apply_chat_template(
 ).to(model.device)
 
 with torch.no_grad():
-    image_features = model.get_image_features(
-        inputs.pop("pixel_values"), inputs.image_grid_thw, return_dict=True
-    )
-    generated = model.generate(
+    outputs = model.generate(
         **inputs,
-        mm_encoder_outputs={"image": image_features},
+        # TODO: Add generation_config.json on the hub
         return_dict_in_generate=True,
         output_hidden_states=[model.config.text_config.num_hidden_layers - 1],
-        use_cache=True,
-        num_beams=1,
-        num_return_sequences=1,
         max_new_tokens=1024,
     )
-    hidden_states = torch.cat([step[-1] for step in generated.hidden_states], dim=1)
+    hidden_states = torch.cat([step[-1] for step in outputs.hidden_states], dim=1)
     mask_logits, mask_token_indices = model.decode_masks(
-        generated.sequences, hidden_states, image_features.last_hidden_state,
+        outputs.sequences, hidden_states, outputs.image_hidden_states,
         inputs.image_grid_thw, ignore_thinking=True,
     )
 results = processor.post_process_grounding(
-    generated.sequences, inputs.image_grid_thw, mask_logits, mask_token_indices, target_sizes=[(480, 640)]
+    outputs.sequences, inputs.image_grid_thw, mask_logits, mask_token_indices, target_sizes=[(480, 640)]
 )
 print(results[0]["boxes"], results[0]["masks"].shape)
 ```
@@ -92,6 +86,47 @@ Tips:
 
 - Ask for boxes and masks explicitly with "Report bbox coordinates and masks." at the end of the instruction. Without it, the model answers in plain text.
 - The mask decoder sees the image at the resolution chosen by the image processor (up to `max_pixels`). Masks are predicted at that resolution and [`~XiaomiLens0Processor.post_process_grounding`] resizes them to `target_sizes`.
+
+## Training with mask supervision
+
+Pass a full teacher-forced sequence containing the target `<|mask|>` tokens to `forward`, together with
+`mask_labels`. Image features and mask-token states retain their gradients, so mask supervision trains
+the mask decoder and both backbones in one forward pass.
+
+`mask_labels` is a list in input-image order. Each entry is a binary tensor of shape
+`(num_masks, 16 * grid_height, 16 * grid_width)`, aligned with that image's mask tokens in sequence order,
+including masks inside thinking blocks. Resize targets to that resolution before calling the model.
+For an image with no mask tokens, supply an empty tensor with the same spatial dimensions.
+Optional `mask_labels_valid_mask` tensors of matching shapes exclude padded pixels or unsupervised mask tokens;
+an all-false mask contributes neither loss nor a mask count.
+
+```python
+outputs = model(
+    **training_inputs,  # Full input_ids, attention_mask, pixels, grids, and modality IDs.
+    labels=language_labels,  # Use -100 for prompt/padding tokens.
+    mask_labels=mask_targets,
+    use_cache=False,
+)
+outputs.loss.backward()
+```
+
+The loss follows the [original Xiaomi-Lens-0 mask objective](https://github.com/SeerRay-Lab/Xiaomi-Lens-0/blob/main/src/xiaomi_lens/model/losses.py):
+Dice loss plus twice the pixel-wise sigmoid binary cross-entropy, averaged over valid masks.
+Mask counts are reduced across distributed ranks. Every rank must supply language labels or mask targets.
+Ranks with language labels but no mask targets participate with a zero mask count. When some ranks have no
+mask supervision, configure the distributed wrapper to handle unused parameters (for DDP,
+`find_unused_parameters=True`).
+Gradient accumulation averages microbatch losses. Without `mask_labels`, only the language loss is computed;
+the mask decoder is skipped and receives no gradients.
+The configuration exposes `mask_loss_weight`, `mask_dice_loss_weight`, and `mask_bce_loss_weight`
+(defaults: 1, 1, 2). Outputs include the language modeling `lm_loss` and weighted `mask_loss`, whose sum is `loss`,
+as well as `mask_logits` and `mask_token_indices`. The `mask_loss_chunk_size` configuration value (default: 8)
+sets how many masks per image are processed at a time when computing the loss. Omit language `labels`
+for mask-only supervision.
+
+Without mask targets, ordinary generation remains unchanged. For full-sequence mask inference through
+`forward`, set `output_masks=True`; incremental cached decoding should use the post-generation
+`decode_masks` workflow above.
 
 ## XiaomiLens0Config
 
@@ -141,3 +176,7 @@ Tips:
 [[autodoc]] XiaomiLens0ForConditionalGeneration
     - forward
     - decode_masks
+
+## XiaomiLens0GenerateOutput
+
+[[autodoc]] XiaomiLens0GenerateOutput

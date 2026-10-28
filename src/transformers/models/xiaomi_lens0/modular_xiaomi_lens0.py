@@ -14,6 +14,7 @@
 """PyTorch Xiaomi-Lens-0 model."""
 
 import re
+from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
@@ -21,13 +22,19 @@ from huggingface_hub.dataclasses import strict
 from torch import nn
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
+from ...generation.utils import GenerateDecoderOnlyOutput
+from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..qwen3_5.configuration_qwen3_5 import Qwen3_5Config, Qwen3_5TextConfig, Qwen3_5VisionConfig
 from ..qwen3_5.modeling_qwen3_5 import (
+    Qwen3_5CausalLMOutputWithPast,
     Qwen3_5ForConditionalGeneration,
     Qwen3_5Model,
+    Qwen3_5ModelOutputWithPast,
     Qwen3_5PreTrainedModel,
     Qwen3_5TextModel,
     Qwen3_5VisionModel,
@@ -106,6 +113,14 @@ class XiaomiLens0Config(Qwen3_5Config):
         The ID of `<think>`, used to filter reasoning masks before decoding.
     think_end_token_id (`int`, *optional*, defaults to 248069):
         The ID of `</think>`, used to filter reasoning masks before decoding.
+    mask_loss_weight (`float`, *optional*, defaults to 1.0):
+        Weight of the combined mask loss.
+    mask_dice_loss_weight (`float`, *optional*, defaults to 1.0):
+        Weight of the Dice term in the mask loss.
+    mask_bce_loss_weight (`float`, *optional*, defaults to 2.0):
+        Weight of the pixel-wise binary cross-entropy term in the mask loss.
+    mask_loss_chunk_size (`int`, *optional*, defaults to 8):
+        Positive number of masks processed per chunk for each image when computing the mask loss.
 
     Example:
 
@@ -133,6 +148,10 @@ class XiaomiLens0Config(Qwen3_5Config):
     think_start_token_id: int = 248068
     think_end_token_id: int = 248069
     tie_word_embeddings: bool = True
+    mask_loss_weight: float = 1.0
+    mask_dice_loss_weight: float = 1.0
+    mask_bce_loss_weight: float = 2.0
+    mask_loss_chunk_size: int = 8
 
     def __post_init__(self, **kwargs):
         raise AttributeError("Not needed for Xiaomi-Lens-0")
@@ -153,8 +172,106 @@ class XiaomiLens0TextModel(Qwen3_5TextModel):
     pass
 
 
+@auto_docstring
+@dataclass
+class XiaomiLens0ModelOutputWithPast(Qwen3_5ModelOutputWithPast):
+    r"""
+    rope_deltas (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+        The rope index difference between sequence length and multimodal rope. Deprecated in favor of
+        `model.base_model.rope_deltas`; this field will be removed in v5.20.
+    image_hidden_states (`torch.FloatTensor` of shape `(num_patches, vision_hidden_size)`, *optional*):
+        Vision patch features before spatial merging, retaining gradients for mask supervision.
+    """
+
+    image_hidden_states: torch.FloatTensor | None = None
+
+
 class XiaomiLens0Model(Qwen3_5Model):
-    pass
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | XiaomiLens0ModelOutputWithPast:
+        if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
+            raise ValueError(
+                "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
+            )
+
+        if inputs_embeds is None:
+            inputs_embeds = self.get_input_embeddings()(input_ids)
+
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, image_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("video") is None and pixel_values_videos is not None:
+            mm_encoder_outputs["video"] = self.get_video_features(
+                pixel_values_videos, video_grid_thw, return_dict=True, **kwargs
+            )
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_embeds = torch.cat(mm_encoder_outputs["image"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            image_mask, _ = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if mm_encoder_outputs.get("video") is not None:
+            video_embeds = torch.cat(mm_encoder_outputs["video"].pooler_output, dim=0).to(
+                inputs_embeds.device, inputs_embeds.dtype
+            )
+            _, video_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(video_mask, video_embeds)
+
+        if position_ids is None:
+            position_ids = self.compute_3d_position_ids(
+                input_ids=input_ids,
+                image_grid_thw=image_grid_thw,
+                video_grid_thw=video_grid_thw,
+                inputs_embeds=inputs_embeds,
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+                mm_token_type_ids=mm_token_type_ids,
+            )
+
+        outputs = self.language_model(
+            input_ids=None,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            use_cache=use_cache,
+            **kwargs,
+        )
+        return XiaomiLens0ModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            rope_deltas=self.rope_deltas,
+            image_hidden_states=(
+                mm_encoder_outputs["image"].last_hidden_state if mm_encoder_outputs.get("image") is not None else None
+            ),
+        )
 
 
 class XiaomiLens0MaskDecoderAttention(SiglipAttention):
@@ -289,12 +406,165 @@ def get_non_thinking_token_mask(
 
 
 @auto_docstring
+@dataclass
+class XiaomiLens0GenerateOutput(GenerateDecoderOnlyOutput):
+    r"""
+    scores (`tuple[torch.FloatTensor]`, *optional*):
+        Processed prediction scores, one tensor per generated token. Returned when `output_scores=True`.
+    logits (`tuple[torch.FloatTensor]`, *optional*):
+        Unprocessed language-model logits, one tensor per generated token. Returned when `output_logits=True`.
+    image_hidden_states (`torch.FloatTensor` of shape `(num_patches, vision_hidden_size)`, *optional*):
+        Vision patch features before spatial merging, in original input-image order. Returned when images are
+        provided and `return_dict_in_generate=True`, independently of `output_hidden_states`. These features can
+        be passed to `decode_masks`. They are not expanded for multiple returned sequences.
+    """
+
+    image_hidden_states: torch.FloatTensor | None = None
+
+
+@auto_docstring
+@dataclass
+class XiaomiLens0CausalLMOutputWithPast(Qwen3_5CausalLMOutputWithPast):
+    r"""
+    rope_deltas (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+        The rope index difference between sequence length and multimodal rope. Deprecated in favor of
+        `model.base_model.rope_deltas`; this field will be removed in v5.20.
+    mask_logits (`list[torch.FloatTensor]`, *optional*):
+        Mask logits grouped by image, each of shape `(num_masks, height, width)`.
+    mask_token_indices (`list[torch.LongTensor]`, *optional*):
+        Batch and sequence indices of the decoded mask tokens, grouped by image.
+    lm_loss (`torch.FloatTensor` of shape `()`, *optional*):
+        Language modeling loss.
+    mask_loss (`torch.FloatTensor` of shape `()`, *optional*):
+        Weighted Dice and binary cross-entropy loss. The total loss is the sum of the language modeling loss and this weighted mask loss.
+    """
+
+    mask_logits: list[torch.FloatTensor] | None = None
+    mask_token_indices: list[torch.LongTensor] | None = None
+    lm_loss: torch.FloatTensor | None = None
+    mask_loss: torch.FloatTensor | None = None
+
+
+@auto_docstring
 class XiaomiLens0ForConditionalGeneration(Qwen3_5ForConditionalGeneration):
     def __init__(self, config):
         super().__init__(config)
         self.mask_decoder = XiaomiLens0MaskDecoder(config.mask_decoder_config)
 
         self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        mm_token_type_ids: torch.IntTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        mask_labels: list[torch.Tensor] | None = None,
+        mask_labels_valid_mask: list[torch.Tensor] | None = None,
+        output_masks: bool = False,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | XiaomiLens0CausalLMOutputWithPast:
+        r"""
+        mask_labels (`list[torch.Tensor]`, *optional*):
+            Binary mask targets grouped by image in input-image order, each of shape
+            `(num_masks, height, width)`. Within each image, targets follow the order of its `<|mask|>` tokens,
+            including thinking tokens. Spatial dimensions must match the decoder output (16 times the patch grid).
+            Use an empty tensor for an image with no mask tokens.
+        mask_labels_valid_mask (`list[torch.Tensor]`, *optional*):
+            Boolean tensors matching `mask_labels`, selecting supervised pixels. An all-false mask is excluded
+            from normalization and can be used for unsupervised mask tokens.
+        output_masks (`bool`, *optional*, defaults to `False`):
+            Whether to decode masks from a full sequence. Mask labels also enable decoding. Requires `input_ids`,
+            image features and `image_grid_thw`; this is not intended for incremental cached decoding.
+        """
+        if mask_labels_valid_mask is not None and mask_labels is None:
+            raise ValueError("mask_labels_valid_mask requires mask_labels")
+        if mask_labels is not None or output_masks:
+            if input_ids is None or image_grid_thw is None:
+                raise ValueError("Mask decoding requires input_ids and image_grid_thw")
+            if past_key_values is not None and past_key_values.get_seq_length() > 0:
+                raise ValueError("Mask decoding requires a full sequence without a populated cache")
+
+        outputs = self.model(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            pixel_values_videos=pixel_values_videos,
+            image_grid_thw=image_grid_thw,
+            video_grid_thw=video_grid_thw,
+            position_ids=position_ids,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            mm_token_type_ids=mm_token_type_ids,
+            mm_encoder_outputs=mm_encoder_outputs,
+            **kwargs,
+        )
+
+        hidden_states = outputs.last_hidden_state
+        logits = self.lm_head(slice_logits_to_keep(hidden_states, logits_to_keep))
+        
+        mask_logits = mask_token_indices = None
+        if mask_labels is not None or output_masks:
+            mask_logits, mask_token_indices = self.decode_masks(
+                input_ids, hidden_states, outputs.image_hidden_states, image_grid_thw, ignore_thinking=False
+            )
+
+        loss = lm_loss = mask_loss = None
+        if labels is not None or mask_labels is not None:
+            loss, lm_loss, mask_loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                mask_logits=mask_logits,
+                mask_labels=mask_labels,
+                mask_labels_valid_mask=mask_labels_valid_mask,
+                config=self.config,
+                **kwargs,
+            )
+
+        return XiaomiLens0CausalLMOutputWithPast(
+            loss=loss,
+            mask_logits=mask_logits,
+            mask_token_indices=mask_token_indices,
+            lm_loss=lm_loss,
+            mask_loss=mask_loss,
+            logits=logits,
+            past_key_values=outputs.past_key_values,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+            rope_deltas=outputs.rope_deltas,
+        )
+
+    @torch.no_grad()
+    def generate(self, *args, **kwargs):
+        # Custom generate to return image_hidden_states for mask decoding.
+        mm_encoder_outputs = dict(kwargs.pop("mm_encoder_outputs", None) or {})
+        pixel_values = kwargs.pop("pixel_values", None)
+        if pixel_values is not None:
+            if mm_encoder_outputs.get("image") is not None:
+                raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings for input image")
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, kwargs.get("image_grid_thw"), return_dict=True
+            )
+        if mm_encoder_outputs:
+            kwargs["mm_encoder_outputs"] = mm_encoder_outputs
+
+        image_outputs = mm_encoder_outputs.get("image")
+        image_hidden_states = image_outputs.last_hidden_state if image_outputs is not None else None
+        result = super().generate(*args, **kwargs)
+        if isinstance(result, GenerateDecoderOnlyOutput):
+            return XiaomiLens0GenerateOutput(**result, image_hidden_states=image_hidden_states)
+        return result
 
     def decode_masks(
         self,
@@ -548,6 +818,7 @@ __all__ = [
     "XiaomiLens0TextModel",
     "XiaomiLens0Model",
     "XiaomiLens0ForConditionalGeneration",
+    "XiaomiLens0GenerateOutput",
     "XiaomiLens0PreTrainedModel",
     "XiaomiLens0Processor",
 ]

@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import itertools
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -30,6 +29,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
+from ...generation.utils import GenerateDecoderOnlyOutput
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub_with_fallback, use_kernelized_func
 from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
@@ -1195,18 +1195,6 @@ class XiaomiLens0TextRotaryEmbedding(nn.Module):
 
 
 @auto_docstring
-@dataclass
-class XiaomiLens0ModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
-@auto_docstring
 class XiaomiLens0TextModel(XiaomiLens0PreTrainedModel):
     config: XiaomiLens0TextConfig
 
@@ -1293,6 +1281,22 @@ class XiaomiLens0TextModel(XiaomiLens0PreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
+
+
+@auto_docstring
+@dataclass
+class XiaomiLens0ModelOutputWithPast(BaseModelOutputWithPast):
+    r"""
+    rope_deltas (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+        The rope index difference between sequence length and multimodal rope. Deprecated in favor of
+        `model.base_model.rope_deltas`; this field will be removed in v5.20.
+    image_hidden_states (`torch.FloatTensor` of shape `(num_patches, vision_hidden_size)`, *optional*):
+        Vision patch features before spatial merging, retaining gradients for mask supervision.
+    """
+
+    rope_deltas: torch.LongTensor | None = None
+
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring
@@ -1656,6 +1660,9 @@ class XiaomiLens0Model(XiaomiLens0PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             rope_deltas=self.rope_deltas,
+            image_hidden_states=(
+                mm_encoder_outputs["image"].last_hidden_state if mm_encoder_outputs.get("image") is not None else None
+            ),
         )
 
 
@@ -1884,14 +1891,44 @@ class XiaomiLens0MaskDecoder(XiaomiLens0PreTrainedModel):
 
 @auto_docstring
 @dataclass
+class XiaomiLens0GenerateOutput(GenerateDecoderOnlyOutput):
+    r"""
+    scores (`tuple[torch.FloatTensor]`, *optional*):
+        Processed prediction scores, one tensor per generated token. Returned when `output_scores=True`.
+    logits (`tuple[torch.FloatTensor]`, *optional*):
+        Unprocessed language-model logits, one tensor per generated token. Returned when `output_logits=True`.
+    image_hidden_states (`torch.FloatTensor` of shape `(num_patches, vision_hidden_size)`, *optional*):
+        Vision patch features before spatial merging, in original input-image order. Returned when images are
+        provided and `return_dict_in_generate=True`, independently of `output_hidden_states`. These features can
+        be passed to `decode_masks`. They are not expanded for multiple returned sequences.
+    """
+
+    image_hidden_states: torch.FloatTensor | None = None
+
+
+@auto_docstring
+@dataclass
 class XiaomiLens0CausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
+    rope_deltas (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+        The rope index difference between sequence length and multimodal rope. Deprecated in favor of
+        `model.base_model.rope_deltas`; this field will be removed in v5.20.
+    mask_logits (`list[torch.FloatTensor]`, *optional*):
+        Mask logits grouped by image, each of shape `(num_masks, height, width)`.
+    mask_token_indices (`list[torch.LongTensor]`, *optional*):
+        Batch and sequence indices of the decoded mask tokens, grouped by image.
+    lm_loss (`torch.FloatTensor` of shape `()`, *optional*):
+        Language modeling loss.
+    mask_loss (`torch.FloatTensor` of shape `()`, *optional*):
+        Weighted Dice and binary cross-entropy loss. The total loss is the sum of the language modeling loss and this weighted mask loss.
     """
 
     rope_deltas: torch.LongTensor | None = None
+
+    mask_logits: list[torch.FloatTensor] | None = None
+    mask_token_indices: list[torch.LongTensor] | None = None
+    lm_loss: torch.FloatTensor | None = None
+    mask_loss: torch.FloatTensor | None = None
 
 
 def get_preceding_image_indices(
@@ -1982,46 +2019,32 @@ class XiaomiLens0ForConditionalGeneration(XiaomiLens0PreTrainedModel, Generation
         video_grid_thw: torch.LongTensor | None = None,
         mm_token_type_ids: torch.IntTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        mask_labels: list[torch.Tensor] | None = None,
+        mask_labels_valid_mask: list[torch.Tensor] | None = None,
+        output_masks: bool = False,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | XiaomiLens0CausalLMOutputWithPast:
         r"""
-        Example:
-
-        ```python
-        >>> from transformers import AutoProcessor, XiaomiLens0ForConditionalGeneration
-
-        >>> model = XiaomiLens0ForConditionalGeneration.from_pretrained("Qwen/Qwen3-VL-8B-Instruct")
-        >>> processor = AutoProcessor.from_pretrained("Qwen/Qwen3-VL-8B-Instruct")
-
-        >>> messages = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "image": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
-                    },
-                    {"type": "text", "text": "Describe the image."},
-                ],
-            }
-        ]
-
-        >>> inputs = processor.apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt"
-        )
-
-        >>> # Generate
-        >>> generated_ids = model.generate(**inputs, max_new_tokens=1024)
-        >>> generated_ids_trimmed = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)]
-        >>> output_text = processor.batch_decode(generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        >>> print(output_text)
-        ```
+        mask_labels (`list[torch.Tensor]`, *optional*):
+            Binary mask targets grouped by image in input-image order, each of shape
+            `(num_masks, height, width)`. Within each image, targets follow the order of its `<|mask|>` tokens,
+            including thinking tokens. Spatial dimensions must match the decoder output (16 times the patch grid).
+            Use an empty tensor for an image with no mask tokens.
+        mask_labels_valid_mask (`list[torch.Tensor]`, *optional*):
+            Boolean tensors matching `mask_labels`, selecting supervised pixels. An all-false mask is excluded
+            from normalization and can be used for unsupervised mask tokens.
+        output_masks (`bool`, *optional*, defaults to `False`):
+            Whether to decode masks from a full sequence. Mask labels also enable decoding. Requires `input_ids`,
+            image features and `image_grid_thw`; this is not intended for incremental cached decoding.
         """
+        if mask_labels_valid_mask is not None and mask_labels is None:
+            raise ValueError("mask_labels_valid_mask requires mask_labels")
+        if mask_labels is not None or output_masks:
+            if input_ids is None or image_grid_thw is None:
+                raise ValueError("Mask decoding requires input_ids and image_grid_thw")
+            if past_key_values is not None and past_key_values.get_seq_length() > 0:
+                raise ValueError("Mask decoding requires a full sequence without a populated cache")
 
         outputs = self.model(
             input_ids=input_ids,
@@ -2038,19 +2061,34 @@ class XiaomiLens0ForConditionalGeneration(XiaomiLens0PreTrainedModel, Generation
             **kwargs,
         )
 
-        hidden_states = outputs[0]
+        hidden_states = outputs.last_hidden_state
+        logits = self.lm_head(slice_logits_to_keep(hidden_states, logits_to_keep))
+        mask_logits = mask_token_indices = None
+        if mask_labels is not None or output_masks:
+            if outputs.image_hidden_states is None:
+                raise ValueError("Mask decoding requires image features")
+            mask_logits, mask_token_indices = self.decode_masks(
+                input_ids, hidden_states, outputs.image_hidden_states, image_grid_thw, ignore_thinking=False
+            )
 
-        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
-        logits = self.lm_head(hidden_states)
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
+        loss = lm_loss = mask_loss = None
+        if labels is not None or mask_labels is not None:
+            loss, lm_loss, mask_loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                mask_logits=mask_logits,
+                mask_labels=mask_labels,
+                mask_labels_valid_mask=mask_labels_valid_mask,
+                config=self.config,
+                **kwargs,
             )
 
         return XiaomiLens0CausalLMOutputWithPast(
             loss=loss,
+            mask_logits=mask_logits,
+            mask_token_indices=mask_token_indices,
+            lm_loss=lm_loss,
+            mask_loss=mask_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
@@ -2095,6 +2133,27 @@ class XiaomiLens0ForConditionalGeneration(XiaomiLens0PreTrainedModel, Generation
         position_ids = torch.cat([text_positions, vision_positions], dim=0)
 
         return position_ids
+
+    @torch.no_grad()
+    def generate(self, *args, **kwargs):
+        # Custom generate to return image_hidden_states for mask decoding.
+        mm_encoder_outputs = dict(kwargs.pop("mm_encoder_outputs", None) or {})
+        pixel_values = kwargs.pop("pixel_values", None)
+        if pixel_values is not None:
+            if mm_encoder_outputs.get("image") is not None:
+                raise ValueError("You cannot pass both: raw pixels and pre-computed embeddings for input image")
+            mm_encoder_outputs["image"] = self.get_image_features(
+                pixel_values, kwargs.get("image_grid_thw"), return_dict=True
+            )
+        if mm_encoder_outputs:
+            kwargs["mm_encoder_outputs"] = mm_encoder_outputs
+
+        image_outputs = mm_encoder_outputs.get("image")
+        image_hidden_states = image_outputs.last_hidden_state if image_outputs is not None else None
+        result = super().generate(*args, **kwargs)
+        if isinstance(result, GenerateDecoderOnlyOutput):
+            return XiaomiLens0GenerateOutput(**result, image_hidden_states=image_hidden_states)
+        return result
 
     def decode_masks(
         self,
@@ -2195,5 +2254,6 @@ __all__ = [
     "XiaomiLens0TextModel",
     "XiaomiLens0Model",
     "XiaomiLens0ForConditionalGeneration",
+    "XiaomiLens0GenerateOutput",
     "XiaomiLens0PreTrainedModel",
 ]

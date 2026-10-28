@@ -188,6 +188,14 @@ class XiaomiLens0Config(PreTrainedConfig):
         The ID of `<think>`, used to filter reasoning masks before decoding.
     think_end_token_id (`int`, *optional*, defaults to 248069):
         The ID of `</think>`, used to filter reasoning masks before decoding.
+    mask_loss_weight (`float`, *optional*, defaults to 1.0):
+        Weight of the combined mask loss.
+    mask_dice_loss_weight (`float`, *optional*, defaults to 1.0):
+        Weight of the Dice term in the mask loss.
+    mask_bce_loss_weight (`float`, *optional*, defaults to 2.0):
+        Weight of the pixel-wise binary cross-entropy term in the mask loss.
+    mask_loss_chunk_size (`int`, *optional*, defaults to 8):
+        Number of masks processed per chunk for each image when computing the mask loss.
 
     Example:
 
@@ -226,6 +234,10 @@ class XiaomiLens0Config(PreTrainedConfig):
     mask_token_id: int = 248077
     think_start_token_id: int = 248068
     think_end_token_id: int = 248069
+    mask_loss_weight: float = 1.0
+    mask_dice_loss_weight: float = 1.0
+    mask_bce_loss_weight: float = 2.0
+    mask_loss_chunk_size: int = 8
 
 
 __all__ = ["XiaomiLens0Config", "XiaomiLens0TextConfig", "XiaomiLens0VisionConfig", "XiaomiLens0MaskDecoderConfig"]
