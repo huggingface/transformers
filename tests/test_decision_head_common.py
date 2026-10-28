@@ -28,7 +28,7 @@ from transformers.testing_utils import torch_device
 if is_torch_available():
     import torch
 
-    from transformers import AutoModel, Qwen2ForCausalLM
+    from transformers import AutoModelForDecision, Qwen2ForCausalLM
 
 
 class DecisionHeadTesterMixin:
@@ -75,7 +75,7 @@ class DecisionHeadTesterMixin:
             model = model_class(self.config).eval()
             with tempfile.TemporaryDirectory() as tmp:
                 model.save_pretrained(tmp)
-                loaded = AutoModel.from_pretrained(tmp, attn_implementation="eager").eval()
+                loaded = AutoModelForDecision.from_pretrained(tmp, attn_implementation="eager").eval()
             for prompt, scores, loaded_scores in zip(self.prompts, self.scores(model), self.scores(loaded)):
                 torch.testing.assert_close(loaded_scores, scores)
                 self.assertEqual(len(scores), sum(len(question.options) for question in prompt.questions))
