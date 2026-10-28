@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import unittest
-
 import pytest
 
 from transformers import DataCollatorWithFlattening, RobertaConfig, is_torch_available

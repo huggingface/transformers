@@ -791,7 +791,7 @@ class MT5EncoderOnlyModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         else {}
     )
 
-    def setUp(self):
+    def setup_method(self):
         self.model_tester = MT5EncoderOnlyModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MT5Config, d_model=37)
 

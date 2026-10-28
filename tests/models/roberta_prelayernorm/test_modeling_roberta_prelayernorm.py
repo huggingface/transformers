@@ -394,8 +394,8 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         config.is_decoder = True
         return config, inputs
 
-    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.setUp with Roberta->RobertaPreLayerNorm
-    def setUp(self):
+    # Copied from tests.models.roberta.test_modeling_roberta.RobertaModelTest.setup_method with Roberta->RobertaPreLayerNorm
+    def setup_method(self):
         self.model_tester = RobertaPreLayerNormModelTester(self)
         self.config_tester = ConfigTester(self, config_class=RobertaPreLayerNormConfig, hidden_size=32)
 
