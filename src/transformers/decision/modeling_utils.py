@@ -55,15 +55,22 @@ class DecisionMixin:
         the checkpoint is the `text_config` of the decision model, and the config files of its head
         (`config_class.extra_config_files`) give the rest of its config, in `__post_init__`.
         """
+        decision_config = None
         if config is None:
-            config = cls.checkpoint_config(pretrained_model_name_or_path, **kwargs)
-        return super().from_pretrained(pretrained_model_name_or_path, *args, config=config, **kwargs)
+            config, decision_config = cls.checkpoint_config(pretrained_model_name_or_path, **kwargs)
+        model = super().from_pretrained(pretrained_model_name_or_path, *args, config=config, **kwargs)
+        if decision_config is not None:  # the decision config of the checkpoint, from the same files
+            model.decision_config = decision_config
+        return model
 
     @classmethod
-    def checkpoint_config(cls, pretrained_model_name_or_path, **kwargs) -> PreTrainedConfig | None:
+    def checkpoint_config(
+        cls, pretrained_model_name_or_path, **kwargs
+    ) -> tuple[PreTrainedConfig, DecisionConfig] | tuple[None, None]:
         """
-        The config of the decision model of a checkpoint that ships its head next to its weights, or `None` for any other
-        repo (e.g. one saved by `save_pretrained`, whose `config.json` is the one of the decision model).
+        The config and decision config of the decision model of a checkpoint that ships its head next to its weights,
+        read from its files, or `None`s for any other repo (e.g. one saved by `save_pretrained`, whose `config.json` is
+        the one of the decision model).
         """
         hub_kwargs = {
             key: kwargs[key] for key in ("cache_dir", "local_files_only", "revision", "token") if key in kwargs
@@ -75,19 +82,21 @@ class DecisionMixin:
             )
             if path is not None:
                 head_configs[Path(filename).stem] = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not head_configs:
+            return None, None
         text_config, _ = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **hub_kwargs)
-        if not head_configs or text_config.get("model_type") == cls.config_class.model_type:
-            return None
-        return cls.config_class(text_config=text_config, **head_configs)
+        decision_config = cls.config_class.decision_config(head_configs, text_config)
+        if decision_config is None or text_config.get("model_type") == cls.config_class.model_type:
+            return None, None  # not a checkpoint of this decision model
+        return cls.config_class(text_config=text_config, **head_configs), decision_config
 
     @property
     def decision_config(self) -> DecisionConfig:
         if getattr(self, "_decision_config", None) is None:
             try:
                 self._decision_config = DecisionConfig.from_pretrained(self.name_or_path)
-            except OSError:  # a checkpoint shipping the head next to its weights
-                from_checkpoint = getattr(type(self.config), "decision_config", None)
-                self._decision_config = (from_checkpoint and from_checkpoint(self.name_or_path)) or DecisionConfig()
+            except OSError:
+                self._decision_config = DecisionConfig()
         return self._decision_config
 
     @decision_config.setter
