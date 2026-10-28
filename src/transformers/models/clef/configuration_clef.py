@@ -86,23 +86,9 @@ class ClefConfig(PreTrainedConfig):
     text_config: dict | PreTrainedConfig | None = None
     tie_word_embeddings: bool = False
 
-    # The file of a clef checkpoint that holds its head next to its weights, read with them
+    # The files of a clef checkpoint that hold its head next to its weights, read with them: its weights and its config
     extra_files = ("joint_head.safetensors",)
-
-    @classmethod
-    def from_checkpoint(cls, pretrained_model_name_or_path, text_config: dict, **kwargs) -> dict | None:
-        """The fields of the head of a clef checkpoint (`joint_head_config.json`), or `None` for any other checkpoint."""
-        if (head := _read_json(pretrained_model_name_or_path, "joint_head_config.json", **kwargs)) is None:
-            return None
-        return {
-            "backbone_hidden_size": head["hidden_size"],
-            "hidden_size": head["width"],
-            "num_evidence_layers": head["routing_layers"],
-            "num_hidden_layers": head["layers"],
-            "num_attention_heads": head["heads"],
-            "num_key_value_heads": head["heads"],
-            "intermediate_size": head["feedforward"],
-        }
+    extra_config_files = ("joint_head_config.json",)
 
     @classmethod
     def decision_config(cls, pretrained_model_name_or_path, **kwargs):
@@ -113,7 +99,15 @@ class ClefConfig(PreTrainedConfig):
             return None
         return DecisionConfig(noul_options=["true", "false"], sort_choices=True, chat_template=CLEF_TEMPLATE)
 
-    def __post_init__(self, **kwargs):
+    def __post_init__(self, joint_head_config: dict | None = None, **kwargs):
+        if joint_head_config:  # the config of the head of a clef checkpoint, whose config is `text_config`
+            self.backbone_hidden_size, self.hidden_size = joint_head_config["hidden_size"], joint_head_config["width"]
+            self.num_evidence_layers, self.num_hidden_layers = (
+                joint_head_config["routing_layers"],
+                joint_head_config["layers"],
+            )
+            self.num_attention_heads = self.num_key_value_heads = joint_head_config["heads"]
+            self.intermediate_size = joint_head_config["feedforward"]
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
         super().__post_init__(**kwargs)
