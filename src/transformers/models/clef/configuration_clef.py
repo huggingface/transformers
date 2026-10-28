@@ -52,13 +52,10 @@ class ClefConfig(PreTrainedConfig):
     attention_bias: bool = True
     attention_dropout: float = 0.0
     initializer_range: float = 0.02
-    question_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
-        if self.question_types is None:
-            self.question_types = ["noul", "choice", "score"]
         super().__post_init__(**kwargs)
 
 

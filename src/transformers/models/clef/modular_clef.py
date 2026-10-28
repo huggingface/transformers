@@ -19,6 +19,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
+from ...decision import Question
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -57,28 +58,16 @@ class ClefConfig(PreTrainedConfig):
     attention_bias: bool = True
     attention_dropout: float = 0.0
     initializer_range: float = 0.02
-    question_types: list[str] | None = None
 
     def __post_init__(self, **kwargs):
         if self.num_key_value_heads is None:
             self.num_key_value_heads = self.num_attention_heads
-        if self.question_types is None:
-            self.question_types = ["noul", "choice", "score"]
         super().__post_init__(**kwargs)
 
 
 class ClefAttention(Molmo2VisionAttention):
-    def __init__(self, config: ClefConfig):
-        super().__init__(config)
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
-        )
+    def __init__(self, config: ClefConfig, hidden_size: int | None = None):
+        super().__init__(config, hidden_size)
 
 
 class ClefMLP(CLIPMLP):
@@ -148,7 +137,7 @@ class ClefEmbeddings(nn.Module):
         self.global_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
         self.option_context_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
         self.option_lexical_projection = nn.Linear(backbone_hidden_size, hidden_size, bias=False)
-        self.type_embedding = nn.Embedding(len(config.question_types), hidden_size)
+        self.type_embedding = nn.Embedding(len(Question.questions_types), hidden_size)
 
     def forward(
         self,
@@ -158,7 +147,7 @@ class ClefEmbeddings(nn.Module):
         num_options: torch.LongTensor,
         question_type_ids: torch.LongTensor,
         output_embeddings: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, torch.Tensor], torch.Tensor]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         dtype = hidden_states.dtype
         # Each question marks the span of its instruction, then of each of its options
         spans_per_question = num_options + 1
@@ -188,7 +177,7 @@ class ClefEmbeddings(nn.Module):
         priors = (nn.functional.normalize(lexical, dim=-1) * anchors).sum(-1)
         fields = self.question_projection(questions)
         field_embeddings = self.global_projection(global_state) + self.type_embedding(question_type_ids)
-        return self.memory_projection(hidden_states), options, (fields, field_embeddings), priors
+        return self.memory_projection(hidden_states), options, fields, field_embeddings, priors
 
 
 class ClefEncoder(nn.Module):
@@ -208,12 +197,12 @@ class ClefEncoder(nn.Module):
         self,
         memory: torch.Tensor,
         options: torch.Tensor,
-        fields: tuple[torch.Tensor, torch.Tensor],
+        fields: torch.Tensor,
+        field_embeddings: torch.Tensor,
         option_question_ids: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """`fields` are the projected questions, which route the options, and the embeddings added to them after."""
-        fields, field_embeddings = fields
+        """`fields` are the projected questions, which route the options; `field_embeddings` are added to them after."""
         for layer in self.evidence_layers:
             options = layer(options, memory, **kwargs)
 
@@ -239,8 +228,8 @@ class ClefScorer(nn.Module):
         self.residual_gate = nn.Parameter(torch.zeros(()))
 
     def forward(self, fields: torch.Tensor, options: torch.Tensor, priors: torch.Tensor) -> torch.Tensor:
-        prior_scale = self.prior_logit_scale.clamp(max=math.log(100.0)).exp()
-        joint_scale = self.joint_logit_scale.clamp(max=math.log(100.0)).exp()
+        logit_scales = torch.stack([self.prior_logit_scale, self.joint_logit_scale])
+        prior_scale, joint_scale = logit_scales.clamp(max=math.log(100.0)).exp()
         options = self.option_norm(options)
         features = torch.cat([fields, options, fields * options, (fields - options).abs()], dim=-1)
         joint = (
@@ -296,10 +285,10 @@ class ClefForDecision(ClefPreTrainedModel):
         # The output embeddings of the tokens of each option give its lexical prior
         output_embeddings = backbone.get_output_embeddings().weight
         option_question_ids = torch.repeat_interleave(num_options)
-        memory, options, fields, priors = self.embeddings(
+        memory, options, fields, field_embeddings, priors = self.embeddings(
             hidden_states, input_ids[None], marks, num_options, question_type_ids, output_embeddings
         )
-        options, fields = self.encoder(memory, options, fields, option_question_ids, **kwargs)
+        options, fields = self.encoder(memory, options, fields, field_embeddings, option_question_ids, **kwargs)
         scores = self.scorer(fields[:, option_question_ids], options, priors)
         return scores[0]
 
