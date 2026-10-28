@@ -34,9 +34,9 @@ class ClefConfig(PreTrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import ClefConfig, ClefForDecision
+    >>> from transformers import ClefConfig, ClefDecisionHead
 
-    >>> head = ClefForDecision(ClefConfig(backbone_hidden_size=4096))
+    >>> head = ClefDecisionHead(ClefConfig(backbone_hidden_size=4096))
     ```"""
 
     model_type = "clef"

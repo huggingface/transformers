@@ -26,7 +26,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...decision import Question
+from ...decision import ForDecision, Question
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -386,7 +386,7 @@ class ClefPreTrainedModel(PreTrainedModel):
     attend to each other and to the prompt, and each option is scored against the field of its question.
     """
 )
-class ClefForDecision(ClefPreTrainedModel):
+class ClefDecisionHead(ClefPreTrainedModel):
     def __init__(self, config: ClefConfig):
         super().__init__(config)
         self.embeddings = ClefEmbeddings(config)
@@ -418,4 +418,8 @@ class ClefForDecision(ClefPreTrainedModel):
         return scores[0]
 
 
-__all__ = ["ClefForDecision", "ClefPreTrainedModel"]
+class ClefForDecision(ForDecision):
+    """Clef: the model of a repo and its [`ClefDecisionHead`]."""
+
+
+__all__ = ["ClefDecisionHead", "ClefForDecision", "ClefPreTrainedModel"]

@@ -21,12 +21,13 @@ from ...test_decision_head_common import DecisionHeadTesterMixin, check_decision
 
 
 if is_torch_available():
-    from transformers import ClefForDecision
+    from transformers import ClefDecisionHead, ClefForDecision
 
 
 @require_torch
 class ClefForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
-    all_model_classes = (ClefForDecision,) if is_torch_available() else ()
+    all_model_classes = (ClefDecisionHead,) if is_torch_available() else ()
+    for_decision_class = ClefForDecision if is_torch_available() else None
     decision_repo = "ArthurZ/clef-flash"
     # The backbone is wider than the head
     tiny_sizes = {
