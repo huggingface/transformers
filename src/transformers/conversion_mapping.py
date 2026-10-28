@@ -2178,19 +2178,16 @@ def _build_checkpoint_conversion_mapping():
             r"attention.in_proj_",
             ["cross_attn.q_proj.", "cross_attn.k_proj.", "cross_attn.v_proj."],
             operations=[Chunk(dim=0)],
-            scope_prefix="encoder",  # the backbone has its own `self_attn`
         ),
         WeightConverter(
             r"self_attn.in_proj_",
             ["self_attn.q_proj.", "self_attn.k_proj.", "self_attn.v_proj."],
             operations=[Chunk(dim=0)],
-            scope_prefix="encoder",  # the backbone has its own `self_attn`
         ),
         WeightConverter(
             r"multihead_attn.in_proj_",
             ["encoder_attn.q_proj.", "encoder_attn.k_proj.", "encoder_attn.v_proj."],
             operations=[Chunk(dim=0)],
-            scope_prefix="encoder",  # the backbone has its own `self_attn`
         ),
     ]
 
@@ -2341,9 +2338,7 @@ def get_model_conversion_mapping(
             scope_prefix = module_name.removeprefix(model.base_model_prefix)
             scope_prefix = scope_prefix.removeprefix(".")
             for transform in conversions:
-                # A transform scoped within its own model, e.g. to `encoder`, stays scoped within the sub-module
-                own_scope = transform.scope_prefix
-                transform.scope_prefix = f"{scope_prefix}.{own_scope}".strip(".") if own_scope else scope_prefix
+                transform.scope_prefix = scope_prefix
                 transform.base_model_prefix = model.base_model_prefix
         weight_conversions.extend(conversions)
 

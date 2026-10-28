@@ -812,9 +812,7 @@ class WeightTransform:
         "base_model_prefix",
     )
 
-    def __init__(
-        self, source_patterns: str | list[str], target_patterns: str | list[str], scope_prefix: str | None = None
-    ):
+    def __init__(self, source_patterns: str | list[str], target_patterns: str | list[str]):
         self.source_patterns: list[str] = source_patterns
         self.target_patterns: list[str] = target_patterns
         # Those are needed to be able to reverse correctly the transform, as the patterns may be processed
@@ -832,7 +830,7 @@ class WeightTransform:
 
         # Optional scope_prefix/base_model_prefix. When used, the transform will only match and apply to keys containing
         # either `base_model_prefix.scope_prefix.` or `scope_prefix.` prefixes
-        self.scope_prefix: str | None = scope_prefix
+        self.scope_prefix: str | None = None
         self.base_model_prefix: str | None = None
 
         # We need to process a few exceptions here when instantiating the reverse mapping (i.e. the targets become
@@ -1195,9 +1193,8 @@ class WeightConverter(WeightTransform):
         target_patterns: str | list[str],
         operations: list[ConversionOps],
         force_cpu: bool = False,
-        scope_prefix: str | None = None,
     ):
-        super().__init__(source_patterns, target_patterns, scope_prefix)
+        super().__init__(source_patterns, target_patterns)
         self.operations: list[ConversionOps] = operations
         self.force_cpu = force_cpu
 
