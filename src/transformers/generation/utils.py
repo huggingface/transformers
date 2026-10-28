@@ -206,6 +206,8 @@ class GenerateDecoderOnlyOutput(ModelOutput):
         past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
+        assistant_metrics (`dict`, *optional*, returned when `output_assistant_metrics=True`):
+            Aggregate speculative decoding acceptance counters for this generation call.
     """
 
     sequences: torch.LongTensor
@@ -214,6 +216,7 @@ class GenerateDecoderOnlyOutput(ModelOutput):
     attentions: tuple[tuple[torch.FloatTensor]] | None = None
     hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
     past_key_values: Cache | None = None
+    assistant_metrics: dict[str, int | float | dict[int, int]] | None = None
 
 
 @dataclass
@@ -251,6 +254,8 @@ class GenerateEncoderDecoderOutput(ModelOutput):
         past_key_values (`Cache`, *optional*, returned when `use_cache=True`):
             Returns the model cache, used to speed up decoding. Different models have a different cache format, check
             the model's documentation. Usually, a [`~cache_utils.Cache`] instance.
+        assistant_metrics (`dict`, *optional*, returned when `output_assistant_metrics=True`):
+            Aggregate speculative decoding acceptance counters for this generation call.
     """
 
     sequences: torch.LongTensor
@@ -262,6 +267,7 @@ class GenerateEncoderDecoderOutput(ModelOutput):
     cross_attentions: tuple[tuple[torch.FloatTensor]] | None = None
     decoder_hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
     past_key_values: Cache | None = None
+    assistant_metrics: dict[str, int | float | dict[int, int]] | None = None
 
 
 @dataclass
@@ -4002,6 +4008,9 @@ class GenerationMixin(ContinuousMixin):
         output_scores = generation_config.output_scores
         output_logits = generation_config.output_logits
         return_dict_in_generate = generation_config.return_dict_in_generate
+        collect_assistant_metrics = return_dict_in_generate and generation_config.output_assistant_metrics
+        assistant_counts = [0, 0, 0, 0] if collect_assistant_metrics else None
+        acceptance_histogram = {} if collect_assistant_metrics else None
 
         # init attention / hidden states / scores tuples
         scores = () if (return_dict_in_generate and output_scores) else None
@@ -4046,6 +4055,9 @@ class GenerationMixin(ContinuousMixin):
                 candidate_logits = candidate_logits.to(self.device)
 
             candidate_length = candidate_input_ids.shape[1] - input_ids.shape[1]
+            if assistant_counts is not None:
+                assistant_counts[0] += candidate_length
+                assistant_counts[2] += 1
 
             # 2. Use the original model to obtain the next token logits given the candidate sequence. We obtain
             # `candidate_length + 1` relevant logits from this process: in the event that all candidates are correct,
@@ -4126,6 +4138,9 @@ class GenerationMixin(ContinuousMixin):
                 # Select all matching candidate tokens, + the new "bonus" token from the logits after the last validated token
                 valid_tokens = selected_tokens[:, : n_matches + 1]
 
+            # The pre-truncation length includes one target-model bonus or replacement token.
+            draft_matches_before_truncation = valid_tokens.shape[1] - 1 if assistant_counts is not None else None
+
             # Whenever we are drafting several tokens at once with the candidate without capping its draft (e.g. MTP), we need to
             # make sure that we did not just validate tokens outside the max length, or outside an eos token
             # Note that we should technically crop based on other stopping criteria as well in all generality, not only EOS and Length
@@ -4140,6 +4155,11 @@ class GenerationMixin(ContinuousMixin):
                 if eos_positions.numel() > 0:
                     num_drafted = eos_positions[0].item() + 1
                     valid_tokens = valid_tokens[:, :num_drafted]
+            if assistant_counts is not None and acceptance_histogram is not None:
+                committed_drafts = min(draft_matches_before_truncation, valid_tokens.shape[1])
+                assistant_counts[1] += committed_drafts
+                assistant_counts[3] += valid_tokens.shape[1]
+                acceptance_histogram[committed_drafts] = acceptance_histogram.get(committed_drafts, 0) + 1
             # Recompute how many matches we accepted if we just cropped above due to length/eos
             n_matches = valid_tokens.shape[1] - 1
 
@@ -4230,6 +4250,18 @@ class GenerationMixin(ContinuousMixin):
                 candidate_generator.num_assistant_tokens
             )
         if return_dict_in_generate:
+            assistant_metrics = None
+            if assistant_counts is not None:
+                proposed, accepted, rounds, emitted = assistant_counts
+                assistant_metrics = {
+                    "proposed_draft_tokens": proposed,
+                    "accepted_draft_tokens": accepted,
+                    "verification_rounds": rounds,
+                    "emitted_tokens": emitted,
+                    "draft_acceptance_rate": accepted / proposed if proposed else 0.0,
+                    "mean_emitted_tokens_per_round": emitted / rounds if rounds else 0.0,
+                    "accepted_length_histogram": acceptance_histogram,
+                }
             cache = None
             if any(cache_key in model_kwargs for cache_key in ALL_CACHE_NAMES):
                 cache_key = next(cache_key for cache_key in ALL_CACHE_NAMES if cache_key in model_kwargs)
@@ -4245,6 +4277,7 @@ class GenerationMixin(ContinuousMixin):
                     cross_attentions=cross_attentions,
                     decoder_hidden_states=decoder_hidden_states,
                     past_key_values=cache,
+                    assistant_metrics=assistant_metrics,
                 )
             else:
                 return GenerateDecoderOnlyOutput(
@@ -4254,6 +4287,7 @@ class GenerationMixin(ContinuousMixin):
                     attentions=decoder_attentions,
                     hidden_states=decoder_hidden_states,
                     past_key_values=cache,
+                    assistant_metrics=assistant_metrics,
                 )
         else:
             return input_ids

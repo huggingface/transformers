@@ -287,6 +287,8 @@ class GenerationConfig(PushToHubMixin):
         output_logits (`bool`):
             Whether or not to return the unprocessed prediction logit scores. See `logits` under returned tensors for
             more details.
+        output_assistant_metrics (`bool`, *optional*, defaults to `False`):
+            Return aggregate draft acceptance statistics when using assisted decoding and `return_dict_in_generate=True`.
         return_dict_in_generate (`bool`):
             Whether or not to return a [`~utils.ModelOutput`], as opposed to returning exclusively the generated
             sequence. This flag must be set to `True` to return the generation cache (when `use_cache` is `True`)
@@ -367,7 +369,13 @@ class GenerationConfig(PushToHubMixin):
             need to use this flag.
     """
 
-    extra_output_flags = ("output_attentions", "output_hidden_states", "output_scores", "output_logits")
+    extra_output_flags = (
+        "output_attentions",
+        "output_hidden_states",
+        "output_scores",
+        "output_logits",
+        "output_assistant_metrics",
+    )
 
     # Tensor versions of token IDs, set by _prepare_special_tokens() at generation time
     _bos_token_tensor: "torch.Tensor | None"
@@ -443,6 +451,7 @@ class GenerationConfig(PushToHubMixin):
         self.output_hidden_states = kwargs.pop("output_hidden_states", None)
         self.output_scores = kwargs.pop("output_scores", None)
         self.output_logits = kwargs.pop("output_logits", None)
+        self.output_assistant_metrics = kwargs.pop("output_assistant_metrics", False)
         self.return_dict_in_generate = kwargs.pop("return_dict_in_generate", None)
 
         # Special tokens that can be used at generation time
