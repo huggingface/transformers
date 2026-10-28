@@ -2747,7 +2747,7 @@ class ModelUtilsTest(TestCasePlus):
 class ModelOnTheFlyConversionTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.user = "hf-internal-testing"
+        cls.org = "hf-internal-testing"
         cls.token = os.getenv("TRANSFORMERS_HUB_BOT_HF_TOKEN") or os.getenv("HF_TOKEN")
 
         if not cls.token:
@@ -2756,7 +2756,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         cls.api = HfApi(token=cls.token)
 
     def setUp(self) -> None:
-        self.repo_name = f"{self.user}/test-model-on-the-fly-{uuid.uuid4()}"
+        self.repo_name = f"{self.org}/test-model-on-the-fly-{uuid.uuid4()}"
         # conftest.py disables conversion globally to avoid Hub traffic in regular tests;
         # this class specifically tests conversion, so we re-enable it.
         self._prev_disable = os.environ.pop("DISABLE_SAFETENSORS_CONVERSION", None)
