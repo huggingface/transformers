@@ -3,15 +3,14 @@ from pathlib import Path
 from typing import Any
 
 from ..decision import DecisionConfig, DecisionTemplate, Question, label_token_ids
-from ..decision.configuration_utils import DECISION_HEAD_CONFIG_NAME
-from ..utils import add_end_docstrings, cached_file, is_torch_available
+from ..utils import add_end_docstrings, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
     import torch
 
-    from ..models.auto import AutoConfig, AutoModel
+    from ..decision.modeling_utils import load_decision_head
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
@@ -80,15 +79,7 @@ class DecisionPipeline(Pipeline):
             except OSError:
                 decision_config = DecisionConfig()
         self.template = DecisionTemplate(self.processor or self.tokenizer, decision_config, questions)
-        if not decision_config.is_causal:
-            self.model.config.get_text_config().is_causal = False
-        if decision_config.adapter:
-            self.model.load_adapter(repo, adapter_kwargs={"subfolder": decision_config.adapter})
-        self.head = None
-        if repo and cached_file(repo, DECISION_HEAD_CONFIG_NAME, _raise_exceptions_for_missing_entries=False):
-            # Next to the model: the config of the head names its weights file (`transformers_weights`)
-            config = AutoConfig.from_pretrained(repo, _configuration_file=DECISION_HEAD_CONFIG_NAME)
-            self.head = AutoModel.from_pretrained(repo, config=config).to(self.device).eval()
+        self.head = load_decision_head(self.model, repo, decision_config) if repo else None
         self.logits_processors = {
             kind: decision_config.get_logits_processor(kind) for kind in Question.questions_types
         }

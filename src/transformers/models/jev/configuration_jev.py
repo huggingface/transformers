@@ -32,9 +32,9 @@ class JevConfig(PreTrainedConfig):
 
     Example:
     ```python
-    >>> from transformers import JevConfig, JevForDecision
+    >>> from transformers import JevConfig, JevDecisionHead
 
-    >>> head = JevForDecision(JevConfig(hidden_size=4096))
+    >>> head = JevDecisionHead(JevConfig(hidden_size=4096))
     ```"""
 
     model_type = "jev"
