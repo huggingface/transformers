@@ -44,8 +44,8 @@ class Nemotron3_5TranscribeProcessorTest(ProcessorTesterMixin, unittest.TestCase
 
     @classmethod
     def _setup_from_pretrained(cls, model_id, **kwargs):
-        # TODO: @eustlb, drop the revision once NVIDIA merges the Transformers files (hub PR #2) into main
-        return super()._setup_from_pretrained(model_id, revision="refs/pr/2", **kwargs)
+        # TODO: @eustlb, drop the revision once NVIDIA merges the Transformers files (hub PR #5) into main
+        return super()._setup_from_pretrained(model_id, revision="refs/pr/5", **kwargs)
 
     @require_librosa
     @parameterized.expand([(1, "np"), (1, "pt"), (2, "np"), (2, "pt")])

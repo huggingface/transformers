@@ -60,10 +60,8 @@ model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
 audio = [samples + "en-Alice_woman.wav", samples + "diarization_example.mp3"]
 speaker_attributed_prompt = (
-    "Transcribe this audio. Include all spoken words and verbal fillers. Write numbers as spoken. Use no punctuation "
-    "and no capitalization. Start every speaker turn with a speaker tag such as <spk:0>, <spk:1>, <spk:2>, etc.; "
-    "assign one stable tag per speaker and keep speaker identities consistent. Output only the speaker-tagged "
-    "transcript."
+    "Transcribe this audio with punctuation and capitalization. Include all spoken words and verbal fillers. Write "
+    "numbers in their standard written form. Put speaker tags <spk:0> <spk:1> <spk:2> <spk:3> on the transcription."
 )
 prompt = [None, speaker_attributed_prompt]
 
@@ -85,10 +83,8 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
 prompt = (
-    "Transcribe this audio. Include all spoken words and verbal fillers. Write numbers as spoken. Use no punctuation "
-    "and no capitalization. Start every speaker turn with a speaker tag such as <spk:0>, <spk:1>, <spk:2>, etc.; "
-    "assign one stable tag per speaker and keep speaker identities consistent. Output only the speaker-tagged "
-    "transcript."
+    "Transcribe this audio with punctuation and capitalization. Include all spoken words and verbal fillers. Write "
+    "numbers in their standard written form. Put speaker tags <spk:0> <spk:1> <spk:2> <spk:3> on the transcription."
 )
 conversation = [
     {
@@ -140,10 +136,8 @@ processor = AutoProcessor.from_pretrained(model_id)
 model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 
 prompt = (
-    "Transcribe this audio. Include all spoken words and verbal fillers. Write numbers as spoken. Use no punctuation "
-    "and no capitalization. Start every speaker turn with a speaker tag such as <spk:0>, <spk:1>, <spk:2>, etc.; "
-    "assign one stable tag per speaker and keep speaker identities consistent. Output only the speaker-tagged "
-    "transcript."
+    "Transcribe this audio with punctuation and capitalization. Include all spoken words and verbal fillers. Write "
+    "numbers in their standard written form. Put speaker tags <spk:0> <spk:1> <spk:2> <spk:3> on the transcription."
 )
 
 inputs = processor.apply_transcription_request(samples + "diarization_example.mp3", prompt=prompt).to(model.device)
@@ -165,7 +159,7 @@ input_features_mask = inputs.input_features_mask
 audio_outputs = model.get_audio_features(inputs.input_features, input_features_mask)
 word_timestamp_logits = model.get_word_timestamp_logits(audio_outputs.asr_last_hidden_state, input_features_mask)
 timestamps = processor.align_word_timestamps(
-    ["<spk:0> to celebrate the ..."],
+    ["<spk:0> To celebrate the ..."],
     word_timestamp_logits,
     input_features_mask,
     audio_outputs.speaker_logits,

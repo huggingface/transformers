@@ -299,19 +299,21 @@ class Nemotron3_5TranscribeForConditionalGenerationModelTest(ALMModelTest, unitt
 @require_torch_accelerator_memory(memory=70)
 class Nemotron3_5TranscribeForConditionalGenerationIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     """
-    Each test runs a usage example of `docs/source/en/model_doc/nemotron3_5_transcribe.md` as written there, with the
-    pre-release checkpoint and `device_map=torch_device`. Expected values: NeMo direct, bfloat16, greedy, on an A100
-    (`tests/fixtures/nemotron3_5_transcribe/expected_*.json`, reproducers `reproducer_<case>.py` and
-    `reproducer_word_timestamps.py` in the dataset `eustlb/nemotron3_5_transcribe-integration-tests`).
+    Each test runs a usage example of `docs/source/en/model_doc/nemotron3_5_transcribe.md` as written there, sharded
+    over the visible accelerators (`device_map="auto"`, as `require_torch_accelerator_memory` counts them). Expected
+    values: NeMo direct, bfloat16, greedy, on an A100 (`tests/fixtures/nemotron3_5_transcribe/expected_*.json`,
+    reproducers `reproducer_<case>.py` and `reproducer_word_timestamps.py` in the bucket
+    `hf-internal-testing/nemotron3_5_transcribe-integration-tests`).
     """
 
     checkpoint = "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B"
+    # TODO: @eustlb, remove once NVIDIA merges the Transformers files (hub PR #5) into the checkpoint's main
+    revision = "refs/pr/5"
     samples = "https://huggingface.co/datasets/hf-internal-testing/dummy-audio-samples/resolve/main/"
     speaker_attributed_prompt = (
-        "Transcribe this audio. Include all spoken words and verbal fillers. Write numbers as spoken. Use no "
-        "punctuation and no capitalization. Start every speaker turn with a speaker tag such as <spk:0>, <spk:1>, "
-        "<spk:2>, etc.; assign one stable tag per speaker and keep speaker identities consistent. Output only the "
-        "speaker-tagged transcript."
+        "Transcribe this audio with punctuation and capitalization. Include all spoken words and verbal fillers. "
+        "Write numbers in their standard written form. Put speaker tags <spk:0> <spk:1> <spk:2> <spk:3> on the "
+        "transcription."
     )
 
     def _load_fixture(self, name):
@@ -359,8 +361,8 @@ class Nemotron3_5TranscribeForConditionalGenerationIntegrationTest(MemoryCleanup
     @slow
     def test_transcription(self):
         """Usage example "Transcription". Reproducer: `reproducer_single.py`."""
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
-        model = AutoModelForMultimodalLM.from_pretrained(self.checkpoint, device_map=torch_device)
+        processor = AutoProcessor.from_pretrained(self.checkpoint, revision=self.revision)
+        model = AutoModelForMultimodalLM.from_pretrained(self.checkpoint, revision=self.revision, device_map="auto")
 
         inputs = processor.apply_transcription_request(self.samples + "en-Alice_woman.wav").to(model.device)
         outputs = model.generate(**inputs, max_new_tokens=256)
@@ -376,8 +378,8 @@ class Nemotron3_5TranscribeForConditionalGenerationIntegrationTest(MemoryCleanup
         Usage example "Batched transcription". Checked against the per-sample references: `reproducer_single.py` and
         `reproducer_speaker_attributed.py`.
         """
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
-        model = AutoModelForMultimodalLM.from_pretrained(self.checkpoint, device_map=torch_device)
+        processor = AutoProcessor.from_pretrained(self.checkpoint, revision=self.revision)
+        model = AutoModelForMultimodalLM.from_pretrained(self.checkpoint, revision=self.revision, device_map="auto")
 
         audio = [
             load_audio(self.samples + "en-Alice_woman.wav", sampling_rate=16000),
@@ -402,8 +404,8 @@ class Nemotron3_5TranscribeForConditionalGenerationIntegrationTest(MemoryCleanup
         Usage example "Speaker-attributed transcription": the whole conversation (97.6 s, three 40 s windows with the
         speaker cache). Reproducer: `reproducer_long_form.py`.
         """
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
-        model = AutoModelForMultimodalLM.from_pretrained(self.checkpoint, device_map=torch_device)
+        processor = AutoProcessor.from_pretrained(self.checkpoint, revision=self.revision)
+        model = AutoModelForMultimodalLM.from_pretrained(self.checkpoint, revision=self.revision, device_map="auto")
 
         conversation = [
             {
@@ -459,8 +461,8 @@ class Nemotron3_5TranscribeForConditionalGenerationIntegrationTest(MemoryCleanup
         Usage example "Word timestamps": the first 30 s of the conversation. Reproducer of the text:
         `reproducer_speaker_attributed.py`; the timestamps of a fixed transcript are checked by the next tests.
         """
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
-        model = AutoModelForMultimodalLM.from_pretrained(self.checkpoint, device_map=torch_device)
+        processor = AutoProcessor.from_pretrained(self.checkpoint, revision=self.revision)
+        model = AutoModelForMultimodalLM.from_pretrained(self.checkpoint, revision=self.revision, device_map="auto")
 
         audio = load_audio(self.samples + "diarization_example.mp3", sampling_rate=16000)[: 30 * 16000]
 
@@ -492,8 +494,8 @@ class Nemotron3_5TranscribeForConditionalGenerationIntegrationTest(MemoryCleanup
         (reproducer `reproducer_word_timestamps.py`); measured on an A100: times bit-exact with the original.
         """
         expected = self._load_fixture("expected_word_timestamps_speaker_attributed")
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
-        model = AutoModelForMultimodalLM.from_pretrained(self.checkpoint, device_map=torch_device)
+        processor = AutoProcessor.from_pretrained(self.checkpoint, revision=self.revision)
+        model = AutoModelForMultimodalLM.from_pretrained(self.checkpoint, revision=self.revision, device_map="auto")
 
         audio = load_audio(self.samples + "diarization_example.mp3", sampling_rate=16000)[: 30 * 16000]
         inputs = processor.apply_transcription_request(audio, prompt=self.speaker_attributed_prompt).to(model.device)
@@ -524,8 +526,8 @@ class Nemotron3_5TranscribeForConditionalGenerationIntegrationTest(MemoryCleanup
         encoder frame (80 ms) where the bfloat16 log-probabilities tie, all other times within 1 ms.
         """
         expected = self._load_fixture("expected_word_timestamps_long_form")
-        processor = AutoProcessor.from_pretrained(self.checkpoint)
-        model = AutoModelForMultimodalLM.from_pretrained(self.checkpoint, device_map=torch_device)
+        processor = AutoProcessor.from_pretrained(self.checkpoint, revision=self.revision)
+        model = AutoModelForMultimodalLM.from_pretrained(self.checkpoint, revision=self.revision, device_map="auto")
 
         audio = load_audio(self.samples + "diarization_example.mp3", sampling_rate=16000)
         inputs = processor.apply_transcription_request(audio, prompt=self.speaker_attributed_prompt).to(model.device)
