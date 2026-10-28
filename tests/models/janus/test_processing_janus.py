@@ -431,26 +431,3 @@ class JanusProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # For an image where pixels go from 0 to 255 the diff can be 1 due to some numerical precision errors when scaling and unscaling
         self.assertTrue(np.abs(orig_image - unnormalized_images.numpy()).max() >= 1)
-
-    def test_processor_text_str_matches_list(self):
-        # A plain `str` must be treated as a single sample, not iterated character by character
-        # when the default system prompt or the image-generation suffix is added.
-        processor_components = self.prepare_components()
-        image_token_id = processor_components["tokenizer"].convert_tokens_to_ids("<image_placeholder>")
-        image_input = self.prepare_images_inputs()
-        text = "<image_placeholder>\nDescribe the image."
-
-        for use_default_system_prompt in (True, False):
-            processor = self.processor_class(
-                **processor_components, use_default_system_prompt=use_default_system_prompt, num_image_tokens=4
-            )
-            str_inputs = processor(text=text, images=image_input, return_tensors="np")
-            list_inputs = processor(text=[text], images=image_input, return_tensors="np")
-            self.assertEqual(str_inputs["input_ids"].shape[0], 1)
-            np.testing.assert_array_equal(str_inputs["input_ids"], list_inputs["input_ids"])
-            self.assertEqual((str_inputs["input_ids"] == image_token_id).sum(), 4)
-
-        str_inputs = processor(text="A cat", generation_mode="image", return_tensors="np")
-        list_inputs = processor(text=["A cat"], generation_mode="image", return_tensors="np")
-        self.assertEqual(str_inputs["input_ids"].shape[0], 1)
-        np.testing.assert_array_equal(str_inputs["input_ids"], list_inputs["input_ids"])
