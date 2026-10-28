@@ -993,13 +993,9 @@ def pipeline(
         # A checkpoint shipping a decision head next to its weights: the decision model whose config files it has
         if task == "decision" and config.model_type not in MODEL_FOR_DECISION_MAPPING_NAMES:
             files_kwargs = {"revision": hub_kwargs["revision"], "token": hub_kwargs["token"]}
-            for model_type in MODEL_FOR_DECISION_MAPPING_NAMES:
-                config_class = CONFIG_MAPPING[model_type]
-                if any(
-                    cached_file(model, filename, _raise_exceptions_for_missing_entries=False, **files_kwargs)
-                    for filename in getattr(config_class, "extra_config_files", ())
-                ):
-                    config = config_class.from_pretrained(model, **files_kwargs)
+            for model_class in MODEL_FOR_DECISION_MAPPING.values():
+                if (decision_config := model_class.checkpoint_config(model, **files_kwargs)) is not None:
+                    config = decision_config
                     break
 
     custom_tasks = {}
