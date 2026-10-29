@@ -309,90 +309,12 @@ jobs:
 
       - name: Process and filter reports
         run: |
-          # Preprocess with Python
-          python3 << 'PYTHON_SCRIPT'
-          import json
-          import os
-          from pathlib import Path
-
-          def count_failures(data):
-            """
-            Count total number of failures (excluding None commits)
-            """
-            total = 0
-            for model, model_result in data.items():
-                for device, failures in model_result.items():
-                    # Count failures where commit is not None
-                    total += sum(
-                        1 for failure in failures
-                        if isinstance(failure, dict) and failure.get('bad_commit') is not None
-                    )
-            return total
-
-          def filter_and_format_report(data):
-            """
-            Filter out entries where commit is `None` (failing tests who status is not certain) and format as text
-            """
-            lines = []
-
-            for model, model_result in data.items():
-                model_lines = []
-                for device, failures in model_result.items():
-
-                    filtered_failures = [
-                        failure for failure in failures
-                        if isinstance(failure, dict) and failure.get('bad_commit') is not None
-                    ]
-
-                    # Add tests to model lines
-                    for idx, failure in enumerate(filtered_failures):
-                        if idx == 0:
-                            job_link = failure['job_link']
-                            model_lines.append(f"- [{model}]({job_link}):")
-
-                        test_name = failure['test']
-                        status = failure.get('status', '')
-                        if "DIFFERENT error message" in status:
-                            indicator = "(❌ ⟹ ❌)"
-                        else:
-                            indicator = "(✅ ⟹ ❌)"
-
-                        model_lines.append(f"    {test_name} {indicator}")
-
-                if len(model_lines) > 0:
-                    lines.extend(model_lines)
-                    lines.append("")  # Empty line between models
-
-            return "\n".join(lines).strip()
-
-          # Read report from downloaded artifact file
-          model_report_path = Path('./new_failures/new_failures_with_bad_commit_run_models_gpu/new_failures_with_bad_commit.json')
-          model_url_path = Path('./new_failures/new_failures_with_bad_commit_run_models_gpu/new_failures_with_bad_commit_url.txt')
-
-          model_url = None
-          if model_url_path.exists():
-              with open(model_url_path, 'r') as f:
-                  model_url = f.read().strip()
-
-          model_report = {}
-          if model_report_path.exists():
-              with open(model_report_path, 'r') as f:
-                  model_report = json.load(f)
-
-          # Count failures and format
-          model_count = count_failures(model_report)
-          formatted_model = filter_and_format_report(model_report)
-
-          # Write to files
-          if formatted_model:
-              header = f"❌ [{model_count} new failing tests]({model_url}) 😭" if model_url else f"❌ {model_count} new failing tests 😭"
-              with open('model_ci_header.txt', 'w') as f:
-                  f.write(header)
-              with open('model_ci_details.txt', 'w') as f:
-                  f.write("<details>\n<summary>Failure details</summary>\n\n")
-                  f.write(formatted_model)
-                  f.write('\n\n</details>\n')
-          PYTHON_SCRIPT
+          python3 utils/format_ci_report.py \
+            --report-path ./new_failures/new_failures_with_bad_commit_run_models_gpu/new_failures_with_bad_commit.json \
+            --url-path ./new_failures/new_failures_with_bad_commit_run_models_gpu/new_failures_with_bad_commit_url.txt \
+            --header-out model_ci_header.txt \
+            --details-out model_ci_details.txt \
+            --kind model
 
       - name: Post results as PR comment
         env:
