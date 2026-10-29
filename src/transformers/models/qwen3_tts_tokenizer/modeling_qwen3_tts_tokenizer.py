@@ -90,7 +90,7 @@ class Qwen3TTSTokenizerCausalConvNet(nn.Module):
 
 
 class Qwen3TTSTokenizerCausalTransConvNet(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1):
+    def __init__(self, in_channels, out_channels, kernel_size, stride):
         super().__init__()
         self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride=stride)
         pad = kernel_size - stride

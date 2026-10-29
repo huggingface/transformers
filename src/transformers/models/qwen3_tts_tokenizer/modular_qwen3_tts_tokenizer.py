@@ -256,7 +256,7 @@ class Qwen3TTSTokenizerCausalConvNet(Qwen3OmniMoeCausalConvNet):
 
 
 class Qwen3TTSTokenizerCausalTransConvNet(Qwen3OmniMoeCausalTransConvNet):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1):
+    def __init__(self, in_channels, out_channels, kernel_size, stride):
         super().__init__(in_channels, out_channels, kernel_size, stride)
         pad = kernel_size - stride
         self.left_pad = 0
