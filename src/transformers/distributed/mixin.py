@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 import torch
 
+from ..core_model_loading import build_glob_alternation
 from ..dynamic_module_utils import custom_object_save
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
@@ -232,7 +233,9 @@ class DistributedMixin:
         Each returned plan maps one concrete module or parameter name to a style, e.g. `model.layers.3.mlp.up_proj`
         instead of `model.layers.*.mlp.up_proj`. A module that has an EP rule keeps no TP rule.
         """
-        names = {replace_layer_number_by_wildcard(n) for n, _ in chain(self.named_modules(), self.named_parameters())}
+        module_names = {replace_layer_number_by_wildcard(n) for n, _ in self.named_modules()}
+        param_names = {replace_layer_number_by_wildcard(n) for n, _ in self.named_parameters()}
+        names = module_names | param_names
         for plan_name in ("tp_plan", "ep_plan", "fsdp_plan"):
             override = getattr(distributed_config, plan_name)
             if isinstance(override, dict):
@@ -283,23 +286,17 @@ class DistributedMixin:
         # Tied embed/lm_head weights are wrapped once: fold the head's FSDP rule into the embedding's.
         fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, self)
 
+        # FSDP2 needs one dtype per group: give the modules kept in float32 their own group.
+        if fsdp_plan and (dtype_plan := self._get_dtype_plan(self.dtype)):
+            kept_in_fp32, _, _ = build_glob_alternation(list(dtype_plan))
+            fp32_modules = {name.rpartition(".")[0] for name in param_names if kept_in_fp32.search(name)}
+            fsdp_plan = dict.fromkeys(fp32_modules, "free_full_weight") | fsdp_plan
+
         tp_plan = self._expand_parallel_plan(tp_plan)
         ep_plan = self._expand_parallel_plan(ep_plan)
         fsdp_plan = self._expand_parallel_plan(fsdp_plan)
-
-        # FSDP2 needs one dtype per group. The parameters kept in float32 next to half-precision weights
-        # (`_keep_in_fp32_modules_strict`, e.g. a router) are upcast when the weights load, after sharding, so each
-        # module that owns one gets a group of its own, listed before its parent (children first, as FSDP2 requires).
-        if fsdp_plan and (dtype_plan := self._get_dtype_plan(self.dtype)):
-            from ..core_model_loading import build_glob_alternation
-
-            fp32_pattern, _, _ = build_glob_alternation(list(dtype_plan))
-            fp32_plan = {
-                name: "free_full_weight"
-                for name, module in reversed(list(self.named_modules()))
-                if any(fp32_pattern.search(f"{name}.{param}") for param, _ in module.named_parameters(recurse=False))
-            }
-            fsdp_plan = fp32_plan | {name: style for name, style in fsdp_plan.items() if name not in fp32_plan}
+        # FSDP2 needs a submodule sharded before the module containing it, e.g. `mlp.gate` before its layer.
+        fsdp_plan = dict(sorted(fsdp_plan.items(), key=lambda item: item[0].count("."), reverse=True))
 
         return tp_plan, ep_plan, fsdp_plan
 
