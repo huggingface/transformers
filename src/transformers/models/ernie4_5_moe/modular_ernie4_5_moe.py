@@ -199,6 +199,8 @@ class Ernie4_5_MoePreTrainedModel(MixtralPreTrainedModel):
         elif isinstance(module, Ernie4_5_MoeExperts):
             init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
             init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
+        elif isinstance(module, Ernie4_5_MoeTopKRouter):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
