@@ -35,7 +35,7 @@ from .deepgemm import (
     is_sm100,
 )
 from .hub_kernels import _MISSING_KERNELS_MESSAGE, lazy_load_kernel
-from .moe import ExpertsInterface, use_experts_implementation
+from .moe import ExpertsInterface, _grouped_mm, use_experts_implementation
 
 
 logger = logging.get_logger(__name__)
@@ -282,6 +282,63 @@ def fp8_linear(
     return finegrained_fp8_linear(input, weight, weight_scale_inv, block_size, bias, activation_scale)
 
 
+def _dequantize_fp8_weight(
+    weight: torch.Tensor, weight_scale_inv: torch.Tensor, block_size: list[int] | None, dtype: torch.dtype
+) -> torch.Tensor:
+    """Dequantize `(..., N, K)` FP8 weights with their per-block (or per-tensor) scales, for the backward pass."""
+    if weight.dtype == torch.int8:
+        raise NotImplementedError("Backward through FP4 weights is not supported.")
+    scale = weight_scale_inv.to(dtype)
+    if block_size is not None:
+        rows, cols = weight.shape[-2:]
+        scale = scale.repeat_interleave(block_size[0], dim=-2)[..., :rows, :]
+        scale = scale.repeat_interleave(block_size[1], dim=-1)[..., :cols]
+    return weight.to(dtype).mul_(scale)
+
+
+class FP8LinearFunction(torch.autograd.Function):
+    """
+    `fp8_linear` with a backward for the input, so adapters (e.g. LoRA) can train on top of FP8 layers. The FP8 weights
+    are frozen: the input gradient goes through the dequantized weight, and the weight, scales and bias get none.
+    """
+
+    @staticmethod
+    def forward(ctx, input, weight, weight_scale_inv, block_size, bias, activation_scale, allow_deepgemm):
+        ctx.save_for_backward(weight, weight_scale_inv)
+        ctx.block_size = block_size
+        return fp8_linear(input, weight, weight_scale_inv, block_size, bias, activation_scale, allow_deepgemm)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        weight, weight_scale_inv = ctx.saved_tensors
+        weight = _dequantize_fp8_weight(weight, weight_scale_inv, ctx.block_size, grad_output.dtype)
+        return grad_output @ weight, None, None, None, None, None, None
+
+
+class FP8GroupedMatmulFunction(torch.autograd.Function):
+    """The finegrained-fp8 grouped matmul with a backward for the input, like `FP8LinearFunction`."""
+
+    @staticmethod
+    def forward(ctx, input, weight, weight_scale_inv, offsets, tokens_per_expert, block_size):
+        ctx.save_for_backward(weight, weight_scale_inv, offsets)
+        ctx.block_size = block_size
+        return load_finegrained_fp8_kernel().grouped_matmul(
+            input,
+            weight,
+            weight_scale_inv,
+            offsets=offsets,
+            tokens_per_expert=tokens_per_expert,
+            block_size=block_size,
+        )
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        weight, weight_scale_inv, offsets = ctx.saved_tensors
+        weight = _dequantize_fp8_weight(weight, weight_scale_inv, ctx.block_size, grad_output.dtype)
+        # (S, output_dim) @ grouped (num_experts, output_dim, input_dim) -> (S, input_dim)
+        return _grouped_mm(grad_output.contiguous(), weight, offs=offsets), None, None, None, None, None
+
+
 class FP8Linear(nn.Linear):
     # Internal, temporary flag — not public API, don't set it directly. `_disable_deepgemm_on_multi_device`
     # flips it True at load when the model spans >1 CUDA device in one process (DeepGEMM's context-bound
@@ -330,14 +387,14 @@ class FP8Linear(nn.Linear):
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
 
-        return fp8_linear(
+        return FP8LinearFunction.apply(
             input,
             self.weight,
             self.weight_scale_inv,
-            block_size=self.block_size,
-            activation_scale=self.activation_scale,
-            bias=self.bias,
-            allow_deepgemm=not self._deepgemm_disabled,
+            self.block_size,
+            self.bias,
+            self.activation_scale,
+            not self._deepgemm_disabled,
         )
 
 
@@ -421,15 +478,7 @@ class FP8GroupedLinear(FP8Linear):
         tokens_per_expert = torch.full((self.n_groups,), tokens_per_group, device=x.device, dtype=torch.int32)
         offsets = torch.arange(1, self.n_groups + 1, device=x.device, dtype=torch.int32) * tokens_per_group
 
-        finegrained_fp8 = load_finegrained_fp8_kernel()
-        y = finegrained_fp8.grouped_matmul(
-            x,
-            w,
-            scale_inv,
-            offsets=offsets,
-            tokens_per_expert=tokens_per_expert,
-            block_size=self.block_size,
-        )
+        y = FP8GroupedMatmulFunction.apply(x, w, scale_inv, offsets, tokens_per_expert, self.block_size)
         y = y.reshape(self.n_groups, *input_shape, -1).movedim(0, -2)
         if self.has_bias:
             y.add_(self.bias.view(self.n_groups, -1))
@@ -523,8 +572,6 @@ def fp8_grouped_mm_experts_forward(
             "Use the default eager dispatch or switch to activation_scheme='dynamic'."
         )
 
-    finegrained_fp8 = load_finegrained_fp8_kernel()
-
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
@@ -548,10 +595,9 @@ def fp8_grouped_mm_experts_forward(
 
     # EP sentinel handling: leave `expert_ids` unclamped so the sort pushes sentinels to the tail,
     # `histc(max=num_experts-1)` drops them from `tokens_per_expert`, and the grouped matmul skips
-    # rows beyond `offsets[-1]` — sentinels cost no real GEMM compute. The kernel writes only
-    # valid rows, so sentinel-tail `proj_out` rows are uninit; without the post-mask below,
-    # `proj_out[sentinel] * 0 = NaN * 0 = NaN` would poison the per-token reduction. FP8
-    # quantized weights are inference-only, so no bwd pre-mask is needed.
+    # rows beyond `offsets[-1]`, leaving them uninit (fwd output and bwd `d_input`). The fwd
+    # post-mask kills `NaN * 0 = NaN` before the per-token reduction, the bwd pre-mask zeros them
+    # in `d_selected_hidden_states_g` before the gather's scatter-add.
     sentinel_mask = (expert_ids_g >= self.num_experts).unsqueeze(-1) if self._is_expert_parallel else None
 
     weight_up = self.gate_up_proj if self.has_gate else self.up_proj
@@ -559,14 +605,13 @@ def fp8_grouped_mm_experts_forward(
     weight_down = self.down_proj
     weight_scale_down = self.down_proj_scale_inv
 
+    # Pre-mask (bwd path).
+    if sentinel_mask is not None:
+        selected_hidden_states_g.masked_fill_(sentinel_mask, 0.0)
+
     # --- Up projection per expert (FP8 grouped) ---
-    proj_out = finegrained_fp8.grouped_matmul(
-        selected_hidden_states_g,
-        weight_up,
-        weight_scale_up,
-        offsets=offsets,
-        tokens_per_expert=tokens_per_expert,
-        block_size=self.block_size,
+    proj_out = FP8GroupedMatmulFunction.apply(
+        selected_hidden_states_g, weight_up, weight_scale_up, offsets, tokens_per_expert, self.block_size
     )  # (S, 2 * intermediate_dim)
 
     # Apply gating or activation
@@ -578,13 +623,8 @@ def fp8_grouped_mm_experts_forward(
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 grouped) ---
-    proj_out = finegrained_fp8.grouped_matmul(
-        proj_out,
-        weight_down,
-        weight_scale_down,
-        offsets=offsets,
-        tokens_per_expert=tokens_per_expert,
-        block_size=self.block_size,
+    proj_out = FP8GroupedMatmulFunction.apply(
+        proj_out, weight_down, weight_scale_down, offsets, tokens_per_expert, self.block_size
     )  # (S, hidden_dim)
 
     # Apply routing weights
@@ -754,13 +794,8 @@ class FP8Experts(nn.Module):
         if weight.element_size() > 1:
             return F.linear(input, weight, None)
 
-        return fp8_linear(
-            input,
-            weight,
-            weight_scale_inv,
-            self.block_size,
-            activation_scale=activation_scale,
-            allow_deepgemm=not self._deepgemm_disabled,
+        return FP8LinearFunction.apply(
+            input, weight, weight_scale_inv, self.block_size, None, activation_scale, not self._deepgemm_disabled
         )
 
 
