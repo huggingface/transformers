@@ -233,8 +233,9 @@ class DistributedMixin:
         Each returned plan maps one concrete module or parameter name to a style, e.g. `model.layers.3.mlp.up_proj`
         instead of `model.layers.*.mlp.up_proj`. A module that has an EP rule keeps no TP rule.
         """
+        module_names = {replace_layer_number_by_wildcard(n) for n, _ in self.named_modules()}
         param_names = {replace_layer_number_by_wildcard(n) for n, _ in self.named_parameters()}
-        names = param_names | {replace_layer_number_by_wildcard(n) for n, _ in self.named_modules()}
+        names = module_names | param_names
         for plan_name in ("tp_plan", "ep_plan", "fsdp_plan"):
             override = getattr(distributed_config, plan_name)
             if isinstance(override, dict):
