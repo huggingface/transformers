@@ -14,13 +14,14 @@
 """Testing suite for the PyTorch Wav2Vec2-Conformer model."""
 
 import math
+import os
 import tempfile
 import unittest
 
 import numpy as np
 from datasets import load_dataset
 
-from transformers import Wav2Vec2ConformerConfig, is_torch_available
+from transformers import Wav2Vec2ConformerConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     is_flaky,
     require_torch,
@@ -42,6 +43,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+    from safetensors.torch import load_file as safe_load_file
+    from safetensors.torch import save_file as safe_save_file
 
     from transformers import (
         Wav2Vec2ConformerForAudioFrameClassification,
@@ -622,6 +625,28 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
     def test_model_from_pretrained(self):
         model = Wav2Vec2ConformerModel.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
         self.assertIsNotNone(model)
+
+    def test_missing_masked_spec_embed_is_initialized(self):
+        # Checkpoints such as facebook/wav2vec2-base-960h lack `masked_spec_embed`: loading must initialize it
+        config = self.model_tester.get_config()
+        with tempfile.TemporaryDirectory() as tmp:
+            Wav2Vec2ConformerModel(config).save_pretrained(tmp)
+            weights = os.path.join(tmp, "model.safetensors")
+            state_dict = safe_load_file(weights)
+            del state_dict["masked_spec_embed"]
+            safe_save_file(state_dict, weights, metadata={"format": "pt"})
+
+            loaded = []
+            for _ in range(2):
+                set_seed(0)
+                loaded.append(Wav2Vec2ConformerModel.from_pretrained(tmp).masked_spec_embed.detach())
+
+        embed = loaded[0]
+        # Uninitialized memory can be NaN, huge, or all zeros: require a real uniform draw
+        self.assertTrue(torch.isfinite(embed).all())
+        self.assertTrue(((embed >= 0) & (embed <= 1)).all())
+        self.assertGreater(embed.std().item(), 0)
+        torch.testing.assert_close(loaded[0], loaded[1], rtol=0, atol=0)
 
 
 @require_torch
