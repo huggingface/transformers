@@ -3155,13 +3155,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
         if sanitize_control_tokens:
-            if not tokenize or return_assistant_tokens_mask:
-                raise ValueError(
-                    "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
-                    "`return_assistant_tokens_mask=True`."
-                )
             conversations, tools, documents, kwargs = self._mark_chat_inputs(
-                chat_template, conversations, tools, documents, kwargs
+                chat_template, conversations, tools, documents, kwargs, tokenize, return_assistant_tokens_mask
             )
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
@@ -3225,8 +3220,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         else:
             return rendered_chat
 
-    def _mark_chat_inputs(self, chat_template: str, conversations, tools, documents, template_kwargs: dict):
+    def _mark_chat_inputs(
+        self, chat_template: str, conversations, tools, documents, template_kwargs: dict, tokenize, assistant_mask
+    ):
         """Wrap the control tokens that appear in the user's strings with private markers, see `mark_control_tokens`."""
+        if not tokenize or assistant_mask:
+            raise ValueError(
+                "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
+                "`return_assistant_tokens_mask=True`."
+            )
         control_tokens_re, _ = _get_control_token_patterns(self._get_control_tokens(chat_template))
         conversations = [
             mark_control_tokens(getattr(chat, "messages", chat), control_tokens_re) for chat in conversations

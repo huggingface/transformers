@@ -26,7 +26,7 @@ from transformers.testing_utils import torch_device
 if is_torch_available():
     import torch
 
-    from transformers import AutoModelForDecision, Qwen2ForCausalLM
+    from transformers import AutoModelForDecision, Qwen2Config, Qwen2ForCausalLM
     from transformers.decision.modeling_utils import read_marks
 
 
@@ -45,6 +45,19 @@ def render(processor, request, config=None):
         prompt = {"input_ids": ids, "marks": marks.tolist(), "questions": questions, "stripped": stripped}
         prompts.append(SimpleNamespace(**prompt, inputs=dict(inputs)))
     return prompts
+
+
+def tiny_qwen2(tokenizer) -> "Qwen2ForCausalLM":
+    """A tiny Qwen2 with the vocabulary of `tokenizer`, the model of the decision tests."""
+    config = Qwen2Config(
+        vocab_size=len(tokenizer),
+        hidden_size=16,
+        intermediate_size=32,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        num_key_value_heads=1,
+    )
+    return Qwen2ForCausalLM(config).eval()
 
 
 class DecisionHeadTesterMixin:
