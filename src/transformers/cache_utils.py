@@ -230,6 +230,14 @@ class DummyLayer:
             return None, None
         raise NotImplementedError("Dummy layer don't store cache: they cannot be updated.")
 
+    # Dummy methods, fine to call on DummyLayer
+    def offload(self): ...
+    def reset(self): ...
+    def reorder_cache(self, beam_idx: torch.LongTensor): ...
+    def crop(self, tokens_to_remove: int): ...
+    def batch_repeat_interleave(self, repeats: int): ...
+    def batch_select_indices(self, indices: torch.Tensor): ...
+
     # These methods should never be called by construction, but they were here to make ty happy and errors readable
     def prefetch(self):
         raise NotImplementedError("Dummy layer don't store cache: they cannot be prefetched.")
@@ -237,12 +245,6 @@ class DummyLayer:
     def get_max_length(self):
         raise NotImplementedError("Dummy layer don't store cache: they cannot have a maximum length.")
 
-    def offload(self): ...
-    def reset(self): ...
-    def reorder_cache(self, beam_idx: torch.LongTensor): ...
-    def crop(self, tokens_to_remove: int): ...
-    def batch_repeat_interleave(self, repeats: int): ...
-    def batch_select_indices(self, indices: torch.Tensor): ...
 
 
 class DynamicSlidingWindowLayer(DynamicLayer):
@@ -1557,7 +1559,7 @@ class Cache:
         non-sliding layer. Note that we do it on the default stream, so that we ensure all earlier
         computation in the layer's `update` methods are finished.
         """
-        if not (self.is_dummy[layer_idx] or (only_non_sliding and self.is_sliding[layer_idx])):
+        if not (only_non_sliding and self.is_sliding[layer_idx]):
             self.layers[layer_idx].offload()
 
     def update(
@@ -1899,7 +1901,7 @@ class Cache:
         # For DynamicCache dispatching the layers lazily (otherwise, all([]) is True)
         if len(self.layers) == 0:
             return False
-        return all(layer.is_compileable for layer in self.non_dummy_layers)
+        return all(layer.is_compileable for layer in self.layers if not isinstance(layer, DummyLayer))
 
     @property
     def is_initialized(self) -> bool:
@@ -1910,7 +1912,7 @@ class Cache:
     @property
     def is_croppable(self) -> bool:
         """Whether `crop` can put the whole cache back as it was, so a rollback leaves no trace."""
-        return all(layer.is_croppable for layer in self.non_dummy_layers)
+        return all(layer.is_croppable for layer in self.layers if not isinstance(layer, DummyLayer))
 
     @property
     def is_sliding(self) -> list[bool]:
