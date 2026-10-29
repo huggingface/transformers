@@ -30,11 +30,10 @@ from ...image_utils import ChannelDimension, ImageInput, PILImageResampling, Siz
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_mimo_v2_utils import load_original_checkpoint_if_needed
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, can_return_tuple, is_torch_greater_or_equal, logging
-from ...utils.generic import no_inherit_decorator
 from ...utils.output_capturing import capture_outputs
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import (
@@ -46,52 +45,70 @@ from ...video_utils import (
     reorder_videos,
 )
 from ..encodec.modeling_encodec import EncodecEuclideanCodebook
-from ..llama.modeling_llama import LlamaMLP, LlamaRMSNorm, rotate_half
-from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed
+from ..glm4_moe.modeling_glm4_moe import Glm4MoeMLP, apply_rotary_pos_emb
+from ..mimo_v2_flash.modeling_mimo_v2_flash import (
+    MiMoV2FlashAttention,
+    MiMoV2FlashDecoderLayer,
+    MiMoV2FlashModel,
+    MiMoV2FlashRMSNorm,
+)
+from ..olmo2.modeling_olmo2 import Olmo2RotaryEmbedding
+from ..qwen2_5_vl.modeling_qwen2_5_vl import Qwen2_5_VisionPatchEmbed, Qwen2_5_VLMLP
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor, Qwen2VLImageProcessorKwargs
 from ..qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor, Qwen2VLVideoProcessorInitKwargs
+from ..voxtral.modeling_voxtral import VoxtralForConditionalGeneration
 from ..whisper.modeling_whisper import WhisperAttention
 from .configuration_mimo_v2_vl import MiMoV2VLConfig, MiMoV2VLTextConfig
 
 
 logger = logging.get_logger(__name__)
 
+_MULTIMODAL_ARGS = r"""
+input_audio_codes (`torch.LongTensor`, *optional*):
+    Grouped codec IDs of shape `(batch, grouped_time, group_size, audio_channels)`.
+feature_attention_mask (`torch.Tensor`, *optional*):
+    Mask identifying valid mel frames in `input_features`.
+audio_feature_lens (`torch.LongTensor`, *optional*):
+    Valid grouped-token length of each audio sequence before batch padding.
+audio_segment_offsets (`torch.LongTensor`, *optional*):
+    `(audio_index, start, length)` rows aligning audio features with prompt spans.
+audio_codes (`torch.LongTensor`, *optional*):
+    Legacy unpadded, prompt-ordered codec IDs of shape `(time, audio_channels)`.
+video_pixel_values (`torch.Tensor`, *optional*):
+    Legacy alias for `pixel_values_videos`. Specify only one of these inputs.
+"""
 
-@no_inherit_decorator
-class MiMoV2VLRMSNorm(LlamaRMSNorm):
+
+class MiMoV2VLRMSNorm(MiMoV2FlashRMSNorm):
     pass
 
 
-class MiMoV2VLRotaryEmbedding(nn.Module):
+class MiMoV2VLRotaryEmbedding(Olmo2RotaryEmbedding):
     def __init__(self, dim: int, theta: float):
-        super().__init__()
+        nn.Module.__init__(self)
         self.dim = dim
         self.theta = theta
-        inv_freq = self.compute_inverse_frequencies().to(torch.empty(0).device)
-        self.inv_freq = nn.Buffer(inv_freq, persistent=False)
+        self.rope_type = "default"
+        inv_freq, self.attention_scaling = self.compute_default_rope_parameters(dim, theta)
+        self.inv_freq = nn.Buffer(inv_freq.to(torch.empty(0).device), persistent=False)
 
-    def compute_inverse_frequencies(self):
-        # Use the same CPU arithmetic during construction and meta-device reload. Small
-        # CPU/CUDA pow differences otherwise change phases at long positions and can change MoE routing.
-        with torch.autocast(device_type="cpu", enabled=False):
-            return 1.0 / (self.theta ** (torch.arange(0, self.dim, 2, dtype=torch.float32, device="cpu") / self.dim))
-
-    @torch.no_grad()
-    def forward(self, position_ids):
-        with torch.autocast(device_type=position_ids.device.type, enabled=False):
-            frequencies = position_ids.float().unsqueeze(-1) * self.inv_freq.to(position_ids.device).float()
-            embeddings = torch.cat((frequencies, frequencies), dim=-1)
-        return embeddings.cos(), embeddings.sin()
+    @staticmethod
+    def compute_default_rope_parameters(dim: int, theta: float):
+        """Initialize fixed RoPE frequencies for text, vision, and audio in float32 on CPU."""
+        # CPU initialization also reconstructs the frequencies consistently after meta-device loading.
+        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float32, device="cpu") / dim))
+        return inv_freq, 1.0
 
 
-def apply_rotary_pos_emb(query, key, cos, sin):
+def apply_rotary_pos_emb_fp32(query, key, cos, sin):
+    """Apply GLM's rotation in FP32, then restore Q/K dtypes without rounding their unrotated tails."""
     rotary_dim = cos.shape[-1]
-    cos, sin = cos.unsqueeze(1), sin.unsqueeze(1)
-    query_rotary = query[..., :rotary_dim].float()
-    key_rotary = key[..., :rotary_dim].float()
-    query_rotary = (query_rotary * cos + rotate_half(query_rotary) * sin).to(query.dtype)
-    key_rotary = (key_rotary * cos + rotate_half(key_rotary) * sin).to(key.dtype)
-    return torch.cat((query_rotary, query[..., rotary_dim:]), -1), torch.cat((key_rotary, key[..., rotary_dim:]), -1)
+    query_rotary, key_rotary = apply_rotary_pos_emb(
+        query[..., :rotary_dim].float(), key[..., :rotary_dim].float(), cos, sin
+    )
+    return torch.cat((query_rotary.to(query.dtype), query[..., rotary_dim:]), -1), torch.cat(
+        (key_rotary.to(key.dtype), key[..., rotary_dim:]), -1
+    )
 
 
 def _attention_forward(query, key, value, attention_mask=None, sinks=None, dropout=0.0, implementation="sdpa"):
@@ -176,13 +193,20 @@ def attention_forward(
     return torch.cat(outputs, dim=-2)
 
 
-class MiMoV2VLMLP(LlamaMLP):
-    def __init__(self, hidden_size, intermediate_size, hidden_act="silu", bias=False):
-        nn.Module.__init__(self)
-        self.gate_proj = nn.Linear(hidden_size, intermediate_size, bias=bias)
-        self.up_proj = nn.Linear(hidden_size, intermediate_size, bias=bias)
-        self.down_proj = nn.Linear(intermediate_size, hidden_size, bias=bias)
-        self.act_fn = ACT2FN[hidden_act]
+class MiMoV2VLMLP(Glm4MoeMLP):
+    pass
+
+
+class MiMoV2VLVisionMLP(Qwen2_5_VLMLP):
+    pass
+
+
+class MiMoV2VLAudioMLP(Qwen2_5_VLMLP):
+    def __init__(self, config, bias=False):
+        super().__init__(config, bias=bias)
+        self.hidden_size = config.input_local_dim
+        self.intermediate_size = config.input_local_intermediate_size
+        self.act_fn = ACT2FN["silu"]
 
 
 class MiMoV2VLTopkRouter(nn.Module):
@@ -228,7 +252,7 @@ class MiMoV2VLMoE(nn.Module):
         self.gate = MiMoV2VLTopkRouter(config)
         self.experts = nn.ModuleList(
             [
-                MiMoV2VLMLP(config.hidden_size, config.moe_intermediate_size, config.hidden_act)
+                MiMoV2VLMLP(config, intermediate_size=config.moe_intermediate_size)
                 for _ in range(config.n_routed_experts)
             ]
         )
@@ -248,44 +272,28 @@ class MiMoV2VLMoE(nn.Module):
         return output.to(hidden_states.dtype).reshape(shape)
 
 
-class MiMoV2VLTextAttention(nn.Module):
-    def __init__(self, config, layer_idx):
-        super().__init__()
-        is_sliding = config.layer_types[layer_idx] == "sliding_attention"
-        self.config = config
-        self.layer_idx = layer_idx
-        self.num_heads = config.swa_num_attention_heads if is_sliding else config.num_attention_heads
-        self.num_key_value_heads = config.swa_num_key_value_heads if is_sliding else config.num_key_value_heads
-        self.head_dim = config.swa_head_dim if is_sliding else config.head_dim
-        self.v_head_dim = config.swa_v_head_dim if is_sliding else config.v_head_dim
-        self.window_size = (config.sliding_window - 1, 0) if is_sliding else None
-        self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(
-            config.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias
+class MiMoV2VLAttention(MiMoV2FlashAttention):
+    def __init__(self, config: MiMoV2VLTextConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        del self.sinks
+        self.num_heads = self.q_proj.out_features // self.head_dim
+        self.num_key_value_heads = self.k_proj.out_features // self.head_dim
+        self.window_size = (self.sliding_window - 1, 0) if self.sliding_window is not None else None
+        use_sink = (
+            config.add_swa_attention_sink_bias
+            if self.sliding_window is not None
+            else config.add_full_attention_sink_bias
         )
-        self.v_proj = nn.Linear(
-            config.hidden_size, self.num_key_value_heads * self.v_head_dim, bias=config.attention_bias
-        )
-        self.o_proj = nn.Linear(self.num_heads * self.v_head_dim, config.hidden_size, bias=False)
-        use_sink = config.add_swa_attention_sink_bias if is_sliding else config.add_full_attention_sink_bias
         self.attention_sink_bias = nn.Parameter(torch.zeros(self.num_heads)) if use_sink else None
 
-    def forward(self, hidden_states, position_embeddings, attention_mask, past_key_values=None):
+    def forward(self, hidden_states, position_embeddings, attention_mask=None, past_key_values=None, **kwargs):
         batch_size, sequence_length, _ = hidden_states.shape
-        query = (
-            self.q_proj(hidden_states).view(batch_size, sequence_length, self.num_heads, self.head_dim).transpose(1, 2)
-        )
-        key = (
-            self.k_proj(hidden_states)
-            .view(batch_size, sequence_length, self.num_key_value_heads, self.head_dim)
-            .transpose(1, 2)
-        )
-        value = (
-            self.v_proj(hidden_states)
-            .view(batch_size, sequence_length, self.num_key_value_heads, self.v_head_dim)
-            .transpose(1, 2)
-        )
-        query, key = apply_rotary_pos_emb(query, key, *position_embeddings)
+        qk_shape = (batch_size, sequence_length, -1, self.head_dim)
+        v_shape = (batch_size, sequence_length, -1, self.v_head_dim)
+        query = self.q_proj(hidden_states).view(qk_shape).transpose(1, 2)
+        key = self.k_proj(hidden_states).view(qk_shape).transpose(1, 2)
+        value = self.v_proj(hidden_states).view(v_shape).transpose(1, 2)
+        query, key = apply_rotary_pos_emb_fp32(query, key, *position_embeddings)
         if self.config.attention_value_scale is not None:
             value = value * self.config.attention_value_scale
         if past_key_values is not None:
@@ -306,27 +314,14 @@ class MiMoV2VLTextAttention(nn.Module):
             implementation=self.config._attn_implementation,
             window_size=self.window_size,
         )
-        return self.o_proj(output.transpose(1, 2).reshape(batch_size, sequence_length, -1))
+        return self.o_proj(output.transpose(1, 2).reshape(batch_size, sequence_length, -1)), None
 
 
-class MiMoV2VLDecoderLayer(GradientCheckpointingLayer):
+class MiMoV2VLDecoderLayer(MiMoV2FlashDecoderLayer):
     def __init__(self, config, layer_idx):
-        super().__init__()
+        super().__init__(config, layer_idx)
         self.layer_type = config.layer_types[layer_idx]
-        self.self_attn = MiMoV2VLTextAttention(config, layer_idx)
-        self.mlp = (
-            MiMoV2VLMoE(config)
-            if config.moe_layer_freq[layer_idx]
-            else MiMoV2VLMLP(config.hidden_size, config.intermediate_size, config.hidden_act)
-        )
-        self.input_layernorm = MiMoV2VLRMSNorm(config.hidden_size, config.rms_norm_eps)
-        self.post_attention_layernorm = MiMoV2VLRMSNorm(config.hidden_size, config.rms_norm_eps)
-
-    def forward(self, hidden_states, position_embeddings, attention_mask, past_key_values=None):
-        hidden_states = hidden_states + self.self_attn(
-            self.input_layernorm(hidden_states), position_embeddings, attention_mask, past_key_values
-        )
-        return hidden_states + self.mlp(self.post_attention_layernorm(hidden_states))
+        self.mlp = MiMoV2VLMoE(config) if config.moe_layer_freq[layer_idx] else MiMoV2VLMLP(config)
 
 
 @auto_docstring
@@ -355,23 +350,16 @@ class MiMoV2VLPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         std = getattr(self.config.get_text_config(), "initializer_range", 0.02)
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv3d)):
+        if isinstance(module, (nn.Linear, nn.Conv1d, nn.Conv3d, nn.Embedding)):
             init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.padding_idx is not None:
+            if isinstance(module, nn.Embedding) and module.padding_idx is not None:
                 init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, (MiMoV2VLRMSNorm, nn.LayerNorm)):
-            init.ones_(module.weight)
-            if getattr(module, "bias", None) is not None:
-                init.zeros_(module.bias)
         elif isinstance(module, MiMoV2VLTopkRouter):
             init.normal_(module.weight, mean=0.0, std=std)
             init.zeros_(module.e_score_correction_bias)
         elif isinstance(module, MiMoV2VLRotaryEmbedding):
-            init.copy_(module.inv_freq, module.compute_inverse_frequencies())
+            inv_freq, _ = module.compute_default_rope_parameters(module.dim, module.theta)
+            init.copy_(module.inv_freq, inv_freq)
         elif isinstance(module, MiMoV2VLCodebook):
             init.ones_(module.inited)
             init.zeros_(module.cluster_size)
@@ -383,23 +371,18 @@ class MiMoV2VLPreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-class MiMoV2VLTextModel(MiMoV2VLPreTrainedModel):
+class MiMoV2VLTextModel(MiMoV2FlashModel):
     config_class = MiMoV2VLTextConfig
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     def __init__(self, config):
         super().__init__(config)
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
-        self.layers = nn.ModuleList([MiMoV2VLDecoderLayer(config, index) for index in range(config.num_hidden_layers)])
-        self.norm = MiMoV2VLRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.rotary_emb = MiMoV2VLRotaryEmbedding(
             int(config.head_dim * config.partial_rotary_factor), config.rope_theta
         )
         self.swa_rotary_emb = MiMoV2VLRotaryEmbedding(
             int(config.swa_head_dim * config.partial_rotary_factor), config.swa_rope_theta
         )
-        self.gradient_checkpointing = False
-        self.post_init()
 
     @capture_outputs
     @auto_docstring
@@ -412,7 +395,7 @@ class MiMoV2VLTextModel(MiMoV2VLPreTrainedModel):
         inputs_embeds=None,
         use_cache=None,
         **kwargs,
-    ):
+    ) -> BaseModelOutputWithPast:
         if (input_ids is None) == (inputs_embeds is None):
             raise ValueError("Specify exactly one of input_ids or inputs_embeds.")
         use_cache = self.config.use_cache if use_cache is None else use_cache
@@ -441,12 +424,17 @@ class MiMoV2VLTextModel(MiMoV2VLPreTrainedModel):
             masks = {"full_attention": create_causal_mask(**mask_kwargs)}
             if "sliding_attention" in self.config.layer_types:
                 masks["sliding_attention"] = create_sliding_window_causal_mask(**mask_kwargs)
-        position_embeddings = self.rotary_emb(position_ids)
-        sliding_position_embeddings = self.swa_rotary_emb(position_ids)
+        position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
+        sliding_position_embeddings = self.swa_rotary_emb(inputs_embeds, position_ids)
         hidden_states = inputs_embeds
         for layer in self.layers:
             rotary = sliding_position_embeddings if layer.layer_type == "sliding_attention" else position_embeddings
-            hidden_states = layer(hidden_states, rotary, masks[layer.layer_type], past_key_values)
+            hidden_states = layer(
+                hidden_states,
+                position_embeddings=rotary,
+                attention_mask=masks[layer.layer_type],
+                past_key_values=past_key_values,
+            )
         hidden_states = self.norm(hidden_states)
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
@@ -487,7 +475,7 @@ class MiMoV2VLVisionAttention(nn.Module):
         query = query.view(1, -1, config.num_heads, config.qk_channels).transpose(1, 2)
         key = key.view(1, -1, config.num_key_value_heads, config.qk_channels).transpose(1, 2)
         value = value.view(1, -1, config.num_key_value_heads, config.qk_channels).transpose(1, 2)
-        query, key = apply_rotary_pos_emb(query, key, *position_embeddings)
+        query, key = apply_rotary_pos_emb_fp32(query, key, *position_embeddings)
         outputs = []
         for query_chunk, key_chunk, value_chunk in zip(
             query.split(sequence_lengths, 2), key.split(sequence_lengths, 2), value.split(sequence_lengths, 2)
@@ -510,7 +498,7 @@ class MiMoV2VLVisionBlock(GradientCheckpointingLayer):
         self.norm1 = MiMoV2VLRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.norm2 = MiMoV2VLRMSNorm(config.hidden_size, config.rms_norm_eps)
         self.attn = MiMoV2VLVisionAttention(config, layer_idx)
-        self.mlp = MiMoV2VLMLP(config.hidden_size, config.intermediate_size, config.hidden_act, bias=True)
+        self.mlp = MiMoV2VLVisionMLP(config, bias=True)
 
     def forward(self, hidden_states, position_embeddings, sequence_lengths):
         hidden_states = hidden_states + self.attn(self.norm1(hidden_states), position_embeddings, sequence_lengths)
@@ -609,7 +597,7 @@ class MiMoV2VLAudioLocalAttention(nn.Module):
             projection(hidden_states).view(shape).transpose(1, 2)
             for projection in (self.q_proj, self.k_proj, self.v_proj)
         ]
-        query, key = apply_rotary_pos_emb(query, key, *position_embeddings)
+        query, key = apply_rotary_pos_emb_fp32(query, key, *position_embeddings)
         output = F.scaled_dot_product_attention(
             query,
             key,
@@ -626,7 +614,7 @@ class MiMoV2VLAudioLocalLayer(GradientCheckpointingLayer):
         self.self_attn = MiMoV2VLAudioLocalAttention(config)
         self.input_layernorm = MiMoV2VLRMSNorm(config.input_local_dim, config.rms_norm_eps)
         self.post_attention_layernorm = MiMoV2VLRMSNorm(config.input_local_dim, config.rms_norm_eps)
-        self.mlp = MiMoV2VLMLP(config.input_local_dim, config.input_local_intermediate_size)
+        self.mlp = MiMoV2VLAudioMLP(config)
 
     def forward(self, hidden_states, position_embeddings):
         hidden_states = hidden_states + self.self_attn(self.input_layernorm(hidden_states), position_embeddings)
@@ -644,7 +632,7 @@ class MiMoV2VLAudioLocalTransformer(nn.Module):
 
     def forward(self, hidden_states):
         positions = torch.arange(hidden_states.shape[1], device=hidden_states.device)[None]
-        position_embeddings = self.rotary_emb(positions)
+        position_embeddings = self.rotary_emb(hidden_states, positions)
         for layer in self.layers:
             hidden_states = layer(hidden_states, position_embeddings)
         return self.norm(hidden_states)
@@ -719,40 +707,21 @@ class MiMoV2VLResidualVectorQuantization(nn.Module):
 
 
 class MiMoV2VLAudioTokenizerAttention(WhisperAttention):
-    def __init__(self, config, layer_idx):
-        embed_dim = config.d_model
-        num_heads = config.encoder_attention_heads
-        dropout = 0.0
-        is_decoder = False
-        bias = True
-        is_causal = config.encoder_causal
-        super().__init__(
-            embed_dim=embed_dim,
-            num_heads=num_heads,
-            dropout=dropout,
-            is_decoder=is_decoder,
-            bias=bias,
-            is_causal=is_causal,
-            layer_idx=layer_idx,
-            config=config,
-        )
-        use_window = not config.hybrid_attention or layer_idx % config.swa_per_block < config.swa_per_block - 1
-        self.window_size = config.encoder_attn_window_size if use_window else (-1, -1)
+    @property
+    def window_size(self):
+        config = self.config
+        use_window = not config.hybrid_attention or self.layer_idx % config.swa_per_block < config.swa_per_block - 1
+        return config.encoder_attn_window_size if use_window else (-1, -1)
 
     def forward(self, hidden_states, lengths, position_embeddings) -> torch.Tensor:
         """Apply RoPE and MiMo's per-layer causal/window mask to the audio tokenizer states."""
         batch_size, sequence_length, _ = hidden_states.shape
-        shape = (
-            batch_size,
-            sequence_length,
-            self.config.encoder_attention_heads,
-            self.config.d_model // self.config.encoder_attention_heads,
-        )
+        shape = (batch_size, sequence_length, self.num_heads, self.head_dim)
         query, key, value = [
             projection(hidden_states).view(shape).transpose(1, 2)
             for projection in (self.q_proj, self.k_proj, self.v_proj)
         ]
-        query, key = apply_rotary_pos_emb(query, key, *position_embeddings)
+        query, key = apply_rotary_pos_emb_fp32(query, key, *position_embeddings)
         positions = torch.arange(sequence_length, device=hidden_states.device)
         allowed = positions[None, None, :] < lengths[:, None, None]
         if self.config.encoder_causal:
@@ -769,7 +738,13 @@ class MiMoV2VLAudioTokenizerAttention(WhisperAttention):
 class MiMoV2VLAudioTokenizerLayer(GradientCheckpointingLayer):
     def __init__(self, config, layer_idx):
         super().__init__()
-        self.self_attn = MiMoV2VLAudioTokenizerAttention(config, layer_idx)
+        self.self_attn = MiMoV2VLAudioTokenizerAttention(
+            embed_dim=config.d_model,
+            num_heads=config.encoder_attention_heads,
+            config=config,
+            layer_idx=layer_idx,
+            is_causal=config.encoder_causal,
+        )
         self.self_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.final_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.fc1 = nn.Linear(config.d_model, config.encoder_ffn_dim)
@@ -815,7 +790,7 @@ class MiMoV2VLAudioTokenizerEncoder(nn.Module):
         lengths = lengths.to(hidden_states.device)
         lengths = (lengths + 3 - config.kernel_size + 2 - config.kernel_size) // config.stride_size + 1
         positions = torch.arange(hidden_states.shape[1], device=hidden_states.device)[None]
-        position_embeddings = self.position_embedding(positions)
+        position_embeddings = self.position_embedding(hidden_states, positions)
         skip_hidden_states = None
         for index, layer in enumerate(self.layers):
             hidden_states = layer(hidden_states, lengths, position_embeddings)
@@ -925,12 +900,6 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
         self.audio_tokenizer = MiMoV2VLAudioTokenizerModel(config.audio_tokenizer_config)
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.language_model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.language_model.embed_tokens = value
-
     @auto_docstring
     def get_image_features(self, pixel_values: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
         return self.visual(pixel_values, image_grid_thw)
@@ -939,7 +908,7 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
     def get_video_features(self, pixel_values_videos: torch.Tensor, video_grid_thw: torch.Tensor) -> torch.Tensor:
         return self.visual(pixel_values_videos, video_grid_thw)
 
-    @auto_docstring
+    @auto_docstring(custom_args=_MULTIMODAL_ARGS)
     def get_audio_features(
         self,
         input_audio_codes=None,
@@ -949,18 +918,6 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
         feature_attention_mask=None,
         audio_codes=None,
     ):
-        """
-        input_audio_codes (`torch.LongTensor`, *optional*):
-            Grouped codec IDs of shape `(batch, grouped_time, group_size, audio_channels)`.
-        audio_feature_lens (`torch.LongTensor`, *optional*):
-            Valid grouped-token length of each audio sequence before batch padding.
-        audio_segment_offsets (`torch.LongTensor`, *optional*):
-            `(audio_index, start, length)` rows specifying audio segments in prompt order.
-        feature_attention_mask (`torch.Tensor`, *optional*):
-            Mask of valid mel frames, with shape `(batch, mel_time)`.
-        audio_codes (`torch.LongTensor`, *optional*):
-            Legacy unpadded codec IDs of shape `(time, audio_channels)`, already ordered to match the prompt.
-        """
         config = self.config.audio_config
         if sum(value is not None for value in (input_audio_codes, input_features, audio_codes)) != 1:
             raise ValueError("Specify exactly one of input_features, input_audio_codes, or audio_codes.")
@@ -1077,7 +1034,7 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
         return inputs_embeds
 
     @can_return_tuple
-    @auto_docstring
+    @auto_docstring(custom_args=_MULTIMODAL_ARGS)
     def forward(
         self,
         input_ids=None,
@@ -1099,20 +1056,6 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
         audio_codes=None,
         **kwargs,
     ):
-        """
-        input_audio_codes (`torch.LongTensor`, *optional*):
-            Grouped codec IDs of shape `(batch, grouped_time, group_size, audio_channels)`.
-        feature_attention_mask (`torch.Tensor`, *optional*):
-            Mask identifying valid mel frames in `input_features`.
-        audio_feature_lens (`torch.LongTensor`, *optional*):
-            Valid grouped-token length of each audio sequence.
-        audio_segment_offsets (`torch.LongTensor`, *optional*):
-            `(audio_index, start, length)` rows aligning audio features with prompt spans.
-        video_pixel_values (`torch.Tensor`, *optional*):
-            Legacy alias for `pixel_values_videos`. Specify only one of these inputs.
-        audio_codes (`torch.LongTensor`, *optional*):
-            Legacy unpadded, prompt-ordered codec IDs of shape `(time, audio_channels)`.
-        """
         inputs_embeds = self.get_multimodal_embeddings(
             input_ids,
             inputs_embeds=inputs_embeds,
@@ -1140,7 +1083,7 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
 
 
 @auto_docstring(checkpoint="XiaomiMiMo/MiMo-V2.6-Flash-RL")
-class MiMoV2VLForConditionalGeneration(MiMoV2VLPreTrainedModel, GenerationMixin):
+class MiMoV2VLForConditionalGeneration(VoxtralForConditionalGeneration):
     """Generate text from text, images, videos, and audio using the MiMo V2 VL architecture.
 
     Pass the tensors returned by `MiMoV2Processor` directly to `forward` or `generate`. Both waveform mel features
@@ -1148,6 +1091,7 @@ class MiMoV2VLForConditionalGeneration(MiMoV2VLPreTrainedModel, GenerationMixin)
     """
 
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+    _keep_in_fp32_modules_strict = AttributeError()
     _multimodal_input_names = (
         "pixel_values",
         "image_grid_thw",
@@ -1162,17 +1106,8 @@ class MiMoV2VLForConditionalGeneration(MiMoV2VLPreTrainedModel, GenerationMixin)
         "audio_segment_offsets",
     )
 
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = MiMoV2VLModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.model.set_input_embeddings(value)
+    def get_audio_features(self, *args, **kwargs):
+        raise AttributeError("Feature extraction is exposed by the multimodal base model.")
 
     @classmethod
     def from_original_checkpoint(cls, pretrained_model_name_or_path, **kwargs):
@@ -1182,7 +1117,7 @@ class MiMoV2VLForConditionalGeneration(MiMoV2VLPreTrainedModel, GenerationMixin)
         return load_original_checkpoint(pretrained_model_name_or_path, **kwargs)
 
     @can_return_tuple
-    @auto_docstring
+    @auto_docstring(custom_args=_MULTIMODAL_ARGS)
     def forward(
         self,
         input_ids=None,
@@ -1206,62 +1141,28 @@ class MiMoV2VLForConditionalGeneration(MiMoV2VLPreTrainedModel, GenerationMixin)
         audio_codes=None,
         **kwargs,
     ):
-        """
-        input_audio_codes (`torch.LongTensor`, *optional*):
-            Grouped codec IDs of shape `(batch, grouped_time, group_size, audio_channels)`.
-        feature_attention_mask (`torch.Tensor`, *optional*):
-            Mask identifying valid mel frames in `input_features`.
-        audio_feature_lens (`torch.LongTensor`, *optional*):
-            Valid grouped-token length of each audio sequence.
-        audio_segment_offsets (`torch.LongTensor`, *optional*):
-            `(audio_index, start, length)` rows aligning audio features with prompt spans.
-        video_pixel_values (`torch.Tensor`, *optional*):
-            Legacy alias for `pixel_values_videos`. Specify only one of these inputs.
-        audio_codes (`torch.LongTensor`, *optional*):
-            Legacy unpadded, prompt-ordered codec IDs of shape `(time, audio_channels)`.
-        """
-        outputs = self.model(
-            input_ids=input_ids,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
+        """Run the MiMo V2 VL language-model head."""
+        kwargs.update(
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             pixel_values_videos=pixel_values_videos,
             video_grid_thw=video_grid_thw,
             input_audio_codes=input_audio_codes,
-            input_features=input_features,
             feature_attention_mask=feature_attention_mask,
             audio_feature_lens=audio_feature_lens,
             audio_segment_offsets=audio_segment_offsets,
             video_pixel_values=video_pixel_values,
             audio_codes=audio_codes,
             return_dict=True,
-            **kwargs,
         )
-        slices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(outputs.last_hidden_state[:, slices, :])
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(
-                logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
-            )
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+        return super().forward(past_key_values=past_key_values, use_cache=use_cache, **kwargs)
 
     def prepare_inputs_for_generation(self, input_ids, is_first_iteration=False, **kwargs):
         cache = kwargs.get("past_key_values")
         if kwargs.get("use_cache", True) and (cache is None or cache.get_seq_length() == 0):
             is_first_iteration = True
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids, is_first_iteration=is_first_iteration, **kwargs
+        model_inputs = GenerationMixin.prepare_inputs_for_generation(
+            self, input_ids, is_first_iteration=is_first_iteration, **kwargs
         )
         if (
             not is_first_iteration
@@ -1292,7 +1193,7 @@ class MiMoV2VLForConditionalGeneration(MiMoV2VLPreTrainedModel, GenerationMixin)
             model_kwargs["inputs_embeds"] = self.model.get_multimodal_embeddings(
                 input_ids, inputs_embeds=model_kwargs.get("inputs_embeds"), **multimodal_inputs
             )
-        return super()._expand_inputs_for_generation(
+        return GenerationMixin._expand_inputs_for_generation(
             expand_size=expand_size, is_encoder_decoder=is_encoder_decoder, input_ids=input_ids, **model_kwargs
         )
 

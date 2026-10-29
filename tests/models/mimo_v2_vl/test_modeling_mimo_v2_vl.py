@@ -602,6 +602,50 @@ class MiMoV2VLModelTest(unittest.TestCase):
         for value, reference in zip(actual, expected):
             torch.testing.assert_close(value, reference)
 
+    @parameterized.expand([(dtype, dim) for dtype in ("float16", "bfloat16", "float32", "float64") for dim in (4, 8)])
+    def test_rotary_dtype_and_partial_rotation(self, dtype, rotary_dim):
+        from transformers.models.mimo_v2_vl.modeling_mimo_v2_vl import (
+            MiMoV2VLRotaryEmbedding,
+            apply_rotary_pos_emb_fp32,
+        )
+
+        dtype = getattr(torch, dtype)
+        query = torch.randn(1, 2, 3, 8, dtype=dtype, device=torch_device, requires_grad=True)
+        key = torch.randn(1, 1, 3, 8, dtype=dtype, device=torch_device, requires_grad=True)
+        positions = torch.tensor([[0, 49000, 49001]], device=torch_device)
+        cos, sin = MiMoV2VLRotaryEmbedding(rotary_dim, 10000.0).to(torch_device)(query, positions)
+        self.assertEqual(cos.dtype, torch.float32)
+        self.assertEqual(sin.dtype, torch.float32)
+        actual = apply_rotary_pos_emb_fp32(query, key, cos, sin)
+        for value, original in zip(actual, (query, key)):
+            self.assertEqual(value.dtype, dtype)
+            self.assertEqual(value.shape, original.shape)
+            torch.testing.assert_close(
+                value[:, :, 0, :rotary_dim], original[:, :, 0, :rotary_dim].float().to(dtype), rtol=0, atol=0
+            )
+            torch.testing.assert_close(value[..., rotary_dim:], original[..., rotary_dim:], rtol=0, atol=0)
+        # Q/K and V must retain matching dtypes, including asymmetric value head dimensions.
+        value = torch.randn(1, 2, 3, 4, dtype=dtype, device=torch_device)
+        output = torch.nn.functional.scaled_dot_product_attention(actual[0], actual[1].repeat_interleave(2, 1), value)
+        self.assertEqual(output.dtype, dtype)
+        output.float().sum().backward()
+        self.assertTrue(torch.isfinite(query.grad).all())
+        self.assertTrue(torch.isfinite(key.grad).all())
+
+    def test_rotary_bfloat16_rounds_after_rotation_and_gradient_accumulation(self):
+        from transformers.models.mimo_v2_vl.modeling_mimo_v2_vl import apply_rotary_pos_emb_fp32
+
+        query = torch.ones(1, 1, 1, 2, dtype=torch.bfloat16, device=torch_device, requires_grad=True)
+        cos = torch.full((1, 1, 2), 0.6, dtype=torch.float32, device=torch_device)
+        sin = torch.full((1, 1, 2), 0.8, dtype=torch.float32, device=torch_device)
+        rotated, _ = apply_rotary_pos_emb_fp32(query, query.detach(), cos, sin)
+        # Rotating (1, 1) gives (-0.2, 1.4); rounding either the phases or intermediate products changes this.
+        expected = torch.tensor([[[[-0.2, 1.4]]]], dtype=torch.bfloat16, device=torch_device)
+        torch.testing.assert_close(rotated, expected, rtol=0, atol=0)
+        rotated.sum().backward()
+        expected_gradient = torch.tensor([[[[1.4, -0.2]]]], dtype=torch.bfloat16, device=torch_device)
+        torch.testing.assert_close(query.grad, expected_gradient, rtol=0, atol=0)
+
     @require_torch_gpu
     def test_rotary_reinitialization_matches_cpu_construction(self):
         from transformers.models.mimo_v2_vl.modeling_mimo_v2_vl import MiMoV2VLRotaryEmbedding
