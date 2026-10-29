@@ -122,7 +122,7 @@ class ReplaceMarkedBlockTest(unittest.TestCase):
         out = replace_marked_block(body, "<!--s-->", "<!--e-->", "<!--s-->\nnew\n<!--e-->")
         self.assertEqual(out, "before\n<!--s-->\nnew\n<!--e-->\nafter")
 
-    def test_only_replaces_first_block_region(self):
+    def test_replaces_all_marked_regions(self):
         body = "<!--s-->a<!--e--> mid <!--s-->b<!--e-->"
         out = replace_marked_block(body, "<!--s-->", "<!--e-->", "REPL")
         # non-greedy match replaces each marked region
