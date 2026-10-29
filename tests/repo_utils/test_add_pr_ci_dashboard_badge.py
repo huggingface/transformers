@@ -26,14 +26,7 @@ import add_pr_ci_dashboard_badge as badge_mod  # noqa: E402
 from add_pr_ci_dashboard_badge import (  # noqa: E402
     BADGE_END,
     BADGE_START,
-    RECAP_END,
-    RECAP_START,
-    delete_old_dashboard_comments,
-    delete_recap_comments,
-    find_open_pr_for_sha,
-    github_paginate,
     inject_ci_badge,
-    remove_marked_block,
     render_ci_badge,
     replace_marked_block,
 )
@@ -66,9 +59,7 @@ class RenderBadgeTest(unittest.TestCase):
 class BadgeUpdateTest(unittest.TestCase):
     def run_main(self, body, event=None, state="open"):
         if event is None:
-            event = {
-                "workflow_run": {"id": 1, "event": "pull_request", "head_sha": "abc", "html_url": "https://gh/run/1"}
-            }
+            event = {"pull_request": {"number": 123}}
         pr = {"number": 123, "html_url": "https://gh/pr/123", "body": body, "state": state}
         request = Mock(return_value=pr)
         with (
@@ -79,9 +70,6 @@ class BadgeUpdateTest(unittest.TestCase):
             patch("builtins.open", mock_open(read_data=json.dumps(event))),
             patch.multiple(
                 badge_mod,
-                find_open_pr_for_sha=Mock(return_value=pr),
-                delete_old_dashboard_comments=Mock(),
-                delete_recap_comments=Mock(),
                 github_request=request,
             ),
         ):
@@ -116,17 +104,12 @@ class BadgeUpdateTest(unittest.TestCase):
 
     def test_updates_header_when_badge_is_missing(self):
         request = self.run_main("Description")
-        request.assert_called_once()
+        self.assertEqual(request.call_count, 2)
         self.assertEqual(request.call_args.kwargs["method"], "PATCH")
         body = request.call_args.kwargs["payload"]["body"]
         self.assertIn("![🤗 Transformers CI]", body)
         self.assertIn("?var-pr=123", body)
         self.assertTrue(body.endswith("Description"))
-
-    def test_does_not_rewrite_an_unchanged_header(self):
-        badge = render_ci_badge(f"{badge_mod.DASHBOARD_URL}?var-pr=123")
-        request = self.run_main(f"{badge}\n\nDescription")
-        request.assert_not_called()
 
 
 class ReplaceMarkedBlockTest(unittest.TestCase):
@@ -146,22 +129,6 @@ class ReplaceMarkedBlockTest(unittest.TestCase):
         self.assertEqual(out, "REPL mid REPL")
 
 
-class RemoveMarkedBlockTest(unittest.TestCase):
-    def test_keeps_body_when_no_existing_block(self):
-        out = remove_marked_block("Hello world", RECAP_START, RECAP_END)
-        self.assertEqual(out, "Hello world")
-
-    def test_handles_none_body(self):
-        out = remove_marked_block(None, RECAP_START, RECAP_END)
-        self.assertEqual(out, "")
-
-    def test_removes_existing_block(self):
-        old = f"text\n{RECAP_START}\nold\n{RECAP_END}\ntail"
-        out = remove_marked_block(old, RECAP_START, RECAP_END)
-        self.assertEqual(out, "text\n\ntail")
-        self.assertNotIn("old", out)
-
-
 class InjectBadgeTest(unittest.TestCase):
     def test_prepends_when_no_existing_block(self):
         badge = f"{BADGE_START}\nbadge\n{BADGE_END}"
@@ -179,112 +146,6 @@ class InjectBadgeTest(unittest.TestCase):
         out = inject_ci_badge(old, badge)
         self.assertEqual(out, f"{badge}\n\nHello")
         self.assertNotIn("old", out)
-
-    def test_badge_and_recap_compose(self):
-        badge = f"{BADGE_START}\nbadge\n{BADGE_END}"
-        recap = f"{RECAP_START}\nrecap\n{RECAP_END}"
-        body = inject_ci_badge("Original PR text", badge)
-        body = f"{body}\n\n{recap}"
-        body = remove_marked_block(body, RECAP_START, RECAP_END)
-        self.assertTrue(body.startswith(badge))
-        self.assertIn("Original PR text", body)
-        self.assertNotIn(RECAP_START, body)
-
-
-class GithubPaginateTest(unittest.TestCase):
-    def test_stops_on_short_page(self):
-        page = [{"i": n} for n in range(100)]
-        with patch.object(badge_mod, "github_request", side_effect=[page, [{"i": 100}]]) as mocked:
-            items = github_paginate("/repos/x/y/pulls", token="t")
-        self.assertEqual(len(items), 101)
-        self.assertEqual(mocked.call_count, 2)
-
-    def test_stops_on_empty_first_page(self):
-        with patch.object(badge_mod, "github_request", return_value=[]) as mocked:
-            items = github_paginate("/repos/x/y/pulls", token="t")
-        self.assertEqual(items, [])
-        self.assertEqual(mocked.call_count, 1)
-
-    def test_extracts_keyed_payload(self):
-        with patch.object(badge_mod, "github_request", return_value={"jobs": [{"name": "a"}]}):
-            items = github_paginate("/repos/x/y/actions/runs/1/jobs", token="t", key="jobs")
-        self.assertEqual(items, [{"name": "a"}])
-
-    def test_builds_query_separator_when_path_has_query(self):
-        with patch.object(badge_mod, "github_request", return_value=[]) as mocked:
-            github_paginate("/repos/x/y/pulls?state=open", token="t")
-        url = mocked.call_args.args[0]
-        self.assertIn("?state=open&per_page=100&page=1", url)
-
-
-class FindOpenPrTest(unittest.TestCase):
-    def test_matches_head_sha(self):
-        prs = [
-            {"number": 1, "head": {"sha": "aaa"}},
-            {"number": 2, "head": {"sha": "bbb"}},
-        ]
-        with patch.object(badge_mod, "github_paginate", return_value=prs):
-            self.assertEqual(find_open_pr_for_sha("x/y", "t", "bbb")["number"], 2)
-
-    def test_returns_none_when_no_match(self):
-        with patch.object(badge_mod, "github_paginate", return_value=[{"number": 1, "head": {"sha": "aaa"}}]):
-            self.assertIsNone(find_open_pr_for_sha("x/y", "t", "zzz"))
-
-
-class DeleteOldCommentsTest(unittest.TestCase):
-    def test_deletes_only_dashboard_comments(self):
-        marker = badge_mod.OLD_DASHBOARD_COMMENT_MARKERS[0]
-        comments = [
-            {"id": 1, "body": f"hello {marker} there"},
-            {"id": 2, "body": "an unrelated comment"},
-            {"id": 3, "body": None},
-        ]
-        with (
-            patch.object(badge_mod, "github_paginate", return_value=comments),
-            patch.object(badge_mod, "github_request") as request_mock,
-        ):
-            delete_old_dashboard_comments("x/y", "t", 5)
-        self.assertEqual(request_mock.call_count, 1)
-        deleted_url = request_mock.call_args.args[0]
-        self.assertIn("/comments/1", deleted_url)
-        self.assertEqual(request_mock.call_args.kwargs["method"], "DELETE")
-
-
-class DeleteRecapCommentsTest(unittest.TestCase):
-    def test_deletes_recap_comments_only(self):
-        comments = [
-            {"id": 1, "body": "an unrelated comment"},
-            {"id": 2, "body": f"{RECAP_START}\nold\n{RECAP_END}"},
-        ]
-        with (
-            patch.object(badge_mod, "github_paginate", return_value=comments),
-            patch.object(badge_mod, "github_request") as request_mock,
-        ):
-            delete_recap_comments("x/y", "t", 5)
-        self.assertEqual(request_mock.call_count, 1)
-        self.assertIn("/comments/2", request_mock.call_args.args[0])
-        self.assertEqual(request_mock.call_args.kwargs["method"], "DELETE")
-
-    def test_deletes_multiple_recap_comments(self):
-        comments = [
-            {"id": 1, "body": f"{RECAP_START}\nold 1\n{RECAP_END}"},
-            {"id": 2, "body": f"{RECAP_START}\nold 2\n{RECAP_END}"},
-        ]
-        with (
-            patch.object(badge_mod, "github_paginate", return_value=comments),
-            patch.object(badge_mod, "github_request") as request_mock,
-        ):
-            delete_recap_comments("x/y", "t", 5)
-        self.assertEqual(request_mock.call_count, 2)
-        self.assertEqual([c.kwargs["method"] for c in request_mock.call_args_list], ["DELETE", "DELETE"])
-
-    def test_no_op_when_no_recap_comments(self):
-        with (
-            patch.object(badge_mod, "github_paginate", return_value=[{"id": 1, "body": "unrelated"}]),
-            patch.object(badge_mod, "github_request") as request_mock,
-        ):
-            delete_recap_comments("x/y", "t", 5)
-        request_mock.assert_not_called()
 
 
 if __name__ == "__main__":

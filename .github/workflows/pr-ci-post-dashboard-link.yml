@@ -16,9 +16,7 @@ jobs:
       actions: read
       contents: read
       pull-requests: write
-    if: >-
-      github.event_name == 'pull_request_target' ||
-      (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request')
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-22.04
     steps:
       - name: Download PR CI dashboard badge script
@@ -46,8 +44,7 @@ jobs:
       actions: read
       contents: read
       pull-requests: write
-    if: always() && github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request'
-    needs: post-link
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout repo (for post_mlinter_review.py and github_utils.py)

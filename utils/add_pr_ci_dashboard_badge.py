@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Inject a Grafana CI badge into the PR description and clean up legacy recap comments."""
+"""Inject a Grafana CI badge into the PR description."""
 
 import json
 import os
@@ -30,48 +30,6 @@ DASHBOARD_URL = "https://transformers-ci.huggingface.cool/d/pytest-observability
 BADGE_URL = "https://img.shields.io/badge/%F0%9F%A4%97%20Transformers%20CI-333333?style=flat"
 BADGE_START = "<!-- ci-dashboard-badge:start -->"
 BADGE_END = "<!-- ci-dashboard-badge:end -->"
-RECAP_START = "<!-- ci-dashboard-recap:start -->"
-RECAP_END = "<!-- ci-dashboard-recap:end -->"
-OLD_DASHBOARD_COMMENT_MARKERS = (
-    "**CI Observability Dashboard:** [View test results in Grafana]",
-    "**CI Dashboard:** [View test results in Grafana]",
-)
-
-
-def log_workflow_run(workflow_run):
-    """Print the GitHub Actions workflow_run payload fields used for debugging."""
-    print("=== Triggering PR CI workflow_run info ===")
-    print(f"  Run ID:           {workflow_run.get('id')}")
-    print(f"  Run number:       {workflow_run.get('run_number')}")
-    print(f"  Run URL:          {workflow_run.get('html_url')}")
-    print(f"  Triggering event: {workflow_run.get('event')}")
-    print(f"  Conclusion:       {workflow_run.get('conclusion')}")
-    print(f"  Head branch:      {workflow_run.get('head_branch')}")
-    print(f"  Head SHA:         {workflow_run.get('head_sha')}")
-    print(f"  Actor:            {(workflow_run.get('actor') or {}).get('login')}")
-    print(f"  Triggering actor: {(workflow_run.get('triggering_actor') or {}).get('login')}")
-    print(f"  Created at:       {workflow_run.get('created_at')}")
-    print(f"  Run started at:   {workflow_run.get('run_started_at')}")
-    print(f"  Updated at:       {workflow_run.get('updated_at')}")
-    print("==========================================")
-
-
-def github_paginate(path, token, key=None):
-    """Return all items from a paginated GitHub API endpoint."""
-    page = 1
-    items = []
-    separator = "&" if "?" in path else "?"
-    while True:
-        url = f"{GITHUB_API_URL}{path}{separator}per_page=100&page={page}"
-        payload = github_request(url, token=token)
-        page_items = payload[key] if key is not None else payload
-        if not page_items:
-            break
-        items.extend(page_items)
-        if len(page_items) < 100:
-            break
-        page += 1
-    return items
 
 
 def replace_marked_block(body, start_marker, end_marker, replacement):
@@ -81,14 +39,6 @@ def replace_marked_block(body, start_marker, end_marker, replacement):
     if pattern.search(existing_body):
         return pattern.sub(replacement, existing_body)
     return None
-
-
-def remove_marked_block(body, start_marker, end_marker):
-    """Remove all marked Markdown regions from a body and normalize blank lines."""
-    updated = replace_marked_block(body, start_marker, end_marker, "")
-    if updated is None:
-        return body or ""
-    return re.sub(r"\n{3,}", "\n\n", updated).strip()
 
 
 def render_ci_badge(dashboard_url):
@@ -105,37 +55,8 @@ def inject_ci_badge(body, badge):
     return f"{badge}\n\n{existing_body.lstrip()}".rstrip()
 
 
-def find_open_pr_for_sha(repo, token, head_sha):
-    """Find the open pull request whose head commit matches a workflow run SHA."""
-    prs = github_paginate(f"/repos/{repo}/pulls?state=open", token)
-    return next((pr for pr in prs if pr["head"]["sha"] == head_sha), None)
-
-
-def delete_old_dashboard_comments(repo, token, pr_number):
-    """Delete legacy dashboard comments created before the recap marker flow."""
-    comments = github_paginate(f"/repos/{repo}/issues/{pr_number}/comments", token)
-    for comment in comments:
-        body = comment.get("body") or ""
-        if any(marker in body for marker in OLD_DASHBOARD_COMMENT_MARKERS):
-            github_request(
-                f"{GITHUB_API_URL}/repos/{repo}/issues/comments/{comment['id']}", token=token, method="DELETE"
-            )
-
-
-def delete_recap_comments(repo, token, pr_number):
-    """Delete any existing CI recap comments (cleanup from before this change)."""
-    comments = github_paginate(f"/repos/{repo}/issues/{pr_number}/comments", token)
-    for comment in comments:
-        if RECAP_START in (comment.get("body") or ""):
-            github_request(
-                f"{GITHUB_API_URL}/repos/{repo}/issues/comments/{comment['id']}",
-                token=token,
-                method="DELETE",
-            )
-
-
 def main():
-    """Add the badge when a PR opens, with CI completion as a fallback and legacy cleanup."""
+    """Add the CI dashboard badge when a PR opens or is reopened."""
     token = os.environ["GITHUB_TOKEN"]
     repo = os.environ["GITHUB_REPOSITORY"]
     event_path = os.environ["GITHUB_EVENT_PATH"]
@@ -143,35 +64,17 @@ def main():
     with open(event_path, encoding="utf-8") as event_file:
         event = json.load(event_file)
 
-    if "pull_request" in event:
-        # The description may have changed while the job was queued. Fetch it by PR number
-        # instead of reusing the event body or searching for a potentially outdated head SHA.
-        pr_number = event["pull_request"]["number"]
-        pr = github_request(f"{GITHUB_API_URL}/repos/{repo}/pulls/{pr_number}", token=token)
-        if pr["state"] != "open":
-            print(f"PR #{pr_number} is no longer open, skipping")
-            return
-    else:
-        workflow_run = event["workflow_run"]
-        log_workflow_run(workflow_run)
-
-        if workflow_run.get("event") != "pull_request":
-            print(f"Workflow run event is {workflow_run.get('event')!r}, skipping")
-            return
-
-        pr = find_open_pr_for_sha(repo, token, workflow_run["head_sha"])
-        if pr is None:
-            print(f"No open PR found for SHA {workflow_run['head_sha']}, skipping")
-            return
+    # The description may have changed while the job was queued. Fetch it by PR number
+    # instead of reusing the event body or searching for a potentially outdated head SHA.
+    pr_number = event["pull_request"]["number"]
+    pr = github_request(f"{GITHUB_API_URL}/repos/{repo}/pulls/{pr_number}", token=token)
+    if pr["state"] != "open":
+        print(f"PR #{pr_number} is no longer open, skipping")
+        return
 
     print(f"Matched PR #{pr['number']}: {pr['html_url']}")
-    if "workflow_run" in event:
-        delete_old_dashboard_comments(repo, token, pr["number"])
-        delete_recap_comments(repo, token, pr["number"])
-
     dashboard_url = f"{DASHBOARD_URL}?var-pr={pr['number']}"
     updated_body = inject_ci_badge(pr.get("body"), render_ci_badge(dashboard_url))
-    updated_body = remove_marked_block(updated_body, RECAP_START, RECAP_END)
     if updated_body != (pr.get("body") or ""):
         github_request(
             f"{GITHUB_API_URL}/repos/{repo}/pulls/{pr['number']}",
