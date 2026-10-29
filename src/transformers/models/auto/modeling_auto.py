@@ -2112,6 +2112,7 @@ MODEL_FOR_AUDIO_TOKENIZATION_NAMES = OrderedDict(
 
 MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
     [
+        ("clef", "ClefForDecision"),
         ("jev", "JevForDecision"),
         ("kev", "KevForDecision"),
         ("von", "VonForDecision"),
