@@ -611,6 +611,8 @@ class HYV4VLModel(Qwen2VLModel):
 
 @auto_docstring
 class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
+    _tp_plan = {"lm_head": "colwise_gather_output"}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _keep_in_fp32_modules_strict = ["lm_head"]
 
     def forward(

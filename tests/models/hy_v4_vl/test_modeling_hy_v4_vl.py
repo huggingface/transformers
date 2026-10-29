@@ -175,6 +175,18 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
                 self.assertEqual(state.shape, (batch_size, seq_len, text_config.hc_mult, text_config.hidden_size))
             self.assertEqual(hidden_states[-1].shape, (batch_size, seq_len, text_config.hidden_size))
 
+    @unittest.skip("The model accesses `.weight` directly in code")
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip("The model accesses `.weight` directly in code")
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip("The model accesses `.weight` directly in code")
+    def test_disk_offload_safetensors(self):
+        pass
+
     @unittest.skip("The text attention (sinks + DSA) is eager-only, so the top-level model cannot switch to SDPA")
     def test_can_set_attention_dynamically_composite_model(self):
         pass

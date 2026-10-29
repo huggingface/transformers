@@ -177,7 +177,7 @@ class HYV4VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         nested_estimate = processor._get_num_multimodal_tokens(video_sizes=[(3, 64, 128)], videos_kwargs=videos_kwargs)
         self.assertEqual(nested_estimate.num_video_tokens, [expected])
         self.assertEqual(
-            processor.video_processor.get_num_of_video_patches(3, 64, 128, videos_kwargs),
+            processor.video_processor.get_num_of_video_patches(3, 64, 128, videos_kwargs)[0],
             output.pixel_values_videos.shape[0],
         )
         self.assertEqual(processor.video_processor.to_dict(), original_video_config)

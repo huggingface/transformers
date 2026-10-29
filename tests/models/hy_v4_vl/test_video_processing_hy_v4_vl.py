@@ -220,13 +220,15 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         processor = self.fast_video_processing_class(**self.video_processor_dict)
         video = np.zeros((3, 64, 128, 3), dtype=np.uint8)
         output = processor(video, **kwargs, return_tensors="pt")
-        estimate = processor.get_num_of_video_patches(3, 64, 128, kwargs)
-        self.assertIsInstance(estimate, int)
-        patches, grid_t, grid_h, grid_w = processor.get_num_of_video_patches(3, 64, 128, kwargs, )
-        self.assertEqual(patches, estimate)
+        patches, grid_t, grid_h, grid_w = processor.get_num_of_video_patches(
+            3,
+            64,
+            128,
+            kwargs,
+        )
         self.assertEqual((grid_t, grid_h, grid_w), tuple(output.video_grid_thw[0].tolist()))
-        self.assertEqual(estimate, output.pixel_values_videos.shape[0])
-        self.assertEqual(estimate, output.video_grid_thw.prod().item())
+        self.assertEqual(patches, output.pixel_values_videos.shape[0])
+        self.assertEqual(patches, output.video_grid_thw.prod().item())
 
     def test_resize_is_idempotent(self):
         # A frame that was already resized must come out unchanged from a second pass.
@@ -253,7 +255,11 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         rows, cols = grid_h // processor.merge_size, grid_w // processor.merge_size
         self.assertLessEqual(grid_t * rows * (cols + 1), budget_tokens)
         # The serving-side estimate has to agree with what the processor actually produced.
-        patches, *grid = processor.get_num_of_video_patches(8, 720, 1280, )
+        patches, *grid = processor.get_num_of_video_patches(
+            8,
+            720,
+            1280,
+        )
         self.assertEqual(tuple(grid), (grid_t, grid_h, grid_w))
         self.assertEqual(patches, output.pixel_values_videos.shape[0])
 

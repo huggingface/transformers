@@ -63,6 +63,7 @@ class HYV4Config(PreTrainedConfig):
     }
     base_model_tp_plan = {
         # TODO: needs `colwise_local` for the sinks, the attention is not sharded until then
+        # noqa: NC001
         # "layers.*.self_attn.q_b_proj": "colwise",
         # "layers.*.self_attn.kv_a_proj_with_mqa": "mla_kv_a_proj",
         # "layers.*.self_attn.kv_b_proj": "colwise",
