@@ -16,18 +16,19 @@ from collections.abc import Callable
 from functools import wraps
 
 from ..feature_extraction_utils import BatchFeature
+from ..image_utils import PILImageResampling
 from ..utils.import_utils import is_torch_available
 
 
 if is_torch_available():
     import torch
 
-    from . import hub_kernels
+    from .hub_kernels import lazy_load_kernel
 
 
 _PROCESSING_KERNEL_ADAPTERS: dict[str, tuple[str, Callable]] = {}
 _KERNEL_DEVICE_TYPE = "cuda"
-_KERNEL_INTERPOLATIONS = {2: "bilinear", 3: "bicubic"}
+KERNEL_INTERPOLATIONS = {PILImageResampling.BILINEAR: "bilinear", PILImageResampling.BICUBIC: "bicubic"}
 
 
 def register_processing_kernel(name: str, kernel_name: str):
@@ -48,15 +49,28 @@ def register_processing_kernel(name: str, kernel_name: str):
 
 def run_processing_kernel(name: str, *args, **kwargs):
     """Run the kernel registered for the processing op `name`, or return `None` if the default path should be used."""
-    if not is_torch_available() or name not in _PROCESSING_KERNEL_ADAPTERS or not hub_kernels._kernels_enabled:
-        return None
-    if not torch.cuda.is_available():
+    if not is_torch_available() or name not in _PROCESSING_KERNEL_ADAPTERS:
         return None
     kernel_name, adapter = _PROCESSING_KERNEL_ADAPTERS[name]
-    kernel = hub_kernels.lazy_load_kernel(kernel_name)
+    kernel = lazy_load_kernel(kernel_name)
     if kernel is None:
         return None
     return adapter(kernel, *args, **kwargs)
+
+
+def kernel_can_resize(images, resample):
+    """Whether one launch of the resize kernels can resize `images` with `resample`: uint8, one device, one channel count."""
+    return (
+        resample in KERNEL_INTERPOLATIONS
+        and bool(images)
+        and all(
+            image.device.type == _KERNEL_DEVICE_TYPE
+            and image.dtype == torch.uint8
+            and image.device == images[0].device
+            and image.shape[-3] == images[0].shape[-3]
+            for image in images
+        )
+    )
 
 
 @register_processing_kernel("connected_component_areas", kernel_name="cv-utils")
@@ -67,30 +81,14 @@ def _connected_component_areas_kernel(kernel, regions):
     return kernel.connected_component_areas(regions)
 
 
-def _kernel_supports(images):
-    """Whether the resize kernels can process `images` in one launch: uint8, one kernel device, one channel count."""
-    return (
-        bool(images)
-        and images[0].device.type == _KERNEL_DEVICE_TYPE
-        and all(
-            image.dtype == torch.uint8 and image.device == images[0].device and image.shape[-3] == images[0].shape[-3]
-            for image in images
-        )
-    )
-
-
 @register_processing_kernel("resize_normalize", kernel_name="cv-utils")
 def _resize_normalize_kernel(kernel, images, sizes, crop_size, resample, rescale_factor, image_mean, image_std):
     """Resize every image to its size in `sizes`, center crop to `crop_size` when given, then rescale and normalize."""
-    interpolation = _KERNEL_INTERPOLATIONS.get(resample)
-    if interpolation is None or not _kernel_supports(images):
+    if not kernel_can_resize(images, resample):
         return None
-    crop = None
-    if crop_size is not None:
-        crop = (crop_size.height, crop_size.width)
-        if not all(crop) or any(crop[0] > height or crop[1] > width for height, width in sizes):
-            return None
-    return kernel.resize_normalize(images, sizes, image_mean, image_std, rescale_factor, interpolation, crop_size=crop)
+    return kernel.resize_normalize(
+        images, sizes, image_mean, image_std, rescale_factor, KERNEL_INTERPOLATIONS[resample], crop_size=crop_size
+    )
 
 
 @register_processing_kernel("resize_normalize_patchify", kernel_name="cv-utils")
@@ -103,12 +101,11 @@ def _resize_normalize_patchify_kernel(
     image_mean,
     image_std,
     patch_size,
-    block_size,
+    patch_block_size,
     temporal_patch_size,
 ):
-    """Resize every `(T, C, H, W)` input to its target frame size, normalize, and write its flattened patches in order."""
-    interpolation = _KERNEL_INTERPOLATIONS.get(resample)
-    if interpolation is None or not _kernel_supports(inputs):
+    """Resize every `(T, C, H, W)` input to its target frame size, normalize, and write its patches in order."""
+    if not kernel_can_resize(inputs, resample):
         return None
     return kernel.resize_normalize_patchify(
         inputs,
@@ -116,25 +113,33 @@ def _resize_normalize_patchify_kernel(
         image_mean,
         image_std,
         rescale_factor,
-        interpolation,
+        KERNEL_INTERPOLATIONS[resample],
         patch_size,
-        block_size,
+        patch_block_size,
         temporal_patch_size,
     )
 
 
-def use_processing_kernel(preprocess_with_kernel: Callable):
+@register_processing_kernel("upsample_argmax", kernel_name="cv-utils")
+def _upsample_argmax_kernel(kernel, logits, target_sizes):
+    """Class of every pixel of `logits` `(B, C, h, w)` upsampled to `target_sizes`, without the upsampled logits."""
+    if logits.device.type != _KERNEL_DEVICE_TYPE:
+        return None
+    return kernel.upsample_argmax(logits, target_sizes)
+
+
+def use_processing_kernel(run_with_kernel: Callable):
     """
-    Decorate the `_preprocess` method of a processor so that `use_kernels=True` first runs `preprocess_with_kernel`.
+    Decorate a processor method so that `use_kernels=True` first runs `run_with_kernel`.
 
-    `preprocess_with_kernel` receives the processor and the named arguments of `_preprocess`. It returns
-    the `BatchFeature` computed by a kernel, or `None` to keep the decorated implementation.
+    `run_with_kernel` receives the processor and the named arguments of the method. It returns the kernel result, or
+    `None` to run the method as usual.
     """
 
-    def decorator(preprocess: Callable) -> Callable:
-        signature = inspect.signature(preprocess)
+    def decorator(method: Callable) -> Callable:
+        signature = inspect.signature(method)
 
-        @wraps(preprocess)
+        @wraps(method)
         def wrapper(self, *args, **kwargs):
             if self.use_kernels:
                 arguments = signature.bind(self, *args, **kwargs)
@@ -142,10 +147,10 @@ def use_processing_kernel(preprocess_with_kernel: Callable):
                 named_arguments = dict(arguments.arguments)
                 named_arguments.pop("self")
                 named_arguments.update(named_arguments.pop("kwargs", {}))
-                output = preprocess_with_kernel(self, **named_arguments)
+                output = run_with_kernel(self, **named_arguments)
                 if output is not None:
                     return output
-            return preprocess(self, *args, **kwargs)
+            return method(self, *args, **kwargs)
 
         return wrapper
 
@@ -169,13 +174,7 @@ def resize_normalize_patchify_images_with_kernel(
     return_tensors,
     **kwargs,
 ):
-    """
-    `pixel_values` and `image_grid_thw` of the Qwen2-VL image pipeline, computed by one kernel call for the batch.
-
-    Target sizes come from the `_resized_size` method of the processor. Patches are written in blocks of
-    `processor.patch_block_size`, `merge_size` when it is `None`, and returned as `(C * T, P, P)` blocks when
-    `processor.flat_patches` is `False`.
-    """
+    """`pixel_values` and `image_grid_thw` of the Qwen2-VL image pipeline, from one kernel call for the batch."""
     if not (do_resize and do_rescale and do_normalize):
         return None
     target_sizes = [
@@ -193,13 +192,13 @@ def resize_normalize_patchify_images_with_kernel(
         image_mean,
         image_std,
         patch_size,
-        merge_size if processor.patch_block_size is None else processor.patch_block_size,
+        getattr(processor, "patch_block_size", merge_size),
         temporal_patch_size,
     )
     if kernel_output is None:
         return None
     pixel_values, image_grid_thw = kernel_output
-    if not processor.flat_patches:
+    if not getattr(processor, "flatten_patches", True):
         pixel_values = pixel_values.view(-1, images[0].shape[0] * temporal_patch_size, patch_size, patch_size)
     return BatchFeature(
         data={"pixel_values": pixel_values, "image_grid_thw": image_grid_thw}, tensor_type=return_tensors
@@ -224,7 +223,7 @@ def resize_normalize_patchify_videos_with_kernel(
     return_tensors,
     **kwargs,
 ):
-    """`pixel_values_videos` and `video_grid_thw` of the Qwen2-VL video pipeline, one kernel call for all frames."""
+    """`pixel_values_videos` and `video_grid_thw` of the Qwen2-VL video pipeline, from one kernel call for all frames."""
     if not (do_resize and do_rescale and do_normalize):
         return None
     target_sizes = [
@@ -248,7 +247,7 @@ def resize_normalize_patchify_videos_with_kernel(
         image_mean,
         image_std,
         patch_size,
-        merge_size,
+        getattr(processor, "patch_block_size", merge_size),
         temporal_patch_size,
     )
     if kernel_output is None:
@@ -257,3 +256,10 @@ def resize_normalize_patchify_videos_with_kernel(
     return BatchFeature(
         data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw}, tensor_type=return_tensors
     )
+
+
+def upsample_argmax_with_kernel(processor, outputs, target_sizes, return_segmentation_scores, **kwargs):
+    """Class maps of `outputs.logits` upsampled to `target_sizes`, without storing the upsampled logits."""
+    if return_segmentation_scores or target_sizes is None:
+        return None
+    return run_processing_kernel("upsample_argmax", outputs.logits, target_sizes)

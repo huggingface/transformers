@@ -106,8 +106,6 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
     patch_size = 14
     temporal_patch_size = 1
     merge_size = 2
-    patch_block_size = 1
-    flat_patches = False
     valid_kwargs = PaddleOCRVLImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
@@ -171,7 +169,7 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
 
     def _resized_size(self, height, width, size, factor):
         """Size an image of `height` x `width` pixels is resized to."""
-        # get_number_of_image_patches repeats this rule, but vLLM calls it and it returns a patch count, not the image dimensions the kernel needs
+        # get_number_of_image_patches repeats this rule because vLLM needs a patch count
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
         return smart_resize(height, width, factor=factor, min_pixels=size.shortest_edge, max_pixels=size.longest_edge)
@@ -298,6 +296,16 @@ class PaddleOCRVLImageProcessor(TorchvisionBackend):
         )
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
         return grid_h * grid_w
+
+    @property
+    def patch_block_size(self):
+        """Patches are written row by row, not in `merge_size` blocks."""
+        return 1
+
+    @property
+    def flatten_patches(self):
+        """Patches are returned as `(C * T, P, P)` blocks."""
+        return False
 
 
 __all__ = ["PaddleOCRVLImageProcessor"]

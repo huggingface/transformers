@@ -188,7 +188,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
         size: SizeDict,
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
         factor: int,
-        temporal_factor: int = 2,
+        temporal_factor: int,
         cap_pixels_per_frame: bool | None = None,
         **kwargs,
     ) -> "torch.Tensor":
@@ -204,7 +204,7 @@ class CohereCompassVideoProcessor(BaseVideoProcessor):
 
     def _resized_size(self, height, width, num_frames, size, factor, temporal_factor, cap_pixels_per_frame):
         """Frame size a video of `num_frames` frames of `height` x `width` pixels is resized to."""
-        # get_num_of_video_patches repeats this rule without the per-frame cap, but vLLM calls it and it returns a patch count, not the frame dimensions the kernel needs
+        # get_num_of_video_patches repeats this rule, without the per-frame cap, because vLLM needs a patch count
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
 

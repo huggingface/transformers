@@ -99,8 +99,6 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
     patch_size = 16
     temporal_patch_size = 1
     merge_size = 2
-    patch_block_size = 1
-    flat_patches = True
     valid_kwargs = HunYuanVLImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
     spatial_patch_size = 1
@@ -116,10 +114,6 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
             size["longest_edge"] = max_pixels
             size.pop("max_pixels", None)
         super().__init__(size=size, **kwargs)
-        # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
-        # resampling argument, which uses BICUBIC for RGB images. Its config has
-        # `resample=1` (LANCZOS), but the original implementation never uses it.
-        self.resample = PILImageResampling.BICUBIC
 
     def _standardize_kwargs(
         self,
@@ -164,12 +158,15 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         return super().resize(
             image=images,
             size=SizeDict(height=resized_height, width=resized_width),
-            resample=resample,
+            # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
+            # resampling argument, which uses BICUBIC for RGB images. Its config has
+            # `resample=1` (LANCZOS), but the original implementation never uses it.
+            resample=PILImageResampling.BICUBIC,
         )
 
     def _resized_size(self, height, width, size, factor):
         """Size an image of `height` x `width` pixels is resized to."""
-        # get_number_of_image_patches repeats this rule, but vLLM calls it and it returns a patch count, not the image dimensions the kernel needs
+        # get_number_of_image_patches repeats this rule because vLLM needs a patch count
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
         return smart_resize(height, width, factor=factor, min_pixels=size.shortest_edge, max_pixels=size.longest_edge)
@@ -184,22 +181,14 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
         """Patchifies each image into flat layout of shape (`seq_len`, `patch_dim`) so we can concat dynamically shaped pixels."""
         batch_size, channel, resized_height, resized_width = images.shape
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
-        patches = images.reshape(
-            batch_size,
-            channel,
-            grid_h // merge_size,
-            merge_size,
-            patch_size,
-            grid_w // merge_size,
-            merge_size,
-            patch_size,
-        )
-        # Flatten patches in row-major order in comparison to Qwen
-        patches = patches.permute(0, 2, 3, 5, 6, 1, 4, 7)
+        # Patches in plain row-major order, unlike Qwen2-VL's `merge_size` x `merge_size` blocks. The original code
+        # split rows and columns by `merge_size` and the permute joined them back, which gave this same order.
+        patches = images.reshape(batch_size, channel, grid_h, patch_size, grid_w, patch_size)
+        patches = patches.permute(0, 2, 4, 1, 3, 5)
 
         flatten_patches = (
-            patches.unsqueeze(6)
-            .expand(-1, -1, -1, -1, -1, -1, temporal_patch_size, -1, -1)
+            patches.unsqueeze(4)
+            .expand(-1, -1, -1, -1, temporal_patch_size, -1, -1)
             .reshape(
                 batch_size,
                 grid_h * grid_w,
@@ -297,6 +286,11 @@ class HunYuanVLImageProcessor(TorchvisionBackend):
             height, width, factor, min_pixels=min_pixels, max_pixels=max_pixels
         )
         return resized_height // patch_size, resized_width // patch_size
+
+    @property
+    def patch_block_size(self):
+        """Patches are written row by row, not in `merge_size` blocks."""
+        return 1
 
 
 __all__ = ["HunYuanVLImageProcessor"]

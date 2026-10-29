@@ -114,10 +114,6 @@ class HunYuanVLImageProcessorPil(PilBackend):
             size["longest_edge"] = max_pixels
             size.pop("max_pixels", None)
         super().__init__(size=size, **kwargs)
-        # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
-        # resampling argument, which uses BICUBIC for RGB images. Its config has
-        # `resample=1` (LANCZOS), but the original implementation never uses it.
-        self.resample = PILImageResampling.BICUBIC
 
     def _standardize_kwargs(
         self,
@@ -164,7 +160,10 @@ class HunYuanVLImageProcessorPil(PilBackend):
         return super().resize(
             image=image,
             size=SizeDict(height=resized_height, width=resized_width),
-            resample=resample,
+            # The reference HunyuanOCR processor calls `PIL.Image.resize` without a
+            # resampling argument, which uses BICUBIC for RGB images. Its config has
+            # `resample=1` (LANCZOS), but the original implementation never uses it.
+            resample=PILImageResampling.BICUBIC,
         )
 
     def patchify(
@@ -180,22 +179,15 @@ class HunYuanVLImageProcessorPil(PilBackend):
         channel, resized_height, resized_width = image.shape
         grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
 
-        patches = image.reshape(
-            channel,
-            grid_h // merge_size,
-            merge_size,
-            patch_size,
-            grid_w // merge_size,
-            merge_size,
-            patch_size,
-        )
-        # Flatten patches in row-major order - (gh, mh, gw, mw, C, ph, pw)
-        patches = np.transpose(patches, (1, 2, 4, 5, 0, 3, 6))
+        # Patches in plain row-major order, unlike Qwen2-VL's `merge_size` x `merge_size` blocks. The original code
+        # split rows and columns by `merge_size` and the transpose joined them back, which gave this same order.
+        patches = image.reshape(channel, grid_h, patch_size, grid_w, patch_size)
+        patches = np.transpose(patches, (1, 3, 0, 2, 4))
 
         # expand temporal_patch_size as a broadcast (zero-copy)
         patches = np.broadcast_to(
-            patches[:, :, :, :, :, None, :, :],
-            (*patches.shape[:5], temporal_patch_size, *patches.shape[5:]),
+            patches[:, :, :, None, :, :],
+            (*patches.shape[:3], temporal_patch_size, *patches.shape[3:]),
         )
 
         flatten_patches = patches.reshape(

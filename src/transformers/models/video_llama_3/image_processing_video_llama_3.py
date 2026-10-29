@@ -96,8 +96,6 @@ class VideoLlama3ImageProcessor(TorchvisionBackend):
     patch_size = 14
     temporal_patch_size = 1
     merge_size = 1
-    patch_block_size = None
-    flat_patches = True
     valid_kwargs = VideoLlama3ImageProcessorKwargs
     model_input_names = [
         "pixel_values",
@@ -165,7 +163,7 @@ class VideoLlama3ImageProcessor(TorchvisionBackend):
 
     def _resized_size(self, height, width, size, factor):
         """Size an image of `height` x `width` pixels is resized to."""
-        # get_number_of_image_patches repeats this rule, but vLLM calls it and it returns a patch count, not the image dimensions the kernel needs
+        # get_number_of_image_patches repeats this rule because vLLM needs a patch count
         if not size.shortest_edge or not size.longest_edge:
             raise ValueError(f"`size` dict must contain 'shortest_edge' and 'longest_edge' keys but got {size}.")
         return smart_resize(height, width, factor=factor, min_pixels=size.shortest_edge, max_pixels=size.longest_edge)
