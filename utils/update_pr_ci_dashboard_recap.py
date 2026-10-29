@@ -135,7 +135,7 @@ def delete_recap_comments(repo, token, pr_number):
 
 
 def main():
-    """Entrypoint for the workflow_run-triggered GitHub Action."""
+    """Add the badge when a PR opens, with CI completion as a fallback and legacy cleanup."""
     token = os.environ["GITHUB_TOKEN"]
     repo = os.environ["GITHUB_REPOSITORY"]
     event_path = os.environ["GITHUB_EVENT_PATH"]
@@ -143,21 +143,31 @@ def main():
     with open(event_path, encoding="utf-8") as event_file:
         event = json.load(event_file)
 
-    workflow_run = event["workflow_run"]
-    log_workflow_run(workflow_run)
+    if "pull_request" in event:
+        # The description may have changed while the job was queued. Fetch it by PR number
+        # instead of reusing the event body or searching for a potentially outdated head SHA.
+        pr_number = event["pull_request"]["number"]
+        pr = github_request(f"{GITHUB_API_URL}/repos/{repo}/pulls/{pr_number}", token=token)
+        if pr["state"] != "open":
+            print(f"PR #{pr_number} is no longer open, skipping")
+            return
+    else:
+        workflow_run = event["workflow_run"]
+        log_workflow_run(workflow_run)
 
-    if workflow_run.get("event") != "pull_request":
-        print(f"Workflow run event is {workflow_run.get('event')!r}, skipping")
-        return
+        if workflow_run.get("event") != "pull_request":
+            print(f"Workflow run event is {workflow_run.get('event')!r}, skipping")
+            return
 
-    pr = find_open_pr_for_sha(repo, token, workflow_run["head_sha"])
-    if pr is None:
-        print(f"No open PR found for SHA {workflow_run['head_sha']}, skipping")
-        return
+        pr = find_open_pr_for_sha(repo, token, workflow_run["head_sha"])
+        if pr is None:
+            print(f"No open PR found for SHA {workflow_run['head_sha']}, skipping")
+            return
 
     print(f"Matched PR #{pr['number']}: {pr['html_url']}")
-    delete_old_dashboard_comments(repo, token, pr["number"])
-    delete_recap_comments(repo, token, pr["number"])
+    if "workflow_run" in event:
+        delete_old_dashboard_comments(repo, token, pr["number"])
+        delete_recap_comments(repo, token, pr["number"])
 
     dashboard_url = f"{DASHBOARD_URL}?var-pr={pr['number']}"
     updated_body = inject_ci_badge(pr.get("body"), render_ci_badge(dashboard_url))

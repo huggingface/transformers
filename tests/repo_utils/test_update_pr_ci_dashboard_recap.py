@@ -64,10 +64,13 @@ class RenderBadgeTest(unittest.TestCase):
 
 
 class BadgeUpdateTest(unittest.TestCase):
-    def run_main(self, body):
-        request = Mock()
-        event = {"workflow_run": {"id": 1, "event": "pull_request", "head_sha": "abc", "html_url": "https://gh/run/1"}}
-        pr = {"number": 123, "html_url": "https://gh/pr/123", "body": body}
+    def run_main(self, body, event=None, state="open"):
+        if event is None:
+            event = {
+                "workflow_run": {"id": 1, "event": "pull_request", "head_sha": "abc", "html_url": "https://gh/run/1"}
+            }
+        pr = {"number": 123, "html_url": "https://gh/pr/123", "body": body, "state": state}
+        request = Mock(return_value=pr)
         with (
             patch.dict(
                 os.environ,
@@ -84,6 +87,32 @@ class BadgeUpdateTest(unittest.TestCase):
         ):
             recap_mod.main()
         return request
+
+    def test_opened_and_reopened_prs_use_current_description_without_waiting_for_ci(self):
+        for action in ("opened", "reopened"):
+            with self.subTest(action=action):
+                event = {
+                    "action": action,
+                    "pull_request": {"number": 123, "body": "Outdated description", "head": {"sha": "old"}},
+                }
+                request = self.run_main("Edited description", event=event)
+                self.assertEqual(request.call_count, 2)
+                self.assertEqual(request.call_args_list[0].args, ("https://api.github.com/repos/test/repo/pulls/123",))
+                self.assertEqual(request.call_args_list[0].kwargs, {"token": "test"})
+                self.assertEqual(request.call_args.kwargs["method"], "PATCH")
+                body = request.call_args.kwargs["payload"]["body"]
+                self.assertIn("?var-pr=123", body)
+                self.assertTrue(body.endswith("Edited description"))
+                self.assertNotIn("Outdated description", body)
+
+    def test_open_event_does_not_rewrite_an_existing_badge(self):
+        badge = render_ci_badge(f"{recap_mod.DASHBOARD_URL}?var-pr=123")
+        request = self.run_main(f"{badge}\n\nDescription", event={"pull_request": {"number": 123}})
+        request.assert_called_once_with("https://api.github.com/repos/test/repo/pulls/123", token="test")
+
+    def test_open_event_skips_a_pr_closed_while_the_job_was_queued(self):
+        request = self.run_main("Description", event={"pull_request": {"number": 123}}, state="closed")
+        request.assert_called_once_with("https://api.github.com/repos/test/repo/pulls/123", token="test")
 
     def test_updates_header_when_badge_is_missing(self):
         request = self.run_main("Description")
