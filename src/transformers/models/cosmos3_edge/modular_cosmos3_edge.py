@@ -22,7 +22,7 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -177,8 +177,8 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
 
     model_type = "cosmos3_edge"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Cosmos3EdgeVisionConfig),
-        "text_config": SubConfigSpec(config_class=Cosmos3EdgeTextConfig),
+        "vision_config": Cosmos3EdgeVisionConfig,
+        "text_config": Cosmos3EdgeTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -432,7 +432,7 @@ class Cosmos3EdgeEncoder(Siglip2Encoder):
 
 
 class Cosmos3EdgePreTrainedModel(Qwen2VLPreTrainedModel):
-    config_class = Cosmos3EdgeConfig
+    config: Cosmos3EdgeConfig
     input_modalities = ("image", "video", "text")
     # Packed, variable-length visual inputs use Python-level per-grid reshaping and cannot be compiled fullgraph.
     _can_compile_fullgraph = False
@@ -445,7 +445,7 @@ class Cosmos3EdgePreTrainedModel(Qwen2VLPreTrainedModel):
 
 
 class Cosmos3EdgeTextModel(LlamaModel, Cosmos3EdgePreTrainedModel):
-    config_class = Cosmos3EdgeTextConfig
+    config: Cosmos3EdgeTextConfig
     input_modalities = ("text",)
 
     def __init__(self, config: Cosmos3EdgeTextConfig):
@@ -520,7 +520,7 @@ class Cosmos3EdgeTextModel(LlamaModel, Cosmos3EdgePreTrainedModel):
 
 @auto_docstring(custom_intro="Packed variable-resolution SigLIP2 vision tower used by Cosmos3 Edge.")
 class Cosmos3EdgeVisionModel(Cosmos3EdgePreTrainedModel):
-    config_class = Cosmos3EdgeVisionConfig
+    config: Cosmos3EdgeVisionConfig
     main_input_name = "pixel_values"
     input_modalities = ("image", "video")
 
@@ -566,7 +566,7 @@ class Cosmos3EdgePatchMerger(Qwen3_5MoeVisionPatchMerger):
 
 
 class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
-    config_class = Cosmos3EdgeConfig
+    config: Cosmos3EdgeConfig
     accepts_loss_kwargs = False
 
     def __init__(self, config: Cosmos3EdgeConfig):
@@ -624,7 +624,7 @@ class Cosmos3EdgeModel(Qwen2VLModel, Cosmos3EdgePreTrainedModel):
 
 @auto_docstring
 class Cosmos3EdgeForConditionalGeneration(Qwen2VLForConditionalGeneration, Cosmos3EdgePreTrainedModel):
-    config_class = Cosmos3EdgeConfig
+    config: Cosmos3EdgeConfig
     _tied_weights_keys = {}
     accepts_loss_kwargs = False
 

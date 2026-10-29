@@ -23,7 +23,7 @@ from torchvision.transforms.v2 import functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images, to_channel_dimension_format
 from ...image_utils import (
@@ -547,8 +547,8 @@ class DeepseekOcr2VisionConfig(PreTrainedConfig):
     model_type = "deepseek_ocr2_vision"
     base_config_key = "vision_config"
     sub_configs_defaults = {
-        "sam_config": SubConfigSpec(config_class=DeepseekOcr2SamVisionConfig),
-        "encoder_config": SubConfigSpec(config_class=DeepseekOcr2VisionEncoderConfig),
+        "sam_config": DeepseekOcr2SamVisionConfig,
+        "encoder_config": DeepseekOcr2VisionEncoderConfig,
     }
     sam_config: dict | PreTrainedConfig | None = None
     encoder_config: dict | PreTrainedConfig | None = None
@@ -612,8 +612,8 @@ class DeepseekOcr2Config(PreTrainedConfig):
 
     model_type = "deepseek_ocr2"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=DeepseekOcr2VisionConfig),
-        "text_config": SubConfigSpec(config_class=DeepseekOcr2TextConfig),
+        "vision_config": DeepseekOcr2VisionConfig,
+        "text_config": DeepseekOcr2TextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -722,6 +722,7 @@ class DeepseekOcr2SamVisionProj(nn.Module):
 class DeepseekOcr2SamVisionEncoder(SamVisionEncoder, DeepseekOcr2PreTrainedModel):
     config: DeepseekOcr2SamVisionConfig
     _input_embed_layer = "patch_embed"
+    config: DeepseekOcr2SamVisionConfig
 
     def __init__(self, config: DeepseekOcr2SamVisionConfig):
         super().__init__(config)
@@ -792,6 +793,7 @@ class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
         "hidden_states": DeepseekOcr2VisionEncoderLayer,
         "attentions": DeepseekOcr2VisionAttention,
     }
+    config: DeepseekOcr2VisionConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -913,7 +915,7 @@ class DeepseekOcr2TextDecoderLayer(DeepseekV2DecoderLayer):
 
 
 class DeepseekOcr2TextPreTrainedModel(DeepseekV2PreTrainedModel):
-    pass
+    config: DeepseekOcr2TextConfig
 
 
 class DeepseekOcr2TextModel(DeepseekV2Model):

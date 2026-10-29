@@ -24,7 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -212,8 +212,8 @@ class Phi4MultimodalConfig(Phi3Config):
     ```"""
 
     sub_configs_defaults = {
-        "audio_config": SubConfigSpec(config_class=Phi4MultimodalAudioConfig),
-        "vision_config": SubConfigSpec(config_class=Phi4MultimodalVisionConfig),
+        "audio_config": Phi4MultimodalAudioConfig,
+        "vision_config": Phi4MultimodalVisionConfig,
     }
 
     vocab_size: int = 200064

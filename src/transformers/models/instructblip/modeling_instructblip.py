@@ -763,6 +763,7 @@ class InstructBlipQFormerModel(InstructBlipPreTrainedModel):
     instruction as input.
     """
 
+    config: InstructBlipQFormerConfig
     _supports_attention_backend = True
     _supports_sdpa = True
     _supports_flash_attn = True

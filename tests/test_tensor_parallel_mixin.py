@@ -1,3 +1,4 @@
+# Copyright 2026 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +16,6 @@ import os
 import socket
 import tempfile
 from abc import ABC, abstractmethod
-from itertools import product
 
 from parameterized import parameterized
 
@@ -420,98 +420,6 @@ def _test_tp_generation_quantized_impl(_rank, model_path, model_class, max_new_t
     dist.barrier()
 
 
-def _load_ep_and_reference_models(model_path, model_class):
-    """Load EP model and non-EP reference model for comparison."""
-    model_ep = model_class.from_pretrained(
-        model_path,
-        distributed_config=DistributedConfig(tp_size=dist.get_world_size(), ep_size=dist.get_world_size()),
-    )
-    dist.barrier()
-
-    device = model_ep.device
-    model_ref = model_class.from_pretrained(model_path)
-    model_ref = model_ref.to(device)
-
-    return model_ep, model_ref, device
-
-
-def _test_ep_forward_impl(_rank, model_path, model_class, atol, rtol, experts_implementation):
-    """Implementation for comparing EP and non-EP model outputs."""
-    set_seed(0)
-
-    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class)
-
-    model_ep.eval()
-    model_ref.eval()
-
-    model_ep.set_experts_implementation(experts_implementation)
-    model_ref.set_experts_implementation(experts_implementation)
-
-    vocab_size = model_ref.config.get_text_config().vocab_size
-    input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
-
-    with torch.no_grad():
-        logits_ref = model_ref(input_ids).logits
-        logits_ep = model_ep(input_ids).logits
-
-    diff = (logits_ref - logits_ep).abs()
-    assert torch.allclose(logits_ref, logits_ep, atol=atol, rtol=rtol), (
-        f"EP and non-EP model outputs differ. Max diff: {diff.max().item()} | Min diff: {diff.min().item()}"
-    )
-
-    dist.barrier()
-
-
-def _test_ep_backward_impl(rank, model_path, model_class, atol, rtol, experts_implementation):
-    """Implementation for comparing EP and non-EP model backward passes."""
-    set_seed(0)
-
-    model_ep, model_ref, device = _load_ep_and_reference_models(model_path, model_class)
-    model_ep.train()
-    model_ref.train()
-
-    model_ep.set_experts_implementation(experts_implementation)
-    model_ref.set_experts_implementation(experts_implementation)
-
-    vocab_size = model_ref.config.get_text_config().vocab_size
-    input_ids = torch.randint(0, vocab_size, (2, 64)).to(device)
-    labels = torch.randint(0, vocab_size, (2, 64)).to(device)
-
-    loss_ref = model_ref(input_ids, labels=labels).loss
-    loss_ref.backward()
-
-    loss_ep = model_ep(input_ids, labels=labels).loss
-    loss_ep.backward()
-
-    assert torch.allclose(loss_ref, loss_ep, atol=atol, rtol=rtol), (
-        f"EP and non-EP model losses differ. "
-        f"Non-EP loss: {loss_ref.item()}, EP loss: {loss_ep.item()}, "
-        f"Diff: {(loss_ref - loss_ep).abs().item()}"
-    )
-
-    world_size = dist.get_world_size()
-    expert_weights = set(_get_expert_weight_names(model_ep))
-    failed_grads = {}
-    for (name, param), (_, param_ep) in zip(model_ref.named_parameters(), model_ep.named_parameters()):
-        if param.grad is None and param_ep.grad is None:
-            continue
-        if param.grad is None or param_ep.grad is None:
-            failed_grads[name] = "no gradient on the " + ("EP" if param_ep.grad is None else "non-EP") + " model"
-            continue
-        local_grad = param_ep.grad.to_local() if isinstance(param_ep.grad, DTensor) else param_ep.grad
-        expected = _reference_grad_shard(
-            name, param.grad, local_grad, rank, world_size, model_ep._tp_plan, expert_weights
-        ).cpu()
-        if not torch.allclose(expected, local_grad.cpu(), atol=atol, rtol=rtol):
-            failed_grads[name] = f"max diff = {(expected - local_grad.cpu()).abs().max().item()}"
-
-    assert not failed_grads, f"Gradients differ for {len(failed_grads)} parameter(s):\n" + "\n".join(
-        f"  {name}: {failure}" for name, failure in failed_grads.items()
-    )
-
-    dist.barrier()
-
-
 class TensorParallelTesterMixin(ABC):
     """
     Mixin for tensor parallel tests. Add to model test classes alongside ModelTesterMixin.
@@ -539,18 +447,13 @@ class TensorParallelTesterMixin(ABC):
     # ============================================================
     # Helper methods
     # ============================================================
-    def _has_ep_plan(self) -> bool:
-        """Check if model has an expert parallel plan defined."""
-        config = self.model_tester.get_config().get_text_config()
-        return hasattr(config, "base_model_ep_plan") and config.base_model_ep_plan is not None
-
     def _has_tp_plan(self) -> bool:
         """Check if model has a tensor parallel plan defined."""
         config = self.model_tester.get_config().get_text_config()
         return hasattr(config, "base_model_tp_plan") and config.base_model_tp_plan is not None
 
     def _skip_if_tp_distributed_not_enabled(self):
-        """Skip expensive distributed TP/EP tests for models outside the allowlist."""
+        """Skip expensive distributed TP tests for models outside the allowlist."""
         config = self.model_tester.get_config()
         if TP_DISTRIBUTED_TEST_MODEL_TYPES is not None and config.model_type not in TP_DISTRIBUTED_TEST_MODEL_TYPES:
             self.skipTest(
@@ -582,9 +485,8 @@ class TensorParallelTesterMixin(ABC):
                 config.tie_word_embeddings = tie_word_embeddings
         return config
 
-    def _skip_if_not_supported(self, expert_parallel: bool = False):
-        """Check and skip the test if tensor/expert parallel is not supported for this model/environment."""
-        parallelism = "Expert" if expert_parallel else "Tensor"
+    def _skip_if_distributed_not_supported(self, parallelism: str = "Tensor"):
+        """Skip when the environment can't run the multi-process CPU tests (torch version, device, CPUs, model tester)."""
         if not is_torch_greater_or_equal("2.9"):
             self.skipTest(f"{parallelism} parallel tests require torch >= 2.9")
 
@@ -602,10 +504,11 @@ class TensorParallelTesterMixin(ABC):
         if self._get_tp_model_class() is None:
             self.skipTest("Model tester has neither causal_lm_class nor conditional_generation_class")
 
-        if expert_parallel:
-            if not self._has_ep_plan():
-                self.skipTest("Model does not have an expert parallel plan (base_model_ep_plan)")
-        elif not self._has_tp_plan():
+    def _skip_if_not_supported(self):
+        """Check and skip the test if tensor parallel is not supported for this model/environment."""
+        self._skip_if_distributed_not_supported()
+
+        if not self._has_tp_plan():
             self.skipTest("Model does not have a tensor parallel plan (base_model_tp_plan)")
 
         self._skip_if_tp_distributed_not_enabled()
@@ -725,49 +628,4 @@ class TensorParallelTesterMixin(ABC):
 
             _init_distributed(tp=self.tensor_parallel_size)(_test_tp_generation_quantized_impl)(
                 tmp_dir, model_class, max_new_tokens
-            )
-
-    @parameterized.expand(
-        list(
-            product(
-                [False, True],  # tie_word_embeddings
-                ["eager", "grouped_mm", "batched_mm"],  # experts_implementation
-            )
-        )
-    )
-    @is_tensor_parallel_test
-    def test_ep_forward(self, tie_word_embeddings, experts_implementation):
-        self._skip_if_not_supported(expert_parallel=True)
-
-        config = self._get_tp_config(tie_word_embeddings=tie_word_embeddings)
-        model_class = self._get_tp_model_class()
-        atol = self.tensor_parallel_atol
-        rtol = self.tensor_parallel_rtol
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            set_seed(42)
-            model = model_class(config)
-            model.save_pretrained(tmp_dir, save_original_format=True)
-
-            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_forward_impl)(
-                tmp_dir, model_class, atol, rtol, experts_implementation
-            )
-
-    @parameterized.expand([("eager",), ("grouped_mm",), ("batched_mm",)])
-    @is_tensor_parallel_test
-    def test_ep_backward(self, experts_implementation):
-        self._skip_if_not_supported(expert_parallel=True)
-
-        config = self._get_tp_config()
-        model_class = self._get_tp_model_class()
-        atol = self.tensor_parallel_atol
-        rtol = self.tensor_parallel_rtol
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            set_seed(42)
-            model = model_class(config)
-            model.save_pretrained(tmp_dir, save_original_format=True)
-
-            _init_distributed(tp=self.tensor_parallel_size)(_test_ep_backward_impl)(
-                tmp_dir, model_class, atol, rtol, experts_implementation
             )

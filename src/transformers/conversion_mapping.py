@@ -688,9 +688,14 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns=r"^patch_merge_mlp\.linear_2\.",
                 target_patterns="model.multi_modal_projector.merge_linear_2.",
             ),
-            WeightRenaming(source_patterns=r"\.block_sparse_moe\.", target_patterns=r"\.mlp\."),
+            # Only the MoE block. Otherwise a save would also rename the dense and vision `.mlp.` keys.
             WeightRenaming(
-                source_patterns=r"\.e_score_correction_bias", target_patterns=r"\.gate\.e_score_correction_bias"
+                source_patterns=r"\.block_sparse_moe\.(experts|gate|shared_experts)\.",
+                target_patterns=r"\.mlp\.\1\.",
+            ),
+            WeightRenaming(
+                source_patterns=r"\.block_sparse_moe\.e_score_correction_bias",
+                target_patterns=r"\.mlp\.gate\.e_score_correction_bias",
             ),
             WeightRenaming(
                 source_patterns=r"\.self_attn\.index_q_proj\.", target_patterns=".self_attn.indexer.q_proj."
@@ -2240,6 +2245,76 @@ def _build_checkpoint_conversion_mapping():
             source_patterns=r"self_attn\.in_proj\.weight",
             target_patterns=["self_attn.q_proj.weight", "self_attn.k_proj.weight", "self_attn.v_proj.weight"],
             operations=[Chunk(dim=0), PermuteForRope(permute_layer_names=["q_proj", "k_proj"])],
+        ),
+    ]
+
+    # NVIDIA's NeMo export (`model.safetensors`, also loaded by NeMo and vLLM). Its multi-token prediction head, the
+    # feature extractor constants, an unused speaker head, the TransformerEngine metadata and the word timestamp head's
+    # constants are left unexpected (see `Nemotron3_5TranscribePreTrainedModel._keys_to_ignore_on_load_unexpected`).
+    diarization = r"^perception\.encoder\.diarization_model\.sortformer_modules\."
+    mapping["nemo_speechlm"] = [
+        WeightRenaming(r"^perception\.encoder\.asr_encoder\.", r"^model\.audio_tower\.asr_encoder\."),
+        WeightRenaming(
+            r"^perception\.encoder\.diarization_model\.encoder\.",
+            r"^model\.audio_tower\.diarization_model\.model\.audio_tower\.",
+        ),
+        WeightRenaming(r"^ctc_timestamp\.decoder\.transformer\.", r"^model\.word_timestamp_encoder\."),
+        WeightRenaming(r"^ctc_timestamp\.decoder\.upsample\.", r"^model\.word_timestamp_encoder\.upsampler\."),
+        WeightRenaming(r"^ctc_timestamp\.decoder\.decoder_layers\.0\.", r"^word_timestamp_head\."),
+        WeightRenaming(diarization + r"encoder_proj\.", r"^model\.audio_tower\.diarization_model\.model\.proj\."),
+        WeightRenaming(
+            diarization + r"subpixel_upsample\.", r"^model\.audio_tower\.diarization_model\.model\.upsampler\.conv\."
+        ),
+        WeightRenaming(
+            diarization + r"first_hidden_to_hidden\.", r"^model\.audio_tower\.diarization_model\.classifier\.dense\."
+        ),
+        WeightRenaming(
+            diarization + r"single_hidden_to_spks\.", r"^model\.audio_tower\.diarization_model\.classifier\.out_proj\."
+        ),
+        WeightRenaming(diarization + r"learnable_sil_emb", r"^model\.audio_tower\.diarization_model\.silence_embeds"),
+        WeightRenaming(r"^perception\.encoder\.asr_norm\.", r"^model\.audio_tower\.asr_norm\."),
+        WeightRenaming(r"^perception\.encoder\.diar_norm\.", r"^model\.audio_tower\.speaker_norm\."),
+        WeightRenaming(r"^perception\.proj\.", r"^model\.multi_modal_projector\."),
+        WeightRenaming(r"^llm\.model\.embed_tokens\.", r"^model\.language_model\.embeddings\."),
+        WeightRenaming(r"^llm\.model\.norm\.", r"^model\.language_model\.norm_f\."),
+        WeightRenaming(r"^llm\.model\.layers\.", r"^model\.language_model\.layers\."),
+        WeightRenaming(r"^llm\.lm_head\.", r"^lm_head\."),
+        # NeMo `TransformerEncoder` blocks: the speech recognition encoder, the diarization encoder and the word
+        # timestamp head
+        WeightRenaming(r"\.pre_encode\.proj\.", r"\.embedder\.projection\."),
+        WeightRenaming(r"\.embed_norm\.", r"\.input_layer_norm\."),
+        WeightRenaming(r"\.final_norm\.", r"\.layer_norm\."),
+        WeightRenaming(r"\.norm1\.", r"\.layer_norm1\."),
+        WeightRenaming(r"\.norm2\.", r"\.layer_norm2\."),
+        WeightRenaming(r"\.attn\.out_proj\.", r"\.self_attn\.o_proj\."),
+        WeightRenaming(r"\.attn\.q_norm\.", r"\.self_attn\.q_norm\."),
+        WeightRenaming(r"\.attn\.k_norm\.", r"\.self_attn\.k_norm\."),
+        WeightRenaming(r"\.ffn\.net\.0\.", r"\.mlp\.fc1\."),
+        WeightRenaming(r"\.ffn\.net\.3\.", r"\.mlp\.fc2\."),
+        # Mamba-2 parameters NeMo keeps in float32 under a separate module
+        WeightRenaming(r"\.mixer\._fp32_params\.A_log", r"\.mixer\.A_log"),
+        WeightRenaming(r"\.mixer\._fp32_params\.D", r"\.mixer\.D"),
+        WeightRenaming(r"\.mixer\._fp32_params\.dt_bias", r"\.mixer\.dt_bias"),
+        # the fused projection, rows ordered `[query | key | value]`
+        WeightConverter(
+            source_patterns=r"\.attn\.w_qkv\.weight",
+            target_patterns=[
+                r"\.self_attn\.q_proj\.weight",
+                r"\.self_attn\.k_proj\.weight",
+                r"\.self_attn\.v_proj\.weight",
+            ],
+            operations=[Chunk(dim=0)],
+        ),
+        # routed experts stored as `(num_experts, in_features, out_features)`
+        WeightConverter(
+            source_patterns=r"\.mixer\.experts\.gate_and_up_projs",
+            target_patterns=r"\.mixer\.experts\.up_proj",
+            operations=[Transpose(1, 2)],
+        ),
+        WeightConverter(
+            source_patterns=r"\.mixer\.experts\.down_projs",
+            target_patterns=r"\.mixer\.experts\.down_proj",
+            operations=[Transpose(1, 2)],
         ),
     ]
 

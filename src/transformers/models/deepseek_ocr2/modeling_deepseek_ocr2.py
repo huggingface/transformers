@@ -557,6 +557,7 @@ class DeepseekOcr2SamVisionEncoder(DeepseekOcr2PreTrainedModel):
     _can_record_outputs = {"hidden_states": DeepseekOcr2SamVisionLayer, "attentions": DeepseekOcr2SamVisionAttention}
     config: DeepseekOcr2SamVisionConfig
     _input_embed_layer = "patch_embed"
+    config: DeepseekOcr2SamVisionConfig
 
     def __init__(self, config: DeepseekOcr2SamVisionConfig):
         super().__init__(config)
@@ -891,6 +892,7 @@ class DeepseekOcr2VisionEncoder(DeepseekOcr2PreTrainedModel):
         "hidden_states": DeepseekOcr2VisionEncoderLayer,
         "attentions": DeepseekOcr2VisionAttention,
     }
+    config: DeepseekOcr2VisionConfig
 
     def __init__(self, config):
         super().__init__(config)

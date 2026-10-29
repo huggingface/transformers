@@ -79,7 +79,7 @@ class Idefics3Config(PreTrainedConfig):
     model_type = "idefics3"
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="llama", init_kwargs={"rms_norm_eps": 1e-5}),
-        "vision_config": SubConfigSpec(config_class=Idefics3VisionConfig),
+        "vision_config": Idefics3VisionConfig,
     }
 
     use_cache: bool = True

@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -122,8 +122,8 @@ class IdeficsConfig(PreTrainedConfig):
 
     model_type = "idefics"
     sub_configs_defaults = {
-        "perceiver_config": SubConfigSpec(config_class=IdeficsPerceiverConfig),
-        "vision_config": SubConfigSpec(config_class=IdeficsVisionConfig),
+        "perceiver_config": IdeficsPerceiverConfig,
+        "vision_config": IdeficsVisionConfig,
     }
 
     vocab_size: int = 32000
