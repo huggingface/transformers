@@ -2228,13 +2228,8 @@ class ProcessorMixin(PushToHubMixin):
 
         # `kwargs` overwrite special tokens if both are present
         if sanitize_control_tokens:
-            if not tokenize or return_assistant_tokens_mask:
-                raise ValueError(
-                    "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
-                    "`return_assistant_tokens_mask=True`."
-                )
             conversations, tools, documents, kwargs = self.tokenizer._mark_chat_inputs(
-                chat_template, conversations, tools, documents, kwargs
+                chat_template, conversations, tools, documents, kwargs, tokenize, return_assistant_tokens_mask
             )
             processor_kwargs["sanitize_control_tokens"] = True
 

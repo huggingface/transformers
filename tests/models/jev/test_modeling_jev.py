@@ -93,8 +93,8 @@ class JevForDecisionTest(DecisionHeadTesterMixin, unittest.TestCase):
         self.assertFalse(torch.all(model.model.norm.weight == 7.0))
 
 
-# Code readouts of a Qwen3.5 checkpoint, read with the files of its repo. The answers each converted head gives to the request of its `decision_test.json`. One per prompt and
-# attention mode: the other fine-tunes (d3-*, Darwin-*, PhysicalEye) share them
+# Code readouts of a Qwen3.5 checkpoint, read with the files of its repo, and the answers each gives to the request of its
+# `decision_test.json`. One per prompt and attention mode: the other fine-tunes (d3-*, Darwin-*, PhysicalEye) share them
 DECIDERS = {
     "ArthurZ/pplx-decider-v1.1-27b": {
         "refund": 0.9993,

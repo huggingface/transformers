@@ -263,12 +263,6 @@ def _split_at_placeholders(text: str, assets: dict[str, Any], load) -> list[dict
     return [block for block in content if block.get("text") != ""]
 
 
-def _load_asset(asset: Any):
-    if isinstance(asset, dict):  # a System One asset
-        asset = asset["data_base64"]
-    return load_image(asset)
-
-
 def _insert_images(template_inputs: dict[str, Any], assets: dict[str, Any], load) -> tuple[dict[str, Any], list]:
     """
     Puts the images of a request into the inputs of a decision template (`state`, `question`), where an image is a
@@ -336,7 +330,8 @@ def chat_template_kwargs(config: DecisionConfig, request: dict[str, Any] | str, 
     chat_kwargs = {"enable_thinking": False}
     if has_images and "enable_thinking" not in _get_template_variables(processor.chat_template):
         chat_kwargs = {}  # processors pass the variables their template doesn't use to the processor
-    load = functools.cache(lambda name: _load_asset(assets[name]))
+    # A System One asset (`{"data_base64": ...}`), or anything `load_image` takes
+    load = functools.cache(lambda name: load_image(a["data_base64"] if isinstance(a := assets[name], dict) else a))
     prompts = []
     one_prompt = "questions" in template_input_names
     for group in [questions] if one_prompt else [[question] for question in questions]:

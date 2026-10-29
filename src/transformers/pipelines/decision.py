@@ -3,13 +3,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-from ..decision import DecisionConfig, decode_decision, label_token_ids
+from ..decision import DecisionConfig, label_token_ids
 from ..utils import add_end_docstrings, is_torch_available
 from .base import Pipeline, build_pipeline_init_args
 
 
 if is_torch_available():
-    from ..decision.modeling_utils import DecisionMixin, read_marks
+    from ..decision.modeling_utils import DecisionMixin, process_scores, read_marks
 
 
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True))
@@ -67,17 +67,12 @@ class DecisionPipeline(Pipeline):
     ):
         super().__init__(*args, **kwargs)
         repo = decision_config if isinstance(decision_config, (str, Path)) else self.model.name_or_path
-        # A decision model (`XxxForDecision`) scores the options itself, any other model by the logits of their labels
-        self.is_decision_model = isinstance(self.model, DecisionMixin)
-        if isinstance(decision_config, DecisionConfig):
-            self.decision_config = decision_config
-        elif self.is_decision_model and decision_config is None:
-            self.decision_config = self.model.decision_config
-        else:
-            try:
-                self.decision_config = DecisionConfig.from_pretrained(repo)
-            except OSError:
-                self.decision_config = DecisionConfig()
+        if not isinstance(decision_config, DecisionConfig):
+            # The one of a decision model (`XxxForDecision`), which scores the options itself; any other model scores
+            # them by the logits of their labels
+            use_model = isinstance(self.model, DecisionMixin) and decision_config is None
+            decision_config = self.model.decision_config if use_model else DecisionConfig.from_pretrained(repo)
+        self.decision_config = decision_config
         if self.decision_config.adapter:  # a LoRA in a subfolder of the repo
             self.model.load_adapter(repo, adapter_kwargs={"subfolder": self.decision_config.adapter})
         self.label_token_ids = functools.cache(functools.partial(label_token_ids, self.tokenizer))
@@ -102,7 +97,7 @@ class DecisionPipeline(Pipeline):
         # TODO: batch / continious batching
         scores = []
         for inputs, questions in model_inputs["prompts"]:
-            if self.is_decision_model:
+            if isinstance(self.model, DecisionMixin):
                 scores.append(
                     self.model.decide(**inputs, decision_questions=questions, decision_config=self.decision_config)
                 )
@@ -110,19 +105,14 @@ class DecisionPipeline(Pipeline):
             # the logits of the labels before each mark
             inputs, marks = read_marks(inputs, self.decision_config._sentinel_ids)
             logits = self.model(**inputs, use_cache=False, logits_to_keep=marks - 1).logits[0]
-            tail = inputs["input_ids"][0, int(marks[-1]) :]
-            scores.append(
-                [
-                    self.decision_config.logits_processors[question.type](
-                        tail, logits[index, self.label_token_ids(tuple(question.labels))].float()
-                    )
-                    for index, question in enumerate(questions)
-                ]
-            )
+            labels = [
+                logits[index, self.label_token_ids(tuple(question.labels))] for index, question in enumerate(questions)
+            ]
+            scores.append(process_scores(self.decision_config, inputs["input_ids"], marks, questions, labels))
         return {"prompts": model_inputs["prompts"], "scores": scores}
 
     def postprocess(self, model_outputs):
         answers = {}
         for (_, questions), scores in zip(model_outputs["prompts"], model_outputs["scores"]):
-            answers |= decode_decision(scores, questions)
+            answers |= (self.processor or self.tokenizer).decode_decision(scores, questions)
         return answers
