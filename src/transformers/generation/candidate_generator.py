@@ -22,13 +22,9 @@ import torch.nn as nn
 
 from ..pytorch_utils import prune_linear_layer
 from ..utils import ModelOutput, is_sklearn_available
-from ..utils.deprecation import deprecate_kwarg
 from .configuration_utils import GenerationConfig
 from .logits_process import LogitsProcessorList, MinLengthLogitsProcessor, SuppressTokensLogitsProcessor
 
-
-if is_sklearn_available():
-    from sklearn.metrics import roc_curve
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -266,6 +262,8 @@ class AssistedCandidateGenerator(CandidateGenerator):
             if (
                 len(self.probs) > 5 and {0, 1}.issubset(self.matches)
             ):  # require at least 5 samples to calculate the ROC curve and at least one positive and one negative sample
+                from sklearn.metrics import roc_curve
+
                 fpr, tpr, thresholds = roc_curve(self.matches, self.probs)
                 fnr = 1 - tpr
 
@@ -1251,21 +1249,11 @@ class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
         "return_shared_kv_states": True,
     }
 
-    @deprecate_kwarg("input_ids", version="5.20.0")
-    @deprecate_kwarg("model_kwargs", version="5.20.0")
-    @deprecate_kwarg("inputs_tensor", version="5.20.0")
-    @deprecate_kwarg("logits_processor", version="5.20.0")
-    @deprecate_kwarg("eos_token_id", version="5.20.0")
     def __init__(
         self,
         assistant_model: "PreTrainedModel",
         target_model_input_embeddings: nn.Embedding,
         generation_config: "GenerationConfig",
-        input_ids: torch.LongTensor | None = None,
-        model_kwargs: dict | None = None,
-        inputs_tensor: torch.Tensor | None = None,
-        logits_processor: Optional["LogitsProcessorList"] = None,
-        eos_token_id: int | list[int] | torch.Tensor | None = None,
         **kwargs,
     ):
         if (

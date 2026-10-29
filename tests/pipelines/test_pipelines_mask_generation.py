@@ -103,6 +103,17 @@ class MaskGenerationPipelineTests(unittest.TestCase):
                 self.assertTrue(batches[-1]["is_last"])
                 self.assertFalse(any(b["is_last"] for b in batches[:-1]))
 
+    def test_crops_n_layers(self):
+        mask_generator = pipeline("mask-generation", model="hf-internal-testing/tiny-random-SamModel")
+        mask_generator.image_processor.pad_size = {"height": 24, "width": 24}
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+        out = mask_generator(image, crops_n_layers=1, points_per_crop=4, pred_iou_thresh=0, stability_score_thresh=0)
+
+        masks = out["masks"]
+
+        self.assertTrue(masks)
+        self.assertTrue(all(mask.shape == (480, 640) for mask in masks))
+
     @slow
     @require_torch
     def test_small_model_pt(self):
