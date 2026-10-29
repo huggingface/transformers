@@ -45,7 +45,7 @@ def bucket_failures(data):
     """
     buckets = {"new": [], "error_changed": [], "same_error": []}
     for model, model_result in data.items():
-        for device, failures in model_result.items():
+        for failures in model_result.values():
             for failure in failures:
                 if not isinstance(failure, dict):
                     continue
@@ -123,12 +123,14 @@ def format_report(data):
     if new_failures:
         lines.append("&nbsp;&nbsp;&nbsp;&nbsp;**New failures:**")
         lines.append("")
-        lines.extend(format_entries_by_model(
-            new_failures,
-            test_suffix_fn=lambda f: "(✅ ⟹ ❌)",
-            model_indent=4,
-            test_indent=8,
-        ))
+        lines.extend(
+            format_entries_by_model(
+                new_failures,
+                test_suffix_fn=lambda f: "(✅ ⟹ ❌)",
+                model_indent=4,
+                test_indent=8,
+            )
+        )
 
     # Separator between new and pre-existing sections
     if new_failures and preexisting_count > 0:
@@ -137,18 +139,22 @@ def format_report(data):
 
     # Pre-existing section
     if preexisting_count > 0:
-        lines.append(f"&nbsp;&nbsp;&nbsp;&nbsp;**Pre-existing failures (still failing) \u2014 {preexisting_count} total:**")
+        lines.append(
+            f"&nbsp;&nbsp;&nbsp;&nbsp;**Pre-existing failures (still failing) \u2014 {preexisting_count} total:**"
+        )
         lines.append("")
 
         if error_changed:
             lines.append(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**Error changed ({error_changed_count}):**")
             lines.append("")
-            lines.extend(format_entries_by_model(
-                error_changed,
-                test_suffix_fn=lambda f: "(❌ ⟹ ❌)",
-                model_indent=8,
-                test_indent=12,
-            ))
+            lines.extend(
+                format_entries_by_model(
+                    error_changed,
+                    test_suffix_fn=lambda f: "(❌ ⟹ ❌)",
+                    model_indent=8,
+                    test_indent=12,
+                )
+            )
 
         if same_error:
             lines.append(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**Same error ({same_error_count}):**")
