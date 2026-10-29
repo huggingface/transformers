@@ -87,13 +87,10 @@ def get_test_classes(test_file):
     test_classes = []
     test_module = get_test_module(test_file)
 
-    # During migration away from unittest.TestCase, some test classes no longer inherit it.
-    # We grab ModelTesterMixin from the already-loaded module (every test_modeling_* file imports
-    # it) so we can detect migrated classes without adding a heavy import here.
-    # TODO: this is a heuristic — grabbing ModelTesterMixin from the test module assumes every
-    # migrated test file imports it under that exact name. It is correct for all current model
-    # test files, but whether it holds universally needs more verification before treating it as
-    # 100% correct. Revisit once the migration is complete.
+    # Migration: grab ModelTesterMixin from the loaded module to also detect migrated classes
+    # (no longer subclassing unittest.TestCase). TODO: heuristic — assumes every test_modeling_*
+    # file imports ModelTesterMixin by that exact name; needs verification before treating as
+    # 100% correct. Revisit once migration is complete.
     ModelTesterMixin = getattr(test_module, "ModelTesterMixin", None)
 
     for attr in dir(test_module):
