@@ -68,10 +68,8 @@ class ExportQuantizer(ABC):
         """Raise if this quantizer can't run on an `export_format` export, or a package it needs is missing or too old;
         warn when one differs from the version it is tested on."""
         if export_format not in self.supported_formats:
-            supported = ", ".join(sorted(f.value for f in self.supported_formats))
-            raise ValueError(
-                f"{self.__class__.__name__} quantizes {supported} exports, not {export_format.value} ones."
-            )
+            supported = ", ".join(sorted(self.supported_formats))
+            raise ValueError(f"{self.__class__.__name__} quantizes {supported} exports, not {export_format} ones.")
         check_packages(self.__class__.__name__, self.required_packages, self.min_versions, self.tested_versions)
 
     @abstractmethod

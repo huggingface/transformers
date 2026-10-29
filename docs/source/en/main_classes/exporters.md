@@ -16,7 +16,8 @@ rendered properly in your Markdown viewer.
 
 # Exporters
 
-New export backends can be added to Transformers by subclassing [`HfExporter`].
+New export backends can be added to Transformers by subclassing [`HfExporter`] and registering it with
+[`~exporters.register_backend`].
 
 <Tip>
 
@@ -32,9 +33,32 @@ Learn how to use the built-in exporters in the [Exporters](../exporters) guide.
 
 [[autodoc]] exporters.auto.AutoExportConfig
 
+## register_backend
+
+[[autodoc]] exporters.auto.register_backend
+
+[[autodoc]] exporters.auto.get_exporter_class
+
+[[autodoc]] exporters.auto.get_export_config_class
+
 ## HfExporter
 
 [[autodoc]] exporters.base.HfExporter
+
+## ExportArtifacts
+
+[[autodoc]] exporters.base.ExportArtifacts
+    - program
+    - save_pretrained
+    - from_pretrained
+
+## ExportedComponent
+
+[[autodoc]] exporters.base.ExportedComponent
+
+## ExportMetadata
+
+[[autodoc]] exporters.metadata.ExportMetadata
 
 ## DynamoExporter
 
