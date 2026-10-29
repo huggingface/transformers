@@ -26,6 +26,7 @@ from transformers.testing_utils import (
 )
 
 from ...generation.test_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_processing_common import url_to_local_path
@@ -243,7 +244,7 @@ class XiaomiLens0ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 @require_torch_accelerator
 @require_vision
 class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
-    # TODO: Update before merge
+    # TODO: Update before merge
     model_id = "guarin/Xiaomi-Lens-0"  # "SeerRay-Lab/Xiaomi-Lens-0"
     image_url = (
         "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"

@@ -34,7 +34,7 @@ class XiaomiLens0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = XiaomiLens0Processor
     tiny_model_id = "hf-internal-testing/tiny-processor-xiaomi_lens0"
 
-    # Same settings/overrides as Qwen3. Only test_post_process_grounding is new.
+    # Same settings/overrides as Qwen3. Only test_post_process_grounding is new.
     videos_unstructured_max_length = 870
     videos_text_kwargs_max_length = 870
     videos_text_kwargs_override_max_length = 870
