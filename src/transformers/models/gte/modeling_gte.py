@@ -327,7 +327,6 @@ class GtePreTrainedModel(PreTrainedModel):
         "hidden_states": GteLayer,
         "attentions": GteAttention,
     }
-    config_class = GteConfig
 
     # Are kept as non-persistent buffers to avoid being saved in the state dict
     # and causing mismatch when loading from a checkpoint that doesn't have them
