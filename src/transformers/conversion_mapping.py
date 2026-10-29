@@ -2316,8 +2316,8 @@ def _build_checkpoint_conversion_mapping():
             target_patterns=r"\.mixer\.experts\.down_proj",
             operations=[Transpose(1, 2)],
         ),
-    ],
-    
+    ]
+
     mapping["mistral_large4"] = [
         # Dispatch the root vision_encoder to the vision model
         WeightRenaming(r"^vision_encoder\.", "model.vision_tower."),
