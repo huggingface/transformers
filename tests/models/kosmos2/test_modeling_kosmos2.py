@@ -366,6 +366,17 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 # Checking there was no complain of missing weights
                 self.assertEqual(infos["missing_keys"], set())
 
+    def test_image_to_text_projection_sdpa_matches_eager(self):
+        # The projection's latent queries cross-attend to every image feature, so SDPA must not apply `is_causal`
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        model = Kosmos2Model(config).to(torch_device).eval()
+        outputs = {}
+        for attn_implementation in ("eager", "sdpa"):
+            model.set_attn_implementation(attn_implementation)
+            with torch.no_grad():
+                outputs[attn_implementation] = model(**inputs_dict).image_embeds
+        torch.testing.assert_close(outputs["sdpa"], outputs["eager"], rtol=1e-4, atol=1e-4)
+
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("KOSMOS-2 doesn't support padding")
     def test_eager_matches_sdpa_inference(

@@ -1340,6 +1340,8 @@ class Kosmos2ImageToTextProjection(nn.Module):
             past_key_values=None,
             attention_mask=None,
             output_attentions=None,
+            # The latent queries attend to every image feature: without a mask, SDPA would apply `is_causal`
+            is_causal=False,
         )
 
         return hidden_states, attn_weights
