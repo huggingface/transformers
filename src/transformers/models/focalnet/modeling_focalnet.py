@@ -319,16 +319,16 @@ class FocalNetMlp(nn.Module):
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
         self.up_proj = nn.Linear(in_features, hidden_features)
-        self.activation = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.down_proj = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
+        self.dropout = nn.Dropout(drop)
 
     def forward(self, hidden_state):
         hidden_state = self.up_proj(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        hidden_state = self.drop(hidden_state)
+        hidden_state = self.act_fn(hidden_state)
+        hidden_state = self.dropout(hidden_state)
         hidden_state = self.down_proj(hidden_state)
-        hidden_state = self.drop(hidden_state)
+        hidden_state = self.dropout(hidden_state)
         return hidden_state
 
 

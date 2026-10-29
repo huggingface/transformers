@@ -877,7 +877,7 @@ class Florence2VisionMLP(CLIPMLP):
     def __init__(self, config: Florence2VisionConfig, stage_idx: int):
         super().__init__(config)
         self.up_proj = nn.Linear(config.embed_dim[stage_idx], int(config.embed_dim[stage_idx] * config.mlp_ratio))
-        self.activation_fn = ACT2FN[config.activation_function]
+        self.act_fn = ACT2FN[config.activation_function]
         self.down_proj = nn.Linear(int(config.embed_dim[stage_idx] * config.mlp_ratio), config.embed_dim[stage_idx])
 
 

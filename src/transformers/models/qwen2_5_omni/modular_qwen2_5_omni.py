@@ -2716,13 +2716,13 @@ class DiTMLP(CLIPMLP):
         nn.Module.__init__(self)
         inner_dim = int(dim * mult)
         self.up_proj = nn.Linear(dim, inner_dim)
-        self.activation_fn = nn.GELU(approximate="tanh")
+        self.act_fn = nn.GELU(approximate="tanh")
         self.dropout = nn.Dropout(dropout)
         self.down_proj = nn.Linear(inner_dim, dim)
 
     def forward(self, hidden_states):
-        hidden_states = self.activation_fn(self.up_proj(hidden_states))
-        return self.down_proj(self.dropout(hidden_states))
+        down_proj = self.down_proj(self.dropout(self.act_fn(self.up_proj(hidden_states))))
+        return down_proj
 
 
 class DiTAttention(nn.Module):

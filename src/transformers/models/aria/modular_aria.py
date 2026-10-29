@@ -165,7 +165,7 @@ class AriaProjectorMLP(CLIPMLP):
         nn.Module.__init__(self)
         self.up_proj = nn.Linear(in_features, hidden_features, bias=False)
         self.down_proj = nn.Linear(hidden_features, output_dim, bias=False)
-        self.activation_fn = ACT2FN["gelu_new"]
+        self.act_fn = ACT2FN["gelu_new"]
 
 
 class AriaCrossAttention(nn.Module):

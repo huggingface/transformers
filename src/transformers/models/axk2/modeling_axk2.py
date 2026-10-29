@@ -72,15 +72,13 @@ class AXK2GateMLP(nn.Module):
     def __init__(self, config: AXK2Config):
         super().__init__()
         self.config = config
-        self.activation_fn = nn.SiLU()
+        self.act_fn = nn.SiLU()
         self.up_proj = nn.Linear(config.hidden_size, config.gated_norm_rank, bias=False)
         self.down_proj = nn.Linear(config.gated_norm_rank, config.hidden_size, bias=False)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class AXK2GatedRMSNorm(nn.Module):

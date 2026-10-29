@@ -153,7 +153,7 @@ class HYV3RotaryEmbedding(LlamaRotaryEmbedding):
 class HYV3MLP(LlamaMLP):
     def __init__(self, config: HYV3Config, intermediate_size: int | None = None):
         super().__init__(config)
-        self.intermediate_size = intermediate_size or config.intermediate_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
 
 
 class HYV3Attention(Qwen3Attention):

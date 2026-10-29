@@ -1310,10 +1310,10 @@ def _build_checkpoint_conversion_mapping():
             # resampler
             WeightRenaming("spatial_linear.0", "spatial_linear.up_proj"),
             WeightRenaming("spatial_linear.2", "spatial_linear.down_proj"),
-            WeightRenaming("spatial_linear.3", "spatial_linear.ln"),
+            WeightRenaming("spatial_linear.3", "spatial_linear.layer_norm"),
             WeightRenaming("temporal_linear.0", "temporal_linear.up_proj"),
             WeightRenaming("temporal_linear.2", "temporal_linear.down_proj"),
-            WeightRenaming("temporal_linear.3", "temporal_linear.ln"),
+            WeightRenaming("temporal_linear.3", "temporal_linear.layer_norm"),
             # language model
             WeightRenaming(r"(?<!language_model\.)embed_tokens", "language_model.embed_tokens"),
             WeightRenaming(r"(?<!language_model\.)layers", "language_model.layers"),
@@ -2128,6 +2128,22 @@ def _build_checkpoint_conversion_mapping():
     ]
     mapping["gpt_neox"] = gpt_neox_mlp_renames
     mapping["persimmon"] = gpt_neox_mlp_renames.copy()
+    mapping["gpt_neox_japanese"] = gpt_neox_mlp_renames.copy()
+    mapping["bloom"] = gpt_neox_mlp_renames.copy()
+    for key in ["gptj", "codegen"]:
+        mapping[key] = [
+            WeightRenaming(r"\.mlp\.fc_in\.", ".mlp.up_proj."),
+            WeightRenaming(r"\.mlp\.fc_out\.", ".mlp.down_proj."),
+        ]
+    for key in ["bark", "semantic", "coarse_acoustics", "fine_acoustics"]:
+        mapping[key] = [
+            WeightRenaming(r"\.mlp\.in_proj\.", ".mlp.up_proj."),
+            WeightRenaming(r"\.mlp\.out_proj\.", ".mlp.down_proj."),
+        ]
+    mapping["perceiver"] = [
+        WeightRenaming(r"\.mlp\.dense1\.", ".mlp.up_proj."),
+        WeightRenaming(r"\.mlp\.dense2\.", ".mlp.down_proj."),
+    ]
     mapping["GPTNeoXForCausalLM"] = [
         WeightRenaming(source_patterns=r"^embed_out\.", target_patterns="lm_head."),
         *gpt_neox_mlp_renames,
@@ -2476,6 +2492,23 @@ def _build_checkpoint_conversion_mapping():
     mapping["UnlimitedOcrVisionEncoder"] = (
         mapping["UnlimitedOcrVisionEncoder"] + clip_layer_renames + ungated_mlp_renames()
     )
+    sam_mlp_renames = [
+        WeightRenaming(r"\.mlp\.lin1\.", ".mlp.up_proj."),
+        WeightRenaming(r"\.mlp\.lin2\.", ".mlp.down_proj."),
+    ]
+    for key in [
+        "sam",
+        "sam_vision_model",
+        "sam_hq",
+        "sam_hq_vision_model",
+        "seggpt",
+        "GotOcr2VisionEncoder",
+        "DeepseekOcr2SamVisionEncoder",
+        "PPFormulaNetVisionModel",
+        "UnlimitedOcrSamVisionEncoder",
+        "SLANeXtVisionEncoder",
+    ]:
+        mapping[key] = mapping.get(key, []) + sam_mlp_renames
     for key in ["internvl_vision", "videoprism_vision_model", "videoprism_text_model"]:
         mapping[key] = mapping[key] + vit_layer_renames
     for key in [

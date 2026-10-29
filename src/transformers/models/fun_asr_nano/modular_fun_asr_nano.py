@@ -289,8 +289,7 @@ class FunAsrNanoMLP(CLIPMLP):
         self.hidden_dropout = config.hidden_dropout
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.act_fn(self.up_proj(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
         hidden_states = self.down_proj(hidden_states)
         return nn.functional.dropout(hidden_states, p=self.hidden_dropout, training=self.training)

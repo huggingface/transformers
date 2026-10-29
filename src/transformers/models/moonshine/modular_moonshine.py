@@ -159,11 +159,8 @@ class MoonshineEncoderModelOutput(BaseModelOutput):
 
 class MoonshineEncoderMLP(CLIPMLP):
     def __init__(self, config, hidden_act):
-        super().__init__()
-        self.config = config
-        self.activation_fn = ACT2FN[hidden_act]
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
+        super().__init__(config)
+        self.act_fn = ACT2FN[hidden_act]
 
 
 class MoonshineDecoderMLP(Phi3MLP):

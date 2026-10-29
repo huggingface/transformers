@@ -467,7 +467,7 @@ class SwinAttention(ViTAttention):
 class SwinMLP(CLIPMLP):
     def __init__(self, config: SwinConfig, dim: int):
         nn.Module.__init__(self)
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.up_proj = nn.Linear(dim, int(config.mlp_ratio * dim))
         self.down_proj = nn.Linear(int(config.mlp_ratio * dim), dim)
 

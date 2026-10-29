@@ -88,9 +88,7 @@ class T5GemmaMLP(nn.Module):
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, x):
-        hidden_states = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
-        hidden_states = self.dropout(hidden_states)
-        down_proj = self.down_proj(hidden_states)
+        down_proj = self.down_proj(self.dropout(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
         return down_proj
 
 

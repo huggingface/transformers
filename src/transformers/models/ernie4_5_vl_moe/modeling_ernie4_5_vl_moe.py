@@ -282,15 +282,14 @@ class Ernie4_5_VLMoeRMSNorm(nn.Module):
 
 
 class Ernie4_5_VLMoeMLP(nn.Module):
-    def __init__(self, config, intermediate_size=None):
+    def __init__(self, config: Ernie4_5_VLMoeConfig, intermediate_size: int | None = None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
-
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
@@ -787,15 +786,13 @@ class Ernie4_5VLVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class Ernie4_5_VLMoePatchEmbed(nn.Module):
@@ -938,14 +935,12 @@ class Ernie4_5_VLMoeVisionMLP(nn.Module):
         self.up_proj = nn.Linear(in_dim, out_dim)
         self.act_fn = nn.GELU()
         self.down_proj = nn.Linear(out_dim, out_dim)
-        self.ln = nn.LayerNorm(out_dim, eps=config.vision_config.rms_norm_eps)
+        self.layer_norm = nn.LayerNorm(out_dim, eps=config.vision_config.rms_norm_eps)
 
     def forward(self, hidden_states):
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.act_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        hidden_states = self.ln(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        down_proj = self.layer_norm(down_proj)
+        return down_proj
 
 
 class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):

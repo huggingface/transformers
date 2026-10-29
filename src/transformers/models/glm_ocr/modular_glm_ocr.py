@@ -48,16 +48,13 @@ class GlmOcrRMSNorm(LlamaRMSNorm):
 
 
 class GlmOcrVisionMlp(LlamaMLP):
-    def __init__(self, config):
-        super().__init__(config)
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.attention_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.attention_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.attention_bias)
+    pass
 
 
 @auto_docstring(checkpoint="zai-org/GLM-OCR")
 @strict
 class GlmOcrVisionConfig(Glm4vVisionConfig):
+    attribute_map = {"num_attention_heads": "num_heads", "mlp_bias": "attention_bias"}
     hidden_size: int = 1024
     attention_bias: bool = True
     num_heads: int = 16

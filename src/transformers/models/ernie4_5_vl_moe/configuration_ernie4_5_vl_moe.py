@@ -85,6 +85,7 @@ class Ernie4_5_VLMoeTextConfig(PreTrainedConfig):
         "num_experts_per_tok": "moe_k",
         "num_local_experts": "moe_num_experts",
         "moe_num_shared_experts": "n_shared_experts",
+        "mlp_bias": "use_bias",
     }
     default_theta = 500000.0
 

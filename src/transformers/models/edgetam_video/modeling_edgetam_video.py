@@ -1181,13 +1181,14 @@ class EdgeTamVideoMemoryAttentionMLP(nn.Module):
     def __init__(self, config: EdgeTamVideoConfig):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.memory_attention_mlp_hidden_act]
+        self.act_fn = ACT2FN[config.memory_attention_mlp_hidden_act]
         self.up_proj = nn.Linear(config.memory_attention_hidden_size, config.memory_attention_mlp_hidden_size)
         self.down_proj = nn.Linear(config.memory_attention_mlp_hidden_size, config.memory_attention_hidden_size)
         self.dropout = nn.Dropout(config.memory_attention_dropout)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.down_proj(self.dropout(self.activation_fn(self.up_proj(hidden_states))))
+        down_proj = self.down_proj(self.dropout(self.act_fn(self.up_proj(hidden_states))))
+        return down_proj
 
 
 class EdgeTamVideoMemoryAttentionLayer(nn.Module):

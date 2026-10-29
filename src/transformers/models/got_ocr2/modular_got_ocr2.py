@@ -35,7 +35,7 @@ from ..llava.modeling_llava import (
     LlavaPreTrainedModel,
 )
 from ..sam.modeling_sam import (
-    SamMLPBlock,
+    SamMLP,
     SamPreTrainedModel,
     SamVisionAttention,
     SamVisionEncoder,
@@ -158,7 +158,7 @@ class GotOcr2VisionEncoderOutput(BaseModelOutputWithPooling):
     image_embeds: torch.FloatTensor | None = None
 
 
-class GotOcr2MLPBlock(SamMLPBlock):
+class GotOcr2MLP(SamMLP):
     pass
 
 

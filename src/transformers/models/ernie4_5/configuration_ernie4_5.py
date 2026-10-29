@@ -44,6 +44,7 @@ class Ernie4_5Config(PreTrainedConfig):
 
     model_type = "ernie4_5"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"mlp_bias": "use_bias"}
     default_theta = 500000.0
     # Default tensor parallel plan for base model `Ernie4_5Model`
     base_model_tp_plan = {

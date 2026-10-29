@@ -129,17 +129,17 @@ class SamPatchEmbeddings(nn.Module):
         return embeddings
 
 
-class SamMLPBlock(nn.Module):
+class SamMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.lin1 = nn.Linear(config.hidden_size, config.mlp_dim)
-        self.lin2 = nn.Linear(config.mlp_dim, config.hidden_size)
-        self.act = ACT2FN[config.hidden_act]
+        self.up_proj = nn.Linear(config.hidden_size, config.mlp_dim)
+        self.down_proj = nn.Linear(config.mlp_dim, config.hidden_size)
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.lin1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.lin2(hidden_states)
+        hidden_states = self.up_proj(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.down_proj(hidden_states)
         return hidden_states
 
 
@@ -296,7 +296,7 @@ class SamTwoWayAttentionBlock(nn.Module):
         self.cross_attn_token_to_image = SamAttention(config, downsample_rate=attention_downsample_rate)
         self.layer_norm2 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
-        self.mlp = SamMLPBlock(config)
+        self.mlp = SamMLP(config)
         self.layer_norm3 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
 
         self.layer_norm4 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
@@ -894,7 +894,7 @@ class SamVisionLayer(GradientCheckpointingLayer):
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn = SAM_VISION_ATTENTION_CLASSES[config._attn_implementation](config, window_size)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.mlp = SamMLPBlock(config)
+        self.mlp = SamMLP(config)
         self.window_size = window_size
 
     def window_partition(self, hidden_states: torch.Tensor, window_size: int) -> tuple[torch.Tensor, tuple[int, int]]:

@@ -687,14 +687,12 @@ class Ernie4_5_VLMoeVisionMLP(nn.Module):
         self.up_proj = nn.Linear(in_dim, out_dim)
         self.act_fn = nn.GELU()
         self.down_proj = nn.Linear(out_dim, out_dim)
-        self.ln = nn.LayerNorm(out_dim, eps=config.vision_config.rms_norm_eps)
+        self.layer_norm = nn.LayerNorm(out_dim, eps=config.vision_config.rms_norm_eps)
 
     def forward(self, hidden_states):
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.act_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        hidden_states = self.ln(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        down_proj = self.layer_norm(down_proj)
+        return down_proj
 
 
 class Ernie4_5_VLMoeVariableResolutionResamplerModel(nn.Module):

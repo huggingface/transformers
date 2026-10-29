@@ -473,15 +473,13 @@ class SwinAttention(nn.Module):
 class SwinMLP(nn.Module):
     def __init__(self, config: SwinConfig, dim: int):
         super().__init__()
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.up_proj = nn.Linear(dim, int(config.mlp_ratio * dim))
         self.down_proj = nn.Linear(int(config.mlp_ratio * dim), dim)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 def window_partition(input_feature, window_size):

@@ -32,6 +32,7 @@ from ..ernie4_5.modeling_ernie4_5 import (  # noqa: F401
     apply_rotary_pos_emb,
     rotate_half,
 )
+from ..hy_v3.modeling_hy_v3 import HYV3MLP
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaRMSNorm
 from ..mixtral.modeling_mixtral import (
     MixtralForCausalLM,
@@ -39,7 +40,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralTopKRouter,
 )
 from ..olmo.modeling_olmo import OlmoRotaryEmbedding
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts, Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeExperts
 from ..qwen3_moe.modeling_qwen3_moe import Qwen3MoeSparseMoeBlock
 from .configuration_ernie4_5_moe import Ernie4_5_MoeConfig
 
@@ -51,13 +52,8 @@ class Ernie4_5_MoeRMSNorm(LlamaRMSNorm):
     pass
 
 
-class Ernie4_5_MoeMLP(Qwen2MoeMLP):
-    def __init__(self, config, intermediate_size=None):
-        super().__init__(config, intermediate_size)
-
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.use_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
+class Ernie4_5_MoeMLP(HYV3MLP):
+    pass
 
 
 class Ernie4_5_MoeRotaryEmbedding(OlmoRotaryEmbedding):

@@ -781,7 +781,8 @@ class Step3p7MLP(DeepseekV4MLP):
     def forward(self, x):
         gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
         up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
-        return self.down_proj(gate * up)
+        down_proj = self.down_proj(gate * up)
+        return down_proj
 
 
 @no_inherit_decorator

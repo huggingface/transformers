@@ -325,12 +325,11 @@ class Glm5NextTextMLP(Qwen2MoeMLP):
         self.swiglu_limit = config.swiglu_limit
 
     def forward(self, x):
-        gate = self.gate_proj(x)
-        up = self.up_proj(x)
         # Key difference using clamping
-        gate = gate.clamp(min=None, max=self.swiglu_limit)
-        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
-        return self.down_proj(self.act_fn(gate) * up)
+        gate = self.gate_proj(x).clamp(max=self.swiglu_limit)
+        up = self.up_proj(x).clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        down_proj = self.down_proj(self.act_fn(gate) * up)
+        return down_proj
 
 
 class Glm5NextTextExperts(DeepseekV4Experts):
@@ -1374,13 +1373,12 @@ class Glm5NextVisionMLP(GlmOcrVisionMlp):
         super().__init__(config)
         self.swiglu_limit = config.swiglu_limit
 
-    def forward(self, hidden_state):
-        gate = self.gate_proj(hidden_state)
-        up = self.up_proj(hidden_state)
+    def forward(self, x):
         # Key difference using clamping
-        gate = gate.clamp(min=None, max=self.swiglu_limit)
-        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
-        return self.down_proj(self.act_fn(gate) * up)
+        gate = self.gate_proj(x).clamp(max=self.swiglu_limit)
+        up = self.up_proj(x).clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        down_proj = self.down_proj(self.act_fn(gate) * up)
+        return down_proj
 
 
 class Glm5NextVisionPatchMerger(GlmOcrVisionPatchMerger):

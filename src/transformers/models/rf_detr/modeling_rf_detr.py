@@ -281,16 +281,14 @@ class RfDetrDinov2MLP(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         # the hidden size comes from mlp_ratio; the config has no intermediate_size
         self.up_proj = nn.Linear(config.hidden_size, int(config.hidden_size * config.mlp_ratio))
         self.down_proj = nn.Linear(int(config.hidden_size * config.mlp_ratio), config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class RfDetrDinov2SwiGLUFFN(nn.Module):
@@ -962,14 +960,14 @@ class RfDetrMLP(nn.Module):
     def __init__(self, config: RfDetrConfig):
         super().__init__()
         self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.decoder_activation_function]
+        self.act_fn = ACT2FN[config.decoder_activation_function]
         self.up_proj = nn.Linear(config.d_model, config.decoder_ffn_dim)
         self.down_proj = nn.Linear(config.decoder_ffn_dim, config.d_model)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = self.down_proj(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1908,15 +1906,13 @@ class RfDetrSegmentationMLP(nn.Module):
     def __init__(self, config: RfDetrConfig):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.segmentation_head_activation_function]
+        self.act_fn = ACT2FN[config.segmentation_head_activation_function]
         self.up_proj = nn.Linear(config.d_model, config.intermediate_size)
         self.down_proj = nn.Linear(config.intermediate_size, config.d_model)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class RfDetrSegmentationMLPBlock(nn.Module):

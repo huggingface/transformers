@@ -89,7 +89,7 @@ class VibeVoiceDiffusionHeadMLP(CLIPMLP):
     def __init__(self, config):
         super().__init__()
         self.up_proj = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.down_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
 

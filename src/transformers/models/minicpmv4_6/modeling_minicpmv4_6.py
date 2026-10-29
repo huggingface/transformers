@@ -97,15 +97,13 @@ class MiniCPMV4_6VisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -498,15 +496,13 @@ class MiniCPMV4_6DownsampleMLP(nn.Module):
 
         self.pre_norm = nn.LayerNorm(merged_hidden_size, eps=1e-6)
         self.up_proj = nn.Linear(merged_hidden_size, merged_hidden_size, bias=True)
-        self.activation_fn = nn.GELU()
+        self.act_fn = nn.GELU()
         self.down_proj = nn.Linear(merged_hidden_size, llm_embed_dim, bias=True)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.pre_norm(hidden_states).view(-1, self.up_proj.in_features)
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class MiniCPMV4_6Merger(nn.Module):

@@ -116,15 +116,13 @@ class Step3p7VisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -534,7 +532,8 @@ class Step3p7MLP(nn.Module):
     def forward(self, x) -> torch.Tensor:
         gate = self.act_fn(self.gate_proj(x)).clamp(max=self.limit)
         up = self.up_proj(x).clamp(min=-self.limit, max=self.limit)
-        return self.down_proj(gate * up)
+        down_proj = self.down_proj(gate * up)
+        return down_proj
 
 
 class Step3p7Experts(nn.Module):

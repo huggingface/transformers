@@ -57,8 +57,9 @@ class Starcoder2MLP(CLIPMLP):
         self.residual_dropout = config.residual_dropout
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.down_proj(self.activation_fn(self.up_proj(hidden_states)))
-        return nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        down_proj = nn.functional.dropout(down_proj, p=self.residual_dropout, training=self.training)
+        return down_proj
 
 
 class Starcoder2Attention(MistralAttention):

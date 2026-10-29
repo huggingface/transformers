@@ -307,9 +307,7 @@ class MuseSparkTextInputScaledRMSNorm(MuseGlimmerTextCenteredRMSNorm):
 
 
 class MuseSparkTextMLP(MuseGlimmerTextMLP):
-    def __init__(self, config: MuseSparkTextConfig):
-        super().__init__(config)
-        self.act_fn = ACT2FN[config.hidden_act]
+    pass
 
 
 class MuseSparkTopKRouter(MiniMaxM2TopKRouter):
@@ -657,7 +655,7 @@ class MuseSparkAudioMLP(CLIPMLP):
         self.intermediate_size = int(self.hidden_size * config.mlp_ratio)
         self.fc1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
         self.fc2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
 
 
 class MuseSparkAudioConvBlock(nn.Module):

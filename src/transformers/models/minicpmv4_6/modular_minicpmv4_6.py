@@ -444,7 +444,7 @@ class MiniCPMV4_6DownsampleMLP(CLIPMLP):
 
         self.pre_norm = nn.LayerNorm(merged_hidden_size, eps=1e-6)
         self.up_proj = nn.Linear(merged_hidden_size, merged_hidden_size, bias=True)
-        self.activation_fn = nn.GELU()
+        self.act_fn = nn.GELU()
         self.down_proj = nn.Linear(merged_hidden_size, llm_embed_dim, bias=True)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:

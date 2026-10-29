@@ -86,13 +86,11 @@ class AriaProjectorMLP(nn.Module):
         super().__init__()
         self.up_proj = nn.Linear(in_features, hidden_features, bias=False)
         self.down_proj = nn.Linear(hidden_features, output_dim, bias=False)
-        self.activation_fn = ACT2FN["gelu_new"]
+        self.act_fn = ACT2FN["gelu_new"]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class AriaCrossAttention(nn.Module):

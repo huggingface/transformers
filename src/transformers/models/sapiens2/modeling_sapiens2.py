@@ -512,7 +512,8 @@ class Sapiens2MLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        return self.down_proj(self.act_fn(self.up_proj(x)))
+        down_proj = self.down_proj(self.act_fn(self.up_proj(x)))
+        return down_proj
 
 
 class Sapiens2GatedMLP(nn.Module):

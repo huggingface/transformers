@@ -61,11 +61,11 @@ from ..gemma3.modeling_gemma3 import (
     create_sliding_window_causal_mask,
     eager_attention_forward,
 )
-from ..mistral.modeling_mistral import MistralMLP
 from ..t5gemma.modeling_t5gemma import (
     T5GemmaClassificationHead,
     T5GemmaEncoderLayer,
     T5GemmaLMHead,
+    T5GemmaMLP,
 )
 
 
@@ -211,16 +211,8 @@ class T5Gemma2RMSNorm(GemmaRMSNorm):
     pass
 
 
-class T5Gemma2MLP(MistralMLP):
-    def __init__(self, config: T5Gemma2TextConfig):
-        super().__init__(config)
-        self.dropout = nn.Dropout(config.dropout_rate)
-
-    def forward(self, x):
-        hidden_states = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
-        hidden_states = self.dropout(hidden_states)
-        down_proj = self.down_proj(hidden_states)
-        return down_proj
+class T5Gemma2MLP(T5GemmaMLP):
+    pass
 
 
 class T5Gemma2RotaryEmbedding(Gemma3RotaryEmbedding):

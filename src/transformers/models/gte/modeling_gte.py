@@ -258,9 +258,7 @@ class GteMLP(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # Unlike MistralMLP, `down_proj` carries a bias and the gated activation is dropped out.
-        hidden_states = self.act_fn(self.gate_proj(x)) * self.up_proj(x)
-        hidden_states = self.dropout(hidden_states)
-        down_proj = self.down_proj(hidden_states)
+        down_proj = self.down_proj(self.dropout(self.act_fn(self.gate_proj(x)) * self.up_proj(x)))
         return down_proj
 
 

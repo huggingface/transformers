@@ -53,14 +53,15 @@ class Starcoder2MLP(nn.Module):
     def __init__(self, config: Starcoder2Config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
         self.residual_dropout = config.residual_dropout
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.down_proj(self.activation_fn(self.up_proj(hidden_states)))
-        return nn.functional.dropout(hidden_states, p=self.residual_dropout, training=self.training)
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        down_proj = nn.functional.dropout(down_proj, p=self.residual_dropout, training=self.training)
+        return down_proj
 
 
 def rotate_half(x):

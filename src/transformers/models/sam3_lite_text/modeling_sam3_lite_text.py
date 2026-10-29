@@ -122,15 +122,13 @@ class Sam3LiteTextConvMLP(nn.Module):
 
     def __init__(self, config: Sam3LiteTextTextConfig):
         super().__init__()
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.up_proj = nn.Conv2d(config.hidden_size, config.intermediate_size, kernel_size=1)
         self.down_proj = nn.Conv2d(config.intermediate_size, config.hidden_size, kernel_size=1)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class Sam3LiteTextConvolutionalFeedForward(nn.Module):
@@ -274,15 +272,13 @@ class Sam3LiteTextTextMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class Sam3LiteTextTextEncoderLayer(GradientCheckpointingLayer):

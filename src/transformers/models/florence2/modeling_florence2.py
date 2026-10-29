@@ -117,15 +117,13 @@ class Florence2VisionMLP(nn.Module):
     def __init__(self, config: Florence2VisionConfig, stage_idx: int):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.activation_function]
+        self.act_fn = ACT2FN[config.activation_function]
         self.up_proj = nn.Linear(config.embed_dim[stage_idx], int(config.embed_dim[stage_idx] * config.mlp_ratio))
         self.down_proj = nn.Linear(int(config.embed_dim[stage_idx] * config.mlp_ratio), config.embed_dim[stage_idx])
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class Florence2VisionConvEmbed(nn.Module):

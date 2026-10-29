@@ -495,9 +495,10 @@ class InklingMLP(MistralMLP):
         self.act_fn = ACT2FN[config.hidden_act]
         self.global_scale = nn.Parameter(torch.ones(1))
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
-        return hidden_states * self.global_scale
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        down_proj = down_proj * self.global_scale
+        return down_proj
 
 
 class InklingExperts(Qwen2MoeExperts):

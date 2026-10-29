@@ -318,12 +318,9 @@ class JanusVisionMLP(Dinov2MLP):
         self.dropout2 = nn.Dropout(config.hidden_dropout_rate)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.dropout1(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        hidden_states = self.dropout2(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.dropout1(self.act_fn(self.up_proj(hidden_states))))
+        down_proj = self.dropout2(down_proj)
+        return down_proj
 
 
 class JanusVisionEncoderLayer(CLIPEncoderLayer):
@@ -386,12 +383,12 @@ class JanusVisionAlignerMLP(nn.Module):
         self.hidden_layers = nn.ModuleList(
             [nn.Linear(config.projection_dim, config.projection_dim) for _ in range(1, config.depth)]
         )
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
         for layer in self.hidden_layers:
-            hidden_states = self.activation_fn(hidden_states)
+            hidden_states = self.act_fn(hidden_states)
             hidden_states = layer(hidden_states)
         return hidden_states
 
@@ -668,12 +665,12 @@ class JanusVQVAEAlignerMLP(nn.Module):
         self.hidden_layers = nn.ModuleList(
             [nn.Linear(config.projection_dim, config.projection_dim) for _ in range(1, config.num_hidden_layers)]
         )
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states):
         hidden_states = self.fc1(hidden_states)
         for layer in self.hidden_layers:
-            hidden_states = self.activation_fn(hidden_states)
+            hidden_states = self.act_fn(hidden_states)
             hidden_states = layer(hidden_states)
         return hidden_states
 

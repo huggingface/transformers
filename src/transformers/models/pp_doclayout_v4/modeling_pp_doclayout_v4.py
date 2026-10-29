@@ -474,12 +474,12 @@ class PPDocLayoutV4MLP(nn.Module):
         super().__init__()
         self.up_proj = nn.Linear(hidden_size, intermediate_size)
         self.down_proj = nn.Linear(intermediate_size, hidden_size)
-        self.activation_fn = ACT2FN[activation_function]
+        self.act_fn = ACT2FN[activation_function]
         self.activation_dropout = config.activation_dropout
         self.dropout = config.dropout
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.activation_fn(self.up_proj(hidden_states))
+        hidden_states = self.act_fn(self.up_proj(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.down_proj(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)

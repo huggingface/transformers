@@ -517,12 +517,12 @@ class FalconMLP(nn.Module):
         hidden_size = config.hidden_size
 
         self.dense_h_to_4h = FalconLinear(hidden_size, config.ffn_hidden_size, bias=config.bias)
-        self.act = get_activation(config.activation)
+        self.act_fn = get_activation(config.activation)
         self.dense_4h_to_h = FalconLinear(config.ffn_hidden_size, hidden_size, bias=config.bias)
         self.hidden_dropout = config.hidden_dropout
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.act(self.dense_h_to_4h(x))
+        x = self.act_fn(self.dense_h_to_4h(x))
         x = self.dense_4h_to_h(x)
         return x
 

@@ -258,17 +258,15 @@ BARK_ATTENTION_CLASSES = {
 class BarkMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.in_proj = nn.Linear(config.hidden_size, 4 * config.hidden_size, bias=config.bias)
-        self.out_proj = nn.Linear(4 * config.hidden_size, config.hidden_size, bias=config.bias)
+        self.up_proj = nn.Linear(config.hidden_size, 4 * config.hidden_size, bias=config.bias)
+        self.down_proj = nn.Linear(4 * config.hidden_size, config.hidden_size, bias=config.bias)
         self.dropout = nn.Dropout(config.dropout)
-        self.gelu = nn.GELU()
+        self.act_fn = nn.GELU()
 
     def forward(self, hidden_states):
-        hidden_states = self.in_proj(hidden_states)
-        hidden_states = self.gelu(hidden_states)
-        hidden_states = self.out_proj(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        down_proj = self.dropout(down_proj)
+        return down_proj
 
 
 class BarkBlock(GradientCheckpointingLayer):

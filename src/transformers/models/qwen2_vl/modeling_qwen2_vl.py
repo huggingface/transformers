@@ -320,11 +320,11 @@ class VisionMlp(nn.Module):
     def __init__(self, dim: int, hidden_dim: int, hidden_act: str) -> None:
         super().__init__()
         self.up_proj = nn.Linear(dim, hidden_dim)
-        self.act = ACT2FN[hidden_act]
+        self.act_fn = ACT2FN[hidden_act]
         self.down_proj = nn.Linear(hidden_dim, dim)
 
     def forward(self, x) -> torch.Tensor:
-        return self.down_proj(self.act(self.up_proj(x)))
+        return self.down_proj(self.act_fn(self.up_proj(x)))
 
 
 # Copied from transformers.models.llama.modeling_llama.repeat_kv

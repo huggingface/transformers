@@ -1472,7 +1472,7 @@ class Qwen3OmniMoeTalkerResizeMLP(CLIPMLP):
         nn.Module.__init__(self)
         self.up_proj = nn.Linear(config.thinker_hidden_size, config.text_config.intermediate_size, bias=True)
         self.down_proj = nn.Linear(config.text_config.intermediate_size, config.text_config.hidden_size, bias=True)
-        self.activation_fn = ACT2FN[config.text_config.hidden_act]
+        self.act_fn = ACT2FN[config.text_config.hidden_act]
 
 
 @dataclass

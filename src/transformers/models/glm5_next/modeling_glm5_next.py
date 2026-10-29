@@ -95,12 +95,11 @@ class Glm5NextTextMLP(nn.Module):
         self.swiglu_limit = config.swiglu_limit
 
     def forward(self, x):
-        gate = self.gate_proj(x)
-        up = self.up_proj(x)
         # Key difference using clamping
-        gate = gate.clamp(min=None, max=self.swiglu_limit)
-        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
-        return self.down_proj(self.act_fn(gate) * up)
+        gate = self.gate_proj(x).clamp(max=self.swiglu_limit)
+        up = self.up_proj(x).clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        down_proj = self.down_proj(self.act_fn(gate) * up)
+        return down_proj
 
 
 @use_experts_implementation
@@ -1529,19 +1528,18 @@ class Glm5NextVisionMLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.attention_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.attention_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.attention_bias)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
         self.act_fn = ACT2FN[config.hidden_act]
         self.swiglu_limit = config.swiglu_limit
 
-    def forward(self, hidden_state):
-        gate = self.gate_proj(hidden_state)
-        up = self.up_proj(hidden_state)
+    def forward(self, x):
         # Key difference using clamping
-        gate = gate.clamp(min=None, max=self.swiglu_limit)
-        up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
-        return self.down_proj(self.act_fn(gate) * up)
+        gate = self.gate_proj(x).clamp(max=self.swiglu_limit)
+        up = self.up_proj(x).clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
+        down_proj = self.down_proj(self.act_fn(gate) * up)
+        return down_proj
 
 
 class Glm5NextVisionPatchMerger(nn.Module):

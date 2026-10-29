@@ -185,14 +185,13 @@ class FunAsrNanoMLP(nn.Module):
     def __init__(self, config: FunAsrNanoEncoderConfig):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
         self.hidden_dropout = config.hidden_dropout
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.act_fn(self.up_proj(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.hidden_dropout, training=self.training)
         hidden_states = self.down_proj(hidden_states)
         return nn.functional.dropout(hidden_states, p=self.hidden_dropout, training=self.training)

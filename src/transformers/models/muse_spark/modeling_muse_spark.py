@@ -159,7 +159,7 @@ class MuseSparkTextInputScaledRMSNorm(nn.Module):
 
 
 class MuseSparkTextMLP(nn.Module):
-    def __init__(self, config: MuseSparkTextConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -829,15 +829,13 @@ class MuseSparkVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size)
         self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class MuseSparkVisionEncoderLayer(GradientCheckpointingLayer):
@@ -1153,13 +1151,11 @@ class MuseSparkAudioMLP(nn.Module):
         self.intermediate_size = int(self.hidden_size * config.mlp_ratio)
         self.fc1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
         self.fc2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class MuseSparkAudioConvBlock(nn.Module):

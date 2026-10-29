@@ -90,14 +90,12 @@ class VibeVoiceAsrFeedForward(nn.Module):
     def __init__(self, config, hidden_size):
         super().__init__()
         self.up_proj = nn.Linear(hidden_size, config.ffn_expansion * hidden_size)
-        self.activation_fn = ACT2FN[config.hidden_act]
+        self.act_fn = ACT2FN[config.hidden_act]
         self.down_proj = nn.Linear(config.ffn_expansion * hidden_size, hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.up_proj(hidden_states)
-        hidden_states = self.activation_fn(hidden_states)
-        hidden_states = self.down_proj(hidden_states)
-        return hidden_states
+        down_proj = self.down_proj(self.act_fn(self.up_proj(hidden_states)))
+        return down_proj
 
 
 class VibeVoiceAsrConv1dCacheLayer:

@@ -672,9 +672,9 @@ class Phi4MultimodalAudioMLP(nn.Module):
         up_states = up_states * self.act_fn(gate)
         up_states = self.dropout(up_states)
         hidden_states = self.down_proj(up_states)
-        out = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states)
 
-        return out
+        return hidden_states
 
 
 class Phi4MultimodalAudioAttention(nn.Module):

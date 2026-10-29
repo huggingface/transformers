@@ -186,7 +186,7 @@ class AXK2RMSNorm(LlamaRMSNorm):
 class AXK2GateMLP(CLIPMLP):
     def __init__(self, config: AXK2Config):
         super().__init__(config)
-        self.activation_fn = nn.SiLU()
+        self.act_fn = nn.SiLU()
         self.up_proj = nn.Linear(config.hidden_size, config.gated_norm_rank, bias=False)
         self.down_proj = nn.Linear(config.gated_norm_rank, config.hidden_size, bias=False)
 

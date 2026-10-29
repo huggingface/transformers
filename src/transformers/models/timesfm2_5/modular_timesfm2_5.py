@@ -29,7 +29,6 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
-from ..clip.modeling_clip import CLIPMLP
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaRMSNorm,
@@ -37,6 +36,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..nemotron.modeling_nemotron import NemotronMLP
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from ..timesfm.configuration_timesfm import TimesFmConfig
 from ..timesfm.modeling_timesfm import (
@@ -86,6 +86,8 @@ class TimesFm2_5Config(TimesFmConfig):
     >>> configuration = model.config
     ```
     """
+
+    attribute_map = {"hidden_act": "activation", "mlp_bias": "use_bias"}
 
     context_length: int = 16384
     num_key_value_heads: int = 16
@@ -138,12 +140,8 @@ class TimesFm2_5OutputForPrediction(TimesFmOutputForPrediction):
     pass
 
 
-class TimesFm2_5MLP(CLIPMLP):
-    def __init__(self, config: TimesFm2_5Config):
-        super().__init__()
-        self.activation_fn = ACT2FN[config.activation]
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=config.use_bias)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.use_bias)
+class TimesFm2_5MLP(NemotronMLP):
+    pass
 
 
 class TimesFm2_5ResidualBlock(TimesFmResidualBlock):

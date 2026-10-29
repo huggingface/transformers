@@ -57,7 +57,8 @@ class ArceeMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        return self.down_proj(self.act_fn(self.up_proj(x)))
+        down_proj = self.down_proj(self.act_fn(self.up_proj(x)))
+        return down_proj
 
 
 @use_kernel_forward_from_hub("RMSNorm")
