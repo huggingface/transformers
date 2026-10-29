@@ -331,6 +331,9 @@ IGNORE_NON_TESTED = (
         "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
         "Nemotron3DiarizationAudioModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3DiarizationModel.
+        "Nemotron3_5TranscribeAsrAudioModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3_5TranscribeModel.
+        "Nemotron3_5TranscribeAudioModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3_5TranscribeModel.
+        "Nemotron3_5TranscribeWordTimestampModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3_5TranscribeModel.
         "MossTranscribeDiarizeAudioModel",  # Building part of bigger (tested) model. Tested implicitly through MossTranscribeDiarizeForConditionalGeneration.
     ]
 )
@@ -601,6 +604,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("inkling_audio", "inkling"),
         ("inkling_vision", "inkling"),
         ("inkling_mm_model", "inkling"),
+        ("nemo_speechlm", "nemotron3_5_transcribe"),
     ]
 )
 
