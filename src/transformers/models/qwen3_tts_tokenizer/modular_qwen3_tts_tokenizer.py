@@ -90,18 +90,17 @@ class Qwen3TTSTokenizerAcousticQuantizerConfig(PreTrainedConfig):
 
     model_type = "qwen3_tts_tokenizer_acoustic_quantizer"
     base_config_key = "acoustic_quantizer_config"
-    attribute_map = {"num_quantizers": "n_codebooks"}
 
     codebook_size: int = 2048
     codebook_dim: int = 256
-    n_codebooks: int = 15
+    num_quantizers: int = 15
     vector_quantization_hidden_dimension: int = 256
     hidden_size: int = 512
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.n_codebooks < 0:
-            raise ValueError(f"`n_codebooks` must not be negative, but is {self.n_codebooks}.")
+        if self.num_quantizers < 0:
+            raise ValueError(f"`num_quantizers` must not be negative, but is {self.num_quantizers}.")
 
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
@@ -282,7 +281,7 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
                 "hidden_size": input_width,
             }
             num_acoustic_quantizers = decoder_config["num_quantizers"] - num_semantic_quantizers
-            config_dict.setdefault("acoustic_quantizer_config", {**shared, "n_codebooks": num_acoustic_quantizers})
+            config_dict.setdefault("acoustic_quantizer_config", {**shared, "num_quantizers": num_acoustic_quantizers})
             config_dict.setdefault("semantic_quantizer_config", {**shared, "num_quantizers": num_semantic_quantizers})
             decoder_fields = Qwen3TTSTokenizerDecoderConfig.__dataclass_fields__.keys() | {"rope_theta"}
             config_dict["decoder_config"] = {

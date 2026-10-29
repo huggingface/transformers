@@ -91,7 +91,7 @@ class Qwen3TTSTokenizerModelTester:
                 "codebook_dim": 8,
                 "vector_quantization_hidden_dimension": 8,
                 "hidden_size": 16,
-                "n_codebooks": num_quantizers - 1,
+                "num_quantizers": num_quantizers - 1,
             },
             "semantic_quantizer_config": {
                 "codebook_size": 8,
@@ -302,7 +302,7 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
                 "rope_parameters": {"rope_type": "default", "rope_theta": 4.0},
                 "layer_scale_initial_scale": 1.0,
             },
-            acoustic_quantizer_config={"n_codebooks": 3},
+            acoustic_quantizer_config={"num_quantizers": 3},
         )
         input_values = torch.linspace(
             -1, 1, self.model_tester.batch_size * self.model_tester.audio_samples, device=torch_device
@@ -340,7 +340,7 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_independent_semantic_quantizer_encode_decode(self):
         acoustic_config = Qwen3TTSTokenizerAcousticQuantizerConfig(
-            n_codebooks=1, codebook_size=5, codebook_dim=2, vector_quantization_hidden_dimension=2, hidden_size=2
+            num_quantizers=1, codebook_size=5, codebook_dim=2, vector_quantization_hidden_dimension=2, hidden_size=2
         )
         semantic_config = Qwen3TTSTokenizerSemanticQuantizerConfig(
             num_quantizers=2, codebook_size=3, codebook_dim=1, vector_quantization_hidden_dimension=1, hidden_size=2

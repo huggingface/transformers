@@ -87,7 +87,7 @@ def _build_tiny_audio_tokenizer(num_quantizers=4):
         acoustic_quantizer_config={
             "codebook_size": 8,
             "codebook_dim": 8,
-            "n_codebooks": num_quantizers - 1,
+            "num_quantizers": num_quantizers - 1,
             "vector_quantization_hidden_dimension": 8,
             "hidden_size": 16,
         },
@@ -976,7 +976,7 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             audio = processor.decode(codes)
         audio_tokenizer_config = processor.audio_tokenizer.config
         num_codebooks = (
-            audio_tokenizer_config.acoustic_quantizer_config.n_codebooks
+            audio_tokenizer_config.acoustic_quantizer_config.num_quantizers
             + audio_tokenizer_config.semantic_quantizer_config.num_quantizers
         )
         self.assertEqual(codes.shape[-1], num_codebooks)
