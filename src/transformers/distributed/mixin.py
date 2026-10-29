@@ -16,7 +16,6 @@ from __future__ import annotations
 import os
 import re
 import shutil
-from collections import Counter
 from itertools import chain
 from typing import TYPE_CHECKING
 
@@ -53,31 +52,6 @@ logger = logging.get_logger(__name__)
 
 if TYPE_CHECKING:
     import torch.nn as nn
-
-
-def _apply_dtype_plan(model: nn.Module, dtype_plan: dict[str, torch.dtype] | None) -> None:
-    """Give the parameters the dtypes they will have once the weights are loaded.
-
-    The model is built uniformly in the requested dtype, but the loader applies `dtype_plan`
-    (`_keep_in_fp32_modules{_strict}`) when the checkpoint lands -- which is *after* the model is sharded. The parallel
-    plans are built from the parameter dtypes, so they have to see the post-load ones rather than the init ones;
-    retyping is free while the parameters are still on meta.
-    """
-    if not dtype_plan:
-        return
-
-    from ..core_model_loading import build_glob_alternation
-
-    pattern, group_to_glob, _ = build_glob_alternation(list(dtype_plan))
-    for name, param in model.named_parameters():
-        match = pattern.search(name)
-        if match is not None and param.dtype != (dtype := dtype_plan[group_to_glob[match.lastgroup]]):
-            param.data = param.data.to(dtype)
-
-
-def _trainable_dtypes(module: nn.Module, recurse: bool = True) -> list[torch.dtype]:
-    """The dtypes FSDP2 checks for uniformity: frozen parameters are left out of its check, so leave them out here."""
-    return [param.dtype for param in module.parameters(recurse=recurse) if param.requires_grad]
 
 
 class DistributedMixin:
@@ -313,37 +287,14 @@ class DistributedMixin:
         ep_plan = self._expand_parallel_plan(ep_plan)
         fsdp_plan = self._expand_parallel_plan(fsdp_plan)
 
-        # FSDP2 all-gathers a group into a single flat buffer, so every group must hold exactly one dtype.
-        fsdp_plan = self._split_fsdp_groups_by_dtype(fsdp_plan)
+        if fsdp_plan:
+            # FSDP2 needs one dtype per group, and the parameters kept in float32 are only upcast when the weights load,
+            # after sharding: the modules owning one get a group of their own.
+            fsdp_plan = dict.fromkeys(self._get_modules_kept_in_fp32(), "free_full_weight") | fsdp_plan
+            # A group takes the parameters that no group sharded before it took, so nested groups go before their parents.
+            fsdp_plan = dict(sorted(fsdp_plan.items(), key=lambda item: item[0].count("."), reverse=True))
 
         return tp_plan, ep_plan, fsdp_plan
-
-    def _split_fsdp_groups_by_dtype(self, fsdp_plan: dict[str, str]) -> dict[str, str]:
-        """Carve the modules that break a planned FSDP group's dtype uniformity into groups of their own.
-
-        FSDP2 flattens a group's parameters into one all-gather buffer, so it requires a single dtype per group -- of
-        its *trainable* parameters, which is why LoRA is unaffected. A model that keeps some of them in another dtype
-        (`_keep_in_fp32_modules_strict`, e.g. a router) would otherwise trip that check at the first forward. Such a
-        group keeps its dominant dtype, and every submodule directly owning a parameter of another dtype becomes a
-        group of its own, listed ahead of its parent (FSDP2 requires children to be sharded first).
-
-        `maybe_distribute_model` has already applied the loader's dtype plan, so the dtypes read here are the ones the
-        parameters will have once the weights land.
-        """
-        carved: dict[str, str] = {}
-        for group_name, style in fsdp_plan.items():
-            dtypes = Counter(_trainable_dtypes(self.get_submodule(group_name)))
-            if len(dtypes) < 2:
-                continue
-            dominant = dtypes.most_common(1)[0][0]
-            # `named_modules` is a pre-order walk, so reversing it lists children ahead of their parents.
-            for sub_name, submodule in reversed(list(self.get_submodule(group_name).named_modules())):
-                if sub_name and any(dtype != dominant for dtype in _trainable_dtypes(submodule, recurse=False)):
-                    carved[f"{group_name}.{sub_name}"] = style
-
-        if carved:
-            logger.info(f"Split {len(carved)} module(s) into their own FSDP group to keep each group dtype-uniform.")
-        return carved | fsdp_plan
 
     @classmethod
     def maybe_distribute_model(
@@ -351,13 +302,10 @@ class DistributedMixin:
         model: nn.Module,
         distributed_config: DistributedConfig | None,
         mesh_manager: TransformersDeviceMesh | None,
-        dtype_plan: dict[str, torch.dtype] | None = None,
     ):
         """Apply pipeline, tensor and expert parallelism, then FSDP2, after model init and before weight loading."""
         if mesh_manager is None:
             return model
-
-        _apply_dtype_plan(model, dtype_plan)
 
         model.config.distributed_config = distributed_config
         model._mesh_manager = mesh_manager

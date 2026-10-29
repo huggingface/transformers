@@ -16,7 +16,6 @@ from __future__ import annotations
 import inspect
 import os
 import warnings
-from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from ..utils import is_torch_available, is_torch_distributed_available, logging, strtobool
@@ -82,24 +81,6 @@ def _get_fsdp_policy_kwargs(distributed_config: DistributedConfig | None) -> dic
             output_dtype=None,
         )
     return fsdp_policy_kwargs
-
-
-def _get_group_policy_kwargs(module: nn.Module, policy_kwargs: dict[str, Any]) -> dict[str, Any]:
-    """Keep a group that the loader holds in its own dtype from being all-gathered in the mixed-precision one.
-
-    `_split_fsdp_groups_by_dtype` carves out the modules the loader keeps in another dtype
-    (`_keep_in_fp32_modules{_strict}`). Gathering those in `param_dtype` would silently undo the upcast, so they are
-    gathered in their own dtype instead.
-    """
-    mp_policy = policy_kwargs.get("mp_policy")
-    if mp_policy is None:
-        return policy_kwargs
-
-    dtypes = {param.dtype for param in module.parameters() if param.requires_grad}
-    if len(dtypes) != 1 or (dtype := dtypes.pop()) == mp_policy.param_dtype:
-        return policy_kwargs
-
-    return policy_kwargs | {"mp_policy": replace(mp_policy, param_dtype=dtype)}
 
 
 def _get_input_output_embeddings(model: nn.Module) -> tuple[nn.Module | None, nn.Module | None]:
@@ -256,9 +237,7 @@ def apply_fully_sharded_data_parallelism(
             reshard_targets.append((name, model.get_submodule(name)))
 
     for name, module in reshard_targets:
-        fully_shard(
-            module, mesh=fsdp_mesh, reshard_after_forward=True, **_get_group_policy_kwargs(module, fsdp_policy_kwargs)
-        )
+        fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=True, **fsdp_policy_kwargs)
         logger.debug(f"Applied fully_shard to {name} (reshard=True)")
 
     # Optimization: when the keep buffer is exactly the (final_norm, lm_head/embed)
@@ -269,15 +248,10 @@ def apply_fully_sharded_data_parallelism(
         logger.debug(f"Grouped tail {names} (reshard=False)")
     else:
         for name, module in no_reshard_targets:
-            fully_shard(
-                module,
-                mesh=fsdp_mesh,
-                reshard_after_forward=False,
-                **_get_group_policy_kwargs(module, fsdp_policy_kwargs),
-            )
+            fully_shard(module, mesh=fsdp_mesh, reshard_after_forward=False, **fsdp_policy_kwargs)
             logger.debug(f"Applied fully_shard to {name} (reshard=False)")
 
-    # Apply FSDP2 to the root module. Its own group holds only what the groups above did not take, which is uniform.
+    # Apply FSDP2 to the root module
     fully_shard(model, mesh=fsdp_mesh, **fsdp_policy_kwargs)
 
     logger.info(f"FSDP2 applied to model via _fsdp_plan: {len(fsdp_plan)} entries")

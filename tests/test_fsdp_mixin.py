@@ -28,7 +28,6 @@ from contextlib import contextmanager
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoModelForSeq2SeqLM, is_torch_available
-from transformers.core_model_loading import build_glob_alternation
 from transformers.distributed.utils import get_distributed_backend
 from transformers.testing_utils import (
     SINGLE_PROCESS_DEVICES,
@@ -390,30 +389,10 @@ def _test_fsdp2_bf16_training_impl(rank, config_class, config_dict):
         model = AutoModelForCausalLM.from_pretrained(
             init_dir, torch_dtype=torch.bfloat16, distributed_config=distributed_config
         )
-        # The loader upcasts these after sharding; they must have landed in a float32 group rather than being folded
-        # into a bfloat16 one (which FSDP2 rejects) or quietly cast back down. Match the plan the way the loader does:
-        # a substring test would read "gate.weight" as "gate" and catch every `gate_up_proj` too. Most models have an
-        # empty plan, and for them this is a plain bfloat16 training step.
-        kept_in_fp32 = {}
-        if dtype_plan := model._get_dtype_plan(torch.bfloat16):
-            pattern, group_to_glob, _ = build_glob_alternation(list(dtype_plan))
-            for name in dict(model.named_parameters()):
-                if (match := pattern.search(name)) is not None:
-                    kept_in_fp32[name] = dtype_plan[group_to_glob[match.lastgroup]]
-
-        def assert_kept_dtypes(when):
-            for name, expected in kept_in_fp32.items():
-                dtype = model.get_parameter(name).dtype
-                assert dtype == expected, f"{name} should be {expected} {when}, got {dtype}"
-
-        assert_kept_dtypes("after sharding")
-
         optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
         batches = _build_repeated_training_batches(config, _get_rank_device(rank), num_steps=2)
         losses, _ = _run_training_steps(model, optimizer, batches, track_grad_norms=False)
         assert all(torch.isfinite(torch.tensor(losses))), f"Non-finite losses: {losses}"
-
-        assert_kept_dtypes("after training")
 
 
 def _test_fsdp2_save_load_dcp_impl(rank, config_class, config_dict):

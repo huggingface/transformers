@@ -51,6 +51,7 @@ from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import (
     WeightConverter,
     WeightRenaming,
+    build_glob_alternation,
     convert_and_load_state_dict_in_model,
     revert_weight_conversion,
 )
@@ -3777,6 +3778,14 @@ class PreTrainedModel(
 
         return dtype_plan
 
+    def _get_modules_kept_in_fp32(self) -> list[str]:
+        """The modules owning a parameter that `_get_dtype_plan` keeps in float32 when the model loads in its dtype."""
+        if not (dtype_plan := self._get_dtype_plan(self.dtype)):
+            return []
+        pattern, _, _ = build_glob_alternation(list(dtype_plan))
+        modules = [name.rpartition(".")[0] for name, _ in self.named_parameters() if pattern.search(name)]
+        return list(dict.fromkeys(modules))
+
     def set_use_kernels(self, use_kernels, kernel_config: KernelConfig | None = None, mode: "Mode | None" = None):
         """
         Set whether or not to use the `kernels` library to kernelize some layers of the model.
@@ -4320,7 +4329,7 @@ class PreTrainedModel(
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
 
         if distributed_config is not None:
-            model = cls.maybe_distribute_model(model, distributed_config, mesh_manager, dtype_plan)
+            model = cls.maybe_distribute_model(model, distributed_config, mesh_manager)
 
         # Prepare the full device map
         if device_map is not None:
