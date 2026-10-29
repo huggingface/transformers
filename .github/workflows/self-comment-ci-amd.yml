@@ -277,11 +277,16 @@ jobs:
     name: Check & Report
     needs: [get-pr-number, get-pr-info, check-timestamps, create_run, model-ci]
     permissions:
+      contents: read
       pull-requests: write
       statuses: write
     if: ${{ always() && needs.create_run.result == 'success' }}
     runs-on: ubuntu-22.04
     steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - name: Download model CI new failures artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
