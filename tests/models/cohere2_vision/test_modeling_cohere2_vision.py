@@ -13,6 +13,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch GotOcr2 model."""
 
+import tempfile
 import unittest
 
 from transformers import (
@@ -22,8 +23,9 @@ from transformers import (
 )
 from transformers.testing_utils import (
     Expectations,
+    backend_device_count,
     cleanup,
-    get_device_properties,
+    get_cpu_ram_total_gib,
     require_deterministic_for_xpu,
     require_torch,
     require_torch_accelerator,
@@ -176,10 +178,16 @@ class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.model_checkpoint = "CohereLabs/command-a-vision-07-2025"
+        self.offload_dir = tempfile.TemporaryDirectory()
 
-    def get_model(self, dummy=True):
-        device_type, major, _ = get_device_properties()
-        dtype = torch.float16
+    def tearDown(self):
+        try:
+            self.offload_dir.cleanup()
+        finally:
+            super().tearDown()
+
+    def get_model(self, dummy=False):
+        dtype = torch.float32 if dummy else torch.float16
 
         # too large to fit into A10
         config = Cohere2VisionConfig.from_pretrained(self.model_checkpoint)
@@ -187,11 +195,25 @@ class Cohere2IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             config.text_config.num_hidden_layers = 4
             config.text_config.layer_types = config.text_config.layer_types[:4]
 
+        # `device_map="auto"` only reserves a buffer with one visible device; on the
+        # multi-GPU runner it packs cards to free memory and `_materialize_copy`'s
+        # transient weight copy OOMs, so cap each device at 70% for headroom.
+        n = backend_device_count(torch_device)
+        if n > 0 and torch_device != "cpu":
+            torch_accel = getattr(torch, torch_device)
+            per_device = int(min(torch_accel.get_device_properties(i).total_memory for i in range(n)) * 0.70 / 1024**3)
+            max_memory = dict.fromkeys(range(n), f"{per_device}GiB")
+            max_memory["cpu"] = f"{int(get_cpu_ram_total_gib() * 0.9)}GiB"
+        else:
+            max_memory = None
+
         model = Cohere2VisionForConditionalGeneration.from_pretrained(
             self.model_checkpoint,
             config=config,
             dtype=dtype,
             device_map="auto",
+            max_memory=max_memory,
+            offload_folder=self.offload_dir.name,
         )
         return model
 
