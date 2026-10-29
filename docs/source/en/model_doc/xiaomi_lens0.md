@@ -29,22 +29,24 @@ limitations under the License.
 
 ## Overview
 
-[Xiaomi-Lens-0](https://huggingface.co/papers/2610.23279) is a 4B multimodal model from Xiaomi built on [Qwen3.5](./qwen3_5)-4B that grounds its answers at the pixel level. Besides text, it writes a `<|mask|>` token for every region it refers to, and a lightweight mask decoder turns the hidden state of each `<|mask|>` token into a segmentation mask. The same mechanism covers referring expression comprehension and segmentation, multi-instance grounding, reasoning segmentation, embodied referring, and fine-grained perception, where masks also appear in the reasoning trace (for example one per counted object).
+[Xiaomi-Lens-0](https://huggingface.co/papers/2610.23279) is a 4B multimodal language model built on [Qwen3.5-4B](https://huggingface.co/Qwen/Qwen3.5-4B). It adds a lightweight pixel-mask decoder and is trained with joint language and mask supervision. Each generated `<|mask|>` token identifies an image region that the decoder turns into a segmentation mask.
 
-The mask decoder reads a single feature grid from the vision encoder, before the spatial merger. The patch features go through one self-attention layer and two transposed convolutions, and are matched against an embedding of each `<|mask|>` hidden state. A final 4x bilinear upsampling brings the masks to the resolution of the resized image fed to the vision encoder.
+The model supports referring expression comprehension and segmentation, multi-instance grounding, reasoning segmentation, embodied referring, and fine-grained visual perception. It can produce masks in its final answer or during reasoning. See the [model card](https://huggingface.co/SeerRay-Lab/Xiaomi-Lens-0) for all examples and details.
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/xiaomi_lens0_architecture.jpg"
+alt="xiaomi lens0 architecture overview" width="600"/>
 
 The original code can be found [here](https://github.com/SeerRay-Lab/Xiaomi-Lens-0).
 
-## Usage
-
-Boxes are written as `<bbox>[x1, y1, x2, y2]</bbox>` with coordinates normalized to `[0, 1000]`, and masks as `<mask><|mask|></mask>`. A grounded instance is written as `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|></mask>`. Generate text while collecting final-layer hidden states and image features, then call `decode_masks` to reuse those features without rerunning either backbone. [`~XiaomiLens0Processor.post_process_grounding`] extracts boxes and resizes masks to the original image. Decoding and postprocessing exclude thinking tokens by default.
+<hfoptions id="usage">
+<hfoption id="AutoModelForImageTextToText">
 
 ```python
 import torch
 from transformers import AutoModelForImageTextToText, AutoProcessor
 
-model_id = "SeerRay-Lab/Xiaomi-Lens-0"
-model = AutoModelForImageTextToText.from_pretrained(model_id, dtype=torch.bfloat16, device_map="auto")
+model_id = "guarin/Xiaomi-Lens-0"
+model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id)
 
 messages = [
@@ -72,64 +74,34 @@ with torch.no_grad():
     )
     hidden_states = torch.cat([step[-1] for step in outputs.hidden_states], dim=1)
     mask_logits, mask_token_indices = model.decode_masks(
-        outputs.sequences, hidden_states, outputs.image_hidden_states,
-        inputs.image_grid_thw, ignore_thinking=True,
+        input_ids=outputs.sequences,
+        hidden_states=hidden_states,
+        image_hidden_states=outputs.image_hidden_states,
+        image_grid_thw=inputs.image_grid_thw,
     )
 results = processor.post_process_grounding(
     outputs.sequences, inputs.image_grid_thw, mask_logits, mask_token_indices, target_sizes=[(480, 640)]
 )
-print(results[0]["boxes"], results[0]["masks"].shape)
+print(results[0]["boxes"]) # bounding boxes in absolute (top_left_x, top_left_y, bottom_right_x, bottom_right_y) pixel coordinates
+# tensor([[344.9600,  24.9600, 640.0000, 372.0000],
+#         [  8.9600,  55.2000, 316.1600, 474.2400]])
+print(results[0]["masks"].shape) # binary segmentation masks
+# torch.Size([2, 480, 640])
 ```
 
-Set `return_dict_in_generate=True` and `output_hidden_states=[model.config.text_config.num_hidden_layers - 1]`
-to retain the image features and final-layer hidden states needed by `decode_masks`. These options are opt-in;
-ordinary generation returns token IDs.
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/xiaomi_lens0_grounding.png"
+alt="xiaomi lens0 grounding boxes and masks results" width="600"/>
 
-Tips:
+</hfoption>
+</hfoptions>
 
-- Ask for boxes and masks explicitly with "Report bbox coordinates and masks." at the end of the instruction. Without it, the model answers in plain text.
+## Notes
+
+- Boxes are written as `<bbox>[x1, y1, x2, y2]</bbox>` with coordinates normalized to `[0, 1000]`, and masks as `<mask><|mask|></mask>`. A grounded instance is written as `<bbox>[x1, y1, x2, y2]</bbox><mask><|mask|></mask>`.
+- Ask for boxes and masks explicitly with "Report bbox coordinates and masks." at the end of the instruction.
+- To detect boxes or masks only ask with "Report bbox coordinates." or "Report masks."
 - The mask decoder sees the image at the resolution chosen by the image processor (up to `max_pixels`). Masks are predicted at that resolution and [`~XiaomiLens0Processor.post_process_grounding`] resizes them to `target_sizes`.
-
-## Training with mask supervision
-
-Pass a full teacher-forced sequence containing the target `<|mask|>` tokens to `forward`, together with
-`mask_labels`. Image features and mask-token states retain their gradients, so mask supervision trains
-the mask decoder and both backbones in one forward pass.
-
-`mask_labels` is a list in input-image order. Each entry is a binary tensor of shape
-`(num_masks, 16 * grid_height, 16 * grid_width)`, aligned with that image's mask tokens in sequence order,
-including masks inside thinking blocks. Resize targets to that resolution before calling the model.
-For an image with no mask tokens, supply an empty tensor with the same spatial dimensions.
-Optional `mask_labels_valid_mask` tensors of matching shapes exclude padded pixels or unsupervised mask tokens;
-an all-false mask contributes neither loss nor a mask count.
-
-```python
-outputs = model(
-    **training_inputs,  # Full input_ids, attention_mask, pixels, grids, and modality IDs.
-    labels=language_labels,  # Use -100 for prompt/padding tokens.
-    mask_labels=mask_targets,
-    use_cache=False,
-)
-outputs.loss.backward()
-```
-
-The loss follows the [original Xiaomi-Lens-0 mask objective](https://github.com/SeerRay-Lab/Xiaomi-Lens-0/blob/main/src/xiaomi_lens/model/losses.py):
-Dice loss plus twice the pixel-wise sigmoid binary cross-entropy, averaged over valid masks.
-Mask counts are reduced across distributed ranks. Every rank must supply language labels or mask targets.
-Ranks with language labels but no mask targets participate with a zero mask count. When some ranks have no
-mask supervision, configure the distributed wrapper to handle unused parameters (for DDP,
-`find_unused_parameters=True`).
-Gradient accumulation averages microbatch losses. Without `mask_labels`, only the language loss is computed;
-the mask decoder is skipped and receives no gradients.
-The configuration exposes `mask_loss_weight`, `mask_dice_loss_weight`, and `mask_bce_loss_weight`
-(defaults: 1, 1, 2). Outputs include the combined `loss` and weighted `mask_loss`,
-as well as `mask_logits` and `mask_token_indices`. The `mask_loss_chunk_size` configuration value (default: 8)
-sets how many masks per image are processed at a time when computing the loss. Omit language `labels`
-for mask-only supervision.
-
-Without mask targets, ordinary generation remains unchanged. For full-sequence mask inference through
-`forward`, set `output_masks=True`; incremental cached decoding should use the post-generation
-`decode_masks` workflow above.
+- Decoding and postprocessing exclude boxes and masks from thinking blocks by default. Set `ignore_thinking=False` in [`~XiaomiLens0ForConditionalGeneration.decode_masks`] to include masks and in [`~XiaomiLens0Processor.post_process_grounding`] to include boxes.
 
 ## XiaomiLens0Config
 
@@ -160,19 +132,16 @@ Without mask targets, ordinary generation remains unchanged. For full-sequence m
 
 [[autodoc]] XiaomiLens0VisionModel
     - forward
-    - decode_masks
 
 ## XiaomiLens0TextModel
 
 [[autodoc]] XiaomiLens0TextModel
     - forward
-    - decode_masks
 
 ## XiaomiLens0Model
 
 [[autodoc]] XiaomiLens0Model
     - forward
-    - decode_masks
 
 ## XiaomiLens0ForConditionalGeneration
 
