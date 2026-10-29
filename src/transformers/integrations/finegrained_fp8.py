@@ -337,7 +337,7 @@ class FP8GroupedMatmulFunction(torch.autograd.Function):
     """The finegrained-fp8 grouped matmul with a backward for the input, like `FP8LinearFunction`."""
 
     # Max bytes of experts dequantized at once in backward. Stacks under it (e.g. Qwen3-30B-A3B: 0.8 GB) go in one shot
-    # with no host sync; bigger ones are chunked (DeepSeek-V3 up proj: 28.9 GiB peak -> 3.5 GiB, same time)
+    # with no host sync; bigger ones are chunked (DeepSeek-V3 up proj: 28.9 GiB peak -> 2.8 GiB, same time)
     dequant_budget_bytes = 2**30
 
     @staticmethod
