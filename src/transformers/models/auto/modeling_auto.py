@@ -271,7 +271,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("hy_v4", "HYV4Model"),
         ("hy_v4_vl", "HYV4VLModel"),
         ("hy_v4_vl_text", "HYV4VLTextModel"),
-        ("hy_v4_vl_vision", "HYV4VLVisionTransformer"),
+        ("hy_v4_vl_vision", "HYV4VLVisionModel"),
         ("hyperclovax", "HyperCLOVAXModel"),
         ("hyperclovax_vision_v2", "HyperCLOVAXVisionV2Model"),
         ("ibert", "IBertModel"),

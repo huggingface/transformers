@@ -841,8 +841,6 @@ class HYV4VLVisionPatchMerger(nn.Module):
         dtype = hidden_states.dtype
         # Key difference: each video frame is merged on its own, so frames are moved to the batch dimension
         hidden_states = hidden_states.reshape(-1, *size, hidden_states.shape[-1]).permute(0, 3, 1, 2)
-        torch_compilable_check(hidden_states.shape[2] > 1, "Spatial height must be greater than 1.")
-        torch_compilable_check(hidden_states.shape[3] > 1, "Spatial width must be greater than 1.")
         hidden_states = self.proj_conv(hidden_states)
         hidden_states = self.proj_act(hidden_states)
         hidden_states = self.proj_out(hidden_states)
@@ -993,7 +991,7 @@ class HYV4VLVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
-class HYV4VLVisionTransformer(HYV4VLPreTrainedModel):
+class HYV4VLVisionModel(HYV4VLPreTrainedModel):
     """
     HYV4VL vision tower: patch embedding -> transformer blocks -> per-image patch merger.
 
@@ -1224,13 +1222,12 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
-    config: HYV4VLConfig
 
     def __init__(self, config: HYV4VLConfig):
         super().__init__(config)
         self.language_model = HYV4VLTextModel._from_config(config.text_config)
         self.rope_deltas = None  # cache rope_deltas here
-        self.vision_tower = HYV4VLVisionTransformer(config.vision_config)
+        self.vision_tower = HYV4VLVisionModel(config.vision_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1238,7 +1235,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
     def get_vision_position_ids(
         self,
         start_position: int,
-        grid_thw: list[int, int, int] | torch.Tensor,
+        grid_thw: torch.Tensor,
         temp_merge_size: int = 1,
         spatial_merge_size: int = 1,
         time_interval: float | torch.Tensor = 1.0,
@@ -1599,19 +1596,7 @@ class HYV4VLModel(HYV4VLPreTrainedModel):
 @auto_docstring
 class HYV4VLForConditionalGeneration(HYV4VLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-    _keep_in_fp32_modules_strict = [
-        "e_score_correction_bias",
-        "fn",
-        "scale",
-        "base",
-        "hc_fn",
-        "hc_scale",
-        "hc_base",
-        "weights_proj",
-        "k_norm",
-        "sinks",
-        "lm_head",
-    ]
+    _keep_in_fp32_modules_strict = ["lm_head"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1777,6 +1762,6 @@ __all__ = [
     "HYV4VLPreTrainedModel",
     "HYV4VLModel",
     "HYV4VLTextModel",
-    "HYV4VLVisionTransformer",
+    "HYV4VLVisionModel",
     "HYV4VLForConditionalGeneration",
 ]

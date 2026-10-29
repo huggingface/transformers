@@ -78,7 +78,7 @@ class HYV4VLProcessor(ProcessorMixin):
             num_video_tokens = []
             for num_frames, height, width in video_sizes:
                 _, grid_t, grid_h, grid_w = self.video_processor.get_num_of_video_patches(
-                    num_frames, height, width, videos_kwargs, return_grid=True
+                    num_frames, height, width, videos_kwargs
                 )
                 num_video_tokens.append(grid_t * self._num_frame_tokens(grid_h, grid_w, merge_size))
             vision_data["num_video_tokens"] = num_video_tokens

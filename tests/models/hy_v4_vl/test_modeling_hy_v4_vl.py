@@ -244,7 +244,7 @@ class HYV4VLModelTest(VLMModelTest, unittest.TestCase):
 @require_torch
 class HYV4VLIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
     # Tiny randomly initialized model with the real tokenizer, chat template and processors
-    model_id = "hf-tiny-v2/tiny-random-HYV4VLForCausalLM"
+    model_id = "hf-internal-testing/tiny-random-HYV4VLForCausalLM"
     image_url = (
         "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/pipeline-cat-chonk.jpeg"
     )
@@ -289,7 +289,12 @@ class HYV4VLIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
 
     def test_small_model_integration_test_image(self):
         inputs = self.prepare_inputs("image", self.image_url)
-        expected_logits = [-0.0391, 0.0135, 0.0313, -0.0234, 0.0115, -0.0174, 0.0262, 0.0399, 0.0332, -0.0241]
+        expected_logits = Expectations(
+            {
+                ("cpu", None): [-0.0391, 0.0135, 0.0313, -0.0234, 0.0115, -0.0174, 0.0262, 0.0399, 0.0332, -0.0241],
+                ("cuda", None): [-0.0391, 0.0135, 0.0313, -0.0234, 0.0115, -0.0174, 0.0262, 0.0399, 0.0332, -0.0241],
+            }
+        ).get_expectation()  # fmt: skip
         expected_ids = Expectations(
             {
                 ("cpu", None): [16079, 84189, 20392, 17356, 59944, 48231, 55278, 119971, 84746, 97572],

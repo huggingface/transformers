@@ -222,7 +222,7 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         output = processor(video, **kwargs, return_tensors="pt")
         estimate = processor.get_num_of_video_patches(3, 64, 128, kwargs)
         self.assertIsInstance(estimate, int)
-        patches, grid_t, grid_h, grid_w = processor.get_num_of_video_patches(3, 64, 128, kwargs, return_grid=True)
+        patches, grid_t, grid_h, grid_w = processor.get_num_of_video_patches(3, 64, 128, kwargs, )
         self.assertEqual(patches, estimate)
         self.assertEqual((grid_t, grid_h, grid_w), tuple(output.video_grid_thw[0].tolist()))
         self.assertEqual(estimate, output.pixel_values_videos.shape[0])
@@ -253,7 +253,7 @@ class HYV4VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
         rows, cols = grid_h // processor.merge_size, grid_w // processor.merge_size
         self.assertLessEqual(grid_t * rows * (cols + 1), budget_tokens)
         # The serving-side estimate has to agree with what the processor actually produced.
-        patches, *grid = processor.get_num_of_video_patches(8, 720, 1280, return_grid=True)
+        patches, *grid = processor.get_num_of_video_patches(8, 720, 1280, )
         self.assertEqual(tuple(grid), (grid_t, grid_h, grid_w))
         self.assertEqual(patches, output.pixel_values_videos.shape[0])
 

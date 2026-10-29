@@ -21,7 +21,7 @@ from torchvision.transforms.v2 import functional as tvF
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import PILImageResampling, SizeDict
 from ...masking_utils import create_causal_mask
@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...processing_utils import MultiModalData, ProcessingKwargs, Unpack
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
+from ...utils import TensorType, TransformersKwargs, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import group_videos_by_shape, reorder_videos
 from ..ernie4_5.modeling_ernie4_5 import apply_rotary_pos_emb  # noqa: F401
@@ -149,8 +149,8 @@ class HYV4VLTextConfig(HYV4Config):
 class HYV4VLConfig(PreTrainedConfig):
     model_type = "hy_v4_vl"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=HYV4VLVisionConfig),
-        "text_config": SubConfigSpec(config_class=HYV4VLTextConfig),
+        "vision_config": HYV4VLVisionConfig,
+        "text_config": HYV4VLTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 
@@ -231,8 +231,6 @@ class HYV4VLVisionPatchMerger(HunYuanVLVisionPatchMerger):
         dtype = hidden_states.dtype
         # Key difference: each video frame is merged on its own, so frames are moved to the batch dimension
         hidden_states = hidden_states.reshape(-1, *size, hidden_states.shape[-1]).permute(0, 3, 1, 2)
-        torch_compilable_check(hidden_states.shape[2] > 1, "Spatial height must be greater than 1.")
-        torch_compilable_check(hidden_states.shape[3] > 1, "Spatial width must be greater than 1.")
         hidden_states = self.proj_conv(hidden_states)
         hidden_states = self.proj_act(hidden_states)
         hidden_states = self.proj_out(hidden_states)
@@ -258,7 +256,7 @@ class HYV4VLVisionAttention(HunYuanVLVisionAttention):
         self.sinks = None
 
 
-class HYV4VLVisionTransformer(HunYuanVLVisionTransformer):
+class HYV4VLVisionModel(HunYuanVLVisionTransformer):
     config: HYV4VLVisionConfig
     # Only the text attention (sinks + DSA) is restricted to eager
     _supports_sdpa = True
@@ -343,17 +341,15 @@ class HYV4VLTextModel(HYV4Model):
 
 @auto_docstring
 class HYV4VLModel(Qwen2VLModel):
-    config: HYV4VLConfig
-
     def __init__(self, config: HYV4VLConfig):
         super().__init__(config)
-        self.vision_tower = HYV4VLVisionTransformer(config.vision_config)
+        self.vision_tower = HYV4VLVisionModel(config.vision_config)
         del self.visual
 
     def get_vision_position_ids(
         self,
         start_position: int,
-        grid_thw: list[int, int, int] | torch.Tensor,
+        grid_thw: torch.Tensor,
         temp_merge_size: int = 1,
         spatial_merge_size: int = 1,
         time_interval: float | torch.Tensor = 1.0,
@@ -615,22 +611,8 @@ class HYV4VLModel(Qwen2VLModel):
 
 @auto_docstring
 class HYV4VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
-    _keep_in_fp32_modules_strict = [
-        "e_score_correction_bias",
-        "fn",
-        "scale",
-        "base",
-        "hc_fn",
-        "hc_scale",
-        "hc_base",
-        "weights_proj",
-        "k_norm",
-        "sinks",
-        "lm_head",
-    ]
+    _keep_in_fp32_modules_strict = ["lm_head"]
 
-    @can_return_tuple
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -925,7 +907,7 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
         )
 
     def get_num_of_video_patches(
-        self, num_frames: int, height: int, width: int, videos_kwargs=None, *, return_grid: bool = False
+        self, num_frames: int, height: int, width: int, videos_kwargs=None
     ) -> int | tuple[int, int, int, int]:
         """
         A utility that returns number of video patches a given video size.
@@ -939,30 +921,25 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
                 Width of the input video.
             videos_kwargs (`dict`, *optional*)
                 Any kwargs to override defaults of the video processor.
-            return_grid (`bool`, *optional*, defaults to `False`):
-                Whether to also return the temporal, height and width grid of the patches.
         Returns:
             `int`: Number of video patches per video, or `tuple[int, int, int, int]` with the number of patches and
-            the `(grid_t, grid_h, grid_w)` grid if `return_grid=True`.
+            the `(grid_t, grid_h, grid_w)` grids.
         """
         videos_kwargs = videos_kwargs if videos_kwargs is not None else {}
-        do_resize = videos_kwargs.get("do_resize", None)
-        do_resize = do_resize if do_resize is not None else self.do_resize
+        do_resize = videos_kwargs.get("do_resize") if videos_kwargs.get("do_resize") is not None else self.do_resize
         size = videos_kwargs.get("size", None) or self.size
-        max_pixels = size["longest_edge"]
         max_image_size = videos_kwargs.get("max_image_size", None) or self.max_image_size
         patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
         merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
         temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
 
-        factor = patch_size * merge_size
         if do_resize:
             height, width = self.smart_resize(
                 frame_height=height,
                 frame_width=width,
                 num_frames=num_frames,
-                factor=factor,
-                max_pixels=max_pixels,
+                factor=patch_size * merge_size,
+                max_pixels=size["longest_edge"],
                 max_image_size=max_image_size["longest_edge"],
             )
 
@@ -970,7 +947,7 @@ class HYV4VLVideoProcessor(Qwen3VLVideoProcessor):
         grid_h, grid_w = height // patch_size, width // patch_size
         num_patches = grid_t * grid_h * grid_w
 
-        return (num_patches, grid_t, grid_h, grid_w) if return_grid else num_patches
+        return num_patches, grid_t, grid_h, grid_w
 
 
 class HYV4VLProcessorKwargs(ProcessingKwargs, total=False):
@@ -1020,7 +997,7 @@ class HYV4VLProcessor(Qwen2VLProcessor):
             num_video_tokens = []
             for num_frames, height, width in video_sizes:
                 _, grid_t, grid_h, grid_w = self.video_processor.get_num_of_video_patches(
-                    num_frames, height, width, videos_kwargs, return_grid=True
+                    num_frames, height, width, videos_kwargs
                 )
                 num_video_tokens.append(grid_t * self._num_frame_tokens(grid_h, grid_w, merge_size))
             vision_data["num_video_tokens"] = num_video_tokens
@@ -1034,7 +1011,7 @@ __all__ = [
     "HYV4VLPreTrainedModel",
     "HYV4VLModel",
     "HYV4VLTextModel",
-    "HYV4VLVisionTransformer",
+    "HYV4VLVisionModel",
     "HYV4VLForConditionalGeneration",
     "HYV4VLImageProcessor",
     "HYV4VLImageProcessorPil",
