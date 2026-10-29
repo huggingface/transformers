@@ -33,6 +33,8 @@ class ChineseCLIPImageProcessingTester(ImageProcessingTester):
 @require_vision
 class ChineseCLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = ChineseCLIPImageProcessingTester
+    # Pillow >= 13 can reverse bicubic resize passes, increasing isolated pixel differences.
+    backend_equivalence_atol = 0.5
 
     @unittest.skip(
         reason="ChineseCLIPImageProcessor doesn't treat 4 channel PIL and numpy consistently yet"
@@ -45,6 +47,8 @@ class ChineseCLIPImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 @require_vision
 class ChineseCLIPImageProcessingTestFourChannels(ImageProcessingTestMixin, unittest.TestCase):
     image_processor_tester_class = ChineseCLIPImageProcessingTester
+    # Pillow >= 13 can reverse bicubic resize passes, increasing isolated pixel differences.
+    backend_equivalence_atol = 0.5
 
     def setUp(self):
         super().setUp()
