@@ -41,7 +41,6 @@ from ..qwen2_5_omni.modeling_qwen2_5_omni import Qwen2_5OmniSnakeBeta
 from ..qwen3_omni_moe.configuration_qwen3_omni_moe import Qwen3OmniMoeCode2WavConfig
 from ..qwen3_omni_moe.modeling_qwen3_omni_moe import (
     Qwen3OmniMoeCausalConvNet,
-    Qwen3OmniMoeCausalTransConvNet,
     Qwen3OmniMoeCode2WavAttention,
     Qwen3OmniMoeCode2WavDecoderBlock,
     Qwen3OmniMoeCode2WavTransformerLayer,
@@ -255,12 +254,11 @@ class Qwen3TTSTokenizerCausalConvNet(Qwen3OmniMoeCausalConvNet):
     pass
 
 
-class Qwen3TTSTokenizerCausalTransConvNet(Qwen3OmniMoeCausalTransConvNet):
+class Qwen3TTSTokenizerCausalTransConvNet(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, stride):
-        super().__init__(in_channels, out_channels, kernel_size, stride)
-        pad = kernel_size - stride
-        self.left_pad = 0
-        self.right_pad = int(pad)
+        super().__init__()
+        self.conv = nn.ConvTranspose1d(in_channels, out_channels, kernel_size, stride=stride)
+        self.right_pad = int(kernel_size - stride)
 
     def forward(self, hidden_state):
         hidden_state = self.conv(hidden_state)
