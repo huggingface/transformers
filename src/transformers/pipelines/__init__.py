@@ -25,7 +25,7 @@ from ..configuration_utils import PreTrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import FeatureExtractionMixin
 from ..image_processing_utils import BaseImageProcessor
-from ..models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
+from ..models.auto.configuration_auto import AutoConfig
 from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, AutoFeatureExtractor
 from ..models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING, AutoImageProcessor
 from ..models.auto.modeling_auto import (
@@ -41,7 +41,6 @@ from ..processing_utils import ProcessorMixin
 from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
     CONFIG_NAME,
-    cached_file,
     find_adapter_config_file,
     hf_api,
     is_kenlm_available,
