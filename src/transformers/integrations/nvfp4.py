@@ -524,9 +524,11 @@ class NVFP4Quantize(_NVFP4Op):
     """Quantize a full-precision linear or experts weight into the NVFP4 tensors its module holds."""
 
     def convert(self, input_dict, model=None, full_layer_name=None, **kwargs):
+        module_name, module = _nvfp4_module(model, full_layer_name)
+        if module is None:
+            return input_dict
+        slot = full_layer_name.rpartition(".")[2]
         value = _single(next(iter(input_dict.values())))
-        module_name, _, slot = full_layer_name.rpartition(".")
-        module = model.get_submodule(module_name)
         # the NVFP4 quantize kernel runs on the accelerator
         if value.device.type == "cpu":
             value = value.to(torch.accelerator.current_accelerator())
@@ -547,6 +549,10 @@ class NVFP4Quantize(_NVFP4Op):
         if getattr(module, names[3]) is not None:
             out[f"{module_name}.{names[3]}"] = torch.ones_like(global_scale)
         return out
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return NVFP4Deserialize(self.hf_quantizer, inverse=True)
 
 
 class NVFP4ExpertGlobals(ConversionOps):
@@ -720,24 +726,18 @@ def checkpoint_renames() -> list:
     return renames
 
 
-def nvfp4_checkpoint_conversions(hf_quantizer, weight_conversions: list, dequantize: bool = False) -> list:
-    """Return the conversions that load an NVFP4 checkpoint. Per-expert globals merge through copies of the model's
-    own expert converters.
-    """
+def nvfp4_checkpoint_conversions(hf_quantizer, weight_conversions: list, op: type[ConversionOps]) -> list:
+    """End each of the model's converters with `op`, and merge per-expert globals through copies of its expert ones."""
     from ..core_model_loading import MergeModulelist, WeightConverter
 
     projections = "|".join(EXPERT_PROJECTIONS)
-    # a dequantized load needs nothing more, as `serialized_names` lists the globals it folds in
-    if dequantize:
-        return weight_conversions
     conversions = []
     for converter in weight_conversions:
         conversions.append(converter)
         if not isinstance(converter, WeightConverter):
             continue
-        # every converter loads its tensors into their module's layout, e.g. a fused gate|up linear's scales
-        if not any(isinstance(op, NVFP4Deserialize) for op in converter.operations):
-            converter.operations = [*converter.operations, NVFP4Deserialize(hf_quantizer)]
+        if not any(isinstance(existing, _NVFP4Op) for existing in converter.operations):
+            converter.operations = [*converter.operations, op(hf_quantizer)]
         target = converter._original_target_patterns[0]
         if not re.search(rf"experts\.({projections})$", target):
             continue

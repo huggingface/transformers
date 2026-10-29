@@ -90,16 +90,6 @@ class NVFP4HfQuantizer(HfQuantizer):
         super().update_parallel_plan(model, plan)
         update_nvfp4_parallel_plan(model, plan)
 
-    def param_needs_quantization(self, model: PreTrainedModel, param_name: str, **kwargs) -> bool:
-        from ..integrations.nvfp4 import EXPERT_PROJECTIONS, NVFP4Experts, NVFP4Linear
-
-        if self.pre_quantized or self.quantization_config.dequantize:
-            return False
-        module, tensor_name = get_module_from_name(model, param_name)
-        if isinstance(module, NVFP4Experts):
-            return tensor_name in EXPERT_PROJECTIONS
-        return isinstance(module, NVFP4Linear) and tensor_name == "weight"
-
     def _module_formats(self, model: PreTrainedModel) -> dict[str, str] | None:
         """Return how each module of `model` loads, from `quantized_layers`, or `None` when every eligible module is NVFP4.
 
@@ -180,11 +170,6 @@ class NVFP4HfQuantizer(HfQuantizer):
         model._weight_conversions = kept  # type: ignore[unresolved-attribute]
         return model
 
-    def get_quantize_ops(self):
-        from ..integrations.nvfp4 import NVFP4Quantize
-
-        return NVFP4Quantize(self)
-
     def get_load_operations(self):
         from ..integrations.nvfp4 import NVFP4Dequantize, NVFP4Deserialize
 
@@ -222,17 +207,21 @@ class NVFP4HfQuantizer(HfQuantizer):
 
     def update_weight_conversions(self, weight_conversions, model, for_save: bool = False):
         from ..core_model_loading import WeightConverter
-        from ..integrations.nvfp4 import NVFP4Deserialize, checkpoint_renames, nvfp4_checkpoint_conversions
+        from ..integrations.nvfp4 import (
+            EXPERT_PROJECTIONS,
+            NVFP4Deserialize,
+            NVFP4Quantize,
+            checkpoint_renames,
+            nvfp4_checkpoint_conversions,
+        )
 
         conversions = super().update_weight_conversions(weight_conversions, model)
-        if not self.pre_quantized and not for_save:
-            return conversions
-        conversions = [
-            *checkpoint_renames(),
-            *nvfp4_checkpoint_conversions(self, conversions, dequantize=self.quantization_config.dequantize),
-        ]
         if self.quantization_config.dequantize:
-            return conversions
+            return [*checkpoint_renames(), *conversions]
+        quantize = not self.pre_quantized and not for_save
+        op = NVFP4Quantize if quantize else NVFP4Deserialize
+        renames = checkpoint_renames() if self.pre_quantized and not for_save else []
+        conversions = [*renames, *nvfp4_checkpoint_conversions(self, conversions, op)]
         # A fused stack in the checkpoint, or a dense scale, loads through its own converter. It comes first, as the
         # first matching converter wins. On save, skip the params a model converter writes back, as they would match
         # first there.
@@ -244,10 +233,12 @@ class NVFP4HfQuantizer(HfQuantizer):
             if type(module) is torch.nn.Linear and "weight_scale_inv" in module._parameters
         }
         per_param = [
-            WeightConverter(re.escape(name), name, [NVFP4Deserialize(self)])
+            WeightConverter(re.escape(name), name, [op(self)])
             for name, _ in model.named_parameters()
             if (self.get_param_ops(model, name) or name.rpartition(".")[0] in fp8_linears)
             and not any(c.rename_source_key(name)[1] for c in reverse)
+            # quantizing on the fly only loads the weights, their scales come out of the quantize op
+            and (not quantize or name.rpartition(".")[2] in ("weight", *EXPERT_PROJECTIONS))
         ]
         renames = [c for c in conversions if not isinstance(c, WeightConverter)]
         return renames + per_param + [c for c in conversions if isinstance(c, WeightConverter)]
