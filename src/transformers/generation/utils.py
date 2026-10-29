@@ -382,6 +382,15 @@ def _undo_generation_steps(num_steps: int, input_ids: torch.LongTensor, *recorde
     return (input_ids[..., :-num_steps], *(record[:-num_steps] if record else record for record in recorded))
 
 
+def _make_attention_mask_contiguous(attention_mask):
+    """Make an attention mask contiguous, including masks nested in dicts, whose types are preserved."""
+    if isinstance(attention_mask, dict):
+        return type(attention_mask)(
+            {key: _make_attention_mask_contiguous(value) for key, value in attention_mask.items()}
+        )
+    return attention_mask.contiguous() if attention_mask is not None else None
+
+
 class StopCheck:
     """
     Decides when the decoding loop should stop, and hands each new token to a streamer.
@@ -739,10 +748,7 @@ class GenerationMixin(ContinuousMixin):
                 mm_token_type_ids=model_inputs.get("mm_token_type_ids"),
                 is_first_iteration=is_first_iteration,
             )
-            if isinstance(attention_mask, dict):
-                attention_mask = {k: v.contiguous() if v is not None else None for k, v in attention_mask.items()}
-            else:
-                attention_mask = attention_mask.contiguous() if attention_mask is not None else None
+            attention_mask = _make_attention_mask_contiguous(attention_mask)
 
         if attention_mask is not None:
             model_inputs[attention_mask_key] = attention_mask
@@ -4196,7 +4202,7 @@ class GenerationMixin(ContinuousMixin):
                             is_decoder_attention=True,
                         )
                     # some (V)LLMs have hard requirement on SDPA and thus never return attn
-                    elif outputs.attentions[0] is not None:
+                    elif outputs.attentions and any(attn is not None for attn in outputs.attentions):
                         decoder_attentions = _split_model_outputs(
                             decoder_attentions,
                             outputs.attentions,
@@ -4432,6 +4438,9 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
     if len(outputs) == 0:
         new_tuple = ()
         for layer in new_outputs:
+            if layer is None:
+                new_tuple += (None,)
+                continue
             last_dim_size = cur_len if is_decoder_attention else layer.shape[-1]
             new_tuple += (layer[..., :cur_len, :last_dim_size],)
         outputs += (new_tuple,)
@@ -4442,6 +4451,9 @@ def _split_model_outputs(outputs, new_outputs, cur_len, added_len, is_decoder_at
     for i in range(added_len):
         new_tuple = ()
         for layer in new_outputs:
+            if layer is None:
+                new_tuple += (None,)
+                continue
             last_dim_size = cur_len + i if is_decoder_attention else layer.shape[-1]
             new_tuple += (layer[..., i : i + 1, :last_dim_size],)
         outputs += (new_tuple,)

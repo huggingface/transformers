@@ -14,9 +14,30 @@
 # limitations under the License.
 
 from .configuration_utils import AmbiguousGlobalPerLayerAttributeError, HeterogeneousConfigMixin
+from .heterogeneous_modeling_spec import (
+    HeterogeneousModelingSpec,
+    SkipDescriptor,
+    get_heterogeneous_modeling_specs,
+)
+from .layer_idx_resolvers import LayerIdxFromArgument, LayerIdxFromModelInitStack, LayerIdxResolver
+from .modeling_utils import (
+    apply_generic_heterogeneous_modeling_if_applicable,
+    support_generic_heterogeneous_modeling,
+)
+from .skip_utils import ReturnEntry, get_skip_replacement_factory
 
 
 __all__ = [
     "AmbiguousGlobalPerLayerAttributeError",
     "HeterogeneousConfigMixin",
+    "HeterogeneousModelingSpec",
+    "LayerIdxFromArgument",
+    "LayerIdxFromModelInitStack",
+    "LayerIdxResolver",
+    "ReturnEntry",
+    "SkipDescriptor",
+    "apply_generic_heterogeneous_modeling_if_applicable",
+    "get_heterogeneous_modeling_specs",
+    "get_skip_replacement_factory",
+    "support_generic_heterogeneous_modeling",
 ]
