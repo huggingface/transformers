@@ -246,7 +246,6 @@ class DummyLayer:
         raise NotImplementedError("Dummy layer don't store cache: they cannot have a maximum length.")
 
 
-
 class DynamicSlidingWindowLayer(DynamicLayer):
     """
     A cache layer that grows dynamically as more tokens are generated, up until the sliding window size.
