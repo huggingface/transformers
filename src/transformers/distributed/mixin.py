@@ -288,10 +288,9 @@ class DistributedMixin:
         fsdp_plan = self._expand_parallel_plan(fsdp_plan)
 
         if fsdp_plan:
-            # FSDP2 needs one dtype per group, and the parameters kept in float32 are only upcast when the weights load,
-            # after sharding: the modules owning one get a group of their own.
+            # FSDP2 needs one dtype per group: give the modules kept in float32 their own group.
             fsdp_plan = dict.fromkeys(self._get_modules_kept_in_fp32(), "free_full_weight") | fsdp_plan
-            # A group takes the parameters that no group sharded before it took, so nested groups go before their parents.
+            # FSDP2 needs a submodule sharded before the module containing it, e.g. `mlp.gate` before its layer.
             fsdp_plan = dict(sorted(fsdp_plan.items(), key=lambda item: item[0].count("."), reverse=True))
 
         return tp_plan, ep_plan, fsdp_plan
