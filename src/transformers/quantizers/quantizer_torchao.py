@@ -111,7 +111,6 @@ class TorchAoHfQuantizer(HfQuantizer):
         if not should_convert_module(param_name, self.modules_to_not_convert):
             return False
 
-        # we only quantize the weight of nn.Linear and nn.Embedding
         module, tensor_name = get_module_from_name(model, param_name)
         _QUANTIZABLE = [torch.nn.Linear]
         if self.quantization_config.include_input_output_embeddings:
@@ -130,6 +129,16 @@ class TorchAoHfQuantizer(HfQuantizer):
                 )
             ):
                 return True
+        elif isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight":
+            return True
+        elif not isinstance(module, torch.nn.Embedding):
+            import torchao.quantization as torchao_quantization
+
+            # Older torchao versions only support automatic selection of Linear weights.
+            config_targets_parameter = getattr(torchao_quantization, "config_targets_parameter", None)
+            if config_targets_parameter is not None:
+                module_fqn, _, _ = param_name.rpartition(".")
+                return config_targets_parameter(module, module_fqn, tensor_name, self.quantization_config.quant_type)
 
         return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
 

@@ -15,16 +15,18 @@
 import gc
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from parameterized import parameterized
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, TorchAoConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer, Qwen3MoeConfig, TorchAoConfig
 from transformers.testing_utils import (
     Expectations,
     backend_empty_cache,
     require_cuda_capability_at_least,
     require_torch_accelerator,
     require_torch_multi_accelerator,
+    require_torch_xpu,
     require_torchao,
     slow,
     torch_device,
@@ -35,7 +37,11 @@ from transformers.utils import is_torch_available, is_torchao_available
 if is_torch_available():
     import torch
 
+    from transformers.integrations.torchao import TorchAoQuantize
+    from transformers.quantizers.quantizer_torchao import TorchAoHfQuantizer
+
 if is_torchao_available():
+    import torchao.quantization as torchao_quantization
     from torchao.prototype.mx_formats import NVFP4DynamicActivationNVFP4WeightConfig
     from torchao.quantization import (
         Float8DynamicActivationFloat8WeightConfig,
@@ -85,6 +91,244 @@ class TorchAoConfigTest(unittest.TestCase):
         d = quantization_config.to_dict()
         self.assertTrue("group_size" in d["quant_type"]["default"]["_data"])
         quantization_config.to_json_string(use_diff=False)
+
+
+@require_torchao
+class TorchAoParameterTargetingTest(unittest.TestCase):
+    def setUp(self):
+        self.model = torch.nn.Module()
+        self.model.linear = torch.nn.Linear(32, 64, device="meta")
+        self.model.embed_tokens = torch.nn.Embedding(64, 32, device="meta")
+        self.model.norm = torch.nn.LayerNorm(32, device="meta")
+        self.model.experts = torch.nn.Module()
+        self.model.experts.gate_up_proj = torch.nn.Parameter(torch.empty(2, 64, 32, device="meta"))
+        self.model.experts.down_proj = torch.nn.Parameter(torch.empty(2, 32, 64, device="meta"))
+        self.model.experts.bias = torch.nn.Parameter(torch.empty(64, device="meta"))
+        self.model.get_input_embeddings = lambda: self.model.embed_tokens
+        self.config = Int4WeightOnlyConfig(int4_packing_format="plain_int32", group_size=32)
+
+    def make_quantizer(self, config=None, **kwargs):
+        quantizer = TorchAoHfQuantizer(
+            TorchAoConfig(self.config if config is None else config, **kwargs), pre_quantized=False
+        )
+        quantizer.modules_to_not_convert = []
+        quantizer.offload_to_cpu = False
+        return quantizer
+
+    @parameterized.expand([(True,), (False,)])
+    def test_backend_parameter_selection(self, eligible):
+        quantizer = self.make_quantizer()
+        with patch.object(
+            torchao_quantization, "config_targets_parameter", return_value=eligible, create=True
+        ) as select:
+            for name in ("gate_up_proj", "down_proj", "bias"):
+                self.assertEqual(quantizer.param_needs_quantization(self.model, f"experts.{name}"), eligible)
+                select.assert_called_with(self.model.experts, "experts", name, self.config)
+
+    @parameterized.expand([("plain",), ("non_dynamic",), ("quantized",)])
+    def test_backend_selection_preserves_linear_targets(self, kind):
+        if kind == "non_dynamic":
+            self.model.linear = torch.nn.modules.linear.NonDynamicallyQuantizableLinear(32, 64, device="meta")
+        elif kind == "quantized":
+            self.model.linear = torch.nn.Linear(32, 64)
+            torchao_quantization.quantize_(self.model.linear, Int8WeightOnlyConfig(set_inductor_config=False))
+            self.assertIsInstance(self.model.linear.weight, TorchAOBaseTensor)
+
+        quantizer = self.make_quantizer()
+        with patch.object(torchao_quantization, "config_targets_parameter", return_value=False, create=True) as select:
+            self.assertTrue(quantizer.param_needs_quantization(self.model, "linear.weight"))
+            select.assert_not_called()
+            quantizer.modules_to_not_convert = ["linear"]
+            self.assertFalse(quantizer.param_needs_quantization(self.model, "linear.weight"))
+            select.assert_not_called()
+
+    @parameterized.expand([(False,), (True,)])
+    def test_legacy_selection_without_backend_helper(self, include_embeddings):
+        quantizer = self.make_quantizer(include_input_output_embeddings=include_embeddings)
+        with patch.dict(vars(torchao_quantization)):
+            torchao_quantization.__dict__.pop("config_targets_parameter", None)
+            for name, expected in (
+                ("linear.weight", True),
+                ("linear.bias", False),
+                ("embed_tokens.weight", include_embeddings),
+                ("norm.weight", False),
+                ("experts.gate_up_proj", False),
+                ("experts.down_proj", False),
+                ("experts.bias", False),
+            ):
+                with self.subTest(name=name):
+                    self.assertEqual(quantizer.param_needs_quantization(self.model, name), expected)
+
+    @parameterized.expand([(False,), (True,)])
+    def test_embedding_opt_in_and_module_exclusion(self, include_embeddings):
+        quantizer = self.make_quantizer(include_input_output_embeddings=include_embeddings)
+        quantizer.modules_to_not_convert = ["experts"]
+        with patch.object(torchao_quantization, "config_targets_parameter", create=True) as select:
+            self.assertFalse(quantizer.param_needs_quantization(self.model, "experts.gate_up_proj"))
+            self.assertEqual(quantizer.param_needs_quantization(self.model, "embed_tokens.weight"), include_embeddings)
+            select.assert_not_called()
+
+    def test_explicit_fqn_does_not_use_backend_selection(self):
+        config = FqnToConfig({r"re:experts\.(gate_up_proj|down_proj)": self.config})
+        quantizer = self.make_quantizer(config)
+        with patch.object(
+            torchao_quantization,
+            "config_targets_parameter",
+            side_effect=AssertionError("unexpected selection"),
+            create=True,
+        ):
+            self.assertTrue(quantizer.param_needs_quantization(self.model, "experts.gate_up_proj"))
+            self.assertTrue(quantizer.param_needs_quantization(self.model, "experts.down_proj"))
+            self.assertFalse(quantizer.param_needs_quantization(self.model, "experts.bias"))
+
+    def test_backend_selection_errors_are_not_suppressed(self):
+        quantizer = self.make_quantizer()
+        with patch.object(
+            torchao_quantization, "config_targets_parameter", side_effect=ValueError("invalid config"), create=True
+        ):
+            with self.assertRaisesRegex(ValueError, "invalid config"):
+                quantizer.param_needs_quantization(self.model, "experts.gate_up_proj")
+
+    def test_int4_custom_parameter_dispatch(self):
+        quantizer = self.make_quantizer()
+        value = torch.randn(2, 64, 32)
+        missing_keys = {"experts.gate_up_proj", "experts.down_proj"}
+        with patch.object(torchao_quantization, "quantize_") as quantize:
+            result = TorchAoQuantize(quantizer).convert(
+                {"gate_up_proj": [value]},
+                model=self.model,
+                full_layer_name="experts.gate_up_proj",
+                missing_keys=missing_keys,
+            )
+        quantize.assert_called_once()
+        self.assertIs(quantize.call_args.args[0], self.model.experts)
+        self.assertEqual(quantize.call_args.args[1].fqn_to_config, {"gate_up_proj": self.config})
+        self.assertEqual(quantize.call_args.kwargs, {"filter_fn": None})
+        self.assertEqual(result, {})
+        self.assertEqual(missing_keys, {"experts.down_proj"})
+        self.assertEqual(self.model.experts.down_proj.device.type, "meta")
+        torch.testing.assert_close(self.model.experts.gate_up_proj, value)
+
+    @parameterized.expand([(False,), (True,)])
+    def test_custom_parameter_quantization(self, explicit_fqn):
+        config = Int8WeightOnlyConfig(set_inductor_config=False)
+        if explicit_fqn:
+            config = FqnToConfig({r"re:experts\.(gate_up_proj|down_proj)": config})
+        quantizer = self.make_quantizer(config)
+        missing_keys = {"experts.gate_up_proj", "experts.down_proj"}
+        for name, shape in (("gate_up_proj", (2, 64, 32)), ("down_proj", (2, 32, 64))):
+            result = TorchAoQuantize(quantizer).convert(
+                {name: torch.randn(shape)},
+                model=self.model,
+                full_layer_name=f"experts.{name}",
+                missing_keys=missing_keys,
+            )
+            self.assertEqual(result, {})
+            self.assertIsInstance(getattr(self.model.experts, name), TorchAOBaseTensor)
+            self.assertTrue(getattr(self.model.experts, name)._is_hf_initialized)
+            if name == "gate_up_proj":
+                self.assertEqual(self.model.experts.down_proj.device.type, "meta")
+        self.assertEqual(missing_keys, set())
+        self.assertTrue(self.model.experts._hf_quantized_needs_local_tp)
+
+    @parameterized.expand([(False, False), (False, True), (True, False), (True, True)])
+    @require_torch_accelerator
+    def test_custom_parameter_cpu_offload(self, explicit_fqn, reverse_order):
+        config = Int8WeightOnlyConfig(set_inductor_config=False)
+        if explicit_fqn:
+            config = FqnToConfig({r"re:experts\.(gate_up_proj|down_proj)": config})
+        quantizer = self.make_quantizer(config)
+        quantizer.offload_to_cpu = True
+        targets = ["gate_up_proj", "down_proj"]
+        if reverse_order:
+            targets.reverse()
+        missing_keys = {f"experts.{name}" for name in targets}
+        quantize = torchao_quantization.quantize_
+
+        for name in targets:
+            sibling_name = next(other for other in targets if other != name)
+            sibling = getattr(self.model.experts, sibling_name)
+            value = torch.randn(getattr(self.model.experts, name).shape)
+
+            def quantize_on_accelerator(module, config, **kwargs):
+                self.assertEqual(getattr(module, name).device.type, torch_device)
+                self.assertIs(getattr(module, sibling_name), sibling)
+                return quantize(module, config, **kwargs)
+
+            with (
+                patch(
+                    "transformers.integrations.torchao.get_current_accelerator",
+                    return_value=torch.device(torch_device),
+                ),
+                patch.object(self.model.experts, "to", side_effect=AssertionError("must not move the entire module")),
+                patch.object(torchao_quantization, "quantize_", side_effect=quantize_on_accelerator) as quantize_mock,
+            ):
+                result = TorchAoQuantize(quantizer).convert(
+                    {name: value},
+                    model=self.model,
+                    full_layer_name=f"experts.{name}",
+                    missing_keys=missing_keys,
+                )
+
+            quantize_mock.assert_called_once()
+            self.assertEqual(result, {})
+            self.assertIsInstance(getattr(self.model.experts, name), TorchAOBaseTensor)
+            self.assertEqual(getattr(self.model.experts, name).device.type, "cpu")
+            self.assertIs(getattr(self.model.experts, sibling_name), sibling)
+            self.assertEqual(self.model.experts.bias.device.type, "meta")
+            self.assertNotIn(f"experts.{name}", missing_keys)
+        self.assertEqual(missing_keys, set())
+
+    def test_linear_quantization_without_backend_helper(self):
+        quantizer = self.make_quantizer(Int8WeightOnlyConfig(set_inductor_config=False))
+        with patch.dict(vars(torchao_quantization)):
+            torchao_quantization.__dict__.pop("config_targets_parameter", None)
+            self.assertTrue(quantizer.param_needs_quantization(self.model, "linear.weight"))
+            result = TorchAoQuantize(quantizer).convert(
+                {"weight": torch.randn(64, 32)},
+                model=self.model,
+                full_layer_name="linear.weight",
+                missing_keys={"linear.weight"},
+            )
+        self.assertEqual(result, {})
+        self.assertIsInstance(self.model.linear.weight, TorchAOBaseTensor)
+
+    @require_torch_xpu
+    def test_moe_from_pretrained_xpu(self):
+        config = Qwen3MoeConfig(
+            vocab_size=128,
+            hidden_size=128,
+            intermediate_size=256,
+            moe_intermediate_size=128,
+            num_hidden_layers=1,
+            num_attention_heads=4,
+            num_key_value_heads=4,
+            num_experts=2,
+            num_experts_per_tok=1,
+        )
+        model = AutoModelForCausalLM.from_config(config)
+        with tempfile.TemporaryDirectory() as checkpoint:
+            model.save_pretrained(checkpoint)
+            model = AutoModelForCausalLM.from_pretrained(
+                checkpoint,
+                quantization_config=TorchAoConfig(
+                    Int4WeightOnlyConfig(int4_packing_format="plain_int32", group_size=32, set_inductor_config=False)
+                ),
+                dtype=torch.bfloat16,
+                device_map="xpu",
+                attn_implementation="eager",
+                experts_implementation="eager",
+            )
+        self.assertIsInstance(model.model.layers[0].self_attn.q_proj.weight, TorchAOBaseTensor)
+        has_backend_selection = getattr(torchao_quantization, "config_targets_parameter", None) is not None
+        for name in ("gate_up_proj", "down_proj"):
+            self.assertEqual(
+                isinstance(getattr(model.model.layers[0].mlp.experts, name), TorchAOBaseTensor), has_backend_selection
+            )
+        with torch.no_grad():
+            logits = model(torch.tensor([[1, 2, 3]], device="xpu")).logits
+        self.assertEqual(logits.shape, (1, 3, 128))
+        self.assertTrue(torch.isfinite(logits).all())
 
 
 @require_torchao
