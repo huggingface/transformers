@@ -87,6 +87,7 @@ MISSING_FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("wav2vec2-conformer", "Wav2Vec2FeatureExtractor"),
         ("wavlm", "Wav2Vec2FeatureExtractor"),
         ("xcodec", "DacFeatureExtractor"),
+        ("yue2_acoustic_tokenizer", "EncodecFeatureExtractor"),
     ]
 )
 
