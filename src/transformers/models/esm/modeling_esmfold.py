@@ -31,7 +31,7 @@ from ...utils import (
     logging,
 )
 from ...utils.generic import maybe_autocast
-from .configuration_esm import EsmFoldConfig
+from .configuration_esm import EsmConfig, EsmFoldConfig
 from .modeling_esm import EsmModel, EsmPreTrainedModel
 from .openfold_utils import (
     OFProtein,
@@ -1963,7 +1963,7 @@ class EsmFoldingTrunk(nn.Module):
     protein(s).
     """
 )
-class EsmForProteinFolding(EsmFoldPreTrainedModel):
+class EsmForProteinFolding(EsmPreTrainedModel):
     _no_split_modules = ["EsmFoldStructureModule", "EsmFoldTriangularSelfAttentionBlock"]
     _supports_flash_attn = False
     _supports_sdpa = False
@@ -1976,7 +1976,7 @@ class EsmForProteinFolding(EsmFoldPreTrainedModel):
         if isinstance(module, EsmForProteinFolding):
             init.copy_(module.af2_to_esm, module._af2_to_esm_from_vocab_list(module.config.vocab_list))
 
-    def __init__(self, config: EsmFoldConfig):
+    def __init__(self, config: EsmConfig):
         super().__init__(config)
 
         self.config = config
