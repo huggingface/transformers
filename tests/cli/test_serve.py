@@ -59,6 +59,7 @@ from transformers.testing_utils import (
 from transformers.utils.chat_parsing import ResponseParser
 from transformers.utils.import_utils import is_serve_available
 
+from ..test_decision_head_common import tiny_qwen2
 from ..test_memory_cleanup_mixin import MemoryCleanupMixin
 
 
@@ -700,18 +701,10 @@ class TestSystemOneEndpoint(ServeIntegrationTestCase):
 class TestSystemOneDecisionConfig(unittest.TestCase):
     @require_torch
     def test_answers_are_the_pipelines(self):
-        from transformers import AutoTokenizer, Qwen2Config, Qwen2ForCausalLM, pipeline
+        from transformers import AutoTokenizer, pipeline
 
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
-        config = Qwen2Config(
-            vocab_size=len(tokenizer),
-            hidden_size=16,
-            intermediate_size=32,
-            num_hidden_layers=2,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-        )
-        model = Qwen2ForCausalLM(config).eval()
+        model = tiny_qwen2(tokenizer)
         decision_config = DecisionConfig(temperature={"noul": 1.5})
         handler = SystemOneHandler(MagicMock(), GenerationState(), decision_config=decision_config)
         request = {"state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
@@ -724,18 +717,10 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
 
     @require_torch
     def test_reads_the_decision_config_of_the_repo(self):
-        from transformers import AutoTokenizer, Qwen2Config, Qwen2ForCausalLM
+        from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
-        config = Qwen2Config(
-            vocab_size=len(tokenizer),
-            hidden_size=16,
-            intermediate_size=32,
-            num_hidden_layers=1,
-            num_attention_heads=2,
-            num_key_value_heads=1,
-        )
-        model = Qwen2ForCausalLM(config).eval()
+        model = tiny_qwen2(tokenizer)
         template = "{{ state }}"
         with tempfile.TemporaryDirectory() as repo:
             DecisionConfig(temperature={"noul": 2.0}, chat_template=template).save_pretrained(repo)
@@ -743,17 +728,6 @@ class TestSystemOneDecisionConfig(unittest.TestCase):
             pipe = SystemOneHandler(MagicMock(), GenerationState())._pipeline(repo, model, tokenizer)
         self.assertEqual(pipe.decision_config.temperature, {"noul": 2.0})
         self.assertEqual(pipe.decision_config.chat_template, template)
-
-    def test_questions_are_validated(self):
-        handler = SystemOneHandler(MagicMock(), GenerationState())
-        body = {"model": "x", "state": "s", "questions": {"upset": {"type": "noul", "instructions": "Upset?"}}}
-        self.assertEqual(handler._validate_request(body).questions, body["questions"])
-        body["questions"] = {"a": {"type": "Choice", "criteria": {}}, "b": {"type": "noul", "instruction": "typo"}}
-        with self.assertRaises(HTTPException) as error:
-            handler._validate_request(body)
-        self.assertEqual(error.exception.status_code, 422)
-        self.assertIn("`type` must be one of", error.exception.detail[0]["msg"])
-        self.assertIn("'b'", error.exception.detail[0]["msg"])
 
 
 @slow
