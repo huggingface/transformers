@@ -91,9 +91,6 @@ class GgufTokenizerTesterMixin:
         {"role": "user", "content": "bye"},
     )
 
-    # Why the file's `add_bos_token` / `add_eos_token` cannot reproduce the reference's default encoding, if so.
-    default_encoding_differs: str | None = None
-
     @classmethod
     def setUpClass(cls):
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.gguf_repo, gguf_file=cls.quantized_gguf_file)
@@ -109,10 +106,8 @@ class GgufTokenizerTesterMixin:
                     reference(text, add_special_tokens=False).input_ids,
                 )
 
-    def test_default_encoding_matches_transformers(self):
+    def test_tokenizer_matches_transformers_with_special_tokens(self):
         """BOS and EOS come from the file's `add_bos_token` / `add_eos_token`, so they are added like the reference."""
-        if self.default_encoding_differs:
-            self.skipTest(self.default_encoding_differs)
         from_gguf, reference = self.tokenizer, self.reference_tokenizer
         for text in self.tokenizer_texts:
             with self.subTest(text=text):
@@ -552,7 +547,13 @@ class TinyLlamaGgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
     gguf_repo = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
     quantized_gguf_file = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
     reference_repo = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    default_encoding_differs = "the file has no `add_bos_token` flag"
+
+    def test_tokenizer_matches_transformers_with_special_tokens(self):
+        """The file predates `add_bos_token`, so nothing says to add BOS; the reference adds it."""
+        from_gguf, reference = self.tokenizer, self.reference_tokenizer
+        for text in self.tokenizer_texts:
+            with self.subTest(text=text):
+                self.assertEqual([reference.bos_token_id] + from_gguf(text).input_ids, reference(text).input_ids)
 
 
 @slow
@@ -576,7 +577,13 @@ class Gemma4GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
     gguf_repo = "unsloth/gemma-4-E4B-it-GGUF"
     quantized_gguf_file = "gemma-4-E4B-it-Q4_K_M.gguf"
     reference_repo = "google/gemma-4-E4B-it"
-    default_encoding_differs = "needs a decision on whether the file's `add_bos_token` or the reference wins"
+
+    def test_tokenizer_matches_transformers_with_special_tokens(self):
+        """The file sets `add_bos_token`, but the reference adds no BOS: its chat template writes `<bos>` itself."""
+        from_gguf, reference = self.tokenizer, self.reference_tokenizer
+        for text in self.tokenizer_texts:
+            with self.subTest(text=text):
+                self.assertEqual(from_gguf(text).input_ids, [reference.bos_token_id] + reference(text).input_ids)
 
 
 @slow
