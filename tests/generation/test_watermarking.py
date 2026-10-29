@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import math
+
+import numpy as np
 import unittest
 
 from parameterized import parameterized
@@ -30,6 +32,13 @@ if is_torch_available():
 
 @require_torch
 class WatermarkDetectorTest(unittest.TestCase):
+    def test_compute_pval_matches_exact_normal_tail(self):
+        z = np.array([4.0, 6.0, 8.0, -4.0, 0.0])
+        pvals = WatermarkDetector._compute_pval(None, z)
+        expected = np.array([0.5 * math.erfc(float(v) / math.sqrt(2)) for v in z])
+        np.testing.assert_allclose(pvals, expected, rtol=1e-12)
+        self.assertGreater(pvals[2], 0.0)  # was exactly 0.0 at z = 8
+
     @parameterized.expand(
         [
             (

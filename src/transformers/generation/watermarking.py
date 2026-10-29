@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import collections
+import math
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Union
@@ -188,7 +189,7 @@ class WatermarkDetector:
 
     def _compute_pval(self, x, loc=0, scale=1):
         z = (x - loc) / scale
-        return 1 - (0.5 * (1 + np.sign(z) * (1 - np.exp(-2 * z**2 / np.pi))))
+        return 0.5 * np.vectorize(math.erfc)(z / np.sqrt(2))
 
     def __call__(
         self,
