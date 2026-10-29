@@ -756,6 +756,8 @@ class ModelTesterMixin(ExportTesterMixin):
     test_torch_exportable = True
     # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
     test_all_params_have_gradient = True
+    # Models added before 2023 skip `test_can_init_all_missing_weights` unless they set this once their `_init_weights` is fixed
+    test_can_init_all_missing_weights_before_2023 = False
     is_encoder_decoder = False
     has_attentions = True
     _is_composite = False
@@ -866,6 +868,7 @@ class ModelTesterMixin(ExportTesterMixin):
             # Nothing we can't do
             "Gemma3nTextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
             "Gemma3nVision2TextModelTest": 4,  # need to test KV shared layer for both types: `full_attention` and `sliding_attention`
+            "MistralLarge4ModelTest": 4,  # need to test KV shared layer for both types: RoPE and NoPE
             "BeitModelTest": 4,  # BeitForSemanticSegmentation requires config.out_indices to be a list of 4 integers
             "ZambaModelTest": 5,  # The minimum number to test beyond the initial ["mamba", "mamba", "hybrid"] in `ZambaConfig._layers_block_type`
             "Wav2Vec2BertModelTest": 4,
@@ -1283,7 +1286,7 @@ class ModelTesterMixin(ExportTesterMixin):
             addition_year = int(match_object.group(1))
         # For now, skip everything older than 2023 and "important models" (too many models to patch otherwise)
         # TODO: relax this as we patch more and more models
-        if addition_year < 2023:
+        if addition_year < 2023 and not self.test_can_init_all_missing_weights_before_2023:
             self.skipTest(reason="Not a prioritized model for now.")
 
         for model_class in self.all_model_classes:
@@ -4212,6 +4215,10 @@ class ModelTesterMixin(ExportTesterMixin):
         for model_class in self.all_generative_model_classes:  # TODO: this test should run on all classes instead
             if not model_class._supports_flash_attn:
                 self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
+            # This test is about the `flash_attn` package: skip models that can't use it
+            valid_fa_implementations = model_class._compatible_flash_implementations
+            if valid_fa_implementations is not None and "flash_attention_2" not in valid_fa_implementations:
+                self.skipTest(f"{model_class.__name__} only supports {valid_fa_implementations}")
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             model = model_class(config)
             if not all(
