@@ -756,6 +756,8 @@ class ModelTesterMixin(ExportTesterMixin):
     test_torch_exportable = True
     # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
     test_all_params_have_gradient = True
+    # Models added before 2023 skip `test_can_init_all_missing_weights` unless they set this once their `_init_weights` is fixed
+    test_can_init_all_missing_weights_before_2023 = False
     is_encoder_decoder = False
     has_attentions = True
     _is_composite = False
@@ -1283,7 +1285,7 @@ class ModelTesterMixin(ExportTesterMixin):
             addition_year = int(match_object.group(1))
         # For now, skip everything older than 2023 and "important models" (too many models to patch otherwise)
         # TODO: relax this as we patch more and more models
-        if addition_year < 2023:
+        if addition_year < 2023 and not self.test_can_init_all_missing_weights_before_2023:
             self.skipTest(reason="Not a prioritized model for now.")
 
         for model_class in self.all_model_classes:
