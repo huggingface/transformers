@@ -90,7 +90,7 @@ class MistralLarge4TextRotaryEmbedding(nn.Module):
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
-        self.alpha = nn.Parameter(torch.zeros_like(self.inv_freq))  # init to 0 to avoid NaNs in alpha.exp()
+        self.alpha = nn.Buffer(torch.zeros_like(self.inv_freq))  # init to 0 to avoid NaNs in alpha.exp()
 
     @staticmethod
     def compute_default_rope_parameters(config: MistralLarge4TextConfig, **kwargs) -> tuple[torch.Tensor, float]:

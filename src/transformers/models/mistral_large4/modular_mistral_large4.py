@@ -211,7 +211,7 @@ class MistralLarge4TextRotaryEmbedding(LlamaRotaryEmbedding):
 
     def __init__(self, config: MistralLarge4TextConfig) -> None:
         super().__init__(config)
-        self.alpha = nn.Parameter(torch.zeros_like(self.inv_freq))  # init to 0 to avoid NaNs in alpha.exp()
+        self.alpha = nn.Buffer(torch.zeros_like(self.inv_freq))  # init to 0 to avoid NaNs in alpha.exp()
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
