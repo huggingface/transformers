@@ -121,13 +121,9 @@ print(processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_t
 ## Notes
 
 - The checkpoint also contains a draft head for speculative decoding (the `mtp_dspark.*` weights) using the DSpark
-    speculative decoding method. <!-- TODO: implement DSpark or specify this is not supported -->
+    speculative decoding method.
 - The DSA indexer is applied as an attention mask on top of dense attention, with the `eager` and `sdpa` backends.
   It gives the same outputs as sparse attention but not its speed-up on long sequences.
-<!-- 
-TODO: ask tokenizer people about this
-- The tokenizer reads a literal `[INST]` typed in a user message as the control token, while the reference
-  [mistral-common](https://github.com/mistralai/mistral-common) tokenizer keeps it as plain text. -->
 
 ## MistralLarge4Config
 
