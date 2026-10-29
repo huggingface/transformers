@@ -388,7 +388,7 @@ jobs:
               preexisting_count = len(error_changed) + len(same_error)
 
               if new_count == 0 and preexisting_count == 0:
-                  return "", 0, 0
+                  return "", 0, 0, 0
 
               summary_parts = []
               if new_count > 0:
@@ -446,7 +446,7 @@ jobs:
                           lines.append("")
 
               lines.append("</details>")
-              return "\n".join(lines), new_count, preexisting_count
+              return "\n".join(lines), new_count, len(error_changed), len(same_error)
 
           # Read reports from downloaded artifact files
           model_report_path = Path('./new_failures/new_failures_with_bad_commit_run_models_gpu/new_failures_with_bad_commit.json')
@@ -476,22 +476,28 @@ jobs:
               with open(quant_report_path, 'r') as f:
                   quant_report = json.load(f)
 
-          model_formatted, model_new_count, model_preexisting_count = format_report(model_report)
-          quant_formatted, quant_new_count, quant_preexisting_count = format_report(quant_report)
+          model_formatted, model_new_count, model_error_changed_count, _ = format_report(model_report)
+          quant_formatted, quant_new_count, quant_error_changed_count, _ = format_report(quant_report)
 
-          # Write model CI files — header only when there are NEW failures; details for any failures
+          # Write model CI files — header (red gate) when new OR error-changed failures exist; details for any failures
           if model_formatted:
-              if model_new_count > 0:
-                  url_text = f"[{model_new_count} new failing tests]({model_url})" if model_url else f"{model_new_count} new failing tests"
+              if model_new_count > 0 or model_error_changed_count > 0:
+                  if model_new_count > 0:
+                      url_text = f"[{model_new_count} new failing tests]({model_url})" if model_url else f"{model_new_count} new failing tests"
+                  else:
+                      url_text = f"[{model_error_changed_count} tests with changed errors]({model_url})" if model_url else f"{model_error_changed_count} tests with changed errors"
                   with open('model_ci_header.txt', 'w') as f:
                       f.write(f"❌ {url_text} 😭")
               with open('model_ci_details.txt', 'w') as f:
                   f.write(model_formatted)
 
-          # Write quantization CI files — header only when there are NEW failures; details for any failures
+          # Write quantization CI files — header (red gate) when new OR error-changed failures exist; details for any failures
           if quant_formatted:
-              if quant_new_count > 0:
-                  url_text = f"[{quant_new_count} new failing quant tests]({quant_url})" if quant_url else f"{quant_new_count} new failing quant tests"
+              if quant_new_count > 0 or quant_error_changed_count > 0:
+                  if quant_new_count > 0:
+                      url_text = f"[{quant_new_count} new failing quant tests]({quant_url})" if quant_url else f"{quant_new_count} new failing quant tests"
+                  else:
+                      url_text = f"[{quant_error_changed_count} quant tests with changed errors]({quant_url})" if quant_url else f"{quant_error_changed_count} quant tests with changed errors"
                   with open('quantization_ci_header.txt', 'w') as f:
                       f.write(f"❌ {url_text} 😭")
               with open('quantization_ci_details.txt', 'w') as f:
