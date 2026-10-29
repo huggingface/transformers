@@ -2001,7 +2001,7 @@ class ProcessorMixin(PushToHubMixin):
         continue_final_message: bool | str = False,
         return_assistant_tokens_mask: bool = False,
         tokenize: bool = False,
-        return_tensors: str | TensorType | None = None,
+        return_tensors: str | TensorType | None = "auto",
         return_dict: bool = False,
         load_audio_from_video: bool = False,
         processor_kwargs: dict | None = None,
@@ -2228,9 +2228,13 @@ class ProcessorMixin(PushToHubMixin):
             ):
                 processor_kwargs["do_sample_frames"] = True
 
-            # Set only is user passes a non-None value. Otherwise wa want to use each processor's own defaults
-            if return_tensors:
+            # We want to use each processor's own defaults by default when users don't pass anything
+            # NOTE: in `elif` branch we need to use processor default for `assistant_masks` to be
+            # same type as other keys but fine for now as it has been broken for a while
+            if return_tensors != "auto":
                 processor_kwargs["return_tensors"] = return_tensors
+            else:
+                return_tensors = None
 
             # Audio was loaded/resampled by us above, so let the audio processor know at which rate.
             # (we additionally preserve the location of the kwarg in the nested structure kwargs -> processor -> audio)
