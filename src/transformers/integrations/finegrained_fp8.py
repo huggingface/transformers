@@ -289,11 +289,18 @@ def _dequantize_fp8_weight(
     if weight.dtype == torch.int8:
         raise NotImplementedError("Backward through FP4 weights is not supported.")
     scale = weight_scale_inv.to(dtype)
-    if block_size is not None:
-        rows, cols = weight.shape[-2:]
-        scale = scale.repeat_interleave(block_size[0], dim=-2)[..., :rows, :]
-        scale = scale.repeat_interleave(block_size[1], dim=-1)[..., :cols]
-    return weight.to(dtype).mul_(scale)
+    weight = weight.to(dtype)
+    if block_size is None:
+        return weight.mul_(scale)
+    rows, cols = weight.shape[-2:]
+    full, rem = divmod(cols, block_size[1])
+    # Only expand the scales over rows, and broadcast them over columns through a view of the weight: expanding them
+    # over both would materialize a second weight-sized tensor
+    scale = scale.repeat_interleave(block_size[0], dim=-2)[..., :rows, :]
+    weight[..., : full * block_size[1]].unflatten(-1, (full, block_size[1])).mul_(scale[..., :full, None])
+    if rem:
+        weight[..., full * block_size[1] :].mul_(scale[..., full:])
+    return weight
 
 
 class FP8LinearFunction(torch.autograd.Function):
@@ -315,28 +322,59 @@ class FP8LinearFunction(torch.autograd.Function):
         return grad_output @ weight, None, None, None, None, None, None
 
 
+def fp8_grouped_matmul(input, weight, weight_scale_inv, offsets, tokens_per_expert, block_size):
+    return load_finegrained_fp8_kernel().grouped_matmul(
+        input,
+        weight,
+        weight_scale_inv,
+        offsets=offsets,
+        tokens_per_expert=tokens_per_expert,
+        block_size=block_size,
+    )
+
+
 class FP8GroupedMatmulFunction(torch.autograd.Function):
     """The finegrained-fp8 grouped matmul with a backward for the input, like `FP8LinearFunction`."""
+
+    # Experts dequantized at once in backward: bounds the bf16 transient (DeepSeek-V3 up proj: 28.9 GiB for the full
+    # stack, 4.4 GiB with 16) for +2-3% backward time
+    experts_per_chunk = 16
 
     @staticmethod
     def forward(ctx, input, weight, weight_scale_inv, offsets, tokens_per_expert, block_size):
         ctx.save_for_backward(weight, weight_scale_inv, offsets)
         ctx.block_size = block_size
-        return load_finegrained_fp8_kernel().grouped_matmul(
-            input,
-            weight,
-            weight_scale_inv,
-            offsets=offsets,
-            tokens_per_expert=tokens_per_expert,
-            block_size=block_size,
-        )
+        return fp8_grouped_matmul(input, weight, weight_scale_inv, offsets, tokens_per_expert, block_size)
 
     @staticmethod
     def backward(ctx, grad_output):
         weight, weight_scale_inv, offsets = ctx.saved_tensors
-        weight = _dequantize_fp8_weight(weight, weight_scale_inv, ctx.block_size, grad_output.dtype)
-        # (S, output_dim) @ grouped (num_experts, output_dim, input_dim) -> (S, input_dim)
-        return _grouped_mm(grad_output.contiguous(), weight, offs=offsets), None, None, None, None, None
+        grad_output = grad_output.contiguous()
+        ends = offsets.tolist()
+        # zeros also cover the EP sentinel rows past `ends[-1]`
+        grad_input = grad_output.new_zeros(grad_output.size(0), weight.size(-1))
+        chunk = FP8GroupedMatmulFunction.experts_per_chunk
+        for start in range(0, len(ends), chunk):
+            end = min(start + chunk, len(ends))
+            lo, hi = ends[start - 1] if start else 0, ends[end - 1]
+            if lo == hi:
+                continue
+            w = _dequantize_fp8_weight(
+                weight[start:end], weight_scale_inv[start:end], ctx.block_size, grad_output.dtype
+            )
+            # (S, output_dim) @ grouped (num_experts, output_dim, input_dim) -> (S, input_dim)
+            grad_input[lo:hi] = _grouped_mm(grad_output[lo:hi], w, offs=offsets[start:end] - lo)
+        return grad_input, None, None, None, None, None
+
+
+def _apply_if_grad(function, direct, input, *args):
+    """
+    Only goes through the autograd `function` when the input needs a gradient: its dispatch alone costs ~6% of a
+    Qwen3-30B-A3B-FP8 decode step
+    """
+    if torch.is_grad_enabled() and input.requires_grad:
+        return function.apply(input, *args)
+    return direct(input, *args)
 
 
 class FP8Linear(nn.Linear):
@@ -387,7 +425,9 @@ class FP8Linear(nn.Linear):
         if self.weight.element_size() > 1:
             return F.linear(input, self.weight, self.bias)
 
-        return FP8LinearFunction.apply(
+        return _apply_if_grad(
+            FP8LinearFunction,
+            fp8_linear,
             input,
             self.weight,
             self.weight_scale_inv,
@@ -478,7 +518,9 @@ class FP8GroupedLinear(FP8Linear):
         tokens_per_expert = torch.full((self.n_groups,), tokens_per_group, device=x.device, dtype=torch.int32)
         offsets = torch.arange(1, self.n_groups + 1, device=x.device, dtype=torch.int32) * tokens_per_group
 
-        y = FP8GroupedMatmulFunction.apply(x, w, scale_inv, offsets, tokens_per_expert, self.block_size)
+        y = _apply_if_grad(
+            FP8GroupedMatmulFunction, fp8_grouped_matmul, x, w, scale_inv, offsets, tokens_per_expert, self.block_size
+        )
         y = y.reshape(self.n_groups, *input_shape, -1).movedim(0, -2)
         if self.has_bias:
             y.add_(self.bias.view(self.n_groups, -1))
@@ -606,12 +648,19 @@ def fp8_grouped_mm_experts_forward(
     weight_scale_down = self.down_proj_scale_inv
 
     # Pre-mask (bwd path).
-    if sentinel_mask is not None:
+    if sentinel_mask is not None and selected_hidden_states_g.requires_grad:
         selected_hidden_states_g.masked_fill_(sentinel_mask, 0.0)
 
     # --- Up projection per expert (FP8 grouped) ---
-    proj_out = FP8GroupedMatmulFunction.apply(
-        selected_hidden_states_g, weight_up, weight_scale_up, offsets, tokens_per_expert, self.block_size
+    proj_out = _apply_if_grad(
+        FP8GroupedMatmulFunction,
+        fp8_grouped_matmul,
+        selected_hidden_states_g,
+        weight_up,
+        weight_scale_up,
+        offsets,
+        tokens_per_expert,
+        self.block_size,
     )  # (S, 2 * intermediate_dim)
 
     # Apply gating or activation
@@ -623,8 +672,15 @@ def fp8_grouped_mm_experts_forward(
         proj_out = self.act_fn(proj_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (FP8 grouped) ---
-    proj_out = FP8GroupedMatmulFunction.apply(
-        proj_out, weight_down, weight_scale_down, offsets, tokens_per_expert, self.block_size
+    proj_out = _apply_if_grad(
+        FP8GroupedMatmulFunction,
+        fp8_grouped_matmul,
+        proj_out,
+        weight_down,
+        weight_scale_down,
+        offsets,
+        tokens_per_expert,
+        self.block_size,
     )  # (S, hidden_dim)
 
     # Apply routing weights
@@ -794,8 +850,16 @@ class FP8Experts(nn.Module):
         if weight.element_size() > 1:
             return F.linear(input, weight, None)
 
-        return FP8LinearFunction.apply(
-            input, weight, weight_scale_inv, self.block_size, None, activation_scale, not self._deepgemm_disabled
+        return _apply_if_grad(
+            FP8LinearFunction,
+            fp8_linear,
+            input,
+            weight,
+            weight_scale_inv,
+            self.block_size,
+            None,
+            activation_scale,
+            not self._deepgemm_disabled,
         )
 
 
