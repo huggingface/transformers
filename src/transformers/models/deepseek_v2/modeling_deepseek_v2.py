@@ -146,10 +146,10 @@ class DeepseekV2SparseMoeBlock(nn.Module):
 
 
 class DeepseekV2MLP(nn.Module):
-    def __init__(self, config: DeepseekV2Config, hidden_size=None, intermediate_size=None):
+    def __init__(self, config: DeepseekV2Config, intermediate_size=None):
         super().__init__()
         self.config = config
-        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
+        self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)

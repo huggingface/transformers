@@ -225,13 +225,12 @@ class SegformerMixMLP(nn.Module):
     position embedding used in standard ViT/BeiT MLPs.
     """
 
-    def __init__(self, config, in_features, hidden_features=None, out_features=None):
+    def __init__(self, config, in_features, hidden_features=None):
         super().__init__()
-        out_features = out_features or in_features
         self.up_proj = nn.Linear(in_features, hidden_features)
         self.dwconv = SegformerDepthWiseConv(hidden_features)
         self.act_fn = ACT2FN[config.hidden_act] if isinstance(config.hidden_act, str) else config.hidden_act
-        self.down_proj = nn.Linear(hidden_features, out_features)
+        self.down_proj = nn.Linear(hidden_features, in_features)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states, height, width):

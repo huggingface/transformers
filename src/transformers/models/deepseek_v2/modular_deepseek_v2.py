@@ -216,9 +216,8 @@ class DeepseekV2SparseMoeBlock(Qwen3MoeSparseMoeBlock):
 
 
 class DeepseekV2MLP(LlamaMLP):
-    def __init__(self, config: DeepseekV2Config, hidden_size=None, intermediate_size=None):
+    def __init__(self, config: DeepseekV2Config, intermediate_size=None):
         super().__init__(config)
-        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
 
 
