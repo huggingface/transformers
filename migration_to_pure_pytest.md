@@ -211,12 +211,13 @@ Out of scope until Phase 3 is complete and stable.
 | 5 | Issue 7 | `__test__ = False` on `VLMModelTest` and `ALMModelTest` | After CI run 40759614150 analysis |
 | 6 | Issue 8 | Remove `unittest.TestCase` from `RobertaPreLayerNormModelTest`, `MT5EncoderOnlyModelTest`, `UMT5EncoderOnlyModelTest` — setUp was already renamed, removing unittest.TestCase makes them pure pytest and eliminates the wrong-signature crash | After CI run 40759614150 analysis |
 | 7 | Issue 9 | `__test__ = False` on `VideoPrismModelTest` — local base class with no model_tester was collected standalone by `*Test` pattern | After CI run 40765894971 analysis |
+| 8 | Issue 10 | `_AssertRaisesCtx` wrapper in `test_modeling_common.py` — `assertRaises` now returns an object with `.exception` (unittest compat) instead of bare `pytest.raises` | After CI run 40765894971 analysis |
 
 **Still open (not yet fixed, in discovery order):**
 - Issue 3: `_testMethodName` getter fragility (inspect.stack)
 - ~~Issue 8: `setup_method(self)` wrong signature in `unittest.TestCase` subclasses (RobertaPreLayerNorm, MT5, UMT5)~~ **FIXED** ✅
 - ~~Issue 9: `VideoPrismModelTest` unintended standalone collection~~ **FIXED** ✅
-- Issue 10: `assertRaises` returns `ExceptionInfo` with no `.exception` — wrapper needed (CI run 40765894971 shards 1, 3, 6)
+- ~~Issue 10: `assertRaises` returns `ExceptionInfo` with no `.exception`~~ **FIXED** ✅
 - Issue 11: `get_test_info.py::get_test_classes` misses migrated classes — detection must not require `unittest.TestCase` (CI run 40765894971 tests_repo_utils)
 
 ---
@@ -532,10 +533,16 @@ The four affected classes still have `unittest.TestCase`, but `ModelTesterMixin`
 comes **first** in the MRO, so `_UnittestCompatMixin.assertRaises` wins over
 `unittest.TestCase.assertRaises`. The tests then crash at `cm.exception`.
 
-**Fix**: Replace `pytest.raises(exc)` in `_UnittestCompatMixin.assertRaises` with a thin wrapper
-context manager that stores the caught exception under both `.exception` and `.value`, matching
-the `unittest._AssertRaisesContext` interface.
-**Status**: Not yet fixed.
+**Fix**: Added `_AssertRaisesCtx` class in `test_modeling_common.py` — a thin context manager
+that catches the expected exception and exposes it as both `.exception` (unittest compat) and
+`.value` (pytest style). `_UnittestCompatMixin.assertRaises` now returns `_AssertRaisesCtx(exc)`
+instead of `pytest.raises(exc)`.
+
+**Note on redundancy**: The pattern `with self.assertRaises(Exc) as cm: ... cm.exception.__class__`
+is redundant — if the `with` block exits without raising `Exc`, the context manager already fails.
+A cleaner fix per model file would be to drop the trailing `self.assertEqual(Exc, cm.exception.__class__)`
+line. But fixing the root cause in `_UnittestCompatMixin` is lower blast radius during migration.
+**Status**: **FIXED** ✅ — all 4 tests pass (EfficientLoFTR, LightGlue, SuperGlue, SuperPoint). No regression on bert/llama (145 passed).
 
 ---
 

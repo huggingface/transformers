@@ -745,6 +745,33 @@ UNSHIFTED_LM_HEADS = {
 }
 
 
+class _AssertRaisesCtx:
+    """Context manager returned by _UnittestCompatMixin.assertRaises.
+
+    Exposes .exception (unittest._AssertRaisesContext compat) and .value (pytest style)
+    so callers using `with self.assertRaises(Exc) as cm: ... cm.exception` keep working.
+    """
+
+    def __init__(self, exc_type):
+        self._exc_type = exc_type
+        self.exception = None
+
+    @property
+    def value(self):
+        return self.exception
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is None:
+            raise AssertionError(f"{self._exc_type.__name__} not raised")
+        if not issubclass(exc_type, self._exc_type):
+            return False  # propagate unexpected exceptions
+        self.exception = exc_val
+        return True  # suppress the expected exception
+
+
 class _UnittestCompatMixin:
     """Temporary bridge: provides unittest-style assert methods as pure pytest equivalents.
     Remove this class (and its use in ModelTesterMixin) once all self.assert* calls are
@@ -808,7 +835,21 @@ class _UnittestCompatMixin:
         assert a <= b, msg
 
     def assertRaises(self, exc, *args, **kwargs):
-        return pytest.raises(exc)
+        # MIGRATION NOTE: pytest.raises() yields a pytest.ExceptionInfo object whose caught
+        # exception lives at .value, not .exception. Some model test files (EfficientLoFTR,
+        # LightGlue, SuperGlue, SuperPoint) use `with self.assertRaises(Exc) as cm:` and then
+        # access `cm.exception`, which is the unittest._AssertRaisesContext attribute name.
+        # We return a thin wrapper that exposes .exception so those callers keep working.
+        #
+        # NOTE: the pattern `with self.assertRaises(Exc) as cm: ... cm.exception.__class__`
+        # is redundant — if the block exits without raising Exc the context manager already
+        # fails. The cleaner fix in those test files would be to drop the trailing
+        # `self.assertEqual(Exc, cm.exception.__class__)` line entirely and rely on the
+        # context manager alone. But that requires touching each model file; fixing it here
+        # is the lower-blast-radius approach during the migration.
+        # TODO: once all unittest.TestCase inheritance is removed and callers are cleaned up,
+        # this can go back to `return pytest.raises(exc)`.
+        return _AssertRaisesCtx(exc)
 
     def assertRaisesRegex(self, exc, regex, *args, **kwargs):
         return pytest.raises(exc, match=regex)
