@@ -111,7 +111,7 @@ class HYV3RotaryEmbedding(nn.Module):
 
 
 class HYV3MLP(nn.Module):
-    def __init__(self, config: HYV3Config, intermediate_size: int | None = None):
+    def __init__(self, config: HYV3Config, intermediate_size=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size

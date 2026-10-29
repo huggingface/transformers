@@ -143,7 +143,7 @@ class Xcodec2RotaryEmbedding(nn.Module):
 
 
 class Xcodec2MLP(nn.Module):
-    def __init__(self, config: Xcodec2Config):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.act_fn = ACT2FN[config.hidden_act]

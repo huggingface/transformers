@@ -282,7 +282,7 @@ class Ernie4_5_VLMoeRMSNorm(nn.Module):
 
 
 class Ernie4_5_VLMoeMLP(nn.Module):
-    def __init__(self, config: Ernie4_5_VLMoeConfig, intermediate_size: int | None = None):
+    def __init__(self, config: Ernie4_5_VLMoeConfig, intermediate_size=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size

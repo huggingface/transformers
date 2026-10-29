@@ -25,7 +25,6 @@ from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
-from ..clip.modeling_clip import CLIPMLP
 from ..gemma2.modeling_gemma2 import Gemma2ForCausalLM
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -37,6 +36,7 @@ from ..llama.modeling_llama import (
     eager_attention_forward,
 )
 from ..llama4.modeling_llama4 import Llama4TextL2Norm
+from ..mimi.modeling_mimi import MimiMLP
 from .configuration_nanochat import NanoChatConfig
 
 
@@ -106,11 +106,8 @@ class NanoChatAttention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class NanoChatMLP(CLIPMLP):
-    def __init__(self, config):
-        super().__init__(config)
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+class NanoChatMLP(MimiMLP):
+    pass
 
 
 class NanoChatDecoderLayer(LlamaDecoderLayer):

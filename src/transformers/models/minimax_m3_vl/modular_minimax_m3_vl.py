@@ -323,7 +323,7 @@ class MiniMaxM3VLRMSNorm(GemmaRMSNorm):
 
 
 class MiniMaxM3VLMLP(nn.Module):
-    def __init__(self, config: MiniMaxM3VLTextConfig, intermediate_size: int | None = None):
+    def __init__(self, config: MiniMaxM3VLTextConfig, intermediate_size=None):
         super().__init__()
         inter = config.dense_intermediate_size if intermediate_size is None else intermediate_size
         self.swiglu_alpha = config.swiglu_alpha

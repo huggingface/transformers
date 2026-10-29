@@ -33,7 +33,6 @@ from ...utils import (
 )
 from ...utils.generic import maybe_autocast
 from ..auto import AutoConfig, AutoModel
-from ..clip.modeling_clip import CLIPMLP
 from ..dac.modeling_dac import DacEncoder, DacEncoderBlock, DacResidualUnit
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
@@ -43,6 +42,7 @@ from ..llama.modeling_llama import (
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
+from ..mimi.modeling_mimi import MimiMLP
 from ..qwen2_5_omni.modeling_qwen2_5_omni import (
     Qwen2_5OmniAntiAliasedActivation1d,
     Qwen2_5OmniDownSample1d,
@@ -178,11 +178,8 @@ class Xcodec2RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class Xcodec2MLP(CLIPMLP):
-    def __init__(self, config: Xcodec2Config):
-        super().__init__(config)
-        self.up_proj = nn.Linear(config.hidden_size, config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, config.hidden_size, bias=False)
+class Xcodec2MLP(MimiMLP):
+    pass
 
 
 class Xcodec2Attention(LlamaAttention):

@@ -116,7 +116,7 @@ class Lfm2MoeRotaryEmbedding(nn.Module):
 
 
 class Lfm2MoeMLP(nn.Module):
-    def __init__(self, config: Lfm2MoeConfig, intermediate_size: int | None = None):
+    def __init__(self, config: Lfm2MoeConfig, intermediate_size=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size

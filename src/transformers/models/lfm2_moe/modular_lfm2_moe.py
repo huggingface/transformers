@@ -50,7 +50,7 @@ class Lfm2MoeRotaryEmbedding(LlamaRotaryEmbedding):
 
 
 class Lfm2MoeMLP(Qwen2MoeMLP):
-    def __init__(self, config: Lfm2MoeConfig, intermediate_size: int | None = None):
+    def __init__(self, config: Lfm2MoeConfig, intermediate_size=None):
         super().__init__(config, intermediate_size)
         self.act_fn = ACT2FN["silu"]
 

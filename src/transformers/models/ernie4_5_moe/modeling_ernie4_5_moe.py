@@ -63,7 +63,7 @@ class Ernie4_5_MoeRMSNorm(nn.Module):
 
 
 class Ernie4_5_MoeMLP(nn.Module):
-    def __init__(self, config: Ernie4_5_MoeConfig, intermediate_size: int | None = None):
+    def __init__(self, config: Ernie4_5_MoeConfig, intermediate_size=None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size

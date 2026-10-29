@@ -101,7 +101,7 @@ class NeuCodecDecoderOutput(ModelOutput):
 
 
 class NeuCodecMLP(nn.Module):
-    def __init__(self, config: NeuCodecConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.act_fn = ACT2FN[config.hidden_act]

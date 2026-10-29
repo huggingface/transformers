@@ -32,11 +32,10 @@ from ...utils import (
     logging,
 )
 from ...utils.output_capturing import OutputRecorder
-from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2SparseMoeBlock
+from ..deepseek_v2.modeling_deepseek_v2 import DeepseekV2MLP, DeepseekV2SparseMoeBlock
 from ..glm4_moe_lite.modeling_glm4_moe_lite import Glm4MoeLiteDecoderLayer
 from ..llama.modeling_llama import (
     LlamaForCausalLM,
-    LlamaMLP,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
@@ -150,10 +149,8 @@ class HYV3RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-class HYV3MLP(LlamaMLP):
-    def __init__(self, config: HYV3Config, intermediate_size: int | None = None):
-        super().__init__(config)
-        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+class HYV3MLP(DeepseekV2MLP):
+    pass
 
 
 class HYV3Attention(Qwen3Attention):
