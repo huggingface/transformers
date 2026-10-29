@@ -82,6 +82,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "privacy-filter": "OpenAIPrivacyFilterConfig",
     "lasr": "LasrCTCConfig",
     "granite-speech5": "GraniteSpeech5CTCConfig",
+    "nemotron3-5-transcribe": "Nemotron3_5TranscribeConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
     "radio": "RADIOConfig",
     "cosmos3-edge": "Cosmos3EdgeConfig",

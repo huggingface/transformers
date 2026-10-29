@@ -73,6 +73,7 @@ else:
             ("mm-grounding-dino", "GroundingDinoProcessor"),
             ("modernvbert", "Idefics3Processor"),
             ("moonshine", "Wav2Vec2Processor"),
+            ("nemo_speechlm", "Nemotron3_5TranscribeProcessor"),
             ("parakeet_ctc", "ParakeetProcessor"),
             ("parakeet_rnnt", "ParakeetProcessor"),
             ("parakeet_tdt", "ParakeetProcessor"),

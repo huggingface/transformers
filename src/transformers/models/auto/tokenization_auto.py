@@ -247,6 +247,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("musicgen_melody", "T5Tokenizer" if is_tokenizers_available() else None),
         ("mvp", "MvpTokenizer" if is_tokenizers_available() else None),
         ("myt5", "MyT5Tokenizer"),
+        ("nemo_speechlm", "TokenizersBackend" if is_tokenizers_available() else None),
         ("nemotron3_5_asr", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("nemotron_asr_streaming", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("nezha", "BertTokenizer" if is_tokenizers_available() else None),
@@ -381,18 +382,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
 # These models will be forced to use TokenizersBackend.
 MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "arctic",
-    "chameleon",
     "chatlm",
-    "deepseek_v2",
-    "deepseek_v3",
-    "deepseek_v32",
-    "deepseek_v4",
-    "deepseek_vl",
-    "deepseek_vl_hybrid",
-    "deepseek_vl_v2",
-    "deepseek_ocr",
-    "deepseek_ocr2",
-    "unlimited_ocr",
     "ernie4_5",
     "ernie4_5_moe",
     "fuyu",
@@ -402,7 +392,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "hyperclovax_vision_v2",
     "internlm2",
     "jamba",
-    "janus",
     "llava",
     "llava_next",
     "minicpm3",
@@ -425,7 +414,6 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "qwen3_5_moe",
     "qwen3_5_moe_text",
     "qwen4_exp",
-    "step3p5",
     "step3_vl",
     "vipllava",
     "cohere_asr",
@@ -819,6 +807,8 @@ class AutoTokenizer:
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
         tokenizer_config_class = tokenizer_config.get("tokenizer_class", None)
 
+        kwargs["_commit_hash"] = tokenizer_config.get("_commit_hash", kwargs.get("_commit_hash"))
+
         # Check for auto_map early to handle dynamic tokenizers properly
         tokenizer_auto_map = None
         if "auto_map" in tokenizer_config:
@@ -837,6 +827,25 @@ class AutoTokenizer:
             and TokenizersBackend is not None
             and any(fnmatch.fnmatch(_config_name_or_path, p) for p in MODEL_IDS_TO_TOKENIZERS_BACKEND)
         ):
+            return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # Hub repos that declare this but ship ByteLevel (Llama3 style) must use TokenizersBackend
+        # because LlamaTokenizer hardcodes Metaspace. Skip Mistral checkpoints (also ByteLevel) so
+        # they still go through the tekken-first MistralCommonBackend check below.
+        _hub_declared_class = tokenizer_config_class or getattr(config, "tokenizer_class", None)
+        if (
+            tokenizer_auto_map is None
+            and TokenizersBackend is not None
+            and _hub_declared_class is not None
+            and _hub_declared_class.removesuffix("Fast") == "LlamaTokenizer"
+            and (TOKENIZER_MAPPING_NAMES.get(config_model_type) or "").removesuffix("Fast") != "MistralCommonBackend"
+            and TokenizersBackend._tokenizer_json_has_byte_level(pretrained_model_name_or_path, **kwargs)
+        ):
+            logger.warning_once(
+                f"`tokenizer_class` is `{_hub_declared_class}` but `tokenizer.json` is ByteLevel; "
+                "loading `TokenizersBackend`. Set `tokenizer_class` to `TokenizersBackend` in "
+                "`tokenizer_config.json`."
+            )
             return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # if there is a config, we can check that the tokenizer class != than model class.
