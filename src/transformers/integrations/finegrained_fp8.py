@@ -336,9 +336,9 @@ def fp8_grouped_matmul(input, weight, weight_scale_inv, offsets, tokens_per_expe
 class FP8GroupedMatmulFunction(torch.autograd.Function):
     """The finegrained-fp8 grouped matmul with a backward for the input, like `FP8LinearFunction`."""
 
-    # Experts dequantized at once in backward: bounds the bf16 transient (DeepSeek-V3 up proj: 28.9 GiB for the full
-    # stack, 4.4 GiB with 16) for +2-3% backward time
-    experts_per_chunk = 16
+    # Max bytes of experts dequantized at once in backward. Stacks under it (e.g. Qwen3-30B-A3B: 0.8 GB) go in one shot
+    # with no host sync; bigger ones are chunked (DeepSeek-V3 up proj: 28.9 GiB peak -> 3.5 GiB, same time)
+    dequant_budget_bytes = 2**30
 
     @staticmethod
     def forward(ctx, input, weight, weight_scale_inv, offsets, tokens_per_expert, block_size):
@@ -350,19 +350,25 @@ class FP8GroupedMatmulFunction(torch.autograd.Function):
     def backward(ctx, grad_output):
         weight, weight_scale_inv, offsets = ctx.saved_tensors
         grad_output = grad_output.contiguous()
+        num_experts = weight.size(0)
+        expert_bytes = weight[0].numel() * grad_output.element_size()
+        chunk = max(1, FP8GroupedMatmulFunction.dequant_budget_bytes // expert_bytes)
+        if chunk >= num_experts:
+            w = _dequantize_fp8_weight(weight, weight_scale_inv, ctx.block_size, grad_output.dtype)
+            # (S, output_dim) @ grouped (num_experts, output_dim, input_dim) -> (S, input_dim)
+            return _grouped_mm(grad_output, w, offs=offsets), None, None, None, None, None
+
         ends = offsets.tolist()
         # zeros also cover the EP sentinel rows past `ends[-1]`
         grad_input = grad_output.new_zeros(grad_output.size(0), weight.size(-1))
-        chunk = FP8GroupedMatmulFunction.experts_per_chunk
-        for start in range(0, len(ends), chunk):
-            end = min(start + chunk, len(ends))
+        for start in range(0, num_experts, chunk):
+            end = min(start + chunk, num_experts)
             lo, hi = ends[start - 1] if start else 0, ends[end - 1]
             if lo == hi:
                 continue
             w = _dequantize_fp8_weight(
                 weight[start:end], weight_scale_inv[start:end], ctx.block_size, grad_output.dtype
             )
-            # (S, output_dim) @ grouped (num_experts, output_dim, input_dim) -> (S, input_dim)
             grad_input[lo:hi] = _grouped_mm(grad_output[lo:hi], w, offs=offsets[start:end] - lo)
         return grad_input, None, None, None, None, None
 
