@@ -300,7 +300,6 @@ class _BaseAutoModelClass:
                 adapter_kwargs["token"] = token
 
             adapter_kwargs.setdefault("revision", hub_kwargs["revision"])
-            adapter_kwargs.setdefault("subfolder", hub_kwargs.get("subfolder") or "")
             maybe_adapter_path = find_adapter_config_file(pretrained_model_name_or_path, **adapter_kwargs)
 
             if maybe_adapter_path is not None:

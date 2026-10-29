@@ -91,8 +91,11 @@ class DecisionConfig:
     def from_pretrained(
         cls, pretrained_model_name_or_path: str | Path, config_name: str = DECISION_CONFIG_NAME, **kwargs
     ) -> "DecisionConfig":
-        config = cls.from_file(cached_file(pretrained_model_name_or_path, config_name, **kwargs))
+        # The default settings for a repo without a decision config, or a model that has no repo
+        if not pretrained_model_name_or_path:
+            return cls()
         kwargs["_raise_exceptions_for_missing_entries"] = False
+        config = cls.from_file(cached_file(pretrained_model_name_or_path, config_name, **kwargs))
         if (template := cached_file(pretrained_model_name_or_path, DECISION_TEMPLATE_NAME, **kwargs)) is not None:
             config.chat_template = Path(template).read_text(encoding="utf-8")
         return config

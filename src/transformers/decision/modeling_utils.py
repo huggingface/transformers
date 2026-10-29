@@ -42,6 +42,12 @@ def read_marks(inputs: dict[str, Any], sentinel_ids: tuple[int, int]) -> tuple[d
     return inputs, marks if len(marks) else keep.sum(0, keepdim=True)
 
 
+def process_scores(decision_config, input_ids, marks, questions, scores) -> list[torch.Tensor]:
+    """The logits processors of the decision config on the option scores of each question of a prompt."""
+    tail = input_ids[0, int(marks[-1]) :]  # the tokens after the last mark, where the templates write the state
+    return [decision_config.logits_processors[q.type](tail, s.float()) for q, s in zip(questions, scores)]
+
+
 class DecisionMixin:
     """
     The `decide` of the `XxxForDecision` models, with their `decision_config`: the decision config of their repo, or the
@@ -93,10 +99,7 @@ class DecisionMixin:
     @property
     def decision_config(self) -> DecisionConfig:
         if getattr(self, "_decision_config", None) is None:
-            try:
-                self._decision_config = DecisionConfig.from_pretrained(self.name_or_path)
-            except OSError:
-                self._decision_config = DecisionConfig()
+            self._decision_config = DecisionConfig.from_pretrained(self.name_or_path)
         return self._decision_config
 
     @decision_config.setter
@@ -126,12 +129,9 @@ class DecisionMixin:
             question_type_ids=torch.tensor([question_types], device=self.device),
             **{key: value.to(self.device) if hasattr(value, "to") else value for key, value in inputs.items()},
         )
-        # The tokens after the last mark, where the templates write the state
-        tail = inputs["input_ids"][0, int(marks[-1]) :]
-        return [
-            decision_config.logits_processors[question.type](tail, question_scores.float())
-            for question, question_scores in zip(decision_questions, scores.split(num_options[0].tolist()))
-        ]
+        return process_scores(
+            decision_config, inputs["input_ids"], marks, decision_questions, scores.split(num_options[0].tolist())
+        )
 
 
 __all__ = ["DecisionMixin"]
