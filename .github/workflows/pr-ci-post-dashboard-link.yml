@@ -2,10 +2,10 @@ name: Post CI Dashboard Link
 
 on:
   pull_request_target:
-    types: [opened, reopened]
+    types: [opened, reopened]  # for post-link: inject the CI dashboard badge as soon as a PR opens
   workflow_run:
     workflows: ["PR CI"]
-    types: [completed]
+    types: [completed]  # for post-mlinter-review: post inline findings after CI finishes
 
 
 permissions: {}
