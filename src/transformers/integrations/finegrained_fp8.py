@@ -370,6 +370,8 @@ class FP8GroupedMatmulFunction(torch.autograd.Function):
                 weight[start:end], weight_scale_inv[start:end], ctx.block_size, grad_output.dtype
             )
             grad_input[lo:hi] = _grouped_mm(grad_output[lo:hi], w, offs=offsets[start:end] - lo)
+            # free this chunk before the next one is dequantized, so only one is alive at a time
+            del w
         return grad_input, None, None, None, None, None
 
 
