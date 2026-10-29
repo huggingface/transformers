@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationConfig, GenerationMixin, GenerationMode
 from ...masking_utils import (
     create_bidirectional_mask,
@@ -40,7 +40,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -109,8 +109,8 @@ class T5GemmaConfig(PreTrainedConfig):
     model_type = "t5gemma"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
-        "encoder": SubConfigSpec(config_class=T5GemmaModuleConfig),
-        "decoder": SubConfigSpec(config_class=T5GemmaModuleConfig),
+        "encoder": T5GemmaModuleConfig,
+        "decoder": T5GemmaModuleConfig,
     }
 
     encoder: T5GemmaModuleConfig | dict[Any, Any] | None = None
@@ -842,9 +842,8 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = decoder_outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         decoder_config = self.get_decoder().config
         if decoder_config.final_logit_softcapping is not None:
             logits = logits / decoder_config.final_logit_softcapping

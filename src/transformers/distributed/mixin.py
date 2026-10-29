@@ -19,6 +19,8 @@ import shutil
 import warnings
 from typing import TYPE_CHECKING
 
+import torch
+
 from ..dynamic_module_utils import custom_object_save
 from ..utils import is_torch_greater_or_equal, logging
 from ..utils.hub import create_and_tag_model_card
@@ -29,11 +31,11 @@ from .checkpoint import (
     consolidate_distributed_checkpoint,
 )
 from .configuration_utils import DistributedConfig
+from .expert_parallel import apply_expert_parallelism
 from .fsdp import apply_fully_sharded_data_parallelism
 from .pipeline_parallel import apply_pipeline_parallelism
 from .tensor_parallel import (
     _validate_parallel_plan_styles,
-    apply_expert_parallelism,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
     resolve_parallel_plans,
@@ -90,6 +92,9 @@ class DistributedMixin:
             self._tp_plan.update(self.config.base_model_tp_plan or {})
             self._ep_plan.update(self.config.base_model_ep_plan or {})
             self._fsdp_plan.update(self.config.base_model_fsdp_plan or {})
+            # Shard the input embeddings on the vocabulary unless the plan already names them.
+            if self._tp_plan and isinstance(getattr(self, "embed_tokens", None), torch.nn.Embedding):
+                self._tp_plan = {"embed_tokens": "embedding_rowwise", **self._tp_plan}
 
         for name, module in self.named_children():
             if plan := getattr(module, "_ep_plan", None):

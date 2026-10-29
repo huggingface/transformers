@@ -314,7 +314,7 @@ class JinaEmbeddingsV3Pooler(nn.Module):
 
 @auto_docstring
 class JinaEmbeddingsV3PreTrainedModel(PreTrainedModel):
-    config_class = JinaEmbeddingsV3Config
+    config: JinaEmbeddingsV3Config
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True

@@ -28,6 +28,7 @@ class CompressedTensorsTest(unittest.TestCase):
     tinyllama_fp8_static = "nm-testing/TinyLlama-1.1B-Chat-v1.0-FP8-e2e"
     tinyllama_w8a16 = "nm-testing/TinyLlama-1.1B-Chat-v1.0-W8A16-G128-compressed"
     llama3_fp8_frozen = "RedHatAI/Llama-3.2-1B-Instruct-FP8"
+    qwen3_kv_cache_only = "inference-optimization/TinyQwen3-KV-Cache-Only"
 
     prompt = "The capital of France is Paris, the capital of Germany is Berlin"
 
@@ -270,3 +271,30 @@ class CompressedTensorsTest(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained(int8_model, device_map="auto")
         fp8_count = sum(1 for m in model.modules() if isinstance(m, CompressedTensorsFP8Linear))
         self.assertEqual(fp8_count, 0, "INT8 model should NOT use CompressedTensorsFP8Linear")
+
+    def test_kv_cache_only_model(self):
+        """A checkpoint quantizing only the KV cache (no weight quantization groups) should load
+        and run: every attention module carries its `k_scale`/`v_scale`, and the dense weights
+        are unaffected."""
+        from transformers.integrations.compressed_tensors import CompressedTensorsFP8Linear
+
+        model = AutoModelForCausalLM.from_pretrained(self.qwen3_kv_cache_only, device_map=torch_device)
+
+        fp8_count = sum(1 for m in model.modules() if isinstance(m, CompressedTensorsFP8Linear))
+        self.assertEqual(fp8_count, 0, "KV-cache-only model should NOT use CompressedTensorsFP8Linear")
+
+        for layer in model.model.layers:
+            self.assertTrue(hasattr(layer.self_attn, "k_scale"), "attention module should carry k_scale")
+            self.assertTrue(hasattr(layer.self_attn, "v_scale"), "attention module should carry v_scale")
+            self.assertEqual(layer.self_attn.k_scale.numel(), 1)
+            self.assertEqual(layer.self_attn.v_scale.numel(), 1)
+        # weights stay dense
+        self.assertEqual(model.model.layers[0].self_attn.q_proj.weight.dtype, model.dtype)
+
+        tokenizer = AutoTokenizer.from_pretrained(self.qwen3_kv_cache_only)
+        inputs = tokenizer(self.prompt, return_tensors="pt").to(model.device)
+        labels = inputs["input_ids"]
+        with torch.no_grad():
+            outputs = model(**inputs, labels=labels)
+        # smoke model: perplexity only needs to stay in the same ballpark as the dense model (~1255)
+        self.assertLessEqual(torch.exp(outputs.loss), 5000.0)

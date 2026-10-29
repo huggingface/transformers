@@ -411,6 +411,7 @@ def _reshaped_vision_attention_forward(
     "transformers.models.video_llama_3.modeling_video_llama_3.VideoLlama3VisionAttention.forward",
     "transformers.models.paddleocr_vl.modeling_paddleocr_vl.PaddleOCRVisionAttention.forward",
     # NaViT (1, T, D) + separate `_proj` + `.out_proj` (tuple return)
+    "transformers.models.minicpm_ocr.modeling_minicpm_ocr.MiniCPMOcrVisionAttention.forward",
     "transformers.models.minicpmv4_6.modeling_minicpmv4_6.MiniCPMV4_6VisionAttention.forward",
     "transformers.models.minicpmv4_7.modeling_minicpmv4_7.MiniCPMV4_7VisionAttention.forward",
     # Audio attention: separate `_proj` + `.out_proj`, no rotary

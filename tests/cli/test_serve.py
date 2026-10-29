@@ -51,6 +51,7 @@ from transformers.testing_utils import (
     require_torchcodec,
     require_vision,
     slow,
+    torch_device,
 )
 from transformers.utils.chat_parsing import ResponseParser
 from transformers.utils.import_utils import is_serve_available
@@ -1021,7 +1022,7 @@ class TestCompletion(ServeIntegrationTestCase):
         """Streaming completion with CB produces text."""
         serve, port = _start_serve(
             force_model=self.MODEL,
-            device="cuda:0",
+            device=f"{torch_device}:0",
             continuous_batching=True,
             attn_implementation="sdpa",
         )
@@ -1043,7 +1044,7 @@ class TestCompletion(ServeIntegrationTestCase):
         """Non-streaming completion with CB returns a full response."""
         serve, port = _start_serve(
             force_model=self.MODEL,
-            device="cuda:0",
+            device=f"{torch_device}:0",
             continuous_batching=True,
             attn_implementation="sdpa",
         )
@@ -2705,7 +2706,7 @@ class TestContinuousBatchingChatCompletion(ServeIntegrationTestCase):
     def serve_kwargs(cls) -> dict:
         return {
             "force_model": cls.MODEL,
-            "device": "cuda:0",
+            "device": f"{torch_device}:0",
             "continuous_batching": True,
             "attn_implementation": "sdpa",
             "default_seed": 42,
@@ -2827,7 +2828,7 @@ class TestContinuousBatchingResponses(ServeIntegrationTestCase):
     def serve_kwargs(cls) -> dict:
         return {
             "force_model": cls.MODEL,
-            "device": "cuda:0",
+            "device": f"{torch_device}:0",
             "continuous_batching": True,
             "attn_implementation": "sdpa",
             "default_seed": 42,
