@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch Mistral4 model."""
 
 import gc
+import tempfile
 import unittest
 
 import pytest
@@ -78,14 +79,20 @@ class Mistral4ModelTest(CausalLMModelTest, unittest.TestCase):
 
 @require_torch
 class Mistral4IntegrationTest(unittest.TestCase):
+    def setUp(self):
+        # The 119B checkpoint does not fit the runners' GPU + CPU budget, so `device_map="auto"` offloads
+        # part of it to disk; the MoE experts must be re-saved there, which needs an `offload_folder`.
+        self.offload_dir = tempfile.TemporaryDirectory()
+
     def tearDown(self):
+        self.offload_dir.cleanup()
         cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_mistral_small_4_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = Mistral3ForConditionalGeneration.from_pretrained(
-            "mistralai/Mistral-Small-4-119B-2603", device_map="auto"
+            "mistralai/Mistral-Small-4-119B-2603", device_map="auto", offload_folder=self.offload_dir.name
         )
         input_ids = torch.tensor([input_ids]).to(model.device)
         with torch.no_grad():
@@ -120,7 +127,7 @@ class Mistral4IntegrationTest(unittest.TestCase):
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-Small-4-119B-2603")
         model = Mistral3ForConditionalGeneration.from_pretrained(
-            "mistralai/Mistral-Small-4-119B-2603", device_map="auto"
+            "mistralai/Mistral-Small-4-119B-2603", device_map="auto", offload_folder=self.offload_dir.name
         )
         input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
 
