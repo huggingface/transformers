@@ -101,53 +101,48 @@ print(model.tp_plan)
 
 ## Partitioning strategies
 
-The `ParallelInterface` class maps each strategy name you can use in a `tp_plan` to a configured strategy instance. You don't interact with it directly to shard a model, but it's the authoritative list of available names.
+`ALL_PARALLEL_STYLES`, a `ParallelInterface` defined in [distributed/parallel_utils.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/parallel_utils.py), maps each strategy name you can use in a plan to a configured strategy instance. You don't interact with it directly to shard a model, but it's the authoritative list of available names. [distributed/tensor_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py) registers the tensor parallel strategies into it:
 
 ```py
-class ParallelInterface(GeneralInterface):
-    _global_mapping = {
-        "embedding_rowwise": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
-        "colwise_gather_output": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
-        "colwise_rep": ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
-        "colwise": ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)),
-        "rowwise": RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()),
-        "rowwise_split_input": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
-        "rowwise_rep": RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()),
-        "packed_colwise": PackedColwiseParallel(),
-        "packed_rowwise": PackedRowwiseParallel(),
-        "sequence_parallel": SequenceParallel(use_local_output=True),
-        "grouped_gemm": MoEParamShard(Shard(0), shards_expert_dim=True),
-        "ep_router": EpRouterParallel(),
-        "megamoe_router": RouterParallelMegaMoe(),
-        "moe_tp_experts": MoeExpertsParallel(),
-        "megamoe_experts": MoeTensorParalellMegaMoeExperts(),
-        "moe_identity_expert": MoeIdentityParallel(),
-        "replicated_with_grad_allreduce": ReplicatedWithGradAllReduce(),
-        "mla_kv_a_proj": MlaKvAProjParallel(),
-        "all_reduce": AllReduceParallel(),
-    }
+ALL_PARALLEL_STYLES.register("embedding_rowwise", EmbeddingParallel(shard_dim=0))
+ALL_PARALLEL_STYLES.register("embedding_colwise", EmbeddingParallel(shard_dim=1))
+ALL_PARALLEL_STYLES.register("colwise_gather_output", ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()))
+ALL_PARALLEL_STYLES.register("colwise_rep", ColwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()))
+ALL_PARALLEL_STYLES.register("colwise", ColwiseParallel(input_layouts=Replicate(), output_layouts=Shard(-1)))
+ALL_PARALLEL_STYLES.register("rowwise", RowwiseParallel(input_layouts=Shard(-1), output_layouts=Replicate()))
+ALL_PARALLEL_STYLES.register("rowwise_split_input", RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()))
+ALL_PARALLEL_STYLES.register("rowwise_rep", RowwiseParallel(input_layouts=Replicate(), output_layouts=Replicate()))
+ALL_PARALLEL_STYLES.register("packed_colwise", PackedColwiseParallel())
+ALL_PARALLEL_STYLES.register("packed_rowwise", PackedRowwiseParallel())
+ALL_PARALLEL_STYLES.register("sequence_parallel", SequenceParallel(use_local_output=True))
+ALL_PARALLEL_STYLES.register("replicated_with_grad_allreduce", ReplicatedWithGradAllReduce())
+ALL_PARALLEL_STYLES.register("mla_kv_a_proj", MlaKvAProjParallel())
+ALL_PARALLEL_STYLES.register("all_reduce", AllReduceParallel())
+ALL_PARALLEL_STYLES.register("moe_tp_experts", MoeExpertsParallel())
+ALL_PARALLEL_STYLES.register("moe_identity_expert", MoeIdentityParallel())
 ```
 
-Every strategy is a subclass of `TensorParallelLayer` in [distributed/tensor_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/tensor_parallel.py). The two you'll reach for most, `ColwiseParallel` and `RowwiseParallel`, take `input_layouts` and `output_layouts` placements, which is how one class covers several plan names. `colwise` leaves its output sharded on the last dim for a following `rowwise` layer to consume, while `colwise_gather_output` all-gathers it back to a full tensor.
+Every tensor parallel strategy is a subclass of `TensorParallelLayer` in that file. The expert parallel strategies, such as `ep_dispatch_experts`, live in [distributed/expert_parallel.py](https://github.com/huggingface/transformers/blob/main/src/transformers/distributed/expert_parallel.py), subclass `ExpertParallelLayer`, which has the same hooks, and register into the same `ALL_PARALLEL_STYLES`. The two you'll reach for most, `ColwiseParallel` and `RowwiseParallel`, take `input_layouts` and `output_layouts` placements, which is how one class covers several plan names. `colwise` leaves its output sharded on the last dim for a following `rowwise` layer to consume, while `colwise_gather_output` all-gathers it back to a full tensor.
 
 The table below describes each strategy.
 
 | Strategy | Description |
 |---|---|
-| `ColwiseParallel` | Shards a weight on its output-feature dim (`Shard(0)` for a 2D `nn.Linear` weight, `Shard(1)` for `nn.Embedding`) and shards a 1D bias. Redistributes the input to `Replicate()`, then places the output at `output_layouts`. |
-| `RowwiseParallel` | Shards a weight on its input-feature dim (`Shard(-1)`, or `Shard(0)` for `nn.Embedding`) and replicates the bias, which is added after the reduction. Each rank's forward produces a `Partial()` output holding its share of the sum, and `transform_output_post_forward` redistributes that to `output_layouts`. Reducing to `Replicate()` issues an all-reduce, and reducing to `Shard(1)` issues a reduce-scatter. |
+| `ColwiseParallel` | Shards a linear weight on its output-feature dim (`Shard(0)` for a 2D `nn.Linear` weight) and shards a 1D bias. Redistributes the input to `Replicate()`, then places the output at `output_layouts`. |
+| `RowwiseParallel` | Shards a linear weight on its input-feature dim (`Shard(-1)`) and replicates the bias, which is added after the reduction. Each rank's forward produces a `Partial()` output holding its share of the sum, and `transform_output_post_forward` redistributes that to `output_layouts`. Reducing to `Replicate()` issues an all-reduce, and reducing to `Shard(1)` issues a reduce-scatter. |
+| `EmbeddingParallel` | Shards an `nn.Embedding` with the token ids replicated. `shard_dim=0` (`embedding_rowwise`, the usual choice) shards the vocabulary and all-reduces each rank's partial lookup into the full output. `shard_dim=1` (`embedding_colwise`) shards the hidden dim and all-gathers each rank's slice of the output. |
 | `PackedColwiseParallel` | A variant of `ColwiseParallel` for fused weights, for example `up_proj` and `gate_proj` packed into `gate_up_proj`. Use `split_factor` when a weight packs a number of layers other than two. |
 | `PackedRowwiseParallel` | The row-wise counterpart, for weights packed along the final dim. Replicates 1D parameters. |
 | `SequenceParallel` | Replicates the module's parameters and shards its input on `sequence_dim` (defaults to `1`). Used for norms that operate per-token, such as `LayerNorm` and `RMSNorm`. |
 | `ReplicatedWithGradAllReduce` | Replicates a parameter but all-reduces its gradient. Needed for norms that sit between a column-wise and a row-wise layer and normalize along a sharded axis, where each rank only sees its own heads. |
 | `AllReduceParallel` | All-reduces a module's `Partial()` forward output to `Replicate()`. Use it as a sync point for a module whose compute ends in a partial sum. |
 | `MlaKvAProjParallel` | Splits the `kv_a_proj_with_mqa` output of DeepSeek-V2 style MLA attention and all-reduces the gradient of the RoPE half, which bypasses `kv_b_proj` and would otherwise keep a partial gradient. Requires `qk_rope_head_dim` in the model config. |
+| `MoeExpertsParallel` | Tensor parallel MoE experts. All-reduces the expert output forward and adds the backward all-reduces for hidden states and routing weights. |
+| `MoeIdentityParallel` | Pre-divides the input of a zero or identity expert by the mesh size, cancelling the all-reduce that `moe_tp_experts` applies downstream. |
 | `MoEParamShard` | Shards MoE expert weights on a given placement. Backs the `grouped_gemm` name, where `shards_expert_dim=True` also rewrites `module.num_experts` to the per-rank expert count. |
 | `EpRouterParallel` | Masks router scores for non-local experts and remaps global expert IDs to local ones, so each rank runs only the experts it owns. Requires `num_experts` to be divisible by the mesh size. |
 | `RouterParallelMegaMoe` | Router variant for DeepGEMM Mega MoE, which dispatches experts inside the kernel which wants the router output untouched. |
-| `MoeExpertsParallel` | Tensor parallel MoE experts. All-reduces the expert output forward and adds the backward all-reduces for hidden states and routing weights. |
 | `MoeTensorParalellMegaMoeExperts` | Inference-only experts layer for DeepGEMM Mega MoE. Skips the gradient syncs and passes the process group into the module so the kernel can set up its shared buffers on the first forward. |
-| `MoeIdentityParallel` | Pre-divides the input of a zero or identity expert by the mesh size, cancelling the all-reduce that `moe_tp_experts` applies downstream. |
 
 ### Packed strategies
 
@@ -240,9 +235,9 @@ The example below walks through a trimmed version of `ColwiseParallel`.
     import torch
 
     from transformers import AutoModelForCausalLM, DistributedConfig
-    from transformers.distributed.tensor_parallel import ParallelInterface
+    from transformers.distributed.parallel_utils import ALL_PARALLEL_STYLES
 
-    ParallelInterface.register("colwise_custom", ColwiseParallel())
+    ALL_PARALLEL_STYLES.register("colwise_custom", ColwiseParallel())
     tp_plan = {
         "model.layers.*.self_attn.q_proj": "colwise_custom",
         ...

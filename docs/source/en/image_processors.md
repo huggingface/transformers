@@ -23,6 +23,8 @@ Image processors convert images into pixel values, tensors that represent image 
 
 Use [`~ImageProcessingMixin.from_pretrained`] to load an image processors configuration (image size, whether to normalize and rescale, etc.) from a vision model on the Hugging Face [Hub](https://hf.co) or local directory. The configuration for each pretrained model is saved in a [preprocessor_config.json](https://huggingface.co/google/vit-base-patch16-224/blob/main/preprocessor_config.json) file.
 
+When an image processor is part of a multimodal processor, its configuration is nested in `processor_config.json` instead. See [Save and load a processor](./processors#save-and-load-a-processor) for details.
+
 ```py
 from transformers import AutoImageProcessor
 

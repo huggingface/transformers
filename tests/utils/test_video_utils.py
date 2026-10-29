@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     require_vision,
 )
 from transformers.video_utils import (
+    VideoMetadata,
     group_videos_by_shape,
     is_torchvision_video_decoding_available,
     make_batched_videos,
@@ -46,7 +47,7 @@ if is_vision_available():
     import PIL
 
     from transformers import BaseVideoProcessor
-    from transformers.video_utils import VideoMetadata, load_video
+    from transformers.video_utils import load_video
 
 
 def get_random_video(height, width, num_frames=8, return_torch=False):
@@ -405,6 +406,20 @@ class LoadVideoTester(unittest.TestCase):
         )
         self.assertEqual(video.shape, (22, 360, 640, 3))
 
+    def test_fps_sampling_short_video_keeps_one_frame(self):
+        video, _ = load_video(
+            "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tiny_video.mp4",
+            fps=0.25,
+        )
+        self.assertEqual(video.shape, (1, 2160, 3840, 3))
+
+    def test_load_video_num_frames_exceeds_total(self):
+        video_file_path = hf_hub_download(
+            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
+        )
+        with self.assertRaisesRegex(ValueError, "exceeds total_num_frames"):
+            load_video(video_file_path, num_frames=300)
+
     def test_load_video_fps(self):
         video, _ = load_video(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/sample_demo_1.mp4", fps=1
@@ -423,10 +438,3 @@ class LoadVideoTester(unittest.TestCase):
                 fps=1,
                 num_frames=10,
             )
-
-    def test_load_video_num_frames_exceeds_total(self):
-        video_file_path = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="sample_demo_1.mp4", repo_type="dataset"
-        )
-        with self.assertRaisesRegex(ValueError, "exceeds total_num_frames"):
-            load_video(video_file_path, num_frames=300)

@@ -26,16 +26,19 @@ from typing import Annotated
 
 import huggingface_hub
 import typer
+from packaging.version import parse
 
 from .. import __version__
 from ..integrations.deepspeed import is_deepspeed_available
 from ..utils import (
+    get_torch_version,
     is_accelerate_available,
     is_torch_available,
     is_torch_hpu_available,
     is_torch_npu_available,
     is_torch_xpu_available,
 )
+from ..utils.import_utils import ACCELERATE_MIN_VERSION, _is_package_available
 
 
 def env(
@@ -50,14 +53,16 @@ def env(
     # TODO: remove hasattr guard once safetensors >= 0.8.0 is released (adds __version__)
     safetensors_version = safetensors.__version__ if hasattr(safetensors, "__version__") else "unknown"
 
-    accelerate_version = "not installed"
+    accelerate_available, accelerate_version = _is_package_available("accelerate", return_version=True)
+    if not accelerate_available:
+        accelerate_version = "not installed"
+    elif parse(accelerate_version) < parse(ACCELERATE_MIN_VERSION):
+        accelerate_version += " (not in expected version range)"
     accelerate_config = accelerate_config_str = "not found"
 
     if is_accelerate_available():
-        import accelerate
         from accelerate.commands.config import default_config_file, load_config_from_file
 
-        accelerate_version = accelerate.__version__
         # Get the default from the config file.
         if accelerate_config_file is not None or os.path.isfile(default_config_file):
             accelerate_config = load_config_from_file(accelerate_config_file).to_dict()
@@ -68,9 +73,15 @@ def env(
             else f"\t{accelerate_config}"
         )
 
-    pt_version = "not installed"
+    pt_version = get_torch_version()
     pt_cuda_available = "NA"
     pt_accelerator = "NA"
+    pt_version_warn = ""
+    if pt_version == "N/A":
+        pt_version = "not installed"
+    elif not is_torch_available():
+        pt_version_warn = " (not in expected version range)"
+
     if is_torch_available():
         import torch
 
@@ -105,7 +116,7 @@ def env(
         "Accelerate version": f"{accelerate_version}",
         "Accelerate config": f"{accelerate_config_str}",
         "DeepSpeed version": f"{deepspeed_version}",
-        "PyTorch version (accelerator?)": f"{pt_version} ({pt_accelerator})",
+        "PyTorch version (accelerator?)": f"{pt_version} ({pt_accelerator}){pt_version_warn}",
         "Using distributed or parallel set-up in script?": "<fill in>",
     }
     if is_torch_available():

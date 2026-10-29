@@ -11,7 +11,6 @@
 *.md @stevhliu
 *tokenization* @ArthurZucker
 docs/ @stevhliu
-/benchmark/ @McPatate
 /docker/ @ydshieh @ArthurZucker
 
 # More high-level globs catch cases when specific rules later don't apply
