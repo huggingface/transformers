@@ -37,6 +37,11 @@ class DecisionConfig:
             `Yes`/`No` for `noul` and `A`, `B`, `C`, ... otherwise.
         temperature (`dict[str, float]`, *optional*):
             Temperature per question type, applied to the option scores before the softmax. Defaults to 1.
+        calibration (`dict[str, float]`, *optional*):
+            Input-conditioned temperature (`bias`, `entropy`, `log_tokens`, `n_options`, `lo`, `hi`), see
+            [`CalibratedTemperatureLogitsWarper`].
+        noul_band (`list[float]`, *optional*):
+            `[edge, slope]` of the band that keeps the probability of `noul` answers away from 0.5, see [`NoulBandLogitsWarper`].
         chat_template (`str`, *optional*):
             Jinja template rendering `state` with `question` (one prompt per question) or `questions` (one prompt for
             all of them). Defaults to a generic prompt in the tokenizer's chat template.
@@ -51,6 +56,8 @@ class DecisionConfig:
 
     labels: dict[str, list[str]] = field(default_factory=dict)
     temperature: dict[str, float | int] = field(default_factory=dict)
+    calibration: dict[str, float | int] | None = None
+    noul_band: list[float] | None = None
     chat_template: str | None = None
     noul_options: list[str] = field(default_factory=lambda: ["true", "false"])
     sanitize_control_tokens: bool = True
@@ -62,9 +69,19 @@ class DecisionConfig:
 
     def get_logits_processor(self, question_type: str):
         """The [`LogitsProcessorList`] applied to the option scores of a question of type `question_type`."""
-        from ..generation import LogitsProcessorList, TemperatureLogitsWarper
+        from ..generation import (
+            CalibratedTemperatureLogitsWarper,
+            LogitsProcessorList,
+            NoulBandLogitsWarper,
+            TemperatureLogitsWarper,
+        )
 
-        return LogitsProcessorList([TemperatureLogitsWarper(float(self.temperature.get(question_type, 1.0)))])
+        processors = LogitsProcessorList([TemperatureLogitsWarper(float(self.temperature.get(question_type, 1.0)))])
+        if self.calibration:
+            processors.append(CalibratedTemperatureLogitsWarper(**self.calibration))
+        if self.noul_band and question_type == "noul":
+            processors.append(NoulBandLogitsWarper(*self.noul_band, true_index=self.noul_options.index("true")))
+        return processors
 
     @property
     def logits_processors(self) -> dict:

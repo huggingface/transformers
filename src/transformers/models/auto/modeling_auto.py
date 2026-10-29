@@ -2114,6 +2114,7 @@ MODEL_FOR_DECISION_MAPPING_NAMES = OrderedDict(
     [
         ("jev", "JevForDecision"),
         ("kev", "KevForDecision"),
+        ("von", "VonForDecision"),
     ]
 )
 

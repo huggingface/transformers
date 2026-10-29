@@ -768,6 +768,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vits", "VitsConfig"),
         ("vivit", "VivitConfig"),
         ("vjepa2", "VJEPA2Config"),
+        ("von", "VonConfig"),
         ("voxtral", "VoxtralConfig"),
         ("voxtral_encoder", "VoxtralEncoderConfig"),
         ("voxtral_realtime", "VoxtralRealtimeConfig"),
