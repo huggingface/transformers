@@ -202,7 +202,7 @@ def eager_attention_forward(
 class Glm4vMoeTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int | None = None):
+    def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -222,7 +222,6 @@ class Glm4vMoeTextAttention(nn.Module):
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        self.rope_parameters = config.rope_parameters
 
     def forward(
         self,

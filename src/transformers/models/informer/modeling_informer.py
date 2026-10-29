@@ -415,7 +415,6 @@ class InformerProbSparseAttention(nn.Module):
         dropout: float | int = 0.0,
         is_decoder: bool = False,
         sampling_factor: int = 5,
-        bias: bool = True,
         layer_idx: int | None = None,
     ):
         super().__init__()
@@ -434,10 +433,10 @@ class InformerProbSparseAttention(nn.Module):
         self.is_decoder = is_decoder
         self.layer_idx = layer_idx
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(embed_dim, embed_dim)
+        self.v_proj = nn.Linear(embed_dim, embed_dim)
+        self.q_proj = nn.Linear(embed_dim, embed_dim)
+        self.out_proj = nn.Linear(embed_dim, embed_dim)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()

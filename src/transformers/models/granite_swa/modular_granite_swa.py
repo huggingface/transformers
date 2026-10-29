@@ -162,7 +162,7 @@ class GraniteSWAAttention(GptOssAttention):
     """Granite attention with per-layer sliding window and a learnable per-head attention sink.
     RoPE is applied only when the model passes ``position_embeddings`` (NoPE uses ``None``)."""
 
-    def __init__(self, config: GraniteSWAConfig, layer_idx: int | None = None):
+    def __init__(self, config: GraniteSWAConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.scaling = config.attention_multiplier
         self.layer_type = config.layer_types[layer_idx]

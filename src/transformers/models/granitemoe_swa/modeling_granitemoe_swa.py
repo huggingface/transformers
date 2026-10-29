@@ -212,7 +212,7 @@ class GraniteMoeSWAAttention(nn.Module):
     """Granite attention with per-layer sliding window and a learnable per-head attention sink.
     RoPE is applied only when the model passes ``position_embeddings`` (NoPE uses ``None``)."""
 
-    def __init__(self, config: GraniteMoeSWAConfig, layer_idx: int | None = None):
+    def __init__(self, config: GraniteMoeSWAConfig, layer_idx: int):
         super().__init__()
         self.layer_type = config.layer_types[layer_idx]
         self.config = config

@@ -141,7 +141,7 @@ class EsmcMLP(LlamaMLP):
 class EsmcAttention(LlamaAttention):
     """Multi-head self-attention with QK-LayerNorm and RoPE."""
 
-    def __init__(self, config: EsmcConfig, layer_idx: int | None = None):
+    def __init__(self, config: EsmcConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.is_causal = False
         # Every released ESMC checkpoint carries q_norm/k_norm weights, so there is no flag for these.

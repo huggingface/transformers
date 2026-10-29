@@ -154,7 +154,7 @@ class HYV3MLP(DeepseekV2MLP):
 
 
 class HYV3Attention(Qwen3Attention):
-    def __init__(self, config: HYV3Config, layer_idx: int | None = None):
+    def __init__(self, config: HYV3Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.sliding_window = None
 

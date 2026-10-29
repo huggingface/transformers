@@ -362,7 +362,7 @@ class PaddleOCRMLP(Ernie4_5MLP):
 
 
 class PaddleOCRAttention(LlamaAttention):
-    def __init__(self, config: PaddleOCRVLConfig, layer_idx: int | None = None):
+    def __init__(self, config: PaddleOCRVLConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.attention_dropout = 0.0
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.use_bias)
@@ -520,8 +520,7 @@ class PaddleOCRVisionEmbeddings(SiglipVisionEmbeddings):
 
 
 class PaddleOCRVisionAttention(VideoLlama3VisionAttention):
-    def __init__(self, config: PaddleOCRVisionConfig):
-        super().__init__()
+    pass
 
 
 class PaddleOCRVisionMLP(CLIPMLP):

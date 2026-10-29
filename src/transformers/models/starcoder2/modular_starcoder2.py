@@ -63,7 +63,7 @@ class Starcoder2MLP(CLIPMLP):
 
 
 class Starcoder2Attention(MistralAttention):
-    def __init__(self, config: Starcoder2Config, layer_idx: int | None = None):
+    def __init__(self, config: Starcoder2Config, layer_idx: int):
         super().__init__(config=config, layer_idx=layer_idx)
         self.residual_dropout = config.residual_dropout
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.use_bias)

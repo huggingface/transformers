@@ -188,7 +188,7 @@ def rotate_half(x):
 class Olmo2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Olmo2Config, layer_idx: int | None = None):
+    def __init__(self, config: Olmo2Config, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx

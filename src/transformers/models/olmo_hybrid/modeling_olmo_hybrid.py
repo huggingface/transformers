@@ -167,7 +167,7 @@ class OlmoHybridAttention(nn.Module):
     enabling NoPE mode for long context extension.
     """
 
-    def __init__(self, config: OlmoHybridConfig, layer_idx: int | None = None):
+    def __init__(self, config: OlmoHybridConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx

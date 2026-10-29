@@ -141,10 +141,9 @@ class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
 
 @no_inherit_decorator
 class Glm4vMoeTextAttention(LlamaAttention):
-    def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int | None = None):
+    def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        self.rope_parameters = config.rope_parameters
 
 
 class Glm4vMoeTextTopKRouter(Glm4MoeTopKRouter, nn.Module):

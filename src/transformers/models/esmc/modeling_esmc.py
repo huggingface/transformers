@@ -180,7 +180,7 @@ def eager_attention_forward(
 class EsmcAttention(nn.Module):
     """Multi-head self-attention with QK-LayerNorm and RoPE."""
 
-    def __init__(self, config: EsmcConfig, layer_idx: int | None = None):
+    def __init__(self, config: EsmcConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx

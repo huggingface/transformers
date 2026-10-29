@@ -144,7 +144,7 @@ class Glm4MoeRotaryEmbedding(GPTNeoXRotaryEmbedding):
 
 
 class Glm4MoeAttention(CohereAttention):
-    def __init__(self, config: Glm4MoeConfig, layer_idx: int | None = None):
+    def __init__(self, config: Glm4MoeConfig, layer_idx: int):
         nn.Module.__init__(self)
         self.config = config
         self.layer_idx = layer_idx

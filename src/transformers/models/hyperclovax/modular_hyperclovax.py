@@ -107,7 +107,7 @@ class HyperCLOVAXRotaryEmbedding(LlamaRotaryEmbedding):
 
 
 class HyperCLOVAXAttention(LlamaAttention):
-    def __init__(self, config: HyperCLOVAXConfig, layer_idx: int | None = None):
+    def __init__(self, config: HyperCLOVAXConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.scaling = config.attention_multiplier
 

@@ -134,7 +134,7 @@ class Cohere2LayerNorm(CohereLayerNorm):
 
 @no_inherit_decorator
 class Cohere2Attention(LlamaAttention):
-    def __init__(self, config: Cohere2Config, layer_idx: int | None = None):
+    def __init__(self, config: Cohere2Config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
 

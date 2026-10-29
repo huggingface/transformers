@@ -200,7 +200,7 @@ def eager_attention_forward(
 class ApertusAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: ApertusConfig, layer_idx: int | None = None):
+    def __init__(self, config: ApertusConfig, layer_idx: int):
         super().__init__()
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config

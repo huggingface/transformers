@@ -110,7 +110,7 @@ def rotate_half(x):
 # - Norm is applied to attention queries and keys.
 # - No qkv clipping.
 class Olmo2Attention(LlamaAttention):
-    def __init__(self, config: Olmo2Config, layer_idx: int | None = None):
+    def __init__(self, config: Olmo2Config, layer_idx: int):
         super().__init__(config, layer_idx=layer_idx)
         self.q_norm = Olmo2RMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
         self.k_norm = Olmo2RMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)

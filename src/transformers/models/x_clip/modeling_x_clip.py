@@ -228,7 +228,7 @@ def eager_attention_forward(
 class XCLIPAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: XCLIPVisionConfig | XCLIPTextConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.num_attention_heads = config.num_attention_heads

@@ -1117,7 +1117,7 @@ class Qwen3OmniMoeThinkerTextSparseMoeBlock(Qwen3MoeSparseMoeBlock):
 
 
 class Qwen3OmniMoeThinkerTextAttention(Qwen3Attention):
-    def __init__(self, config, layer_idx):
+    def __init__(self, config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.sliding_window = None
 
@@ -2141,7 +2141,7 @@ class Qwen3OmniMoeConvNeXtBlock(nn.Module):
 
 
 class Qwen3OmniMoeCode2WavAttention(Qwen3Attention):
-    def __init__(self, config: Qwen3OmniMoeCode2WavConfig, layer_idx):
+    def __init__(self, config: Qwen3OmniMoeCode2WavConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.q_norm = nn.Identity()
         self.k_norm = nn.Identity()

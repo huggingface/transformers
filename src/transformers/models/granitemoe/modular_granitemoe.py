@@ -82,7 +82,7 @@ class GraniteMoeSparseMoeBlock(Qwen3MoeSparseMoeBlock):
 
 class GraniteMoeAttention(LlamaAttention):
     def __init__(self, config: GraniteMoeConfig, layer_idx: int):
-        super().__init__(self, config, layer_idx)
+        super().__init__(config, layer_idx)
         self.scaling = config.attention_multiplier  # Only diff with llama
 
 

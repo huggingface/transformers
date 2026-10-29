@@ -1419,7 +1419,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 class Qwen3OmniMoeThinkerTextAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config, layer_idx):
+    def __init__(self, config, layer_idx: int):
         super().__init__()
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config
@@ -3519,7 +3519,7 @@ class Qwen3OmniMoeConvNeXtBlock(nn.Module):
 class Qwen3OmniMoeCode2WavAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Qwen3OmniMoeCode2WavConfig, layer_idx):
+    def __init__(self, config: Qwen3OmniMoeCode2WavConfig, layer_idx: int):
         super().__init__()
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.config = config

@@ -102,7 +102,7 @@ class AriaCrossAttention(nn.Module):
             The configuration to use.
     """
 
-    def __init__(self, config: AriaConfig, dropout_rate: float = 0):
+    def __init__(self, config: AriaConfig):
         super().__init__()
         hidden_size = config.vision_config.hidden_size
         num_heads = config.vision_config.num_attention_heads
@@ -114,7 +114,7 @@ class AriaCrossAttention(nn.Module):
         # Original code here: https://github.com/rhymes-ai/Aria/blob/719ff4e52b727443cba3793b0e27fe64e0244fe1/aria/model/projector.py#L48
         self.multihead_attn = nn.MultiheadAttention(hidden_size, num_heads, batch_first=True)
         self.linear = nn.Linear(hidden_size, hidden_size)
-        self.dropout = nn.Dropout(dropout_rate)
+        self.dropout = nn.Dropout(0)
 
         self.layer_norm = nn.LayerNorm(hidden_size)
         self.layer_norm_kv = nn.LayerNorm(hidden_size)

@@ -98,9 +98,7 @@ class Kolibri1Config(Qwen3MoeConfig):
 
 
 class Kolibri1Attention(Exaone4Attention):
-    def __init__(self, config: Kolibri1Config, layer_idx: int):
-        super().__init__(config, layer_idx)
-        del self.sliding_window_pattern
+    pass
 
 
 class Kolibri1MLP(Qwen3MoeMLP):

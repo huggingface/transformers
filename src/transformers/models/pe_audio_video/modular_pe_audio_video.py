@@ -237,7 +237,7 @@ class PeAudioVideoEncoderEmbedder(nn.Module):
 
 @no_inherit_decorator
 class PeAudioVideoEncoderAttention(Qwen3Attention):
-    def __init__(self, config, layer_idx):
+    def __init__(self, config, layer_idx: int):
         super().__init__(config, layer_idx)
         self.is_causal = False
         del self.sliding_window

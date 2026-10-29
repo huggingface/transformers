@@ -114,7 +114,7 @@ def eager_attention_forward(
 class GraniteAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: GraniteConfig, layer_idx: int | None = None):
+    def __init__(self, config: GraniteConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx

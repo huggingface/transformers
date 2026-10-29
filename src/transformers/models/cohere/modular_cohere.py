@@ -122,7 +122,7 @@ class CohereMLP(MistralMLP):
 class CohereAttention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: CohereConfig, layer_idx: int | None = None):
+    def __init__(self, config: CohereConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.use_qk_norm = config.use_qk_norm
         if self.use_qk_norm:

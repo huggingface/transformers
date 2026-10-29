@@ -91,7 +91,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 @no_inherit_decorator
 class GlmAttention(LlamaAttention):
-    def __init__(self, config: GlmConfig, layer_idx: int | None = None):
+    def __init__(self, config: GlmConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 

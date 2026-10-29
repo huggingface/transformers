@@ -99,7 +99,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 @no_inherit_decorator
 class HeliumAttention(LlamaAttention):
-    def __init__(self, config: HeliumConfig, layer_idx: int | None = None):
+    def __init__(self, config: HeliumConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.scaling = 1 / math.sqrt(self.head_dim)

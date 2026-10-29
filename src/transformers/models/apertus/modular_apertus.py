@@ -128,7 +128,7 @@ class ApertusRotaryEmbedding(LlamaRotaryEmbedding):
 
 
 class ApertusAttention(Qwen3Attention):
-    def __init__(self, config: ApertusConfig, layer_idx: int | None = None):
+    def __init__(self, config: ApertusConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.sliding_window = None
 

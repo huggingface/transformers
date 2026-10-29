@@ -97,8 +97,7 @@ class XCLIPTextEmbeddings(CLIPTextEmbeddings):
 
 
 class XCLIPAttention(CLIPAttention):
-    def __init__(self, config: XCLIPVisionConfig | XCLIPTextConfig):
-        super().__init__(config)
+    pass
 
 
 class XCLIPMLP(CLIPMLP):

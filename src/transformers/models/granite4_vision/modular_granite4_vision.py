@@ -347,7 +347,7 @@ class Granite4VisionTextRotaryEmbedding(LlamaRotaryEmbedding):
 
 
 class Granite4VisionTextAttention(LlamaAttention):
-    def __init__(self, config: Granite4VisionTextConfig, layer_idx: int | None = None):
+    def __init__(self, config: Granite4VisionTextConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.scaling = config.attention_multiplier
 

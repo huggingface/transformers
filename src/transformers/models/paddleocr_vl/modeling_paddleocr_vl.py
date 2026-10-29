@@ -305,7 +305,7 @@ def eager_attention_forward(
 class PaddleOCRAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: PaddleOCRVLConfig, layer_idx: int | None = None):
+    def __init__(self, config: PaddleOCRVLConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -608,7 +608,7 @@ def apply_rotary_pos_emb_vision(
 class PaddleOCRVisionAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: PaddleOCRVisionConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
