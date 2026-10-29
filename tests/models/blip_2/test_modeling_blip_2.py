@@ -195,7 +195,7 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
-            expected_arg_names = ["pixel_values"]
+            expected_arg_names = ["input_ids"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_model(self):
@@ -1679,6 +1679,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         expected_outputs = expectations.get_expectation()
 
         # Test output
+        self.assertEqual(predictions[0].shape[0], 999, "injected failure for CI format test")
         self.assertEqual(predictions[0].tolist(), expected_outputs[0])
         self.assertEqual(expected_outputs[1], generated_text)
 
