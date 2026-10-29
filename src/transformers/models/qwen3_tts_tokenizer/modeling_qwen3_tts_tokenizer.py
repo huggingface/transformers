@@ -651,8 +651,8 @@ class Qwen3TTSTokenizerSplitResidualVectorQuantizer(nn.Module):
     def __init__(self, acoustic_config, semantic_config):
         super().__init__()
         self.codebook_size = acoustic_config.codebook_size
-        self.num_semantic_quantizers = semantic_config.n_codebooks
-        self.num_acoustic_quantizers = acoustic_config.n_codebooks
+        self.num_semantic_quantizers = semantic_config.num_quantizers
+        self.num_acoustic_quantizers = acoustic_config.num_quantizers
         self.max_num_quantizers = self.num_semantic_quantizers + self.num_acoustic_quantizers
         self.semantic_residual_vector_quantizer = Qwen3TTSTokenizerResidualVectorQuantizer(
             semantic_config, self.num_semantic_quantizers
