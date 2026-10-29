@@ -400,6 +400,7 @@ class MistralLarge4TextAttention(GlmMoeDsaAttention):
             MistralLarge4RMSNorm(config.kv_lora_rank, eps=config.rms_norm_eps) if not self.is_kv_shared_layer else None
         )
 
+    # trf-ignore: TRF043
     def forward(
         self,
         hidden_states: torch.Tensor,
