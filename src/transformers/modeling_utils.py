@@ -3779,12 +3779,15 @@ class PreTrainedModel(
         return dtype_plan
 
     def _get_modules_kept_in_fp32(self) -> list[str]:
-        """The modules owning a parameter that `_get_dtype_plan` keeps in float32 when the model loads in its dtype."""
+        """The modules owning a parameter that `_get_dtype_plan` upcasts to float32."""
         if not (dtype_plan := self._get_dtype_plan(self.dtype)):
             return []
         pattern, _, _ = build_glob_alternation(list(dtype_plan))
-        modules = [name.rpartition(".")[0] for name, _ in self.named_parameters() if pattern.search(name)]
-        return list(dict.fromkeys(modules))
+        return [
+            name
+            for name, module in self.named_modules()
+            if any(pattern.search(f"{name}.{param_name}") for param_name, _ in module.named_parameters(recurse=False))
+        ]
 
     def set_use_kernels(self, use_kernels, kernel_config: KernelConfig | None = None, mode: "Mode | None" = None):
         """
