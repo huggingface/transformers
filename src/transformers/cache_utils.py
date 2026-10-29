@@ -90,7 +90,7 @@ class CacheLayerMixin(ABC):
             # It can either be an int for dynamic layers, or a tensor for static layers
             if isinstance(self.cumulative_length, int):
                 self.cumulative_length = 0
-            else:
+            elif self.cumulative_length is not None:
                 self.cumulative_length.zero_()
 
     def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
@@ -111,8 +111,10 @@ class DynamicLayer(CacheLayerMixin):
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         self.dtype, self.device = key_states.dtype, key_states.device
-        self.keys = torch.tensor([], dtype=self.dtype, device=self.device)
-        self.values = torch.tensor([], dtype=self.dtype, device=self.device)
+        self.keys = torch.zeros(*key_states.shape[:-2], 0, key_states.shape[-1], dtype=self.dtype, device=self.device)
+        self.values = torch.zeros(
+            *value_states.shape[:-2], 0, value_states.shape[-1], dtype=self.dtype, device=self.device
+        )
         self.is_initialized = True
 
     def update(
@@ -204,8 +206,12 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         super().__init__()
         self.sliding_window = sliding_window
         self.cumulative_length = 0
-        self._sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long)
+        self.sliding_window_tensor: torch.Tensor | None = None
         self.record_past = False
+
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
+        super().lazy_initialization(key_states, value_states)
+        self.sliding_window_tensor = torch.tensor(self.sliding_window, dtype=torch.long, device=self.device)
 
     def activate_past_recording(self):
         """
@@ -213,10 +219,6 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         before restricting the size of the `k/v_states` to `sliding_window`, to be able to retrieve previous full states.
         """
         self.record_past = True
-
-    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
-        super().lazy_initialization(key_states, value_states)
-        self._sliding_window_tensor = self._sliding_window_tensor.to(self.device)
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, *args, **kwargs
@@ -330,7 +332,13 @@ class DynamicIndexedLayer(DynamicLayer):
 
     def lazy_initialization_indexer(self, indexer_key_states: torch.Tensor) -> None:
         self.indexer_dtype, self.indexer_device = indexer_key_states.dtype, indexer_key_states.device
-        self.indexer_keys = torch.tensor([], dtype=self.indexer_dtype, device=self.indexer_device)
+        self.indexer_keys = torch.zeros(
+            *indexer_key_states.shape[:-2],
+            0,
+            indexer_key_states.shape[-1],
+            dtype=self.indexer_dtype,
+            device=self.indexer_device,
+        )
         self.is_indexer_initialized = True
 
     def update_indexer(self, indexer_key_states: torch.Tensor) -> torch.Tensor:
@@ -415,8 +423,8 @@ class StaticLayer(CacheLayerMixin):
     def __init__(self, max_cache_len: int, **kwargs):
         super().__init__()
         self.max_cache_len = max_cache_len
-        # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions
-        self.cumulative_length = torch.tensor(0, dtype=int)
+        # Very important that it's a tensor here, to avoid recompiling when we update it and use it to create positions.
+        self.cumulative_length: torch.Tensor | None = None
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         """
@@ -443,7 +451,7 @@ class StaticLayer(CacheLayerMixin):
             dtype=self.dtype,
             device=self.device,
         )
-        self.cumulative_length = self.cumulative_length.to(self.device)
+        self.cumulative_length = torch.zeros((), dtype=torch.long, device=self.device)
         # Note: `mark_static_address` is used to tag the tensors as a fixed data pointer, preventing compiled graph
         # breaks or cudagraph skips due to inplace mutations when updating the cache. However, it is not supported when
         # tracing the graph, so we skip it in this case. As prefill should never be compiled, this is not an issue and it
@@ -1639,16 +1647,24 @@ class Cache:
         head_dim: int | list[int],
         dtype: torch.dtype,
         device: torch.device,
+        value_head_dim: int | list[int] | None = None,
     ):
         """
         Initialize all the layers in advance (it's otherwise lazily initialized on the first `update` call).
         This is useful for our `export` recipes, as `export` needs everything in advance.
+
+        `value_head_dim` is for the caches whose values are not keys-shaped (latent attention caches the
+        rope keys against the compressed latent); it defaults to `head_dim`.
         """
         # To allow different num_heads and head_dim depending on layers, we accept lists
         if isinstance(num_heads, int):
             num_heads = [num_heads] * len(self)
         if isinstance(head_dim, int):
             head_dim = [head_dim] * len(self)
+        if value_head_dim is None:
+            value_head_dim = head_dim
+        if isinstance(value_head_dim, int):
+            value_head_dim = [value_head_dim] * len(self)
 
         if len(num_heads) != len(self.layers):
             raise ValueError(
@@ -1659,15 +1675,20 @@ class Cache:
                 f"`head_dim` was provided as a list of length {len(num_heads)}, but the Cache currently has {len(self.layers)} layers"
             )
 
-        for layer, layer_num_heads, layer_head_dim in zip(self.layers, num_heads, head_dim):
+        for layer, layer_num_heads, layer_head_dim, layer_value_dim in zip(
+            self.layers, num_heads, head_dim, value_head_dim
+        ):
             if not layer.supports_early_init or layer.is_initialized:
                 continue
             # Note that the initialization needs all dimensions (except -2), as well as device and dtype, so we use
             # this fake tensor approach. It has size 0 on the -2 dimension, so it does not allocate any data (it only
             # creates an empty tensor with correct shape, dtype and device), which is very efficient and practical
-            fake_kv_tensor = torch.zeros((batch_size, layer_num_heads, 0, layer_head_dim), dtype=dtype, device=device)
+            fake_key_tensor = torch.zeros((batch_size, layer_num_heads, 0, layer_head_dim), dtype=dtype, device=device)
+            fake_value_tensor = torch.zeros(
+                (batch_size, layer_num_heads, 0, layer_value_dim), dtype=dtype, device=device
+            )
             # Init the layer
-            layer.lazy_initialization(fake_kv_tensor, fake_kv_tensor)
+            layer.lazy_initialization(fake_key_tensor, fake_value_tensor)
 
     def get_seq_length(self, layer_idx: int = 0) -> int:
         """Returns the sequence length of the cache for the given layer."""
@@ -1895,7 +1916,9 @@ def get_layer_types_and_kwargs(config: PreTrainedConfig) -> tuple[list[str], lis
 
     # Prepare additional kwargs that may be needed to __init__ each cache layer
     per_layer_kwargs = []
-    for layer_type, layer_config in zip(layer_types, layer_configs):
+    for layer_idx, layer_type in enumerate(layer_types):
+        # `layer_types` may count cache layers beyond the decoder layers (e.g. Idefics' gated cross-attention)
+        layer_config = layer_configs[layer_idx] if layer_idx < len(layer_configs) else config
         layer_kwargs = {}
         if layer_type in ("sliding_attention", "hybrid_sliding", "reference_sliding_attention"):
             layer_kwargs["sliding_window"] = layer_config.sliding_window
@@ -2004,7 +2027,7 @@ class DynamicCache(Cache):
 
     def __iter__(self):
         for layer in self.layers:
-            yield layer.keys, layer.values, getattr(layer, "_sliding_window_tensor", None)
+            yield layer.keys, layer.values, getattr(layer, "sliding_window_tensor", None)
 
 
 class StaticCache(Cache):

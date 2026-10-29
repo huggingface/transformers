@@ -1,0 +1,788 @@
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+# Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Splitting a generative model into the graphs an export needs.
+
+`generate` calls a model on the prompt, then once per generated token, and a multi-modal model's vision or audio
+tower once up front. This runs `generate` and records each call, so the exporters get one decode graph serving the
+prompt and every step, an encoder or modality graphs beside it, and the calls each graph is run with.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import copy
+import functools
+import inspect
+from dataclasses import replace
+from typing import Any, NamedTuple
+
+from ..utils import logging
+from ..utils.import_utils import is_torch_available
+from .cache import causal_mask, mask_width, materialize_cache_like
+from .components import (
+    Component,
+    CrossAttentionEncoder,
+    ModalityEncoder,
+    PatchVisionEncoder,
+    TokenEmbedder,
+)
+from .precompute import _find_config_attr, precompute_export_inputs
+from .utils import patch_attributes
+
+
+logger = logging.get_logger(__name__)
+
+if is_torch_available():
+    import torch
+
+    from ..cache_utils import Cache, EncoderDecoderCache
+    from ..modeling_utils import PreTrainedModel
+
+
+@contextlib.contextmanager
+def _capture_calls(obj: Any, attribute: str):
+    """Capture the kwargs of each `obj.<attribute>(...)` call during the block (positional args normalised
+    to kwargs), restoring the attribute afterwards."""
+    calls: list[dict] = []
+    original = getattr(obj, attribute)
+    was_instance_attr = attribute in vars(obj)
+    sig = inspect.signature(original)
+
+    @functools.wraps(original)
+    def wrapper(*args, **kwargs):
+        captured = {}
+        for name, value in sig.bind(*args, **kwargs).arguments.items():
+            kind = sig.parameters[name].kind
+            if kind == inspect.Parameter.VAR_KEYWORD:
+                captured.update(copy.deepcopy(value))
+            elif kind != inspect.Parameter.VAR_POSITIONAL:
+                captured[name] = copy.deepcopy(value)
+        calls.append(captured)
+        return original(*args, **kwargs)
+
+    setattr(obj, attribute, wrapper)
+    try:
+        yield calls
+    finally:
+        # Delete rather than reassign: a bound method pinned in the instance dict would make a later
+        # `copy.copy` of the module run with `self` = the original (empty getter capture on qwen2_5_omni).
+        if was_instance_attr:
+            setattr(obj, attribute, original)
+        else:
+            delattr(obj, attribute)
+
+
+class CrossWriter(NamedTuple):
+    """One module that fills the cross-attention cache, and the call that filled it.
+
+    The slots (`("arg", index)` or `("kwarg", name)`) locate the encoder output, the decoder query (`width`
+    wide) and the cache, so a replay can swap in live tensors.
+    """
+
+    module: Any
+    args: tuple
+    kwargs: dict
+    states_at: tuple
+    query_at: tuple | None
+    width: int | None
+    cache_at: tuple
+
+
+def _slot_of(args: tuple, kwargs: dict, match) -> tuple | None:
+    """Where the first argument satisfying `match` sits, as `("arg", index)` / `("kwarg", name)`."""
+    for index, value in enumerate(args):
+        if match(value):
+            return ("arg", index)
+    for name, value in kwargs.items():
+        if match(value):
+            return ("kwarg", name)
+    return None
+
+
+def _argument(args: tuple, kwargs: dict, slot: tuple):
+    """The argument a `CrossWriter` slot points at."""
+    kind, key = slot
+    return args[key] if kind == "arg" else kwargs[key]
+
+
+@contextlib.contextmanager
+def capture_cross_writers(model: PreTrainedModel):
+    """Capture the modules that fill the cross-attention cache, with the calls that filled it.
+
+    A write to the cross half of an `EncoderDecoderCache` is attributed to the innermost running module, and
+    the encoder output is found by identity among its arguments, so nothing is looked up by name.
+
+    Yields `{layer index: CrossWriter}`, filled once the model has run.
+    """
+    writers: dict[int, CrossWriter] = {}
+    active: list[tuple] = []
+    encoder_states: list = []
+    hooks = []
+
+    def opened(module, args, kwargs):
+        active.append((module, args, kwargs))
+
+    def closed(module, args, output):
+        if active:
+            active.pop()
+
+    def encoded(module, args, output):
+        encoder_states.append(output.last_hidden_state if hasattr(output, "last_hidden_state") else output[0])
+
+    for module in model.get_decoder().modules():
+        hooks.append(module.register_forward_pre_hook(opened, with_kwargs=True))
+        hooks.append(module.register_forward_hook(closed))
+    hooks.append(model.get_encoder().register_forward_hook(encoded))
+
+    original_update = Cache.update
+
+    def update(self, key_states, value_states, layer_idx, *args, **kwargs):
+        if not active or layer_idx in writers or not encoder_states:
+            return original_update(self, key_states, value_states, layer_idx, *args, **kwargs)
+        module, call_args, call_kwargs = active[-1]
+        cache_at = _slot_of(call_args, call_kwargs, lambda value: isinstance(value, EncoderDecoderCache))
+        paired = _argument(call_args, call_kwargs, cache_at) if cache_at else None
+        if paired is not None and paired.cross_attention_cache is self:
+            states = encoder_states[-1]
+            states_at = _slot_of(call_args, call_kwargs, lambda value: value is states)
+            query_at = _slot_of(
+                call_args,
+                call_kwargs,
+                lambda value: isinstance(value, torch.Tensor) and value is not states and value.dim() == 3,
+            )
+            if states_at is not None:
+                query = _argument(call_args, call_kwargs, query_at) if query_at else None
+                writers[layer_idx] = CrossWriter(
+                    module,
+                    call_args,
+                    call_kwargs,
+                    states_at,
+                    query_at,
+                    query.shape[-1] if query is not None else None,
+                    cache_at,
+                )
+        return original_update(self, key_states, value_states, layer_idx, *args, **kwargs)
+
+    Cache.update = update
+    try:
+        yield writers
+    finally:
+        Cache.update = original_update
+        for hook in hooks:
+            hook.remove()
+
+
+def _merge_decode_calls(decode_calls: list[dict]) -> dict:
+    """Merge consecutive single-token decode captures into one multi-token decode input.
+
+    A single-token step specializes the query axis to 1 under `torch.export`; concatenating `N` steps gives
+    it a hint `N > 1` so it stays dynamic. The cache is taken from the first step.
+    """
+    first = decode_calls[0]
+    merged = copy.copy(first)
+
+    # With `use_cache` off each step re-runs the whole sequence, already multi-token, so take the last.
+    def query_length(call: dict) -> int | None:
+        for key in ("input_ids", "inputs_embeds"):
+            value = call.get(key)
+            if value is not None:
+                return value.shape[1]
+        return None
+
+    if any(query_length(call) != 1 for call in decode_calls):
+        return copy.copy(decode_calls[-1])
+
+    def concat_along(key: str, dim: int) -> None:
+        values = [call[key] for call in decode_calls if call.get(key) is not None]
+        if len(values) == len(decode_calls):
+            merged[key] = torch.cat(values, dim=dim)
+
+    concat_along("input_ids", 1)
+    concat_along("inputs_embeds", 1)
+    concat_along("cache_position", 0)
+    # `[batch, seq]` or `[n_axes, batch, seq]` (m-rope): the sequence axis is last in both.
+    concat_along("position_ids", -1)
+    # Left at one step it re-specializes the query axis (`Guard failed: token_type_ids.size()[1] == 1`).
+    concat_along("token_type_ids", -1)
+
+    masks = [call.get("attention_mask") for call in decode_calls]
+    if all(mask is not None for mask in masks):
+        merged["attention_mask"] = _merge_step_masks(masks)
+
+    return merged
+
+
+def _merge_step_masks(masks: list[Any]) -> Any:
+    """Merge one attention mask per decode step into a single multi-token mask.
+
+    A 4D causal mask is concatenated along the query axis (one causal row per step); a 2D padding mask keeps
+    the last step. Dicts (hybrid attention) merge per entry; `None` stays `None`.
+    """
+    last_mask = masks[-1]
+    if last_mask is None:
+        return None
+    if isinstance(last_mask, dict):
+        return {key: _merge_step_masks([mask[key] for mask in masks]) for key in last_mask}
+    if last_mask.dim() == 4 and all(mask.shape[3] == last_mask.shape[3] for mask in masks):
+        return torch.cat(masks, dim=2)
+    return last_mask
+
+
+def decompose_prefill_decode(
+    model: PreTrainedModel,
+    inputs: dict[str, Any],
+    *,
+    multi_token_decode: bool,
+    generation_config: Any = None,
+) -> dict[str, Component]:
+    """Run `model.generate()` and capture prefill and decode inputs.
+
+    `generation_config` is forwarded to `generate()`; one with `cache_implementation="static"` and
+    `max_cache_len=N` captures a fixed-size cache. With `multi_token_decode`, two decode steps are merged
+    (`_merge_decode_calls`) so the decode graph's query axis stays symbolic.
+
+    Returns:
+        `{"prefill": Component(model, prefill_inputs), "decode": Component(model, decode_inputs)}`.
+    """
+    # Encoder-decoders capture from the second decode step: cache length 1 would be 0/1-specialized.
+    first_decode = 2 if getattr(model.config, "is_encoder_decoder", False) else 1
+    num_new_tokens = first_decode + (2 if multi_token_decode else 1)
+    capture_config = copy.deepcopy(generation_config if generation_config is not None else model.generation_config)
+    capture_config.max_new_tokens = num_new_tokens
+    capture_config.min_new_tokens = num_new_tokens
+    capture_config.disable_compile = True
+    # Captured as plain decode steps: assisted generation would fold them into candidate windows
+    capture_config.prompt_lookup_num_tokens = None
+    capture_config.assistant_early_exit = None
+    no_mm_encoder_outputs = []
+    if hasattr(model, "_supports_mm_encoder_outputs"):
+        no_mm_encoder_outputs.append((model, "_supports_mm_encoder_outputs", lambda original: lambda: False))
+    try:
+        with _capture_calls(model, "forward") as calls, patch_attributes(no_mm_encoder_outputs):
+            model.generate(**copy.deepcopy(inputs), generation_config=capture_config)
+    except Exception as e:
+        raise RuntimeError(
+            f"decompose_prefill_decode failed for {type(model).__name__}. "
+            f"Inputs passed: {list(inputs.keys())}. "
+            f"Make sure the inputs are compatible with model.generate()."
+        ) from e
+
+    if len(calls) < num_new_tokens:
+        raise RuntimeError(
+            f"decompose_prefill_decode expected at least {num_new_tokens} calls to "
+            f"{type(model).__name__}.forward() during generate(max_new_tokens={num_new_tokens}), but "
+            f"captured {len(calls)}. This likely means generate() bypasses the top-level forward() "
+            "(e.g. delegates to an inner model), so prefill/decode decomposition is not supported "
+            "for this architecture."
+        )
+
+    # `logits_to_keep` is kept, and baked into the graph at export: without it the graph outputs full
+    # `[batch, tokens, vocab]` logits (311 MB for a 512-token Qwen3 prompt) when generation reads only the last row.
+    prefill_inputs = calls[0]
+    decode_inputs = (
+        _merge_decode_calls(calls[first_decode:num_new_tokens]) if multi_token_decode else calls[first_decode]
+    )
+    return {
+        "prefill": Component(copy.copy(model), prefill_inputs),
+        "decode": Component(copy.copy(model), decode_inputs),
+    }
+
+
+def _multimodal_text_decoder(model: PreTrainedModel | torch.nn.Module) -> torch.nn.Module | None:
+    """The text decoder of a multi-modal model, or `None` when the model is not one to decompose.
+
+    A modality getter counts as well as an encoder module: vibevoice_asr reports no encoder but has
+    `get_audio_features`.
+    """
+    if not isinstance(model, PreTrainedModel):
+        return None
+    decoder = model.get_decoder()
+    if decoder is None or decoder is model:
+        return None
+    for modality in ("image", "audio"):
+        # `get_encoder` falls back to `self`, and some models keep `self.vision_tower = None`.
+        encoder = model.get_encoder(modality=modality)
+        if encoder is not None and encoder is not model:
+            return decoder
+    if any(_modality_owner(model, spec.getter) is not None for spec in _MODALITY_SPECS):
+        return decoder
+    return None
+
+
+def is_multimodal(model: PreTrainedModel | torch.nn.Module) -> bool:
+    """Returns `True` if the model is multi-modal with a modality to export and a language model."""
+    return _multimodal_text_decoder(model) is not None
+
+
+# Models that stream a modality with the text, each step taking a window of it: the prefill step embeds it, a branch
+# the decode graph doesn't keep. Model type -> the streamed input.
+_STREAMED_INPUTS = {"voxtral_realtime": "input_features"}
+
+
+class ModalitySpec(NamedTuple):
+    """One input modality a model may take, and the generate kwargs that carry it."""
+
+    # The component exporting it, and the model method it is captured from
+    component: str
+    getter: str
+    # The modality's data, under each name a model gives it; a call carrying one has the modality
+    feature_keys: tuple[str, ...]
+    # Side inputs riding along (masks, sizes, indices), which `generate` may keep after dropping the features
+    aux_keys: tuple[str, ...]
+    # The native grid kwarg, which the exported graph takes as `grid_thw`
+    grid_key: str | None
+    # The config field holding the placeholder token id its features scatter into
+    token_field: str
+
+    @property
+    def input_keys(self) -> tuple[str, ...]:
+        return self.feature_keys + self.aux_keys
+
+
+_MODALITY_SPECS = (
+    ModalitySpec(
+        "vision_embeddings_model",
+        "get_image_features",
+        ("pixel_values", "pixel_values_images", "flattened_patches", "image_patches"),
+        ("image_patches_indices", "image_embeds_position_mask", "pixel_attention_mask", "target_sizes"),
+        "image_grid_thw",
+        "image_token_id",
+    ),
+    ModalitySpec(
+        "video_embeddings_model",
+        "get_video_features",
+        ("pixel_values_videos",),
+        ("target_sizes_videos",),
+        "video_grid_thw",
+        "video_token_id",
+    ),
+    ModalitySpec(
+        "audio_embeddings_model",
+        "get_audio_features",
+        ("input_features", "audio_input_ids", "input_values"),
+        ("padding_mask",),
+        None,
+        "audio_token_id",
+    ),
+)
+
+
+def anyres_patch_counts(config: Any, image_sizes) -> list[int]:
+    """Per-image patch counts (tiles plus the base patch) from `image_sizes`; config-only."""
+    from ..image_processing_utils import select_best_resolution
+
+    pinpoints = _find_config_attr(config, "image_grid_pinpoints")
+    tile = _find_config_attr(config, "image_size")
+    counts = []
+    for size in image_sizes:
+        height, width = select_best_resolution(size.tolist() if hasattr(size, "tolist") else list(size), pinpoints)
+        counts.append(-(-height // tile) * -(-width // tile) + 1)
+    return counts
+
+
+def flatten_anyres_patches(config: Any, pixel_values, image_sizes):
+    """The flat `(total_patches, …)` tensor the tower takes, dropping padding rows outside the graph."""
+    if pixel_values.dim() != 5:
+        return pixel_values
+    counts = anyres_patch_counts(config, image_sizes)
+    return torch.cat([pix[:count] for pix, count in zip(pixel_values, counts)], dim=0)
+
+
+def packs_anyres_features(owner: Any, config: Any) -> bool:
+    """Whether this image getter ends in the anyres `pack_image_features` (deepstack towers included)."""
+    projectors = ("multi_modal_projector", "layerwise_projectors")
+    return (
+        _find_config_attr(config, "image_grid_pinpoints") is not None
+        and any(hasattr(owner, name) for name in projectors)
+        and all(hasattr(owner, attr) for attr in ("vision_tower", "image_newline"))
+    )
+
+
+def _modality_owner(model, getter):
+    """Whichever of the model or its base actually defines a modality getter."""
+    base = model.base_model
+    return base if hasattr(base, getter) else (model if hasattr(model, getter) else None)
+
+
+def _embeds_input_ids(decoder: Any) -> bool:
+    """Whether `decoder` turns `input_ids` into embeddings with a single module (not musicgen's
+    per-codebook `ModuleList`)."""
+    try:
+        embeddings = decoder.get_input_embeddings() if decoder is not None else None
+    except NotImplementedError:
+        return False
+    return isinstance(embeddings, torch.nn.Module) and not isinstance(embeddings, torch.nn.ModuleList)
+
+
+def decompose_multimodal(
+    model: PreTrainedModel,
+    inputs: dict[str, Any],
+    recorded_features: dict[str, list] | None = None,
+    prompt_ids: torch.Tensor | None = None,
+) -> dict[str, Component]:
+    """Split a multi-modal model into independently exportable components.
+
+    Components, named as optimum-intel does: `text_embeddings_model`, one `<modality>_embeddings_model` per modality
+    present (`get_<modality>_features`), and `language_model`. The `masked_scatter` merge stays outside the graphs.
+
+    Raises:
+        `ValueError`: if no known multi-modal submodules are found on the model.
+    """
+    decoder = _multimodal_text_decoder(model)
+    if decoder is None:
+        raise ValueError(
+            f"decompose_multimodal found no multi-modal submodules on {type(model).__name__}. "
+            f"Expected an image/audio encoder + language model, found neither."
+        )
+
+    # An encoder-decoder consumed its modality inputs before prefill; the caller passes the recorded calls.
+    recorded_features = recorded_features or {}
+    active_modalities = []
+    for spec in _MODALITY_SPECS:
+        if (owner := _modality_owner(model, spec.getter)) is None:
+            continue
+        if any(inputs.get(key) is not None for key in spec.input_keys) or recorded_features.get(spec.component):
+            active_modalities.append((spec.component, spec.getter, owner, spec.grid_key))
+
+    try:
+        with contextlib.ExitStack() as stack, torch.no_grad():
+            decoder_calls = stack.enter_context(_capture_calls(decoder, "forward"))
+            captured_features = {
+                name: stack.enter_context(_capture_calls(owner, getter))
+                for name, getter, owner, _ in active_modalities
+            }
+            model(**copy.deepcopy(inputs))
+    except Exception as e:
+        raise RuntimeError(
+            f"decompose_multimodal failed for {type(model).__name__}. Inputs passed: {list(inputs.keys())}."
+        ) from e
+
+    components = {"language_model": Component(decoder, decoder_calls[-1])} if decoder_calls else {}
+
+    # Dual-encoders (owlvit) refuse `get_input_embeddings`. `prompt_ids` covers an encoder-decoder, whose
+    # prefill kwargs carry `decoder_input_ids` instead.
+    token_ids = inputs.get("input_ids") if inputs.get("input_ids") is not None else prompt_ids
+    if token_ids is not None and _embeds_input_ids(decoder):
+        placeholder_ids = [
+            token_id
+            for spec in _MODALITY_SPECS
+            if (token_id := getattr(model.config, spec.token_field, None)) is not None
+        ]
+        components["text_embeddings_model"] = Component(
+            TokenEmbedder(decoder, placeholder_ids), {"input_ids": token_ids}
+        )
+
+    for name, getter, owner, grid_key in active_modalities:
+        calls = captured_features.get(name) or recorded_features.get(name) or []
+        if not calls:
+            continue
+        feature_inputs = {
+            ("grid_thw" if key == grid_key else key): value for key, value in calls[-1].items() if value is not None
+        }
+        # Config-derived tensors become graph inputs: a getter reading its grid as data cannot be traced.
+        if name == "vision_embeddings_model" and packs_anyres_features(owner, model.config):
+            tower_inputs = {
+                "pixel_values": flatten_anyres_patches(
+                    model.config, feature_inputs["pixel_values"], feature_inputs["image_sizes"]
+                ),
+                **{
+                    key: feature_inputs[key]
+                    for key in ("vision_feature_layer", "vision_feature_select_strategy")
+                    if key in feature_inputs
+                },
+            }
+            components[name] = Component(PatchVisionEncoder(owner), tower_inputs)
+            continue
+        feature_inputs = precompute_export_inputs(model.config, feature_inputs)
+        components[name] = Component(ModalityEncoder(owner, getter, grid_key), feature_inputs)
+    return components
+
+
+def _prefill_graph_reason(model, components: dict, writes_cross_cache: bool) -> str | None:
+    """Why the prefill step would need a graph of its own beside the decode graph, or `None` when the decode graph
+    serves it. A second graph would duplicate every parameter, so such a model isn't decomposed.
+
+    The decode graph is traced after a branch the prefill step takes (the cross-attention cache write, a streamed
+    modality, a modality inside the forward), which export does not keep.
+    """
+    if components.get("encoder") is not None and not writes_cross_cache:
+        return "neither its encoder nor its decode graph can write the cross-attention cache"
+    if (streamed := _STREAMED_INPUTS.get(model.config.model_type)) is not None:
+        return f"it streams `{streamed}` with the text"
+    # Checked per modality, since getters rename their inputs.
+    prefill_inputs = components["prefill"].inputs
+    # An encoder-decoder's encoder takes its modality (t5gemma2's image) once, beside the decode graph.
+    encoder_inputs = components["encoder"].inputs if "encoder" in components else {}
+    for spec in _MODALITY_SPECS:
+        consumed = spec.component in components or any(key in encoder_inputs for key in spec.input_keys)
+        if not consumed and any(prefill_inputs.get(key) is not None for key in spec.input_keys):
+            return f"its {spec.component.split('_')[0]} input runs inside the prefill step's forward"
+    return None
+
+
+def _fold_cross_cache_into_encoder(model, components: dict, writers: dict) -> dict:
+    """Let the encoder component write the decoder's cross-attention cache, so the decode graph serves prefill.
+
+    Replay is not always separable (t5gemma2 merges self- and cross-attention), so the result is checked against
+    the cache the model itself filled; the encoder is left as it was when it doesn't match.
+    """
+    encoder = components.get("encoder")
+    if not writers or encoder is None:
+        return components
+    captured = components["decode"].inputs.get("past_key_values")
+    layers = getattr(getattr(captured, "cross_attention_cache", None), "layers", [])
+    if not layers:
+        return components
+    # Copies: the check may write in place into tensors the decode component is exported with.
+    copied = {
+        index: writer._replace(args=copy.deepcopy(writer.args), kwargs=copy.deepcopy(writer.kwargs))
+        for index, writer in writers.items()
+    }
+    module = CrossAttentionEncoder(encoder.module, copied).eval()
+    try:
+        with torch.no_grad():
+            produced = module(**copy.deepcopy(encoder.inputs))
+    except Exception:
+        logger.warning_once(f"{type(encoder.module).__name__} cannot compute the decoder's cross-attention cache.")
+        return components
+    for index, layer in enumerate(layers):
+        for kind, expected in (("keys", layer.keys), ("values", layer.values)):
+            actual = produced.get(f"cross_{kind}_{index}")
+            if expected is None:
+                continue
+            if actual is None or actual.shape != expected.shape or not torch.allclose(actual, expected, atol=1e-5):
+                logger.warning_once(
+                    f"{type(encoder.module).__name__} reproduces the decoder's cross-attention cache incorrectly "
+                    f"at layer {index}."
+                )
+                return components
+    return {**components, "encoder": replace(encoder, module=module)}
+
+
+def _write_cross_cache_in_decoder(components: dict) -> tuple[dict, bool]:
+    """Let the decode graph write its own cross-attention cache, from the `encoder_outputs` it is fed.
+
+    Emptying the cross half (`is_updated` off) traces the write instead of the read, for a backend that
+    keeps its cache in variables (OpenVINO). Only a growing cross half is emptied. Returns the components
+    and whether the decode graph now writes the cross cache.
+    """
+    decode = components["decode"]
+    cache = decode.inputs.get("past_key_values")
+    # BLT keeps a self-attention cache in the cross half and takes no `encoder_outputs`.
+    if not isinstance(cache, EncoderDecoderCache) or decode.inputs.get("encoder_outputs") is None:
+        return components, False
+    layers = cache.cross_attention_cache.layers
+    if not layers or any(getattr(layer, "is_compileable", False) for layer in layers):
+        return components, False
+    cache = copy.deepcopy(cache)
+    for index, layer in enumerate(cache.cross_attention_cache.layers):
+        if layer.keys is not None:
+            layer.keys, layer.values = layer.keys[..., :0, :], layer.values[..., :0, :]
+        cache.is_updated[index] = False
+    return {**components, "decode": replace(decode, inputs={**decode.inputs, "past_key_values": cache})}, True
+
+
+def _capture_generation(
+    model, inputs, generation_config, multi_token_decode
+) -> tuple[dict[str, Component], dict, dict]:
+    """Run one `generate` and return `(components, recorded_features, cross_writers)`; the last two are empty
+    for a decoder-only model."""
+    capture = functools.partial(
+        decompose_prefill_decode,
+        model,
+        inputs,
+        generation_config=generation_config,
+        multi_token_decode=multi_token_decode,
+    )
+    if not getattr(model.config, "is_encoder_decoder", False):
+        return capture(), {}, {}
+
+    # The encoder and modality getters run outside the captured forwards, so record them over the same generate.
+    modality_owners = {
+        spec: owner for spec in _MODALITY_SPECS if (owner := _modality_owner(model, spec.getter)) is not None
+    }
+    with contextlib.ExitStack() as stack:
+        encoder_calls = stack.enter_context(_capture_calls(model.get_encoder(), "forward"))
+        cross_writers = stack.enter_context(capture_cross_writers(model))
+        live = {
+            spec.component: stack.enter_context(_capture_calls(owner, spec.getter))
+            for spec, owner in modality_owners.items()
+        }
+        components = capture()
+    encoder_inputs = {key: value for key, value in encoder_calls[0].items() if isinstance(value, torch.Tensor)}
+    components = {
+        "encoder": Component(model.get_encoder(), encoder_inputs),
+        **components,
+    }
+    return components, {name: list(calls) for name, calls in live.items() if calls}, cross_writers
+
+
+def embedded_inputs(call_inputs: dict, components: dict) -> dict:
+    """A text graph's captured kwargs, rewritten to take embeddings instead of token ids and modality inputs,
+    so the runtime can scatter features in."""
+    call_inputs = copy.copy(call_inputs)
+    for spec in _MODALITY_SPECS:
+        for input_key in (*spec.input_keys, spec.grid_key):
+            call_inputs.pop(input_key, None)
+    # Only the runtime's anyres packing reads the image sizes.
+    call_inputs.pop("image_sizes", None)
+    # `mm_token_type_ids` only feeds `get_rope_index`, unused once `position_ids` is given.
+    if call_inputs.get("position_ids") is not None:
+        call_inputs.pop("mm_token_type_ids", None)
+    if call_inputs.get("input_ids") is not None and "text_embeddings_model" in components:
+        with torch.no_grad():
+            embedded = components["text_embeddings_model"].module(call_inputs.pop("input_ids"))
+        # Per-layer embeddings, when returned, are decode inputs too.
+        call_inputs.update(embedded if isinstance(embedded, dict) else {"inputs_embeds": embedded})
+    return call_inputs
+
+
+def decompose_for_generation(
+    model: PreTrainedModel,
+    inputs: dict[str, Any],
+    *,
+    multi_token_decode: bool,
+    generation_config: Any = None,
+    decoder_writes_cross_cache: bool = False,
+) -> dict[str, Component]:
+    """Decompose a generative model into independently exportable components.
+
+    Captures prefill and decode kwargs from a real `generate` and splits a multi-modal model into components. The
+    decode graph serves the prefill step too (all at once with `multi_token_decode`, else a token at a time), so
+    `"prefill"` is that step's call to the decode graph, not a graph of its own: a caller exports the decode graph only
+    (as `export_for_generation` does) and can use `"prefill"`'s inputs to calibrate or check it on that step. A model
+    whose prefill step needs a graph of its own raises.
+
+    Args:
+        model: Generative model. Must support `model.generate(**inputs)`.
+        inputs: **Generate** kwargs — what you'd pass to `model.generate(**inputs)`.
+        generation_config: Optional `GenerationConfig` forwarded to `generate()`; use
+            `cache_implementation="static"` + `max_cache_len=N` for a static cache.
+        multi_token_decode: Capture the decode graph with a dynamic query axis, so it takes the whole prefill step
+            at once.
+        decoder_writes_cross_cache: Have the decode graph write its own cross-attention cache instead of the
+            encoder (for backends that keep the cache as state).
+
+    Returns:
+        `{component_name: Component}`, named as optimum-intel does: `"prefill"` and the decode graph, which is a
+        causal LM's `"model"`, an encoder-decoder's `"decoder_model"` (beside `"encoder_model"`), or a multi-modal
+        model's `"language_model"` (beside `"text_embeddings_model"` and one `"<modality>_embeddings_model"` per
+        modality, and taking `inputs_embeds`).
+
+    Raises:
+        `ValueError`: if the prefill step needs a graph of its own beside the decode graph.
+    """
+    components, recorded_features, cross_writers = _capture_generation(
+        model, inputs, generation_config, multi_token_decode
+    )
+
+    prompt = components["prefill"]
+    multimodal = is_multimodal(prompt.module)
+    if multimodal:
+        split = decompose_multimodal(prompt.module, prompt.inputs, recorded_features, inputs.get("input_ids"))
+        # The decode component serves the text stack; keeping `language_model` would duplicate its parameters.
+        split.pop("language_model", None)
+        components.update(split)
+
+    writes_cross_cache = False
+    if decoder_writes_cross_cache:
+        components, writes_cross_cache = _write_cross_cache_in_decoder(components)
+    if not writes_cross_cache:
+        components = _fold_cross_cache_into_encoder(model, components, cross_writers)
+        writes_cross_cache = isinstance(getattr(components.get("encoder"), "module", None), CrossAttentionEncoder)
+
+    reason = _prefill_graph_reason(model, components, writes_cross_cache)
+    if reason is not None:
+        raise ValueError(
+            f"{type(model).__name__} can't be exported as a single decode graph: {reason}, so its prefill step would "
+            "need a graph of its own, duplicating the model's weights."
+        )
+    decode = components["decode"]
+    # `generate` drops the token types after the prefill step (gemma3's bidirectional image blocks); the generated
+    # tokens are text, so zeros let the one graph build the prefill step's mask too.
+    token_types = prompt.inputs.get("token_type_ids")
+    if token_types is not None and decode.inputs.get("token_type_ids") is None:
+        text = next(decode.inputs[key] for key in ("input_ids", "inputs_embeds") if decode.inputs.get(key) is not None)
+        decode = components["decode"] = replace(
+            decode, inputs={**decode.inputs, "token_type_ids": token_types.new_zeros(text.shape[:2])}
+        )
+    if multimodal:
+        decode = components["decode"] = replace(decode, inputs=embedded_inputs(decode.inputs, components))
+    # The prefill step as the decode graph takes it.
+    components["prefill"] = replace(decode, inputs=_prefill_call(model, prompt.inputs, decode.inputs, components))
+    decode_name = "decoder_model" if "encoder" in components else "language_model" if multimodal else "model"
+    names = {"decode": decode_name, "encoder": "encoder_model"}
+    return {names.get(name, name): component for name, component in components.items()}
+
+
+# The decode graph's names, after optimum-intel's: a causal LM's `model`, an encoder-decoder's `decoder_model` (beside
+# its `encoder_model`), and a multi-modal model's `language_model`.
+DECODE_GRAPHS = ("model", "decoder_model", "language_model")
+
+
+def decode_graph_name(components) -> str:
+    """The name of the decode graph among `components` (`model`, `decoder_model` or `language_model`), if any."""
+    return next((name for name in DECODE_GRAPHS if name in components), None)
+
+
+def _prefill_call(model, prefill_inputs: dict, decode_inputs: dict, components: dict) -> dict:
+    """The prefill step's call to the decode graph, as the runtime makes it: the captured prefill kwargs with a cache
+    materialized like the decode capture's (zeroed linear-attention states included), the mask `generate` drops when
+    nothing is padded, and embeddings on a multi-modal model."""
+    prefill_inputs = copy.copy(prefill_inputs)
+    materialize_cache_like(model, prefill_inputs, decode_inputs)
+    cache, decode_cache = prefill_inputs.get("past_key_values"), decode_inputs.get("past_key_values")
+    if isinstance(cache, EncoderDecoderCache) and isinstance(decode_cache, EncoderDecoderCache):
+        # The cross half depends only on the encoder's output, the same for both calls: taken as the encoder graph
+        # (or the decode graph's own write) leaves it.
+        cache.cross_attention_cache = copy.deepcopy(decode_cache.cross_attention_cache)
+        cache.is_updated = dict(decode_cache.is_updated)
+    if "attention_mask" in decode_inputs:
+        mask, decode_mask = prefill_inputs.get("attention_mask"), decode_inputs["attention_mask"]
+        if not _same_kind(mask, decode_mask):
+            mask = _prefill_mask(prefill_inputs, decode_mask)
+        prefill_inputs["attention_mask"] = mask
+    if "inputs_embeds" in decode_inputs and "input_ids" in prefill_inputs:
+        prefill_inputs = embedded_inputs(prefill_inputs, components)
+    # In the decode capture's order: a runtime binding flattened leaves by position would misplace them otherwise.
+    order = {name: index for index, name in enumerate(decode_inputs)}
+    return dict(sorted(prefill_inputs.items(), key=lambda item: order.get(item[0], len(order))))
+
+
+def _same_kind(mask: Any, decode_mask: Any) -> bool:
+    """Whether the captured prefill mask has the decode capture's form (`generate` drops or reshapes it per step)."""
+    if isinstance(mask, dict) and isinstance(decode_mask, dict):
+        return mask.keys() == decode_mask.keys() and all(_same_kind(mask[key], decode_mask[key]) for key in mask)
+    if isinstance(mask, torch.Tensor) and isinstance(decode_mask, torch.Tensor):
+        return mask.dim() == decode_mask.dim() and mask.dtype == decode_mask.dtype
+    return mask is None and decode_mask is None
+
+
+def _prefill_mask(prefill_inputs: dict, decode_mask: Any) -> Any:
+    """The prefill step's mask, shaped like the decode capture's: a 2D padding mask, or a 4D causal one."""
+    if decode_mask is None:
+        return None
+    if isinstance(decode_mask, dict):
+        return {key: _prefill_mask(prefill_inputs, mask) for key, mask in decode_mask.items()}
+    text = next(prefill_inputs[key] for key in ("input_ids", "inputs_embeds") if prefill_inputs.get(key) is not None)
+    batch_size, query_length = text.shape[:2]
+    cache_len = mask_width(prefill_inputs.get("past_key_values"), query_length)
+    if decode_mask.dim() == 2:
+        return torch.ones(batch_size, cache_len, dtype=decode_mask.dtype, device=decode_mask.device)
+    # An empty cache: the prefill step's positions start at 0 when the model takes none.
+    positions = prefill_inputs.get("position_ids")
+    if positions is None:
+        positions = torch.arange(query_length, device=decode_mask.device).expand(batch_size, -1)
+    return causal_mask(positions, cache_len).to(decode_mask.dtype)

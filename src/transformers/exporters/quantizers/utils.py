@@ -22,7 +22,8 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ..utils import decompose_for_generation, get_leaf_tensors
+from ..decompose import decode_graph_name, decompose_for_generation
+from ..utils import BATCH_INPUTS, get_leaf_tensors
 
 
 if TYPE_CHECKING:
@@ -32,21 +33,29 @@ if TYPE_CHECKING:
 def capture_calibration_inputs(
     model: PreTrainedModel,
     calibration_dataset: Iterable[dict[str, Any]],
+    *,
+    multi_token_decode: bool,
     generation_config: Any = None,
-    multi_token_decode: bool = False,
+    decoder_writes_cross_cache: bool = False,
 ) -> dict[str, list[dict]]:
-    """Run each generate-style sample through `decompose_for_generation` and collect every component's forward
-    kwargs: `{component_name: [forward_inputs, ...]}`, one calibration set per component."""
+    """Run each generate-style sample through `decompose_for_generation` and collect every exported component's
+    forward kwargs: `{component_name: [forward_inputs, ...]}`, one calibration set per component."""
     calibration: dict[str, list[dict]] = {}
     for sample in calibration_dataset:
         components = decompose_for_generation(
-            model, sample, generation_config=generation_config, multi_token_decode=multi_token_decode
+            model,
+            sample,
+            generation_config=generation_config,
+            multi_token_decode=multi_token_decode,
+            decoder_writes_cross_cache=decoder_writes_cross_cache,
         )
-        for name, (_submodel, forward_inputs) in components.items():
-            calibration.setdefault(name, []).append(forward_inputs)
-        # A multi-token decode graph also serves the prefill step, so it calibrates on the prefill inputs too.
-        if multi_token_decode and "prefill" in components and "decode" in components:
-            calibration["decode"].append(components["prefill"][1])
+        prefill = components.pop("prefill")
+        for name, component in components.items():
+            calibration.setdefault(name, []).append(component.inputs)
+        # A multi-token decode graph also runs the prefill step, so it calibrates on that call too; a single-token
+        # one only ever takes one token.
+        if multi_token_decode:
+            calibration[decode_graph_name(components)].append(prefill.inputs)
     return calibration
 
 
@@ -74,7 +83,9 @@ def openvino_feed(ov_model: Any, sample) -> dict[str, Any]:
     """`sample`'s forward kwargs as the converted model's inputs: tensor leaves by port name (folded state takes none),
     the identity `beam_idx`, and scalars as they are."""
     leaves = {path: tensor.cpu().numpy() for path, tensor in get_leaf_tensors(sample).items()}
-    batch = next(iter(leaves.values())).shape[0] if leaves else 1
+    # Off a text input: the first leaf may be an m-rope `position_ids`, `[sections, batch, positions]`.
+    batch_input = next((leaves[name] for name in BATCH_INPUTS if name in leaves), next(iter(leaves.values()), None))
+    batch = batch_input.shape[0] if batch_input is not None else 1
 
     def port_value(name: str) -> Any:
         path = name.removeprefix("input.")

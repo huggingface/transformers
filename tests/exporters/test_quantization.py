@@ -35,8 +35,8 @@ from tests.exporters.test_export import (
 )
 from tests.test_memory_cleanup_mixin import MemoryCleanupMixin
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
+from transformers.exporters.decompose import decompose_for_generation
 from transformers.exporters.quantizers.utils import capture_calibration_inputs
-from transformers.exporters.utils import decompose_for_generation
 from transformers.testing_utils import (
     require_executorch,
     require_nncf,
@@ -174,13 +174,14 @@ class QuantizationTesterMixin(MemoryCleanupMixin):
         return GenerationConfig(cache_implementation="static", max_cache_len=MAX_CACHE_LEN, do_sample=False)
 
     def _decode_component(self, model=None):
-        """Multi-token `decode` component against a fixed-size `StaticCache`. The mask is a precomputed
+        """Multi-token decode graph (`model`) against a fixed-size `StaticCache`. The mask is a precomputed
         input, so PT2E has no in-graph mask construction to trip on."""
         model = model if model is not None else self._dense_model()
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
-        return decompose_for_generation(
+        decode = decompose_for_generation(
             model, inputs, generation_config=self._generation_config(), multi_token_decode=True
-        )["decode"]
+        )["model"]
+        return decode.module, decode.inputs
 
     def _pt2e_quantizer(self, name, calibration_dataset=None, dynamic=False):
         """A `PT2EQuantizer` over the PT2E quantizer named `name`: `x86` (torchao, static per-channel int8, or dynamic
@@ -311,7 +312,7 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     @disable_hub_kernels
     def test_calibration_dataset_captured_per_component(self):
         """A generate-level `calibration_dataset` becomes one calibration set per component; a multi-token decode
-        graph also serves prefill, so its set carries each sample's prefill inputs too."""
+        graph also serves the prompt, so its set carries each sample's prompt call too."""
         model = self._dense_model()
         calibration = [
             {"input_ids": torch.randint(0, 64, (1, n)), "attention_mask": torch.ones(1, n, dtype=torch.long)}
@@ -320,9 +321,8 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         captured = capture_calibration_inputs(
             model, copy.deepcopy(calibration), generation_config=self._generation_config(), multi_token_decode=True
         )
-        self.assertEqual(set(captured), {"prefill", "decode"})
-        self.assertEqual(len(captured["prefill"]), len(calibration))
-        self.assertEqual(len(captured["decode"]), 2 * len(calibration))
+        self.assertEqual(set(captured), {"model"})
+        self.assertEqual(len(captured["model"]), 2 * len(calibration))
 
     @pytest.mark.torch_export_test
     @disable_hub_kernels
@@ -335,7 +335,7 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
             {"input_ids": torch.randint(0, 64, (1, n)), "attention_mask": torch.ones(1, n, dtype=torch.long)}
             for n in (3, 4, 5)
         ]
-        config = DynamoConfig(quantizer=self._pt2e_quantizer("x86", calibration))
+        config = DynamoConfig(dynamic=True, quantizer=self._pt2e_quantizer("x86", calibration))
         inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
         with patch.object(DynamoExporter, "export_program", autospec=True, return_value=(None, {})) as export:
             DynamoExporter().export_for_generation(
@@ -346,7 +346,7 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
                 multi_token_decode=True,
             )
         received = sorted(len(call.kwargs["config"].quantizer.calibration_dataset) for call in export.call_args_list)
-        self.assertEqual(received, [len(calibration), 2 * len(calibration)])
+        self.assertEqual(received, [2 * len(calibration)])
 
     @parameterized.expand([("dense",), ("moe",), ("ssm",)])
     @pytest.mark.torch_export_test
@@ -397,27 +397,28 @@ class DynamoQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
     @disable_hub_kernels
     def test_vlm_per_component_quantization(self):
         """A VLM is quantized component by component, each with its own recipe, via a `{component: config}`
-        dict on `export_for_generation` (multi-token decode): static int8 on the prompt's `language_model`,
-        the lighter dynamic int8 on `decode`, and `lm_head` left in fp32."""
+        dict on `export_for_generation` (multi-token decode): static int8 on the `vision_embeddings_model`, the
+        lighter dynamic int8 on the `language_model`, and the `text_embeddings_model` left in fp32."""
         from transformers.exporters import DynamoConfig, DynamoExporter
 
         model, inputs = self._vlm_model()
         static, dynamic = self._pt2e_quantizer("x86"), self._pt2e_quantizer("x86", dynamic=True)
         config = {
-            "language_model": DynamoConfig(dynamic=True, quantizer=static),
-            "decode": DynamoConfig(dynamic=True, quantizer=dynamic),
-            "lm_head": DynamoConfig(dynamic=True),
+            "text_embeddings_model": DynamoConfig(dynamic=True),
+            "vision_embeddings_model": DynamoConfig(dynamic=True, quantizer=static),
+            "language_model": DynamoConfig(dynamic=True, quantizer=dynamic),
         }
         components = DynamoExporter().export_for_generation(model, inputs, config, multi_token_decode=True)
 
-        self.assertTrue(_has_quantize_ops(components["language_model"].program), "language_model should be quantized")
-        self.assertTrue(_has_quantize_ops(components["decode"].program), "decode should be quantized")
-        self.assertFalse(_has_quantize_ops(components["lm_head"].program), "lm_head should stay fp32")
-        # the recipes really differ: decode is dynamically quantized, language_model statically
-        self.assertTrue(_has_dynamic_quant_ops(components["decode"].program), "decode should be dynamically quantized")
-        self.assertFalse(
-            _has_dynamic_quant_ops(components["language_model"].program), "language_model should be static"
+        vision, language, text = (
+            components[name].program for name in ("vision_embeddings_model", "language_model", "text_embeddings_model")
         )
+        self.assertTrue(_has_quantize_ops(vision), "the vision embeddings should be quantized")
+        self.assertTrue(_has_quantize_ops(language), "the language model should be quantized")
+        self.assertFalse(_has_quantize_ops(text), "the text embeddings should stay fp32")
+        # the recipes really differ: the language model is dynamically quantized, the vision embeddings statically
+        self.assertTrue(_has_dynamic_quant_ops(language), "the language model should be dynamically quantized")
+        self.assertFalse(_has_dynamic_quant_ops(vision), "the vision embeddings should be static")
 
 
 @slow
@@ -743,7 +744,7 @@ class ExecutorchQuantizationTest(QuantizationTesterMixin, unittest.TestCase):
         defect."""
         outputs = _run_executorch_program(exported, copy.deepcopy(inputs))
         if outputs is not None:
-            self.assertTrue(all(o.isfinite().all() for o in outputs if o.is_floating_point()))
+            self.assertTrue(all(o.isfinite().all() for o in outputs.values() if o.is_floating_point()))
 
     @parameterized.expand([("dense",), ("moe",), ("ssm",)])
     @require_executorch

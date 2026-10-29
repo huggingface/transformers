@@ -41,9 +41,10 @@ def _openvino_device(device=None) -> str:
 
 
 def _output_name(port) -> str:
-    """A port's readable name: compiling can merge a named output with an intermediate that kept a numeric id."""
+    """A port's readable name: not OV's own `<node>:<port>` or bare-id names, which compiling can merge into it."""
     names = sorted(port.get_names())
-    return next((name for name in names if not name.isdigit()), names[0]).removeprefix("output.")
+    given = [name for name in names if ":" not in name and not name.isdigit()]
+    return (given[0] if given else names[0]).removeprefix("output.")
 
 
 class OpenVINOModelRunner(ModelRunner):

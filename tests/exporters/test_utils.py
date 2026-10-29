@@ -40,7 +40,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from transformers import BertConfig, GenerationConfig
+from transformers import BertConfig, GenerationConfig, PreTrainedConfig
 from transformers.exporters import (
     EXPORT_BACKENDS,
     AutoExportConfig,
@@ -60,9 +60,9 @@ if is_torch_available():
     import torch
     from torch import nn
 
+    from transformers.exporters.decompose import decompose_prefill_decode
     from transformers.exporters.utils import (
         cast_leaf_tensors,
-        decompose_prefill_decode,
         duplicate_leaf_tensors,
         patch_attributes,
         register_patch,
@@ -198,31 +198,31 @@ class ExportArtifactsTest(unittest.TestCase):
 
     def test_program_refuses_several_components(self):
         component = ExportedComponent("program", ExportMetadata())
-        artifacts = ExportArtifacts({"prefill": component, "decode": component}, "stub")
+        artifacts = ExportArtifacts({"encoder_model": component, "decoder_model": component}, "stub")
         with self.assertRaisesRegex(ValueError, "2 components"):
             artifacts.program
 
     def test_save_pretrained_from_pretrained_roundtrip(self):
         components = {
-            "prefill": ExportedComponent("prefill program", ExportMetadata({"input_names": ["input_ids"]})),
-            "decode": ExportedComponent("decode program", ExportMetadata()),
+            "encoder_model": ExportedComponent("encoder program", ExportMetadata({"input_names": ["input_ids"]})),
+            "decoder_model": ExportedComponent("decoder program", ExportMetadata()),
         }
         config, generation_config = BertConfig(hidden_size=32), GenerationConfig(max_new_tokens=3)
         with mock.patch.dict(EXPORT_BACKENDS):
             register_backend("stub", _StubConfig, _StubExporter)
             with tempfile.TemporaryDirectory() as directory:
-                ExportArtifacts(components, "stub", config, generation_config).save_pretrained(directory)
-                self.assertTrue((Path(directory) / "decode.txt").is_file())
+                ExportArtifacts(components, "stub", config, generation_config, generation=True).save_pretrained(
+                    directory
+                )
+                self.assertTrue((Path(directory) / "decoder_model.txt").is_file())
                 loaded = ExportArtifacts.from_pretrained(directory)
         self.assertEqual(loaded.export_format, "stub")
         self.assertEqual(
             {name: component.program for name, component in loaded.items()},
-            {
-                "prefill": "prefill program",
-                "decode": "decode program",
-            },
+            {"encoder_model": "encoder program", "decoder_model": "decoder program"},
         )
-        self.assertEqual(loaded["prefill"].metadata, components["prefill"].metadata)
+        self.assertTrue(loaded.can_generate())
+        self.assertEqual(loaded["encoder_model"].metadata, components["encoder_model"].metadata)
         self.assertEqual(loaded.config.hidden_size, 32)
         self.assertEqual(loaded.generation_config.max_new_tokens, 3)
 
@@ -348,6 +348,7 @@ class DecomposePrefillDecodeGuardTest(unittest.TestCase):
                 # `decompose_prefill_decode` bases its capture config on the model's own (mimics a
                 # real `PreTrainedModel`); the guard under test fires afterwards on the capture count.
                 self.generation_config = GenerationConfig()
+                self.config = PreTrainedConfig()
 
             def forward(self, input_ids=None, **kwargs):
                 return input_ids
@@ -356,4 +357,6 @@ class DecomposePrefillDecodeGuardTest(unittest.TestCase):
                 return self.forward(input_ids=input_ids)  # a single top-level forward call
 
         with self.assertRaisesRegex(RuntimeError, "captured 1"):
-            decompose_prefill_decode(_FakeGenerator(), {"input_ids": torch.zeros(1, 1, dtype=torch.long)})
+            decompose_prefill_decode(
+                _FakeGenerator(), {"input_ids": torch.zeros(1, 1, dtype=torch.long)}, multi_token_decode=False
+            )

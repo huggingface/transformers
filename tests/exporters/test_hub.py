@@ -44,7 +44,7 @@ class ExportArtifactsMockedHubTest(unittest.TestCase):
     def test_from_pretrained_downloads_only_the_export_from_the_hub(self):
         """From the Hub, the manifest is fetched first, then only the files it names (and the configs), so an
         export in a model repo's subfolder doesn't pull the model's own weights."""
-        components = {"decode": ExportedComponent("decode program", ExportMetadata())}
+        components = {"model": ExportedComponent("program", ExportMetadata())}
         with mock.patch.dict(EXPORT_BACKENDS), tempfile.TemporaryDirectory() as repo:
             register_backend("stub", _StubConfig, _StubExporter)
             ExportArtifacts(components, "stub").save_pretrained(Path(repo) / "stub")
@@ -55,7 +55,7 @@ class ExportArtifactsMockedHubTest(unittest.TestCase):
             def snapshot_download(repo_id, allow_patterns, **kwargs):
                 self.assertEqual(
                     sorted(allow_patterns),
-                    ["stub/config.json", "stub/decode.txt", "stub/export.json", "stub/generation_config.json"],
+                    ["stub/config.json", "stub/export.json", "stub/generation_config.json", "stub/model.txt"],
                 )
                 return repo
 
@@ -64,10 +64,10 @@ class ExportArtifactsMockedHubTest(unittest.TestCase):
                 mock.patch("transformers.exporters.base.snapshot_download", snapshot_download),
             ):
                 loaded = ExportArtifacts.from_pretrained("org/model", subfolder="stub")
-        self.assertEqual(loaded["decode"].program, "decode program")
+        self.assertEqual(loaded["model"].program, "program")
 
     def test_save_pretrained_pushes_to_hub(self):
-        components = {"decode": ExportedComponent("decode program", ExportMetadata())}
+        components = {"model": ExportedComponent("program", ExportMetadata())}
         artifacts = ExportArtifacts(components, "stub", generation_config=GenerationConfig(max_new_tokens=3))
         api = mock.Mock()
         api.create_repo.return_value.repo_id = "org/model"
@@ -80,7 +80,7 @@ class ExportArtifactsMockedHubTest(unittest.TestCase):
             register_backend("stub", _StubConfig, _StubExporter)
             artifacts.save_pretrained(directory, push_to_hub=True, repo_id="org/model")
         uploaded = {operation.path_in_repo for operation in api.create_commit.call_args.kwargs["operations"]}
-        self.assertEqual(uploaded, {"decode.txt", "export.json", "generation_config.json"})
+        self.assertEqual(uploaded, {"model.txt", "export.json", "generation_config.json"})
 
 
 @is_staging_test

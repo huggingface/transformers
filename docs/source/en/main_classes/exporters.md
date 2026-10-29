@@ -141,10 +141,12 @@ between decomposing a model and exporting each component.
 
 [[autodoc]] exporters.utils.prepare_for_export
 
-[[autodoc]] exporters.utils.decompose_prefill_decode
+[[autodoc]] exporters.decompose.decompose_for_generation
 
-[[autodoc]] exporters.utils.decompose_multimodal
+[[autodoc]] exporters.decompose.decompose_prefill_decode
 
-[[autodoc]] exporters.utils.decompose_for_generation
+[[autodoc]] exporters.decompose.decompose_multimodal
 
-[[autodoc]] exporters.utils.is_multimodal
+[[autodoc]] exporters.decompose.is_multimodal
+
+[[autodoc]] exporters.components.Component
