@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import collections
+import math
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Union
@@ -25,8 +26,19 @@ from torch.nn import BCELoss
 from .. import initialization as init
 from ..configuration_utils import PreTrainedConfig
 from ..modeling_utils import PreTrainedModel
-from ..utils import ModelOutput, logging
+from ..utils import ModelOutput, is_scipy_available, logging
 from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
+
+
+if is_scipy_available():
+    from scipy.special import erfc
+else:
+    from math import erfc as _erfc
+
+    def erfc(z):
+        if np.isscalar(z):
+            return math.erfc(float(z))
+        return np.vectorize(_erfc, otypes=[float])(z)
 
 
 if TYPE_CHECKING:
@@ -188,7 +200,7 @@ class WatermarkDetector:
 
     def _compute_pval(self, x, loc=0, scale=1):
         z = (x - loc) / scale
-        return 1 - (0.5 * (1 + np.sign(z) * (1 - np.exp(-2 * z**2 / np.pi))))
+        return 0.5 * erfc(z / np.sqrt(2))
 
     def __call__(
         self,

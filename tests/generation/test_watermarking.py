@@ -147,3 +147,29 @@ class WatermarkDetectorTest(unittest.TestCase):
         self.assertEqual(result.num_tokens_scored[0], expected_count)
 
         return result
+
+    def test_compute_pval_exact_normal_tail(self):
+        """Test that _compute_pval matches exact normal tail and does not underflow to 0 for large z (#50109)."""
+        import numpy as np
+
+        model_config = GPT2Config(vocab_size=128, bos_token_id=127, eos_token_id=127)
+        watermark_config = WatermarkingConfig(greenlist_ratio=0.25)
+        detector = WatermarkDetector(
+            model_config=model_config,
+            device=torch_device,
+            watermarking_config=watermark_config,
+        )
+
+        for z in [0.0, 1.0, 3.0, 4.0, 6.0, 8.0]:
+            expected = 0.5 * math.erfc(z / math.sqrt(2))
+            actual = detector._compute_pval(z)
+            self.assertAlmostEqual(actual, expected, places=12 if z < 6 else 18)
+            self.assertGreater(actual, 0.0)
+
+        # Test array input
+        z_arr = np.array([0.0, 4.0, 8.0])
+        p_arr = detector._compute_pval(z_arr)
+        for i, z in enumerate(z_arr):
+            expected = 0.5 * math.erfc(z / math.sqrt(2))
+            self.assertAlmostEqual(p_arr[i], expected, places=12 if z < 6 else 18)
+
