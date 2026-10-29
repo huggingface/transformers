@@ -317,57 +317,137 @@ jobs:
           import json
           import os
           from pathlib import Path
-          
-          def count_failures(data):
-            """
-            Count total number of failures (excluding None commits)
-            """
-            total = 0
-            for model, model_result in data.items():
-                for device, failures in model_result.items():
-                    # Count failures where commit is not None
-                    total += sum(
-                        1 for failure in failures 
-                        if isinstance(failure, dict) and failure.get('bad_commit') is not None
-                    )
-            return total
-          
-          def filter_and_format_report(data):
-            """
-            Filter out entries where commit is `None` (failing tests who status is not certain) and format as text
-            """
-            lines = []
-            
-            for model, model_result in data.items():
-                model_lines = []
-                for device, failures in model_result.items():
-                    
-                    filtered_failures = [
-                        failure for failure in failures 
-                        if isinstance(failure, dict) and failure.get('bad_commit') is not None
-                    ]
 
-                    # Add tests to model lines
-                    for idx, failure in enumerate(filtered_failures):
-                        if idx == 0:
-                            job_link = failure['job_link']
-                            model_lines.append(f"- [{model}]({job_link}):")
-        
-                        test_name = failure['test']
-                        status = failure.get('status', '')
-                        if "DIFFERENT error message" in status:
-                            indicator = "(❌ ⟹ ❌)"
-                        else:
-                            indicator = "(✅ ⟹ ❌)"
-        
-                        model_lines.append(f"    {test_name} {indicator}")
-        
-                if len(model_lines) > 0:
-                    lines.extend(model_lines)
-                    lines.append("")  # Empty line between models
-            
-            return "\n".join(lines).strip()
-          
+          def bucket_failures(data):
+              """
+              Bucket failures into 3 categories:
+              - new: bad_commit is not None AND "DIFFERENT error message" not in status  (✅ ⟹ ❌)
+              - error_changed: bad_commit is not None AND "DIFFERENT error message" in status  (❌ ⟹ ❌)
+              - same_error: bad_commit is None AND failure_at_base_commit non-empty AND "SAME error message" in status
+              Flaky / bisect-failed entries (bad_commit is None AND failure_at_base_commit empty) are discarded.
+              Returns dict with keys 'new', 'error_changed', 'same_error', each a list of (model, failure) tuples.
+              """
+              buckets = {'new': [], 'error_changed': [], 'same_error': []}
+              for model, model_result in data.items():
+                  for device, failures in model_result.items():
+                      for failure in failures:
+                          if not isinstance(failure, dict):
+                              continue
+                          bad_commit = failure.get('bad_commit')
+                          status = failure.get('status', '')
+                          failure_at_base = failure.get('failure_at_base_commit', '')
+                          if bad_commit is not None:
+                              if "DIFFERENT error message" in status:
+                                  buckets['error_changed'].append((model, failure))
+                              else:
+                                  buckets['new'].append((model, failure))
+                          elif failure_at_base and "SAME error message" in status:
+                              buckets['same_error'].append((model, failure))
+              return buckets
+
+          def format_entries_by_model(entries, test_suffix_fn=None, model_indent=4, test_indent=8):
+              """
+              Group (model, failure) entries by model and format as indented markdown lines.
+              model_indent / test_indent: number of &nbsp; to prepend to model / test lines.
+              Returns a list of strings (lines), with a blank line after each model group.
+              """
+              nbsp = "&nbsp;"
+              model_prefix = nbsp * model_indent
+              test_prefix = nbsp * test_indent
+              model_groups = {}
+              model_order = []
+              for model, failure in entries:
+                  if model not in model_groups:
+                      model_groups[model] = []
+                      model_order.append(model)
+                  model_groups[model].append(failure)
+              lines = []
+              for model in model_order:
+                  failures = model_groups[model]
+                  job_link = failures[0].get('job_link', '')
+                  lines.append(f"{model_prefix}- [{model}]({job_link}):")
+                  for failure in failures:
+                      test_name = failure.get('test', '')
+                      suffix = (' ' + test_suffix_fn(failure)) if test_suffix_fn else ''
+                      lines.append(f"{test_prefix}`{test_name}`{suffix}")
+                  lines.append("")
+              return lines
+
+          def format_report(data):
+              """
+              Format failure data into a GitHub markdown details block.
+              Surfaces pre-existing failures (still failing on the PR) alongside new regressions.
+              Returns (formatted_text, new_count, preexisting_count).
+              formatted_text is empty string if no failures of any kind.
+              """
+              buckets = bucket_failures(data)
+              new_failures = buckets['new']
+              error_changed = buckets['error_changed']
+              same_error = buckets['same_error']
+              new_count = len(new_failures)
+              preexisting_count = len(error_changed) + len(same_error)
+
+              if new_count == 0 and preexisting_count == 0:
+                  return "", 0, 0
+
+              summary_parts = []
+              if new_count > 0:
+                  summary_parts.append(f"{new_count} new")
+              if preexisting_count > 0:
+                  summary_parts.append(f"{preexisting_count} pre-existing")
+              summary = ", ".join(summary_parts)
+
+              lines = ["<details>", f"<summary>Failures ({summary})</summary>", ""]
+
+              # New failures section
+              if new_failures:
+                  lines.append("&nbsp;&nbsp;&nbsp;&nbsp;**New failures:**")
+                  lines.append("")
+                  lines.extend(format_entries_by_model(
+                      new_failures,
+                      test_suffix_fn=lambda f: "(✅ ⟹ ❌)",
+                      model_indent=4,
+                      test_indent=8,
+                  ))
+
+              # Separator between new and pre-existing sections
+              if new_failures and preexisting_count > 0:
+                  lines.append("---")
+                  lines.append("")
+
+              # Pre-existing section
+              if preexisting_count > 0:
+                  lines.append(f"&nbsp;&nbsp;&nbsp;&nbsp;**Pre-existing failures (still failing) \u2014 {preexisting_count} total:**")
+                  lines.append("")
+
+                  if error_changed:
+                      lines.append(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**Error changed ({len(error_changed)}):**")
+                      lines.append("")
+                      lines.extend(format_entries_by_model(
+                          error_changed,
+                          test_suffix_fn=lambda f: "(❌ ⟹ ❌)",
+                          model_indent=8,
+                          test_indent=12,
+                      ))
+
+                  if same_error:
+                      lines.append(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**Same error ({len(same_error)}):**")
+                      lines.append("")
+                      if len(same_error) <= 10:
+                          lines.extend(format_entries_by_model(same_error, model_indent=8, test_indent=12))
+                      else:
+                          # Collapse with dl/dd trick; content indented relative to the dl/dd nesting
+                          se_lines = format_entries_by_model(same_error, model_indent=4, test_indent=8)
+                          lines.append(f"<dl><dd><dl><dd><details><summary>show all {len(same_error)}</summary>")
+                          lines.append("")
+                          lines.append("&nbsp;")
+                          lines.extend(se_lines)
+                          lines.append("</details></dd></dl></dd></dl>")
+                          lines.append("")
+
+              lines.append("</details>")
+              return "\n".join(lines), new_count, preexisting_count
+
           # Read reports from downloaded artifact files
           model_report_path = Path('./new_failures/new_failures_with_bad_commit_run_models_gpu/new_failures_with_bad_commit.json')
           quant_report_path = Path('./new_failures/new_failures_with_bad_commit_run_quantization_torch_gpu/new_failures_with_bad_commit.json')
@@ -380,7 +460,7 @@ jobs:
           if model_url_path.exists():
               with open(model_url_path, 'r') as f:
                   model_url = f.read().strip()
-          
+
           quant_url = None
           if quant_url_path.exists():
               with open(quant_url_path, 'r') as f:
@@ -390,37 +470,32 @@ jobs:
           if model_report_path.exists():
               with open(model_report_path, 'r') as f:
                   model_report = json.load(f)
-          
+
           quant_report = {}
           if quant_report_path.exists():
               with open(quant_report_path, 'r') as f:
                   quant_report = json.load(f)
-          
-          # Count failures
-          model_count = count_failures(model_report)
-          quant_count = count_failures(quant_report)
-          
-          formatted_model = filter_and_format_report(model_report)
-          formatted_quant = filter_and_format_report(quant_report)
-          
-          # Write to files
-          if formatted_model:
-              header = f"❌ [{model_count} new failing tests]({model_url}) 😭" if model_url else f"❌ {model_count} new failing tests 😭"
-              with open('model_ci_header.txt', 'w') as f:
-                  f.write(header)
-              with open('model_ci_details.txt', 'w') as f:
-                  f.write("<details>\n<summary>Failure details</summary>\n\n")
-                  f.write(formatted_model)
-                  f.write('\n\n</details>\n')
 
-          if formatted_quant:
-              header = f"❌ [{quant_count} new failing quant tests]({quant_url}) 😭" if quant_url else f"❌ {quant_count} new failing quant tests 😭"
-              with open('quantization_ci_header.txt', 'w') as f:
-                  f.write(header)
+          model_formatted, model_new_count, model_preexisting_count = format_report(model_report)
+          quant_formatted, quant_new_count, quant_preexisting_count = format_report(quant_report)
+
+          # Write model CI files — header only when there are NEW failures; details for any failures
+          if model_formatted:
+              if model_new_count > 0:
+                  url_text = f"[{model_new_count} new failing tests]({model_url})" if model_url else f"{model_new_count} new failing tests"
+                  with open('model_ci_header.txt', 'w') as f:
+                      f.write(f"❌ {url_text} 😭")
+              with open('model_ci_details.txt', 'w') as f:
+                  f.write(model_formatted)
+
+          # Write quantization CI files — header only when there are NEW failures; details for any failures
+          if quant_formatted:
+              if quant_new_count > 0:
+                  url_text = f"[{quant_new_count} new failing quant tests]({quant_url})" if quant_url else f"{quant_new_count} new failing quant tests"
+                  with open('quantization_ci_header.txt', 'w') as f:
+                      f.write(f"❌ {url_text} 😭")
               with open('quantization_ci_details.txt', 'w') as f:
-                  f.write("<details>\n<summary>Failure details (quantization)</summary>\n\n")
-                  f.write(formatted_quant)
-                  f.write('\n\n</details>\n')
+                  f.write(quant_formatted)
           PYTHON_SCRIPT
 
       - name: Post results as PR comment
@@ -481,6 +556,14 @@ jobs:
             else
               echo "STATUS=success" >> $GITHUB_ENV
               echo "**Nvidia** · ✅ No new failures 🎉👏 · ⚙️ [Workflow]($GITHUB_RUN_URL) · 📊 [Dashboard]($DASHBOARD_URL)"
+              if [ -s model_ci_details.txt ]; then
+                echo ''
+                cat model_ci_details.txt
+              fi
+              if [ -s quantization_ci_details.txt ]; then
+                echo ''
+                cat quantization_ci_details.txt
+              fi
             fi
           } > comment_body.txt
 
