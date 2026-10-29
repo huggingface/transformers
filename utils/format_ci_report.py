@@ -57,7 +57,7 @@ def bucket_failures(data):
                         buckets["error_changed"].append((model, failure))
                     else:
                         buckets["new"].append((model, failure))
-                elif failure_at_base and "SAME error message" in status:
+                elif failure_at_base:
                     buckets["same_error"].append((model, failure))
     return buckets
 
@@ -207,12 +207,13 @@ def main():
     if formatted:
         # Red gate: fires when new OR error_changed failures exist
         if new_count > 0 or error_changed_count > 0:
+            parts = []
             if new_count > 0:
-                label = "new failing quant tests" if quant else "new failing tests"
-                url_text = f"[{new_count} {label}]({url})" if url else f"{new_count} {label}"
-            else:
-                label = "quant tests with changed errors" if quant else "tests with changed errors"
-                url_text = f"[{error_changed_count} {label}]({url})" if url else f"{error_changed_count} {label}"
+                parts.append(f"{new_count} new failing {'quant ' if quant else ''}tests")
+            if error_changed_count > 0:
+                parts.append(f"{error_changed_count} {'quant ' if quant else ''}tests with changed errors")
+            label = " · ".join(parts)
+            url_text = f"[{label}]({url})" if url else label
             Path(args.header_out).write_text(f"❌ {url_text} 😭", encoding="utf-8")
         Path(args.details_out).write_text(formatted, encoding="utf-8")
 
