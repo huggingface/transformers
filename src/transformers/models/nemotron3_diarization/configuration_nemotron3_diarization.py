@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ...utils.type_validators import interval, positive_int_field
 
@@ -158,6 +158,10 @@ class Nemotron3DiarizationConfig(PreTrainedConfig):
     chunk_right_context (`int`, *optional*, defaults to 40):
         Offline mode: number of look-ahead encoder frames each chunk takes from the following ones. In streaming mode
         the look-ahead is `num_lookahead_frames` of each forward.
+    chunk_left_context (`int`, *optional*, defaults to 0):
+        Offline mode: number of look-back encoder frames each chunk takes again from the preceding ones, fed between
+        the cached frames and the chunk. Like the look-ahead, they are attended to but neither scored nor pushed to
+        the FIFO queue. In streaming mode the look-back is `num_lookback_frames` of each forward.
     fifo_length (`int`, *optional*, defaults to 40):
         Offline mode: capacity of the FIFO queue of the most recent encoder frames. Streaming mode uses
         `streaming_config.fifo_length`.
@@ -168,9 +172,9 @@ class Nemotron3DiarizationConfig(PreTrainedConfig):
 
     model_type = "nemotron3_diarization"
     sub_configs_defaults = {
-        "audio_config": SubConfigSpec(config_class=Nemotron3DiarizationAudioConfig),
-        "head_config": SubConfigSpec(config_class=Nemotron3DiarizationHeadConfig),
-        "streaming_config": SubConfigSpec(config_class=Nemotron3DiarizationStreamingConfig),
+        "audio_config": Nemotron3DiarizationAudioConfig,
+        "head_config": Nemotron3DiarizationHeadConfig,
+        "streaming_config": Nemotron3DiarizationStreamingConfig,
     }
 
     audio_config: Nemotron3DiarizationAudioConfig | dict | None = None
@@ -178,6 +182,7 @@ class Nemotron3DiarizationConfig(PreTrainedConfig):
     streaming_config: Nemotron3DiarizationStreamingConfig | dict | None = None
     chunk_length: int = 340
     chunk_right_context: int = 40
+    chunk_left_context: int = interval(min=0)(default=0)
     fifo_length: int = 40
     speaker_cache_update_period: int = 300
     initializer_range: float = 0.02

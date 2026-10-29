@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -96,7 +96,7 @@ class Qwen4ExpTextConfig(PreTrainedConfig):
         "hyper_connection_mixer.input_mix_weight_down": "rowwise_split_input",
         # It's extremely important to shard this embedding as its size is ~45B == 90 GiB - we shard on dim 1, as the checkpoints
         # for it are sharded on dim0 (this way Concatenate and tp do not work on the same dim and everything is easy)
-        "layers.*.ple.ple_embedding.ngram_embedding": "colwise_gather_output",
+        "layers.*.ple.ple_embedding.ngram_embedding": "embedding_colwise",
     }
     base_model_pp_plan = None
     base_model_ep_plan = {
@@ -304,8 +304,8 @@ class Qwen4ExpConfig(PreTrainedConfig):
 
     model_type = "qwen4_exp"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Qwen4ExpVisionConfig),
-        "text_config": SubConfigSpec(config_class=Qwen4ExpTextConfig),
+        "vision_config": Qwen4ExpVisionConfig,
+        "text_config": Qwen4ExpTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 

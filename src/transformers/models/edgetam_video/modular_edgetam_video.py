@@ -203,9 +203,9 @@ class EdgeTamVideoConfig(PreTrainedConfig):
     model_type = "edgetam_video"
     default_rope_type = "axial"
     sub_configs_defaults = {
-        "mask_decoder_config": SubConfigSpec(config_class=EdgeTamVideoMaskDecoderConfig),
+        "mask_decoder_config": EdgeTamVideoMaskDecoderConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="sam2_vision_model"),
-        "prompt_encoder_config": SubConfigSpec(config_class=EdgeTamVideoPromptEncoderConfig),
+        "prompt_encoder_config": EdgeTamVideoPromptEncoderConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

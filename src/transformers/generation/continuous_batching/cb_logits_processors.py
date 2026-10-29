@@ -21,7 +21,8 @@ from ..logits_process import (
     TopKLogitsWarper,
     TopPLogitsWarper,
 )
-from .requests import FutureRequestState, logger
+from .requests import FutureRequestState
+from .utils import logger
 
 
 # Abstract base class for all continuous batching logits processors

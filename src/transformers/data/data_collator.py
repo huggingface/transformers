@@ -132,13 +132,13 @@ def torch_default_data_collator(features: list[InputDataClass]) -> dict[str, Any
     # (it should be automatically the case, but let's make sure of it.)
     if "label" in first and first["label"] is not None:
         label = first["label"].item() if isinstance(first["label"], torch.Tensor) else first["label"]
-        dtype = torch.long if isinstance(label, int) else torch.float
+        dtype = torch.long if isinstance(label, (int, np.integer)) else torch.float
         batch["labels"] = torch.tensor([f["label"] for f in features], dtype=dtype)
     elif "label_ids" in first and first["label_ids"] is not None:
         if isinstance(first["label_ids"], torch.Tensor):
             batch["labels"] = torch.stack([f["label_ids"] for f in features])
         else:
-            dtype = torch.long if isinstance(first["label_ids"][0], int) else torch.float
+            dtype = torch.long if isinstance(first["label_ids"][0], (int, np.integer)) else torch.float
             batch["labels"] = torch.tensor([f["label_ids"] for f in features], dtype=dtype)
 
     # Handling of all other possible keys.
@@ -166,13 +166,13 @@ def numpy_default_data_collator(features: list[InputDataClass]) -> dict[str, Any
     # (it should be automatically the case, but let's make sure of it.)
     if "label" in first and first["label"] is not None:
         label = first["label"].item() if isinstance(first["label"], np.ndarray) else first["label"]
-        dtype = np.int64 if isinstance(label, int) else np.float32
+        dtype = np.int64 if isinstance(label, (int, np.integer)) else np.float32
         batch["labels"] = np.array([f["label"] for f in features], dtype=dtype)
     elif "label_ids" in first and first["label_ids"] is not None:
         if isinstance(first["label_ids"], np.ndarray):
             batch["labels"] = np.stack([f["label_ids"] for f in features])
         else:
-            dtype = np.int64 if isinstance(first["label_ids"][0], int) else np.float32
+            dtype = np.int64 if isinstance(first["label_ids"][0], (int, np.integer)) else np.float32
             batch["labels"] = np.array([f["label_ids"] for f in features], dtype=dtype)
 
     # Handling of all other possible keys.
