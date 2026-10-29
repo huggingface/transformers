@@ -15,16 +15,19 @@
 
 import torch
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...backbone_utils import filter_output_hidden_states
 from ...modeling_outputs import (
     BaseModelOutputWithPoolingAndNoAttention,
     ImageClassifierOutputWithNoAttention,
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import can_return_tuple
+from ...utils.output_capturing import OutputRecorder, capture_outputs
 from .configuration_mobilenet_v2 import MobileNetV2Config
 
 
@@ -258,6 +261,12 @@ class MobileNetV2PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class MobileNetV2Model(MobileNetV2PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(
+            MobileNetV2InvertedResidual, layer_name="layer", capture_initial_hidden_state=False
+        )
+    }
+
     def __init__(self, config: MobileNetV2Config, add_pooling_layer: bool = True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
@@ -322,31 +331,20 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @capture_outputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | BaseModelOutputWithPoolingAndNoAttention:
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPoolingAndNoAttention:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.conv_stem(pixel_values)
 
-        all_hidden_states = () if output_hidden_states else None
-
-        for i, layer_module in enumerate(self.layer):
+        for layer_module in self.layer:
             hidden_states = layer_module(hidden_states)
-
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
 
         last_hidden_state = self.conv_1x1(hidden_states)
 
@@ -355,13 +353,9 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
         else:
             pooled_output = None
 
-        if not return_dict:
-            return tuple(v for v in [last_hidden_state, pooled_output, all_hidden_states] if v is not None)
-
         return BaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
-            hidden_states=all_hidden_states,
         )
 
 
@@ -372,6 +366,12 @@ class MobileNetV2Model(MobileNetV2PreTrainedModel):
     """
 )
 class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(MobileNetV2InvertedResidual, capture_initial_hidden_state=False)
+    }
+
+    accepts_loss_kwargs = False
+
     def __init__(self, config: MobileNetV2Config) -> None:
         super().__init__(config)
 
@@ -387,36 +387,30 @@ class MobileNetV2ForImageClassification(MobileNetV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
         labels: torch.Tensor | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple | ImageClassifierOutputWithNoAttention:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss). If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
+        outputs = self.mobilenet_v2(pixel_values, **kwargs)
 
-        outputs = self.mobilenet_v2(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
-
-        pooled_output = outputs.pooler_output if return_dict else outputs[1]
+        pooled_output = outputs.pooler_output
 
         logits = self.classifier(self.dropout(pooled_output))
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(labels, logits, self.config)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            loss = self.loss_function(labels=labels, pooled_logits=logits, config=self.config)
 
         return ImageClassifierOutputWithNoAttention(
             loss=loss,
@@ -506,6 +500,10 @@ class MobileNetV2DeepLabV3Plus(nn.Module):
     """
 )
 class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
+    _can_record_outputs = {
+        "hidden_states": OutputRecorder(MobileNetV2InvertedResidual, capture_initial_hidden_state=False)
+    }
+
     def __init__(self, config: MobileNetV2Config) -> None:
         super().__init__(config)
 
@@ -516,14 +514,14 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
+    @filter_output_hidden_states
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | SemanticSegmenterOutput:
         r"""
         Examples:
@@ -549,44 +547,27 @@ class MobileNetV2ForSemanticSegmentation(MobileNetV2PreTrainedModel):
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
         ```"""
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.return_dict
-
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        outputs = self.mobilenet_v2(
-            pixel_values,
-            output_hidden_states=True,  # we need the intermediate hidden states
-            return_dict=return_dict,
-        )
+        outputs = self.mobilenet_v2(pixel_values, **kwargs)
 
-        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+        encoder_hidden_states = outputs.hidden_states
 
         logits = self.segmentation_head(encoder_hidden_states[-1])
 
         loss = None
         if labels is not None:
-            # upsample logits to the images' original size
-            upsampled_logits = nn.functional.interpolate(
-                logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+            loss = self.loss_function(
+                logits,
+                labels,
+                ignore_index=self.config.semantic_loss_ignore_index,
             )
-            loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
-            loss = loss_fct(upsampled_logits, labels)
-
-        if not return_dict:
-            if output_hidden_states:
-                output = (logits,) + outputs[1:]
-            else:
-                output = (logits,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
 
         return SemanticSegmenterOutput(
             loss=loss,
             logits=logits,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            hidden_states=outputs.hidden_states,
             attentions=None,
         )
 
