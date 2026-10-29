@@ -128,3 +128,34 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for key in input_subproc:
             if input_processor and key in processor.model_input_names:
                 torch.testing.assert_close(input_subproc[key], input_processor[key])
+
+    def test_preprocess_box_annotation_consistency(self):
+        import numpy as np
+        from PIL import Image
+
+        from transformers.models.got_ocr2.processing_got_ocr2 import (
+            _get_image_size_width_height,
+            preprocess_box_annotation,
+        )
+
+        image_pil = Image.new("RGB", (320, 120))
+        image_np = np.asarray(image_pil)
+        box = [32, 12, 160, 60]
+
+        size_pil = _get_image_size_width_height(image_pil)
+        size_np = _get_image_size_width_height(image_np)
+
+        self.assertEqual(size_pil, (320, 120))
+        self.assertEqual(size_np, (320, 120))
+
+        norm_pil = preprocess_box_annotation(box, size_pil)
+        norm_np = preprocess_box_annotation(box, size_np)
+
+        self.assertEqual(norm_pil, [100, 100, 500, 500])
+        self.assertEqual(norm_np, [100, 100, 500, 500])
+
+        # Test tuple box input and immutability of input box
+        box_tuple = (32, 12, 160, 60)
+        norm_tuple = preprocess_box_annotation(box_tuple, size_np)
+        self.assertEqual(norm_tuple, [100, 100, 500, 500])
+        self.assertEqual(box, [32, 12, 160, 60])
