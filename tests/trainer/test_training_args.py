@@ -48,6 +48,20 @@ class TestTrainingArguments(unittest.TestCase):
 
             # Directory should be created when actually needed (e.g. in Trainer)
 
+    def test_fsdp_config_ignored_modules(self):
+        """Test that ignored_modules in fsdp_config reaches fsdp_plugin_args."""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(output_dir=tmp_dir, fsdp=True, fsdp_config={"ignored_modules": "lm_head"})
+            self.assertEqual(args.fsdp_plugin_args["ignored_modules"], "lm_head")
+
+            args = TrainingArguments(
+                output_dir=tmp_dir, fsdp=True, fsdp_config={"ignored_modules": ["layer1", "layer2"]}
+            )
+            self.assertEqual(args.fsdp_plugin_args["ignored_modules"], ["layer1", "layer2"])
+
+            args = TrainingArguments(output_dir=tmp_dir, fsdp=True)
+            self.assertNotIn("ignored_modules", args.fsdp_plugin_args)
+
     def test_torch_empty_cache_steps_requirements(self):
         """Test that torch_empty_cache_steps is a positive integer or None."""
 
