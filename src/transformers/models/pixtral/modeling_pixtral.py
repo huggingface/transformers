@@ -70,7 +70,7 @@ class PixtralVisionRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
 
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
         inv_freq_2d = torch.cat([inv_freq[0::2], inv_freq[1::2]])
 
         return inv_freq_2d, attention_factor

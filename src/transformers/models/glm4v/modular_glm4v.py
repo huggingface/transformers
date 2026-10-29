@@ -378,7 +378,7 @@ class Glm4vTextRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
         return inv_freq.to(device), attention_factor
 
     def recomposition_frequencies(self, freq):
