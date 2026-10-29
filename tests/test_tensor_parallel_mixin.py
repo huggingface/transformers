@@ -67,7 +67,6 @@ TP_DISTRIBUTED_TEST_MODEL_TYPES = {
     "olmoe",
     "qwen2_moe",
     "cohere2_moe",
-    "granitemoe_swa",
     # VLM
     "glm4v_moe",
     # ALM
