@@ -355,6 +355,10 @@ jobs:
             else
               echo "STATUS=success" >> $GITHUB_ENV
               echo "**AMD** · ✅ No new failures 🎉👏 · ⚙️ [Workflow]($GITHUB_RUN_URL) · 📊 [Dashboard]($DASHBOARD_URL)"
+              if [ -s model_ci_details.txt ]; then
+                echo ''
+                cat model_ci_details.txt
+              fi
             fi
           } > comment_body.txt
 
