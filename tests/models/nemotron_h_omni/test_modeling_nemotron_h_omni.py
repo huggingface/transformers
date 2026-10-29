@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch NemotronH_Omni model."""
 
 import copy
+import json
 import re
 import tempfile
 import unittest
@@ -28,6 +29,7 @@ from transformers import (
     ParakeetFeatureExtractor,
     PreTrainedTokenizerFast,
     RadioConfig,
+    SequenceFeatureExtractor,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -35,6 +37,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_torch_large_accelerator,
     slow,
     torch_device,
 )
@@ -253,12 +256,13 @@ class NemotronHOmniModelTestMixin:
         return tester.get_config(), {"pixel_values": pixel_values, "image_grid_hw": image_grid_hw}
 
     def _video_features_prepare_config_and_inputs(self):
-        # `pixel_values_videos` holds the frames of a single video: two tubelets of non-square frames, since the
-        # processor keeps the aspect ratio
+        # non-square frames, since the processor keeps the aspect ratio
         tester = self.model_tester
         config = tester.get_config()
-        num_frames = 2 * config.video_temporal_patch_size
-        pixel_values_videos = floats_tensor([num_frames, 3, tester.image_size, 2 * tester.image_size])
+        num_tubelets, height, width = 2, tester.image_size, 2 * tester.image_size
+        pixel_values_videos = floats_tensor(
+            [tester.batch_size, num_tubelets, config.video_temporal_patch_size * 3, height, width]
+        )
         return config, {"pixel_values_videos": pixel_values_videos}
 
     def _audio_features_prepare_config_and_inputs(self):
@@ -277,43 +281,6 @@ class NemotronHOmniModelTestMixin:
 
     def _audio_features_get_expected_num_attentions(self, model_tester=None):
         return TINY_AUDIO_LAYERS
-
-    @parameterized.expand([True, False, None])
-    def test_get_video_features_output(self, return_dict: bool | None):
-        # `get_video_features` encodes one video, so the common batch-size checks do not apply: the vision tower runs
-        # once per tubelet of `video_temporal_patch_size` frames
-        config, inputs_dict = self._video_features_prepare_config_and_inputs()
-        if return_dict is not None:
-            config.return_dict = return_dict
-        model = NemotronH_Omni_Reasoning_V3(config).to(torch_device).eval()
-        with torch.no_grad():
-            outputs = model.get_video_features(**inputs_dict)
-
-        if return_dict is False:
-            self.assertIsInstance(outputs, tuple)
-            return
-        num_frames = inputs_dict["pixel_values_videos"].shape[0]
-        self.assertEqual(outputs.last_hidden_state.shape[0], num_frames // config.video_temporal_patch_size)
-        self.assertEqual(outputs.last_hidden_state.shape[-1], config.vision_config.hidden_size)
-        self.assertIsNotNone(outputs.pooler_output)
-
-    def test_get_video_features_pooler_output(self):
-        # `forward` concatenates the `pooler_output` entries and prunes on their token grid, so the single entry keeps
-        # it: `(num_tubelets, grid_height, grid_width, hidden_size)`, with a grid that is not square here
-        config, inputs_dict = self._video_features_prepare_config_and_inputs()
-        model = NemotronH_Omni_Reasoning_V3(config).to(torch_device).eval()
-        with torch.no_grad():
-            pooler_output = model.get_video_features(**inputs_dict, return_dict=True).pooler_output
-
-        num_frames, _, height, width = inputs_dict["pixel_values_videos"].shape
-        tokens_per_side = [
-            int(side // self.model_tester.patch_size * config.downsample_ratio) for side in (height, width)
-        ]
-        self.assertEqual(len(pooler_output), 1)
-        self.assertEqual(
-            tuple(pooler_output[0].shape),
-            (num_frames // config.video_temporal_patch_size, *tokens_per_side, config.text_config.hidden_size),
-        )
 
     def test_attention_outputs(self):
         # only the language model's attention layers return attention maps; the mamba and moe layers do not
@@ -477,8 +444,10 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         tester = self.model_tester
         num_tubelets = 2
-        num_frames = num_tubelets * config.video_temporal_patch_size
-        pixel_values_videos = floats_tensor([num_frames, tester.num_channels, frame_height, frame_width])
+        pixel_values_videos = floats_tensor(
+            [1, num_tubelets, config.video_temporal_patch_size * tester.num_channels, frame_height, frame_width]
+        )
+        frames = pixel_values_videos[0].reshape(-1, tester.num_channels, frame_height, frame_width)
         grid_height = int(frame_height // tester.patch_size * config.downsample_ratio)
         grid_width = int(frame_width // tester.patch_size * config.downsample_ratio)
         tokens_per_tubelet = grid_height * grid_width
@@ -494,11 +463,17 @@ class NemotronHOmniVision2TextModelTest(NemotronHOmniModelTestMixin, VLMModelTes
             model = NemotronH_Omni_Reasoning_V3(config).to(torch_device).eval()
             with torch.no_grad():
                 logits = model(input_ids=input_ids, pixel_values_videos=pixel_values_videos).logits
+                # as in `generate()`, which passes precomputed features
+                video_features = model.get_video_features(pixel_values_videos, return_dict=True)
+                logits_from_features = model(input_ids=input_ids, mm_encoder_outputs={"video": video_features}).logits
+                logits_from_frames = model(input_ids=input_ids, pixel_values_videos=frames).logits
 
             kept_video_tokens = num_tubelets * tokens_per_tubelet
             if video_pruning_rate > 0:
                 kept_video_tokens = max(tokens_per_tubelet, int(kept_video_tokens * (1 - video_pruning_rate)))
             self.assertEqual(logits.shape[1], text_ids.shape[1] + kept_video_tokens)
+            torch.testing.assert_close(logits_from_features, logits)
+            torch.testing.assert_close(logits_from_frames, logits)
 
 
 @require_torch
@@ -619,3 +594,89 @@ class NemotronH_Omni_Reasoning_V3IntegrationTest(unittest.TestCase):
 
         self.model.video_pruning_rate = 0.0
         self.assertTrue(self._generate(inputs).strip())
+
+
+@slow
+@require_torch_gpu
+@require_flash_attn
+@require_torch_large_accelerator(memory=240)
+class NemotronH_Omni_Reasoning_V3SuperVLIntegrationTest(unittest.TestCase):
+    """A released checkpoint whose language model has MTP layers, so the model builds the final vision LayerNorm and
+    loads it from the checkpoint's `vision_projector.vision_final_layernorm.*` weights.
+
+    The ~226 GiB of bfloat16 weights are kept on one accelerator.
+    """
+
+    model_id = "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16"
+
+    @classmethod
+    def setUpClass(cls):
+        # As in the Nano test, the processor is composed from the repo files. Only images are fed, so the video
+        # processor and feature extractor (the checkpoint has no audio tower) just fill their slots.
+        tokenizer = PreTrainedTokenizerFast.from_pretrained(cls.model_id)
+        cls.processor = NemotronH_Omni_Reasoning_V3Processor(
+            image_processor=NemotronH_Omni_Reasoning_V3ImageProcessor.from_pretrained(cls.model_id),
+            video_processor=NemotronH_Omni_Reasoning_V3VideoProcessor(),
+            feature_extractor=SequenceFeatureExtractor(feature_size=128, sampling_rate=16000, padding_value=0.0),
+            tokenizer=tokenizer,
+            chat_template=tokenizer.chat_template,
+        )
+        cls.model, cls.loading_info = NemotronH_Omni_Reasoning_V3.from_pretrained(
+            cls.model_id,
+            dtype=torch.bfloat16,
+            device_map=torch_device,
+            attn_implementation="flash_attention_2",
+            output_loading_info=True,
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        del cls.model
+        cleanup(torch_device, gc_collect=True)
+
+    def test_vision_final_layernorm_loaded(self):
+        from huggingface_hub import hf_hub_download
+        from safetensors import safe_open
+
+        self.assertIsNotNone(self.model.vision_final_layernorm)
+        for kind in ("missing_keys", "unexpected_keys"):
+            self.assertFalse([key for key in self.loading_info[kind] if "vision_final_layernorm" in key], kind)
+
+        # the norm holds the checkpoint's trained values, not its initialization
+        prefix = "vision_projector.vision_final_layernorm"
+        with open(hf_hub_download(self.model_id, "model.safetensors.index.json"), encoding="utf-8") as f:
+            shard = json.load(f)["weight_map"][f"{prefix}.weight"]
+        with safe_open(hf_hub_download(self.model_id, shard), framework="pt") as f:
+            for name in ("weight", "bias"):
+                torch.testing.assert_close(
+                    getattr(self.model.vision_final_layernorm, name).cpu(),
+                    f.get_tensor(f"{prefix}.{name}"),
+                    rtol=0,
+                    atol=0,
+                )
+
+    def test_image_generation(self):
+        from transformers.image_utils import load_image
+
+        # two cats lying on a pink blanket
+        image = load_image("http://images.cocodataset.org/val2017/000000039769.jpg")
+        inputs = self.processor.apply_chat_template(
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": image},
+                        {"type": "text", "text": "What animal is in this image? Answer with one word."},
+                    ],
+                }
+            ],
+            add_generation_prompt=True,
+            tokenize=True,
+            return_tensors="pt",
+            return_dict=True,
+            enable_thinking=False,
+        ).to(self.model.device)
+        with torch.inference_mode():
+            output = self.model.generate(**inputs, max_new_tokens=1, do_sample=False)
+        self.assertEqual(output.shape[-1], inputs["input_ids"].shape[-1] + 1)
+        self.assertIn("cat", self.processor.tokenizer.decode(output[0, -1:], skip_special_tokens=True).lower())
