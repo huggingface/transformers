@@ -633,7 +633,7 @@ def _test_fsdp2_expert_parallel_bf16_grads_impl(rank, config_class, config_dict)
         reference = AutoModelForCausalLM.from_pretrained(init_model_dir, torch_dtype=dtype).to(device)
         reference_loss = reference(input_ids=input_ids, labels=input_ids, use_cache=False).loss
         reference_loss.backward()
-        expected = {name: param.grad.float() for name, param in reference.named_parameters()}
+        expected = {name: param.grad.float() for name, param in reference.named_parameters() if param.grad is not None}
         del reference
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -646,7 +646,11 @@ def _test_fsdp2_expert_parallel_bf16_grads_impl(rank, config_class, config_dict)
         rows = slice(dp_rank * BATCH_SIZE, (dp_rank + 1) * BATCH_SIZE)
         loss = model(input_ids=input_ids[rows], labels=input_ids[rows], use_cache=False).loss
         loss.backward()
-        actual = {name: param.grad.full_tensor().float() for name, param in model.named_parameters()}
+        actual = {
+            name: param.grad.full_tensor().float()
+            for name, param in model.named_parameters()
+            if param.grad is not None
+        }
         loss = loss.detach()
         dist.all_reduce(loss, group=dp_group)
         loss = loss / world_size
