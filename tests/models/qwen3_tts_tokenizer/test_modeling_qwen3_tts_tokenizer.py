@@ -98,7 +98,7 @@ class Qwen3TTSTokenizerModelTester:
                 "codebook_dim": 8,
                 "vector_quantization_hidden_dimension": 8,
                 "hidden_size": 16,
-                "n_codebooks": 1,
+                "num_quantizers": 1,
             },
         }
 
@@ -164,12 +164,12 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
             (Qwen3TTSTokenizerSemanticQuantizerConfig, -1),
             (Qwen3TTSTokenizerSemanticQuantizerConfig, 0),
         )
-        for config_class, n_codebooks in invalid_configs:
+        for config_class, num_quantizers in invalid_configs:
             with (
-                self.subTest(config_class=config_class.__name__, n_codebooks=n_codebooks),
+                self.subTest(config_class=config_class.__name__, num_quantizers=num_quantizers),
                 self.assertRaises(StrictDataclassClassValidationError),
             ):
-                config_class(n_codebooks=n_codebooks)
+                config_class(num_quantizers=num_quantizers)
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -343,7 +343,7 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
             n_codebooks=1, codebook_size=5, codebook_dim=2, vector_quantization_hidden_dimension=2, hidden_size=2
         )
         semantic_config = Qwen3TTSTokenizerSemanticQuantizerConfig(
-            n_codebooks=2, codebook_size=3, codebook_dim=1, vector_quantization_hidden_dimension=1, hidden_size=2
+            num_quantizers=2, codebook_size=3, codebook_dim=1, vector_quantization_hidden_dimension=1, hidden_size=2
         )
         quantizer = Qwen3TTSTokenizerSplitResidualVectorQuantizer(acoustic_config, semantic_config).eval()
         semantic = quantizer.semantic_residual_vector_quantizer
@@ -376,7 +376,7 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
             config, inputs = self.model_tester.prepare_config_and_inputs()
             config_dict = config.to_dict()
             config_dict["semantic_quantizer_config"] = {
-                "n_codebooks": 2,
+                "num_quantizers": 2,
                 "codebook_size": 5,
                 "codebook_dim": 4,
                 "vector_quantization_hidden_dimension": 4,
@@ -393,7 +393,7 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
             with open(Path(directory) / "config.json", encoding="utf-8") as config_file:
                 saved_config = json.load(config_file)
             self.assertNotIn("quantizer_config", saved_config)
-            self.assertEqual(saved_config["semantic_quantizer_config"]["n_codebooks"], 2)
+            self.assertEqual(saved_config["semantic_quantizer_config"]["num_quantizers"], 2)
             restored, loading_info = AutoModel.from_pretrained(directory, output_loading_info=True)
             self.assertFalse(loading_info["missing_keys"])
             self.assertFalse(loading_info["unexpected_keys"])

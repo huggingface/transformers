@@ -39,19 +39,18 @@ class Qwen3TTSTokenizerSemanticQuantizerConfig(PreTrainedConfig):
 
     model_type = "qwen3_tts_tokenizer_semantic_quantizer"
     base_config_key = "semantic_quantizer_config"
-    attribute_map = {"num_quantizers": "n_codebooks"}
 
     codebook_size: int = 2048
     codebook_dim: int = 256
-    n_codebooks: int = 1
+    num_quantizers: int = 1
     vector_quantization_hidden_dimension: int = 256
     hidden_size: int = 512
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""
-        if self.n_codebooks < 1:
+        if self.num_quantizers < 1:
             raise ValueError(
-                f"The semantic quantizer needs at least one codebook, but `n_codebooks` is {self.n_codebooks}."
+                f"The semantic quantizer needs at least one codebook, but `num_quantizers` is {self.num_quantizers}."
             )
 
 
@@ -310,7 +309,7 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
             }
             num_acoustic_quantizers = decoder_config["num_quantizers"] - num_semantic_quantizers
             config_dict.setdefault("acoustic_quantizer_config", {**shared, "n_codebooks": num_acoustic_quantizers})
-            config_dict.setdefault("semantic_quantizer_config", {**shared, "n_codebooks": num_semantic_quantizers})
+            config_dict.setdefault("semantic_quantizer_config", {**shared, "num_quantizers": num_semantic_quantizers})
             decoder_fields = Qwen3TTSTokenizerDecoderConfig.__dataclass_fields__.keys() | {"rope_theta"}
             config_dict["decoder_config"] = {
                 key: value for key, value in decoder_config.items() if key in decoder_fields
