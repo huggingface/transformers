@@ -211,13 +211,6 @@ class Qwen3TTSTokenizerDecoderConfig(Qwen3OmniMoeCode2WavConfig):
     codebook_size = AttributeError()
     num_quantizers = AttributeError()
 
-    @classmethod
-    def get_config_dict(cls, pretrained_model_name_or_path, **kwargs):
-        config_dict, kwargs = super().get_config_dict(pretrained_model_name_or_path, **kwargs)
-        if config_dict.get("model_type") == Qwen3TTSTokenizerConfig.model_type:
-            config_dict = Qwen3TTSTokenizerConfig.from_dict(config_dict).decoder_config.to_dict()
-        return config_dict, kwargs
-
 
 @auto_docstring(checkpoint="Qwen/Qwen3-TTS-Tokenizer-12Hz")
 @strict
