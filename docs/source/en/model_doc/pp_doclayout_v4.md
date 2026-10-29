@@ -43,7 +43,27 @@ The reading order is not decoded inside the model. `PPDocLayoutV4ForObjectDetect
 matrix into a directed acyclic graph (DAG), breaking cycles, sorting each connected component topologically, and
 ordering the components by their relative order votes.
 
+## Page geometry prediction
+
+Geometry-enabled models predict page orientation, shear and perspective from the hybrid encoder features.
+Access `outputs.warp_params` or `results[0]["warp_params"]` after postprocessing. Their shapes are
+`(batch_size, 5)` and `(5,)`, respectively, with values `[rectifying_roll, quadrant_confidence, shear, kx, ky]`.
+Roll and shear are in degrees, with roll wrapped to `[-180, 180)`. The perspective parameters are expectations
+over the bins defined by `deform_kbins` and `deform_krange`.
+
+These parameters describe rectification relative to the input canvas. Postprocessing returns them unchanged,
+including when no detections pass the score threshold; it does not warp the image or its detected quadrilaterals.
+Geometry prediction is enabled by `deform_pred` in the model configuration and defaults to `False`.
+
 ## Usage
+
+<Tip warning={true}>
+
+The image processor uses torchvision bicubic interpolation on the input device, followed by rescaling.
+Uint8 inputs are rounded and clipped to `[0, 255]` before rescaling. Interpolation may differ slightly from
+PaddleX's OpenCV preprocessing, so model predictions may also differ slightly between the two backends.
+
+</Tip>
 
 Results returned by [`~PPDocLayoutV4ImageProcessor.post_process_object_detection`] are already sorted by reading
 order. Each result carries `polygon_points` — a `(num_boxes, 4, 2)` tensor of the regressed corners in top-left,
