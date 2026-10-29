@@ -2021,10 +2021,10 @@ class XiaomiLens0ForConditionalGeneration(XiaomiLens0PreTrainedModel, XiaomiLens
 
         ```python
         >>> import torch
-        >>> from transformers import AutoProcessor, XiaomiLens0ForConditionalGeneration
+        >>> from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-        >>> model_id = "guarin/Xiaomi-Lens-0"
-        >>> model = XiaomiLens0ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+        >>> model_id = "SeerRay-Lab/Xiaomi-Lens-0"
+        >>> model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
         >>> processor = AutoProcessor.from_pretrained(model_id)
 
         >>> messages = [
