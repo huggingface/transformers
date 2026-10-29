@@ -326,7 +326,7 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             }
         ).get_expectation()
         torch.testing.assert_close(
-            logits[0, -1, :8], torch.tensor(expected_slice, device=torch_device), rtol=1e-3, atol=1e-3
+            logits[0, -1, :8], torch.tensor(expected_slice, device=torch_device), rtol=1e-4, atol=1e-4
         )
         expected_argmax = Expectations({("cuda", (8, 0)): 12675}).get_expectation()
         self.assertEqual(logits[0, -1].argmax().item(), expected_argmax)
