@@ -146,7 +146,6 @@ class Qwen3TTSTokenizerEncoderConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         self.upsampling_ratios = self.upsampling_ratios if self.upsampling_ratios else [8, 6, 5, 4]
         self.head_dim = self.head_dim or self.hidden_size // self.num_attention_heads
-        self._frame_rate = kwargs.pop("frame_rate", None)
         super().__post_init__(**kwargs)
 
     @property
@@ -294,7 +293,7 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
         input_sampling_rate = config_dict.pop("input_sample_rate", None)
         encoder_config = config_dict.get("encoder_config")
         if isinstance(encoder_config, dict):
-            encoder_fields = Qwen3TTSTokenizerEncoderConfig.__dataclass_fields__.keys() | {"_frame_rate", "rope_theta"}
+            encoder_fields = Qwen3TTSTokenizerEncoderConfig.__dataclass_fields__.keys() | {"rope_theta"}
             encoder_config = {key: value for key, value in encoder_config.items() if key in encoder_fields}
             if input_sampling_rate is not None:
                 encoder_config.setdefault("sampling_rate", input_sampling_rate)
