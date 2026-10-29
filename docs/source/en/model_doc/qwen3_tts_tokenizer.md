@@ -179,6 +179,8 @@ print("Audio values shape:", output.audio_values.shape)
 
 ## Qwen3TTSTokenizerEncoderConfig
 
+The encoder frame rate is derived as `sampling_rate / frame_size`, rather than stored as a separate override.
+
 [[autodoc]] Qwen3TTSTokenizerEncoderConfig
 
 ## Qwen3TTSTokenizerDecoderConfig

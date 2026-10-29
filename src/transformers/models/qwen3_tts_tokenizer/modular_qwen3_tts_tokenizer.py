@@ -59,6 +59,8 @@ logger = logging.get_logger(__name__)
 @strict
 class Qwen3TTSTokenizerSemanticQuantizerConfig(PreTrainedConfig):
     r"""
+    num_quantizers (`int`, *optional*, defaults to 1):
+        Number of semantic codebooks. Must be at least one.
     vector_quantization_hidden_dimension (`int`, *optional*, defaults to 256):
         Dimension used within the semantic vector quantizers.
     """
@@ -84,6 +86,8 @@ class Qwen3TTSTokenizerSemanticQuantizerConfig(PreTrainedConfig):
 @strict
 class Qwen3TTSTokenizerAcousticQuantizerConfig(PreTrainedConfig):
     r"""
+    num_quantizers (`int`, *optional*, defaults to 15):
+        Number of acoustic codebooks, excluding the semantic codebooks. Can be zero.
     vector_quantization_hidden_dimension (`int`, *optional*, defaults to 256):
         Dimension used within the acoustic vector quantizers.
     """
