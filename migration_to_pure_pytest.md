@@ -212,13 +212,14 @@ Out of scope until Phase 3 is complete and stable.
 | 6 | Issue 8 | Remove `unittest.TestCase` from `RobertaPreLayerNormModelTest`, `MT5EncoderOnlyModelTest`, `UMT5EncoderOnlyModelTest` — setUp was already renamed, removing unittest.TestCase makes them pure pytest and eliminates the wrong-signature crash | After CI run 40759614150 analysis |
 | 7 | Issue 9 | `__test__ = False` on `VideoPrismModelTest` — local base class with no model_tester was collected standalone by `*Test` pattern | After CI run 40765894971 analysis |
 | 8 | Issue 10 | `_AssertRaisesCtx` wrapper in `test_modeling_common.py` — `assertRaises` now returns an object with `.exception` (unittest compat) instead of bare `pytest.raises` | After CI run 40765894971 analysis |
+| 9 | Issue 11 | `get_test_info.py`: detect migrated classes via `ModelTesterMixin` subclass check + try `setup_method` fallback in `get_model_tester_from_test_class` | After CI run 40765894971 analysis |
 
 **Still open (not yet fixed, in discovery order):**
 - Issue 3: `_testMethodName` getter fragility (inspect.stack)
 - ~~Issue 8: `setup_method(self)` wrong signature in `unittest.TestCase` subclasses (RobertaPreLayerNorm, MT5, UMT5)~~ **FIXED** ✅
 - ~~Issue 9: `VideoPrismModelTest` unintended standalone collection~~ **FIXED** ✅
 - ~~Issue 10: `assertRaises` returns `ExceptionInfo` with no `.exception`~~ **FIXED** ✅
-- Issue 11: `get_test_info.py::get_test_classes` misses migrated classes — detection must not require `unittest.TestCase` (CI run 40765894971 tests_repo_utils)
+- ~~Issue 11: `get_test_info.py::get_test_classes` misses migrated classes~~ **FIXED** ✅
 
 ---
 
@@ -568,12 +569,16 @@ This utility is used by CI infrastructure (test fetcher, PR CI routing) to map m
 to their test classes. A broken mapping means our migrated models may be missed when deciding
 which tests to run.
 
-**Fix**: Extend the detection condition in `get_test_classes` to also accept classes that are
-subclasses of `ModelTesterMixin` (or that have a non-empty `all_model_classes` attribute and
-are not one of the known base classes to exclude) — without requiring `unittest.TestCase`.
-The comment on line 96–101 already handles `CausalLMModelTest` (where `all_model_classes` is
-set during `setUp`); the same logic can be generalized.
-**Status**: Not yet fixed.
+**Fix**: Two changes in `utils/get_test_info.py`:
+1. `get_test_classes`: grab `ModelTesterMixin` from the already-loaded test module (every
+   `test_modeling_*` file imports it) and extend the detection condition to also match
+   `issubclass(attr_value, ModelTesterMixin)` without requiring `unittest.TestCase`.
+2. `get_model_tester_from_test_class`: after trying `setUp`, also try `setup_method` — migrated
+   classes set `model_tester` in `setup_method`, not `setUp`.
+
+Both changes carry a TODO heuristic note: correct for all current model test files but not
+formally verified to be universally correct — revisit once migration is complete.
+**Status**: **FIXED** ✅ — all 3 tests pass (test_get_model_to_test_mapping, test_get_model_to_tester_mapping, test_get_test_to_tester_mapping).
 
 ---
 
