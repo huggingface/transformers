@@ -230,6 +230,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         (
+            "mistral_large4",
+            "MistralCommonBackend"
+            if is_mistral_common_available()
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
+        ),  # TODO: needed?
+        (
             "mixtral",
             "MistralCommonBackend"
             if is_mistral_common_available()
