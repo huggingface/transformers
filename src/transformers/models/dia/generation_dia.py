@@ -120,7 +120,9 @@ class DiaGenerationMixin(GenerationMixin):
             generation_config.temperature = 1.0
         # We allow generation up to max length + max delay pattern
         # (will revert back to max length after generation)
-        generation_config.max_length += max(self.config.delay_pattern)
+        # `max_length` can be unset in favor of `max_new_tokens`, which then defines it
+        if generation_config.max_length is not None:
+            generation_config.max_length += max(self.config.delay_pattern)
 
         # Internal flag to indicate CFG that needs to prepare unconditioned input
         self._uses_cfg = generation_config.guidance_scale is not None and generation_config.guidance_scale != 1

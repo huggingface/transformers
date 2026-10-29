@@ -15,9 +15,9 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...utils import auto_docstring, logging
-from ..auto import CONFIG_MAPPING, AutoConfig
+from ..auto import AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -103,10 +103,9 @@ class Sam3VideoConfig(PreTrainedConfig):
     """
 
     model_type = "sam3_video"
-    is_composition = True
-    sub_configs = {
-        "detector_config": AutoConfig,
-        "tracker_config": AutoConfig,
+    sub_configs_defaults = {
+        "detector_config": SubConfigSpec(config_class=AutoConfig, model_type="sam3"),
+        "tracker_config": SubConfigSpec(config_class=AutoConfig, model_type="sam3_tracker_video"),
     }
 
     detector_config: dict | PreTrainedConfig | None = None
@@ -133,22 +132,6 @@ class Sam3VideoConfig(PreTrainedConfig):
     recondition_every_nth_frame: int = 16
     high_conf_thresh: float = 0.8
     high_iou_thresh: float = 0.8
-
-    def __post_init__(self, **kwargs):
-        if self.detector_config is None:
-            self.detector_config = CONFIG_MAPPING["sam3"]()
-            logger.info("detector_config is None. Initializing the Sam3Config with default values.")
-        if isinstance(self.detector_config, dict):
-            self.detector_config["model_type"] = self.detector_config.get("model_type", "sam3")
-            self.detector_config = CONFIG_MAPPING[self.detector_config["model_type"]](**self.detector_config)
-
-        if self.tracker_config is None:
-            self.tracker_config = CONFIG_MAPPING["sam3_tracker_video"]()
-            logger.info("tracker_config is None. Initializing the Sam3TrackerVideoConfig with default values.")
-        if isinstance(self.tracker_config, dict):
-            self.tracker_config["model_type"] = self.tracker_config.get("model_type", "sam3_tracker_video")
-            self.tracker_config = CONFIG_MAPPING[self.tracker_config["model_type"]](**self.tracker_config)
-        super().__post_init__(**kwargs)
 
     def validate_architecture(self):
         """Part of `@strict`-powered validation. Validates the architecture of the config."""

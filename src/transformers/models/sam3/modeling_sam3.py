@@ -38,7 +38,6 @@ from ...utils import auto_docstring, can_return_tuple, is_torchvision_available,
 from ...utils.generic import (
     TransformersKwargs,
     is_flash_attention_requested,
-    maybe_autocast,
     merge_with_config_defaults,
 )
 from ...utils.import_utils import requires
@@ -446,12 +445,9 @@ class Sam3ViTRotaryEmbedding(nn.Module):
     @torch.no_grad()
     def forward(self, x, position_ids):
         # position_ids: (2, N) — row 0 = h coords, row 1 = w coords
-        position_ids_expanded = position_ids[..., None].float()
-        device_type = x.device.type if isinstance(x.device.type, str) else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):
-            freqs = position_ids_expanded * self.inv_freq.float()
-            cos = freqs.cos() * self.attention_scaling
-            sin = freqs.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        cos = freqs.cos() * self.attention_scaling
+        sin = freqs.sin() * self.attention_scaling
 
         cos = self.recomposition_frequencies(cos)
         sin = self.recomposition_frequencies(sin)
@@ -810,7 +806,7 @@ class Sam3ViTLayer(GradientCheckpointingLayer):
 @auto_docstring
 @requires(backends=("torch", "torchvision"))
 class Sam3PreTrainedModel(PreTrainedModel):
-    config_class = Sam3Config
+    config: Sam3Config
     base_model_prefix = "sam3"
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
@@ -1090,7 +1086,7 @@ class Sam3VisionNeck(nn.Module):
     """
 )
 class Sam3VisionModel(Sam3PreTrainedModel):
-    config_class = Sam3VisionConfig
+    config: Sam3VisionConfig
     main_input_name = "pixel_values"
 
     def __init__(self, config: Sam3VisionConfig):

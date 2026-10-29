@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...masking_utils import (
     _preprocess_mask_arguments,
     blockwise_overlay,
@@ -37,9 +37,10 @@ from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     dynamic_rope_update,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ..auto import AutoConfig
 from ..gemma2.configuration_gemma2 import Gemma2Config
 from ..gemma2.modeling_gemma2 import (
     Gemma2Attention,
@@ -58,7 +59,6 @@ from ..paligemma.modeling_paligemma import (
     PaliGemmaModel,
     PaligemmaModelOutputWithPast,
 )
-from ..siglip import SiglipVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -203,34 +203,19 @@ class Gemma3Config(PreTrainedConfig):
         "boi_token_id": "boi_token_index",
         "eoi_token_id": "eoi_token_index",
     }
-    sub_configs = {
+    sub_configs_defaults = {
         "text_config": Gemma3TextConfig,
-        "vision_config": SiglipVisionConfig,
+        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="siglip_vision_model"),
     }
 
-    text_config: Gemma3TextConfig | dict[str, Any] | None = None
-    vision_config: SiglipVisionConfig | dict[str, Any] | None = None
+    text_config: PreTrainedConfig | dict[str, Any] | None = None
+    vision_config: PreTrainedConfig | dict[str, Any] | None = None
     mm_tokens_per_image: int | None = 256
     boi_token_index: int | None = 255_999
     eoi_token_index: int | None = 256_000
     image_token_index: int | None = 262_144
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool | None = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Gemma3TextConfig()
-            logger.info("text_config is None, using default Gemma3TextConfig text config.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Gemma3TextConfig(**self.text_config)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = SiglipVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = SiglipVisionConfig()
-            logger.info("vision_config is None, using default SiglipVisionConfig vision config.")
-
-        super().__post_init__(**kwargs)
 
 
 class Gemma3ModelOutputWithPast(PaligemmaModelOutputWithPast):
@@ -435,6 +420,7 @@ class Gemma3PreTrainedModel(Gemma2PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     _no_split_modules = ["Gemma3DecoderLayer"]
+    _supports_sdpa = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -847,9 +833,8 @@ class Gemma3ForConditionalGeneration(PaliGemmaForConditionalGeneration):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

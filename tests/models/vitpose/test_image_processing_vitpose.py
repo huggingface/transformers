@@ -41,6 +41,11 @@ class VitPoseImageProcessingTester(ImageProcessingTester):
 
         super().__init__(**kwargs)
 
+    def prepare_processor_inputs(self, **kwargs):
+        inputs = super().prepare_processor_inputs(**kwargs)
+        inputs["boxes"] = [[[0, 0, 1, 1], [0.5, 0.5, 0.5, 0.5]]] * len(inputs["images"])
+        return inputs
+
 
 @require_torch
 @require_vision
