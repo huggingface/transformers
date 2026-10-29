@@ -193,6 +193,10 @@ class XiaomiLens0ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 
     def setUp(self):
         self.model_tester = XiaomiLens0VisionText2TextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=XiaomiLens0Config)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def _get_conv_state_shape(self, batch_size: int, config):
         num_v_heads = config.linear_num_value_heads
@@ -211,7 +215,7 @@ class XiaomiLens0ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         return (batch_size, num_v_heads, head_k_dim, head_v_dim)
 
     def test_attention_outputs(self):
-        "Needs to be overwritten as Xiaomi-Lens-0 alternates between attention layers and gated deltanet layers (same as Qwen3.5)."
+        "Needs to be overwritten as Xiaomi-Lens-0 alternates between attention layers and gated deltanet layers (same as Qwen 3.5)."
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         seq_len = self.model_tester.seq_length
         num_attention_layers = sum(layer == "full_attention" for layer in config.text_config.layer_types)
@@ -239,6 +243,7 @@ class XiaomiLens0ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
 @require_torch_accelerator
 @require_vision
 class XiaomiLens0IntegrationTest(MemoryCleanupMixin, unittest.TestCase):
+    # TODO: Update before merge
     model_id = "guarin/Xiaomi-Lens-0"  # "SeerRay-Lab/Xiaomi-Lens-0"
     image_url = (
         "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
