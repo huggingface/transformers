@@ -51,7 +51,6 @@ from .conversion_mapping import get_model_conversion_mapping
 from .core_model_loading import (
     WeightConverter,
     WeightRenaming,
-    build_glob_alternation,
     convert_and_load_state_dict_in_model,
     revert_weight_conversion,
 )
@@ -3777,17 +3776,6 @@ class PreTrainedModel(
             dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules_strict, torch.float32))
 
         return dtype_plan
-
-    def _get_modules_kept_in_fp32(self) -> list[str]:
-        """The modules owning a parameter that `_get_dtype_plan` upcasts to float32."""
-        if not (dtype_plan := self._get_dtype_plan(self.dtype)):
-            return []
-        pattern, _, _ = build_glob_alternation(list(dtype_plan))
-        return [
-            name
-            for name, module in self.named_modules()
-            if any(pattern.search(f"{name}.{param_name}") for param_name, _ in module.named_parameters(recurse=False))
-        ]
 
     def set_use_kernels(self, use_kernels, kernel_config: KernelConfig | None = None, mode: "Mode | None" = None):
         """
