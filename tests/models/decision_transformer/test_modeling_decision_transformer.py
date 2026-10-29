@@ -126,6 +126,7 @@ class DecisionTransformerModelTester:
 class DecisionTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DecisionTransformerModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": DecisionTransformerModel} if is_torch_available() else {}
+    additional_model_inputs = ["actions", "rewards", "returns_to_go", "timesteps"]
 
     # Ignoring of a failing test from GenerationTesterMixin, as the model does not use inputs_ids
     test_generate_without_input_ids = False
@@ -194,7 +195,9 @@ class DecisionTransformerModelIntegrationTest(unittest.TestCase):
 
         NUM_STEPS = 2  # number of steps of autoregressive prediction we will perform
         TARGET_RETURN = 10  # defined by the RL environment, may be normalized
-        model = DecisionTransformerModel.from_pretrained("edbeeching/decision-transformer-gym-hopper-expert")
+        model = DecisionTransformerModel.from_pretrained(
+            "edbeeching/decision-transformer-gym-hopper-expert", attn_implementation="eager"
+        )
         model = model.to(torch_device)
         config = model.config
         torch.manual_seed(0)

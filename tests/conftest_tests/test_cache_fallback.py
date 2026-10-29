@@ -40,9 +40,10 @@ class ReadOnlyCacheFallbackTest(unittest.TestCase):
         self.conftest = conftest
         # Reset the module-level session cache dir so each test starts from a clean slate;
         # the patcher restores whatever value was there before on cleanup.
-        patcher = mock.patch.object(conftest, "_ci_fallback_cache_dir", None)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        for name, value in (("_ci_fallback_cache_dir", None), ("_ci_fallback_repo_ids", set())):
+            patcher = mock.patch.object(conftest, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     def test_is_readonly_fs_error_classification(self):
         is_ro = self.conftest._is_readonly_fs_error
@@ -111,6 +112,64 @@ class ReadOnlyCacheFallbackTest(unittest.TestCase):
     def test_retry_on_oserror_erofs(self):
         # The plain (non-Xet) download path raises this.
         self._assert_recovers(OSError(errno.EROFS, "Read-only file system"))
+
+    def test_later_lookups_use_fallback_cache(self):
+        # A repo missing from the read-only cache is downloaded to the tmp dir; a later
+        # `local_files_only=True` reload must look there too, not in the shared cache.
+        calls = []
+
+        def side_effect(*args, **kwargs):
+            calls.append(kwargs)
+            if kwargs.get("cache_dir") is None:
+                if kwargs.get("local_files_only"):
+                    raise OSError("We couldn't connect to 'https://huggingface.co' to load the files")
+                raise OSError(errno.EROFS, "Read-only file system")
+            return "from-tmp-cache"
+
+        wrapped = self.conftest._with_tmpdir_cache_fallback(mock.Mock(side_effect=side_effect))
+
+        self.assertEqual(wrapped(path_or_repo_id="repo"), "from-tmp-cache")
+        self.assertEqual(wrapped(path_or_repo_id="repo", local_files_only=True), "from-tmp-cache")
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(calls[2]["cache_dir"], self.conftest._ci_fallback_cache_dir)
+
+    def test_later_lookups_fall_through_to_shared_cache(self):
+        # Files of a repo split across both caches are still found in the shared one.
+        calls = []
+
+        def side_effect(*args, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise OSError(errno.EROFS, "Read-only file system")
+            if kwargs.get("cache_dir") is not None and len(calls) == 3:
+                raise OSError("not in the tmp cache")
+            return "found"
+
+        wrapped = self.conftest._with_tmpdir_cache_fallback(mock.Mock(side_effect=side_effect))
+
+        wrapped(path_or_repo_id="repo")
+        self.assertEqual(wrapped(path_or_repo_id="repo", local_files_only=True), "found")
+        self.assertEqual(len(calls), 4)
+        self.assertNotIn("cache_dir", calls[3])
+
+    def test_resolve_revision_uses_fallback_cache(self):
+        # Offline revision resolution of a repo that fell back must read the tmp cache refs:
+        # the shared cache may still point to an older commit.
+        resolve_revision = mock.Mock(return_value="sha")
+        wrapped = self.conftest._with_fallback_cache_revision(resolve_revision)
+        api = object()
+
+        wrapped(api, "repo", local_files_only=True)
+        self.assertNotIn("cache_dir", resolve_revision.call_args.kwargs)
+
+        self.conftest._ci_fallback_cache_dir = "/tmp/fallback"
+        self.conftest._ci_fallback_repo_ids.add("repo")
+        wrapped(api, "repo", local_files_only=True)
+        resolve_revision.assert_called_with(api, "repo", local_files_only=True, cache_dir="/tmp/fallback")
+
+        # An explicit cache_dir is left alone.
+        wrapped(api, "repo", cache_dir="/explicit")
+        resolve_revision.assert_called_with(api, "repo", cache_dir="/explicit")
 
 
 if __name__ == "__main__":

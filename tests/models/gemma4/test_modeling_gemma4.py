@@ -288,6 +288,10 @@ class Gemma4Audio2TextModelTest(ALMModelTest, unittest.TestCase):
     def test_get_image_features_output(self, return_dict: bool | None):
         pass
 
+    @unittest.skip("The tester has no image in input dict")
+    def test_get_image_features_pooler_output(self):
+        pass
+
     @unittest.skip("The tester has no videos in input dict")
     def test_get_video_features_hidden_states(self):
         pass
@@ -1029,7 +1033,9 @@ class Gemma4IntegrationTest(unittest.TestCase):
         model = Gemma4ForConditionalGeneration.from_pretrained(
             self.model_name,
             device_map=torch_device,
-            attn_implementation=attn_implementation,
+            # Audio tower chunked local attention is eager-only (#49404); vary only text
+            # attention.
+            attn_implementation={"text_config": attn_implementation, "audio_config": "eager"},
         )
 
         # Make sure prefill is larger than sliding window

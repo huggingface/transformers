@@ -35,7 +35,7 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -482,7 +482,12 @@ class ZambaMambaMixer(nn.Module):
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
-        use_precomputed_states = cache_params is not None and cache_params.has_previous_state(self.layer_idx)
+        # Retrieve conv and recurrent states if there is a cache. They may be None if the layer is not initialized.
+        if cache_params is not None:
+            conv_state = cache_params.get_conv_state(self.layer_idx, state_idx=0)
+            recurrent_state = cache_params.get_recurrent_state(self.layer_idx, state_idx=0)
+        else:
+            conv_state, recurrent_state = None, None
 
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -493,12 +498,8 @@ class ZambaMambaMixer(nn.Module):
         hidden_states_B_C = hidden_states_B_C.squeeze(2).contiguous()
         gate = gate.reshape(batch_size, self.n_mamba_heads, self.mamba_head_dim, seq_len).transpose(0, 1)
 
-        if use_precomputed_states:
-            conv_state = cache_params.layers[self.layer_idx].conv_states[0]
-            recurrent_state = cache_params.layers[self.layer_idx].recurrent_states[0]
-
         # 2. Convolution sequence transformation
-        if use_precomputed_states and seq_len == 1 and not cache_params.layers[self.layer_idx].record_past:
+        if conv_state is not None and seq_len == 1 and not cache_params.is_recording_past(self.layer_idx):
             hidden_states_B_C = causal_conv1d_update(
                 hidden_states_B_C,
                 conv_state,
@@ -552,7 +553,7 @@ class ZambaMambaMixer(nn.Module):
 
         # Key difference: per head scans
         # Recurrent form
-        if use_precomputed_states and seq_len == 1:
+        if recurrent_state is not None and seq_len == 1:
             scan_outputs = []
 
             for head_idx in range(self.n_mamba_heads):
@@ -987,9 +988,8 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

@@ -91,6 +91,9 @@ class NemotronIntegrationTest(unittest.TestCase):
                 ("cuda", 7): [
                     "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer",
                 ],
+                ("cuda", 8): [
+                    "What is the largest planet in solar system?\nAnswer: Jupiter\n\nWhat is the answer: What is the name of the 19",
+                ],
             }
         )
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()

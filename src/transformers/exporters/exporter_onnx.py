@@ -34,6 +34,9 @@ into an ONNX model via `torch.onnx.export`:
    lowering for specific aten ops where it's buggy or missing.
 5. **ONNX IR fixes** (`_IR_FIXES` via `apply_onnx_ir_fixes`): post-export in-place
    fixes on the `ONNXProgram` IR for ORT compatibility.
+
+A backend-model quantizer (e.g. [`~exporters.quantizers.OnnxRuntimeQuantizer`]) then runs on the fixed model, before
+it's saved.
 """
 
 from __future__ import annotations
@@ -94,10 +97,9 @@ if is_onnxscript_available():
     }
 
 if TYPE_CHECKING:
-    from ..modeling_utils import PreTrainedModel
+    from onnxscript.function_libs.torch_lib.ops.core import BOOL, INT64, TReal
 
-    if is_onnxscript_available():
-        from onnxscript.function_libs.torch_lib.ops.core import BOOL, INT64, TReal
+    from ..modeling_utils import PreTrainedModel
 
 
 logger = logging.get_logger(__file__)
@@ -139,19 +141,28 @@ class OnnxExporter(DynamoExporter):
             onnx_program: ONNXProgram = torch.onnx.export(
                 exported_program,
                 args=(),
-                f=config.output_path,
                 input_names=inputs_names,
                 output_names=outputs_names,
                 kwargs=copy.deepcopy(dict(sample_inputs)),
                 custom_translation_table=_ONNX_TRANSLATION_TABLE,
-                keep_initializers_as_inputs=config.keep_initializers_as_inputs,
                 opset_version=config.opset_version,
-                external_data=config.external_data,
-                export_params=config.export_params,
                 optimize=config.optimize,
             )
 
         apply_onnx_ir_fixes(onnx_program)
+
+        quantizer = config.quantizer
+        if quantizer is not None and not quantizer.quantizes_fx_graph:
+            onnx_program.model = quantizer.quantize(onnx_program.model, sample_inputs, config.export_format)
+
+        if config.output_path is not None:
+            onnx_program.save(
+                config.output_path,
+                include_initializers=config.export_params,
+                keep_initializers_as_inputs=config.keep_initializers_as_inputs,
+                external_data=config.external_data,
+            )
+
         return onnx_program
 
 
@@ -1051,6 +1062,12 @@ def _aten_grouped_mm(mat_a: TReal, mat_b: TReal, offs: INT64, bias=None, out_dty
     return result
 
 
+def _aten_mm_dtype(self: TReal, mat2: TReal, out_dtype: int) -> TReal:
+    """ONNX implementation of `aten.mm.dtype`, i.e. `torch.mm(self, mat2, out_dtype=...)`: a `MatMul` on the inputs
+    cast to `out_dtype`, as the CUDA kernel accumulates in it. The exporter hands `out_dtype` over as an ONNX dtype."""
+    return op.MatMul(op.Cast(self, to=out_dtype), op.Cast(mat2, to=out_dtype))
+
+
 def _aten_repeat_interleave_self_int(self, repeats, dim=None, output_size=None):
     """ONNX implementation of `aten.repeat_interleave.self_int`.
 
@@ -1129,6 +1146,24 @@ def _aten_masked_fill(self, mask, value):
     return op.Where(mask, value_cast, self)
 
 
+def _quantized_decomposed_dequantize_per_channel(
+    input,
+    scales,
+    zero_points,
+    axis: int,
+    quant_min: int,
+    quant_max: int,
+    dtype: int,
+    out_dtype: int = -1,
+):
+    """`quantized_decomposed.dequantize_per_channel` as `DequantizeLinear` along `axis`; torchlib only translates the
+    per-tensor variants. The zero-point must share the input's integer dtype."""
+    if zero_points is not None:
+        zero_points = op.CastLike(zero_points, input)
+        return op.DequantizeLinear(input, scales, zero_points, axis=axis)
+    return op.DequantizeLinear(input, scales, axis=axis)
+
+
 _ONNX_TRANSLATION_TABLE: dict[Any, Any] = {}
 if is_onnxscript_available():
     _ONNX_TRANSLATION_TABLE.update(
@@ -1142,6 +1177,16 @@ if is_onnxscript_available():
             torch.ops.aten.masked_fill.Tensor: _aten_masked_fill,
             operator.floordiv: _operator_floordiv,
         }
+    )
+    # `torch.mm(..., out_dtype=...)` exists from torch 2.8
+    if hasattr(torch.ops.aten.mm, "dtype"):
+        _ONNX_TRANSLATION_TABLE[torch.ops.aten.mm.dtype] = _aten_mm_dtype
+
+    # Registers the `quantized_decomposed` ops, so the per-channel dequant resolves as a table key.
+    import torch.ao.quantization.fx._decomposed  # noqa: F401
+
+    _ONNX_TRANSLATION_TABLE[torch.ops.quantized_decomposed.dequantize_per_channel.default] = (
+        _quantized_decomposed_dequantize_per_channel
     )
 
 

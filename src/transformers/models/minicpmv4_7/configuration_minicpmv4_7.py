@@ -26,7 +26,7 @@ from ...utils import auto_docstring
 from ..auto import AutoConfig
 
 
-@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
+@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7-1B")
 @strict
 class MiniCPMV4_7VisionConfig(PreTrainedConfig):
     r"""
@@ -61,7 +61,7 @@ class MiniCPMV4_7VisionConfig(PreTrainedConfig):
         return self.intermediate_size * self.window_kernel_size[0] * self.window_kernel_size[1]
 
 
-@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7")
+@auto_docstring(checkpoint="openbmb/MiniCPM-V-4.7-1B")
 @strict
 class MiniCPMV4_7Config(PreTrainedConfig):
     r"""
@@ -98,7 +98,7 @@ class MiniCPMV4_7Config(PreTrainedConfig):
     model_type = "minicpmv4_7"
     sub_configs_defaults = {
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="qwen3_5_text"),
-        "vision_config": SubConfigSpec(config_class=MiniCPMV4_7VisionConfig),
+        "vision_config": MiniCPMV4_7VisionConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

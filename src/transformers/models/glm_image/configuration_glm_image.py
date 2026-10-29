@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -168,9 +168,9 @@ class GlmImageConfig(PreTrainedConfig):
 
     model_type = "glm_image"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=GlmImageTextConfig),
-        "vision_config": SubConfigSpec(config_class=GlmImageVisionConfig),
-        "vq_config": SubConfigSpec(config_class=GlmImageVQVAEConfig),
+        "text_config": GlmImageTextConfig,
+        "vision_config": GlmImageVisionConfig,
+        "vq_config": GlmImageVQVAEConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 

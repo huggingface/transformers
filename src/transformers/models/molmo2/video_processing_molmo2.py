@@ -25,14 +25,28 @@ from torch.nn import functional as F
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling, SizeDict
-from ...processing_utils import Unpack
+from ...processing_utils import Unpack, VideosKwargs
 from ...utils import TensorType, auto_docstring, logging
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata
-from .processing_molmo2 import Molmo2VideosKwargs
 
 
 logger = logging.get_logger(__name__)
+
+
+class Molmo2VideoProcessorKwargs(VideosKwargs, total=False):
+    """
+    patch_size (`int`, *optional*):
+        Side length in pixels of each ViT patch for video frames.
+    pooling_size (`list[int]`, *optional*):
+        `[pool_h, pool_w]` pooling window applied to video patch features.
+    max_fps (`int`, *optional*):
+        Maximum sampling rate in frames per second for short videos.
+    """
+
+    patch_size: int
+    pooling_size: list[int]
+    max_fps: int
 
 
 def batch_pixels_to_patches(images: torch.Tensor, patch_size: int) -> torch.Tensor:
@@ -141,10 +155,10 @@ class Molmo2VideoProcessor(BaseVideoProcessor):
     num_frames = 64
     do_sample_frames = True
     max_fps = 2
-    valid_kwargs = Molmo2VideosKwargs
+    valid_kwargs = Molmo2VideoProcessorKwargs
     model_input_names = ["pixel_values_videos", "video_token_pooling", "video_grids"]
 
-    def __init__(self, **kwargs: Unpack[Molmo2VideosKwargs]):
+    def __init__(self, **kwargs: Unpack[Molmo2VideoProcessorKwargs]):
         super().__init__(**kwargs)
         if self.size is not None and (self.size.get("height", None) is None or self.size.get("width", None) is None):
             raise ValueError("size must contain 'height' and 'width' keys.")

@@ -288,7 +288,4 @@ torch.cuda.empty_cache()
 
 لمزيد من الأمثلة على الضبط الدقيق، راجع:
 
-- [🤗 أمثلة المحولات](https://github.com/huggingface/transformers/tree/main/examples) تتضمن
-  النصوص البرمجية لتدريب مهام NLP الشائعة في PyTorch وTensorFlow.
-
 - [🤗 دفاتر ملاحظات المحولات](notebooks) يحتوي على دفاتر ملاحظات مختلفة حول كيفية ضبط نموذج لمهمة محددة في PyTorch وTensorFlow.

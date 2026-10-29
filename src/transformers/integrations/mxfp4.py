@@ -188,43 +188,13 @@ class Mxfp4ReverseDeserialize(ConversionOps):
         missing_keys: list[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        num_local_experts = getattr(model.config, "num_local_experts", 32)
-        hidden_size = getattr(model.config, "hidden_size", 2880)
-
-        proj = "gate_up_proj" if "gate_up_proj" in full_layer_name else "down_proj"
-
-        name = full_layer_name.rsplit("_", 1)[0]
         module, _ = get_module_from_name(model, full_layer_name)
-        state_dict = {}
-        if isinstance(module, Mxfp4GptOssExperts):
-            if "bias" in full_layer_name:
-                name = full_layer_name.replace("_blocks", "")
-                state_dict[name] = getattr(module, proj + "_bias")
-                return state_dict
-            if "gate_up_proj" in full_layer_name:
-                state_dict[f"{name}_blocks"] = (
-                    module.gate_up_proj.storage.layout.unswizzle_data(module.gate_up_proj.storage.data)
-                    .transpose(-1, -2)
-                    .reshape(num_local_experts, -1, 90, 16)
-                )
-                state_dict[f"{name}_scales"] = (
-                    module.gate_up_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
-                        module.gate_up_proj_precision_config.weight_scale.storage.data
-                    ).transpose(-1, -2)
-                )
-            else:
-                state_dict[f"{name}_blocks"] = (
-                    module.down_proj.storage.layout.unswizzle_data(module.down_proj.storage.data)
-                    .transpose(-1, -2)
-                    .reshape(num_local_experts, hidden_size, 90, -1)
-                )
-                state_dict[f"{name}_scales"] = (
-                    module.down_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
-                        module.down_proj_precision_config.weight_scale.storage.data
-                    ).transpose(-1, -2)
-                )
-
-        return state_dict
+        name = full_layer_name.removesuffix("_blocks")
+        proj = name.rsplit(".", 1)[-1]
+        weight, scales = getattr(module, proj), getattr(module, f"{proj}_precision_config").weight_scale
+        scales = scales.storage.layout.unswizzle_data(scales.storage.data).transpose(-1, -2)
+        blocks = weight.storage.layout.unswizzle_data(weight.storage.data).transpose(-1, -2)
+        return {f"{name}_blocks": blocks.reshape(*scales.shape, -1), f"{name}_scales": scales}
 
 
 # Copied from GPT_OSS repo and vllm
@@ -473,22 +443,28 @@ def routing_torch_dist(
     return RoutingData(gate_scal, hist, n_local_experts, hit_experts, expt_data), gather_indx, scatter_indx
 
 
-def mlp_forward(self, hidden_states):
-    if _is_torch_distributed_initialized() and hasattr(self, "_is_hooked"):
-        routing = routing_torch_dist
-    else:
-        routing = triton_kernels_hub.routing.routing
+class Mxfp4GptOssMLP(nn.Module):
+    def __init__(self, router, experts):
+        super().__init__()
+        self.router = router
+        self.experts = experts
 
-    batch_size = hidden_states.shape[0]
-    hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
-    router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
+    def forward(self, hidden_states):
+        if _is_torch_distributed_initialized() and hasattr(self, "_is_hooked"):
+            routing = routing_torch_dist
+        else:
+            routing = triton_kernels_hub.routing.routing
 
-    with on_device(router_logits.device):
-        routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k)
+        batch_size = hidden_states.shape[0]
+        hidden_states = hidden_states.reshape(-1, self.router.hidden_dim)
+        router_logits = nn.functional.linear(hidden_states, self.router.weight, self.router.bias)
 
-    routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx=scatter_idx)
-    routed_out = routed_out.reshape(batch_size, -1, self.router.hidden_dim)
-    return routed_out, router_logits
+        with on_device(router_logits.device):
+            routing_data, gather_idx, scatter_idx = routing(router_logits, self.router.top_k)
+
+        routed_out = self.experts(hidden_states, routing_data, gather_idx, scatter_idx=scatter_idx)
+        routed_out = routed_out.reshape(batch_size, -1, self.router.hidden_dim)
+        return routed_out, router_logits
 
 
 def dequantize_convertops(blocks, scales):
@@ -560,23 +536,18 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
     if quantization_config.dequantize:
         return model
 
+    from ..models.gpt_oss.modeling_gpt_oss import GptOssMLP
     from .hub_kernels import get_kernel
 
     global triton_kernels_hub
     triton_kernels_hub = get_kernel("kernels-community/gpt-oss-triton-kernels", version=1)
 
     has_been_replaced = False
-    for module_name, module in model.named_modules():
-        if not should_convert_module(module_name, modules_to_not_convert):
-            continue
-        if module.__class__.__name__ == "GptOssExperts" and not quantization_config.dequantize:
+    for module_name, module in list(model.named_modules()):
+        if isinstance(module, GptOssMLP) and should_convert_module(f"{module_name}.experts", modules_to_not_convert):
             with torch.device("meta"):
-                model.set_submodule(module_name, Mxfp4GptOssExperts(model.config))
-                has_been_replaced = True
-        if module.__class__.__name__ == "GptOssMLP" and not quantization_config.dequantize:
-            from types import MethodType
-
-            module.forward = MethodType(mlp_forward, module)
+                model.set_submodule(module_name, Mxfp4GptOssMLP(module.router, Mxfp4GptOssExperts(model.config)))
+            has_been_replaced = True
 
     if not has_been_replaced:
         logger.warning(

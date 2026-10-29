@@ -42,12 +42,14 @@ import enum
 import functools
 import inspect
 import sys
-from collections.abc import MutableMapping
+from collections.abc import Iterable, Mapping, MutableMapping
 from typing import Any
+
+from packaging import version
 
 from ..utils import logging
 from ..utils.generic import get_max_seqlen
-from ..utils.import_utils import is_torch_available
+from ..utils.import_utils import _is_package_available, is_torch_available
 
 
 logger = logging.get_logger(__name__)
@@ -275,12 +277,58 @@ def _iter_leaf_tensors(obj: Any, prefix: str = ""):
         for index, item in enumerate(obj):
             path = f"{prefix}.{index}" if prefix else str(index)
             yield from _iter_leaf_tensors(item, path)
-    elif isinstance(obj, dict):
+    elif isinstance(obj, Mapping):
         for key, value in obj.items():
             path = f"{prefix}.{key}" if prefix else key
             yield from _iter_leaf_tensors(value, path)
     elif hasattr(obj, "__dict__"):
         yield from _iter_leaf_tensors(vars(obj), prefix)
+
+
+def check_packages(
+    owner: str, required_packages: Iterable[str], min_versions: dict[str, str], tested_versions: dict[str, str]
+) -> None:
+    """Raise if one of `required_packages` is missing or older than its `min_versions` entry, and warn when one differs
+    from its `tested_versions` entry. Shared by the exporters and the quantizers; `owner` names the one checking.
+    Missing and outdated packages are reported together, in one error."""
+    installed = {}
+    for package in {*required_packages, *min_versions}:
+        exists, package_version = _is_package_available(package, return_version=True)
+        if exists:
+            # The local build suffix (`+cu126`, `+cpu`) doesn't change the API
+            installed[package] = package_version.split("+", 1)[0]
+
+    missing = [package for package in dict.fromkeys([*required_packages, *min_versions]) if package not in installed]
+    outdated = [
+        f"{package}>={minimum} (found {installed[package]})"
+        for package, minimum in min_versions.items()
+        if package in installed
+        and (installed[package] == "N/A" or version.parse(installed[package]) < version.parse(minimum))
+    ]
+    if missing or outdated:
+        fixes = []
+        if missing:
+            fixes.append(
+                "install "
+                + ", ".join(
+                    f"{package}=={tested_versions[package]}" if package in tested_versions else package
+                    for package in missing
+                )
+            )
+        if outdated:
+            fixes.append(f"upgrade {', '.join(outdated)}")
+        raise ImportError(f"To use {owner}, please {' and '.join(fixes)}.")
+
+    drift = [
+        f"{package}: installed {installed[package]}, tested {tested.split('+', 1)[0]}"
+        for package, tested in tested_versions.items()
+        if package in required_packages and installed[package] not in ("N/A", tested.split("+", 1)[0])
+    ]
+    if drift:
+        logger.warning(
+            f"{owner} is experimental and patches many backend internals; behaviour may differ from what was "
+            f"validated. Version drift detected — {', '.join(drift)}. If you hit issues, try the tested versions."
+        )
 
 
 # ── Public tensor utilities ────────────────────────────────────────────────

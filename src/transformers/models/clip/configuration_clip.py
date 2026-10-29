@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -154,8 +154,8 @@ class CLIPConfig(PreTrainedConfig):
 
     model_type = "clip"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=CLIPVisionConfig),
-        "text_config": SubConfigSpec(config_class=CLIPTextConfig),
+        "vision_config": CLIPVisionConfig,
+        "text_config": CLIPTextConfig,
     }
 
     text_config: dict | CLIPTextConfig | None = None

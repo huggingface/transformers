@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -159,8 +159,8 @@ class CLIPSegConfig(PreTrainedConfig):
 
     model_type = "clipseg"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=CLIPSegVisionConfig),
-        "text_config": SubConfigSpec(config_class=CLIPSegTextConfig),
+        "vision_config": CLIPSegVisionConfig,
+        "text_config": CLIPSegTextConfig,
     }
 
     text_config: dict | CLIPSegTextConfig | None = None

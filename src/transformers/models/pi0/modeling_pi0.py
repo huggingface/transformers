@@ -383,7 +383,7 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             )
 
             # We need to keep only the "vlm-prefix", no attention to past denoising steps!
-            past_key_values.crop(prefix_length)
+            past_key_values.crop(prefix_length - past_key_values.get_seq_length())
             noise = noise + dt * output.logits
         return noise
 

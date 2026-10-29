@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch DAB-DETR model."""
 
+import copy
 import math
 from dataclasses import dataclass
 
@@ -1432,7 +1433,7 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         self.bbox_predictor = DabDetrMLP(config.hidden_size, config.hidden_size, 4, 3)
 
         # Default iter_update is True
-        self.model.decoder.bbox_embed = self.bbox_predictor
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_predictor)
 
         # Initialize weights and apply final processing
         self.post_init()

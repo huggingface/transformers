@@ -20,8 +20,7 @@ from ... import initialization as init
 from ...configuration_utils import SubConfigSpec
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
-from ..auto import AutoModel
-from ..auto.configuration_auto import AutoConfig
+from ..auto import AutoConfig, AutoModel
 from ..sam2.configuration_sam2 import (
     Sam2Config,
     Sam2MaskDecoderConfig,
@@ -116,8 +115,8 @@ class Sam3TrackerConfig(Sam2Config):
             model_type="sam3_vision_model",
             init_kwargs={"backbone_feature_sizes": [[288, 288], [144, 144], [72, 72]]},
         ),
-        "prompt_encoder_config": SubConfigSpec(config_class=Sam3TrackerPromptEncoderConfig),
-        "mask_decoder_config": SubConfigSpec(config_class=Sam3TrackerMaskDecoderConfig),
+        "prompt_encoder_config": Sam3TrackerPromptEncoderConfig,
+        "mask_decoder_config": Sam3TrackerMaskDecoderConfig,
     }
 
 

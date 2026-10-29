@@ -59,8 +59,6 @@
 >>> outputs = model(input_ids, langs=langs)
 ```
 
-يمكن لنص البرنامج النصي [run_generation.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-generation/run_generation.py) توليد النص باستخدام تضمينات اللغة مع نقاط تفتيش `xlm-clm`.
-
 ### XLM بدون تضمينات اللغة
 
 النماذج التالية من XLM لا تتطلب تضمينات اللغة أثناء الاستنتاج:

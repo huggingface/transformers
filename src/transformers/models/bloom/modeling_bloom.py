@@ -20,7 +20,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
 from torch.nn import functional as F
 
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...utils import (
     auto_docstring,
     logging,
@@ -40,6 +40,22 @@ from .configuration_bloom import BloomConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+def _get_alibi_slopes(num_heads: int, device: torch.device) -> torch.Tensor:
+    closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
+    base = torch.full((), 2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=device, dtype=torch.float32)
+    powers = torch.arange(1, 1 + closest_power_of_2, device=device, dtype=torch.int32)
+    slopes = torch.pow(base, powers)
+
+    if closest_power_of_2 != num_heads:
+        extra_base = torch.full(
+            (), 2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), device=device, dtype=torch.float32
+        )
+        num_remaining_heads = min(closest_power_of_2, num_heads - closest_power_of_2)
+        extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=device, dtype=torch.int32)
+        slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
+    return slopes
 
 
 def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torch.dtype) -> torch.Tensor:
@@ -60,23 +76,7 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torc
             dtype of the output tensor
     """
     batch_size, seq_length = attention_mask.shape
-    closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
-    base = torch.full(
-        (), 2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
-    )
-    powers = torch.arange(1, 1 + closest_power_of_2, device=attention_mask.device, dtype=torch.int32)
-    slopes = torch.pow(base, powers)
-
-    if closest_power_of_2 != num_heads:
-        extra_base = torch.full(
-            (),
-            2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))),
-            device=attention_mask.device,
-            dtype=torch.float32,
-        )
-        num_remaining_heads = min(closest_power_of_2, num_heads - closest_power_of_2)
-        extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=attention_mask.device, dtype=torch.int32)
-        slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
+    slopes = _get_alibi_slopes(num_heads, attention_mask.device)
 
     # Note: alibi will added to the attention bias that will be applied to the query, key product of attention
     # => therefore alibi will have to be of shape (batch_size, num_heads, query_length, key_length)
@@ -503,11 +503,20 @@ class BloomModel(BloomPreTrainedModel):
 
         # Compute alibi tensor: check build_alibi_tensor documentation
         if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_length_with_past), device=hidden_states.device)
+            # Without padding, alibi only depends on the key length (the whole cache length for static caches), so we
+            # build it directly instead of materializing an all-ones mask
+            kv_length = (
+                past_key_values.get_mask_sizes(seq_length, 0)[0]
+                if past_key_values is not None
+                else seq_length_with_past
+            )
+            slopes = _get_alibi_slopes(self.num_heads, hidden_states.device)
+            alibi = slopes[:, None, None] * torch.arange(kv_length, device=hidden_states.device)
+            alibi = alibi.repeat(batch_size, 1, 1).to(hidden_states.dtype)
         else:
             attention_mask = attention_mask.to(hidden_states.device)
+            alibi = self.build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
 
-        alibi = self.build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,
@@ -571,40 +580,22 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings: torch.Tensor):
         self.lm_head = new_embeddings
 
-    def prepare_inputs_for_generation(
+    def create_masks_for_generate(
         self,
-        input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        use_cache=True,
-        is_first_iteration=False,
+        config: BloomConfig,
+        inputs_embeds: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None,
         **kwargs,
-    ):
-        # Overwritten because of the fixed-shape attention mask creation
-
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            is_first_iteration=is_first_iteration,
-            **kwargs,
-        )
-
-        # This part differs from other models because BLOOM needs a 2D mask to construct alibi tensor
-        # The only difference is the usage of 2D instead of 4D mask, but the shape will be static
-        if isinstance(past_key_values, StaticCache) and attention_mask is not None:
-            target_length = past_key_values.get_max_length()
-            batch_size, seq_length = attention_mask.shape
-            diff = target_length - seq_length
-
-            new_attn_mask = torch.zeros(batch_size, diff, device=attention_mask.device, dtype=attention_mask.dtype)
-            attention_mask = torch.cat([attention_mask, new_attn_mask], dim=-1)
-            model_inputs["attention_mask"] = attention_mask
-
-        return model_inputs
+    ) -> torch.Tensor:
+        # Overwritten because BLOOM needs a 2D mask to build the alibi tensor, while the generic function returns a
+        # 4D one. The shape stays static (the cache max length), so compiled forwards are not affected.
+        if attention_mask is None or attention_mask.ndim == 4:
+            return attention_mask
+        target_length = past_key_values.get_max_length()
+        if (padding_length := target_length - attention_mask.shape[-1]) > 0:
+            attention_mask = F.pad(attention_mask, (0, padding_length))
+        return attention_mask
 
     @auto_docstring
     def forward(
@@ -652,9 +643,8 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

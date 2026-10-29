@@ -23,7 +23,7 @@ from typing import Any
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, is_timm_available, requires_backends
 
 
@@ -440,9 +440,9 @@ class Gemma3nConfig(PreTrainedConfig):
 
     model_type = "gemma3n"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Gemma3nTextConfig),
-        "vision_config": SubConfigSpec(config_class=Gemma3nVisionConfig),
-        "audio_config": SubConfigSpec(config_class=Gemma3nAudioConfig),
+        "text_config": Gemma3nTextConfig,
+        "vision_config": Gemma3nVisionConfig,
+        "audio_config": Gemma3nAudioConfig,
     }
 
     text_config: Gemma3nTextConfig | dict[str, Any] | None = None

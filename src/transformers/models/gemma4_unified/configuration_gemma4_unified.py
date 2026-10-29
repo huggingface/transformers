@@ -295,7 +295,7 @@ class Gemma4UnifiedConfig(PreTrainedConfig):
 
     model_type = "gemma4_unified"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Gemma4UnifiedTextConfig),
+        "text_config": Gemma4UnifiedTextConfig,
         "vision_config": SubConfigSpec(config_class=Gemma4UnifiedVisionConfig, optional=True),
         "audio_config": SubConfigSpec(config_class=Gemma4UnifiedAudioConfig, optional=True),
     }

@@ -124,12 +124,12 @@ class Sam3LiteTextConfig(PreTrainedConfig):
 
     model_type = "sam3_lite_text"
     sub_configs_defaults = {
-        "geometry_encoder_config": SubConfigSpec(config_class=Sam3LiteTextGeometryEncoderConfig),
-        "detr_encoder_config": SubConfigSpec(config_class=Sam3LiteTextDETREncoderConfig),
-        "detr_decoder_config": SubConfigSpec(config_class=Sam3LiteTextDETRDecoderConfig),
-        "mask_decoder_config": SubConfigSpec(config_class=Sam3LiteTextMaskDecoderConfig),
+        "geometry_encoder_config": Sam3LiteTextGeometryEncoderConfig,
+        "detr_encoder_config": Sam3LiteTextDETREncoderConfig,
+        "detr_decoder_config": Sam3LiteTextDETRDecoderConfig,
+        "mask_decoder_config": Sam3LiteTextMaskDecoderConfig,
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="sam3_vision_model"),
-        "text_config": SubConfigSpec(config_class=Sam3LiteTextTextConfig),
+        "text_config": Sam3LiteTextTextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

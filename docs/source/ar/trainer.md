@@ -597,42 +597,4 @@ use_cpu: false
 </hfoptions>
 يُعد أمر  [`accelerate_launch`](https://huggingface.co/docs/accelerate/package_reference/cli#accelerate-launch) هو الطريقة المُوصى بها لتشغيل نص البرمجى للتدريب على نظام موزع باستخدام Accelerate و [`Trainer`] مع المعلمات المحددة في `config_file.yaml`. يتم حفظ هذا الملف في مجلد ذاكرة التخزين المؤقت لـ Accelerate ويتم تحميله تلقائيًا عند تشغيل `accelerate_launch`.
 
-على سبيل المثال، لتشغيل النص البرنامجي للتدريب [run_glue.py](https://github.com/huggingface/transformers/blob/f4db565b695582891e43a5e042e5d318e28f20b8/examples/pytorch/text-classification/run_glue.py#L4) مع تكوين FSDP:
-
-```bash
-accelerate launch \
-    ./examples/pytorch/text-classification/run_glue.py \
-    --model_name_or_path google-bert/bert-base-cased \
-    --task_name $TASK_NAME \
-    --do_train \
-    --do_eval \
-    --max_seq_length 128 \
-    --per_device_train_batch_size 16 \
-    --learning_rate 5e-5 \
-    --num_train_epochs 3 \
-    --output_dir /tmp/$TASK_NAME/ \
-```
-
-يمكنك أيضًا تحديد المعلمات من ملف `config_file.yaml` مباشرة في سطر الأوامر:
-
-```bash
-accelerate launch --num_processes=2 \
-    --use_fsdp \
-    --mixed_precision=bf16 \
-    --fsdp_auto_wrap_policy=TRANSFORMER_BASED_WRAP  \
-    --fsdp_transformer_layer_cls_to_wrap="BertLayer" \
-    --fsdp_sharding_strategy=1 \
-    --fsdp_state_dict_type=FULL_STATE_DICT \
-    ./examples/pytorch/text-classification/run_glue.py
-    --model_name_or_path google-bert/bert-base-cased \
-    --task_name $TASK_NAME \
-    --do_train \
-    --do_eval \
-    --max_seq_length 128 \
-    --per_device_train_batch_size 16 \
-    --learning_rate 5e-5 \
-    --num_train_epochs 3 \
-    --output_dir /tmp/$TASK_NAME/ \
-```
-
 اطلع على برنامج تعليمي [Launching your Accelerate scripts](https://huggingface.co/docs/accelerate/basic_tutorials/launch) لمعرفة المزيد حول `accelerate_launch` والتكوينات المخصصة.

@@ -17,7 +17,7 @@ import os
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -216,9 +216,9 @@ class ClvpConfig(PreTrainedConfig):
 
     model_type = "clvp"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=ClvpEncoderConfig),
-        "speech_config": SubConfigSpec(config_class=ClvpEncoderConfig),
-        "decoder_config": SubConfigSpec(config_class=ClvpDecoderConfig),
+        "text_config": ClvpEncoderConfig,
+        "speech_config": ClvpEncoderConfig,
+        "decoder_config": ClvpDecoderConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

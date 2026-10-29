@@ -94,8 +94,9 @@ class MuseGlimmerProcessor(ProcessorMixin):
             timestamps.append(timestamps[-1] if timestamps else 0.0)
 
         replacement_str = self.video_start_token
+        timestamp_format = self.video_processor.frame_timestamp_format
         for g, ts in enumerate(timestamps):
-            replacement_str += f"Time: {ts:.1f}s" + self.video_token * tokens_per_group
+            replacement_str += timestamp_format.format(timestamp=ts) + self.video_token * tokens_per_group
             replacement_str += self.video_sep_token if g < n_frames - 1 else self.video_end_token
         return replacement_str
 

@@ -95,9 +95,19 @@ jobs:
             fs.writeFileSync('tests_models_dir.txt', JSON.stringify(tests_models_dir, null, 2));
             fs.writeFileSync('tests_quantization_dir.txt', JSON.stringify(tests_quantization_dir, null, 2));
 
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version-file: .python-version
+
+      # The script imports `transformers`. This is the base branch checkout, not the PR's code.
+      - name: Install transformers
+        run: pip install -e .
+
       - name: Run script to get jobs to run
         id: get_jobs
         run: |
+          set -o pipefail
           python utils/get_pr_run_slow_jobs.py | tee output.txt
           echo "jobs_to_run: $(tail -n 1 output.txt)"
           echo "jobs_to_run=$(tail -n 1 output.txt)" >> $GITHUB_OUTPUT
@@ -108,7 +118,7 @@ jobs:
     #   - or the previous comment is 30 minutes or more old
     name: Send a comment to suggest jobs to run
     if: ${{ needs.get-jobs.outputs.jobs != '' }}
-    needs: [get-pr-number, get-jobs]
+    needs: [get-pr-number, get-pr-info, get-jobs]
     permissions:
       pull-requests: write
     runs-on: ubuntu-22.04
@@ -118,6 +128,7 @@ jobs:
         env:
           BODY: "\n\nrun-slow: ${{ needs.get-jobs.outputs.jobs }}"
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
         with:
           script: |
             const prNumber = parseInt(process.env.PR_NUMBER, 10);
@@ -132,40 +143,38 @@ jobs:
               issue_number: prNumber
             });
 
-            // Find existing comments that start with our prefix
+            // Find existing bot comments that start with our prefix
             const existingComments = comments.filter(comment =>
               comment.user.login === 'github-actions[bot]' &&
               comment.body.startsWith(commentPrefix)
             );
 
-            let shouldCreateNewComment = true;
-            let commentsToDelete = [];
+            // --- conditions ---
+            const mostRecentBotComment = existingComments.length > 0
+              ? existingComments.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]
+              : null;
 
-            if (existingComments.length > 0) {
-              // Get the most recent comment
-              const mostRecentComment = existingComments
-                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+            const isOld = mostRecentBotComment ? new Date(mostRecentBotComment.created_at) < thirtyMinutesAgo : false;
+            const isDifferentContent = mostRecentBotComment ? mostRecentBotComment.body !== newBody : false;
 
-              const commentDate = new Date(mostRecentComment.created_at);
-              const isOld = commentDate < thirtyMinutesAgo;
-              const isDifferentContent = mostRecentComment.body !== newBody;
+            const mergeCommitTimestamp = parseInt(process.env.PR_MERGE_COMMIT_TIMESTAMP, 10) * 1000;
+            const maintainerRanSlow = comments.some(comment =>
+              ['MEMBER', 'OWNER', 'COLLABORATOR'].includes(comment.author_association) &&
+              comment.body.trimStart().startsWith('run-slow:') &&
+              new Date(comment.created_at).getTime() > mergeCommitTimestamp
+            );
 
-              console.log(`Most recent comment created: ${mostRecentComment.created_at}`);
-              console.log(`Is older than 30 minutes: ${isOld}`);
-              console.log(`Has different content: ${isDifferentContent}`);
+            // --- decide ---
+            const needsRefresh = !mostRecentBotComment || isOld || isDifferentContent;
+            const commentsToDelete = (needsRefresh && mostRecentBotComment) ? existingComments : [];
+            const shouldCreateNewComment = needsRefresh && !maintainerRanSlow;
 
-              if (isOld || isDifferentContent) {
-                // Delete all existing comments and create new one
-                commentsToDelete = existingComments;
-                console.log(`Will delete ${commentsToDelete.length} existing comment(s) and create new one`);
-              } else {
-                // Content is same and comment is recent, skip
-                shouldCreateNewComment = false;
-                console.log('Comment is recent and content unchanged, skipping update');
-              }
-            } else {
-              console.log('No existing comments found, will create new one');
-            }
+            // --- log ---
+            console.log(`Existing bot comment: ${mostRecentBotComment ? mostRecentBotComment.created_at : 'none'}`);
+            console.log(`Is older than 30 minutes: ${isOld}`);
+            console.log(`Has different content: ${isDifferentContent}`);
+            console.log(`Maintainer already ran slow after current commit: ${maintainerRanSlow}`);
+            console.log(`Will delete ${commentsToDelete.length} comment(s), will create new: ${shouldCreateNewComment}`);
 
             // Delete old comments if needed
             for (const comment of commentsToDelete) {

@@ -26,6 +26,7 @@ from .test_modeling_common import (
     torch_device,
 )
 from .test_pipeline_mixin import PipelineTesterMixin
+from .test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -212,7 +213,7 @@ class MultiModalModelTester:
 
 
 @require_torch
-class MultiModalModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
+class MultiModalModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TensorParallelTesterMixin):
     """Shared test-class base for multimodal model families.
 
     Subclasses must set:

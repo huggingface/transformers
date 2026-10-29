@@ -24,7 +24,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_bidirectional_mask, create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -32,7 +32,7 @@ from ...modeling_outputs import (
     BaseModelOutputWithPooling,
     CausalLMOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, logging
 from ...utils.generic import (
@@ -211,8 +211,8 @@ class Phi4MultimodalConfig(Phi3Config):
     ```"""
 
     sub_configs_defaults = {
-        "audio_config": SubConfigSpec(config_class=Phi4MultimodalAudioConfig),
-        "vision_config": SubConfigSpec(config_class=Phi4MultimodalVisionConfig),
+        "audio_config": Phi4MultimodalAudioConfig,
+        "vision_config": Phi4MultimodalVisionConfig,
     }
 
     vocab_size: int = 200064
@@ -420,9 +420,6 @@ class Phi4MultimodalVisionEmbeddings(SiglipVisionEmbeddings):
 
         fractional_coords_h = torch.clamp(fractional_coords_h, max=(1.0 - 1e-6))
         fractional_coords_w = torch.clamp(fractional_coords_w, max=(1.0 - 1e-6))
-
-        fractional_coords_h = fractional_coords_h.to(pixel_values.dtype)
-        fractional_coords_w = fractional_coords_w.to(pixel_values.dtype)
 
         bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
         bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
@@ -1440,9 +1437,8 @@ class Phi4MultimodalForCausalLM(Phi3ForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

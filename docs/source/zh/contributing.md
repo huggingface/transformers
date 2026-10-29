@@ -234,7 +234,7 @@ python src/transformers/commands/transformers_cli.py env
 
 ### 测试
 
-包含了广泛的测试套件来测试库的行为和一些示例。库测试可以在 [tests](https://github.com/huggingface/transformers/tree/main/tests) 文件夹中找到，示例测试可以在 [examples](https://github.com/huggingface/transformers/tree/main/examples) 文件夹中找到。
+包含了广泛的测试套件来测试库的行为。库测试可以在 [tests](https://github.com/huggingface/transformers/tree/main/tests) 文件夹中找到。
 
 我们喜欢使用 `pytest` 和 `pytest-xdist`，因为它运行更快。在仓库的根目录，指定一个*子文件夹的路径或测试文件*来运行测试：
 
@@ -242,14 +242,7 @@ python src/transformers/commands/transformers_cli.py env
 python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
 ```
 
-同样地，在 `examples` 目录，指定一个*子文件夹的路径或测试文件* 来运行测试。例如，以下命令会测试 PyTorch `examples` 目录中的文本分类子文件夹：
-
-```bash
-pip install -r examples/xxx/requirements.txt  # 仅在第一次需要
-python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
-```
-
-实际上这就是我们的 `make test` 和 `make test-examples` 命令的实现方式（不包括 `pip install`）！
+实际上这就是我们的 `make test` 命令的实现方式！
 
 你也可以指定一个较小的测试集来仅测试特定功能。
 
@@ -257,13 +250,12 @@ python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classific
 
 <Tip warning={true}>
 
-记得指定一个*子文件夹的路径或测试文件*来运行测试。否则你将会运行 `tests` 或 `examples` 文件夹中的所有测试，它会花费很长时间！
+记得指定一个*子文件夹的路径或测试文件*来运行测试。否则你将会运行 `tests` 文件夹中的所有测试，它会花费很长时间！
 
 </Tip>
 
 ```bash
 RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./tests/models/my_new_model
-RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/text-classification
 ```
 
 和时间较长的测试一样，还有其他环境变量在测试过程中，在默认情况下是未启用的：
@@ -277,7 +269,6 @@ RUN_SLOW=yes python -m pytest -n auto --dist=loadfile -s -v ./examples/pytorch/t
 
 ```bash
 python -m unittest discover -s tests -t . -v
-python -m unittest discover -s examples -t examples -v
 ```
 
 ### 风格指南

@@ -19,7 +19,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -150,8 +150,8 @@ class ChineseCLIPConfig(PreTrainedConfig):
 
     model_type = "chinese_clip"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=ChineseCLIPVisionConfig),
-        "text_config": SubConfigSpec(config_class=ChineseCLIPTextConfig),
+        "vision_config": ChineseCLIPVisionConfig,
+        "text_config": ChineseCLIPTextConfig,
     }
 
     text_config: dict | ChineseCLIPTextConfig | None = None

@@ -13,9 +13,7 @@
 # limitations under the License.
 
 from collections.abc import Sequence
-from typing import Any, TypeAlias, TypedDict, Union
-
-from typing_extensions import overload
+from typing import Any, TypeAlias, TypedDict, Union, overload
 
 from ..image_utils import is_pil_image
 from ..utils import is_vision_available, requires_backends

@@ -160,6 +160,7 @@ tags
 
 # .lock
 *.lock
+!prototype-fleet.lock
 
 # DS_Store (MacOS)
 .DS_Store

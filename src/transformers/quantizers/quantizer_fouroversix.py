@@ -26,9 +26,6 @@ class FourOverSixHfQuantizer(HfQuantizer):
     requires_calibration = False
     quantization_config: "FourOverSixConfig"
 
-    def __init__(self, quantization_config, **kwargs):
-        super().__init__(quantization_config, **kwargs)
-
     def validate_environment(self, *args, **kwargs):
         if not is_fouroversix_available():
             raise ImportError(
@@ -101,23 +98,10 @@ class FourOverSixHfQuantizer(HfQuantizer):
         return FourOverSixQuantize(self)
 
     def get_weight_conversions(self):
-        """
-        Return weight conversions for loading pre-quantized checkpoints of
-        other pre-quantized models (not fouroversix models). After first use,
-        the pre_quantized_model_config_type attribute is set to None to ensure
-        subsequent calls (e.g., during save_pretrained) return an empty list
-        since, by then, the model will be saved with our framework's format
-        so weight conversions are no longer needed.
-        """
+        # Pre-quantized checkpoints of other formats are converted by fouroversix itself
+        model_config_type = getattr(self.quantization_config, "pre_quantized_model_config_type", None)
+        if model_config_type is None:
+            return []
         from fouroversix import WeightConversions
 
-        # pre_quantized_model_config_type is only set if we are loading a
-        # pre-quantized model so it is not guaranteed to exist.
-        if hasattr(self.quantization_config, "pre_quantized_model_config_type"):
-            model_config_type = self.quantization_config.pre_quantized_model_config_type
-            weight_conversions = WeightConversions.get_weight_conversions(
-                model_config_type,
-            )
-            return weight_conversions
-
-        return []
+        return WeightConversions.get_weight_conversions(model_config_type)

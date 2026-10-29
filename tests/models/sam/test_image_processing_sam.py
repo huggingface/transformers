@@ -153,6 +153,20 @@ class SamImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertTrue(encoding["labels"].min().item() >= 0)
             self.assertTrue(encoding["labels"].max().item() <= 255)
 
+    def test_same_points_generated(self):
+        image = torch.randint(256, (3, 100, 200), dtype=torch.uint8)
+
+        for image_processing_class in self.image_processing_classes.values():
+            image_processor = image_processing_class()
+
+            _, points, crops, _ = image_processor.generate_crop_boxes(image, 1024, crop_n_layers=1, points_per_crop=4)
+
+            for c, crop in enumerate(crops):
+                _, crop_points, _, _ = image_processor.generate_crop_boxes(
+                    crop, 1024, crop_n_layers=0, points_per_crop=4
+                )
+                torch.testing.assert_close(points[0, :, c], crop_points[0, :, 0])
+
     def test_backends_equivalence(self):
         """Override base class test to also compare segmentation labels."""
         if len(self.image_processing_classes) < 2:

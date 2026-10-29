@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 from dataclasses import dataclass
 
 import torch
@@ -898,8 +899,8 @@ class Deimv2ForObjectDetection(DFineForObjectDetection):
                 ]
             )
 
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         self.post_init()
 
     def forward(**super_kwargs):

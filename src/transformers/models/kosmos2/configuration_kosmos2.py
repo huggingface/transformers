@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -100,8 +100,8 @@ class Kosmos2Config(PreTrainedConfig):
 
     model_type = "kosmos-2"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=Kosmos2TextConfig),
-        "vision_config": SubConfigSpec(config_class=Kosmos2VisionConfig),
+        "text_config": Kosmos2TextConfig,
+        "vision_config": Kosmos2VisionConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None

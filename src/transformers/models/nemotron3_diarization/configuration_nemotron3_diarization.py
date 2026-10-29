@@ -20,7 +20,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 from ...utils.type_validators import interval, positive_int_field
 
@@ -168,9 +168,9 @@ class Nemotron3DiarizationConfig(PreTrainedConfig):
 
     model_type = "nemotron3_diarization"
     sub_configs_defaults = {
-        "audio_config": SubConfigSpec(config_class=Nemotron3DiarizationAudioConfig),
-        "head_config": SubConfigSpec(config_class=Nemotron3DiarizationHeadConfig),
-        "streaming_config": SubConfigSpec(config_class=Nemotron3DiarizationStreamingConfig),
+        "audio_config": Nemotron3DiarizationAudioConfig,
+        "head_config": Nemotron3DiarizationHeadConfig,
+        "streaming_config": Nemotron3DiarizationStreamingConfig,
     }
 
     audio_config: Nemotron3DiarizationAudioConfig | dict | None = None

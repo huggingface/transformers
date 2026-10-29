@@ -185,26 +185,8 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
             output_eager.images[0][0], output_compiled.images[0][0], atol=1e-4, rtol=1e-4, mean_atol=1e-5
         )
 
-    def test_patches(self):
-        """Test that patchify_image produces the expected number of patches."""
-        for image_processing_class in self.image_processing_classes.values():
-            image_processor = image_processing_class(**self.image_processor_dict)
-            batch_size = 3
-            channels = 3
-            height = 300
-            width = 300
-            image_input = torch.rand(batch_size, channels, height, width)
-
-            expected_num_patches = image_processor.get_num_patches(image_height=height, image_width=width)
-            patches_final = image_processor.patchify_image(image=image_input)
-
-            self.assertEqual(patches_final.shape[1], expected_num_patches)
-
     def test_patches_match_backends(self):
         """Test that backends produce same patches."""
-        if len(self.image_processing_classes) < 2:
-            self.skipTest(reason="Skipping backends patch equivalence test as there are less than 2 backends")
-
         batch_size = 3
         channels = 3
         height = 300
@@ -216,7 +198,12 @@ class FuyuImageProcessorTest(ImageProcessingTestMixin, unittest.TestCase):
             processors[backend_name] = image_processing_class(**self.image_processor_dict)
 
         backend_names = list(processors.keys())
-        reference_patches = processors[backend_names[0]].patchify_image(image=image_input)
+        expected_num_patches = processors[backend_names[0]].get_num_patches(image_height=height, image_width=width)
+
+        reference_patches = processors[backend_names[0]].patchify_image(image=image_input.numpy())
+        reference_patches = torch.from_numpy(reference_patches)
+        self.assertEqual(reference_patches.shape[1], expected_num_patches)
+
         for backend_name in backend_names[1:]:
             patches = processors[backend_name].patchify_image(image=image_input)
             self.assertEqual(reference_patches.shape, patches.shape)

@@ -217,15 +217,17 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         scale_resolution: int,
         patch_size: int,
         allow_upscale: bool = False,
+        downsample_mode: str = "16x",
     ) -> tuple[int, int]:
         height, width = video_size
         if (height * width > scale_resolution * scale_resolution) or allow_upscale:
             aspect_ratio = width / height
             height = int(scale_resolution / math.sqrt(aspect_ratio))
             width = int(height * aspect_ratio)
-        # factor 4 = two successive 2×2 spatial merges (ViT insert merger + downsample MLP)
-        best_height = ensure_divide(height, patch_size * 4)
-        best_width = ensure_divide(width, patch_size * 4)
+        # "4x" merges one 2×2 block, "16x" merges twice (ViT insert merger + downsample MLP)
+        merge_factor = 2 if downsample_mode == "4x" else 4
+        best_height = ensure_divide(height, patch_size * merge_factor)
+        best_width = ensure_divide(width, patch_size * merge_factor)
         return best_height, best_width
 
     def get_refine_size(
@@ -235,6 +237,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         scale_resolution: int,
         patch_size: int,
         allow_upscale: bool = False,
+        downsample_mode: str = "16x",
     ) -> tuple[int, int]:
         height, width = video_size
         grid_y, grid_x = grid
@@ -245,6 +248,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             video_size=(refine_height / grid_y, refine_width / grid_x),
             scale_resolution=scale_resolution,
             patch_size=patch_size,
+            downsample_mode=downsample_mode,
             allow_upscale=allow_upscale,
         )
         return best_height * grid_y, best_width * grid_x
@@ -350,6 +354,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         max_slice_nums: int,
         scale_resolution: int,
         patch_size: int,
+        downsample_mode: str = "16x",
     ):
         num_frames = video.shape[1]
         video_size = video.shape[-2:]
@@ -360,7 +365,11 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
 
         # Always resize the source
         new_height, new_width = self.find_best_resize(
-            video_size, scale_resolution, patch_size, allow_upscale=(best_grid is None)
+            video_size,
+            scale_resolution,
+            patch_size,
+            downsample_mode=downsample_mode,
+            allow_upscale=(best_grid is None),
         )
         source_videos = self.resize(video, size=SizeDict(height=new_height, width=new_width), resample=resample)
 
@@ -368,7 +377,12 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         patches = [source_videos]
         if best_grid is not None:
             refine_height, refine_width = self.get_refine_size(
-                video_size, best_grid, scale_resolution, patch_size, allow_upscale=True
+                video_size,
+                best_grid,
+                scale_resolution,
+                patch_size,
+                downsample_mode=downsample_mode,
+                allow_upscale=True,
             )
             grid_y, grid_x = best_grid
             patch_height, patch_width = refine_height // grid_y, refine_width // grid_x
@@ -417,7 +431,8 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
         stack_frames: int,
         max_num_frames: int,
         video_metadata: list[VideoMetadata],
-        return_tensors: str | TensorType | None = None,
+        return_tensors: str | TensorType | None,
+        downsample_mode: str = "16x",
         **kwargs,
     ) -> BatchFeature:
         # Stage 1 — Build an ordered list of visual units.
@@ -475,7 +490,11 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
             num_frames_per_video.append(len(visual_units) - units_before)
 
         # Stage 2 — Resize, split, normalise and reshape each unit independently.
-        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
+        # Consume `visual_units` (not `videos`): with `stack_frames > 1` the sampled frames
+        # have already been combined into per-second composite canvases, and those canvases
+        # differ in height from main frames. `group_videos_by_shape` keys on
+        # `(num_frames, height, width)`, so both kinds are grouped and resized separately.
+        grouped_videos, grouped_videos_index = group_videos_by_shape(visual_units)
         resized_videos_grouped = {}
         videos_grids = {}
         processed_num_patches_per_frame = {}
@@ -489,6 +508,7 @@ class MiniCPMV4_6VideoProcessor(BaseVideoProcessor):
                     max_slice_nums=max_slice_nums,
                     scale_resolution=scale_resolution,
                     patch_size=patch_size,
+                    downsample_mode=downsample_mode,
                 )
             else:
                 stacked_videos = [[video] for video in stacked_videos]

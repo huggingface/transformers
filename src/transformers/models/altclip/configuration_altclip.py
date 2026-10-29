@@ -18,7 +18,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring, logging
 
 
@@ -151,8 +151,8 @@ class AltCLIPConfig(PreTrainedConfig):
 
     model_type = "altclip"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=AltCLIPVisionConfig),
-        "text_config": SubConfigSpec(config_class=AltCLIPTextConfig),
+        "vision_config": AltCLIPVisionConfig,
+        "text_config": AltCLIPTextConfig,
     }
 
     text_config: dict | AltCLIPTextConfig | None = None

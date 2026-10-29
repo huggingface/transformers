@@ -33,7 +33,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
@@ -185,9 +185,8 @@ def yarn_get_mscale(scale=1, mscale=1):
 def yarn_apply_mscale(rope_parameters, scaling):
     if rope_parameters.get("rope_type", "default") != "default":
         mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        scaling_factor = rope_parameters["factor"]
         if mscale_all_dim:
-            mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+            mscale = yarn_get_mscale(rope_parameters["factor"], mscale_all_dim)
             scaling = scaling * mscale * mscale
     return scaling
 
@@ -568,8 +567,8 @@ class MiniCPM3ForCausalLM(MiniCPM3PreTrainedModel, GenerationMixin):
         hidden_states = outputs.last_hidden_state
         # MiniCPM3 scales hidden states down before the LM head (not present in Llama).
         hidden_states = hidden_states / self.config.logits_scaling
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

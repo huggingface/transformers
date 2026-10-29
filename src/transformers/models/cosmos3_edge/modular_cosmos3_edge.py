@@ -22,7 +22,7 @@ import torch.nn.functional as F
 from huggingface_hub.dataclasses import strict
 
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -176,8 +176,8 @@ class Cosmos3EdgeConfig(PreTrainedConfig):
 
     model_type = "cosmos3_edge"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Cosmos3EdgeVisionConfig),
-        "text_config": SubConfigSpec(config_class=Cosmos3EdgeTextConfig),
+        "vision_config": Cosmos3EdgeVisionConfig,
+        "text_config": Cosmos3EdgeTextConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 

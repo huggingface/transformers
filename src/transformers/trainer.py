@@ -4084,11 +4084,25 @@ class Trainer:
                 remove_dummy_checkpoint(self.args.should_save, output_dir, [WEIGHTS_NAME, SAFE_WEIGHTS_NAME])
                 self.model_wrapped.save_checkpoint(output_dir)
 
-        elif self.is_distributed_loading_by_transformers and not _is_peft_model(self.model):
-            # Sharded at load time (`DistributedConfig`): gathering the weights inside `save_pretrained`
-            # is collective, so every rank saves; only the main process writes, the others leave at the
-            # closing barrier. (PEFT models fall through to the adapter-only save below.)
-            self._save(output_dir)
+        elif self.is_distributed_loading_by_transformers:
+            # Sharded at load time (`DistributedConfig`): gathering a `DTensor` is collective, so every rank gathers
+            # and only the main process writes.
+            if _is_peft_model(self.model):
+                # The adapter is the trainable parameters. PEFT would otherwise gather the whole sharded model, on the
+                # main process only.
+                from torch.distributed.tensor import DTensor
+
+                state_dict = {
+                    name: param.full_tensor() if isinstance(param, DTensor) else param
+                    for name, param in self.model.named_parameters()
+                    if param.requires_grad
+                }
+                if self.args.should_save:
+                    self._save(output_dir, state_dict=state_dict)
+            else:
+                # `save_pretrained` gathers the weights itself, so every rank calls it; the others leave at the
+                # closing barrier.
+                self._save(output_dir)
 
         elif self.args.should_save:
             self._save(output_dir)

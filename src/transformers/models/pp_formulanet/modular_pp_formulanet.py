@@ -21,7 +21,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     ImageInput,
@@ -31,7 +31,7 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import (
     ProcessingKwargs,
     Unpack,
@@ -115,8 +115,8 @@ class PPFormulaNetTextConfig(MBartConfig):
 class PPFormulaNetConfig(PreTrainedConfig):
     model_type = "pp_formulanet"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=PPFormulaNetTextConfig),
-        "vision_config": SubConfigSpec(config_class=PPFormulaNetVisionConfig),
+        "text_config": PPFormulaNetTextConfig,
+        "vision_config": PPFormulaNetVisionConfig,
     }
 
     text_config: dict | PPFormulaNetTextConfig | None = None
@@ -480,9 +480,8 @@ class PPFormulaNetForConditionalGeneration(Florence2ForConditionalGeneration):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

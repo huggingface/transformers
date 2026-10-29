@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 
-from ...cache_utils import DynamicCache, QuantizedCache, QuantizedLayer, StaticCache
+from ...cache_utils import BaseQuantizedLayer, DynamicCache, QuantizedCache, StaticCache
 from ...generation import (
     GenerateDecoderOnlyOutput,
     GenerationConfig,
@@ -399,7 +399,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             mask_4d = diffusion_start_mask.view(-1, 1, 1, 1)
             # Reset the KV cache
             for layer in negative_model_kwargs["past_key_values"].layers:
-                if isinstance(layer, QuantizedLayer):
+                if isinstance(layer, BaseQuantizedLayer):
                     continue
                 if layer.keys is not None and layer.values is not None:
                     layer_mask_4d = mask_4d.to(layer.keys.device)

@@ -74,7 +74,7 @@ def create_position_bias_mask(
         # A custom float mask is already additive, so we can simply add it to the position_bias
         position_bias_mask = position_bias + attention_mask
 
-    return position_bias_mask
+    return position_bias_mask.contiguous()
 
 
 def sdpa_attention_forward(
@@ -90,6 +90,10 @@ def sdpa_attention_forward(
     cache: PagedAttentionCache | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
+    if kwargs.get("softcap") is not None:
+        raise ValueError(
+            "`sdpa` attention does not support `softcap`. Try using `eager`, `flex_attention`, or the few FA kernels supporting it"
+        )
     if kwargs.get("output_attentions", False):
         logger.warning_once(
             "`sdpa` attention does not support `output_attentions=True`."

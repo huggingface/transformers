@@ -349,6 +349,7 @@ class Qwen3_5MoeForCausalLM(Qwen3NextForCausalLM):
 
 
 class Qwen3_5MoeForConditionalGeneration(Qwen3VLMoeForConditionalGeneration):
+    input_modalities = ("image", "video", "text")
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
     _fsdp_plan = {"lm_head": "keep_full_weight"}

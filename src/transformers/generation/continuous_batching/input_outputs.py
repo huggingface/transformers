@@ -24,13 +24,14 @@ from ...utils import get_available_devices
 from .cache import PagedAttentionCache
 from .cache_allocators import FULL_ATTENTION, SLIDING_ATTENTION
 from .cb_logits_processors import ContinuousBatchingLogitsProcessorList
-from .requests import TMP_TOKEN_ID, FutureRequestState, logger
+from .requests import TMP_TOKEN_ID, FutureRequestState
 from .utils import (
     CudaGraphBuffer,
     aligned_divide,
     attn_mask_is_needed,
     build_attention_mask,
     create_device_stream,
+    logger,
     pad_to_pow2,
     stream_context,
 )

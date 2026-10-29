@@ -121,37 +121,37 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 <PipelineTag pipeline="text-classification"/>
 
 - A blog post on how to [finetune XLM RoBERTa for multiclass classification with Habana Gaudi on AWS](https://www.philschmid.de/habana-distributed-training)
-- [`XLMRobertaForSequenceClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)..
+- [`XLMRobertaForSequenceClassification`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)..
 - [Text classification](../tasks/sequence_classification) chapter of the 🤗 Hugging Face Task Guides.
 - [Text classification task guide](../tasks/sequence_classification)
 
 <PipelineTag pipeline="token-classification"/>
 
-- [`XLMRobertaForTokenClassification`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb).
+- [`XLMRobertaForTokenClassification`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb).
 - [Token classification](https://huggingface.co/course/chapter7/2?fw=pt) chapter of the 🤗 Hugging Face Course.
 - [Token classification task guide](../tasks/token_classification)
 
 <PipelineTag pipeline="text-generation"/>
 
-- [`XLMRobertaForCausalLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
+- [`XLMRobertaForCausalLM`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
 - [Causal language modeling](../tasks/language_modeling) chapter of the 🤗 Hugging Face Task Guides.
 - [Causal language modeling task guide](../tasks/language_modeling)
 
 <PipelineTag pipeline="fill-mask"/>
 
-- [`XLMRobertaForMaskedLM`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
+- [`XLMRobertaForMaskedLM`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
 - [Masked language modeling](https://huggingface.co/course/chapter7/3?fw=pt) chapter of the 🤗 Hugging Face Course.
 - [Masked language modeling](../tasks/masked_language_modeling)
 
 <PipelineTag pipeline="question-answering"/>
 
-- [`XLMRobertaForQuestionAnswering`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
+- [`XLMRobertaForQuestionAnswering`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb).
 - [Question answering](https://huggingface.co/course/chapter7/7?fw=pt) chapter of the 🤗 Hugging Face Course.
 - [Question answering task guide](../tasks/question_answering)
 
 **Multiple choice**
 
-- [`XLMRobertaForMultipleChoice`] is supported by this [example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
+- [`XLMRobertaForMultipleChoice`] is supported by this [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb).
 - [Multiple choice task guide](../tasks/multiple_choice)
 
 🚀 Deploy

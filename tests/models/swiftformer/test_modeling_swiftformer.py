@@ -264,6 +264,7 @@ class SwiftFormerModelIntegrationTest(unittest.TestCase):
             {
                 (None, None): [[-2.1726, 2.1093, -2.0801]],
                 ("cuda", 8): [[-2.1703, 2.1107, -2.0811]],
+                ("xpu",5): [[-2.1703,  2.1107, -2.0811]]
             }
         ).get_expectation()  # fmt: skip
         expected_slice = torch.tensor(expected_slice).to(torch_device)

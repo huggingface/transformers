@@ -25,6 +25,7 @@ from unittest.mock import patch
 
 import numpy as np
 import pytest
+from parameterized import parameterized
 
 from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat, ImageInput
@@ -778,6 +779,7 @@ class ImageProcessingTestMixin:
             # Test not batched input
             encoded_images = image_processor(
                 image_inputs[0],
+                do_convert_rgb=False,
                 return_tensors="pt",
                 input_data_format="channels_last",
                 image_mean=[0.0, 0.0, 0.0, 0.0],
@@ -789,6 +791,7 @@ class ImageProcessingTestMixin:
             # Test batched
             encoded_images = image_processor(
                 image_inputs,
+                do_convert_rgb=False,
                 return_tensors="pt",
                 input_data_format="channels_last",
                 image_mean=[0.0, 0.0, 0.0, 0.0],
@@ -798,6 +801,40 @@ class ImageProcessingTestMixin:
             self.assertEqual(
                 tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
             )
+
+    @parameterized.expand([1, 3, 4])
+    def test_convert_to_rgb_mixed_input_batch(self, num_channels: int):
+        """
+        Image processor should be able to convert any input image format to RGB (PIL/numpy/torch in any layout).
+        See: https://github.com/huggingface/transformers/pull/49495#discussion_r4256793350
+        """
+        height, width = 40, 100
+
+        np_channels_last = np.random.randint(0, 256, (height, width, num_channels), dtype=np.uint8)
+        np_channels_first = np_channels_last.transpose(2, 0, 1).copy()
+        pil_image = (
+            Image.fromarray(np_channels_last[..., 0]) if num_channels == 1 else Image.fromarray(np_channels_last)
+        )
+
+        image_inputs = [
+            pil_image,
+            np_channels_last,
+            np_channels_first,
+            torch.from_numpy(np_channels_last),
+            torch.from_numpy(np_channels_first),
+        ]
+
+        for image_processing_class in self.image_processing_classes.values():
+            if not hasattr(image_processing_class, "do_convert_rgb"):
+                continue
+            image_processor = image_processing_class(**self.image_processor_dict)
+
+            # every input type / channel count, one image at a time
+            for image in image_inputs:
+                image_processor(image, do_convert_rgb=True, return_tensors="pt")
+
+            # the whole mixed list as a single batch
+            image_processor(image_inputs, do_convert_rgb=True, return_tensors="pt")
 
     def test_image_processor_preprocess_arguments(self):
         is_tested = False

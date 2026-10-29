@@ -46,7 +46,7 @@ def get_constant_schedule(optimizer: Optimizer, last_epoch: int = -1):
         last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
-    Return:
+    Returns:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
@@ -64,7 +64,7 @@ def get_reduce_on_plateau_schedule(optimizer: Optimizer, **kwargs):
             Extra parameters to be passed to the scheduler. See `torch.optim.lr_scheduler.ReduceLROnPlateau`
             for possible parameters.
 
-    Return:
+    Returns:
         `torch.optim.lr_scheduler.ReduceLROnPlateau` with the appropriate schedule.
     """
 
@@ -90,7 +90,7 @@ def get_constant_schedule_with_warmup(optimizer: Optimizer, num_warmup_steps: in
         last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
-    Return:
+    Returns:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
@@ -119,7 +119,7 @@ def get_linear_schedule_with_warmup(optimizer, num_warmup_steps, num_training_st
         last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
-    Return:
+    Returns:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
@@ -161,7 +161,7 @@ def get_cosine_schedule_with_warmup(
         last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
-    Return:
+    Returns:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
@@ -205,7 +205,7 @@ def get_cosine_with_hard_restarts_schedule_with_warmup(
         last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
-    Return:
+    Returns:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
@@ -265,7 +265,7 @@ def get_polynomial_decay_schedule_with_warmup(
     implementation at
     https://github.com/google-research/bert/blob/f39e881b169b9d53bea03d2d341b31707a6c052b/optimization.py#L37
 
-    Return:
+    Returns:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
 
     """
@@ -310,7 +310,7 @@ def get_inverse_sqrt_schedule(
         last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
-    Return:
+    Returns:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
     # Note: this implementation is adapted from
@@ -365,7 +365,7 @@ def get_cosine_with_min_lr_schedule_with_warmup(
         min_lr_rate (`float`, *optional*):
             The minimum learning rate as a ratio of the initial learning rate. If set, `min_lr` should not be set.
 
-    Return:
+    Returns:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
@@ -445,7 +445,7 @@ def get_cosine_with_min_lr_schedule_with_warmup_lr_rate(
         warmup_lr_rate (`float`, *optional*):
             The minimum learning rate as a ratio of the start learning rate. If not set, `warmup_lr_rate` will be treated as float(1/num_warmup_steps).
 
-    Return:
+    Returns:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
@@ -546,7 +546,7 @@ def get_wsd_schedule(
         last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
 
-    Return:
+    Returns:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
 
@@ -935,7 +935,7 @@ def get_greedy_schedule(optimizer: Optimizer, **kwargs):
         kwargs (`dict`, *optional*):
             Extra parameters passed to the scheduler. See [`GreedyLR`] for possible parameters.
 
-    Return:
+    Returns:
         [`GreedyLR`] with the appropriate schedule.
     """
     return GreedyLR(optimizer, **kwargs)
@@ -1334,7 +1334,7 @@ def get_adafactor_schedule(optimizer, initial_lr=0.0):
         initial_lr (`float`, *optional*, defaults to 0.0):
             Initial lr
 
-    Return:
+    Returns:
         [`~optimization.Adafactor`] proxy schedule object.
 
 

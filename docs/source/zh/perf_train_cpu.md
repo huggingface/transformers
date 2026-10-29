@@ -47,39 +47,6 @@ pip install intel_extension_for_pytorch==<version_name> -f https://developer.int
 
 查看更多 [安装IPEX](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/installation.html) 的方法。
 
-
-### 在 Trainer 中使用 IPEX
-在 Trainer 中使用 IPEX 时，您应在训练命令参数中添加 `use_ipex`、`bf16` 或 `fp16` 以及 `no_cuda` 来启用自动混合精度。
-
-以 [Transformers 问答任务](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)为例：
-
-- 在 CPU 上使用 BF16 自动混合精度训练 IPEX 的示例如下：
-<pre> python examples/pytorch/question-answering/run_qa.py \
---model_name_or_path google-bert/bert-base-uncased \
---dataset_name squad \
---do_train \
---do_eval \
---per_device_train_batch_size 12 \
---learning_rate 3e-5 \
---num_train_epochs 2 \
---max_seq_length 384 \
---doc_stride 128 \
---output_dir /tmp/debug_squad/ \
-<b>--use_ipex</b> \
-<b>--bf16</b> \
-<b>--use_cpu</b></pre> 
-
-如果您想在脚本中启用 `use_ipex` 和 `bf16`，请像下面这样将这些参数添加到 `TrainingArguments` 中：
-```diff
-training_args = TrainingArguments(
-    output_dir=args.output_path,
-+   bf16=True,
-+   use_ipex=True,
-+   use_cpu=True,
-    **kwargs
-)
-```
-
 ### 实践示例
 
 博客: [使用 Intel Sapphire Rapids 加速 PyTorch Transformers](https://huggingface.co/blog/intel-sapphire-rapids)

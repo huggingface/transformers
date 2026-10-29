@@ -998,7 +998,7 @@ class SamPreTrainedModel(PreTrainedModel):
     base_model_prefix = "sam"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
-    _no_split_modules = ["SamVisionAttention"]
+    _no_split_modules = ["SamVisionLayer"]
     supports_gradient_checkpointing = True
     _supports_sdpa = True
 

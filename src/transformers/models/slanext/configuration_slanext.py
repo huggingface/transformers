@@ -21,7 +21,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -86,7 +86,7 @@ class SLANeXtConfig(PreTrainedConfig):
 
     model_type = "slanext"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=SLANeXtVisionConfig),
+        "vision_config": SLANeXtVisionConfig,
     }
 
     vision_config: dict | SLANeXtVisionConfig | None = None

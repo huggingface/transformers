@@ -279,7 +279,7 @@ class PPOCRV6SmallDetPreTrainedModel(PreTrainedModel):
     """
 
     config: PPOCRV6SmallDetConfig
-    base_model_prefix = "pp_ocrv6_small_det"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _can_compile_fullgraph = True

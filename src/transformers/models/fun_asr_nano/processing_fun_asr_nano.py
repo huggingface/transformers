@@ -25,7 +25,7 @@ from ...audio_utils import (
     prepare_language_inputs,
 )
 from ...feature_extraction_utils import BatchFeature
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring
 
@@ -47,15 +47,6 @@ LANGUAGE_CODE_TO_NAME = {
     "ja": "日文",
     "japanese": "日文",
 }
-
-
-def _prepare_keyword_inputs(keywords, batch_size: int) -> list[list[str] | None]:
-    """Broadcast / validate the hotword argument to match batch_size."""
-    if isinstance(keywords, str):
-        keywords = [keywords]
-    if isinstance(keywords, list | tuple) and all(isinstance(item, str) for item in keywords):
-        keywords = [list(keywords)] * batch_size
-    return prepare_prompt_input(keywords, batch_size, input_name="keywords")
 
 
 @auto_docstring
@@ -179,7 +170,7 @@ class FunAsrNanoProcessor(ProcessorMixin):
 
         languages = prepare_language_inputs(language, batch_size, LANGUAGE_CODE_TO_NAME, return_code=False)
         prompts = prepare_prompt_input(prompt, batch_size, input_name="prompt")
-        keyword_batches = _prepare_keyword_inputs(keywords, batch_size)
+        keyword_batches = prepare_keyword_inputs(keywords, batch_size)
 
         conversations = []
         for audio_item, prompt_text, keyword_list, language_name in zip(

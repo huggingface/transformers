@@ -113,10 +113,7 @@ class OpenVINOExporter(DynamoExporter):
         elif type(config) is not OpenVINOConfig:
             raise TypeError(f"Expected config to be an OpenVINOConfig or dict, got {type(config)}")
 
-        # ``torch.no_grad()``: with grad enabled, every modeling-internal ``torch.no_grad()``
-        # region (frozen towers, VQ-VAEs) traces as a ``wrap_with_set_grad_enabled``
-        # HigherOrderOp subgraph, which OV's frontend can't lower.
-        with torch.no_grad(), patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("openvino"):
+        with patch_model_outputs(model) as (inputs_names, outputs_names), apply_patches("openvino"):
             exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
 
         exported_program, graph_module = _fix_exported_program(exported_program)
@@ -125,6 +122,11 @@ class OpenVINOExporter(DynamoExporter):
         inputs_names = [name for name in inputs_names if name in get_leaf_tensors(sample_inputs)]
         inputs_names, outputs_names = disambiguate_io_names(inputs_names, outputs_names)
         _rename_model_ports(ov_model, graph_module, inputs_names, outputs_names)
+
+        # Before the state folding, so calibration feeds each sample's cache as an input instead of empty state.
+        quantizer = config.quantizer
+        if quantizer is not None and not quantizer.quantizes_fx_graph:
+            ov_model = quantizer.quantize(ov_model, sample_inputs, config.export_format)
 
         if config.stateful:
             _make_stateful(ov_model, exported_program, graph_module, sample_inputs, inputs_names, outputs_names)
@@ -1344,21 +1346,6 @@ def _patch_feature_vector_attention_mask(original):
         output_lengths = output_lengths.to(torch.long)
         positions = torch.arange(feature_vector_length, device=attention_mask.device)
         return positions.unsqueeze(0) < output_lengths.unsqueeze(1)
-
-    return patch
-
-
-@register_patch("openvino", "torch.empty_permuted")
-def _patch_empty_permuted(original):
-    """Replace ``torch.empty_permuted(size, physical_layout, ...)`` with plain ``torch.empty(size, ...)``.
-
-    OV's frontend has no ``aten.empty_permuted`` lowering. The op exists only to hint a memory
-    layout (stride) — the values are uninitialised either way, and downstream reads see the same
-    logical content. ``torch.empty`` is enough.
-    """
-
-    def patch(size, physical_layout, **kwargs):
-        return torch.empty(size, **kwargs)
 
     return patch
 

@@ -15,7 +15,7 @@
 
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring, logging
 
@@ -89,7 +89,7 @@ class ChameleonConfig(PreTrainedConfig):
 
     model_type = "chameleon"
     sub_configs_defaults = {
-        "vq_config": SubConfigSpec(config_class=ChameleonVQVAEConfig),
+        "vq_config": ChameleonVQVAEConfig,
     }
     keys_to_ignore_at_inference = ["past_key_values"]
 

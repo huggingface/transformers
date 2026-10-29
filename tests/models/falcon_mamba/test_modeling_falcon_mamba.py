@@ -432,6 +432,10 @@ class FalconMambaIntegrationTests(unittest.TestCase):
                     "cuda",
                     (8, 6),
                 ): "Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n",
+                (
+                    "xpu",
+                    5,
+                ): "Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n",
             }
         )
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
@@ -455,6 +459,7 @@ class FalconMambaIntegrationTests(unittest.TestCase):
             {
                 ("cuda", (8, 0)): 'The mount Fuji is a nice mountain in Japan. It is a volcano. It is 3,776 meters high. It is the highest',
                 ("cuda", (8, 6)): 'The mount Fuji is a nice mountain in Japan. It is 3,776 meters high. It is a volcano. It is a very',
+                ("xpu", 5): 'The mount Fuji is a nice mountain in Japan. It is a volcano. It is 3,776 meters high. It is the highest',
             }
         )  # fmt: skip
         EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
@@ -481,6 +486,10 @@ class FalconMambaIntegrationTests(unittest.TestCase):
                 (
                     "cuda",
                     (8, 6),
+                ): "Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n",
+                (
+                    "xpu",
+                    5,
                 ): "Hello today I am going to talk about the “Theory of Relativity” by Albert Einstein.\n",
             }
         )

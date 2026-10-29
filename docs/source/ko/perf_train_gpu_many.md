@@ -114,54 +114,7 @@ DP와 DDP 사이에는 다른 차이점이 있지만, 이 토론과는 관련이
 
 이 2가지 모드를 깊게 이해하고 싶다면, [이 문서](https://www.telesens.co/2019/04/04/distributed-data-parallel-training-using-pytorch-on-aws/)를 강력히 추천합니다. 이 문서는 멋진 다이어그램을 포함하고 있으며, 다양한 하드웨어에서 여러 벤치마크와 프로파일러 출력을 설명하여 필요한 세부 사항을 모두 설명합니다.
 
-실제 벤치마크를 살펴보겠습니다:
-
-| Type   | NVlink | Time |
-| :----- | -----  | ---: |
-| 2:DP   | Y      | 110s |
-| 2:DDP  | Y      | 101s |
-| 2:DDP  | N      | 131s |
-
-
-분석:
-
-여기서 DP는 NVlink가 있는 DDP보다 약 10% 느립니다. 그러나 NVlink가 없는 DDP보다 약 15% 빠릅니다.
-
 실제 차이는 각 GPU가 다른 GPU와 동기화해야 하는 데이터 양에 따라 달라질 것입니다. 동기화할 데이터가 많을수록 느린 링크가 총 실행 시간을 늦출 수 있습니다.
-
-다음은 전체 벤치마크 코드와 출력입니다:
-
-해당 벤치마크에서 `NCCL_P2P_DISABLE=1`을 사용하여 NVLink 기능을 비활성화했습니다.
-
-```bash
-
-# DP
-rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
-python examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
---do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
-
-{'train_runtime': 110.5948, 'train_samples_per_second': 1.808, 'epoch': 0.69}
-
-# DDP w/ NVlink
-rm -r /tmp/test-clm; CUDA_VISIBLE_DEVICES=0,1 \
-torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
---do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
-
-{'train_runtime': 101.9003, 'train_samples_per_second': 1.963, 'epoch': 0.69}
-
-# DDP w/o NVlink
-rm -r /tmp/test-clm; NCCL_P2P_DISABLE=1 CUDA_VISIBLE_DEVICES=0,1 \
-torchrun --nproc_per_node 2 examples/pytorch/language-modeling/run_clm.py \
---model_name_or_path openai-community/gpt2 --dataset_name wikitext --dataset_config_name wikitext-2-raw-v1 \
---do_train --output_dir /tmp/test-clm --per_device_train_batch_size 4 --max_steps 200
-
-{'train_runtime': 131.4367, 'train_samples_per_second': 1.522, 'epoch': 0.69}
-```
-
-하드웨어: 각각 24GB의 TITAN RTX 2개 + NVlink과 2개의 NVLink (`nvidia-smi topo -m`에서 `NV2`입니다.)
-소프트웨어: `pytorch-1.8-to-be` + `cuda-11.0` / `transformers==4.3.0.dev0`
 
 ## ZeRO 데이터 병렬화 [[zero-data-parallelism]]
 

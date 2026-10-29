@@ -36,7 +36,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, torch_compilable_check
 from ...utils.generic import merge_with_config_defaults
@@ -559,7 +559,7 @@ class Molmo2VisionModel(Molmo2PreTrainedModel):
     def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         hidden_states = self.patch_embedding(pixel_values.to(dtype=self.dtype))
         # patch count == num_position_embeddings, locked by config; only retraining with a different grid breaks this.
-        hidden_states = hidden_states + self.positional_embedding[None, :, :].to(hidden_states.dtype)
+        hidden_states = hidden_states + self.positional_embedding[None, :, :].to(hidden_states)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(hidden_states, None, **kwargs)
@@ -850,7 +850,7 @@ class Molmo2Model(Molmo2PreTrainedModel):
             image_features = mm_encoder_outputs["video"].pooler_output
 
         if image_features is not None:
-            image_features = torch.cat(image_features, dim=0)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device)
             # `get_placeholder_mask` returns a [batch, seq, 1] mask; Molmo2 *adds* the image features onto
             # the placeholder-token embeddings (residual), which means we index `inputs_embeds` directly.
             # Boolean indexing does not broadcast, so the mask must be expanded to the hidden dim first.
@@ -1019,8 +1019,8 @@ class Molmo2ForConditionalGeneration(Molmo2PreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

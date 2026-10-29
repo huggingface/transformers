@@ -19,15 +19,22 @@ import torchvision.transforms.v2.functional as tvF
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 from ...video_processing_utils import BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
 class InternVLVideoProcessorInitKwargs(VideosKwargs, total=False):
+    r"""
+    initial_shift (`bool`, `float` or `int`, *optional*, defaults to `True`):
+        The initial shift to apply when sampling frames. If `True`, the shift is set so that frames are sampled from
+        the middle of the video.
+    """
+
     initial_shift: bool | float | int
 
 
+@auto_docstring
 class InternVLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN

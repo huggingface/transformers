@@ -19,7 +19,15 @@ from unittest.mock import patch
 
 from parameterized import parameterized
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config, OPTForCausalLM
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    DeepseekV4Config,
+    FineGrainedFP8Config,
+    OPTForCausalLM,
+)
+from transformers.distributed import DistributedConfig
 from transformers.quantizers.quantizer_finegrained_fp8 import FineGrainedFP8HfQuantizer
 from transformers.testing_utils import (
     get_device_properties,
@@ -73,6 +81,15 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 
         self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
+
+    def test_megamoe_takes_over_the_experts_ep_rule(self):
+        """Mega MoE dispatches inside its kernel, so it replaces the token-dispatch experts rule of the EP plan."""
+        config = DeepseekV4Config()
+        config._experts_implementation = "deepgemm_megamoe"
+        config = FineGrainedFP8HfQuantizer(FineGrainedFP8Config()).update_tp_plan(config)
+        self.assertEqual(config.base_model_ep_plan["layers.*.mlp.experts"], "megamoe_experts")
+        with self.assertRaisesRegex(ValueError, "Mega MoE expert parallelism requires `ep_size=tp_size`"):
+            DistributedConfig(tp_size=1, fsdp_size=8, ep_size=8)._validate_resolved_ep_plan(config.base_model_ep_plan)
 
 
 @slow
@@ -520,3 +537,38 @@ class FP8DeepGEMMMultiDeviceTest(unittest.TestCase):
         _disable_deepgemm_on_multi_device(model)
         self.assertFalse(model.a._deepgemm_disabled)
         self.assertFalse(model.b._deepgemm_disabled)
+
+
+class FP8Ue8m0LoadingTest(unittest.TestCase):
+    @unittest.skipUnless(hasattr(torch, "float8_e8m0fnu"), "needs torch.float8_e8m0fnu")
+    @patch.object(FineGrainedFP8HfQuantizer, "validate_environment", lambda *args, **kwargs: None)
+    def test_float32_scale_container_loads_as_ue8m0(self):
+        # dsv4-flash-base ships power-of-two ue8m0 scales as float32 under `.scale`; they must load as e8m0
+        from safetensors.torch import load_file, save_file
+
+        from transformers import MixtralConfig, MixtralForCausalLM
+
+        config = MixtralConfig(
+            vocab_size=64, hidden_size=128, intermediate_size=128, num_hidden_layers=1, num_attention_heads=4,
+            num_key_value_heads=2, num_local_experts=4, num_experts_per_tok=2,
+        )  # fmt: skip
+        with tempfile.TemporaryDirectory() as tmp:
+            MixtralForCausalLM(config).save_pretrained(f"{tmp}/bf16")
+            quantized = AutoModelForCausalLM.from_pretrained(
+                f"{tmp}/bf16", quantization_config=FineGrainedFP8Config(scale_fmt="ue8m0"), device_map="cpu"
+            )
+            expected = {k: v.float() for k, v in quantized.state_dict().items() if k.endswith("scale_inv")}
+            quantized.save_pretrained(f"{tmp}/fp8")
+            path = f"{tmp}/fp8/model.safetensors"
+            state_dict = {
+                k.replace("proj.weight_scale_inv", "proj.scale"): v.float() if k.endswith("scale_inv") else v
+                for k, v in load_file(path).items()
+            }
+            save_file(state_dict, path, metadata={"format": "pt"})
+
+            loaded = AutoModelForCausalLM.from_pretrained(f"{tmp}/fp8", device_map="cpu")
+        scales = {k: v for k, v in loaded.state_dict().items() if k.endswith("scale_inv")}
+        self.assertEqual(scales.keys(), expected.keys())
+        for name, scale in scales.items():
+            self.assertEqual(scale.dtype, torch.float8_e8m0fnu, name)
+            torch.testing.assert_close(scale.float(), expected[name], rtol=0, atol=0)

@@ -231,6 +231,7 @@ class PPOCRV5MobileRecPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    input_modalities = ("image",)
 
     _can_compile_fullgraph = True
     _supports_attention_backend = True
@@ -238,7 +239,6 @@ class PPOCRV5MobileRecPreTrainedModel(PreTrainedModel):
         "hidden_states": PPOCRV5MobileRecBlock,
     }
     main_input_name = "pixel_values"
-    input_modalities = ("image",)
 
 
 def make_divisible(value: int, divisor: int = 8, min_value: int | None = None) -> int:

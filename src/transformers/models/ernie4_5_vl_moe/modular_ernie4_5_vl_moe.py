@@ -22,7 +22,7 @@ from huggingface_hub.dataclasses import strict
 
 from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...image_processing_backends import PilBackend, TorchvisionBackend
 from ...masking_utils import create_causal_mask
@@ -30,7 +30,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
     TransformersKwargs,
@@ -82,8 +82,6 @@ class Ernie4_5_VLMoeVisionConfig(Qwen2VLVisionConfig):
     model_type = "ernie4_5_vl_moe_vision"
 
     base_model_tp_plan = {
-        "blocks.*.attn.qkv": "colwise",
-        "blocks.*.attn.proj": "rowwise",
         "blocks.*.mlp.fc1": "colwise",
         "blocks.*.mlp.fc2": "rowwise",
     }
@@ -124,12 +122,26 @@ class Ernie4_5_VLMoeTextConfig(Ernie4_5_MoeConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.text_moe.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.text_moe.experts.down_proj": "rowwise",
+        "layers.*.mlp.text_moe.experts": "moe_tp_experts",
+        "layers.*.mlp.vision_moe.experts.gate_up_proj": "packed_colwise",
+        "layers.*.mlp.vision_moe.experts.down_proj": "rowwise",
+        "layers.*.mlp.vision_moe.experts": "moe_tp_experts",
         "layers.*.mlp.shared_experts.gate_proj": "colwise",
         "layers.*.mlp.shared_experts.up_proj": "colwise",
         "layers.*.mlp.shared_experts.down_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_ep_plan = {
+        "layers.*.mlp.text_moe.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.text_moe.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.text_moe.experts": "ep_dispatch_experts",
+        "layers.*.mlp.vision_moe.experts.gate_up_proj": "grouped_gemm",
+        "layers.*.mlp.vision_moe.experts.down_proj": "grouped_gemm",
+        "layers.*.mlp.vision_moe.experts": "ep_dispatch_experts",
     }
     ignore_keys_at_rope_validation = {"mrope_section"}
 
@@ -187,8 +199,8 @@ class Ernie4_5_VLMoeConfig(PreTrainedConfig):
     model_type = "ernie4_5_vl_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Ernie4_5_VLMoeVisionConfig),
-        "text_config": SubConfigSpec(config_class=Ernie4_5_VLMoeTextConfig),
+        "vision_config": Ernie4_5_VLMoeVisionConfig,
+        "text_config": Ernie4_5_VLMoeTextConfig,
     }
 
     text_config: dict | PreTrainedConfig | None = None
@@ -1119,9 +1131,8 @@ class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, Gene
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

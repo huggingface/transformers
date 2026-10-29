@@ -39,7 +39,7 @@ from ...modeling_layers import (
 )
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import merge_with_config_defaults
@@ -285,9 +285,8 @@ def yarn_get_mscale(scale=1, mscale=1):
 def yarn_apply_mscale(rope_parameters, scaling):
     if rope_parameters.get("rope_type", "default") != "default":
         mscale_all_dim = rope_parameters.get("mscale_all_dim", 0)
-        scaling_factor = rope_parameters["factor"]
         if mscale_all_dim:
-            mscale = yarn_get_mscale(scaling_factor, mscale_all_dim)
+            mscale = yarn_get_mscale(rope_parameters["factor"], mscale_all_dim)
             scaling = scaling * mscale * mscale
     return scaling
 
@@ -488,16 +487,12 @@ class AXK1DecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: AXK1Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+        self.self_attn = AXK1Attention(config, layer_idx)
 
-        self.self_attn = AXK1Attention(config=config, layer_idx=layer_idx)
+        self.mlp = AXK1MoE(config) if config.mlp_layer_types[layer_idx] == "sparse" else AXK1MLP(config)
 
-        if layer_idx >= config.first_k_dense_replace:
-            self.mlp = AXK1MoE(config)
-        else:
-            self.mlp = AXK1MLP(config)
-
-        self.input_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = AXK1RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = AXK1RMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = AXK1RMSNorm(config.hidden_size, config.rms_norm_eps)
 
     def forward(
         self,
@@ -698,8 +693,8 @@ class AXK1ForCausalLM(AXK1PreTrainedModel, GenerationMixin):
 
         hidden_states = outputs.last_hidden_state
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

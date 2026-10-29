@@ -113,7 +113,7 @@ class CanaryConfig(PreTrainedConfig):
                 "layerdrop": 0.0,
             },
         ),
-        "decoder_config": SubConfigSpec(config_class=CanaryDecoderConfig),
+        "decoder_config": CanaryDecoderConfig,
     }
 
     encoder_config: dict | PreTrainedConfig | None = None

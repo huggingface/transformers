@@ -583,32 +583,12 @@ bf16은 설정 파일에서 설정하거나 다음 인수를 전달하면 명령
 <hfoptions id="deploy">
 <hfoption id="multi-GPU">
 
-여러 GPU에 DeepSpeed를 배포하려면 `--num_gpus` 매개변수를 추가하세요. 사용 가능한 모든 GPU를 사용하려는 경우 `--num_gpus`를 추가할 필요가 없습니다. 아래 예제에서는 2개의 GPU를 사용합니다.
-
-```bash
-deepspeed --num_gpus=2 examples/pytorch/translation/run_translation.py \
---deepspeed tests/deepspeed/ds_config_zero3.json \
---model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --fp16 \
---do_train --max_train_samples 500 --num_train_epochs 1 \
---dataset_name wmt16 --dataset_config "ro-en" \
---source_lang en --target_lang ro
-```
+여러 GPU에 DeepSpeed를 배포하려면 `--num_gpus` 매개변수를 추가하세요. 사용 가능한 모든 GPU를 사용하려는 경우 `--num_gpus`를 추가할 필요가 없습니다.
 
 </hfoption>
 <hfoption id="single-GPU">
 
 단일 GPU에 DeepSpeed를 배포하려면 `--num_gpus` 매개변수를 추가하세요. GPU가 1개만 있는 경우 이 값을 명시적으로 설정할 필요는 없습니다. DeepSpeed는 지정된 노드에서 볼 수 있는 모든 GPU를 배포하므로 이 값을 명시적으로 설정할 필요는 없습니다.
-
-```bash
-deepspeed --num_gpus=1 examples/pytorch/translation/run_translation.py \
---deepspeed tests/deepspeed/ds_config_zero2.json \
---model_name_or_path google-t5/t5-small --per_device_train_batch_size 1 \
---output_dir output_dir --fp16 \
---do_train --max_train_samples 500 --num_train_epochs 1 \
---dataset_name wmt16 --dataset_config "ro-en" \
---source_lang en --target_lang ro
-```
 
 DeepSpeed는 단 하나의 GPU로도 여전히 유용합니다:
 
@@ -787,22 +767,9 @@ cat <<'EOT' > ds_config_zero3.json
 EOT
 ```
 
-트레이닝 스크립트가 노트북 셀이 아닌 파일에 있는 경우, 노트북 셀의 셸에서 `deepspeed`를 정상적으로 실행할 수 있습니다. 예를 들어 `run_translation.py`를 시작하려면 다음과 같이 하세요.:
-
-```py
-!git clone https://github.com/huggingface/transformers
-!cd transformers; deepspeed examples/pytorch/translation/run_translation.py ...
-```
+트레이닝 스크립트가 노트북 셀이 아닌 파일에 있는 경우, 노트북 셀의 셸에서 `deepspeed`를 정상적으로 실행할 수 있습니다.
 
 또한 `%%bash` 매직을 사용하여 여러 줄의 코드를 작성하여 셸 프로그램을 실행할 수도 있지만 교육이 완료될 때까지 로그를 볼 수 없습니다. `%%bash` 매직으로 분산 환경을 에뮬레이션할 필요는 없습니다.
-
-```py
-%%bash
-
-git clone https://github.com/huggingface/transformers
-cd transformers
-deepspeed examples/pytorch/translation/run_translation.py ...
-```
 
 ## 모델 가중치 저장하기[[save-model-weights]]
 

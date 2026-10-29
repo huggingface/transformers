@@ -16,6 +16,7 @@
 import logging as stdlib_logging
 import math
 import unittest
+import warnings
 
 from parameterized import parameterized
 
@@ -38,6 +39,28 @@ if is_torch_available():
 
 @require_torch
 class RopeTest(unittest.TestCase):
+    def test_rope_scaling_setter_is_deprecated(self):
+        config = LlamaConfig(rope_theta=500000.0)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config.rope_scaling = {
+                "type": "yarn",
+                "factor": 4.0,
+                "rope_theta": 500000.0,
+                "original_max_position_embeddings": 4096,
+            }
+        self.assertTrue(any(issubclass(w.category, FutureWarning) for w in caught))
+        self.assertEqual(config.rope_parameters["rope_type"], "yarn")
+        LlamaRotaryEmbedding(config)
+
+    def test_rope_scaling_setter_accepts_none(self):
+        config = LlamaConfig(rope_theta=500000.0)
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            config.rope_scaling = None
+        self.assertTrue(any(issubclass(w.category, FutureWarning) for w in caught))
+        self.assertIsNone(config.rope_parameters)
+
     def get_config_with_rope_parameters(
         self, rope_params: dict, is_nested: bool = False, same_rope_per_layer: bool = False
     ):

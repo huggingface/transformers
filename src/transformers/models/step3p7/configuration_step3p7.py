@@ -20,7 +20,7 @@
 # limitations under the License.
 from huggingface_hub.dataclasses import strict
 
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import auto_docstring
 
@@ -315,8 +315,8 @@ class Step3p7TextConfig(PreTrainedConfig):
 class Step3p7Config(PreTrainedConfig):
     model_type = "step3p7"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=Step3p7VisionConfig),
-        "text_config": SubConfigSpec(config_class=Step3p7TextConfig),
+        "vision_config": Step3p7VisionConfig,
+        "text_config": Step3p7TextConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None

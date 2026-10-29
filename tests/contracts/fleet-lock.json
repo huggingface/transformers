@@ -1,0 +1,151 @@
+{
+  "comment": "Pinned consolidated MIC snapshots in huggingface-mic/<name>-mic. Usage and framework expectations are in each immutable Hub snapshot. Stable fixture target names retain baseline identities. Run: run-model-contracts --fixtures-only --lock tests/contracts/fleet-lock.json",
+  "framework": "transformers",
+  "contracts": {
+    "SmolLM": {
+      "integration": {
+        "repo": "huggingface-mic/smollm-mic",
+        "revision": "39a8a2e580277c904e7d9737302b408d168e8efb",
+        "files_sha256": "fe4674584d161b963cc40d293e9086851f1e33ced8ef1de5d37005d57b5a402a"
+      },
+      "fixtures": {
+        "huggingface-mic/smollm-mic": {
+          "revision": "39a8a2e580277c904e7d9737302b408d168e8efb",
+          "files_sha256": "8562493b1bb64ef7fd81ceb10b47e69aa135afe9ea31385d2b3dfaaf92ba330d",
+          "target": "mic-SmolLM-slim"
+        },
+        "huggingface-mic/smollm-1.7b-mic": {
+          "revision": "fc0e707f0977de7e4095792e1b56203e3af7b5c6",
+          "files_sha256": "d6cb7aae64669f6d15ed9cbc6004396e3c12e1a9c7b2d6b41b5e1c70ca61c48b",
+          "target": "mic-SmolLM-1.7B-slim"
+        }
+      },
+      "checkpoints": {
+        "HuggingFaceTB/SmolLM-135M": "1d461723eec654e65efdc40cf49301c89c0c92f4",
+        "HuggingFaceTB/SmolLM-360M": "59f7ef243ee09a72cbc14cb054393a3e3b771d41",
+        "HuggingFaceTB/SmolLM-1.7B": "d7449ff7241c863f3e8accc475155f0f97afa011"
+      }
+    },
+    "CLIP": {
+      "integration": {
+        "repo": "huggingface-mic/clip-vit-base-patch32-mic",
+        "revision": "5eb92c4457ab608437d2a495fbed71df19740da8",
+        "files_sha256": "068ddc0b5c80c8779e81e570107adb30a63828f69541afe0932d0df737b99fe5"
+      },
+      "fixtures": {
+        "huggingface-mic/clip-vit-base-patch32-mic": {
+          "revision": "5eb92c4457ab608437d2a495fbed71df19740da8",
+          "files_sha256": "e72402276836e7b27c96687600cde8e3612a82e7b6e9d69a0523626816f99e1d",
+          "target": "mic-clip-vit-base-patch32-slim"
+        }
+      },
+      "checkpoints": {
+        "openai/clip-vit-base-patch32": "3d74acf9a28c67741b2f4f2ea7635f0aaf6f0268"
+      }
+    },
+    "BERT": {
+      "integration": {
+        "repo": "huggingface-mic/bert-base-uncased-mic",
+        "revision": "faa5f7a24350db87b0b9992eab1e07ad01032c70",
+        "files_sha256": "8f62027b0db7f38c367d906cc2cc599308ca7e3e7a47ef8dbce79033a0a978b6"
+      },
+      "fixtures": {
+        "huggingface-mic/bert-base-uncased-mic": {
+          "revision": "faa5f7a24350db87b0b9992eab1e07ad01032c70",
+          "files_sha256": "10e7f1627bf4615e202df67f40abbeb5070a88fd9741a257fbf71dee21daf16f",
+          "target": "mic-bert-base-uncased-slim"
+        }
+      },
+      "checkpoints": {
+        "google-bert/bert-base-uncased": "86b5e0934494bd15c9632b12f734a8a67f723594"
+      }
+    },
+    "T5": {
+      "integration": {
+        "repo": "huggingface-mic/t5-small-mic",
+        "revision": "4a35f4f7e20ff5839f0de0050b928cb8f8e360c1",
+        "files_sha256": "2db49b1a3dd135901892fda6f18585d00bc9160f8d953a803de0de83bcece2e9"
+      },
+      "fixtures": {
+        "huggingface-mic/t5-small-mic": {
+          "revision": "4a35f4f7e20ff5839f0de0050b928cb8f8e360c1",
+          "files_sha256": "530a553b936f1a6c0a68b8e394e30319fd0ae38dc76718fe55c47212d053f8a6",
+          "target": "mic-t5-small-slim"
+        },
+        "huggingface-mic/umt5-small-mic": {
+          "revision": "d19f49ff5f24f97a285fe1a11ef9ffbd67097f67",
+          "files_sha256": "91a8c18974956cfd1e6e08cb6ec8f056b10d12ada1a3e8d35acee48a995634ac",
+          "target": "mic-umt5-small-slim"
+        }
+      },
+      "checkpoints": {
+        "google-t5/t5-small": "df1b051c49625cf57a3d0d8d3863ed4d13564fe4",
+        "google/umt5-small": "8c63c2b77efbf8e41206a2c8d994846cc9392360"
+      }
+    },
+    "Whisper": {
+      "integration": {
+        "repo": "huggingface-mic/whisper-tiny-mic",
+        "revision": "974f2748e2a6dc5744e89efbcfa96b9a1b1eceda",
+        "files_sha256": "8e5fcc36121354232238e0f8df35db9751ff6d58eb5784d549960cb5f78ea564"
+      },
+      "fixtures": {
+        "huggingface-mic/whisper-tiny-mic": {
+          "revision": "974f2748e2a6dc5744e89efbcfa96b9a1b1eceda",
+          "files_sha256": "71e6e2a43065192dd2d535faaf16d2ed5bd2a6d6d7b8e66ef8388a159511ec9f",
+          "target": "mic-whisper-tiny-slim"
+        }
+      },
+      "checkpoints": {
+        "openai/whisper-tiny": "169d4a4341b33bc18d8881c4b69c2e104e1cc0af"
+      }
+    },
+    "Wav2Vec2": {
+      "integration": {
+        "repo": "huggingface-mic/wav2vec2-base-960h-mic",
+        "revision": "d77fbf722169d5fbf4c740afc55cef80600e031f",
+        "files_sha256": "600d344a61da970d76c09012059203e5ca6dc2de4b8814613f119b956ada256d"
+      },
+      "fixtures": {
+        "huggingface-mic/wav2vec2-base-960h-mic": {
+          "revision": "d77fbf722169d5fbf4c740afc55cef80600e031f",
+          "files_sha256": "5522f324c0e8bd3e70aa54a57318e4d5016c46df7709120dfb632423f4221c2f",
+          "target": "mic-wav2vec2-base-960h-slim"
+        }
+      },
+      "checkpoints": {
+        "facebook/wav2vec2-base-960h": "22aad52d435eb6dbaf354bdad9b0da84ce7d6156"
+      }
+    }
+  },
+  "environment": {
+    "python": "3.10",
+    "torch": "2.11.0",
+    "torchvision": "0.26.0",
+    "torchaudio": "2.11.0",
+    "tokenizers": "0.23.1",
+    "numpy": "1.26.4",
+    "pillow": "12.2.0",
+    "accelerate": "1.13.0",
+    "safetensors": "0.8.0",
+    "huggingface-hub": "1.32.0",
+    "sentencepiece": "0.2.1",
+    "protobuf": "6.33.6",
+    "librosa": "0.11.0",
+    "soundfile": "0.13.1",
+    "scipy": "1.15.3"
+  },
+  "known_failures": {
+    "Wav2Vec2/mic-wav2vec2-base-960h-slim": {
+      "issue": "https://github.com/huggingface/transformers/issues/49385: masked_spec_embed uninitialized, so the SpecAugment loss and gradients are undefined (fix #49386)",
+      "skip_outputs": [
+        "training.gradients",
+        "training.loss"
+      ]
+    },
+    "Whisper/mic-whisper-tiny-slim": {
+      "issue": "https://github.com/huggingface/transformers/issues/49456",
+      "match": "You have modified the pretrained model configuration"
+    }
+  }
+}

@@ -35,7 +35,7 @@ BLOOM を使い始めるのに役立つ公式 Hugging Face およびコミュニ
 
 <PipelineTag pipeline="text-generation"/>
 
-- [`BloomForCausalLM`] これによってサポートされています [causal language modeling example script](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#gpt-2gpt-and-causal-language-modeling) and [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
+- [`BloomForCausalLM`] これによってサポートされています [notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb).
 
 以下も参照してください。
 - [因果言語モデリング タスク ガイド](../tasks/language_modeling)

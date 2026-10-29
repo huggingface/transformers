@@ -599,6 +599,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_GENERATIONS = Expectations(
             {
                 (None, None): "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, providing a rustic and warm setting for the photograph.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with snow",
+                ("rocm", (9, 4)): "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, giving a rustic and cozy feel to the image.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with",
                 ("cuda", 8): "Describe the images.\nThe first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of planks, giving a rustic and cozy feel to the image.\n\nThe second image depicts a scenic mountain landscape. The view is from a high vantage point, looking down at a rugged terrain with rocky outcrops and patches of green vegetation. The mountains in the distance are covered with",
             }
         )  # fmt: skip
@@ -636,6 +637,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             {
                 ("cuda", 8): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a puppy,",
                 ("rocm", (9, 5)): "Describe the images.The image features a dog positioned centrally, taking up a significant portion of the frame. The dog is situated against a backdrop of rugged terrain, which includes rocky cliffs and grassy slopes. The dog appears to be in a relaxed posture, possibly looking directly",
+                ("xpu", 5): "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of wooden planks, which cover the entire background. The dog appears to be a puppy,",
             }
         )  # fmt: skip
         EXPECTED_GENERATION = EXPECTED_GENERATIONS.get_expectation()

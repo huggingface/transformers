@@ -100,40 +100,38 @@ BERT를 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 - [다중 레이블 텍스트 분류를 위한 BERT (및 관련 모델) 미세 조정](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/BERT/Fine_tuning_BERT_(and_friends)_for_multi_label_text_classification.ipynb)에 대한 노트북.
 - [PyTorch를 이용해 BERT를 다중 레이블 분류를 위해 미세 조정하는 방법](htt기ps://colab.research.google.com/github/abhimishra91/transformers-tutorials/blob/master/transformers_multi_label_classification.ipynb)에 대한 노트북. 🌎
 - [BERT로 EncoderDecoder 모델을 warm-start하여 요약하기](https://colab.research.google.com/github/patrickvonplaten/notebooks/blob/master/BERT2BERT_for_CNN_Dailymail.ipynb)에 대한 노트북.
-- [`BertForSequenceClassification`]이  [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)에서 지원됩니다.
-- [`TFBertForSequenceClassification`]이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/text-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb)에서 지원됩니다.
-- [`FlaxBertForSequenceClassification`]이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/text-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb)에서 지원됩니다.
+- [`BertForSequenceClassification`]이  [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification.ipynb)에서 지원됩니다.
+- [`TFBertForSequenceClassification`]이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb)에서 지원됩니다.
+- [`FlaxBertForSequenceClassification`]이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification_flax.ipynb)에서 지원됩니다.
 - [텍스트 분류 작업 가이드](../tasks/sequence_classification)
 
 <PipelineTag pipeline="token-classification"/>
 
 - [Keras와 함께 Hugging Face Transformers를 사용하여 비영리 BERT를 개체명 인식(NER)용으로 미세 조정하는 방법](https://www.philschmid.de/huggingface-transformers-keras-tf)에 대한 블로그 포스트.
 - [BERT를 개체명 인식을 위해 미세 조정하기](https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/BERT/Custom_Named_Entity_Recognition_with_BERT_only_first_wordpiece.ipynb)에 대한 노트북. 각 단어의 첫 번째 wordpiece에만 레이블을 지정하여 학습하는 방법을 설명합니다. 모든 wordpiece에 레이블을 전파하는 방법은 [이 버전](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/BERT/Custom_Named_Entity_Recognition_with_BERT.ipynb)에서 확인할 수 있습니다.
-- [`BertForTokenClassification`]이  [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/token-classification)와  [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)에서 지원됩니다.
-- [`TFBertForTokenClassification`]이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/token-classification)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)에서 지원됩니다.
-- [`FlaxBertForTokenClassification`]이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/token-classification)에서 지원됩니다.
+- [`BertForTokenClassification`]이  [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)에서 지원됩니다.
+- [`TFBertForTokenClassification`]이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)에서 지원됩니다.
 - 🤗 Hugging Face 코스의 [토큰 분류 챕터](https://huggingface.co/course/chapter7/2?fw=pt).
 - [토큰 분류 작업 가이드](../tasks/token_classification)
 
 <PipelineTag pipeline="fill-mask"/>
 
-- [`BertForMaskedLM`]이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/language-modeling#robertabertdistilbert-and-masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)에서 지원됩니다.
-- [`TFBertForMaskedLM`]이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/language-modeling#run_mlmpy) 와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)에서 지원됩니다.
-- [`FlaxBertForMaskedLM`]이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling#masked-language-modeling)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)에서 지원됩니다.
+- [`BertForMaskedLM`]이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling.ipynb)에서 지원됩니다.
+- [`TFBertForMaskedLM`]이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb)에서 지원됩니다.
+- [`FlaxBertForMaskedLM`]이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/masked_language_modeling_flax.ipynb)에서 지원됩니다.
 - 🤗 Hugging Face 코스의 [마스킹된 언어 모델링 챕터](https://huggingface.co/course/chapter7/3?fw=pt).
 - [마스킹된 언어 모델링 작업 가이드](../tasks/masked_language_modeling)
 
 <PipelineTag pipeline="question-answering"/>
 
-- [`BertForQuestionAnswering`]이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/question-answering)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)에서 지원됩니다.
-- [`TFBertForQuestionAnswering`]이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/question-answering) 와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)에서 지원됩니다.
-- [`FlaxBertForQuestionAnswering`]이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/flax/question-answering)에서 지원됩니다.
+- [`BertForQuestionAnswering`]이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering.ipynb)에서 지원됩니다.
+- [`TFBertForQuestionAnswering`]이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb)에서 지원됩니다.
 - 🤗 Hugging Face 코스의 [질문 답변 챕터](https://huggingface.co/course/chapter7/7?fw=pt).
 - [질문 답변 작업 가이드](../tasks/question_answering)
 
 **다중 선택**
-- [`BertForMultipleChoice`]이 [예제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/multiple-choice)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)에서 지원됩니다.
-- [`TFBertForMultipleChoice`]이 [에제 스크립트](https://github.com/huggingface/transformers/tree/main/examples/tensorflow/multiple-choice)와 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb)에서 지원됩니다.
+- [`BertForMultipleChoice`]이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice.ipynb)에서 지원됩니다.
+- [`TFBertForMultipleChoice`]이 [노트북](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/multiple_choice-tf.ipynb)에서 지원됩니다.
 - [다중 선택 작업 가이드](../tasks/multiple_choice)
 
 ⚡️ **추론**

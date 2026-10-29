@@ -177,7 +177,6 @@ CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 
 - [원격 센싱 (인공위성) 이미지와 캡션을 가지고 CLIP 미세조정하기](https://huggingface.co/blog/fine-tune-clip-rsicd):
 [RSICD dataset](https://github.com/201528014227051/RSICD_optimal)을 가지고 CLIP을 미세조정 하는 방법과 데이터 증강에 대한 성능 비교에 대한 블로그 포스트
-- 이 [예시 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/contrastive-image-text)는 [COCO dataset](https://cocodataset.org/#home)를 이용한 사전학습된 비전과 텍스트와 인코더를 사용해서 CLIP같은 비전-텍스트 듀얼 모델을 어떻게 학습시키는지 보여줍니다.
 
 <PipelineTag pipeline="image-to-text"/>
 

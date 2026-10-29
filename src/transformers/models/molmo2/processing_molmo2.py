@@ -19,7 +19,7 @@
 # limitations under the License.
 
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
@@ -28,44 +28,9 @@ from ...video_utils import VideoInput
 logger = logging.get_logger(__name__)
 
 
-class Molmo2ImagesKwargs(ImagesKwargs, total=False):
-    """
-    max_crops (`int`, *optional*, defaults to 8):
-        Maximum number of crops to use per image.
-    overlap_margins (`list[int]`, *optional*, defaults to `[4, 4]`):
-        Overlap margins (in patches) for overlapping crop extraction.
-    patch_size (`int`, *optional*, defaults to 14):
-        The spatial patch size of the vision encoder.
-    pooling_size (`list[int]`, *optional*, defaults to `[2, 2]`):
-        The pooling size of the vision adapter.
-    """
-
-    max_crops: int
-    overlap_margins: list[int]
-    patch_size: int
-    pooling_size: list[int]
-
-
-class Molmo2VideosKwargs(VideosKwargs, total=False):
-    """
-    patch_size (`int`, *optional*):
-        Side length in pixels of each ViT patch for video frames.
-    pooling_size (`list[int]`, *optional*):
-        `[pool_h, pool_w]` pooling window applied to video patch features.
-    max_fps (`int`, *optional*):
-        Maximum sampling rate in frames per second for short videos.
-    """
-
-    patch_size: int
-    pooling_size: list[int]
-    max_fps: int
-
-
 class Molmo2ProcessorKwargs(ProcessingKwargs, total=False):
     """Molmo2 processor kwargs"""
 
-    images_kwargs: Molmo2ImagesKwargs
-    videos_kwargs: Molmo2VideosKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -218,8 +183,7 @@ class Molmo2Processor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = Molmo2ProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(self.valid_processor_kwargs, **kwargs)["images_kwargs"]
 
             num_image_tokens, num_image_patches = [], []
             for image_size in image_sizes:

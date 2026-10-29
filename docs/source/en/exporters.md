@@ -821,6 +821,12 @@ for (int64_t position = prompt_len; position < max_cache_len; ++position) {
 
 </details>
 
+## Quantization
+
+Every export config takes a `quantizer` that quantizes the model during the export, on the `torch.export` FX graph
+(PT2E or NNCF, for every backend) or on the converted ONNX or OpenVINO model (ONNX Runtime or NNCF). See
+[Quantizing exports](./exporters_quantization) for the quantizers, their backends, calibration, and how to add one.
+
 ## Limitations and workarounds
 
 `torch.export`, `torch.onnx.export`, and ExecuTorch each have rough edges around specific
@@ -839,3 +845,4 @@ For `ExecutorchExporter` with either XNNPACK or MLX, the exporter swaps MoE expe
 
 - Add export support for a new architecture or backend with the patch and fix registries in
 [Extending the exporters](./exporters_extend).
+- Quantize an export, or add a quantizer, in [Quantizing exports](./exporters_quantization).

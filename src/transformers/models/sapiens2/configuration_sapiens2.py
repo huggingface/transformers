@@ -19,7 +19,7 @@
 from huggingface_hub.dataclasses import strict
 
 from ...backbone_utils import BackboneConfigMixin
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...utils import auto_docstring
 
 
@@ -207,7 +207,7 @@ class Sapiens2Config(BackboneConfigMixin, PreTrainedConfig):
     _out_indices: list[int] | None = None
     reshape_hidden_states: bool = True
     sub_configs_defaults = {
-        "head_config": SubConfigSpec(config_class=Sapiens2HeadConfig),
+        "head_config": Sapiens2HeadConfig,
     }
     use_mask_token: bool = False
     rms_norm_eps: float = 1e-6

@@ -194,7 +194,8 @@ class BenchmarkResults:
     def cleanup(self) -> None:
         torch.cuda.empty_cache()
         gc.collect()
-        torch.cuda.reset_peak_memory_stats()
+        if torch.cuda.is_available():
+            torch.cuda.reset_peak_memory_stats()
 
     def _get_model(self) -> Any:
         self.cleanup()
