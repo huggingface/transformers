@@ -238,7 +238,7 @@ class DummyLayer:
     def batch_repeat_interleave(self, repeats: int): ...
     def batch_select_indices(self, indices: torch.Tensor): ...
 
-    # These methods should never be called by construction, but they were here to make ty happy and errors readable
+    # These methods should never be called by construction, but they are here to make ty happy and errors readable
     def prefetch(self):
         raise NotImplementedError("Dummy layer don't store cache: they cannot be prefetched.")
 
