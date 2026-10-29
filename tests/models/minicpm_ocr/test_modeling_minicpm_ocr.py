@@ -323,6 +323,7 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
         expected_slice = Expectations(
             {
                 ("cuda", (8, 0)): [2.765625, 6.0, 0.61328125, 4.8125, 2.0, -2.796875, 3.59375, 3.71875],
+                ("cuda", (8, 6)): [-2.2031, 7.5312, -3.4062, 1.7188, 0.1611, -1.9844, 5.2812, 0.5781],
             }
         ).get_expectation()
         torch.testing.assert_close(
@@ -373,6 +374,9 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
                 ("cuda", (8, 0)): (
                     "This is a **Tibet Wildcat** (*Lynx rufus dovondo*).\n\n### Key Features:\n- **Morph"
                 ),
+                ("cuda", (8, 6)): (
+                    "This is a **Panterta** (*Panterta panterta*).\n\nIt is a small, wild cat native to the Mongolian step"
+                ),
             }
         ).get_expectation()
         self.assertEqual(decoded_text, expected_text)
@@ -417,6 +421,9 @@ class MiniCPMOcrIntegrationTest(MemoryCleanupMixin, unittest.TestCase):
             {
                 ("cuda", (8, 0)): (
                     "This is a **Tibet Wildcat** (*Lynx rufus dovondo*).\n\n### Key Features:\n- **Morph"
+                ),
+                ("cuda", (8, 6)): (
+                    "This is a **Panterta** (*Panterta panterta*).\n\nIt is a small, wild cat native to the Mongolian step"
                 ),
             }
         ).get_expectation()
