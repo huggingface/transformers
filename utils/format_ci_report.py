@@ -159,6 +159,9 @@ def format_report(data):
         if same_error:
             lines.append(f"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;**Same error ({same_error_count}):**")
             lines.append("")
+            # TODO: if main is heavily broken, a very large same_error list could push the comment
+            # body toward GitHub's 65536-char limit, causing the comment update to fail. This is
+            # unlikely in practice but a hard cap on listed entries would fully bound the risk.
             if same_error_count <= 10:
                 lines.extend(format_entries_by_model(same_error, model_indent=8, test_indent=12))
             else:
