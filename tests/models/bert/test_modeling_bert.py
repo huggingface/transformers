@@ -23,6 +23,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_fast_integration_common import FastIntegrationTestMixin
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -580,3 +581,11 @@ class BertModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor([[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]])
 
         torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
+
+
+@require_torch
+class BertFastIntegrationTest(FastIntegrationTestMixin, unittest.TestCase):
+    model_id = "hf-tiny-v2/tiny-random-BertForMaskedLM"
+    all_model_classes = (BertForMaskedLM,) if is_torch_available() else ()
+    input_modalities = ("text",)
+    # BertForMaskedLM is encoder-only — can_generate() is False → test_fast_generate auto-skipped
