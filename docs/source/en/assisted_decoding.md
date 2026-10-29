@@ -279,3 +279,30 @@ This requires candidate logits from the assistant model and is not supported wit
 ## Resources
 
 - Read the [Assisted Generation: a new direction toward low-latency text generation](https://huggingface.co/blog/assisted-generation) blog post for more context about text generation latency and assisted generation.
+
+### Draft acceptance metrics
+
+Assisted decoding can optionally report draft acceptance statistics for one generation call.
+Set `output_assistant_metrics=True` on a `GenerationConfig` and request a structured output.
+No statistics are collected by default.
+
+```python
+from copy import deepcopy
+
+config = deepcopy(model.generation_config)
+config.return_dict_in_generate = True
+config.output_assistant_metrics = True
+output = model.generate(**inputs, assistant_model=assistant_model, generation_config=config)
+print(output.assistant_metrics)
+```
+
+`assistant_metrics` includes the total proposed draft tokens, committed draft tokens,
+verification rounds, emitted tokens, acceptance rate, mean emitted tokens per round,
+and a histogram of committed draft tokens per verification round. Acceptance rate is
+`accepted_draft_tokens / proposed_draft_tokens`, or zero if no drafts were proposed.
+A generated replacement or bonus token is not an accepted draft. An accepted EOS token
+is counted even when truncation removes the following bonus token. Drafts discarded
+because of the generation length limit are not counted as committed.
+
+This reports token acceptance, not latency or a guaranteed speedup. When the option is
+disabled (or ordinary generation is used), the output does not include these metrics.
