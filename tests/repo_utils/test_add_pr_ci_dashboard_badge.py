@@ -22,8 +22,8 @@ from unittest.mock import Mock, mock_open, patch
 git_repo_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 sys.path.append(os.path.join(git_repo_path, "utils"))
 
-import update_pr_ci_dashboard_recap as recap_mod  # noqa: E402
-from update_pr_ci_dashboard_recap import (  # noqa: E402
+import add_pr_ci_dashboard_badge as badge_mod  # noqa: E402
+from add_pr_ci_dashboard_badge import (  # noqa: E402
     BADGE_END,
     BADGE_START,
     RECAP_END,
@@ -46,7 +46,7 @@ class RenderBadgeTest(unittest.TestCase):
             badge = render_ci_badge(url)
             self.assertEqual(
                 badge,
-                f"{BADGE_START}\n[![🤗 Transformers CI]({recap_mod.BADGE_URL})]({url})\n{BADGE_END}",
+                f"{BADGE_START}\n[![🤗 Transformers CI]({badge_mod.BADGE_URL})]({url})\n{BADGE_END}",
             )
             self.assertNotIn("event=", badge)
             self.assertNotIn("/badge/pr", badge)
@@ -78,14 +78,14 @@ class BadgeUpdateTest(unittest.TestCase):
             ),
             patch("builtins.open", mock_open(read_data=json.dumps(event))),
             patch.multiple(
-                recap_mod,
+                badge_mod,
                 find_open_pr_for_sha=Mock(return_value=pr),
                 delete_old_dashboard_comments=Mock(),
                 delete_recap_comments=Mock(),
                 github_request=request,
             ),
         ):
-            recap_mod.main()
+            badge_mod.main()
         return request
 
     def test_opened_and_reopened_prs_use_current_description_without_waiting_for_ci(self):
@@ -106,7 +106,7 @@ class BadgeUpdateTest(unittest.TestCase):
                 self.assertNotIn("Outdated description", body)
 
     def test_open_event_does_not_rewrite_an_existing_badge(self):
-        badge = render_ci_badge(f"{recap_mod.DASHBOARD_URL}?var-pr=123")
+        badge = render_ci_badge(f"{badge_mod.DASHBOARD_URL}?var-pr=123")
         request = self.run_main(f"{badge}\n\nDescription", event={"pull_request": {"number": 123}})
         request.assert_called_once_with("https://api.github.com/repos/test/repo/pulls/123", token="test")
 
@@ -124,7 +124,7 @@ class BadgeUpdateTest(unittest.TestCase):
         self.assertTrue(body.endswith("Description"))
 
     def test_does_not_rewrite_an_unchanged_header(self):
-        badge = render_ci_badge(f"{recap_mod.DASHBOARD_URL}?var-pr=123")
+        badge = render_ci_badge(f"{badge_mod.DASHBOARD_URL}?var-pr=123")
         request = self.run_main(f"{badge}\n\nDescription")
         request.assert_not_called()
 
@@ -194,24 +194,24 @@ class InjectBadgeTest(unittest.TestCase):
 class GithubPaginateTest(unittest.TestCase):
     def test_stops_on_short_page(self):
         page = [{"i": n} for n in range(100)]
-        with patch.object(recap_mod, "github_request", side_effect=[page, [{"i": 100}]]) as mocked:
+        with patch.object(badge_mod, "github_request", side_effect=[page, [{"i": 100}]]) as mocked:
             items = github_paginate("/repos/x/y/pulls", token="t")
         self.assertEqual(len(items), 101)
         self.assertEqual(mocked.call_count, 2)
 
     def test_stops_on_empty_first_page(self):
-        with patch.object(recap_mod, "github_request", return_value=[]) as mocked:
+        with patch.object(badge_mod, "github_request", return_value=[]) as mocked:
             items = github_paginate("/repos/x/y/pulls", token="t")
         self.assertEqual(items, [])
         self.assertEqual(mocked.call_count, 1)
 
     def test_extracts_keyed_payload(self):
-        with patch.object(recap_mod, "github_request", return_value={"jobs": [{"name": "a"}]}):
+        with patch.object(badge_mod, "github_request", return_value={"jobs": [{"name": "a"}]}):
             items = github_paginate("/repos/x/y/actions/runs/1/jobs", token="t", key="jobs")
         self.assertEqual(items, [{"name": "a"}])
 
     def test_builds_query_separator_when_path_has_query(self):
-        with patch.object(recap_mod, "github_request", return_value=[]) as mocked:
+        with patch.object(badge_mod, "github_request", return_value=[]) as mocked:
             github_paginate("/repos/x/y/pulls?state=open", token="t")
         url = mocked.call_args.args[0]
         self.assertIn("?state=open&per_page=100&page=1", url)
@@ -223,25 +223,25 @@ class FindOpenPrTest(unittest.TestCase):
             {"number": 1, "head": {"sha": "aaa"}},
             {"number": 2, "head": {"sha": "bbb"}},
         ]
-        with patch.object(recap_mod, "github_paginate", return_value=prs):
+        with patch.object(badge_mod, "github_paginate", return_value=prs):
             self.assertEqual(find_open_pr_for_sha("x/y", "t", "bbb")["number"], 2)
 
     def test_returns_none_when_no_match(self):
-        with patch.object(recap_mod, "github_paginate", return_value=[{"number": 1, "head": {"sha": "aaa"}}]):
+        with patch.object(badge_mod, "github_paginate", return_value=[{"number": 1, "head": {"sha": "aaa"}}]):
             self.assertIsNone(find_open_pr_for_sha("x/y", "t", "zzz"))
 
 
 class DeleteOldCommentsTest(unittest.TestCase):
     def test_deletes_only_dashboard_comments(self):
-        marker = recap_mod.OLD_DASHBOARD_COMMENT_MARKERS[0]
+        marker = badge_mod.OLD_DASHBOARD_COMMENT_MARKERS[0]
         comments = [
             {"id": 1, "body": f"hello {marker} there"},
             {"id": 2, "body": "an unrelated comment"},
             {"id": 3, "body": None},
         ]
         with (
-            patch.object(recap_mod, "github_paginate", return_value=comments),
-            patch.object(recap_mod, "github_request") as request_mock,
+            patch.object(badge_mod, "github_paginate", return_value=comments),
+            patch.object(badge_mod, "github_request") as request_mock,
         ):
             delete_old_dashboard_comments("x/y", "t", 5)
         self.assertEqual(request_mock.call_count, 1)
@@ -257,8 +257,8 @@ class DeleteRecapCommentsTest(unittest.TestCase):
             {"id": 2, "body": f"{RECAP_START}\nold\n{RECAP_END}"},
         ]
         with (
-            patch.object(recap_mod, "github_paginate", return_value=comments),
-            patch.object(recap_mod, "github_request") as request_mock,
+            patch.object(badge_mod, "github_paginate", return_value=comments),
+            patch.object(badge_mod, "github_request") as request_mock,
         ):
             delete_recap_comments("x/y", "t", 5)
         self.assertEqual(request_mock.call_count, 1)
@@ -271,8 +271,8 @@ class DeleteRecapCommentsTest(unittest.TestCase):
             {"id": 2, "body": f"{RECAP_START}\nold 2\n{RECAP_END}"},
         ]
         with (
-            patch.object(recap_mod, "github_paginate", return_value=comments),
-            patch.object(recap_mod, "github_request") as request_mock,
+            patch.object(badge_mod, "github_paginate", return_value=comments),
+            patch.object(badge_mod, "github_request") as request_mock,
         ):
             delete_recap_comments("x/y", "t", 5)
         self.assertEqual(request_mock.call_count, 2)
@@ -280,8 +280,8 @@ class DeleteRecapCommentsTest(unittest.TestCase):
 
     def test_no_op_when_no_recap_comments(self):
         with (
-            patch.object(recap_mod, "github_paginate", return_value=[{"id": 1, "body": "unrelated"}]),
-            patch.object(recap_mod, "github_request") as request_mock,
+            patch.object(badge_mod, "github_paginate", return_value=[{"id": 1, "body": "unrelated"}]),
+            patch.object(badge_mod, "github_request") as request_mock,
         ):
             delete_recap_comments("x/y", "t", 5)
         request_mock.assert_not_called()

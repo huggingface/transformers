@@ -21,7 +21,7 @@ jobs:
       (github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request')
     runs-on: ubuntu-22.04
     steps:
-      - name: Download PR CI recap script
+      - name: Download PR CI dashboard badge script
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Always run the trusted workflow revision, never code from the PR head.
@@ -29,17 +29,17 @@ jobs:
         run: |
           gh api \
             -H "Accept: application/vnd.github.raw" \
-            "/repos/${GITHUB_REPOSITORY}/contents/utils/update_pr_ci_dashboard_recap.py?ref=${SCRIPT_REF}" \
-            > update_pr_ci_dashboard_recap.py
+            "/repos/${GITHUB_REPOSITORY}/contents/utils/add_pr_ci_dashboard_badge.py?ref=${SCRIPT_REF}" \
+            > add_pr_ci_dashboard_badge.py
           gh api \
             -H "Accept: application/vnd.github.raw" \
             "/repos/${GITHUB_REPOSITORY}/contents/utils/github_utils.py?ref=${SCRIPT_REF}" \
             > github_utils.py
 
-      - name: Update PR CI recap
+      - name: Add PR CI dashboard badge
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 update_pr_ci_dashboard_recap.py
+        run: python3 add_pr_ci_dashboard_badge.py
 
   post-mlinter-review:
     permissions:
