@@ -292,7 +292,6 @@ class Qwen3TTSTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
                 "num_key_value_heads": 2,
                 "head_dim": 4,
                 "intermediate_size": 24,
-                "frame_rate": 125,
                 "rope_parameters": {"rope_type": "default", "rope_theta": 2.0},
                 "layer_scale_initial_scale": 1.0,
             },

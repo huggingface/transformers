@@ -180,9 +180,6 @@ class Qwen3TTSTokenizerEncoderConfig(PreTrainedConfig):
 
     @property
     def frame_rate(self) -> float:
-        # handle backward compatibility
-        if self._frame_rate is not None:
-            return self._frame_rate
         return self.sampling_rate / self.frame_size
 
     @classmethod

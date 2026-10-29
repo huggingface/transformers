@@ -162,6 +162,10 @@ class Qwen3TTSTokenizerEncoderConfig(MimiConfig):
         self._frame_rate = kwargs.pop("frame_rate", None)
         PreTrainedConfig.__post_init__(self, **kwargs)
 
+    @property
+    def frame_rate(self) -> float:
+        return self.sampling_rate / self.frame_size
+
     @classmethod
     def get_config_dict(cls, pretrained_model_name_or_path, **kwargs):
         config_dict, kwargs = super().get_config_dict(pretrained_model_name_or_path, **kwargs)
