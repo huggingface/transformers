@@ -849,8 +849,7 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertIsInstance(audio, torch.Tensor)
 
-    @parameterized.expand(["canonical", "checkpoint_nested", "checkpoint_nested_default_model_type"])
-    def test_audio_config_roundtrip_preserves_codec_outputs(self, schema):
+    def test_audio_config_roundtrip_preserves_codec_outputs(self):
         codec = _build_tiny_audio_tokenizer()
         codes = torch.arange(24).reshape(1, 6, 4) % 8
         waveform = torch.sin(torch.arange(256, dtype=torch.float32) * 0.03).reshape(1, 1, -1) * 0.1
@@ -865,49 +864,16 @@ class Qwen3TTSProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             expected_encoding = codec.encode(waveform, padding_mask=padding_mask)
 
         audio_config = codec.config.to_dict()
-        if schema != "canonical":
-            # Published codec JSON keeps the quantizer settings inside the encoder and decoder configs.
-            audio_config = {
-                "model_type": codec.config.model_type,
-                "input_sample_rate": codec.config.input_sampling_rate,
-                "output_sample_rate": codec.config.output_sampling_rate,
-                "encoder_valid_num_quantizers": 4,
-                "encoder_config": {
-                    **codec.config.encoder_config.to_dict(),
-                    "codebook_size": 8,
-                    "codebook_dim": 4,
-                    "vector_quantization_hidden_dimension": 4,
-                    "num_quantizers": 4,
-                    "num_semantic_quantizers": 1,
-                    "upsample_groups": 8,
-                },
-                "decoder_config": {
-                    **codec.config.decoder_config.to_dict(),
-                    "codebook_size": 8,
-                    "num_quantizers": 4,
-                    "num_semantic_quantizers": 1,
-                    "semantic_codebook_size": 8,
-                },
-            }
-            if schema == "checkpoint_nested_default_model_type":
-                audio_config.pop("model_type")
         original_audio_config = copy.deepcopy(audio_config)
         config = Qwen3TTSConfig(audio_config=audio_config)
         self.assertEqual(audio_config, original_audio_config)
 
         with tempfile.TemporaryDirectory() as directory:
-            # Load the original JSON as an embedded config, not only a previously normalized config.
+            # Load the canonical audio config embedded in a TTS checkpoint.
             with open(os.path.join(directory, "config.json"), "w", encoding="utf-8") as file:
                 json.dump({"model_type": "qwen3_tts", "audio_config": audio_config}, file)
             loaded_config = AutoConfig.from_pretrained(directory)
             loaded_config.save_pretrained(directory)
-            with open(os.path.join(directory, "config.json"), encoding="utf-8") as file:
-                saved_audio_config = json.load(file)["audio_config"]
-            self.assertNotIn("num_quantizers", saved_audio_config["encoder_config"])
-            self.assertNotIn("num_quantizers", saved_audio_config["decoder_config"])
-            self.assertNotIn("encoder_valid_num_quantizers", saved_audio_config)
-            self.assertIn("acoustic_quantizer_config", saved_audio_config)
-            self.assertIn("semantic_quantizer_config", saved_audio_config)
             restored_config = AutoConfig.from_pretrained(directory)
 
         for origin, candidate in (

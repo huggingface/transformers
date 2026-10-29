@@ -175,6 +175,9 @@ print("Audio values shape:", output.audio_values.shape)
 
 ## Qwen3TTSTokenizerConfig
 
+Configure non-default quantizers through `acoustic_quantizer_config` and `semantic_quantizer_config`.
+Quantizer settings are not inferred from legacy fields inside `encoder_config` or `decoder_config`.
+
 [[autodoc]] Qwen3TTSTokenizerConfig
 
 ## Qwen3TTSTokenizerEncoderConfig

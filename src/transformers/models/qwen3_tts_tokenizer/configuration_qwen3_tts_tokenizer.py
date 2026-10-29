@@ -19,7 +19,6 @@
 # limitations under the License.
 
 import math
-from copy import deepcopy
 
 import numpy as np
 from huggingface_hub.dataclasses import strict
@@ -272,38 +271,6 @@ class Qwen3TTSTokenizerConfig(PreTrainedConfig):
     @property
     def input_sampling_rate(self) -> int:
         return self.encoder_config.sampling_rate
-
-    @classmethod
-    def from_dict(cls, config_dict, **kwargs):
-        # The original checkpoint keeps both quantizers' settings inside its encoder and decoder configs.
-        config_dict = deepcopy(config_dict)
-        config_dict.pop("encoder_valid_num_quantizers", None)
-        input_sampling_rate = config_dict.pop("input_sample_rate", None)
-        encoder_config = config_dict.get("encoder_config")
-        if isinstance(encoder_config, dict):
-            encoder_fields = Qwen3TTSTokenizerEncoderConfig.__dataclass_fields__.keys() | {"rope_theta"}
-            encoder_config = {key: value for key, value in encoder_config.items() if key in encoder_fields}
-            if input_sampling_rate is not None:
-                encoder_config.setdefault("sampling_rate", input_sampling_rate)
-            config_dict["encoder_config"] = encoder_config
-        decoder_config = config_dict.get("decoder_config")
-        if isinstance(decoder_config, dict) and "num_quantizers" in decoder_config:
-            input_width = decoder_config.get("codebook_dim", 512)
-            num_semantic_quantizers = decoder_config.get("num_semantic_quantizers", 1)
-            shared = {
-                "codebook_size": decoder_config.get("codebook_size", 2048),
-                "codebook_dim": input_width // 2,
-                "vector_quantization_hidden_dimension": input_width // 2,
-                "hidden_size": input_width,
-            }
-            num_acoustic_quantizers = decoder_config["num_quantizers"] - num_semantic_quantizers
-            config_dict.setdefault("acoustic_quantizer_config", {**shared, "num_quantizers": num_acoustic_quantizers})
-            config_dict.setdefault("semantic_quantizer_config", {**shared, "num_quantizers": num_semantic_quantizers})
-            decoder_fields = Qwen3TTSTokenizerDecoderConfig.__dataclass_fields__.keys() | {"rope_theta"}
-            config_dict["decoder_config"] = {
-                key: value for key, value in decoder_config.items() if key in decoder_fields
-            }
-        return super().from_dict(config_dict, **kwargs)
 
     @classmethod
     def from_json_file(cls, json_file):
