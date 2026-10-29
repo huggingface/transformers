@@ -206,7 +206,7 @@ class HYV4Indexer(DeepseekV32Indexer):
         super().__init__(config, layer_idx)
         self.k_norm = nn.LayerNorm(self.head_dim, eps=config.rms_norm_eps)
 
-    @torch.no_grad()
+    @torch.no_grad()  # output is int32 and thus cannot carry gradients
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -255,7 +255,7 @@ class HYV4Indexer(DeepseekV32Indexer):
             index_scores = index_scores + attention_mask
 
         topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk] converted to int32 for flash-mla
 
 
 class HYV4Attention(GlmMoeDsaAttention):

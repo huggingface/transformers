@@ -769,7 +769,7 @@ class Glm5NextTextIndexer(GlmMoeDsaIndexer):
         self.index_kpool_compress_ape = nn.Parameter(torch.zeros(self.index_kpool, self.head_dim))
         self.index_kpool_compress_gate = nn.Parameter(torch.zeros(self.head_dim, self.hidden_size))
 
-    @torch.no_grad()
+    @torch.no_grad()  # output is int32 and thus cannot carry gradients
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -873,7 +873,7 @@ class Glm5NextTextIndexer(GlmMoeDsaIndexer):
         topk_indices = topk_indices[..., :output_width]
         topk_indices = topk_indices.masked_fill(~attention_mask[..., None], -1)
 
-        return topk_indices.to(torch.int32)
+        return topk_indices.to(torch.int32)  # converted to int32 for flash-mla
 
     def get_visible_tokens(
         self,

@@ -131,7 +131,7 @@ class GlmMoeDsaRotaryEmbedding(DeepseekV32RotaryEmbedding):
 
 
 class GlmMoeDsaIndexer(DeepseekV32Indexer):
-    @torch.no_grad()
+    @torch.no_grad()  # output is int32 and thus cannot carry gradients
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -189,7 +189,7 @@ class GlmMoeDsaIndexer(DeepseekV32Indexer):
             index_scores = index_scores + attention_mask
 
         topk = min(self.index_topk, index_scores.shape[-1])
-        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk]
+        return index_scores.topk(topk, dim=-1).indices.to(torch.int32)  # [B, S, topk] converted to int32 for flash-mla
 
 
 class GlmMoeDsaAttention(AXK1Attention):
