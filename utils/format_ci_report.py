@@ -74,14 +74,14 @@ def format_entries_by_model(entries, test_suffix_fn=None, model_indent=4, test_i
     model_groups = {}
     model_order = []
     for model, failure in entries:
-        if model not in model_groups:
-            model_groups[model] = []
-            model_order.append(model)
-        model_groups[model].append(failure)
+        key = (model, failure.get("job_link", ""))
+        if key not in model_groups:
+            model_groups[key] = []
+            model_order.append(key)
+        model_groups[key].append(failure)
     lines = []
-    for model in model_order:
-        failures = model_groups[model]
-        job_link = failures[0].get("job_link", "")
+    for model, job_link in model_order:
+        failures = model_groups[(model, job_link)]
         lines.append(f"{model_prefix}- [{model}]({job_link}):")
         for failure in failures:
             test_name = failure.get("test", "")
