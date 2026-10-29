@@ -467,14 +467,21 @@ def encode_marked_chat(tokenizer, chat: str, markers_re: re.Pattern) -> list[int
     Encode a chat rendered from inputs marked by `mark_control_tokens`. Marked control tokens are encoded as plain text,
     without their markers, and the rest of the chat, including the template's own control tokens, is encoded normally.
 
+    With a tokenizers backend, marked tokens are encoded together with the text around them, so the result is what
+    encoding the chat would give if those tokens were ordinary text. This is also how a model writes them when it
+    generates them as text, so its own output encodes back to the same ids when it is sent back in a later turn. Other
+    backends encode each marked token on its own.
+
     String methods in the template, like `split()`, can separate the markers around a token. Lone markers like these
-    are dropped, but still break the text, so that the text on either side can't join into a control token.
+    are dropped, but the text on either side still can't join into a control token.
 
     Args:
         tokenizer: The tokenizer that rendered the chat.
         chat: The rendered chat.
         markers_re: A regex that matches a marked control token or a lone marker, from `_get_control_token_patterns`.
     """
+    if tokenizer.is_fast:
+        return _encode_marked_chat_in_context(tokenizer, chat, markers_re)
     # Splitting on the markers gives [text, marked token, text, marked token, ..., text], with None in place of the
     # token for a lone marker
     pieces = markers_re.split(chat)
@@ -489,6 +496,55 @@ def encode_marked_chat(tokenizer, chat: str, markers_re: re.Pattern) -> list[int
             raise ValueError(f"Can't sanitize {piece!r}: the tokenizer produces it from plain text")
         ids += piece_ids
     return ids
+
+
+def _encode_marked_chat_in_context(tokenizer, chat: str, markers_re: re.Pattern) -> list[int]:
+    # Remove the markers, keeping the character spans of the marked tokens and the positions of lone markers
+    parts, marked_spans, breaks = [], [], []
+    length = last = 0
+    for match in markers_re.finditer(chat):
+        parts.append(chat[last : match.start()])
+        length += match.start() - last
+        if match.group(1) is None:
+            breaks.append(length)
+        else:
+            parts.append(match.group(1))
+            marked_spans.append((length, length + len(match.group(1))))
+            length += len(match.group(1))
+        last = match.end()
+    parts.append(chat[last:])
+    text = "".join(parts)
+
+    encoding = tokenizer(text, add_special_tokens=False, return_offsets_mapping=True)
+    ids, offsets = encoding["input_ids"], encoding["offset_mapping"]
+    added_ids = set(tokenizer.added_tokens_decoder)
+
+    def is_forged(start, end):
+        # An added token matched inside a marked span, or across a lone marker, comes from the user's strings
+        return any(s < end and start < e for s, e in marked_spans) or any(start < b < end for b in breaks)
+
+    # Every other added token was written by the template. Split the chat at those, and encode the text between two of
+    # them as plain text if the tokenizer matched an added token in it. Elsewhere, keep the ids of the normal encoding
+    controls = [i for i, (start, end) in enumerate(offsets) if ids[i] in added_ids and not is_forged(start, end)]
+    marked_ids = {tokenizer.convert_tokens_to_ids(text[s:e]) for s, e in marked_spans}
+    newline_ids = tokenizer.encode("\n", add_special_tokens=False)
+    input_ids, prev, piece_start = [], -1, 0
+    for i in controls + [len(ids)]:
+        piece_ids = ids[prev + 1 : i]
+        if any(token_id in added_ids for token_id in piece_ids):
+            piece = text[piece_start : offsets[i][0] if i < len(ids) else len(text)]
+            if piece_start == 0:
+                piece_ids = tokenizer._encode_without_added_tokens(piece)
+            else:
+                piece_ids = _encode_chat_piece(tokenizer, piece, True, newline_ids)
+            if marked_ids.intersection(piece_ids):
+                raise ValueError(f"Can't sanitize {piece!r}: the tokenizer produces a control token from plain text")
+        input_ids += piece_ids
+        if i < len(ids):
+            input_ids.append(ids[i])
+            piece_start = offsets[i][1]
+        prev = i
+    return input_ids
 
 
 def _encode_chat_piece(tokenizer, piece: str, as_text: bool, newline_ids: list[int]) -> list[int]:
