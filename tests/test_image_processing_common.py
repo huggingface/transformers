@@ -340,6 +340,10 @@ class ImageProcessingTestMixin:
     # Must be set by subclass
     image_processor_tester_class = None
 
+    # Models can allow larger individual pixel differences between image backends without
+    # relaxing the mean-error limit or exact comparisons of integer outputs.
+    backend_equivalence_atol = 1e-1
+
     test_cast_dtype = None
 
     def setUp(self):
@@ -430,7 +434,11 @@ class ImageProcessingTestMixin:
         reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
             self._assert_encodings_equivalence(
-                reference_encoding, encodings[backend_name], reference_backend, backend_name
+                reference_encoding,
+                encodings[backend_name],
+                reference_backend,
+                backend_name,
+                atol=self.backend_equivalence_atol,
             )
 
     @require_vision
@@ -453,7 +461,11 @@ class ImageProcessingTestMixin:
         reference_encoding = encodings[reference_backend]
         for backend_name in backend_names[1:]:
             self._assert_encodings_equivalence(
-                reference_encoding, encodings[backend_name], reference_backend, backend_name
+                reference_encoding,
+                encodings[backend_name],
+                reference_backend,
+                backend_name,
+                atol=self.backend_equivalence_atol,
             )
 
     def _assert_has_attributes(self, processor, expected_attributes: dict[str, Any]) -> None:
