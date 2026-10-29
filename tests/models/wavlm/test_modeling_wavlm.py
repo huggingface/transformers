@@ -14,14 +14,12 @@
 """Testing suite for the PyTorch WavLM model."""
 
 import math
-import os
-import tempfile
 import unittest
 
 import pytest
 from datasets import load_dataset
 
-from transformers import WavLMConfig, is_torch_available, set_seed
+from transformers import WavLMConfig, is_torch_available
 from transformers.testing_utils import require_torch, require_torchaudio, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -36,8 +34,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-    from safetensors.torch import load_file as safe_load_file
-    from safetensors.torch import save_file as safe_save_file
 
     from transformers import (
         Wav2Vec2FeatureExtractor,
@@ -309,6 +305,7 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+    test_can_init_all_missing_weights_before_2023 = True
 
     def setUp(self):
         self.model_tester = WavLMModelTester(self)
@@ -422,28 +419,6 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         model = WavLMModel.from_pretrained("microsoft/wavlm-base-plus")
         self.assertIsNotNone(model)
-
-    def test_missing_masked_spec_embed_is_initialized(self):
-        # Checkpoints such as facebook/wav2vec2-base-960h lack `masked_spec_embed`: loading must initialize it
-        config = self.model_tester.get_config()
-        with tempfile.TemporaryDirectory() as tmp:
-            WavLMModel(config).save_pretrained(tmp)
-            weights = os.path.join(tmp, "model.safetensors")
-            state_dict = safe_load_file(weights)
-            del state_dict["masked_spec_embed"]
-            safe_save_file(state_dict, weights, metadata={"format": "pt"})
-
-            loaded = []
-            for _ in range(2):
-                set_seed(0)
-                loaded.append(WavLMModel.from_pretrained(tmp).masked_spec_embed.detach())
-
-        embed = loaded[0]
-        # Uninitialized memory can be NaN, huge, or all zeros: require a real uniform draw
-        self.assertTrue(torch.isfinite(embed).all())
-        self.assertTrue(((embed >= 0) & (embed <= 1)).all())
-        self.assertGreater(embed.std().item(), 0)
-        torch.testing.assert_close(loaded[0], loaded[1], rtol=0, atol=0)
 
 
 @require_torch

@@ -941,6 +941,8 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                 init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, Wav2Vec2Model) and hasattr(module, "masked_spec_embed"):
             init.uniform_(module.masked_spec_embed)
+        elif isinstance(module, AMSoftmaxLoss):
+            init.normal_(module.weight)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int, add_adapter: bool | None = None):
         """

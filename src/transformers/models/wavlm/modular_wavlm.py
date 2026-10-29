@@ -497,6 +497,10 @@ class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
                 init.uniform_(module.bias, a=-k, b=k)
         elif isinstance(module, WavLMModel) and hasattr(module, "masked_spec_embed"):
             init.uniform_(module.masked_spec_embed)
+        elif isinstance(module, WavLMAttention):
+            init.ones_(module.gru_rel_pos_const)
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
+            init.normal_(module.weight)
 
     def _get_adapters(self):
         raise AttributeError("Not needed for WavLM")
