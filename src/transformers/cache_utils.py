@@ -237,6 +237,13 @@ class DummyLayer:
     def get_max_length(self):
         raise NotImplementedError("Dummy layer don't store cache: they cannot have a maximum length.")
 
+    def offload(self): ...
+    def reset(self): ...
+    def reorder_cache(self, beam_idx: torch.LongTensor): ...
+    def crop(self, tokens_to_remove: int): ...
+    def batch_repeat_interleave(self, repeats: int): ...
+    def batch_select_indices(self, indices: torch.Tensor): ...
+
 
 class DynamicSlidingWindowLayer(DynamicLayer):
     """
@@ -1550,10 +1557,8 @@ class Cache:
         non-sliding layer. Note that we do it on the default stream, so that we ensure all earlier
         computation in the layer's `update` methods are finished.
         """
-        if not (only_non_sliding and self.is_sliding[layer_idx]):
-            layer = self.layers[layer_idx]
-            if not isinstance(layer, DummyLayer):
-                layer.offload()
+        if not (self.is_dummy[layer_idx] or (only_non_sliding and self.is_sliding[layer_idx])):
+            self.layers[layer_idx].offload()
 
     def update(
         self, key_states: torch.Tensor, value_states: torch.Tensor, layer_idx: int, *args, **kwargs
@@ -1831,19 +1836,14 @@ class Cache:
         # It's simply equal to the length of the past states, except in very specific cases, see `MtpCache`
         return self.get_seq_length(layer_idx=layer_idx)
 
-    @property
-    def non_dummy_layers(self) -> list[CacheLayerMixin | LinearAttentionCacheLayerMixin]:
-        """Return the non-dummy layers of the cache."""
-        return [layer for layer in self.layers if not isinstance(layer, DummyLayer)]
-
     def reset(self):
         """Recursively reset all layers tensors"""
-        for layer in self.non_dummy_layers:
+        for layer in self.layers:
             layer.reset()
 
     def reorder_cache(self, beam_idx: torch.LongTensor):
         """Reorder the cache for beam search"""
-        for layer in self.non_dummy_layers:
+        for layer in self.layers:
             layer.reorder_cache(beam_idx)
 
     def crop(self, tokens_to_remove: int) -> None:
@@ -1853,17 +1853,17 @@ class Cache:
         minimal working size. This means that `crop(0)` will not necessarily always be a no-op, as it may still remove useless states
         (i.e. states that are not needed for the next `forward`) from the Cache.
         """
-        for layer in self.non_dummy_layers:
+        for layer in self.layers:
             layer.crop(tokens_to_remove)
 
     def batch_repeat_interleave(self, repeats: int):
         """Repeat and interleave the cache"""
-        for layer in self.non_dummy_layers:
+        for layer in self.layers:
             layer.batch_repeat_interleave(repeats)
 
     def batch_select_indices(self, indices: torch.Tensor):
         """Select indices from the cache"""
-        for layer in self.non_dummy_layers:
+        for layer in self.layers:
             layer.batch_select_indices(indices)
 
     def activate_past_recording(self):

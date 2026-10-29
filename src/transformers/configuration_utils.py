@@ -1677,18 +1677,16 @@ def recursive_diff_dict(dict_a, dict_b, config_obj=None):
 def get_head_shapes(config) -> tuple[int | list[int], int | list[int]]:
     """Returns a tuple `(num_kv_heads, head_dim)`, each of them either a single int for all layers, or a list of int
     with the value for each layer."""
-    layer_configs = config.per_layer_config[: config.num_hidden_layers]
-
     head_dim = [
         getattr(layer_config, "head_dim", None) or layer_config.hidden_size // layer_config.num_attention_heads
-        for layer_config in layer_configs
+        for layer_config in config.per_layer_config
     ]
     if len(set(head_dim)) == 1:
         head_dim = head_dim[0]
 
     num_kv_heads = [
         getattr(layer_config, "num_key_value_heads", None) or layer_config.num_attention_heads
-        for layer_config in layer_configs
+        for layer_config in config.per_layer_config
     ]
     if len(set(num_kv_heads)) == 1:
         num_kv_heads = num_kv_heads[0]

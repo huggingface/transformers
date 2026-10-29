@@ -347,7 +347,7 @@ class Gemma4UnifiedTextAttention(nn.Module):
         self.is_causal = config.use_bidirectional_attention != "all"
 
         # Shared kv cache
-        kv_sharing_mode = config.kv_sharing_modes[layer_idx] if hasattr(config, "kv_sharing_modes") else None
+        kv_sharing_mode = config.kv_sharing_modes[layer_idx]
         self.is_kv_shared_layer = kv_sharing_mode == "reuse"
         self.store_full_length_kv = kv_sharing_mode == "store"
 
@@ -442,7 +442,7 @@ class Gemma4UnifiedTextAttention(nn.Module):
 class Gemma4UnifiedTextMLP(nn.Module):
     def __init__(self, config: Gemma4UnifiedTextConfig, layer_idx: int):
         super().__init__()
-        kv_sharing_mode = config.kv_sharing_modes[layer_idx] if hasattr(config, "kv_sharing_modes") else None
+        kv_sharing_mode = config.kv_sharing_modes[layer_idx]
         is_kv_shared_layer = kv_sharing_mode == "reuse"
         use_double_wide_mlp = config.use_double_wide_mlp and is_kv_shared_layer
         self.config = config

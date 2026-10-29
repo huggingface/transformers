@@ -965,7 +965,7 @@ class Gemma4VisionEncoder(nn.Module):
 
 class Gemma4TextMLP(Gemma3MLP):
     def __init__(self, config: Gemma4TextConfig, layer_idx: int):
-        kv_sharing_mode = config.kv_sharing_modes[layer_idx] if hasattr(config, "kv_sharing_modes") else None
+        kv_sharing_mode = config.kv_sharing_modes[layer_idx]
         is_kv_shared_layer = kv_sharing_mode == "reuse"
         use_double_wide_mlp = config.use_double_wide_mlp and is_kv_shared_layer
         super().__init__()
@@ -1025,7 +1025,7 @@ class Gemma4TextAttention(nn.Module):
         self.is_causal = config.use_bidirectional_attention != "all"
 
         # Shared kv cache
-        kv_sharing_mode = config.kv_sharing_modes[layer_idx] if hasattr(config, "kv_sharing_modes") else None
+        kv_sharing_mode = config.kv_sharing_modes[layer_idx]
         self.is_kv_shared_layer = kv_sharing_mode == "reuse"
         self.store_full_length_kv = kv_sharing_mode == "store"
 
