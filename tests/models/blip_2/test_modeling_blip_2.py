@@ -1600,6 +1600,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
+        self.assertEqual(predictions[0].shape[0], 999, "injected new failure for CI format test")
         expected_ids = [50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118]  # fmt: skip
         self.assertEqual(predictions[0].tolist(), expected_ids)
         self.assertEqual("a woman sitting on the beach with a dog", generated_text)
