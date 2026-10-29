@@ -625,6 +625,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
         ("youtu", "YoutuModel"),
+        ("yue2", "YuE2Model"),
         ("yue2_acoustic_tokenizer", "YuE2AcousticTokenizerModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
@@ -1948,6 +1949,7 @@ MODEL_FOR_TEXT_TO_WAVEFORM_MAPPING_NAMES = OrderedDict(
         ("seamless_m4t_v2", "SeamlessM4Tv2ForTextToSpeech"),
         ("vibevoice", "VibeVoiceForConditionalGeneration"),
         ("vits", "VitsModel"),
+        ("yue2", "YuE2ForConditionalGeneration"),
     ]
 )
 

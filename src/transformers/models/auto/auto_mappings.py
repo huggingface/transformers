@@ -791,6 +791,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
         ("youtu", "YoutuConfig"),
+        ("yue2", "YuE2Config"),
         ("yue2_acoustic_tokenizer", "YuE2AcousticTokenizerConfig"),
         ("zamba", "ZambaConfig"),
         ("zamba2", "Zamba2Config"),
@@ -1325,6 +1326,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2Processor"),
         ("wav2vec2-bert", "Wav2Vec2BertProcessor"),
         ("whisper", "WhisperProcessor"),
+        ("yue2", "YuE2Processor"),
     ]
 )
 
