@@ -39,14 +39,14 @@ alt="xiaomi lens0 architecture overview" width="600"/>
 The original code can be found [here](https://github.com/SeerRay-Lab/Xiaomi-Lens-0).
 
 <hfoptions id="usage">
-<hfoption id="AutoModelForImageTextToText">
+<hfoption id="AutoModelForMultimodalLM">
 
 ```python
 import torch
-from transformers import AutoModelForImageTextToText, AutoProcessor
+from transformers import AutoModelForMultimodalLM, AutoProcessor
 
-model_id = "guarin/Xiaomi-Lens-0"
-model = AutoModelForImageTextToText.from_pretrained(model_id, device_map="auto")
+model_id = "SeerRay-Lab/Xiaomi-Lens-0"
+model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
 processor = AutoProcessor.from_pretrained(model_id)
 
 messages = [

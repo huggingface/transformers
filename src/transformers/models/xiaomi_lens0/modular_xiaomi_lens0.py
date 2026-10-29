@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch Xiaomi-Lens-0 model."""
-
 import re
 from dataclasses import dataclass
 
@@ -478,6 +476,58 @@ class XiaomiLens0ForConditionalGeneration(Qwen3_5ForConditionalGeneration, Xiaom
         output_masks (`bool`, *optional*, defaults to `False`):
             Whether to decode masks from a full sequence. Mask labels also enable decoding. Requires `input_ids`,
             image features and `image_grid_thw`; this is not intended for incremental cached decoding.
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoModelForMultimodalLM, AutoProcessor
+
+        >>> model_id = "SeerRay-Lab/Xiaomi-Lens-0"
+        >>> model = AutoModelForMultimodalLM.from_pretrained(model_id, device_map="auto")
+        >>> processor = AutoProcessor.from_pretrained(model_id)
+
+        >>> messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                    {
+                        "type": "text",
+                        "text": 'Locate all instances in the image that match the description "cat".\nReport bbox coordinates and masks.',
+                    },
+                ],
+            }
+        ]
+        >>> inputs = processor.apply_chat_template(
+            messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(model.device)
+
+        >>> with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                return_dict_in_generate=True,
+                output_hidden_states=[model.config.text_config.num_hidden_layers - 1],
+                max_new_tokens=1024,
+            )
+            hidden_states = torch.cat([step[-1] for step in outputs.hidden_states], dim=1)
+            mask_logits, mask_token_indices = model.decode_masks(
+                input_ids=outputs.sequences,
+                hidden_states=hidden_states,
+                image_hidden_states=outputs.image_hidden_states,
+                image_grid_thw=inputs.image_grid_thw,
+            )
+        >>> results = processor.post_process_grounding(
+            outputs.sequences, inputs.image_grid_thw, mask_logits, mask_token_indices, target_sizes=[(480, 640)]
+        )
+        >>> # Bounding boxes in absolute (top_left_x, top_left_y, bottom_right_x, bottom_right_y) pixel coordinates
+        >>> print(results[0]["boxes"])
+        tensor([[344.9600,  24.9600, 640.0000, 372.0000],
+                [  8.9600,  55.2000, 316.1600, 474.2400]])
+        >>> # Binary segmentation masks
+        >>> print(results[0]["masks"].shape)
+        torch.Size([2, 480, 640])
+        ```
         """
         if mask_labels_valid_mask is not None and mask_labels is None:
             raise ValueError("mask_labels_valid_mask requires mask_labels")
