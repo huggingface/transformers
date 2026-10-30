@@ -336,14 +336,6 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         self.assertEqual(result.shape, (2, 8 * 16 * 2, 4))
         self.assertEqual(result.dtype, torch.bfloat16)
 
-    @require_torch
-    def test_mxfp4_mlp_keeps_megablocks_hub_mapping(self):
-        """`Mxfp4GptOssMLP` replaces `GptOssMLP`, so it must keep its `MegaBlocksMoeMLP` hub kernel mapping"""
-        from transformers.integrations.mxfp4 import Mxfp4GptOssMLP
-        from transformers.models.gpt_oss.modeling_gpt_oss import GptOssMLP
-
-        self.assertEqual(Mxfp4GptOssMLP.kernel_layer_name, GptOssMLP.kernel_layer_name)
-
     @REQUIRE_TRITON_MXFP4
     @require_kernels
     @require_torch
@@ -587,3 +579,44 @@ class Mxfp4ModelTest(unittest.TestCase):
 
         # we should at least have 3 times memory reduction in total for this model
         assert model_size[""] > quantized_model_size[""] * 3
+
+
+@require_torch
+@REQUIRE_TRITON_MXFP4
+@require_kernels
+@slow
+@unittest.skipUnless(
+    torch_device in ["cpu", "xpu"],
+    "MXFP4 weights only stay quantized with `use_kernels=True` on CPU and XPU, other devices dequantize to bf16",
+)
+class Mxfp4KernelsModelTest(unittest.TestCase):
+    model_name = "openai/gpt-oss-20b"
+    input_text = "Once upon a time"
+
+    def setUp(self):
+        gc.collect()
+        _empty_accelerator_cache()
+
+    def tearDown(self):
+        gc.collect()
+        _empty_accelerator_cache()
+
+    def test_quantized_mlp_uses_megablocks_kernel(self):
+        """With `use_kernels=True`, the quantized MLP keeps its MXFP4 experts and runs the megablocks hub kernel"""
+        from transformers.integrations.mxfp4 import Mxfp4GptOssExperts, Mxfp4GptOssMLP
+
+        model = GptOssForCausalLM.from_pretrained(
+            self.model_name, dtype=torch.bfloat16, device_map=torch_device, use_kernels=True
+        )
+        for layer in model.model.layers:
+            self.assertIsInstance(layer.mlp, Mxfp4GptOssMLP)
+            self.assertIsInstance(layer.mlp.experts, Mxfp4GptOssExperts)
+            self.assertIn("MegaBlocksMoeMLP", layer.mlp.forward.__qualname__)
+
+        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        encoded_input = tokenizer(self.input_text, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            output_sequences = model.generate(**encoded_input, max_new_tokens=10, do_sample=False)
+        generated_text = tokenizer.decode(output_sequences[0], skip_special_tokens=True)
+
+        self.assertIn(generated_text, Mxfp4ModelTest.EXPECTED_OUTPUTS)
