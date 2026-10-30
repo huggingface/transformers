@@ -34,15 +34,8 @@ Each row recommends a first method to try. Check the [comparison table](#compare
 | Load checkpoints made with llm-compressor | [compressed-tensors](./compressed_tensors) | Loads FP8, int4, and int8 checkpoints in the compressed-tensors format. |
 | Compress below 4 bits | [HQQ](./hqq) or [SINQ](./sinq) | Quantize to 2 or 3 bits while loading without calibration. [AQLM](./aqlm), [VPTQ](./vptq), and [SpQR](./spqr) checkpoints go lower but must be quantized with their own libraries. |
 
-## Compare methods
-
-The table lists every method Transformers supports, in alphabetical order.
-
-- Workflow says whether Transformers can quantize the model while loading it, or can only load a checkpoint quantized somewhere else.
-- `quant_method` is the value stored in a checkpoint's `quantization_config`.
-- Save means [`~PreTrainedModel.save_pretrained`] writes the quantized weights.
-- Fine-tune means [`Trainer`] accepts the quantized model for training, for example with PEFT adapters.
-- Auto-compile means `generate` compiles the model automatically when it uses a static cache. A ❌ doesn't always mean `torch.compile` fails. Check the method's page.
+<details>
+<summary>Show the full comparison table</summary>
 
 | Method | `quant_method` | Workflow | Bits | Hardware | Save | Fine-tune | Auto-compile |
 |---|---|---|---|---|---|---|---|
@@ -70,6 +63,8 @@ The table lists every method Transformers supports, in alphabetical order.
 | [SpQR](./spqr) | `spqr` | Pre-quantized only | 3 | CUDA | ✅ | ❌ | ❌ |
 | [torchao](./torchao) | `torchao` | While loading | 4, 8 | CUDA, XPU, CPU | ✅ | Only 8-bit schemes | ✅ |
 | [VPTQ](./vptq) | `vptq` | Pre-quantized only | 1–8 | CUDA | ✅ | ❌ | ❌ |
+
+</details>
 
 ## Check memory with the quantization picker
 
