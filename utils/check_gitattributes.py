@@ -24,6 +24,7 @@ python utils/check_gitattributes.py --fix_and_overwrite  # regenerate (used in `
 """
 
 import argparse
+from collections import defaultdict
 from pathlib import Path
 
 
@@ -47,24 +48,24 @@ def is_generated(path: Path) -> bool:
 
 
 def generated_patterns() -> list[str]:
-    # `__init__.py` are all generated, and a model folder whose other files (modular/convert sources aside) are all
-    # generated gets a single glob; the negations at the end take back what those globs over-match.
-    patterns = [f"{MODELS_DIR.as_posix()}/**/__init__.py"]
-    negations = [f"{MODELS_DIR.as_posix()}/**/{glob}" for glob in ("modular_*.py", "convert_*.py")]
+    # One glob for the `__init__.py`, then one per file kind (`modeling_*.py`, `configuration_*.py`, ...) in each model
+    # folder, used only when every file of that kind is generated, so hand-written sources like `modular_*.py` never match.
+    patterns = [f"{MODELS_DIR.as_posix()}/**/__init__.py linguist-generated=true"]
     for folder in sorted({path.parent for path in MODELS_DIR.rglob("*.py")}):
-        files = [path for path in sorted(folder.glob("*.py")) if path.name != "__init__.py"]
-        sources = [path for path in files if path.name.startswith(("modular_", "convert_"))]
-        generated = [path for path in files if is_generated(path)]
-        if generated and len(generated) + len(sources) == len(files):
-            patterns.append(f"{folder.as_posix()}/*.py")
-        else:
-            patterns += [path.as_posix() for path in generated]
+        kinds = defaultdict(list)
+        for path in sorted(folder.glob("*.py")):
+            if path.name != "__init__.py":
+                kinds[path.name.split("_")[0]].append(path)
+        for kind, files in kinds.items():
+            generated = [path for path in files if is_generated(path)]
+            if len(generated) == len(files):
+                patterns.append(f"{folder.as_posix()}/{kind}_*.py linguist-generated=true")
+            else:
+                patterns += [f"{path.as_posix()} linguist-generated=true" for path in generated]
         init = folder / "__init__.py"
         if init.exists() and not is_generated(init):
-            negations.append(init.as_posix())
-    return [f"{pattern} linguist-generated=true" for pattern in patterns] + [
-        f"{pattern} linguist-generated=false" for pattern in negations
-    ]
+            patterns.append(f"{init.as_posix()} linguist-generated=false")
+    return patterns
 
 
 def expected_content(current: str) -> str:
