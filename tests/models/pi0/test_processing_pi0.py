@@ -50,7 +50,8 @@ class PI0ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     @classmethod
     def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
+        # Do not add `image_token` in inputs
+        pass
 
     @require_vision
     def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = True):

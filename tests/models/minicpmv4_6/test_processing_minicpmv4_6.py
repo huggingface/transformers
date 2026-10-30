@@ -60,11 +60,6 @@ class MiniCPMV4_6ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Use scale_resolution=64 with max_slice_nums=1; shape assertions in
         return video_processor_class.from_pretrained(cls.tiny_model_id, scale_resolution=64, max_slice_nums=1)
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-        cls.video_token = processor.video_token
-
     @property
     def video_sampling_expectations(self):
         return [

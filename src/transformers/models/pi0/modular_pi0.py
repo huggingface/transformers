@@ -26,7 +26,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, make_nested_list_of_images
+from ...image_utils import ImageInput, make_flat_list_of_images, make_nested_list_of_images
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
@@ -63,6 +63,8 @@ class PI0ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 @requires(backends=("vision", "torch"))
 class PI0Processor(ProcessorMixin):
+    valid_processor_kwargs = PI0ProcessorKwargs
+
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.height, self.width = image_processor.size["height"], image_processor.size["width"]
         state_mean = kwargs.get("state_mean", [-0.0419, 0.0354, 0.8257, 2.9083, -0.5562, -0.1665, 0.0283, -0.0286])
@@ -127,55 +129,7 @@ class PI0Processor(ProcessorMixin):
             - **state** -- Robot state compatible with model if `state` is not None
             - **actions** -- Label-actions compatible with training if `actions` is not None
         """
-        output_kwargs = self._merge_kwargs(
-            PI0ProcessorKwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
-
-        if text is None:
-            logger.warning_once("You are using PI0 without a text prefix. The processor will use an empty prompt.")
-            text = ""
-
-        if isinstance(text, str):
-            text = [text]
-
-        batched_images = make_nested_list_of_images(images)
-        if len(batched_images) != len(text):
-            raise ValueError(
-                f"Received {len(batched_images)} image samples for {len(text)} prompts. "
-                "Each prompt should be associated with one sample (with one or more camera images)."
-            )
-
-        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
-        output_kwargs["images_kwargs"].pop("return_tensors", None)
-
-        prompt_strings = []
-        for sample, image_list in zip(text, batched_images):
-            sample = (
-                f"{self.image_token * self.image_seq_length * len(image_list)}{self.tokenizer.bos_token}{sample}\n"
-            )
-            prompt_strings.append(sample)
-
-        text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
-
-        # Here is the diff from PaliGemma. Ideally we'd create a new ImageProcessor if it were a VLM
-        max_num_cameras = max(len(sample_images) for sample_images in batched_images)
-        pixel_attention_mask = torch.zeros((len(batched_images), max_num_cameras), dtype=torch.bool)
-        padded_pixel_values = torch.zeros(len(batched_images), max_num_cameras, 3, self.height, self.width)
-
-        for batch, sample_images in enumerate(batched_images):
-            if not sample_images:
-                continue
-            processed = self.image_processor(sample_images, return_tensors="pt", **output_kwargs["images_kwargs"])
-
-            num_cameras = len(sample_images)
-            pixel_attention_mask[batch, :num_cameras] = True
-            padded_pixel_values[batch, :num_cameras] = processed["pixel_values"]
-
-        model_inputs = {
-            **text_inputs,
-            "pixel_values": padded_pixel_values,
-            "pixel_attention_mask": pixel_attention_mask,
-        }
+        model_inputs = super().__call__(images=images, text=text, **kwargs)
 
         if actions is not None:
             actions = (torch.tensor(actions) - self.actions_mean) / (self.actions_std + 1e-08)
@@ -189,7 +143,52 @@ class PI0Processor(ProcessorMixin):
                 state = F.pad(state, (0, self.max_state_dim - state.shape[-1]))
             model_inputs["state"] = state.view(-1, self.max_state_dim)
 
-        return BatchFeature(data=model_inputs, tensor_type=return_tensors)
+        return BatchFeature(data=model_inputs, tensor_type=kwargs.get("return_tensors"))
+
+    def prepare_inputs_layout(
+        self,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
+    ):
+        if text is None:
+            logger.warning_once("You are using PI0 without a text prefix. The processor will use an empty prompt.")
+            text = ""
+
+        images, text, *_ = super().prepare_inputs_layout(text=text, images=images)
+        images = make_nested_list_of_images(images)
+        text = [f"{self.tokenizer.bos_token}{sample}\n" for sample in text]
+
+        if images is not None:
+            text = [f"{self.image_token * len(image_list)}{sample}" for sample, image_list in zip(text, images)]
+
+        return images, text, None, None
+
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        return self.image_token * self.image_seq_length
+
+    def _process_images(self, images: ImageInput, **kwargs):
+        # Here is the diff from PaliGemma. Ideally we'd create a new ImageProcessor if it were a VLM
+        max_num_cameras = max(len(sample_images) for sample_images in images)
+        pixel_attention_mask = torch.zeros((len(images), max_num_cameras), dtype=torch.bool)
+        padded_pixel_values = torch.zeros(len(images), max_num_cameras, 3, self.height, self.width)
+
+        for batch, sample_images in enumerate(images):
+            if not sample_images:
+                continue
+            processed = self.image_processor(sample_images, **kwargs)
+
+            num_cameras = len(sample_images)
+            pixel_attention_mask[batch, :num_cameras] = True
+            padded_pixel_values[batch, :num_cameras] = processed["pixel_values"]
+
+        processed_images = {"pixel_values": padded_pixel_values, "pixel_attention_mask": pixel_attention_mask}
+        images = make_flat_list_of_images(images)
+        image_replacements = []
+        for idx in range(len(images)):
+            replacement_text = self.replace_image_token(processed_images, image_idx=idx, **kwargs)
+            image_replacements.append(replacement_text)
+        return processed_images, image_replacements
 
     @property
     def model_input_names(self):

@@ -931,7 +931,7 @@ class EmbeddingGemma2Processor(Gemma4Processor):
         audio: AudioInput = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        ProcessorMixin.validate_inputs(self, images=images, text=text, **kwargs)
+        ProcessorMixin.validate_inputs(self, images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         # Unlike Gemma 4, any single modality on its own is a valid embedding input.
         if text is None and images is None and videos is None and audio is None:
@@ -939,51 +939,6 @@ class EmbeddingGemma2Processor(Gemma4Processor):
 
         if audio is not None and (self.audio_token is None or self.boa_token is None or self.eoa_token is None):
             raise ValueError("Audio inputs were provided, but the tokenizer does not have an `audio_token` defined.")
-
-        if text is not None:
-            n_images_in_text = [sample.count(self.image_token) for sample in text]
-            if images is not None:
-                if len(images) != len(text):
-                    raise ValueError(
-                        f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
-                    )
-
-                n_images_in_images = [len(sublist) for sublist in images]
-                if n_images_in_text != n_images_in_images:
-                    raise ValueError(
-                        f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                        f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
-                    )
-            elif any(n_images_in_text):
-                raise ValueError(
-                    f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
-                )
-
-            n_videos_in_text = [sample.count(self.video_token) for sample in text]
-            if videos is not None:
-                if sum(n_videos_in_text) != len(videos):
-                    raise ValueError(
-                        f"The total number of {self.video_token} tokens in the prompts should be the same as the number of videos passed."
-                        f" Found {sum(n_videos_in_text)} {self.video_token} tokens and {len(videos)} videos."
-                    )
-            elif any(n_videos_in_text):
-                raise ValueError(
-                    f"Found {sum(n_videos_in_text)} {self.video_token} tokens in the text but no videos were passed."
-                )
-
-            if self.audio_token is not None:
-                n_audio_in_text = [sample.count(self.audio_token) for sample in text]
-                if audio is not None:
-                    n_audio_passed = len(audio) if isinstance(audio, (list, tuple)) else 1
-                    if sum(n_audio_in_text) != n_audio_passed:
-                        raise ValueError(
-                            f"The total number of {self.audio_token} tokens in the prompts should be the same as the number of audio inputs passed."
-                            f" Found {sum(n_audio_in_text)} {self.audio_token} tokens and {n_audio_passed} audio inputs."
-                        )
-                elif any(n_audio_in_text):
-                    raise ValueError(
-                        f"Found {sum(n_audio_in_text)} {self.audio_token} tokens in the text but no audio inputs were passed."
-                    )
 
     def replace_video_token(self, video_inputs: dict, video_idx: int, **kwargs) -> str:
         num_soft_tokens = video_inputs["num_soft_tokens_per_video"][video_idx]

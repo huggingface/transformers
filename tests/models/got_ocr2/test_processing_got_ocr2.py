@@ -93,6 +93,21 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             inputs[self.text_input_name][1:].tolist(), inputs_nested[self.text_input_name][1:].tolist()
         )
 
+    def test_if_input_has_mismatching_tokens_and_visuals(self):
+        """
+        Tests that vision models raise an error when number of data doesn't match number
+        of special token in input text.
+        """
+        # Overwritten: requires `multi_page` kwarg to process nested vision inputs
+        processor = self.get_processor()
+        image_inputs = self.prepare_images_inputs(batch_size=4)
+        image_inputs_nested = [[image] if not isinstance(image, list) else image for image in image_inputs]
+        text = self.prepare_text_inputs(batch_size=3, modalities=["image"])
+        processing_kwargs = {"return_tensors": "pt", "padding": True, "multi_page": True}
+
+        with self.assertRaisesRegex(ValueError, " tokens in the prompts should be the same as the number of "):
+            processor(images=image_inputs_nested, text=text, **processing_kwargs)
+
     def test_subprocessor_defaults_1_images(self):
         # overriden - pop certina keys from `merged_kwargs` which are used only by processor
         parameterized_config = MODALITY_TEST_SPECS["images"]

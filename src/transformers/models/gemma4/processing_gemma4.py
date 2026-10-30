@@ -188,32 +188,13 @@ class Gemma4Processor(ProcessorMixin):
         audio: AudioInput = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
-        super().validate_inputs(images=images, text=text, **kwargs)
+        super().validate_inputs(images=images, text=text, videos=videos, audio=audio, **kwargs)
 
         if text is None and images is None:
             raise ValueError("You must provide either `text` or `images`.")
 
         if audio is not None and self.audio_token is None or self.boa_token is None or self.eoa_token is None:
             raise ValueError("Audio inputs were provided, but the tokenizer does not have an `audio_token` defined.")
-
-        if text is not None:
-            n_images_in_text = [sample.count(self.image_token) for sample in text]
-            if images is not None:
-                if len(images) != len(text):
-                    raise ValueError(
-                        f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
-                    )
-
-                n_images_in_images = [len(sublist) for sublist in images]
-                if n_images_in_text != n_images_in_images:
-                    raise ValueError(
-                        f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
-                        f" Found {n_images_in_text} {self.image_token} tokens and {n_images_in_images} images per sample."
-                    )
-            elif images is None and any(n_images_in_text):
-                raise ValueError(
-                    f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
-                )
 
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         num_soft_tokens = image_inputs["num_soft_tokens_per_image"][image_idx]

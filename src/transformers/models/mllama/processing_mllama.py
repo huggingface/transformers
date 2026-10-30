@@ -252,40 +252,6 @@ class MllamaProcessor(ProcessorMixin):
 
         return images, text
 
-    def validate_inputs(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ):
-        super().validate_inputs(images, text, **kwargs)
-
-        if text is not None:
-            n_images_in_text = [t.count(self.image_token) for t in text]
-
-            if sum(n_images_in_text) > 0 and images is None:
-                raise ValueError("No image were provided, but there are image tokens in the prompt")
-            elif images is not None:
-                images = make_nested_list_of_images(images)
-                n_images_in_images = [len(sample) for sample in images]
-
-                if any(batch_img == 0 for batch_img in n_images_in_text) and not all(
-                    batch_img == 0 for batch_img in n_images_in_text
-                ):
-                    raise ValueError(
-                        "If a batch of text is provided, there should be either no images or at least one image per sample"
-                    )
-
-                if n_images_in_images != n_images_in_text:
-                    add_message = ""
-                    if sum(n_images_in_images) == sum(n_images_in_text) and n_images_in_images != n_images_in_text:
-                        add_message = "Make sure to pass your images as a nested list, where each sub-list holds images per batch"
-
-                    raise ValueError(
-                        f"The number of image tokens in each text ({n_images_in_text}) should be the same as the "
-                        f"number of provided images per batch ({n_images_in_images}). {add_message}"
-                    )
-
     def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
         # Mllama has an `image_token` but doesn't need to add placeholders because
         # it uses cross-attention. Return the token itself an empty replacement

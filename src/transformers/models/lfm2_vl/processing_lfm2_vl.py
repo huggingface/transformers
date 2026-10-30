@@ -151,18 +151,6 @@ class Lfm2VlProcessor(ProcessorMixin):
                 "You must provide `text` when `images` is provided. Minimal text consists of a single image token."
             )
 
-        if text is not None:
-            n_images_in_text = [sample.count(self.image_token) for sample in text]
-            if sum(n_images_in_text) > 0 and images is None:
-                raise ValueError(f"We detected {sum(n_images_in_text)} tokens in the text but no images were passed")
-
-            if images is not None:
-                n_images_in_images = [len(sublist) for sublist in images]
-                if n_images_in_images != n_images_in_text:
-                    raise ValueError(
-                        f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
-                    )
-
     def _process_images(self, images: ImageInput, **kwargs):
         use_image_special_tokens = kwargs.pop("use_image_special_tokens")
         processed_images = self.image_processor(images, **kwargs)

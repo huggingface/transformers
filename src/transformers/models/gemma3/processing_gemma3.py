@@ -87,26 +87,6 @@ class Gemma3Processor(ProcessorMixin):
                 text = [" ".join([self.boi_token] * len(image_list)) for image_list in images]
         return images, text, None, None
 
-    def validate_inputs(
-        self,
-        images: ImageInput | None = None,
-        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[ProcessingKwargs],
-    ):
-        super().validate_inputs(images=images, text=text, **kwargs)
-
-        if images is not None and text is not None:
-            if len(images) != len(text):
-                raise ValueError(
-                    f"Received inconsistently sized batches of images ({len(images)}) and text ({len(text)})."
-                )
-
-            for prompt, images in zip(text, images):
-                if len(images) != prompt.count(self.boi_token):
-                    raise ValueError(
-                        f"Prompt contained {prompt.count(self.boi_token)} image tokens but received {len(images)} images."
-                    )
-
     def _check_special_mm_tokens(self, text: list[str], text_inputs: "BatchFeature", modalities: list[str]):
         """
         Checks that number of special tokens in text and processed text is same. The count can be different

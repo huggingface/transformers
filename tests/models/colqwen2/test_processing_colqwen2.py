@@ -238,6 +238,10 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip("ColQwen2Processor can't process text+image inputs at the same time")
+    def test_if_input_has_mismatching_tokens_and_visuals(self):
+        pass
+
+    @unittest.skip("ColQwen2Processor can't process text+image inputs at the same time")
     def test_get_num_multimodal_tokens_matches_processor_call(self):
         pass
 

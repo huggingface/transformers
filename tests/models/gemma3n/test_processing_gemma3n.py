@@ -36,12 +36,13 @@ class Gemma3nProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "hf-internal-testing/namespace-google-repo_name-gemma-3n-E4B-it"
     tiny_model_id = "hf-internal-testing/tiny-processor-gemma3n"
 
+    @staticmethod
+    def prepare_processor_dict():
+        """Override this method to provide custom kwargs for processor initialization."""
+        return {"audio_seq_length": 7, "image_seq_length": 5}
+
     def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = False):
         return super().prepare_images_inputs(batch_size=batch_size, nested=True)
-
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.boi_token
 
     def test_audio_feature_extractor(self):
         processor = self.get_processor()

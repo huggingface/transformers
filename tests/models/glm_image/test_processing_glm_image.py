@@ -35,10 +35,6 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Tiny processor created with make_tiny_processor.py from "zai-org/GLM-Image"
     tiny_model_id = "hf-internal-testing/tiny-processor-glm_image"
 
-    @classmethod
-    def _setup_test_attributes(cls, processor):
-        cls.image_token = processor.image_token
-
     def prepare_images_inputs(self, batch_size: int | None = None, nested: bool = False):
         """Override to create images with valid aspect ratio (< 4) for GLM-Image."""
         # GLM-Image requires aspect ratio < 4, so use near-square images
