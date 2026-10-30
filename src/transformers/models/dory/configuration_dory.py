@@ -92,7 +92,6 @@ class DoryConfig(PreTrainedConfig):
             self.rope_parameters = {
                 kind: {
                     "rope_type": "default",
-                    "partial_rotary_factor": 1.0,
                 }
                 for kind in ("sliding_attention", "full_attention")
                 if kind in self.layer_types
@@ -148,10 +147,10 @@ class DoryConfig(PreTrainedConfig):
         for rope in self.rope_parameters.values():
             if not isinstance(rope, dict) or rope.get("rope_type") != "default" or rope.get("rope_theta", 0) <= 0:
                 raise ValueError("Dory requires default RoPE with a positive rope_theta")
-            fraction = rope.get("partial_rotary_factor", 1.0)
-            rotary_dim = int(self.head_dim * fraction)
-            if not 0 < fraction <= 1 or rotary_dim <= 0 or rotary_dim % 2:
-                raise ValueError("Rotary dimensions must be positive, even, and <= head_dim")
+            if rope.get("partial_rotary_factor", 1.0) != 1.0:
+                raise ValueError("Dory requires full-head rotary embeddings (partial_rotary_factor=1.0)")
+            if self.head_dim % 2:
+                raise ValueError("Rotary dimensions must be even")
 
 
 __all__ = ["DoryConfig"]

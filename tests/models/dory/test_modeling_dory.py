@@ -260,22 +260,54 @@ def test_last_loop_matches_explicit_final_loop_history(loops):
                 layer.keys, layer.values = final.keys.clone(), final.values.clone()
 
 
+@pytest.mark.parametrize("legacy_full_rotary", [False, True])
 @torch.no_grad()
-def test_partial_rotary_and_distinct_attention_frequencies():
+def test_rotary_distinct_attention_frequencies(legacy_full_rotary):
     rope = {
-        "sliding_attention": {"rope_type": "default", "rope_theta": 100, "partial_rotary_factor": 0.5},
-        "full_attention": {"rope_type": "default", "rope_theta": 10000, "partial_rotary_factor": 1.0},
+        "sliding_attention": {"rope_type": "default", "rope_theta": 10000},
+        "full_attention": {"rope_type": "default", "rope_theta": 10000000},
     }
+    if legacy_full_rotary:
+        for parameters in rope.values():
+            parameters["partial_rotary_factor"] = 1.0
     model = make_model(rope_parameters=rope)
     tokens = torch.arange(1, 8).unsqueeze(0)
     expected = model(tokens, use_cache=False).logits
     first = model(tokens[:, :4])
     actual = model(tokens[:, 4:], past_key_values=first.past_key_values).logits
     torch.testing.assert_close(actual, expected[:, 4:])
-    rotary = model.backbone.rotary_emb["sliding_attention"]
+    rotary = model.backbone.rotary_emb
     values = torch.randn(1, 7, 2, 8)
-    rotated, _ = apply_rotary_pos_emb(values, values, *rotary(values, torch.arange(7).unsqueeze(0)))
-    torch.testing.assert_close(rotated[..., 4:], values[..., 4:], atol=0, rtol=0)
+    positions = torch.arange(7).unsqueeze(0) + 4096
+    rotations = []
+    for kind, parameters in rope.items():
+        inverse_frequencies = 1.0 / parameters["rope_theta"] ** (torch.arange(0, 8, 2) / 8)
+        frequencies = positions.float().unsqueeze(-1) * inverse_frequencies
+        cosine, sine = frequencies.cos().unsqueeze(2), frequencies.sin().unsqueeze(2)
+        first_half, second_half = values.chunk(2, dim=-1)
+        expected = torch.cat(
+            (first_half * cosine - second_half * sine, second_half * cosine + first_half * sine), dim=-1
+        )
+        rotated, _ = apply_rotary_pos_emb(values, values, *rotary(values, positions, kind), unsqueeze_dim=2)
+        torch.testing.assert_close(rotated, expected)
+        rotations.append(rotated)
+    assert not torch.allclose(*rotations)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize("cache_mode", ["per_loop", "last_loop"])
+@torch.no_grad()
+def test_rotary_buffers_survive_save_load(tmp_path, dtype, cache_mode):
+    make_model(cache_mode).save_pretrained(tmp_path / "original")
+    # Load in the target dtype so non-persistent RoPE buffers retain FP32 precision.
+    model = DoryForCausalLM.from_pretrained(tmp_path / "original", dtype=dtype, attn_implementation="eager").eval()
+    tokens = torch.tensor([[1, 3, 5, 7]])
+    positions = torch.arange(4).unsqueeze(0) + 4096
+    expected = model(tokens, position_ids=positions, use_cache=False).logits
+    model.save_pretrained(tmp_path)
+    loaded = DoryForCausalLM.from_pretrained(tmp_path, dtype=dtype, attn_implementation="eager").eval()
+    actual = loaded(tokens, position_ids=positions, use_cache=False).logits
+    torch.testing.assert_close(actual, expected, atol=0, rtol=0)
 
 
 @pytest.mark.parametrize(
@@ -287,6 +319,12 @@ def test_partial_rotary_and_distinct_attention_frequencies():
         {"layer_types": ["full_attention"]},
         {"num_key_value_heads": 3},
         {"sliding_window": 0},
+        {
+            "rope_parameters": {
+                "sliding_attention": {"rope_type": "default", "rope_theta": 10000, "partial_rotary_factor": 0.5},
+                "full_attention": {"rope_type": "default", "rope_theta": 10000000},
+            }
+        },
     ],
 )
 def test_invalid_architecture_is_rejected(overrides):
@@ -422,7 +460,7 @@ class DoryModelTest(CausalLMModelTest, unittest.TestCase):
     def test_model_rope_scaling_from_config(self, scaling_type):
         pass
 
-    @unittest.skip("Dory supports default RoPE only; partial rotation and per-type frequencies are tested separately")
+    @unittest.skip("Dory supports default RoPE only; per-type frequencies are tested separately")
     def test_model_rope_scaling_frequencies(self):
         pass
 
