@@ -1154,6 +1154,51 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "qwen3_5_text": [PrefixChange(prefix_to_remove="language_model", model_prefix="model")],
+        # Xiaomi-Lens-0 mask decoder: unroll the original `nn.Sequential` blocks and split the fused
+        # `nn.MultiheadAttention` input projection
+        "xiaomi_lens0": [
+            WeightRenaming(r"mask_decoder\.mask_embed\.net\.0\.", "mask_decoder.mask_embed.fc1."),
+            WeightRenaming(r"mask_decoder\.mask_embed\.net\.2\.", "mask_decoder.mask_embed.fc2."),
+            WeightRenaming(r"mask_decoder\.patch_proj\.", "mask_decoder.pixel_decoder.patch_proj."),
+            WeightRenaming(
+                r"mask_decoder\.patch_self_attn\.norm1\.", "mask_decoder.pixel_decoder.patch_layer.layer_norm1."
+            ),
+            WeightRenaming(
+                r"mask_decoder\.patch_self_attn\.norm2\.", "mask_decoder.pixel_decoder.patch_layer.layer_norm2."
+            ),
+            WeightRenaming(
+                r"mask_decoder\.patch_self_attn\.mlp\.net\.0\.", "mask_decoder.pixel_decoder.patch_layer.mlp.fc1."
+            ),
+            WeightRenaming(
+                r"mask_decoder\.patch_self_attn\.mlp\.net\.2\.", "mask_decoder.pixel_decoder.patch_layer.mlp.fc2."
+            ),
+            WeightRenaming(
+                r"mask_decoder\.patch_self_attn\.attn\.out_proj\.",
+                "mask_decoder.pixel_decoder.patch_layer.self_attn.out_proj.",
+            ),
+            WeightConverter(
+                source_patterns="mask_decoder.patch_self_attn.attn.in_proj_weight",
+                target_patterns=[
+                    "mask_decoder.pixel_decoder.patch_layer.self_attn.q_proj.weight",
+                    "mask_decoder.pixel_decoder.patch_layer.self_attn.k_proj.weight",
+                    "mask_decoder.pixel_decoder.patch_layer.self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns="mask_decoder.patch_self_attn.attn.in_proj_bias",
+                target_patterns=[
+                    "mask_decoder.pixel_decoder.patch_layer.self_attn.q_proj.bias",
+                    "mask_decoder.pixel_decoder.patch_layer.self_attn.k_proj.bias",
+                    "mask_decoder.pixel_decoder.patch_layer.self_attn.v_proj.bias",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming(r"mask_decoder\.channel_reduce\.", "mask_decoder.pixel_decoder.channel_reduce."),
+            WeightRenaming(r"mask_decoder\.upscaler\.0\.", "mask_decoder.pixel_decoder.upscale_block.conv1."),
+            WeightRenaming(r"mask_decoder\.upscaler\.1\.", "mask_decoder.pixel_decoder.upscale_block.layer_norm."),
+            WeightRenaming(r"mask_decoder\.upscaler\.3\.", "mask_decoder.pixel_decoder.upscale_block.conv2."),
+        ],
         "sam3_tracker": [
             WeightRenaming(
                 source_patterns=r"detector_model.vision_encoder.backbone.", target_patterns="vision_encoder.backbone."

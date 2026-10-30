@@ -622,6 +622,9 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("xcodec", "XcodecModel"),
         ("xcodec2", "Xcodec2Model"),
         ("xglm", "XGLMModel"),
+        ("xiaomi_lens0", "XiaomiLens0Model"),
+        ("xiaomi_lens0_text", "XiaomiLens0TextModel"),
+        ("xiaomi_lens0_vision", "XiaomiLens0VisionModel"),
         ("xlm", "XLMModel"),
         ("xlm-roberta", "XLMRobertaModel"),
         ("xlm-roberta-xl", "XLMRobertaXLModel"),
@@ -1233,6 +1236,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("video_llava", "VideoLlavaForConditionalGeneration"),
         ("vipllava", "VipLlavaForConditionalGeneration"),
         ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
+        ("xiaomi_lens0", "XiaomiLens0ForConditionalGeneration"),
     ]
 )
 

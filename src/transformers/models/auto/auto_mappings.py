@@ -788,6 +788,10 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("xcodec", "XcodecConfig"),
         ("xcodec2", "Xcodec2Config"),
         ("xglm", "XGLMConfig"),
+        ("xiaomi_lens0", "XiaomiLens0Config"),
+        ("xiaomi_lens0_mask_decoder", "XiaomiLens0MaskDecoderConfig"),
+        ("xiaomi_lens0_text", "XiaomiLens0TextConfig"),
+        ("xiaomi_lens0_vision", "XiaomiLens0VisionConfig"),
         ("xlm", "XLMConfig"),
         ("xlm-roberta", "XLMRobertaConfig"),
         ("xlm-roberta-xl", "XLMRobertaXLConfig"),
@@ -1098,6 +1102,9 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("xclip", "x_clip"),
         ("xclip_text_model", "x_clip"),
         ("xclip_vision_model", "x_clip"),
+        ("xiaomi_lens0_mask_decoder", "xiaomi_lens0"),
+        ("xiaomi_lens0_text", "xiaomi_lens0"),
+        ("xiaomi_lens0_vision", "xiaomi_lens0"),
         ("xlm-roberta", "xlm_roberta"),
         ("xlm-roberta-xl", "xlm_roberta_xl"),
     ]
@@ -1335,6 +1342,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2Processor"),
         ("wav2vec2-bert", "Wav2Vec2BertProcessor"),
         ("whisper", "WhisperProcessor"),
+        ("xiaomi_lens0", "XiaomiLens0Processor"),
     ]
 )
 
