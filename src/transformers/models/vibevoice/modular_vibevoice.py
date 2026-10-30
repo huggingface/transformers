@@ -34,6 +34,7 @@ from ..voxtral.modeling_voxtral import (
     VoxtralMultiModalProjector,
     VoxtralPreTrainedModel,
 )
+from .configuration_vibevoice import VibeVoiceConfig
 from .generation_vibevoice import VibeVoiceGenerationMixin
 
 
@@ -186,7 +187,7 @@ class VibeVoicePreTrainedModel(VoxtralPreTrainedModel):
     """
 )
 class VibeVoiceModel(VoxtralModel):
-    def __init__(self, config):
+    def __init__(self, config: VibeVoiceConfig):
         super().__init__(config)
         self.multi_modal_projector = VibeVoiceMultiModalProjector(
             config.audio_config.hidden_size, config.text_config.hidden_size
@@ -274,7 +275,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
     _tp_plan = {"lm_head": "colwise_gather_output"}
 
-    def __init__(self, config):
+    def __init__(self, config: VibeVoiceConfig):
         super().__init__(config)
         self.model = VibeVoiceModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

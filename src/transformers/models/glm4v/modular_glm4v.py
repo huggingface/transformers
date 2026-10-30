@@ -571,7 +571,7 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
         "attentions": Glm4vVisionAttention,
     }
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: Glm4vVisionConfig) -> None:
         super().__init__(config)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
@@ -752,7 +752,7 @@ class Glm4vTextModel(Qwen2_5_VLTextModel):
 class Glm4vModel(Qwen2VLModel):
     _no_split_modules = ["Glm4vTextDecoderLayer", "Glm4vVisionBlock"]
 
-    def __init__(self, config):
+    def __init__(self, config: Glm4vConfig):
         super().__init__(config)
         self.visual = Glm4vVisionModel._from_config(config.vision_config)
 

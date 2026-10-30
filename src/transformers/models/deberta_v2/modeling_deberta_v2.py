@@ -700,7 +700,7 @@ class DebertaV2PreTrainedModel(PreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.deberta.modeling_deberta.DebertaModel with Deberta->DebertaV2
 class DebertaV2Model(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
 
         self.embeddings = DebertaV2Embeddings(config)
@@ -891,7 +891,7 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     }
     _keys_to_ignore_on_load_unexpected = [r"mask_predictions.*"]
 
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
         self.legacy = config.legacy
         self.deberta = DebertaV2Model(config)
@@ -998,7 +998,7 @@ class ContextPooler(nn.Module):
     """
 )
 class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
 
         num_labels = getattr(config, "num_labels", 2)
@@ -1102,7 +1102,7 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
 @auto_docstring
 # Copied from transformers.models.deberta.modeling_deberta.DebertaForTokenClassification with Deberta->DebertaV2
 class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1161,7 +1161,7 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
 
 @auto_docstring
 class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1239,7 +1239,7 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
 
 @auto_docstring
 class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DebertaV2Config):
         super().__init__(config)
 
         num_labels = getattr(config, "num_labels", 2)

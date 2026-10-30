@@ -347,7 +347,7 @@ class MoonshinMoonshineStreamingDecoderMLP(LlamaMLP): ...
 
 
 class MoonshineStreamingDecoder(MoonshineDecoder):
-    def __init__(self, config):
+    def __init__(self, config: MoonshineStreamingConfig):
         super().__init__(config)
         self.pos_emb = nn.Embedding(self.config.max_position_embeddings, config.encoder_config.hidden_size)
 
@@ -400,7 +400,7 @@ class MoonshineStreamingDecoder(MoonshineDecoder):
 
 
 class MoonshineStreamingModel(MoonshineModel):
-    def __init__(self, config):
+    def __init__(self, config: MoonshineStreamingConfig):
         super().__init__(config)
         self.encoder = MoonshineStreamingEncoder(config.encoder_config)
         self.decoder = MoonshineStreamingDecoder(config)

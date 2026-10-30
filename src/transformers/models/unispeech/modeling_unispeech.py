@@ -708,6 +708,8 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, UniSpeechModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
 
     def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """
@@ -1092,7 +1094,7 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
     """
 )
 class UniSpeechForCTC(UniSpeechPreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: UniSpeechConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -1219,7 +1221,7 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
     """
 )
 class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UniSpeechConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:

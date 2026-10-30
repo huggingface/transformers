@@ -80,7 +80,7 @@ class Glm46VPreTrainedModel(Glm4vPreTrainedModel):
 class Glm46VModel(Glm4vModel):
     _no_split_modules = None
 
-    def __init__(self, config):
+    def __init__(self, config: Glm46VConfig):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)

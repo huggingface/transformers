@@ -677,7 +677,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         "router_logits": OutputRecorder(SwitchTransformersTop1Router, index=2),
     }
 
-    def __init__(self, config):
+    def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
 

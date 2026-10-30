@@ -210,7 +210,7 @@ class DeepseekVLHybridPreTrainedModel(DeepseekVLPreTrainedModel):
 
 
 class DeepseekVLHybridModel(DeepseekVLModel):
-    def __init__(self, config):
+    def __init__(self, config: DeepseekVLHybridConfig):
         self.output_size = config.vision_config.image_size // config.vision_config.patch_size
         self.global_attn_index = config.high_res_vision_config.global_attn_indexes[0]
 

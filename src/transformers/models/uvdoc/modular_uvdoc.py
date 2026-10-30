@@ -482,7 +482,7 @@ class UVDocPreTrainedModel(PPOCRV5ServerDetPreTrainedModel):
 
 
 class UVDocBridge(UVDocPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UVDocConfig):
         super().__init__(config)
         self.bridge = nn.ModuleList([])
         for bridge_index in range(len(config.stage_configs)):

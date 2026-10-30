@@ -101,7 +101,7 @@ class DeepseekVLPreTrainedModel(JanusPreTrainedModel):
 
 @auto_docstring
 class DeepseekVLModel(JanusModel):
-    def __init__(self, config):
+    def __init__(self, config: DeepseekVLConfig):
         super().__init__(config)
         self.config = config
 

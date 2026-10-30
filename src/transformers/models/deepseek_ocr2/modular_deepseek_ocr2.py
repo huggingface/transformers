@@ -793,7 +793,7 @@ class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
     }
     config: DeepseekOcr2VisionConfig
 
-    def __init__(self, config):
+    def __init__(self, config: DeepseekOcr2VisionConfig):
         super().__init__(config)
         del self.embed_tokens
         self.layers = nn.ModuleList(

@@ -118,6 +118,9 @@ class JanusProcessor(ProcessorMixin):
             )
         # generation_mode in text_kwargs has priority for backwards compatibility
         generation_mode = merged_kwargs["text_kwargs"].pop("generation_mode", merged_kwargs["generation_mode"])
+        
+        if isinstance(text, str):
+            text = [text]
         if self.use_default_system_prompt and generation_mode == "text":
             text = [f"{DEFAULT_SYSTEM_PROMPT}{sample}" for sample in text]
         elif generation_mode == "image":
