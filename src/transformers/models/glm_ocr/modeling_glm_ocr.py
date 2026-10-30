@@ -20,7 +20,6 @@
 
 import itertools
 from collections.abc import Callable
-from dataclasses import dataclass
 from itertools import accumulate
 
 import torch
@@ -316,18 +315,6 @@ class GlmOcrPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_attention_backend = True
     _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.16.*"]
-
-
-@auto_docstring
-@dataclass
-class GlmOcrModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
 
 
 def rotate_half(x):
@@ -1119,7 +1106,7 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GlmOcrModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1174,22 +1161,7 @@ class GlmOcrModel(GlmOcrPreTrainedModel):
             **kwargs,
         )
 
-        return GlmOcrModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
-
-
-@auto_docstring
-@dataclass
-class GlmOcrCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
+        return outputs
 
 
 class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
@@ -1249,7 +1221,7 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GlmOcrCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -1309,13 +1281,12 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return GlmOcrCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

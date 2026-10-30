@@ -94,18 +94,6 @@ class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
 
 
 @auto_docstring
-@dataclass
-class Cosmos3OmniModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
-@auto_docstring
 class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
@@ -404,7 +392,7 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Cosmos3OmniModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -497,22 +485,7 @@ class Cosmos3OmniModel(Cosmos3OmniPreTrainedModel):
             **kwargs,
         )
 
-        return Cosmos3OmniModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
-
-
-@auto_docstring
-@dataclass
-class Cosmos3OmniCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
+        return outputs
 
 
 class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, GenerationMixin):
@@ -572,7 +545,7 @@ class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, Generation
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Cosmos3OmniCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         Example:
 
@@ -637,13 +610,12 @@ class Cosmos3OmniForConditionalGeneration(Cosmos3OmniPreTrainedModel, Generation
                 logits=logits, labels=labels, vocab_size=self.config.text_config.vocab_size, **kwargs
             )
 
-        return Cosmos3OmniCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):

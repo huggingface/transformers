@@ -1087,18 +1087,6 @@ class Qwen2_5OmniPreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedMo
 ############################
 
 
-@auto_docstring
-@dataclass
-class Qwen2_5OmniThinkerCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
 class Qwen2_5OmniAudioAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1990,7 +1978,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         video_second_per_grid: torch.LongTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen2_5OmniThinkerCausalLMOutputWithPast:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         feature_attention_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`, *optional*):
             Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
@@ -2063,13 +2051,12 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
                 logits=logits, labels=labels, vocab_size=self.config.get_text_config().vocab_size, **kwargs
             )
 
-        return Qwen2_5OmniThinkerCausalLMOutputWithPast(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=self.model.rope_deltas,
         )
 
     def _prepare_position_ids_for_generation(self, inputs_tensor, model_kwargs):
@@ -2127,16 +2114,12 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
 @dataclass
 class Qwen2_5OmniTalkerCausalLMOutputWithPast(CausalLMOutputWithPast):
     r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
     thinker_reply_part (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Hidden states from the thinker model that are used as input for the talker model. These represent the encoded
         response that the talker model will use to generate speech tokens.
     """
 
     attentions: tuple[torch.FloatTensor] | None = None
-    rope_deltas: torch.LongTensor | None = None
     thinker_reply_part: torch.FloatTensor | None = None
 
 
@@ -2311,7 +2294,6 @@ class Qwen2_5OmniTalkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCon
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
             thinker_reply_part=thinker_reply_part,
         )
 

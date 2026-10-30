@@ -1153,18 +1153,6 @@ class Qwen3OmniMoeThinkerTextModel(Qwen3VLMoeTextModel):
         self.rotary_emb = Qwen3OmniMoeThinkerTextRotaryEmbedding(config)
 
 
-@auto_docstring
-@dataclass
-class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-
-
 class Qwen3OmniMoeThinkerModel(Qwen2_5OmniThinkerModel):
     _keys_to_ignore_on_load_unexpected = [r"^talker", r"^code2wav"]
     _no_split_modules = [
@@ -1414,7 +1402,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         video_second_per_grid=None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs,
-    ) -> tuple | Qwen3OmniMoeThinkerCausalLMOutputWithPast:
+    ) -> tuple | MoeCausalLMOutputWithPast:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
@@ -1459,14 +1447,13 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             if labels is not None:
                 loss += self.router_aux_loss_coef * aux_loss.to(loss.device)  # make sure to reside in the same device
 
-        return Qwen3OmniMoeThinkerCausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             aux_loss=aux_loss,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
             past_key_values=outputs.past_key_values,
-            rope_deltas=self.model.rope_deltas,
             router_logits=outputs.router_logits,
         )
 

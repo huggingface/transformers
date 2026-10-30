@@ -37,7 +37,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
+    MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
@@ -941,33 +941,6 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
 
 
 @auto_docstring
-@dataclass
-class Qwen3VLMoeModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
-
-
-@auto_docstring
-@dataclass
-class Qwen3VLMoeCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
-    aux_loss: torch.FloatTensor | None = None
-
-
-@auto_docstring
 class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
     base_model_prefix = "model"
     # Reference: fix gemma3 grad acc #37208
@@ -1266,7 +1239,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen3VLMoeModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1359,10 +1332,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
             **kwargs,
         )
 
-        return Qwen3VLMoeModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
+        return outputs
 
 
 def load_balancing_loss_func(
@@ -1492,7 +1462,7 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen3VLMoeCausalLMOutputWithPast:
+    ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
         Example:
 
@@ -1581,14 +1551,13 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLMoePreTrainedModel, GenerationMi
                     loss.device
                 )  # make sure to reside in the same device
 
-        return Qwen3VLMoeCausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
             router_logits=outputs.router_logits,
         )
 

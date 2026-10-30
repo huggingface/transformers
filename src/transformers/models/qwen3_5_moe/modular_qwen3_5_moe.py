@@ -20,7 +20,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging, no_inherit_decorator
@@ -49,12 +49,7 @@ from ..qwen3_next.modeling_qwen3_next import (
     Qwen3NextSparseMoeBlock,
 )
 from ..qwen3_vl.configuration_qwen3_vl import Qwen3VLConfig
-from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
-    Qwen3VLMoeCausalLMOutputWithPast,
-    Qwen3VLMoeForConditionalGeneration,
-    Qwen3VLMoeModelOutputWithPast,
-    Qwen3VLMoeTextTopKRouter,
-)
+from ..qwen3_vl_moe.modeling_qwen3_vl_moe import Qwen3VLMoeForConditionalGeneration, Qwen3VLMoeTextTopKRouter
 
 
 logger = logging.get_logger(__name__)
@@ -242,14 +237,6 @@ class Qwen3_5MoeVisionModel(Qwen3_5VisionModel):
     pass
 
 
-class Qwen3_5MoeModelOutputWithPast(Qwen3VLMoeModelOutputWithPast):
-    router_logits: tuple[torch.FloatTensor] | None = None
-
-
-class Qwen3_5MoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
-    pass
-
-
 class Qwen3_5MoeTextModel(Qwen3_5TextModel):
     pass
 
@@ -271,7 +258,7 @@ class Qwen3_5MoeModel(Qwen3_5Model):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen3_5MoeModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (pixel_values is not None or pixel_values_videos is not None) and mm_encoder_outputs is not None:
             raise ValueError(
                 "You cannot specify both pixel_values/pixel_values_videos and mm_encoder_outputs at the same time"
@@ -329,12 +316,11 @@ class Qwen3_5MoeModel(Qwen3_5Model):
             use_cache=use_cache,
             **kwargs,
         )
-        return Qwen3_5MoeModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=self.rope_deltas,
             router_logits=outputs.router_logits,
         )
 

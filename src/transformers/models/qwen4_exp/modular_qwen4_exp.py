@@ -53,7 +53,6 @@ from ..qwen3_5_moe.modeling_qwen3_5_moe import (
     Qwen3_5MoeForCausalLM,
     Qwen3_5MoeForConditionalGeneration,
     Qwen3_5MoeModel,
-    Qwen3_5MoeModelOutputWithPast,
     Qwen3_5MoePreTrainedModel,
     Qwen3_5MoeTextModel,
     Qwen3_5MoeVisionModel,
@@ -884,10 +883,6 @@ class Qwen4ExpPreTrainedModel(Qwen3_5MoePreTrainedModel):
             init.zeros_(module.conv1d.weight)
 
 
-class Qwen4ExpModelOutputWithPast(Qwen3_5MoeModelOutputWithPast):
-    pass
-
-
 @auto_docstring
 class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
     config: Qwen4ExpTextConfig
@@ -1028,7 +1023,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
         hidden_states = self.hyper_connection_mixer(hidden_states)
 
-        return Qwen4ExpModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -1059,7 +1054,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen4ExpModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1129,10 +1124,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
             **kwargs,
         )
 
-        return Qwen4ExpModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
+        return outputs
 
 
 @auto_docstring

@@ -20,7 +20,7 @@ from huggingface_hub.dataclasses import strict
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import BaseModelOutputWithPooling, MoeModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -46,11 +46,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vVisionRotaryEmbedding,
 )
 from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
-from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
-    Qwen3VLMoeCausalLMOutputWithPast,
-    Qwen3VLMoeModelOutputWithPast,
-    load_balancing_loss_func,
-)
+from ..qwen3_vl_moe.modeling_qwen3_vl_moe import load_balancing_loss_func
 
 
 logger = logging.get_logger(__name__)
@@ -230,10 +226,6 @@ class Glm4vMoePreTrainedModel(Glm4MoePreTrainedModel):
     _can_record_outputs = {}
 
 
-class Glm4vMoeCausalLMOutputWithPast(Qwen3VLMoeCausalLMOutputWithPast):
-    pass
-
-
 class Glm4vMoeVisionRotaryEmbedding(Glm4vVisionRotaryEmbedding):
     pass
 
@@ -329,10 +321,6 @@ class Glm4vMoeTextModel(Glm4vTextModel):
         )
 
 
-class Glm4vMoeModelOutputWithPast(Qwen3VLMoeModelOutputWithPast):
-    pass
-
-
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
     def __init__(self, config):
         super().__init__(config)
@@ -358,7 +346,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Glm4vMoeCausalLMOutputWithPast:
+    ) -> tuple | MoeCausalLMOutputWithPast:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
@@ -402,14 +390,13 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
                     loss.device
                 )  # make sure to reside in the same device
 
-        return Glm4vMoeCausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
             router_logits=outputs.router_logits,
         )
 

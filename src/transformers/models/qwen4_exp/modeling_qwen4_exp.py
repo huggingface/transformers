@@ -21,7 +21,6 @@
 import itertools
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
@@ -43,7 +42,6 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     BaseModelOutputWithPooling,
-    CausalLMOutputWithPast,
     MoeCausalLMOutputWithPast,
     MoeModelOutputWithPast,
 )
@@ -1355,19 +1353,6 @@ class Qwen4ExpPreTrainedModel(PreTrainedModel):
 
 
 @auto_docstring
-@dataclass
-class Qwen4ExpModelOutputWithPast(BaseModelOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
-
-
-@auto_docstring
 class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
     config: Qwen4ExpTextConfig
     _no_split_modules = ["Qwen4ExpTextDecoderLayer"]
@@ -1486,7 +1471,7 @@ class Qwen4ExpTextModel(Qwen4ExpPreTrainedModel):
 
         hidden_states = self.hyper_connection_mixer(hidden_states)
 
-        return Qwen4ExpModelOutputWithPast(
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -2302,7 +2287,7 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen4ExpModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -2372,24 +2357,7 @@ class Qwen4ExpModel(Qwen4ExpPreTrainedModel):
             **kwargs,
         )
 
-        return Qwen4ExpModelOutputWithPast(
-            **outputs,
-            rope_deltas=self.rope_deltas,
-        )
-
-
-@auto_docstring
-@dataclass
-class Qwen4ExpCausalLMOutputWithPast(CausalLMOutputWithPast):
-    r"""
-    rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
-        The rope index difference between sequence length and multimodal rope.
-        The attribute is deprecated and will be removed in v5.20, use `model.base_model.rope_deltas` instead.
-    """
-
-    rope_deltas: torch.LongTensor | None = None
-    router_logits: tuple[torch.FloatTensor] | None = None
-    aux_loss: torch.FloatTensor | None = None
+        return outputs
 
 
 @auto_docstring
@@ -2454,7 +2422,7 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
         logits_to_keep: int | torch.Tensor = 0,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Qwen4ExpCausalLMOutputWithPast:
+    ) -> tuple | MoeCausalLMOutputWithPast:
         r"""
         Example:
         ```python
@@ -2539,14 +2507,13 @@ class Qwen4ExpForConditionalGeneration(Qwen4ExpPreTrainedModel, GenerationMixin)
                     loss.device
                 )  # make sure to reside in the same device
 
-        return Qwen4ExpCausalLMOutputWithPast(
+        return MoeCausalLMOutputWithPast(
             loss=loss,
             aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            rope_deltas=outputs.rope_deltas,
             router_logits=outputs.router_logits,
         )
 
