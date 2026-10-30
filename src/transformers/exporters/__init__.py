@@ -21,10 +21,12 @@ _import_structure = {
     "auto": [
         "EXPORT_BACKENDS",
         "AutoExportConfig",
+        "AutoExportedModel",
         "AutoHfExporter",
         "ExportBackend",
         "get_export_config_class",
         "get_exporter_class",
+        "get_runner_class",
         "register_backend",
     ],
     "base": ["ExportArtifacts", "ExportedComponent", "HfExporter"],
@@ -53,16 +55,19 @@ _import_structure = {
         "OnnxRuntimeStaticConfig",
         "PT2EQuantizer",
     ],
+    "runtimes": ["ExportedModel", "ModelRunner"],
 }
 
 if TYPE_CHECKING:
     from .auto import (
         EXPORT_BACKENDS,
         AutoExportConfig,
+        AutoExportedModel,
         AutoHfExporter,
         ExportBackend,
         get_export_config_class,
         get_exporter_class,
+        get_runner_class,
         register_backend,
     )
     from .base import ExportArtifacts, ExportedComponent, HfExporter
@@ -84,6 +89,7 @@ if TYPE_CHECKING:
         OnnxRuntimeStaticConfig,
         PT2EQuantizer,
     )
+    from .runtimes import ExportedModel, ModelRunner
 else:
     import sys
 
