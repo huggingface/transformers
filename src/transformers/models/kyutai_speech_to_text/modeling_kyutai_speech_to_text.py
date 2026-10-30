@@ -552,7 +552,7 @@ class KyutaiSpeechToTextEmbeddings(nn.Module):
 
 @auto_docstring
 class KyutaiSpeechToTextModel(KyutaiSpeechToTextPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: KyutaiSpeechToTextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -626,7 +626,7 @@ class KyutaiSpeechToTextForConditionalGeneration(KyutaiSpeechToTextPreTrainedMod
     _keep_in_fp32_modules_strict = ["codec_model"]
     output_modalities = ("audio", "text")
 
-    def __init__(self, config):
+    def __init__(self, config: KyutaiSpeechToTextConfig):
         super().__init__(config)
         self.model = KyutaiSpeechToTextModel(config)
         self.vocab_size = config.vocab_size

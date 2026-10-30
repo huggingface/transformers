@@ -585,7 +585,7 @@ class Qwen2MoeForCausalLM(Qwen2MoePreTrainedModel, GenerationMixin):
 
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen2MoeConfig):
         super().__init__(config)
         self.model = Qwen2MoeModel(config)
         self.vocab_size = config.vocab_size

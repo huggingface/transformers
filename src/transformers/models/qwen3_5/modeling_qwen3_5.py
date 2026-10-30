@@ -1117,7 +1117,7 @@ class Qwen3_5VisionModel(Qwen3_5PreTrainedModel):
     }
     _no_split_modules = ["Qwen3_5VisionBlock"]
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
+    def __init__(self, config: Qwen3_5VisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
@@ -1302,7 +1302,7 @@ class Qwen3_5Model(Qwen3_5PreTrainedModel):
     input_modalities = ("image", "video", "text")
     _no_split_modules = ["Qwen3_5DecoderLayer", "Qwen3_5VisionBlock"]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3_5Config):
         super().__init__(config)
         self.visual = AutoModel.from_config(config.vision_config)
         self.language_model = AutoModel.from_config(config.text_config)
@@ -1667,7 +1667,7 @@ class Qwen3_5ForCausalLM(Qwen3_5PreTrainedModel, GenerationMixin):
     config: Qwen3_5TextConfig
     _keys_to_ignore_on_load_unexpected = [r"^mtp.*", r"^model.visual.*"]
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3_5TextConfig):
         super().__init__(config)
         self.model = Qwen3_5TextModel(config)
         self.vocab_size = config.vocab_size
@@ -1757,7 +1757,7 @@ class Qwen3_5ForConditionalGeneration(Qwen3_5PreTrainedModel, GenerationMixin):
     accepts_loss_kwargs = False
     input_modalities = ("image", "video", "text")
 
-    def __init__(self, config):
+    def __init__(self, config: Qwen3_5Config):
         super().__init__(config)
         self.model = Qwen3_5Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

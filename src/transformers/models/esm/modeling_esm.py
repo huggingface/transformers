@@ -616,7 +616,7 @@ class EsmModel(EsmPreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: EsmConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -795,7 +795,7 @@ class EsmModel(EsmPreTrainedModel):
 class EsmForMaskedLM(EsmPreTrainedModel):
     _tied_weights_keys = {"lm_head.decoder.weight": "esm.embeddings.word_embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: EsmConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -886,7 +886,7 @@ class EsmLMHead(nn.Module):
     """
 )
 class EsmForSequenceClassification(EsmPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: EsmConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -952,7 +952,7 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
 
 @auto_docstring
 class EsmForTokenClassification(EsmPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: EsmConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

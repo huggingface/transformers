@@ -1554,7 +1554,7 @@ class MuseSparkForConditionalGeneration(MuseSparkPreTrainedModel, GenerationMixi
     accepts_loss_kwargs = False
     input_modalities = ("image", "video", "text")
 
-    def __init__(self, config):
+    def __init__(self, config: MuseSparkConfig):
         super().__init__(config)
         self.model = MuseSparkModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

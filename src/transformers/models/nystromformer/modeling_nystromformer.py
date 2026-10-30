@@ -409,7 +409,7 @@ class NystromformerPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class NystromformerModel(NystromformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NystromformerConfig):
         super().__init__(config)
         self.config = config
 
@@ -508,7 +508,7 @@ class NystromformerForMaskedLM(NystromformerPreTrainedModel):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: NystromformerConfig):
         super().__init__(config)
 
         self.nystromformer = NystromformerModel(config)
@@ -599,7 +599,7 @@ class NystromformerClassificationHead(nn.Module):
     """
 )
 class NystromformerForSequenceClassification(NystromformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NystromformerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.nystromformer = NystromformerModel(config)
@@ -674,7 +674,7 @@ class NystromformerForSequenceClassification(NystromformerPreTrainedModel):
 
 @auto_docstring
 class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NystromformerConfig):
         super().__init__(config)
 
         self.nystromformer = NystromformerModel(config)
@@ -775,7 +775,7 @@ class NystromformerForMultipleChoice(NystromformerPreTrainedModel):
 
 @auto_docstring
 class NystromformerForTokenClassification(NystromformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NystromformerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -837,7 +837,7 @@ class NystromformerForTokenClassification(NystromformerPreTrainedModel):
 
 @auto_docstring
 class NystromformerForQuestionAnswering(NystromformerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: NystromformerConfig):
         super().__init__(config)
 
         config.num_labels = 2

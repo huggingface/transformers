@@ -533,7 +533,7 @@ class HrmTextForCausalLM(HrmTextPreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: HrmTextConfig):
         super().__init__(config)
         self.model = HrmTextModel(config)
         self.vocab_size = config.vocab_size

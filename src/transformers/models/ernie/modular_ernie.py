@@ -176,7 +176,7 @@ class ErniePreTrainedModel(PreTrainedModel):
 class ErnieModel(BertModel):
     _no_split_modules = ["ErnieLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: ErnieConfig, add_pooling_layer=True):
         super().__init__(self, config)
         self.config = config
         self.gradient_checkpointing = False

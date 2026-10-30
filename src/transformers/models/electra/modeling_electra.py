@@ -543,7 +543,7 @@ class ElectraForPreTrainingOutput(ModelOutput):
 
 @auto_docstring
 class ElectraModel(ElectraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ElectraConfig):
         super().__init__(config)
         self.embeddings = ElectraEmbeddings(config)
 
@@ -793,7 +793,7 @@ class ElectraSequenceSummary(nn.Module):
     """
 )
 class ElectraForSequenceClassification(ElectraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ElectraConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -867,7 +867,7 @@ class ElectraForSequenceClassification(ElectraPreTrainedModel):
     """
 )
 class ElectraForPreTraining(ElectraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ElectraConfig):
         super().__init__(config)
 
         self.electra = ElectraModel(config)
@@ -961,7 +961,7 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
 class ElectraForMaskedLM(ElectraPreTrainedModel):
     _tied_weights_keys = {"generator_lm_head.weight": "electra.embeddings.word_embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: ElectraConfig):
         super().__init__(config)
 
         self.electra = ElectraModel(config)
@@ -1025,7 +1025,7 @@ class ElectraForMaskedLM(ElectraPreTrainedModel):
     """
 )
 class ElectraForTokenClassification(ElectraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ElectraConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1082,7 +1082,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
     config: ElectraConfig
     base_model_prefix = "electra"
 
-    def __init__(self, config):
+    def __init__(self, config: ElectraConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1150,7 +1150,7 @@ class ElectraForQuestionAnswering(ElectraPreTrainedModel):
 
 @auto_docstring
 class ElectraForMultipleChoice(ElectraPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ElectraConfig):
         super().__init__(config)
 
         self.electra = ElectraModel(config)
@@ -1247,7 +1247,7 @@ class ElectraForMultipleChoice(ElectraPreTrainedModel):
 class ElectraForCausalLM(ElectraPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"generator_lm_head.weight": "electra.embeddings.word_embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: ElectraConfig):
         super().__init__(config)
 
         if not config.is_decoder:

@@ -804,7 +804,7 @@ class Qwen3NextModel(Qwen3NextPreTrainedModel):
 
 
 class Qwen3NextForCausalLM(MixtralForCausalLM):
-    def __init__(self, config):
+    def __init__(self, config: Qwen3NextConfig):
         super().__init__(config)
         self.num_experts = config.num_experts
 

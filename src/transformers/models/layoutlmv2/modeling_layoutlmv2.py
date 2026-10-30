@@ -551,7 +551,7 @@ class LayoutLMv2Pooler(nn.Module):
 class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
     _can_record_outputs = {"hidden_states": LayoutLMv2Layer, "attentions": LayoutLMv2SelfAttention}
 
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMv2Config):
         requires_backends(self, "detectron2")
         super().__init__(config)
         self.config = config
@@ -790,7 +790,7 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
     """
 )
 class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMv2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.layoutlmv2 = LayoutLMv2Model(config)
@@ -984,7 +984,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
     """
 )
 class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMv2Config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.layoutlmv2 = LayoutLMv2Model(config)
@@ -1119,7 +1119,7 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
 
 @auto_docstring
 class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
-    def __init__(self, config, has_visual_segment_embedding=True):
+    def __init__(self, config: LayoutLMv2Config, has_visual_segment_embedding=True):
         r"""
         has_visual_segment_embedding (`bool`, *optional*, defaults to `True`):
             Whether or not to add visual segment embeddings.

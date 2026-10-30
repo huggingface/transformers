@@ -363,7 +363,7 @@ class GPTNeoXJapaneseLayer(nn.Module):
 
 @auto_docstring
 class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoXJapaneseConfig):
         super().__init__(config)
         self.config = config
 
@@ -490,7 +490,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
 class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"embed_out.weight": "gpt_neox_japanese.embed_in.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: GPTNeoXJapaneseConfig):
         super().__init__(config)
         self.config = config
 

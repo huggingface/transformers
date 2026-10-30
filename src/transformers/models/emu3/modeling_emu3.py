@@ -1256,7 +1256,7 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
     _fsdp_plan = {"lm_head": "keep_full_weight"}
     config: Emu3TextConfig
 
-    def __init__(self, config):
+    def __init__(self, config: Emu3TextConfig):
         super().__init__(config)
         self.model = Emu3TextModel(config)
         self.vocab_size = config.vocab_size
@@ -1325,7 +1325,7 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
 
 
 class Emu3Model(Emu3PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: Emu3Config):
         super().__init__(config)
         self.text_model = Emu3TextModel._from_config(config.text_config)
         self.vqmodel = Emu3VQVAE(config.vq_config)
@@ -1488,7 +1488,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     output_modalities = ("image", "text")
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: Emu3Config):
         super().__init__(config)
         self.model = Emu3Model(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

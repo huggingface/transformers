@@ -857,7 +857,7 @@ class CohereCompassVisionModel(CohereCompassPreTrainedModel):
         "attentions": CohereCompassVisionAttention,
     }
 
-    def __init__(self, config, *inputs, **kwargs) -> None:
+    def __init__(self, config: CohereCompassVisionConfig, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size

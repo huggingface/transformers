@@ -648,7 +648,7 @@ class Ernie4_5_VLMoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretr
         "attentions": Ernie4_5_VLMoeVisionAttention,
     }
 
-    def __init__(self, config) -> None:
+    def __init__(self, config: Ernie4_5_VLMoeVisionConfig) -> None:
         super().__init__(config)
 
         del self.merger
@@ -1046,7 +1046,7 @@ class Ernie4_5_VLMoeModel(Qwen2VLModel):
 
 
 class Ernie4_5_VLMoeForConditionalGeneration(Glm4vForConditionalGeneration, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: Ernie4_5_VLMoeConfig):
         super().__init__(config)
 
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
@@ -1237,6 +1237,8 @@ class Ernie4_5_VL_MoeVisionConfig(Ernie4_5_VLMoeVisionConfig):
 
 
 class Ernie4_5_VL_MoePreTrainedModel(Ernie4_5_VLMoePreTrainedModel):
+    config: Ernie4_5_VLMoeConfig
+
     def post_init(self):
         logger.warning_once(
             "`Ernie4_5_VL_MoePreTrainedModel` is deprecated; please use `Ernie4_5_VLMoePreTrainedModel` instead.",

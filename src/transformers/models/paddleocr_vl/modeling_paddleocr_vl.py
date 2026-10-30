@@ -1306,7 +1306,7 @@ class PaddleOCRVLForConditionalGeneration(PaddleOCRVLPreTrainedModel, Generation
     _tp_plan = {"lm_head": "colwise_gather_output"}
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
 
-    def __init__(self, config):
+    def __init__(self, config: PaddleOCRVLConfig):
         super().__init__(config)
         self.model = PaddleOCRVLModel(config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)

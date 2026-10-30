@@ -54,20 +54,20 @@ messages = [
 pipe = pipeline("image-text-to-text", model="openbmb/MiniCPM-OCR-1.0")
 outputs = pipe(text=messages, max_new_tokens=256, return_full_text=False)
 print(outputs[0]["generated_text"])
-# PSPS
+#
+#
 # Document No : TD01167104
 # Date : 25/12/2018 8:13:39 PM
 # Cashier : MANIS
 # Member :
-#
 # CASH BILL
-#
 # CODE/DESC PRICE Disc AMOUNT
-# QTY RM
+# QTY RM RM
 # 9556939040118 KF MODELLING CLAY KIDDY FISH
 # 1 PC * 9.00 0.00 9.00
 # Total : 9.00
-# ...
+# Rounding Adjustment : 0.00
+# Round-d Total (RM) : 9.00
 ```
 
 </hfoption>
@@ -99,20 +99,19 @@ inputs = processor.apply_chat_template(
 output = model.generate(**inputs, max_new_tokens=512)
 decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 print(decoded_output)
-# But, let's break this down and convert the page to markdown.
+# ```markdown
+# R&D QUALITY IMPROVEMENT
+# SUGGESTION/SOLUTION FORM
 #
-# ## R&D QUALITY IMPROVEMENT
-# ### SUGGESTION/SOLUTION FORM
+# Name/Phone Ext.: M. Hamann, P. Harper, P. Martinez Date: 9/3/92
 #
-# #### Name/Phone Ext.: M. Hamann, P. Harper, P. Martinez  Date: 9/3/92
-#
-# #### Supervisor/Manager: J. S. Wigand  R&D Group: Licensee
+# Supervisor/Manager: J. S. Wigand R&D Group: Licensee
 # ...
+# ```
 ```
 
-The chat template opens a thinking block unless `enable_thinking=False` is passed to
-`apply_chat_template`, which is why the decoded text above starts with the model reasoning about
-the page before transcribing it.
+The released checkpoint's chat template disables thinking by default. Pass `enable_thinking=True`
+to `apply_chat_template` to enable it explicitly.
 
 </hfoption>
 
@@ -180,7 +179,8 @@ the two:
 - `"adaptive"`: decide per image, and per slice, from glyph size and density.
 
 ```python
-from transformers import AutoProcessor, load_image
+from transformers import AutoProcessor
+from transformers.image_utils import load_image
 
 url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/ocr_receipt.jpeg"
 image = load_image(url).resize((224, 224))
@@ -259,17 +259,16 @@ inputs = processor.apply_chat_template(
 output = model.generate(**inputs, max_new_tokens=256)
 decoded_outputs = processor.batch_decode(output[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)
 print(decoded_outputs[0])
-# PSPS
-# Document No: TD01167104
-# Date: 25/12/2018
-# Cashier: MANIS
+# Document No : TD01167104
+# Date : 25/12/2018 8:13:39 PM
+# Cashier : MANIS
 # ...
 print(decoded_outputs[1])
-# ... thinking preamble ...
-# **R&D QUALITY IMPROVEMENT
-# SUGGESTION/SOLUTION FORM**
+# R&D QUALITY IMPROVEMENT
+# SUGGESTION/SOLUTION FORM
 #
-# Name/Phone Ext.: M. Hamann, P. Harper, P. Martinez  Date: 9/3/92
+# Name/Phone Ext.: M. Hamann P. Harper P. Martinez Date: 9/3/92
+# Supervisor/Manager: J. S. Wigand R&D Group: Licensee
 # ...
 ```
 

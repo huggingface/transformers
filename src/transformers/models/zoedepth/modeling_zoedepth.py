@@ -547,7 +547,6 @@ class ZoeDepthSeedBinRegressor(nn.Module):
             return bin_centers, bin_centers
 
 
-@torch.jit.script
 def inv_attractor(dx, alpha: float = 300, gamma: int = 2):
     """Inverse attractor: dc = dx / (1 + alpha*dx^gamma), where dx = a - c, a = attractor point, c = bin center, dc = shift in bin center
     This is the default one according to the accompanying paper.
@@ -1223,7 +1222,7 @@ class ZoeDepthPreTrainedModel(PreTrainedModel):
     """
 )
 class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ZoeDepthConfig):
         super().__init__(config)
 
         self.backbone = load_backbone(config)
