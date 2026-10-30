@@ -327,6 +327,21 @@ SPECIAL_CASES_TO_ALLOW = {
         "num_last_full_attention_layers",  # builder attr consumed in __post_init__ to compute num_key_value_heads_per_layer
         "flip_pairs",  # used externally for post-processing keypoints, not in forward pass
     ],
+    # Geometry metadata and variables used by channel-layout properties.
+    "WeatherNext2Config": [
+        "attention_k_hop",
+        "ball_query_radius_fraction",
+        "mesh_splits",
+        "atmospheric_variables",
+        "forcing_variables",
+        "global_variables",
+        "input_variables",
+        "num_input_timesteps",
+        "pressure_levels",
+        "static_variables",
+        "target_variables",
+        "time_step_hours",
+    ],
     "UnlimitedOcrTextConfig": ["sliding_window"],  # only used for cache init
 }
 

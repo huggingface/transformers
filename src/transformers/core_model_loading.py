@@ -1408,7 +1408,9 @@ def set_param_for_module(
     else:
         if not isinstance(param_value, torch.nn.Parameter) and not is_dtensor(ref):
             if param_name not in module_obj._buffers:
-                param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+                param_value = torch.nn.Parameter(
+                    param_value, requires_grad=ref.requires_grad and param_value.is_floating_point()
+                )
 
         # Remove from missing keys (it's either mismatched, or all good)
         loading_info.missing_keys.discard(target_name)
