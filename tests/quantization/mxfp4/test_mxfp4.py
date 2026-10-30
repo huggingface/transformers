@@ -336,6 +336,14 @@ class Mxfp4IntegrationTest(unittest.TestCase):
         self.assertEqual(result.shape, (2, 8 * 16 * 2, 4))
         self.assertEqual(result.dtype, torch.bfloat16)
 
+    @require_torch
+    def test_mxfp4_mlp_keeps_megablocks_hub_mapping(self):
+        """`Mxfp4GptOssMLP` replaces `GptOssMLP`, so it must keep its `MegaBlocksMoeMLP` hub kernel mapping"""
+        from transformers.integrations.mxfp4 import Mxfp4GptOssMLP
+        from transformers.models.gpt_oss.modeling_gpt_oss import GptOssMLP
+
+        self.assertEqual(Mxfp4GptOssMLP.kernel_layer_name, GptOssMLP.kernel_layer_name)
+
     @REQUIRE_TRITON_MXFP4
     @require_kernels
     @require_torch
