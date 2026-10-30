@@ -36,6 +36,7 @@ if is_torch_available():
     import torch
 
     from transformers import XiaomiLens0Config, XiaomiLens0ForConditionalGeneration, XiaomiLens0Model
+    from transformers.loss.loss_xiaomi_lens0 import XiaomiLens0ForConditionalGenerationLoss
 
 
 class XiaomiLens0VisionText2TextModelTester:
@@ -238,6 +239,45 @@ class XiaomiLens0ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
     def test_reverse_loading_mapping(self):
         # The mask decoder exists only on the conditional generation model.
         super().test_reverse_loading_mapping(skip_base_model=True)
+
+    def test_loss(self):
+        rng = torch.Generator().manual_seed(42)
+        logits = torch.randn(2, 4, 5, generator=rng).to(torch_device)
+        labels = torch.tensor([[-100, 1, 4, -100], [2, 0, -100, 3]], device=torch_device)
+        mask_logits = torch.randn(4, 2, 3, generator=rng).to(torch_device)
+        mask_labels = (torch.arange(24, device=torch_device).reshape(4, 2, 3) % 3 == 0).to(torch.uint8)
+        valid_mask = torch.tensor(
+            [
+                [[1, 1, 0], [1, 0, 0]],
+                [[0, 0, 0], [0, 0, 0]],
+                [[1, 1, 1], [1, 1, 0]],
+                [[0, 1, 0], [1, 0, 1]],
+            ],
+            dtype=torch.bool,
+            device=torch_device,
+        )
+        # Unequal mask counts per image
+        mask_logits = list(mask_logits.split([3, 1]))
+        mask_labels = list(mask_labels.split([3, 1]))
+
+        config = self.model_tester.get_config()
+        config.text_config.vocab_size = 5
+
+        loss, _, _ = XiaomiLens0ForConditionalGenerationLoss(
+            logits=logits,
+            labels=labels,
+            mask_logits=mask_logits,
+            mask_labels=mask_labels,
+            mask_labels_valid_mask=list(valid_mask.split([3, 1])),
+            config=config,
+        )
+        expected_loss = Expectations(
+            {
+                (None, None): 3.642270088195801,
+                ("cuda", 8): 3.642270088195801,
+            }
+        ).get_expectation()
+        torch.testing.assert_close(loss, torch.tensor(expected_loss, device=torch_device), atol=1e-5, rtol=1e-5)
 
 
 @slow
