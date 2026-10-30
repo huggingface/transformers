@@ -45,8 +45,8 @@ from ..utils.quantization_config import (
     SpQRConfig,
     TorchAoConfig,
     VptqConfig,
-    read_modelopt,
-    read_mxfp8,
+    convert_modelopt_schema,
+    convert_mxfp8_schema,
 )
 from .base import HfQuantizer
 from .quantizer_aqlm import AqlmHfQuantizer
@@ -140,11 +140,11 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "gemma": GemmaQuantizationConfig,
 }
 
-# Readers that turn another tool's checkpoint config into a Transformers config, keyed by `quant_method`. A reader
-# returns `None` to leave the checkpoint to the method's own config class.
-AUTO_QUANTIZATION_CONFIG_READERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
-    "modelopt": read_modelopt,
-    "mxfp8": read_mxfp8,
+# Convert another tool's quantization schema into a Transformers config, by `quant_method`. `None` leaves the checkpoint
+# to the method's own config class, e.g. a plain MXFP8 one.
+AUTO_QUANTIZATION_SCHEMA_CONVERTERS: dict[str, Callable[[dict], QuantizationConfigMixin | None]] = {
+    "modelopt": convert_modelopt_schema,
+    "mxfp8": convert_mxfp8_schema,
 }
 
 LOADING_ATTRIBUTES_CONFIG_TYPES = (
@@ -180,8 +180,8 @@ class AutoQuantizationConfig:
                 "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
             )
 
-        reader = AUTO_QUANTIZATION_CONFIG_READERS.get(quant_method)
-        if reader is not None and (config := reader(quantization_config_dict)) is not None:
+        converter = AUTO_QUANTIZATION_SCHEMA_CONVERTERS.get(quant_method)
+        if converter is not None and (config := converter(quantization_config_dict)) is not None:
             return config
 
         if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING:
@@ -310,7 +310,7 @@ class AutoHfQuantizer:
 
         if (
             quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING
-            and quant_method not in AUTO_QUANTIZATION_CONFIG_READERS
+            and quant_method not in AUTO_QUANTIZATION_SCHEMA_CONVERTERS
         ):
             logger.warning(
                 f"Unknown quantization type, got {quant_method} - supported types are:"

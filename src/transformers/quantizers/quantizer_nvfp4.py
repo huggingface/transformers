@@ -43,20 +43,16 @@ class NVFP4HfQuantizer(HfQuantizer):
     def serialized_names(self) -> dict[str, list[str]]:
         """The tensors a weight ships as. A dequantized load also folds each global in.
 
-        Expert stacks come first, as `weight_global_scale` also ends a stack's `{proj}_weight_global_scale`. They keep
-        their `experts.` prefix, so a dense MLP's `down_proj` does not match.
+        Expert stacks come first, as `weight_global_scale` also ends their `{proj}_weight_global_scale`. They start at a
+        name boundary, so a shared expert's `shared_experts.down_proj` does not match. Core strips it from targets.
         """
         from ..integrations.nvfp4 import EXPERT_PROJECTIONS
 
         globals_ = self.quantization_config.dequantize
-        stacks = {
-            f"experts.{proj}": [
-                f"experts.{proj}",
-                f"experts.{proj}_scale_inv",
-                *([f"experts.{proj}_weight_global_scale"] if globals_ else []),
-            ]
-            for proj in EXPERT_PROJECTIONS
-        }
+        stacks = {}
+        for proj in EXPERT_PROJECTIONS:
+            stack = rf"(?<!\w)experts.{proj}"
+            stacks[stack] = [stack, f"{stack}_scale_inv", *([f"{stack}_weight_global_scale"] if globals_ else [])]
         return {**stacks, "weight": ["weight", "weight_scale_inv", *(["weight_global_scale"] if globals_ else [])]}
 
     @property
@@ -90,28 +86,28 @@ class NVFP4HfQuantizer(HfQuantizer):
         super().update_parallel_plan(model, plan)
         update_nvfp4_parallel_plan(model, plan)
 
-    def _module_formats(self, model: PreTrainedModel) -> dict[str, str] | None:
-        """Return how each module of `model` loads, from `quantized_layers`, or `None` when every eligible module is NVFP4.
+    def _module_quant_plan(self, model: PreTrainedModel) -> dict[str, str] | None:
+        """Return how each module loads, from the config's `quant_plan`. `None` makes every eligible module NVFP4.
 
         A module matches by its model or checkpoint name. Exact names win, and fused experts also match their per-expert
         entries, such as `experts.3.w1`. Otherwise the first pattern that matches applies.
         """
-        layers = self.quantization_config.quantized_layers
-        if layers is None:
+        plan = self.quantization_config.quant_plan
+        if plan is None:
             return None
         # the model's renames, reversed, give a module's checkpoint name
         reverse = [rule.reverse_transform() for rule in self.model_renames[::-1]]
-        patterns = [(re.compile(layer), loads) for layer, loads in layers.items()]
-        formats = {}
+        patterns = [(re.compile(layer), loads) for layer, loads in plan.items()]
+        module_plan = {}
         for name, _ in model.named_modules():
             key = f"{name}.weight"
             for rule in reverse:
                 key, _ = rule.rename_source_key(key)
             names = {name, key.removesuffix(".weight")}
-            entries = [loads for layer, loads in layers.items() if layer in names]
+            entries = [loads for layer, loads in plan.items() if layer in names]
             if not entries and name.endswith(".experts"):
                 entries = [
-                    loads for layer, loads in layers.items() for prefix in names if layer.startswith(f"{prefix}.")
+                    loads for layer, loads in plan.items() for prefix in names if layer.startswith(f"{prefix}.")
                 ]
             if not entries:
                 entries = [loads for pattern, loads in patterns if any(pattern.fullmatch(n) for n in names)][:1]
@@ -120,8 +116,8 @@ class NVFP4HfQuantizer(HfQuantizer):
                     f"{name!r} is one module, but the checkpoint gives it formats {sorted(set(entries))}."
                 )
             if entries:
-                formats[name] = entries[0]
-        return formats
+                module_plan[name] = entries[0]
+        return module_plan
 
     def _process_model_before_weight_loading(self, model: PreTrainedModel, **kwargs):
         from ..conversion_mapping import get_model_conversion_mapping
@@ -131,7 +127,6 @@ class NVFP4HfQuantizer(HfQuantizer):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
-        # the model's renames map its names to the checkpoint's and back
         mapping = get_model_conversion_mapping(model, add_legacy=False)
         self.model_renames = [rule for rule in mapping if isinstance(rule, WeightRenaming)]
         # no slot for calibrated `input_scale`s or FP8 KV-cache scales
@@ -142,32 +137,31 @@ class NVFP4HfQuantizer(HfQuantizer):
         }
         if self.quantization_config.dequantize:
             return
-        formats = self._module_formats(model)
-        weight_only = self.quantization_config.activation_format == "bf16"
-        if not replace_with_nvfp4(model, self.modules_to_not_convert, formats, self.pre_quantized, weight_only):
+        quant_plan = self._module_quant_plan(model)
+        weight_only = self.quantization_config.weight_only
+        if not replace_with_nvfp4(model, self.modules_to_not_convert, quant_plan, self.pre_quantized, weight_only):
             raise ValueError("NVFP4 found no linear or experts module to quantize in this model.")
 
     def _process_model_after_weight_loading(self, model: PreTrainedModel, **kwargs):
-        from ..integrations.nvfp4 import checkpoint_renames, dequantize_fp8_linears
+        from ..integrations.nvfp4 import checkpoint_to_module_renames, dequantize_fp8_linears
 
+        # For now the FP8 layers of a mixed-precision checkpoint load dequantized. Later they will load as FP8.
         dequantize_fp8_linears(model)
-        # the dequantized layers are now in the model dtype, so a save lists them no more
-        if self.quantization_config.quantized_layers is not None:
-            self.quantization_config.quantized_layers = {
-                layer: loads
-                for layer, loads in self.quantization_config.quantized_layers.items()
-                if loads != "dequantize"
+        # the FP8 layers are now in the model dtype, so the saved config should not list them
+        if self.quantization_config.quant_plan is not None:
+            self.quantization_config.quant_plan = {
+                layer: loads for layer, loads in self.quantization_config.quant_plan.items() if loads != "dequantize"
             }
 
+        # Core only keeps the conversions that matched a checkpoint key. After quantizing on the fly, the scales have
+        # none, so we add them for the save.
         conversions = getattr(model, "_weight_conversions", None) or []
         if not self.pre_quantized:
-            # scales from on-the-fly quantization save through the conversions of their weights
             conversions = self.update_weight_conversions(conversions, model, for_save=True)
-        # Save the modules' own names, which load as they are. A save cannot reverse the ModelOpt renames, as on save
-        # the renames run before the converters.
-        shipped = {tuple(rename._original_source_patterns) for rename in checkpoint_renames()}
-        kept = [c for c in conversions if tuple(c._original_source_patterns) not in shipped]
-        model._weight_conversions = kept  # type: ignore[unresolved-attribute]
+        # A save writes each param under its own name. So it drops the checkpoint renames and the load-only converters.
+        load_only = {tuple(rename._original_source_patterns) for rename in checkpoint_to_module_renames()}
+        load_only |= {tuple(names) for names in self.serialized_names.values()}
+        model._weight_conversions = [c for c in conversions if tuple(c._original_source_patterns) not in load_only]  # type: ignore[unresolved-attribute]
         return model
 
     def get_load_operations(self):
@@ -176,9 +170,8 @@ class NVFP4HfQuantizer(HfQuantizer):
         return {"deserialize": NVFP4Deserialize, "dequantize": NVFP4Dequantize}
 
     def get_param_ops(self, model: PreTrainedModel, param_name: str) -> list:
-        """Return the layout ops a tensor runs when it loads into `param_name`. Each op is reversed on save.
-
-        The ops are the packed FP4 view, the gate|up interleave and the scale swizzle.
+        """Return the layout ops a tensor runs when it loads into `param_name`: the packed FP4 view, the gate|up
+        interleave and the scale swizzle. A save runs them in reverse.
         """
         from ..integrations.nvfp4 import (
             EXPERT_PROJECTIONS,
@@ -188,14 +181,14 @@ class NVFP4HfQuantizer(HfQuantizer):
             NVFP4Reciprocal,
             NVFP4SwizzleScales,
             NVFP4ViewPackedInt8,
-            _reciprocal_globals,
+            ships_reciprocal_globals,
         )
 
         module, name = get_module_from_name(model, param_name)
         if not isinstance(module, (NVFP4Linear, NVFP4Experts)):
             return []
         if name.endswith("global_scale"):
-            return [NVFP4Reciprocal(self)] if _reciprocal_globals(self) else []
+            return [NVFP4Reciprocal(self)] if ships_reciprocal_globals(self) else []
         ops = []
         if name in ("weight", *EXPERT_PROJECTIONS):
             ops.append(NVFP4ViewPackedInt8(self))
@@ -206,27 +199,30 @@ class NVFP4HfQuantizer(HfQuantizer):
         return ops
 
     def update_weight_conversions(self, weight_conversions, model, for_save: bool = False):
+        """End each converter with the op of the load: quantize on the fly, deserialize a pre-quantized checkpoint, or
+        dequantize it. A save runs their reverse.
+        """
         from ..core_model_loading import WeightConverter
         from ..integrations.nvfp4 import (
             EXPERT_PROJECTIONS,
             NVFP4Deserialize,
             NVFP4Quantize,
-            checkpoint_renames,
-            nvfp4_checkpoint_conversions,
+            add_nvfp4_ops,
+            checkpoint_to_module_renames,
         )
 
         conversions = super().update_weight_conversions(weight_conversions, model)
         if self.quantization_config.dequantize:
-            return [*checkpoint_renames(), *conversions]
+            return [*checkpoint_to_module_renames(), *conversions]
         quantize = not self.pre_quantized and not for_save
         op = NVFP4Quantize if quantize else NVFP4Deserialize
-        renames = checkpoint_renames() if self.pre_quantized and not for_save else []
-        conversions = [*renames, *nvfp4_checkpoint_conversions(self, conversions, op)]
-        # A fused stack in the checkpoint, or a dense scale, loads through its own converter. It comes first, as the
-        # first matching converter wins. On save, skip the params a model converter writes back, as they would match
-        # first there.
+        renames = checkpoint_to_module_renames() if self.pre_quantized and not for_save else []
+        conversions = [*renames, *add_nvfp4_ops(self, conversions, op)]
+
+        # Each NVFP4 param, and each FP8 layer's weight and scale, also gets a converter of its own: for a checkpoint
+        # that ships an expert stack fused, or a scale. It comes first, as the first matching converter wins. On save,
+        # skip the params a model converter writes back, as they would match first there.
         reverse = [c.reverse_transform() for c in conversions if isinstance(c, WeightConverter)] if for_save else []
-        # An FP8 layer's weight and scale load into their own slots too, so the scale shards by its own plan.
         fp8_linears = {
             name
             for name, module in model.named_modules()
@@ -237,7 +233,7 @@ class NVFP4HfQuantizer(HfQuantizer):
             for name, _ in model.named_parameters()
             if (self.get_param_ops(model, name) or name.rpartition(".")[0] in fp8_linears)
             and not any(c.rename_source_key(name)[1] for c in reverse)
-            # quantizing on the fly only loads the weights, their scales come out of the quantize op
+            # quantizing on the fly loads only the weights, the quantize op makes their scales
             and (not quantize or name.rpartition(".")[2] in ("weight", *EXPERT_PROJECTIONS))
         ]
         renames = [c for c in conversions if not isinstance(c, WeightConverter)]

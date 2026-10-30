@@ -2071,33 +2071,25 @@ class GemmaQuantizationConfig(QuantizationConfigMixin):
 class NVFP4Config(QuantizationConfigMixin):
     """Configuration for NVFP4 weights, quantized on the fly or loaded from a ModelOpt export.
 
-    NVFP4 stores E2M1 values with an E4M3 scale per 16 values and an fp32 global per tensor. It runs on the
-    `kernels-community/finegrained-kernels` Hub kernel.
-
     Args:
         modules_to_not_convert (`list[str]`, *optional*):
             Module-name patterns that should remain in their original precision.
-        quantized_layers (`dict[str, str | None]`, *optional*):
-            How checkpoint modules load: `"nvfp4"`, `"nvfp4_weight_only"`, `"dequantize"`, or `None` to stay
-            unquantized. A key is a module name, or else a pattern. Exact names win, then the first pattern that
-            matches. Unlisted modules stay unquantized. `None` makes every eligible module NVFP4.
-        activation_format (`str`, *optional*):
-            `None` quantizes the activations to NVFP4 too. `"bf16"` keeps them in the model dtype (weight-only).
+        quant_plan (`dict[str, str | None]`, *optional*):
+            How each checkpoint module loads: `"nvfp4"`, `"nvfp4_weight_only"`, `"dequantize"`, or `None` to stay
+            unquantized. A key is a module name or a pattern. `None` makes every linear and experts module NVFP4.
+        weight_only (`bool`, *optional*, defaults to `False`):
+            Whether to keep the activations in the model dtype instead of quantizing them to NVFP4.
         dequantize (`bool`, *optional*, defaults to `False`):
-            Whether to load a pre-quantized checkpoint dequantized. It is also the fallback without a supported GPU or
-            the `kernels` package.
+            Whether to load a pre-quantized checkpoint dequantized to the model dtype.
         checkpoint_format (`str`, *optional*, defaults to `"modelopt"`):
-            The layout of the checkpoint's NVFP4 tensors. `"nvfp4-pack-quantized"` names the packed weight
-            `weight_packed` and ships the reciprocal of each global.
-        kwargs (`dict[str, Any]`, *optional*):
-            Additional values are ignored and reported through the Transformers logger.
+            The layout of a pre-quantized checkpoint's NVFP4 tensors, `"modelopt"` or `"nvfp4-pack-quantized"`.
     """
 
     def __init__(
         self,
         modules_to_not_convert: list[str] | None = None,
-        quantized_layers: dict[str, str] | None = None,
-        activation_format: str | None = None,
+        quant_plan: dict[str, str] | None = None,
+        weight_only: bool = False,
         dequantize: bool = False,
         checkpoint_format: str = "modelopt",
         **kwargs,
@@ -2105,10 +2097,8 @@ class NVFP4Config(QuantizationConfigMixin):
         kwargs.pop("quant_method", None)
         self.quant_method = QuantizationMethod.NVFP4
         self.modules_to_not_convert = modules_to_not_convert
-        self.quantized_layers = quantized_layers
-        if activation_format not in (None, "bf16"):
-            raise ValueError(f"NVFP4 activation_format must be None or 'bf16'; got {activation_format!r}")
-        self.activation_format = activation_format
+        self.quant_plan = quant_plan
+        self.weight_only = weight_only
         self.dequantize = dequantize
         if checkpoint_format not in ("modelopt", "nvfp4-pack-quantized"):
             raise ValueError(
@@ -2121,11 +2111,11 @@ class NVFP4Config(QuantizationConfigMixin):
             )
 
     def get_loading_attributes(self):
-        return {"activation_format": self.activation_format, "dequantize": self.dequantize}
+        return {"weight_only": self.weight_only, "dequantize": self.dequantize}
 
 
-def read_modelopt(config_dict: dict) -> NVFP4Config:
-    """Read a ModelOpt export with NVFP4 layers. Its FP8, block FP8 or MXFP8 layers load dequantized."""
+def convert_modelopt_schema(config_dict: dict) -> NVFP4Config:
+    """Convert a ModelOpt export's quantization schema. Its FP8, block FP8 or MXFP8 layers load dequantized."""
     config_dict = {**config_dict, **config_dict.get("quantization", {})}
     if config_dict.get("group_size", 16) != 16:
         raise ValueError(f"NVFP4 uses a group size of 16; got {config_dict['group_size']}.")
@@ -2135,7 +2125,6 @@ def read_modelopt(config_dict: dict) -> NVFP4Config:
     else:
         algos = None
     used = set(algos.values()) if algos is not None else {quant_algo}
-    # ModelOpt's algorithms, by how they load
     loads = {
         "NVFP4": "nvfp4",
         "W4A16_NVFP4": "nvfp4_weight_only",
@@ -2162,18 +2151,14 @@ def read_modelopt(config_dict: dict) -> NVFP4Config:
     # a `MIXED_PRECISION` export lists every quantized module, so the default skips (e.g. `lm_head`) do not apply
     if not skip and algos is None:
         skip = None
-    quantized_layers = {name: loads[algo] for name, algo in algos.items()} if algos is not None else None
-    activation_format = "bf16" if quant_algo == "W4A16_NVFP4" else None
-    return NVFP4Config(
-        modules_to_not_convert=skip, quantized_layers=quantized_layers, activation_format=activation_format
-    )
+    quant_plan = {name: loads[algo] for name, algo in algos.items()} if algos is not None else None
+    return NVFP4Config(modules_to_not_convert=skip, quant_plan=quant_plan, weight_only=quant_algo == "W4A16_NVFP4")
 
 
-def read_mxfp8(config_dict: dict) -> NVFP4Config | None:
-    """Read an MXFP8 checkpoint whose MoE experts are NVFP4. Return `None` for a plain MXFP8 one.
+def convert_mxfp8_schema(config_dict: dict) -> NVFP4Config | None:
+    """Convert the schema of an MXFP8 checkpoint whose MoE experts are NVFP4, or return `None` for a plain MXFP8 one.
 
-    The experts load NVFP4. The checkpoint's other MXFP8 layers load dequantized, and its ignored layers stay as they
-    ship.
+    The experts load NVFP4, the other MXFP8 layers load dequantized, and the ignored layers stay as they ship.
     """
     if config_dict.get("moe_quant_algo") != "NVFP4":
         return None
@@ -2184,12 +2169,9 @@ def read_mxfp8(config_dict: dict) -> NVFP4Config | None:
     logger.warning_once(
         "This checkpoint's MXFP8 layers load dequantized to the model dtype, next to its NVFP4 experts."
     )
-    # an ignored module stays as it ships, with its children
-    quantized_layers = {re.escape(name) + r"(\..*)?": None for name in config_dict.get("ignored_layers") or []}
-    quantized_layers.update({r".*\.experts": "nvfp4", r".*": "dequantize"})
-    return NVFP4Config(
-        modules_to_not_convert=[], quantized_layers=quantized_layers, checkpoint_format=checkpoint_format
-    )
+    quant_plan = {re.escape(name) + r"(\..*)?": None for name in config_dict.get("ignored_layers") or []}
+    quant_plan.update({r".*\.experts": "nvfp4", r".*": "dequantize"})
+    return NVFP4Config(modules_to_not_convert=[], quant_plan=quant_plan, checkpoint_format=checkpoint_format)
 
 
 @dataclass
