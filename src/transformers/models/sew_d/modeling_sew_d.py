@@ -205,17 +205,14 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
     return rel_pos_ids
 
 
-@torch.jit.script
 def c2p_dynamic_expand(c2p_pos, query_layer, relative_pos):
     return c2p_pos.expand([query_layer.size(0), query_layer.size(1), query_layer.size(2), relative_pos.size(-1)])
 
 
-@torch.jit.script
 def p2c_dynamic_expand(c2p_pos, query_layer, key_layer):
     return c2p_pos.expand([query_layer.size(0), query_layer.size(1), key_layer.size(-2), key_layer.size(-2)])
 
 
-@torch.jit.script
 def pos_dynamic_expand(pos_index, p2c_att, key_layer):
     return pos_index.expand(p2c_att.size()[:2] + (pos_index.size(-2), key_layer.size(-2)))
 
@@ -1301,7 +1298,7 @@ class SEWDModel(SEWDPreTrainedModel):
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForCTC with Wav2Vec2->SEWD, wav2vec2->sew_d, WAV2VEC2->SEWD
 class SEWDForCTC(SEWDPreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: SEWDConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -1429,7 +1426,7 @@ class SEWDForCTC(SEWDPreTrainedModel):
 )
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2ForSequenceClassification with Wav2Vec2->SEWD, wav2vec2->sew_d, WAV2VEC2->SEWD
 class SEWDForSequenceClassification(SEWDPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SEWDConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:

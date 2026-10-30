@@ -727,7 +727,7 @@ class Wav2Vec2BertModel(Wav2Vec2Model, Wav2Vec2BertPreTrainedModel):
 
 
 class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: Wav2Vec2BertConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -794,7 +794,7 @@ class Wav2Vec2BertForCTC(Wav2Vec2ConformerForCTC):
 
 
 class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
 
     def freeze_feature_encoder(self):
@@ -866,7 +866,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2ForSequenceClassification):
 
 
 class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClassification):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
 
     def freeze_feature_encoder(self):
@@ -921,7 +921,7 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2ConformerForAudioFrameClas
 
 
 class Wav2Vec2BertForXVector(Wav2Vec2ConformerForXVector):
-    def __init__(self, config):
+    def __init__(self, config: Wav2Vec2BertConfig):
         super().__init__(config)
 
     def freeze_feature_encoder(self):

@@ -344,7 +344,7 @@ class DecisionTransformerGPT2PreTrainedModel(PreTrainedModel):
 
 
 class DecisionTransformerGPT2Model(DecisionTransformerGPT2PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DecisionTransformerConfig):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
@@ -510,7 +510,7 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
 
     """
 
-    def __init__(self, config):
+    def __init__(self, config: DecisionTransformerConfig):
         super().__init__(config)
         self.config = config
         self.hidden_size = config.hidden_size

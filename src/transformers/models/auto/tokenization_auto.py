@@ -230,6 +230,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         (
+            "mistral_large4",
+            "MistralCommonBackend"
+            if is_mistral_common_available()
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
+        ),  # TODO: needed?
+        (
             "mixtral",
             "MistralCommonBackend"
             if is_mistral_common_available()
@@ -247,6 +253,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("musicgen_melody", "T5Tokenizer" if is_tokenizers_available() else None),
         ("mvp", "MvpTokenizer" if is_tokenizers_available() else None),
         ("myt5", "MyT5Tokenizer"),
+        ("nemo_speechlm", "TokenizersBackend" if is_tokenizers_available() else None),
         ("nemotron3_5_asr", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("nemotron_asr_streaming", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("nezha", "BertTokenizer" if is_tokenizers_available() else None),
@@ -838,6 +845,8 @@ class AutoTokenizer:
             and _hub_declared_class is not None
             and _hub_declared_class.removesuffix("Fast") == "LlamaTokenizer"
             and (TOKENIZER_MAPPING_NAMES.get(config_model_type) or "").removesuffix("Fast") != "MistralCommonBackend"
+            and config_model_type not in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
+            and config_model_name not in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS
             and TokenizersBackend._tokenizer_json_has_byte_level(pretrained_model_name_or_path, **kwargs)
         ):
             logger.warning_once(

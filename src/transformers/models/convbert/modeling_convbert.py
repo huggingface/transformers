@@ -574,7 +574,7 @@ class ConvBertSequenceSummary(nn.Module):
 
 @auto_docstring
 class ConvBertModel(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
         self.embeddings = ConvBertEmbeddings(config)
 
@@ -671,7 +671,7 @@ class ConvBertGeneratorPredictions(nn.Module):
 class ConvBertForMaskedLM(ConvBertPreTrainedModel):
     _tied_weights_keys = {"generator_lm_head.weight": "convbert.embeddings.word_embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
 
         self.convbert = ConvBertModel(config)
@@ -757,7 +757,7 @@ class ConvBertClassificationHead(nn.Module):
     """
 )
 class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -824,7 +824,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
 
 @auto_docstring
 class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
 
         self.convbert = ConvBertModel(config)
@@ -915,7 +915,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
 
 @auto_docstring
 class ConvBertForTokenClassification(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -970,7 +970,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
 
 @auto_docstring
 class ConvBertForQuestionAnswering(ConvBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ConvBertConfig):
         super().__init__(config)
 
         self.num_labels = config.num_labels

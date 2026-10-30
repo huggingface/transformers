@@ -37,7 +37,6 @@ from transformers import (
     PreTrainedModel,
     is_torch_available,
     logging,
-    pipeline,
     set_seed,
 )
 from transformers.testing_utils import (
@@ -3693,6 +3692,8 @@ class GenerationIntegrationTests(unittest.TestCase):
 
     # TODO (joao): replace `stop_sequence` in the pipeline by the more recent `generate` functionality
     def test_stop_sequence_stopping_criteria(self):
+        from transformers import pipeline
+
         prompt = """Hello I believe in"""
         generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-bart")
         output = generator(prompt, max_new_tokens=10, do_sample=False)

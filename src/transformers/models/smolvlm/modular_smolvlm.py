@@ -24,7 +24,6 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import merge_with_config_defaults
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
@@ -200,7 +199,6 @@ class SmolVLMModel(Idefics3Model):
         image_batch_size would be 7 when num_images_per_sample=[1, 3, 1, 2] and max_num_images would be 3.
         """
     )
-    @deprecate_kwarg("image_hidden_states", version="v5.20", new_name="mm_encoder_outputs")
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
@@ -274,7 +272,7 @@ class SmolVLMModel(Idefics3Model):
 class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: SmolVLMConfig):
         super().__init__(config)
         self.model = SmolVLMModel(config)
         self.model.text_model.generation_config = GenerationConfig.from_model_config(config)

@@ -43,6 +43,10 @@ class DistributedConfig:
             does not change `tp_size` or `fsdp_size`.
         fsdp_size (`int`, *optional*):
             Number of devices for FSDP (data parallelism). If `None` and `tp_size` is set, defaults to 1.
+        fsdp_plan (`dict[str, str]`, *optional*):
+            FSDP2 sharding plan. Leave as `None` to use the model's predefined `base_model_fsdp_plan` and
+            class-level `_fsdp_plan`. Pass a dictionary to override individual rules; unspecified rules are kept.
+            Applied only when `fsdp_size > 1`.
         fsdp_cpu_offload (`bool`, *optional*, defaults to `False`):
             Whether to enable CPU offloading for FSDP2.
         fsdp_mixed_precision (`bool`, *optional*, defaults to `False`):
@@ -65,6 +69,7 @@ class DistributedConfig:
     enable_sequence_parallel: bool = False
     enable_expert_parallel: bool = False
     fsdp_size: int | None = None
+    fsdp_plan: dict[str, str] | None = None
     fsdp_cpu_offload: bool = False
     fsdp_mixed_precision: bool = False
     pp_size: int | None = None
@@ -142,6 +147,8 @@ class DistributedConfig:
         """Validate mesh sizes before the model's expert plan is available."""
         if self.ep_plan is not None and not isinstance(self.ep_plan, dict):
             raise ValueError("`ep_plan` must be a dictionary or None.")
+        if self.fsdp_plan is not None and not isinstance(self.fsdp_plan, dict):
+            raise ValueError("`fsdp_plan` must be a dictionary or None.")
 
         if self.ep_size > 1:
             if self.ep_size % self.tp_size:

@@ -2179,7 +2179,7 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
 
 @auto_docstring
 class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
 
         config.num_labels = 2
@@ -2279,7 +2279,7 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
     used in combination with the [`EncoderDecoderModel`] framework.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: BigBirdPegasusConfig):
         super().__init__(config)
         self.decoder = BigBirdPegasusDecoder(config)
         self.post_init()
@@ -2289,7 +2289,7 @@ class BigBirdPegasusDecoderWrapper(BigBirdPegasusPreTrainedModel):
 
 
 class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel, GenerationMixin):
-    def __init__(self, config):
+    def __init__(self, config: BigBirdPegasusConfig):
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)
