@@ -389,7 +389,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
             # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        kwargs["output_hidden_states"] = True  # Ignore arg on purpose
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or vision_feature_layer
         image_outputs = self.vision_tower(
             pixel_values,
             return_dict=True,
@@ -579,7 +579,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         batch_size, frames, channels, height, width = pixel_values_videos.shape
         pixel_values_videos = pixel_values_videos.view(batch_size * frames, channels, height, width)
 
-        kwargs["output_hidden_states"] = True  # Ignore arg on purpose
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or vision_feature_layer
         vision_outputs = self.vision_tower(
             pixel_values_videos,
             return_dict=True,

@@ -183,7 +183,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`
         """
-        kwargs["output_hidden_states"] = True  # Ignore arg on purpose
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or vision_feature_layer
         image_outputs = self.image_tower(
             pixel_values,
             return_dict=True,
@@ -222,7 +222,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         batch_size_vid, num_frames, channels, height, width = pixel_values_videos.shape
 
         pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
-        kwargs["output_hidden_states"] = True  # Ignore arg on purpose
+        kwargs["output_hidden_states"] = kwargs.get("output_hidden_states") or vision_feature_layer
         video_outputs = self.video_tower(
             pixel_values,
             return_dict=True,

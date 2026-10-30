@@ -5584,6 +5584,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             config, inputs_dict = self._image_features_prepare_config_and_inputs()
+            self._check_features_ignore_output_hidden_states(model_class, config, inputs_dict, "get_image_features")
 
             inputs_dict["output_hidden_states"] = True
             check_hidden_states_output(inputs_dict, config, model_class)
@@ -5599,6 +5600,49 @@ class ModelTesterMixin(ExportTesterMixin):
 
             set_value_subconfigs(config, "output_hidden_states", True)
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def _check_features_ignore_output_hidden_states(self, model_class, config, inputs_dict, method_name):
+        """
+        The features are the same whether or not all hidden states are requested. Models that build their features
+        from `vision_feature_layer(s)` only capture those hidden states by default, matching a full capture.
+        """
+        inputs_dict = {k: v for k, v in inputs_dict.items() if k != "output_hidden_states"}
+        model = model_class(copy.deepcopy(config)).to(torch_device).eval()
+        with torch.no_grad():
+            outputs = getattr(model, method_name)(**inputs_dict)
+            outputs_all = getattr(model, method_name)(**inputs_dict, output_hidden_states=True)
+
+        def features(output):
+            if not isinstance(output, dict):
+                return output
+            return {
+                k: features(v)
+                for k, v in output.items()
+                if not k.endswith(("hidden_states", "attentions")) and isinstance(v, (torch.Tensor, dict, tuple, list))
+            }
+
+        torch.testing.assert_close(features(outputs), features(outputs_all))
+
+        hidden_states = outputs.get("hidden_states")
+        hidden_states_all = outputs_all.get("hidden_states")
+        if hidden_states is None or hidden_states_all is None:
+            return
+        self.assertEqual(len(hidden_states), len(hidden_states_all))
+        for h, h_all in zip(hidden_states, hidden_states_all):
+            self.assertIsNotNone(h_all, "`output_hidden_states=True` should capture all hidden states")
+            if h is not None:
+                torch.testing.assert_close(h, h_all)
+        selects_layers = any(
+            getattr(c, attr, None) is not None
+            for c in [config, *(getattr(config, k, None) for k in config.sub_configs)]
+            for attr in ("vision_feature_layer", "vision_feature_layers")
+            if c is not None
+        )
+        if selects_layers:
+            self.assertTrue(
+                any(h is None for h in hidden_states),
+                "Features built from `vision_feature_layer(s)` should only capture the hidden states they use",
+            )
 
     def test_get_image_features_attentions(self):
         def check_attentions_output(inputs_dict, config, model_class):
@@ -5734,6 +5778,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()
+            self._check_features_ignore_output_hidden_states(model_class, config, inputs_dict, "get_audio_features")
 
             inputs_dict["output_hidden_states"] = True
             check_hidden_states_output(inputs_dict, config, model_class)
@@ -5914,6 +5959,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
+            self._check_features_ignore_output_hidden_states(model_class, config, inputs_dict, "get_video_features")
 
             inputs_dict["output_hidden_states"] = True
             check_hidden_states_output(inputs_dict, config, model_class)
@@ -6164,6 +6210,7 @@ class ModelTesterMixin(ExportTesterMixin):
                 inputs = self._prepare_for_class(inputs_dict, model_class)
 
                 # Despite the previous skip based on decorators, some models do not propagate the outputs correctly.......
+                torch.manual_seed(0)  # Some models are random in eval (e.g. ViTMAE's masking)
                 out = model(**inputs, output_hidden_states=True)
                 if "hidden_states" in out:
                     hidden_states = out.hidden_states
@@ -6174,28 +6221,19 @@ class ModelTesterMixin(ExportTesterMixin):
                         f"{model_class.__name__} does not propagate hidden states correctly or uses another name"
                     )
 
-                skips_first_input = any(
-                    not module._can_record_outputs["hidden_states"].capture_initial_hidden_state
-                    for module in model.modules()
-                    if isinstance(module, PreTrainedModel)
-                    and hasattr(
-                        (module._can_record_outputs or {}).get("hidden_states", None), "capture_initial_hidden_state"
-                    )
-                )
-                N_layers = len(hidden_states) if skips_first_input else len(hidden_states) - 1
-                # Capture one every 2 layers
-                indices_to_capture = list(range(0, N_layers, 2))
+                # Indices select hidden states as they appear in the full output, so negative indices count from the end
+                num_hidden_states = len(hidden_states)
+                indices_to_capture = [*range(0, num_hidden_states, 2), -1]
+                torch.manual_seed(0)
                 out = model(**inputs, output_hidden_states=indices_to_capture)
-
-                hidden_states = out.hidden_states if "hidden_states" in out else out.text_model_output.hidden_states
-                # hidden_states = out.hidden_states
-                # We should have the same number of captured hidden_states, i.e. we do not add the first input
-                self.assertEqual(len(hidden_states), N_layers)
-                # assert we correctly captured the layers
-                self.assertTrue(all(hidden_states[i] is None for i in range(N_layers) if i not in indices_to_capture))
-                self.assertTrue(
-                    all(isinstance(hidden_states[i], torch.Tensor) for i in range(N_layers) if i in indices_to_capture)
-                )
+                captured = out.hidden_states if "hidden_states" in out else out.text_model_output.hidden_states
+                self.assertEqual(len(captured), num_hidden_states)
+                kept = {i % num_hidden_states for i in indices_to_capture}
+                for i in range(num_hidden_states):
+                    if i in kept:
+                        torch.testing.assert_close(captured[i], hidden_states[i])
+                    else:
+                        self.assertIsNone(captured[i])
 
     @require_kernels
     @require_torch_accelerator

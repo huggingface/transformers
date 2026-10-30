@@ -28,6 +28,9 @@ from .import_utils import is_torchdynamo_compiling, requires
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    import torch
     from torch import nn
 
     from ..modeling_utils import PreTrainedModel
@@ -97,6 +100,21 @@ class CompileableContextVar:
 _active_collector = CompileableContextVar("output_collector")
 
 
+def _append_hidden_state(collected_outputs: dict, hidden_state: torch.Tensor) -> None:
+    """Append to the captured `hidden_states`, keeping only those a requested subset of indices can select."""
+    hidden_states = collected_outputs["hidden_states"]
+    selection = collected_outputs.get("_hidden_states_selection")
+    if selection is None:
+        hidden_states.append(hidden_state)
+        return
+    keep, window = selection
+    idx = len(hidden_states)
+    hidden_states.append(hidden_state if idx in keep or window else None)
+    # Negative indices can only select the last `window` hidden states, so drop the one that just left the window
+    if window and (old := idx - window) >= 0 and old not in keep:
+        hidden_states[old] = None
+
+
 def install_output_capuring_hook(
     module: nn.Module, key: str, index: int, capture_initial_hidden_state: bool = True
 ) -> None:
@@ -109,26 +127,15 @@ def install_output_capuring_hook(
         if collected_outputs is None or key not in collected_outputs.keys():
             return
 
-        # Optionally capture only some layer's hidden_states
-        hidden_states_layers = collected_outputs.get("_hidden_states_layers")
-
-        # Historically, the first hidden_states output is actually the input of layer 0 (or inputs_embeds), so the hidden_states outputs
-        # have length `num_hidden_layers + 1`. When we request a list of explicit layers to capture, do not add this into the result, so
-        # that the indexing of the output is the same as the actual requested layers
-        if (
-            capture_initial_hidden_state
-            and key == "hidden_states"
-            and len(collected_outputs[key]) == 0
-            and hidden_states_layers is None
-        ):
-            collected_outputs[key].append(args[0])
-
-        # If we are capturing only some layer's hidden_states, skip capture if not part of the requested indices
-        if key == "hidden_states" and hidden_states_layers is not None:
-            current_layer_idx = len(collected_outputs[key])
-            if current_layer_idx not in hidden_states_layers:
-                collected_outputs[key].append(None)
-                return
+        if key == "hidden_states":
+            # Historically, the first hidden_states output is actually the input of layer 0 (or inputs_embeds), so the
+            # hidden_states outputs have length `num_hidden_layers + 1`
+            if capture_initial_hidden_state and len(collected_outputs[key]) == 0:
+                _append_hidden_state(collected_outputs, args[0])
+            hidden_state = output if not isinstance(output, tuple) else output[index]
+            if hidden_state is not None:
+                _append_hidden_state(collected_outputs, hidden_state)
+            return
 
         if not isinstance(output, tuple):
             collected_outputs[key].append(output)
@@ -231,6 +238,22 @@ def maybe_install_capturing_hooks(model: PreTrainedModel) -> None:
         install_all_output_capturing_hooks(model)
 
 
+def _selected_hidden_states(output_hidden_states: bool | int | list[int] | None) -> list[int] | None:
+    """The hidden state indices `output_hidden_states` selects, or `None` if it is a flag."""
+    if isinstance(output_hidden_states, bool) or output_hidden_states is None:
+        return None
+    if isinstance(output_hidden_states, int):
+        return [output_hidden_states]
+    return list(output_hidden_states)
+
+
+def select_hidden_states(hidden_states: Sequence, selected: list[int]) -> list:
+    """Replace the hidden states that `selected` does not index with `None`, resolving negative indices."""
+    num_hidden_states = len(hidden_states)
+    keep = {i % num_hidden_states for i in selected if -num_hidden_states <= i < num_hidden_states}
+    return [h if i in keep else None for i, h in enumerate(hidden_states)]
+
+
 def capture_outputs(func=None, *, tie_last_hidden_states=True):
     """
     Decorator to intercept specific layer outputs through hooks. The hooks are installed only once and lazily,
@@ -270,12 +293,13 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
                 )
 
             collected_outputs = {k.replace("output_", ""): [] for k, v in recordable_keys.items() if v}
-            # We accept a list of layer indices as `output_hidden_states`, to capture only specific layer outputs - in this case
-            # we need to add the layers to the `collected_outputs`'s dict to tell the hook which ones we need
-            if "output_hidden_states" in recordable_keys and isinstance(
-                recordable_keys["output_hidden_states"], (list, tuple, set)
-            ):
-                collected_outputs["_hidden_states_layers"] = set(recordable_keys["output_hidden_states"])
+            # `output_hidden_states` may select hidden states by index (or indices), in which case only those are kept. The
+            # indices are the ones that would select them from all the hidden states, so they may be negative
+            selected = _selected_hidden_states(recordable_keys.get("output_hidden_states"))
+            if selected is not None:
+                keep = {i for i in selected if i >= 0}
+                window = max((-i for i in selected if i < 0), default=0)
+                collected_outputs["_hidden_states_selection"] = (keep, window)
             # Make sure hooks are installed if we need to collect outputs
             if len(collected_outputs) > 0:
                 maybe_install_capturing_hooks(self)
@@ -289,13 +313,15 @@ def capture_outputs(func=None, *, tie_last_hidden_states=True):
             finally:
                 _active_collector.reset(output_token)
 
-            hidden_states_layers = collected_outputs.pop("_hidden_states_layers", None)
+            if collected_outputs.pop("_hidden_states_selection", None) is not None:
+                # The hooks keep every hidden state a negative index might select, now drop the unselected ones
+                collected_outputs["hidden_states"] = select_hidden_states(collected_outputs["hidden_states"], selected)
             # Inject collected outputs into model output (return everything as tuples for BC)
             for key in collected_outputs:
                 if key == "hidden_states":
                     tie_last = getattr(self.config, "tie_last_hidden_states", None)
                     tie_last = tie_last_hidden_states if tie_last is None else tie_last
-                    if not tie_last or (hidden_states_layers is not None and collected_outputs[key][-1] is None):
+                    if not tie_last or collected_outputs[key][-1] is None:
                         pass
                     elif hasattr(outputs, "vision_hidden_states"):
                         collected_outputs[key] = collected_outputs[key][:-1]
