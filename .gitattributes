@@ -113,6 +113,7 @@ src/transformers/models/dinov2_with_registers/modeling_*.py linguist-generated=t
 src/transformers/models/dinov3_vit/modeling_*.py linguist-generated=true
 src/transformers/models/doge/configuration_*.py linguist-generated=true
 src/transformers/models/doge/modeling_*.py linguist-generated=true
+src/transformers/models/dory/modeling_*.py linguist-generated=true
 src/transformers/models/dots1/configuration_*.py linguist-generated=true
 src/transformers/models/dots1/modeling_*.py linguist-generated=true
 src/transformers/models/dpt/image_processing_dpt.py linguist-generated=true
