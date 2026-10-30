@@ -18,17 +18,30 @@ import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, MSELoss
 
 from .loss_ctc import ForCTCLoss
-from .loss_d_fine import DFineForObjectDetectionLoss
-from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
-from .loss_deimv2 import Deimv2ForObjectDetectionLoss
-from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
-from .loss_grounding_dino import GroundingDinoForObjectDetectionLoss
 from .loss_lsd import PocketTTSForConditionalGenerationLoss
-from .loss_lw_detr import LwDetrForObjectDetectionLoss
-from .loss_rf_detr import RfDetrForSegmentationLoss
 from .loss_rnnt import ParakeetForRNNTLoss
-from .loss_rt_detr import RTDetrForObjectDetectionLoss
 from .loss_tdt import ParakeetForTDTLoss
+
+
+def dice_loss(inputs, targets, num_boxes):
+    inputs = inputs.sigmoid().flatten(1)
+    numerator = 2 * (inputs * targets).sum(1)
+    denominator = inputs.sum(-1) + targets.sum(-1)
+    loss = 1 - (numerator + 1) / (denominator + 1)
+    return loss.sum() / num_boxes
+
+
+def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2):
+    prob = inputs.sigmoid()
+    ce_loss = nn.functional.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    p_t = prob * targets + (1 - prob) * (1 - targets)
+    loss = ce_loss * ((1 - p_t) ** gamma)
+
+    if alpha >= 0:
+        alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
+        loss = alpha_t * loss
+
+    return loss.mean(1).sum() / num_boxes
 
 
 def fixed_cross_entropy(
@@ -172,7 +185,6 @@ def ForSemanticSegmentationLoss(
 
 
 LOSS_MAPPING = {
-    "ForSemanticSegmentation": ForSemanticSegmentationLoss,
     "ForCausalLM": ForCausalLMLoss,
     "ForMaskedLM": ForMaskedLMLoss,
     "ForQuestionAnswering": ForQuestionAnsweringLoss,
@@ -181,26 +193,12 @@ LOSS_MAPPING = {
     "ForVideoClassification": ForSequenceClassificationLoss,
     "ForAudioClassification": ForSequenceClassificationLoss,
     "ForTokenClassification": ForTokenClassification,
-    "ForSegmentation": ForSegmentationLoss,
-    "ForObjectDetection": ForObjectDetectionLoss,
+    "ForSemanticSegmentation": ForSemanticSegmentationLoss,
     "ForCTC": ForCTCLoss,
     "ForConditionalGeneration": ForCausalLMLoss,
-    "DeformableDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
-    "ConditionalDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
-    "DabDetrForObjectDetection": DeformableDetrForObjectDetectionLoss,
-    "GroundingDinoForObjectDetection": GroundingDinoForObjectDetectionLoss,
-    "MMGroundingDinoForObjectDetection": GroundingDinoForObjectDetectionLoss,
-    "ConditionalDetrForSegmentation": DeformableDetrForSegmentationLoss,
-    "RTDetrForObjectDetection": RTDetrForObjectDetectionLoss,
-    "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,
-    "DFineForObjectDetection": DFineForObjectDetectionLoss,
-    "Deimv2ForObjectDetection": Deimv2ForObjectDetectionLoss,
     "CsmForConditionalGeneration": ForCausalLMLoss,
-    "LwDetrForObjectDetection": LwDetrForObjectDetectionLoss,
     "PocketTTSForConditionalGeneration": PocketTTSForConditionalGenerationLoss,
     "GradiumPhononTTSForConditionalGeneration": PocketTTSForConditionalGenerationLoss,
     "ParakeetForRNNT": ParakeetForRNNTLoss,
     "ParakeetForTDT": ParakeetForTDTLoss,
-    "RfDetrForObjectDetection": LwDetrForObjectDetectionLoss,
-    "RfDetrForInstanceSegmentation": RfDetrForSegmentationLoss,
 }

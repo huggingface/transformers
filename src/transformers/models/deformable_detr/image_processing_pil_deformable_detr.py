@@ -23,6 +23,7 @@ from typing import Any, Optional
 import numpy as np
 
 from ...image_processing_backends import PilBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
     PaddingMode,
@@ -733,6 +734,23 @@ class DeformableDetrImageProcessorPil(PilBackend):
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
+
+    @requires(backends=("torch",))
+    def post_process_semantic_segmentation(
+        self,
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
+        """Semantic segmentation post-processing is not implemented for Deformable DETR yet."""
+        raise NotImplementedError("Semantic segmentation post-processing is not implemented for Deformable DETR yet.")
+
+    @requires(backends=("torch",))
+    def post_process_instance_segmentation(self) -> list[dict]:
+        """Segmentation post-processing is not implemented for Deformable DETR yet."""
+        raise NotImplementedError("Segmentation post-processing is not implemented for Deformable DETR yet.")
+
+    @requires(backends=("torch",))
+    def post_process_panoptic_segmentation(self) -> list[dict]:
+        """Panoptic segmentation post-processing is not implemented for Deformable DETR yet."""
+        raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Deformable DETR yet.")
 
 
 __all__ = ["DeformableDetrImageProcessorPil"]

@@ -42,6 +42,7 @@ if is_torch_available():
     import torch.nn.functional as F
 
     from transformers import MaskFormerForInstanceSegmentation, MaskFormerModel
+    from transformers.models.maskformer.modeling_maskformer import MaskFormerHungarianMatcher, MaskFormerLoss
 
     if is_vision_available():
         from transformers import MaskFormerImageProcessorPil
@@ -211,6 +212,68 @@ class MaskFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def setUp(self):
         self.model_tester = MaskFormerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=MaskFormerConfig, has_text_modality=False)
+
+    def test_maskformer_swin_criterion_fixed_loss_contract(self):
+        torch.manual_seed(1729)
+        criterion = MaskFormerLoss(
+            num_labels=2,
+            matcher=MaskFormerHungarianMatcher(cost_class=1.0, cost_mask=1.0, cost_dice=1.0),
+            weight_dict={"loss_cross_entropy": 1.0, "loss_mask": 1.0, "loss_dice": 1.0},
+            eos_coef=0.1,
+        )
+        masks_logits = torch.tensor([[[[2.0, -2.0], [-2.0, 2.0]], [[-2.0, 2.0], [2.0, -2.0]]]])
+        class_logits = torch.tensor([[[6.0, -3.0, -5.0], [-3.0, 5.0, -5.0]]])
+        mask_labels = [torch.tensor([[[1.0, 0.0], [0.0, 1.0]]])]
+        class_labels = [torch.tensor([0])]
+
+        losses = criterion(masks_logits, class_logits, mask_labels, class_labels)
+
+        self.assertEqual(set(losses), {"loss_cross_entropy", "loss_dice", "loss_mask"})
+        expected_losses = {
+            "loss_cross_entropy": 0.9092528223991394,
+            "loss_dice": 0.09536236524581909,
+            "loss_mask": 0.0009017818956635892,
+        }
+        for name, expected in expected_losses.items():
+            torch.testing.assert_close(losses[name], torch.tensor(expected), rtol=1e-5, atol=1e-6)
+
+    def test_maskformer_swin_model_fixed_loss_contract(self):
+        torch.manual_seed(1729)
+        config = self.model_tester.get_config()
+        config.num_labels = 2
+        config.num_queries = 2
+        config.use_auxiliary_loss = False
+        config.mask_feature_size = 16
+        model = MaskFormerForInstanceSegmentation(config).to("cpu").eval()
+        pixel_values = torch.randn(1, 3, 64, 64)
+        pixel_mask = torch.ones(1, 64, 64)
+        mask_labels = [torch.tensor([[[1.0, 0.0], [0.0, 1.0]]])]
+        class_labels = [torch.tensor([0])]
+        with torch.no_grad():
+            outputs = model(
+                pixel_values=pixel_values,
+                pixel_mask=pixel_mask,
+                mask_labels=mask_labels,
+                class_labels=class_labels,
+            )
+
+        losses = model.get_loss_dict(
+            outputs.masks_queries_logits,
+            outputs.class_queries_logits,
+            mask_labels,
+            class_labels,
+            {},
+        )
+        self.assertEqual(set(losses), {"loss_cross_entropy", "loss_dice", "loss_mask"})
+        expected_losses = {
+            "loss_cross_entropy": 1.0944433212280273,
+            "loss_dice": 0.406496524810791,
+            "loss_mask": 1.5281641483306885,
+        }
+        for name, expected in expected_losses.items():
+            torch.testing.assert_close(losses[name], torch.tensor(expected), rtol=1e-5, atol=1e-6)
+        torch.testing.assert_close(outputs.loss, torch.tensor(3.029103994369507), rtol=1e-5, atol=1e-6)
+        self.assertEqual(tuple(outputs.loss.shape), ())
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)

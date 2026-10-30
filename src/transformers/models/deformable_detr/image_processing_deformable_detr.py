@@ -26,6 +26,7 @@ from torchvision.io import read_image
 from torchvision.transforms.v2 import functional as tvF
 
 from ...image_processing_backends import TorchvisionBackend
+from ...image_processing_outputs import SemanticSegmentationPostProcessorOutput
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import (
     center_to_corners_format,
@@ -50,7 +51,10 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import ImagesKwargs, Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import (
+    TensorType,
+    auto_docstring,
+)
 
 
 class DeformableDetrImageProcessorKwargs(ImagesKwargs, total=False):
@@ -722,6 +726,20 @@ class DeformableDetrImageProcessor(TorchvisionBackend):
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
+
+    def post_process_semantic_segmentation(
+        self,
+    ) -> "list[torch.Tensor] | list[SemanticSegmentationPostProcessorOutput]":
+        """Semantic segmentation post-processing is not implemented for Deformable DETR yet."""
+        raise NotImplementedError("Semantic segmentation post-processing is not implemented for Deformable DETR yet.")
+
+    def post_process_instance_segmentation(self) -> list[dict]:
+        """Segmentation post-processing is not implemented for Deformable DETR yet."""
+        raise NotImplementedError("Segmentation post-processing is not implemented for Deformable DETR yet.")
+
+    def post_process_panoptic_segmentation(self) -> list[dict]:
+        """Panoptic segmentation post-processing is not implemented for Deformable DETR yet."""
+        raise NotImplementedError("Panoptic segmentation post-processing is not implemented for Deformable DETR yet.")
 
 
 __all__ = ["DeformableDetrImageProcessor"]
