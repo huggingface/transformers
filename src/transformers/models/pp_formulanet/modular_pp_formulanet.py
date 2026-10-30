@@ -44,7 +44,6 @@ from ...utils import (
 )
 from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
-from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..florence2.modeling_florence2 import Florence2ForConditionalGeneration
 from ..mbart.configuration_mbart import MBartConfig
@@ -126,7 +125,6 @@ class PPFormulaNetConfig(PreTrainedConfig):
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class PPFormulaNetImageProcessor(NougatImageProcessor):
     image_mean = [0.7931, 0.7931, 0.7931]
     image_std = [0.1738, 0.1738, 0.1738]
