@@ -929,22 +929,50 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         frame_idx: int,
         high_res_masks: torch.Tensor,
         object_score_logits: torch.Tensor,
+        binary_mask_indices: list[int] | None = None,
     ):
         """
         Run the memory encoder on `high_res_masks`. This is usually after applying
         non-overlapping constraints to object scores. Since their scores changed, their
         memory also need to be computed again with the memory encoder.
+        `binary_mask_indices` identifies detector corrections that must bypass sigmoid.
         """
         # Retrieve correct image features
         cached_features = inference_session.cache.get_vision_features(frame_idx)
         current_vision_feats = cached_features["vision_feats"]
-        maskmem_features, maskmem_pos_enc = self.tracker_model._encode_new_memory(
-            current_vision_feats=current_vision_feats[-1],
-            pred_masks_high_res=high_res_masks,
-            object_score_logits=object_score_logits,
-            is_mask_from_pts=False,
+        if not binary_mask_indices:
+            return self.tracker_model._encode_new_memory(
+                current_vision_feats=current_vision_feats[-1],
+                pred_masks_high_res=high_res_masks,
+                object_score_logits=object_score_logits,
+                is_mask_from_pts=False,
+            )
+
+        # Binary correction masks must bypass sigmoid, while ordinary tracker logits must not.
+        num_objects = high_res_masks.shape[0]
+        binary_indices = set(binary_mask_indices)
+        vision_features = current_vision_feats[-1].expand(-1, num_objects, -1)
+        memory_features, memory_positions, encoded_indices = [], [], []
+        for is_binary in (False, True):
+            indices = [i for i in range(num_objects) if (i in binary_indices) == is_binary]
+            if not indices:
+                continue
+            features, positions = self.tracker_model._encode_new_memory(
+                current_vision_feats=vision_features[:, indices],
+                pred_masks_high_res=high_res_masks[indices],
+                object_score_logits=object_score_logits[indices],
+                is_mask_from_pts=is_binary,
+            )
+            memory_features.append(features)
+            memory_positions.append(positions)
+            encoded_indices.extend(indices)
+
+        # Restore object order after encoding the two groups separately.
+        original_order = torch.tensor(encoded_indices, device=high_res_masks.device).argsort()
+        return (
+            torch.cat(memory_features, dim=1)[:, original_order],
+            torch.cat(memory_positions, dim=1)[:, original_order],
         )
-        return maskmem_features, maskmem_pos_enc
 
     def _prepare_recondition_masks(
         self,
@@ -979,7 +1007,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
             else:
                 # Correction mode: detector corrects drift, replace tracker mask with detection mask
                 new_mask = det_out["mask"][det_idx : det_idx + 1].unsqueeze(1)
-                reconditioned_masks[obj_idx] = new_mask >= 0.5
+                reconditioned_masks[obj_idx] = new_mask > 0
                 reconditioned_obj_ids.add(trk_obj_id)
 
         return reconditioned_masks, reconditioned_obj_ids
@@ -1220,16 +1248,17 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         # Use mask areas as a proxy for object scores
         object_score_logits = torch.where((high_res_masks > 0).any(dim=(-1, -2)), 10.0, -10.0)
 
-        # Run memory encoder in batch for all objects at once
+        # Run memory encoder for all objects
         num_objects = len(inference_session.obj_ids)
         object_score_logits_batched = object_score_logits.unsqueeze(-1)  # Shape: (num_objects, 1)
 
-        # Encode memories for all objects in one batch call
+        # Keep binary detector corrections separate from tracker logits during encoding.
         maskmem_features_batched, maskmem_pos_enc_batched = self.run_memory_encoder(
             inference_session,
             frame_idx,
             high_res_masks,  # Shape: (num_objects, 1, H, W)
             object_score_logits_batched,  # Shape: (num_objects, 1)
+            binary_mask_indices=list(reconditioned_masks) if not self.recondition_on_trk_masks else None,
         )
 
         # Split and store encoded memories per object
