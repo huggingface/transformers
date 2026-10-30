@@ -3290,6 +3290,42 @@ class TestAttentionImplementation(unittest.TestCase):
             )
         self.assertEqual(attn_output.shape, (1, 16, 8, 64))
 
+    @parameterized.expand([("0", False), ("1", True)])
+    def test_transformers_sdpa_force_gqa_env_var_overrides_use_gqa_in_sdpa_attention_forward(
+        self, env_var_value, expected_enable_gqa
+    ):
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward
+
+        module = torch.nn.Module()
+        module.num_key_value_groups = 2
+        query = torch.randn(1, 4, 16, 1, dtype=torch.float16)
+        key = torch.randn(1, 2, 16, 1, dtype=torch.float16)
+        value = torch.randn(1, 2, 16, 1, dtype=torch.float16)
+
+        # use an attention mask and set _is_torch_{xpu,mps}_available to False, so that use_gqa_in_sdpa
+        # falls back to returning False when the env var is not set to 1
+        attention_mask = torch.zeros(1, 1, 16, 16, dtype=torch.float16)
+
+        with (
+            patch("transformers.integrations.sdpa_attention._is_torch_xpu_available", False),
+            patch("transformers.integrations.sdpa_attention._is_torch_mps_available", False),
+            patch(
+                "torch.nn.functional.scaled_dot_product_attention",
+                wraps=torch.nn.functional.scaled_dot_product_attention,
+            ) as mock_sdpa,
+            patch.dict(os.environ, {"TRANSFORMERS_SDPA_FORCE_GQA": env_var_value}),
+        ):
+            sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
+
+        mock_sdpa.assert_called_once()
+        self.assertEqual(mock_sdpa.call_args.kwargs.get("enable_gqa", False), expected_enable_gqa)
+        self.assertEqual(
+            mock_sdpa.call_args.args[1].shape[1], 2 if expected_enable_gqa else 4
+        )  # check if key was repeated
+        self.assertEqual(
+            mock_sdpa.call_args.args[2].shape[1], 2 if expected_enable_gqa else 4
+        )  # check if value was repeated
+
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
         # When flash_attn is importable but not present in PACKAGE_DISTRIBUTION_MAPPING
