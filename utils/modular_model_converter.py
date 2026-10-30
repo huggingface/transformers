@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
+import ast
 import glob
 import importlib
 import multiprocessing as mp
@@ -1626,12 +1627,17 @@ class ModularFileMapper(ModuleMapper):
         # 1. for each modeling file found in the imports, rename it with the new model name, visit it, and update dependencies
         self.visited_modules = {}
         self.renamers = {}
+        # Top-level classes/functions of each renamed modeling file, before the modular definitions are merged in
+        self.renamed_original_nodes = {}
         name_prefixes = self.infer_new_model_name()
         for file, module in self.model_specific_modules.items():
             file_model_name = file.split(".")[-2]
             new_name = name_prefixes[file]
             renamer = ReplaceNameTransformer(file_model_name, new_name, self.model_name)
             renamed_module = module.visit(renamer)
+            self.renamed_original_nodes[file] = {
+                node.name.value: node for node in renamed_module.body if isinstance(node, (cst.ClassDef, cst.FunctionDef))
+            }
             self.visited_modules[file] = ModelFileMapper.visit_and_merge_dependencies(
                 renamed_module,
                 self.classes,
@@ -1969,6 +1975,82 @@ def get_class_node_and_dependencies(
     return nodes_to_add, file_type, new_imports
 
 
+def _normalized_code(node: cst.CSTNode) -> str:
+    """Code of `node` without docstrings, so that only behavior is compared."""
+    tree = ast.parse(cst.Module(body=[node]).code)
+    for sub in ast.walk(tree):
+        body = getattr(sub, "body", None)
+        if (
+            isinstance(body, list)
+            and body
+            and isinstance(body[0], ast.Expr)
+            and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            sub.body = body[1:] or [ast.Pass()]
+    return ast.dump(tree)
+
+
+def _statement_key(node: cst.CSTNode) -> str | None:
+    if isinstance(node, (cst.FunctionDef, cst.ClassDef)):
+        return node.name.value
+    target = get_assign_target(node)
+    return target.value if isinstance(target, cst.Name) else None
+
+
+def _names_in(node: cst.CSTNode) -> set[str]:
+    return {name.value for name in m.findall(node, m.Name())}
+
+
+def find_inherited_code_mismatches(
+    modular_mapper: "ModularFileMapper", files: dict[str, dict]
+) -> list[tuple[str, str, str, str]]:
+    """
+    Inheriting in a modular file must mean the same thing as inheriting in Python. If `MixtralDecoderLayer(LlamaDecoderLayer)`
+    does not override `__init__`, Python builds `LlamaMLP`, but the generated file builds `MixtralMLP` because of the
+    renaming. If the modular file redefines `MixtralMLP` with different code, the modular and generated files disagree.
+    Returns `(class_name, member, used_name, parent_class)` for each such case.
+    """
+    generated = {name: entry["node"] for body in files.values() for name, entry in body.items()}
+    modular_defined = set(modular_mapper.classes) | set(modular_mapper.functions)
+    mismatches = []
+    for class_name, modular_node in modular_mapper.classes.items():
+        bases = [
+            k.value.value
+            for k in modular_node.bases
+            if m.matches(k.value, m.Name()) and k.value.value in modular_mapper.model_specific_imported_objects
+        ]
+        if len(bases) != 1 or class_name not in generated:
+            continue
+        originals = modular_mapper.renamed_original_nodes[modular_mapper.model_specific_imported_objects[bases[0]]]
+        modular_statements = {_statement_key(node): node for node in modular_node.body.body}
+        for statement in generated[class_name].body.body:
+            key = _statement_key(statement)
+            inherited_names = _names_in(statement)
+            if key is not None and key in modular_statements:
+                inherited_names -= _names_in(modular_statements[key])
+            for name in sorted(inherited_names & modular_defined - {class_name}):
+                if name not in originals or name not in generated:
+                    continue
+                if _normalized_code(originals[name]) != _normalized_code(generated[name]):
+                    mismatches.append((class_name, key, name, bases[0]))
+    return mismatches
+
+
+def check_inherited_code_uses_parent_definitions(modular_mapper: "ModularFileMapper", files: dict[str, dict]):
+    mismatches = find_inherited_code_mismatches(modular_mapper, files)
+    if mismatches:
+        errors = [
+            f"`{class_name}.{member}` is inherited from `{parent}` but uses `{name}`, which the modular file redefines: "
+            f"Python inheritance would use `{parent}`'s version. Override `{member}` in `{class_name}`."
+            for class_name, member, name, parent in mismatches
+        ]
+        raise ValueError(
+            f"Modular file for `{modular_mapper.model_name}` does not behave like the generated code:\n- "
+            + "\n- ".join(errors)
+        )
+
+
 def create_modules(
     modular_mapper: ModularFileMapper,
     file_path: str | None = None,
@@ -2011,6 +2093,8 @@ def create_modules(
                 idx = current_file_indices[file_type]
                 current_file_indices[file_type] += 1
             files[file_type][dependency] = {"insert_idx": idx, "node": node}
+
+    check_inherited_code_uses_parent_definitions(modular_mapper, files)
 
     # Add the __all__ statement to files at the end
     for file_type, node in modular_mapper.all_all_to_add.items():

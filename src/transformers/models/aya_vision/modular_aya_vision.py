@@ -31,6 +31,7 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from .configuration_aya_vision import AyaVisionConfig
+from ..auto import AutoModel
 
 
 logger = logging.get_logger(__name__)
@@ -199,6 +200,13 @@ class AyaVisionModel(LlavaModel):
             attentions=outputs.attentions,
             image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
         )
+    def __init__(self, config: AyaVisionConfig):
+        super().__init__(config)
+        self.vision_tower = AutoModel.from_config(config.vision_config)
+
+        self.multi_modal_projector = AyaVisionMultiModalProjector(config)
+        self.language_model = AutoModel.from_config(config.text_config)
+        self.post_init()
 
 
 class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
@@ -264,6 +272,12 @@ class AyaVisionForConditionalGeneration(LlavaForConditionalGeneration):
             mm_encoder_outputs=mm_encoder_outputs,
             **kwargs,
         )
+
+    def __init__(self, config: AyaVisionConfig):
+        super().__init__(config)
+        self.model = AyaVisionModel(config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
+        self.post_init()
 
 
 __all__ = ["AyaVisionForConditionalGeneration", "AyaVisionPreTrainedModel", "AyaVisionModel"]
