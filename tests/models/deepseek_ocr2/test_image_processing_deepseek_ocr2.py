@@ -48,19 +48,21 @@ class DeepseekOcr2ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
 
     def test_crop_to_patches(self):
         for backend_name, image_processing_class in self.image_processing_classes.items():
-            image_processor = image_processing_class(**self.image_processor_dict)
+            image_processor = image_processing_class(
+                **{**self.image_processor_dict, "min_patches": 1, "max_patches": 6}
+            )
             tile_size = self.image_processor_tester.tile_size
             if backend_name == "pil":
                 image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)[0]
                 processed_images = image_processor.crop_image_to_patches(
-                    image, min_patches=1, max_patches=6, tile_size=tile_size
+                    image, image_processor.supported_aspect_ratios, tile_size=tile_size
                 )
                 self.assertGreater(len(processed_images), 0)
                 self.assertEqual(processed_images[0].shape[:2], (tile_size, tile_size))
             else:
                 image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)[0]
                 stacked_patches, n_patches = image_processor.crop_image_to_patches(
-                    image.unsqueeze(0).float(), min_patches=1, max_patches=6, tile_size=tile_size
+                    image.unsqueeze(0).float(), image_processor.supported_aspect_ratios, tile_size=tile_size
                 )
                 self.assertGreater(n_patches, 0)
                 self.assertEqual(stacked_patches.shape[-2:], (tile_size, tile_size))

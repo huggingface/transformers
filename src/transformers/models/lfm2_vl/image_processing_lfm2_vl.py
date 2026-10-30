@@ -171,11 +171,9 @@ class Lfm2VlImageProcessorKwargs(ImagesKwargs, total=False):
         Whether to split large images into a grid of smaller tiles. When enabled, images exceeding the maximum token
         limit are divided into multiple tiles based on `min_tiles` and `max_tiles` constraints.
     min_tiles (`int`, *optional*, defaults to `2`):
-        Minimum number of tiles (width × height) to use when splitting an image into a grid. The grid configuration
-        is chosen to maintain the original aspect ratio while staying within the `min_tiles` and `max_tiles` range.
+        Minimum number of tiles (width × height) to use when splitting an image into a grid. Can only be set at init.
     max_tiles (`int`, *optional*, defaults to `10`):
-        Maximum number of tiles (width × height) to use when splitting an image into a grid. The grid configuration
-        is chosen to maintain the original aspect ratio while staying within the `min_tiles` and `max_tiles` range.
+        Maximum number of tiles (width × height) to use when splitting an image into a grid. Can only be set at init.
     use_thumbnail (`bool`, *optional*, defaults to `True`):
         Whether to include a thumbnail version of the image when splitting into tiles. The thumbnail provides a
         low-resolution overview of the entire image and is added as an additional patch when the grid has more than
@@ -204,6 +202,7 @@ class Lfm2VlImageProcessorKwargs(ImagesKwargs, total=False):
     do_image_splitting: bool
     min_tiles: int
     max_tiles: int
+    supported_aspect_ratios: list[list[int]]
     use_thumbnail: bool
     min_image_tokens: int
     max_image_tokens: int
@@ -220,6 +219,7 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
     do_image_splitting = True
     min_tiles = 2
     max_tiles = 10
+    init_only_kwargs = ("min_tiles", "max_tiles")
     use_thumbnail = True
     min_image_tokens = 64
     max_image_tokens = 256
@@ -249,30 +249,33 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
             tile_size_patches,
         )
 
-    @lru_cache(maxsize=256)
-    def _target_ratios(self, min_tiles: int, max_tiles: int) -> list[tuple[int, int]]:
-        ratios = [
-            (w, h)
-            for n in range(min_tiles, max_tiles + 1)
-            for w in range(1, n + 1)
-            for h in range(1, n + 1)
-            if min_tiles <= w * h <= max_tiles
-        ]
-        return sorted(set(ratios), key=lambda x: x[0] * x[1])
+        if self.do_image_splitting and self.min_tiles > self.max_tiles:
+            raise ValueError("min_tiles must be less than or equal to max_tiles")
+        # build the grids for configs saved without them, or when `min_tiles`/`max_tiles` were changed
+        tile_counts = [width * height for width, height in self.supported_aspect_ratios or [[0, 0]]]
+        if (min(tile_counts), max(tile_counts)) != (self.min_tiles, self.max_tiles):
+            grids = {
+                (width, height)
+                for n in range(self.min_tiles, self.max_tiles + 1)
+                for width in range(1, n + 1)
+                for height in range(1, n + 1)
+                if self.min_tiles <= width * height <= self.max_tiles
+            }
+            self.supported_aspect_ratios = [list(grid) for grid in sorted(grids, key=lambda grid: grid[0] * grid[1])]
 
     def _get_grid_layout(
         self,
         height: int,
         width: int,
-        min_tiles: int,
-        max_tiles: int,
+        supported_aspect_ratios: list[list[int]],
         tile_size: int,
     ) -> tuple[int, int]:
         aspect_ratio = width / height
-        target_ratios = self._target_ratios(min_tiles, max_tiles)
 
         # find best matching grid configuration
-        grid_width, grid_height = find_closest_aspect_ratio(aspect_ratio, target_ratios, width, height, tile_size)
+        grid_width, grid_height = find_closest_aspect_ratio(
+            aspect_ratio, supported_aspect_ratios, width, height, tile_size
+        )
 
         target_width = tile_size * grid_width
         target_height = tile_size * grid_height
@@ -283,8 +286,7 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
     def crop_image_to_patches(
         self,
         image: "torch.Tensor",
-        min_tiles: int,
-        max_tiles: int,
+        supported_aspect_ratios: list[list[int]],
         tile_size: int,
         use_thumbnail: bool,
         thumbnail_size: tuple[int],
@@ -299,7 +301,7 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
         """
         batch_size, num_channels, height, width = image.shape
         grid_width, grid_height, target_width, target_height, total_patches = self._get_grid_layout(
-            height, width, min_tiles=min_tiles, max_tiles=max_tiles, tile_size=tile_size
+            height, width, supported_aspect_ratios=supported_aspect_ratios, tile_size=tile_size
         )
 
         resized_image = super().resize(
@@ -383,8 +385,8 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
         self,
         images: "torch.Tensor",
         downsample_factor: int,
-        min_tiles: int,
-        max_tiles: int,
+        do_image_splitting: bool,
+        supported_aspect_ratios: list[list[int]],
         use_thumbnail: bool,
         min_image_tokens: int,
         max_image_tokens: int,
@@ -394,7 +396,6 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
         resample: "PILImageResampling | tvF.InterpolationMode | int | None",
     ) -> tuple[list["torch.Tensor"], list[list[int]], list[list[int]], list[list[tuple[int, int]]]]:
         batch_size, _, height, width = images.shape
-        do_image_splitting = not min_tiles == max_tiles == 1
         is_image_large = self._is_image_too_large(
             height=height,
             width=width,
@@ -417,8 +418,7 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
         if is_image_large and do_image_splitting:
             images, num_cols, num_rows = self.crop_image_to_patches(
                 images,
-                min_tiles=min_tiles,
-                max_tiles=max_tiles,
+                supported_aspect_ratios=supported_aspect_ratios,
                 tile_size=tile_size,
                 thumbnail_size=(new_height, new_width),
                 use_thumbnail=use_thumbnail,
@@ -447,8 +447,7 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
         image_std: float | list[float],
         downsample_factor: int,
         do_image_splitting: bool,
-        min_tiles: int,
-        max_tiles: int,
+        supported_aspect_ratios: list[list[int]],
         use_thumbnail: bool,
         min_image_tokens: int,
         max_image_tokens: int,
@@ -461,16 +460,6 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
         disable_grouping: bool | None,
         **kwargs,
     ) -> BatchFeature:
-        if not do_image_splitting:
-            min_tiles = 1
-            max_tiles = 1
-            logger.debug(
-                "Image splitting is disabled, setting min_tiles and max_tiles to 1. Set do_image_splitting=True to enable splitting."
-            )
-
-        if do_image_splitting and min_tiles > max_tiles:
-            raise ValueError("min_tiles must be less than or equal to max_tiles")
-
         max_thumbnail_image_patches = max_image_tokens * downsample_factor**2
         tile_size_patches = (tile_size // encoder_patch_size) ** 2 if do_image_splitting else 0
         max_num_patches = max(
@@ -493,8 +482,9 @@ class Lfm2VlImageProcessor(TorchvisionBackend):
                 stacked_images, num_rows, num_cols, image_sizes = self.resize_and_split(
                     stacked_images,
                     downsample_factor=downsample_factor,
-                    min_tiles=min_tiles,
-                    max_tiles=max_tiles,
+                    # a single 1x1 grid is the same as not splitting
+                    do_image_splitting=do_image_splitting and self.max_tiles > 1,
+                    supported_aspect_ratios=supported_aspect_ratios,
                     use_thumbnail=use_thumbnail,
                     min_image_tokens=min_image_tokens,
                     max_image_tokens=max_image_tokens,

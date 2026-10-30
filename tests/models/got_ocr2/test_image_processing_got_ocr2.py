@@ -85,14 +85,15 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_crop_to_patches(self):
         for backend_name, image_processing_class in self.image_processing_classes.items():
-            image_processor = image_processing_class(**self.image_processor_dict)
+            image_processor = image_processing_class(
+                **{**self.image_processor_dict, "min_patches": 1, "max_patches": 6}
+            )
             if backend_name == "pil":
                 # PIL backend processes single images
                 image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, numpify=True)[0]
                 processed_images = image_processor.crop_image_to_patches(
                     image,
-                    min_patches=1,
-                    max_patches=6,
+                    supported_aspect_ratios=image_processor.supported_aspect_ratios,
                     use_thumbnail=True,
                     patch_size=SizeDict(height=20, width=20),
                 )
@@ -103,8 +104,7 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 image = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)[0]
                 processed_images = image_processor.crop_image_to_patches(
                     image.unsqueeze(0),
-                    min_patches=1,
-                    max_patches=6,
+                    supported_aspect_ratios=image_processor.supported_aspect_ratios,
                     use_thumbnail=True,
                     patch_size=SizeDict(height=20, width=20),
                 )
@@ -137,7 +137,8 @@ class GotOcr2ProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
             self.assertEqual(num_patches, 10)
 
+            image_processing = image_processing_class(**{**self.image_processor_dict, "max_patches": 200})
             num_patches = image_processing.get_number_of_image_patches(
-                height=100, width=100, images_kwargs={"crop_to_patches": True, "max_patches": 200}
+                height=100, width=100, images_kwargs={"crop_to_patches": True}
             )
             self.assertEqual(num_patches, 50)
