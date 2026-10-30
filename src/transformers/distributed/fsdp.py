@@ -146,25 +146,6 @@ def _resolve_tied_embed_lm_head_plan(
     return adapted_plan
 
 
-def expand_fsdp_plan(model: nn.Module, fsdp_plan: dict[str, str]) -> dict[str, str]:
-    """
-    Expand FSDP plan patterns to concrete module FQNs and their reshard policies.
-    """
-    _warning_once_on_rank_zero(
-        "`expand_fsdp_plan` is deprecated and will be removed in v5.23: the model expands its plans itself in "
-        "`_resolve_parallel_plans`."
-    )
-    fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, model)
-
-    expanded_plan = {}
-    for module_name, _ in model.named_modules():
-        plan_key = module_name if module_name in fsdp_plan else replace_layer_number_by_wildcard(module_name)
-        if plan_key in fsdp_plan:
-            expanded_plan[module_name] = fsdp_plan[plan_key]
-
-    return expanded_plan
-
-
 def verify_fsdp_plan(module_names: list[str], fsdp_plan: dict[str, str] | None) -> None:
     """
     Verify the FSDP plan of the model, log a warning if plan keys were not applied or strategies are invalid.
