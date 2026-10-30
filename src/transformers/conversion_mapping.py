@@ -170,6 +170,31 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.hc_head_base", ".hc_base"),
             WeightRenaming(r"\.hc_head_scale", ".hc_scale"),
         ],
+        # The original H-Net nests each stage in the previous one (`backbone.main_network.main_network...`): unroll
+        # the stages into per-stage lists, the innermost network being `main_network`.
+        "hnet": [
+            WeightRenaming(r"embeddings\.", "embed_tokens."),
+            WeightRenaming(r"backbone\.main_network\.main_network\.pad_dimension", "pad_dimensions.1"),
+            WeightRenaming(r"backbone\.main_network\.pad_dimension", "pad_dimensions.0"),
+            WeightRenaming(r"backbone\.main_network\.(encoder|decoder|routing_module|residual_proj)\.", r"\1s.1."),
+            WeightRenaming(r"backbone\.(encoder|decoder|routing_module|residual_proj)\.", r"\1s.0."),
+            WeightRenaming(r"backbone\.(?:main_network\.)+", "main_network."),
+            WeightRenaming(r"\.rmsnorm\.", ".norm."),
+            WeightRenaming(r"\.norm1\.", ".input_layernorm."),
+            WeightRenaming(r"\.norm2\.", ".post_attention_layernorm."),
+            WeightRenaming(r"\.(q|k)_proj_layer\.", r".\1_proj."),
+            WeightRenaming(r"\.mlp\.fc2\.", ".mlp.down_proj."),
+            WeightConverter(
+                source_patterns=r"\.mlp\.fc1\.weight",
+                target_patterns=[".mlp.up_proj.weight", ".mlp.gate_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=r"\.mixer\.Wqkv\.weight",
+                target_patterns=[".mixer.q_proj.weight", ".mixer.k_proj.weight", ".mixer.v_proj.weight"],
+                operations=[Chunk(dim=0)],
+            ),
+        ],
         # Cosmos3 Edge's composite checkpoint stores its dense reasoner text tower as conventional attention + MLP
         # blocks. The visual/projector tensors already use their native module names and intentionally need no mapping.
         "cosmos3_edge": [
