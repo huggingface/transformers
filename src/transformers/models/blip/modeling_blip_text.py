@@ -466,7 +466,7 @@ class BlipTextModel(BlipTextPreTrainedModel):
     `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: BlipTextConfig, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
@@ -585,7 +585,7 @@ class BlipTextLMHeadModel(BlipTextPreTrainedModel, GenerationMixin):
         "cls.predictions.decoder.weight": "bert.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BlipTextConfig):
         super().__init__(config)
 
         self.bert = BlipTextModel(config, add_pooling_layer=False)

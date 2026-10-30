@@ -42,7 +42,6 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check
-from ...utils.deprecation import deprecate_kwarg
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
 from ...utils.import_utils import is_torchdynamo_compiling
 from ...utils.output_capturing import OutputRecorder, _scope_router_output_collection, capture_outputs
@@ -1175,7 +1174,6 @@ class MiniMaxM3VLVisionModel(MiniMaxM3VLPreTrainedModel):
     @merge_with_config_defaults
     @capture_outputs
     @auto_docstring
-    @deprecate_kwarg("image_grid_thw", new_name="grid_thw", version="5.16.0")
     def forward(
         self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> BaseModelOutputWithPooling:

@@ -514,7 +514,7 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
     """
 )
 class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: EfficientNetConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config

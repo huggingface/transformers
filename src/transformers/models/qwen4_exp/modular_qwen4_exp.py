@@ -1046,6 +1046,9 @@ class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
 
 
 class Qwen4ExpModel(Qwen3_5MoeModel):
+    # Qwen4ExpDecoderLayer, inherited from Qwen3_5MoeModel and renamed by prefix, does not exist
+    _no_split_modules = ["Qwen4ExpTextDecoderLayer", "Qwen4ExpVisionBlock"]
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,

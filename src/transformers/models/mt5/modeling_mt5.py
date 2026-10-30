@@ -650,7 +650,7 @@ class MT5PreTrainedModel(PreTrainedModel):
 
 # Copied from transformers.models.t5.modeling_t5.T5Stack with T5->MT5
 class MT5Stack(MT5PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MT5Config):
         super().__init__(config)
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
