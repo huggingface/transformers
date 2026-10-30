@@ -1117,6 +1117,8 @@ MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         ("mask2former", "Mask2FormerForUniversalSegmentation"),
         ("maskformer", "MaskFormerForInstanceSegmentation"),
         ("oneformer", "OneFormerForUniversalSegmentation"),
+        ("rt_detr", "RTDetrForSegmentation"),
+        ("rt_detr_v2", "RTDetrV2ForSegmentation"),
         ("videomt", "VideomtForUniversalSegmentation"),
     ]
 )
