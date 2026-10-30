@@ -169,6 +169,7 @@ class CsmProcessor(ProcessorMixin):
         self,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None,
         audio: AudioInput | None = None,
+        # Should be processor kwargs but need to stay for BC.
         output_labels: bool | None = False,
         depth_decoder_labels_ratio: float | None = 1.0,
         **kwargs: Unpack[CsmProcessorKwargs],

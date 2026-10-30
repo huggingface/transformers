@@ -144,6 +144,7 @@ class DiaProcessor(ProcessorMixin):
         self,
         text: str | list[str],
         audio: AudioInput | None = None,
+        # Should be a processor kwarg but needs to stay for BC.
         output_labels: bool | None = False,
         **kwargs: Unpack[DiaProcessorKwargs],
     ):
