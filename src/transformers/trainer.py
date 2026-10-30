@@ -242,7 +242,8 @@ logger = logging.get_logger(__name__)
 
 
 # Name of the files used for checkpointing
-TRAINING_ARGS_NAME = "training_args.bin"
+TRAINING_ARGS_NAME = "training_args.json"
+TRAINING_ARGS_NAME_BIN = "training_args.bin"
 TRAINER_STATE_NAME = "trainer_state.json"
 OPTIMIZER_NAME = "optimizer.pt"
 SCALER_NAME = "scaler.pt"
@@ -1549,6 +1550,14 @@ class Trainer:
             if state.train_batch_size is not None and args.auto_find_batch_size:
                 # Only restore the checkpoint's train_batch_size when using auto_find_batch_size,
                 self._train_batch_size = state.train_batch_size
+            if os.path.isfile(os.path.join(resume_from_checkpoint, TRAINING_ARGS_NAME_BIN)) and not os.path.isfile(
+                os.path.join(resume_from_checkpoint, TRAINING_ARGS_NAME)
+            ):
+                logger.warning_once(
+                    f"Found a deprecated `{TRAINING_ARGS_NAME_BIN}` in {resume_from_checkpoint}. Training arguments are "
+                    f"now saved as `{TRAINING_ARGS_NAME}` and can be loaded with `TrainingArguments.from_json_file`. "
+                    f"New checkpoints will no longer include `{TRAINING_ARGS_NAME_BIN}`."
+                )
 
         inner_training_loop = find_executable_batch_size(
             self._inner_training_loop, self._train_batch_size, args.auto_find_batch_size
@@ -4133,7 +4142,7 @@ class Trainer:
             self.data_collator.tokenizer.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
-        torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
+        self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
 
     # ---- Logging & Metrics ----
 
@@ -4397,7 +4406,7 @@ class Trainer:
         if self.processing_class is not None:
             self.processing_class.save_pretrained(output_dir)
         # Same for the training arguments
-        torch.save(self.args, os.path.join(output_dir, TRAINING_ARGS_NAME))
+        self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
 
         if self.args.save_strategy == SaveStrategy.STEPS:
             commit_message = f"Training in progress, step {self.state.global_step}"
