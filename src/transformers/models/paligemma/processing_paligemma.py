@@ -28,6 +28,7 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
@@ -36,9 +37,10 @@ IMAGE_TOKEN = "<image>"
 EXTRA_TOKENS = [f"<loc{i:0>4}>" for i in range(1024)] + [f"<seg{i:0>3}>" for i in range(128)]
 
 
-class PaliGemmaTextKwargs(TextKwargs):
+class DeprecatedPaliGemmaTextKwargs(TextKwargs, total=False):
     """
-    suffix (`str`, `list[str]`, `list[list[str]]`):
+    suffix (`str | list[str] | list[list[str]]`, *optional*):
+        Deprecated, pass directly to [`PaliGemmaProcessor.__call__`] instead.
         The suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
         for more information. If your prompt is "<image> What is on the image", the suffix corresponds to the expected prediction "a cow sitting on a bench".
     """
@@ -46,22 +48,15 @@ class PaliGemmaTextKwargs(TextKwargs):
     suffix: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None
 
 
-class PaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: PaliGemmaTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
-        },
-    }
+class DeprecatedPaliGemmaProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: DeprecatedPaliGemmaTextKwargs
 
 
 @auto_docstring
 class PaliGemmaProcessor(ProcessorMixin):
-    valid_processor_kwargs = PaliGemmaProcessorKwargs
+    images_kwargs = {
+        "data_format": "channels_first",
+    }
 
     def __init__(
         self,
@@ -96,9 +91,14 @@ class PaliGemmaProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[PaliGemmaProcessorKwargs],
+        suffix: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
+        suffix (`str | list[str] | list[list[str]]`, *optional*):
+            The suffixes or batch of suffixes to be encoded. Only necessary for finetuning. See https://github.com/google-research/big_vision/blob/main/big_vision/configs/proj/paligemma/README.md
+            for more information. If your prompt is "<image> What is on the image", the suffix corresponds to the expected prediction "a cow sitting on a bench".
+
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -110,7 +110,7 @@ class PaliGemmaProcessor(ProcessorMixin):
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **labels** -- Labels compatible with training if `suffix` is not None
         """
-        if (suffix := kwargs.pop("suffix", None)) is not None:
+        if suffix is not None:
             if not isinstance(suffix, (list, tuple)):
                 suffix = [suffix]
             suffix = [sample + self.tokenizer.eos_token for sample in suffix]
@@ -118,7 +118,6 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         kwargs["return_token_type_ids"] = True
         kwargs = self._merge_kwargs(
-            PaliGemmaProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -223,4 +222,11 @@ class PaliGemmaProcessor(ProcessorMixin):
         return super().model_input_names + ["token_type_ids", "labels"]
 
 
+__getattr__ = deprecate_attr(
+    __name__,
+    remove={
+        "PaliGemmaTextKwargs": (DeprecatedPaliGemmaTextKwargs, "5.29.0"),
+        "PaliGemmaProcessorKwargs": (DeprecatedPaliGemmaProcessorKwargs, "5.29.0"),
+    },
+)
 __all__ = ["PaliGemmaProcessor"]

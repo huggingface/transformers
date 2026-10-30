@@ -192,3 +192,9 @@ class VoxtralRealtimeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_tensors="pt",
         )["input_features"]
         torch.testing.assert_close(encoding["input_features"], expected_features)
+
+    @unittest.skip(
+        reason="Cannot change the default of is_streaming and is_first_audio_chunk in __call__ without breaking BC."
+    )
+    def test_call_arguments_default_none(self):
+        pass

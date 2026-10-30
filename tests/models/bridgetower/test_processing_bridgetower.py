@@ -33,3 +33,7 @@ class BridgeTowerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
         return tokenizer_class.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
+
+    @unittest.skip(reason="Skip for BC. Hub subprocessor configs might not have the same defaults as the processor.")
+    def test_no_redundant_default_kwargs(self):
+        pass

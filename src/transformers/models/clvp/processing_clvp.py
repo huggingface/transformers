@@ -41,7 +41,6 @@ class ClvpProcessor(ProcessorMixin):
         # nested `audio_kwargs` before merging would switch `_merge_kwargs` into nested-dict mode and silently drop any
         # flat kwargs the user passed.
         merged_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
         )

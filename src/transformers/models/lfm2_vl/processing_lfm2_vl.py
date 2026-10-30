@@ -23,14 +23,16 @@ from ...processing_utils import (
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class Lfm2VlTextKwargs(TextKwargs, total=False):
+class DeprecatedLfm2VlTextKwargs(TextKwargs, total=False):
     """
     use_image_special_tokens (`bool`, *optional*, defaults to `True`):
+        Deprecated, use [`Lfm2VlProcessorKwargs.use_image_special_tokens`] instead.
         Whether to use special image tokens (`<|image_start|>` and `<|image_end|>`) to delimit image sequences
         in the text. When enabled, images are wrapped with these tokens to clearly mark image boundaries.
         When disabled, only the image token itself is used without delimiters.
@@ -40,23 +42,28 @@ class Lfm2VlTextKwargs(TextKwargs, total=False):
 
 
 class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: Lfm2VlTextKwargs
-    _defaults = {
-        "images_kwargs": {
-            "return_row_col_info": True,
-        },
-        "text_kwargs": {
-            "use_image_special_tokens": True,
-            "add_special_tokens": False,
-            "padding": False,
-            "is_split_into_words": False,
-        },
-    }
+    """
+    use_image_special_tokens (`bool`, *optional*, defaults to `True`):
+        Whether to use special image tokens (`<|image_start|>` and `<|image_end|>`) to delimit image sequences
+        in the text. When enabled, images are wrapped with these tokens to clearly mark image boundaries.
+        When disabled, only the image token itself is used without delimiters.
+    """
+
+    text_kwargs: DeprecatedLfm2VlTextKwargs
+    use_image_special_tokens: bool
 
 
 @auto_docstring
 class Lfm2VlProcessor(ProcessorMixin):
     valid_processor_kwargs = Lfm2VlProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": False,
+    }
+    images_kwargs = {
+        "return_row_col_info": True,
+    }
+    use_image_special_tokens = True
 
     def __init__(
         self,
@@ -87,26 +94,40 @@ class Lfm2VlProcessor(ProcessorMixin):
         self.validate_inputs(images=images, text=text, **kwargs)
 
         merged_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
             **kwargs,
         )
-        # The arg is supposed to be in `images_kwargs` but was assigned in `text_kwargs` when shipping
-        merged_kwargs["images_kwargs"]["use_image_special_tokens"] = merged_kwargs["text_kwargs"].pop(
-            "use_image_special_tokens"
+
+        for key in ("use_image_special_tokens", "return_mm_token_type_ids", "return_text_replacement_offsets"):
+            if key in merged_kwargs["text_kwargs"]:
+                logger.warning_once(
+                    f"Passing `{key}` in `text_kwargs` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+
+        # text_kwargs has priority for backwards compatibility
+        use_image_special_tokens = merged_kwargs["text_kwargs"].pop(
+            "use_image_special_tokens", merged_kwargs["use_image_special_tokens"]
         )
 
         processed_images = {}
         images_replacements = []
         if images is not None:
-            processed_images, images_replacements = self._process_images(images, **merged_kwargs["images_kwargs"])
+            processed_images, images_replacements = self._process_images(
+                images, use_image_special_tokens=use_image_special_tokens, **merged_kwargs["images_kwargs"]
+            )
 
         text_inputs = {}
         return_tensors = merged_kwargs["text_kwargs"].get("return_tensors", None)
         if text is not None:
-            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+            # return_mm_token_type_ids in text_kwargs has priority for backwards compatibility
+            return_mm_token_type_ids = merged_kwargs["text_kwargs"].pop(
+                "return_mm_token_type_ids", merged_kwargs["return_mm_token_type_ids"]
+            )
+            # return_text_replacement_offsets in text_kwargs has priority for backwards compatibility
             return_text_replacement_offsets = merged_kwargs["text_kwargs"].pop(
-                "return_text_replacement_offsets", False
+                "return_text_replacement_offsets", merged_kwargs["return_text_replacement_offsets"]
             )
 
             text, text_replacement_offsets = self.get_text_with_replacements(text, images_replacements)
@@ -163,8 +184,7 @@ class Lfm2VlProcessor(ProcessorMixin):
                         f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
                     )
 
-    def _process_images(self, images: ImageInput, **kwargs):
-        use_image_special_tokens = kwargs.pop("use_image_special_tokens")
+    def _process_images(self, images: ImageInput, use_image_special_tokens: bool, **kwargs):
         processed_images = self.image_processor(images, **kwargs)
 
         image_replacements = []
@@ -259,4 +279,5 @@ class Lfm2VlProcessor(ProcessorMixin):
         return ["image_rows", "image_cols", "image_sizes", "token_type_ids"]
 
 
+__getattr__ = deprecate_attr(__name__, remove={"Lfm2VlTextKwargs": (DeprecatedLfm2VlTextKwargs, "5.29.0")})
 __all__ = ["Lfm2VlProcessor"]

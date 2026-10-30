@@ -184,3 +184,7 @@ class Qwen3ASRProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         kept_positions = ~audio_positions
         self.assertTrue(kept_positions.any())
         self.assertTrue((labels[kept_positions] == input_ids[kept_positions]).all())
+
+    @unittest.skip(reason="Cannot change the default of output_labels in __call__ without breaking BC.")
+    def test_call_arguments_default_none(self):
+        pass

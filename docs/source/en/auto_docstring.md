@@ -164,7 +164,7 @@ from ...processing_utils import ProcessorMixin, ProcessingKwargs, Unpack
 from ...utils import auto_docstring
 
 class MyModelProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {"text_kwargs": {"padding": False}}
+    pass
 
 @auto_docstring
 class MyModelProcessor(ProcessorMixin):

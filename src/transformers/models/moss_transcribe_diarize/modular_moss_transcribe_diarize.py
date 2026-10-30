@@ -30,7 +30,7 @@ from ...configuration_utils import SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...modeling_utils import slice_logits_to_keep
-from ...processing_utils import Unpack, prepare_keyword_inputs, prepare_prompt_input
+from ...processing_utils import ProcessingKwargs, Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import (
     TensorType,
@@ -41,6 +41,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.import_utils import requires
 from ..audioflamingo3.configuration_audioflamingo3 import AudioFlamingo3Config, AudioFlamingo3EncoderConfig
 from ..audioflamingo3.modeling_audioflamingo3 import (
@@ -53,7 +54,7 @@ from ..audioflamingo3.modeling_audioflamingo3 import (
 )
 from ..auto import AutoConfig
 from ..qwen2_audio.modeling_qwen2_audio import Qwen2AudioAttention, Qwen2AudioEncoder, Qwen2AudioEncoderLayer
-from ..vibevoice_asr.processing_vibevoice_asr import VibeVoiceAsrProcessor, VibeVoiceAsrProcessorKwargs
+from ..vibevoice_asr.processing_vibevoice_asr import VibeVoiceAsrProcessor
 from ..whisper.feature_extraction_whisper import WhisperFeatureExtractor
 
 
@@ -271,10 +272,6 @@ class MossTranscribeDiarizeConfig(AudioFlamingo3Config):
         return self.audio_config.hidden_size * self.audio_merge_size
 
 
-class MossTranscribeDiarizeProcessorKwargs(VibeVoiceAsrProcessorKwargs):
-    _defaults = {}
-
-
 @requires(backends=("torch",))
 @auto_docstring
 class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
@@ -294,7 +291,8 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
             A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
     """
 
-    valid_processor_kwargs = MossTranscribeDiarizeProcessorKwargs
+    text_kwargs = AttributeError()
+    audio_kwargs = AttributeError()
 
     def __init__(
         self,
@@ -346,7 +344,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         text: TextInput | list[TextInput],
         audio: AudioInput | None = None,
         output_labels: bool | None = False,
-        **kwargs: Unpack[MossTranscribeDiarizeProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         output_labels (bool, *optional*, default=False):
@@ -356,9 +354,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
             [`BatchFeature`]: A dictionary with tokenized text (`input_ids`, `attention_mask`) and
             audio features (`input_values`, `padding_mask`).
         """
-        output_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs, tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs
-        )
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
         return_tensors = output_kwargs["text_kwargs"].get("return_tensors", None)
 
         if return_tensors != "pt":
@@ -442,7 +438,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
-        **kwargs: Unpack[MossTranscribeDiarizeProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """
         Prepare inputs for transcription / diarization without manually writing the chat template.
@@ -845,6 +841,8 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
             audio_hidden_states=outputs.audio_hidden_states,
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"MossTranscribeDiarizeProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "MossTranscribeDiarizeConfig",

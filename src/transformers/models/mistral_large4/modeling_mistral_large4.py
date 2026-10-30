@@ -710,6 +710,8 @@ class MistralLarge4PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class MistralLarge4TextModel(MistralLarge4PreTrainedModel):
+    config: MistralLarge4TextConfig
+
     def __init__(self, config: MistralLarge4TextConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

@@ -26,22 +26,27 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring, is_torch_available
+from ...utils import auto_docstring, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 
 
 if is_torch_available():
     import torch
 
 
+logger = logging.get_logger(__name__)
+
 IMAGE_TOKEN = "<image>"
 
 
-class IdeficsTextKwargs(TextKwargs, total=False):
+class DeprecatedIdeficsTextKwargs(TextKwargs, total=False):
     """
-    add_eos_token (`bool`, *optional*, defaults to `False`):
+    add_eos_token (`bool`, *optional*):
+        Deprecated, use [`IdeficsProcessorKwargs.add_eos_token`] instead.
         Whether to add an end-of-sequence token at the end of the text input. When enabled, an EOS token is
         appended to mark the end of the text sequence, which is useful for generation tasks.
     add_end_of_utterance_token (`bool`, *optional*):
+        Deprecated, use [`IdeficsProcessorKwargs.add_end_of_utterance_token`] instead.
         Whether to add an end-of-utterance token to mark the end of a user's message in conversational contexts.
         This token helps the model distinguish between different utterances in a multi-turn conversation and is
         particularly important for chat-based models.
@@ -52,15 +57,21 @@ class IdeficsTextKwargs(TextKwargs, total=False):
 
 
 class IdeficsProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: IdeficsTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": False,
-            "padding": "longest",
-            "add_eos_token": False,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
+    """
+    add_eos_token (`bool`, *optional*, defaults to `False`):
+        Whether to add an end-of-sequence token at the end of the text input. When enabled, an EOS token is
+        appended to mark the end of the text sequence, which is useful for generation tasks.
+    add_end_of_utterance_token (`bool`, *optional*):
+        Whether to add an end-of-utterance token to mark the end of a user's message in conversational contexts.
+        This token helps the model distinguish between different utterances in a multi-turn conversation and is
+        particularly important for chat-based models. If `None`, the token is added only if the tokenizer was
+        trained with it.
+    """
+
+    text_kwargs: DeprecatedIdeficsTextKwargs
+
+    add_eos_token: bool
+    add_end_of_utterance_token: bool | None
 
 
 # copied from m4.training.packing
@@ -145,6 +156,17 @@ def is_url(string):
 @auto_docstring
 class IdeficsProcessor(ProcessorMixin):
     valid_processor_kwargs = IdeficsProcessorKwargs
+
+    text_kwargs = {
+        "add_special_tokens": False,
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
+
+    add_eos_token: bool = False
 
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
         r"""
@@ -280,13 +302,22 @@ class IdeficsProcessor(ProcessorMixin):
                 prompts = list(zip(images, text))
 
         output_kwargs = self._merge_kwargs(
-            IdeficsProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
 
-        add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
-        add_end_of_utterance_token = output_kwargs["text_kwargs"].pop("add_end_of_utterance_token", None)
+        for key in ("add_eos_token", "add_end_of_utterance_token"):
+            if key in output_kwargs["text_kwargs"]:
+                logger.warning_once(
+                    f"Passing `{key}` in `text_kwargs` is deprecated "
+                    "and will be removed in v5.29.0. "
+                    "Pass it directly to the processor instead."
+                )
+        # Modality-specific kwargs have priority for backwards compatibility.
+        add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", output_kwargs["add_eos_token"])
+        add_end_of_utterance_token = output_kwargs["text_kwargs"].pop(
+            "add_end_of_utterance_token", output_kwargs.get("add_end_of_utterance_token", None)
+        )
 
         # if the value isn't overridden by the user, check if the tokenizer was trained with this token and then use it
         if add_end_of_utterance_token is None:
@@ -415,4 +446,5 @@ class IdeficsProcessor(ProcessorMixin):
         return list(tokenizer_input_names + image_processor_input_names + ["image_attention_mask"])
 
 
+__getattr__ = deprecate_attr(__name__, remove={"IdeficsTextKwargs": (DeprecatedIdeficsTextKwargs, "5.29.0")})
 __all__ = ["IdeficsProcessor"]

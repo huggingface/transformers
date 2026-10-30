@@ -25,26 +25,17 @@ from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-
-
-class QianfanOCRProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding_side": "left",
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "crop_to_patches": True,
-        },
-        "videos_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class QianfanOCRProcessor(ProcessorMixin):
-    valid_processor_kwargs = QianfanOCRProcessorKwargs
+    text_kwargs = {
+        "padding_side": "left",
+    }
+    images_kwargs = {
+        "crop_to_patches": True,
+    }
 
     def __init__(
         self,
@@ -83,7 +74,7 @@ class QianfanOCRProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
-        **kwargs: Unpack[QianfanOCRProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         Returns:
@@ -104,7 +95,7 @@ class QianfanOCRProcessor(ProcessorMixin):
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         videos=None,
-        **kwargs: Unpack[QianfanOCRProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         super().validate_inputs(images=images, text=text, videos=videos, **kwargs)
         if text is None:
@@ -132,8 +123,7 @@ class QianfanOCRProcessor(ProcessorMixin):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = QianfanOCRProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
@@ -248,5 +238,7 @@ class QianfanOCRProcessor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["num_patches"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"QianfanOCRProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["QianfanOCRProcessor"]

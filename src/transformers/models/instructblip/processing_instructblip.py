@@ -20,29 +20,18 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class InstructBlipProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "add_special_tokens": True,
-            "padding": False,
-            "stride": 0,
-            "return_overflowing_tokens": False,
-            "return_special_tokens_mask": False,
-            "return_offsets_mapping": False,
-            "return_token_type_ids": False,
-            "return_length": False,
-            "verbose": True,
-        },
-    }
-
-
 @auto_docstring
 class InstructBlipProcessor(ProcessorMixin):
+    text_kwargs = {
+        "return_token_type_ids": False,
+    }
+
     def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
         r"""
         qformer_tokenizer (`AutoTokenizer`):
@@ -65,13 +54,12 @@ class InstructBlipProcessor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[InstructBlipProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         if images is None and text is None:
             raise ValueError("You have to specify at least images or text.")
 
         output_kwargs = self._merge_kwargs(
-            InstructBlipProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -119,5 +107,7 @@ class InstructBlipProcessor(ProcessorMixin):
         qformer_input_names = ["qformer_input_ids", "qformer_attention_mask"]
         return tokenizer_input_names + image_processor_input_names + qformer_input_names
 
+
+__getattr__ = deprecate_attr(__name__, rename={"InstructBlipProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["InstructBlipProcessor"]

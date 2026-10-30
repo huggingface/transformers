@@ -25,12 +25,17 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring
+from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
-class ChameleonTextKwargs(TextKwargs, total=False):
+logger = logging.get_logger(__name__)
+
+
+class DeprecatedChameleonTextKwargs(TextKwargs, total=False):
     """
-    return_for_text_completion (`bool`, *optional*, defaults to `False`):
+    return_for_text_completion (`bool`, *optional*):
+        Deprecated, use [`ChameleonProcessorKwargs.return_for_text_completion`] instead.
         Whether the processed text is intended for text completion tasks. When `True`, the processor does not
         append the separator token (`sep_token`) to the end of the prompt, which is typically used for chat
         mode. When `False`, the separator token is appended for proper chat formatting.
@@ -40,22 +45,28 @@ class ChameleonTextKwargs(TextKwargs, total=False):
 
 
 class ChameleonProcessorKwargs(ProcessingKwargs, total=False):
-    text_kwargs: ChameleonTextKwargs
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_for_text_completion": False,
-            "return_mm_token_type_ids": False,
-        },
-        "common_kwargs": {
-            "return_tensors": "pt",
-        },
-    }
+    """
+    return_for_text_completion (`bool`, *optional*, defaults to `False`):
+        Whether the processed text is intended for text completion tasks. When `True`, the processor does not
+        append the separator token (`sep_token`) to the end of the prompt, which is typically used for chat
+        mode. When `False`, the separator token is appended for proper chat formatting.
+    """
+
+    text_kwargs: DeprecatedChameleonTextKwargs
+    return_for_text_completion: bool
 
 
 @auto_docstring
 class ChameleonProcessor(ProcessorMixin):
     valid_processor_kwargs = ChameleonProcessorKwargs
+
+    text_kwargs = {
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "return_tensors": "pt",
+    }
+    return_for_text_completion: bool = False
 
     def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
         r"""
@@ -101,8 +112,23 @@ class ChameleonProcessor(ProcessorMixin):
         if isinstance(text, str):
             text = [text]
 
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
+
+        if "return_for_text_completion" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `return_for_text_completion` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+
+        # text_kwargs has priority for backwards compatibility
+        return_for_text_completion = output_kwargs["text_kwargs"].pop(
+            "return_for_text_completion", output_kwargs["return_for_text_completion"]
+        )
+
         # special Chameleon treatment to add sep for chat mode
-        text = [f"{sample}{self.tokenizer.sep_token}" for sample in text]
+        if not return_for_text_completion:
+            text = [f"{sample}{self.tokenizer.sep_token}" for sample in text]
+
         model_inputs = super().__call__(images=images, text=text, **kwargs)
         return model_inputs
 
@@ -134,4 +160,5 @@ class ChameleonProcessor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
 
+__getattr__ = deprecate_attr(__name__, remove={"ChameleonTextKwargs": (DeprecatedChameleonTextKwargs, "5.29.0")})
 __all__ = ["ChameleonProcessor"]

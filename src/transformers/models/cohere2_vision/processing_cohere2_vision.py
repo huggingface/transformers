@@ -15,22 +15,15 @@
 
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin
 from ...utils import auto_docstring
-
-
-class Cohere2VisionProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding_side": "left",
-            "padding": True,
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class Cohere2VisionProcessor(ProcessorMixin):
-    valid_processor_kwargs = Cohere2VisionProcessorKwargs
+    text_kwargs = {
+        "padding_side": "left",
+        "padding": True,
+    }
 
     def __init__(
         self,
@@ -88,8 +81,7 @@ class Cohere2VisionProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = Cohere2VisionProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             num_image_patches = [
                 self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
@@ -105,5 +97,7 @@ class Cohere2VisionProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Cohere2VisionProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Cohere2VisionProcessor"]

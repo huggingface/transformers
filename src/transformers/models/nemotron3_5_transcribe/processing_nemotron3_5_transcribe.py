@@ -227,7 +227,7 @@ def _diarization_segments(is_active: "torch.Tensor", frame_duration: float, audi
 class Nemotron3_5TranscribeProcessorKwargs(ProcessingKwargs, total=False):
     # call defaults (`padding`, `padding_side`) ship in the checkpoint's `tokenizer_config.json`; outputs are always
     # PyTorch tensors
-    _defaults = {}
+    pass
 
 
 @requires(backends=("torch",))
@@ -270,11 +270,11 @@ class Nemotron3_5TranscribeProcessor(ProcessorMixin):
         self,
         text: TextInput | list[TextInput],
         audio: AudioInput | None = None,
-        output_labels: bool | None = False,
+        output_labels: bool | None = None,
         **kwargs: Unpack[Nemotron3_5TranscribeProcessorKwargs],
     ) -> BatchFeature:
         r"""
-        output_labels (bool, *optional*, default=False):
+        output_labels (bool, *optional*):
             Whether to return labels for training.
 
         Returns:

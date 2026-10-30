@@ -18,27 +18,20 @@ from ...image_utils import ImageInput, make_nested_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring
-
-
-class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": True,
-        },
-        "images_kwargs": {
-            "do_convert_rgb": True,
-            "do_pan_and_scan": False,
-            "pan_and_scan_min_crop_size": 256,
-            "pan_and_scan_max_num_crops": 4,
-            "pan_and_scan_min_ratio_to_activate": 1.2,
-        },
-    }
+from ...utils.deprecation import deprecate_attr
 
 
 @auto_docstring
 class Gemma3Processor(ProcessorMixin):
-    valid_processor_kwargs = Gemma3ProcessorKwargs
+    images_kwargs = {
+        # Values are "null" in preprocessor_config.json
+        "do_convert_rgb": True,
+        "do_pan_and_scan": False,
+        "pan_and_scan_min_crop_size": 256,
+        "pan_and_scan_max_num_crops": 4,
+        "pan_and_scan_min_ratio_to_activate": 1.2,
+    }
+    return_mm_token_type_ids = True
 
     def __init__(
         self,
@@ -67,7 +60,7 @@ class Gemma3Processor(ProcessorMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[Gemma3ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         if text is not None and not isinstance(text, str):
             if not isinstance(text, list) or not isinstance(text[0], str):
@@ -172,5 +165,7 @@ class Gemma3Processor(ProcessorMixin):
             + " ".join([self.full_image_sequence] * num_crops)
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Gemma3ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Gemma3Processor"]

@@ -29,24 +29,11 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.deprecation import deprecate_attr
 from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
-
-
-class Gemma4UnifiedProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "return_mm_token_type_ids": True,
-        },
-        "images_kwargs": {
-            "do_convert_rgb": True,
-        },
-        "audio_kwargs": {},
-        "videos_kwargs": {"return_metadata": True},
-    }
 
 
 def get_aspect_ratio_preserving_size(
@@ -105,7 +92,11 @@ def get_aspect_ratio_preserving_size(
 
 @auto_docstring
 class Gemma4UnifiedProcessor(ProcessorMixin):
-    valid_processor_kwargs = Gemma4UnifiedProcessorKwargs
+    text_kwargs = {
+        "padding": True,
+    }
+    videos_kwargs = {"return_metadata": True}
+    return_mm_token_type_ids = True
 
     def __init__(
         self,
@@ -273,9 +264,9 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
             input modalities, along with other useful data.
         """
+        merged_kwargs = self._merge_kwargs(**kwargs)
+        images_kwargs = merged_kwargs.get("images_kwargs", {})
 
-        images_kwargs = Gemma4UnifiedProcessorKwargs._defaults.get("images_kwargs", {})
-        images_kwargs.update(kwargs)
         patch_size = images_kwargs.get("patch_size", None) or self.image_processor.patch_size
         pooling_kernel_size = (
             images_kwargs.get("pooling_kernel_size", None) or self.image_processor.pooling_kernel_size
@@ -303,8 +294,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
             vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
 
         if video_sizes is not None:
-            videos_kwargs = Gemma4UnifiedProcessorKwargs._defaults.get("videos_kwargs", {})
-            videos_kwargs.update(kwargs)
+            videos_kwargs = merged_kwargs.get("videos_kwargs", {})
             patch_size = videos_kwargs.get("patch_size", None) or self.video_processor.patch_size
             pooling_kernel_size = (
                 videos_kwargs.get("pooling_kernel_size", None) or self.video_processor.pooling_kernel_size
@@ -368,5 +358,7 @@ class Gemma4UnifiedProcessor(ProcessorMixin):
     def unused_input_names(self) -> list[str]:
         return ["num_soft_tokens_per_image", "num_soft_tokens_per_video"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Gemma4UnifiedProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Gemma4UnifiedProcessor"]

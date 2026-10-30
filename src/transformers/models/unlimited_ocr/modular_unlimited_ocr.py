@@ -212,7 +212,7 @@ class UnlimitedOcrImageProcessor(DeepseekOcr2ImageProcessor):
 
 
 class UnlimitedOcrProcessor(DeepseekOcr2Processor):
-    valid_processor_kwargs = AttributeError()
+    images_kwargs = AttributeError()
     skip_tensor_conversion = ["video_metadata", "text_replacement_offsets", "num_local_patches", "patches_grid"]
 
     def __init__(

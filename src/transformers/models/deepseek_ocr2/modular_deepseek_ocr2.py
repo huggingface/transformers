@@ -791,9 +791,9 @@ class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
         "hidden_states": DeepseekOcr2VisionEncoderLayer,
         "attentions": DeepseekOcr2VisionAttention,
     }
-    config: DeepseekOcr2VisionConfig
+    config: DeepseekOcr2VisionEncoderConfig
 
-    def __init__(self, config: DeepseekOcr2VisionConfig):
+    def __init__(self, config: DeepseekOcr2VisionEncoderConfig):
         super().__init__(config)
         del self.embed_tokens
         self.layers = nn.ModuleList(
