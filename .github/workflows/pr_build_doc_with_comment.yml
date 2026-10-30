@@ -104,7 +104,7 @@ jobs:
       version: ${{ steps.python_version.outputs.version }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
           sparse-checkout: .python-version
@@ -122,7 +122,7 @@ jobs:
     name: Build doc
     needs: [get-pr-number, get-pr-info, verify_pr_commit, python-version]
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != '' && needs.verify_pr_commit.result == 'success' }}
-    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@145b9d4f6ab65ad3af87c66773b2c43294e52446 # main
+    uses: huggingface/doc-builder/.github/workflows/build_pr_documentation.yml@5f905d478f12abef0339c938d1388de3b448619d # main
     with:
       commit_sha: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
       pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
