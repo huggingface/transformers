@@ -113,9 +113,9 @@ class HNetConfig(PreTrainedConfig):
     def __post_init__(self, **kwargs):
         # `hidden_sizes`, `intermediate_sizes`, `num_heads_per_stage` and `sliding_windows` are builder-only kwargs:
         # they shape `layer_types` and `per_layer_config` and are not kept on the config
-        hidden_sizes = kwargs.pop("hidden_sizes", [1024, 1536])
-        intermediate_sizes = kwargs.pop("intermediate_sizes", [0, 4096])
-        num_heads_per_stage = kwargs.pop("num_heads_per_stage", [16] * len(hidden_sizes))
+        hidden_sizes = kwargs.pop("hidden_sizes", [self.hidden_size, 1536])
+        intermediate_sizes = kwargs.pop("intermediate_sizes", [self.intermediate_size, 4096])
+        num_heads_per_stage = kwargs.pop("num_heads_per_stage", [self.num_attention_heads] * len(hidden_sizes))
         sliding_windows = kwargs.pop("sliding_windows", [1024] + [None] * (len(hidden_sizes) - 1))
         self.encoder_layer_types = self.encoder_layer_types or [["mamba"] * 4]
         self.main_layer_types = self.main_layer_types or ["attention"] * 22

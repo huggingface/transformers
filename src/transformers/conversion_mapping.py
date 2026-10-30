@@ -171,19 +171,27 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"\.hc_head_scale", ".hc_scale"),
         ],
         # The original H-Net nests each stage in the previous one (`backbone.main_network.main_network...`): unroll
-        # the stages into per-stage lists, the innermost network being `main_network`.
+        # the stages into per-stage lists, the innermost network being `main_network`. Every target is unique so that
+        # saving reverses each rename (the main network is saved at the 2-stage depth, which loads back the same).
         "hnet": [
             WeightRenaming(r"embeddings\.", "embed_tokens."),
-            WeightRenaming(r"backbone\.main_network\.main_network\.pad_dimension", "pad_dimensions.1"),
-            WeightRenaming(r"backbone\.main_network\.pad_dimension", "pad_dimensions.0"),
-            WeightRenaming(r"backbone\.main_network\.(encoder|decoder|routing_module|residual_proj)\.", r"\1s.1."),
-            WeightRenaming(r"backbone\.(encoder|decoder|routing_module|residual_proj)\.", r"\1s.0."),
-            WeightRenaming(r"backbone\.(?:main_network\.)+", "main_network."),
-            WeightRenaming(r"\.rmsnorm\.", ".norm."),
+            WeightRenaming(r"routing_module\.q_proj_layer\.", "routing_module.q_proj."),
+            WeightRenaming(r"routing_module\.k_proj_layer\.", "routing_module.k_proj."),
+            WeightRenaming(r"\.rmsnorm\.", ".norm_f."),
             WeightRenaming(r"\.norm1\.", ".input_layernorm."),
             WeightRenaming(r"\.norm2\.", ".post_attention_layernorm."),
-            WeightRenaming(r"\.(q|k)_proj_layer\.", r".\1_proj."),
             WeightRenaming(r"\.mlp\.fc2\.", ".mlp.down_proj."),
+            WeightRenaming(r"backbone\.main_network\.main_network\.pad_dimension", "pad_dimensions.1"),
+            WeightRenaming(r"backbone\.main_network\.pad_dimension", "pad_dimensions.0"),
+            WeightRenaming(r"backbone\.main_network\.encoder\.", "encoders.1."),
+            WeightRenaming(r"backbone\.main_network\.decoder\.", "decoders.1."),
+            WeightRenaming(r"backbone\.main_network\.routing_module\.", "routing_modules.1."),
+            WeightRenaming(r"backbone\.main_network\.residual_proj\.", "residual_projs.1."),
+            WeightRenaming(r"backbone\.encoder\.", "encoders.0."),
+            WeightRenaming(r"backbone\.decoder\.", "decoders.0."),
+            WeightRenaming(r"backbone\.routing_module\.", "routing_modules.0."),
+            WeightRenaming(r"backbone\.residual_proj\.", "residual_projs.0."),
+            WeightRenaming([r"backbone\.main_network\.main_network\.", r"backbone\.main_network\."], "main_network."),
             WeightConverter(
                 source_patterns=r"\.mlp\.fc1\.weight",
                 target_patterns=[".mlp.up_proj.weight", ".mlp.gate_proj.weight"],

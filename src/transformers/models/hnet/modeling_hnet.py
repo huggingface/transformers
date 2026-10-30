@@ -782,6 +782,7 @@ class HNetAttention(nn.Module):
         self.num_key_value_groups = 1
         self.scaling = self.head_dim**-0.5
         self.is_causal = True
+        # CODEPATH: hnet_2stage_* slide over 1024 chunks at stage 1, every main network is global
         self.sliding_window = config.sliding_window if config.layer_types[layer_idx] == "sliding_attention" else None
         projection_size = layer_config.num_attention_heads * self.head_dim
         self.q_proj = nn.Linear(layer_config.hidden_size, projection_size, bias=False)
@@ -877,7 +878,7 @@ class HNetStack(nn.Module):
         self.config = config
         stage_config = config.per_layer_config[layer_ids[0]]
         self.layers = nn.ModuleList([HNetDecoderLayer(config, idx) for idx in layer_ids])
-        self.norm = HNetRMSNorm(stage_config.hidden_size, eps=config.rms_norm_eps)
+        self.norm_f = HNetRMSNorm(stage_config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = HNetRotaryEmbedding(stage_config)
         self.first_attention_idx = next(
             (idx for idx in layer_ids if config.layer_types[idx] != "linear_attention"), None
@@ -916,14 +917,7 @@ class HNetStack(nn.Module):
                 past_key_values=past_key_values,
                 **kwargs,
             )
-        return self.norm(hidden_states)
-
-
-def get_cached_state(past_key_values: Cache | None, layer_idx: int) -> torch.Tensor | None:
-    """The state a routing or dechunk step stored with `update_recurrent_state`, `None` before the prefill."""
-    if past_key_values is None or not past_key_values.layers[layer_idx].is_recurrent_states_initialized[0]:
-        return None
-    return past_key_values.layers[layer_idx].recurrent_states[0]
+        return self.norm_f(hidden_states)
 
 
 class HNetRoutingModule(nn.Module):
@@ -940,7 +934,7 @@ class HNetRoutingModule(nn.Module):
         self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, past_key_values: Cache | None = None
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # When decoding, the first position is compared to the last one of the previous step
-        previous = get_cached_state(past_key_values, self.layer_idx)
+        previous = past_key_values.get_recurrent_state(self.layer_idx) if past_key_values is not None else None
         states = hidden_states if previous is None else torch.cat([previous[:, None], hidden_states], dim=1)
         queries = F.normalize(self.q_proj(states[:, :-1]), dim=-1)
         keys = F.normalize(self.k_proj(states[:, 1:]), dim=-1)
@@ -1008,27 +1002,41 @@ def dechunk(
     chunk_states: torch.Tensor,
     boundary_prob: torch.Tensor,
     boundary_mask: torch.Tensor,
+    config: HNetConfig,
     previous: torch.Tensor | None = None,
 ) -> torch.Tensor:
     """
     Smooths the chunks with an EMA weighted by their boundary probability `p`, then repeats each chunk over the
     positions it covers: `(B, num_chunks, D) -> (B, L, D)`. `previous` is the last EMA value of the previous step.
 
-    `out_t = p_t * h_t + (1 - p_t) * out_{t-1}`, unrolled as `out_t = sum_s p_s * h_s * prod_{r=s+1..t} (1 - p_r)`.
+    `out_t = p_t * h_t + (1 - p_t) * out_{t-1}` is a Mamba2 scan with `dt = -log(1 - p)`, `A = -1`, `B = p`, `C = 1`
+    and inputs `h / dt`, as in the original implementation.
     """
-    num_chunks = chunk_states.shape[1]
-    prob = boundary_prob.float().clamp(min=1e-4, max=1 - 1e-4)
-    prob = prob.gather(1, boundaries_first(boundary_mask)[:, :num_chunks])
-    log_decay = torch.log1p(-prob)
-    smoothed = (torch.exp(segment_sum(log_decay)) * prob[:, None, :]) @ chunk_states.float()
+    batch_size, num_chunks, hidden_size = chunk_states.shape
+    num_heads = hidden_size // config.mamba_headdim
+    smoothed = previous[:, None].float() if previous is not None else chunk_states.float()
+    if num_chunks > 0:
+        prob = boundary_prob.float().clamp(min=1e-4, max=1 - 1e-4)
+        prob = prob.gather(1, boundaries_first(boundary_mask)[:, :num_chunks])
+        dt = -torch.log1p(-prob)
+        initial_states = None if previous is None else previous.float().view(batch_size, num_heads, -1, 1)
+        smoothed = mamba2_chunk_scan(
+            (chunk_states.float() / dt[..., None]).view(batch_size, num_chunks, num_heads, -1),
+            dt[..., None].expand(-1, -1, num_heads),
+            -torch.ones(num_heads, device=dt.device),
+            prob[..., None, None],
+            torch.ones_like(prob)[..., None, None],
+            config.chunk_size,
+            initial_states=initial_states,
+        ).view(batch_size, num_chunks, hidden_size)
+        if previous is not None:
+            smoothed = torch.cat([previous[:, None].float(), smoothed], dim=1)
     if previous is None:
         chunk_index = (boundary_mask.cumsum(dim=1) - 1).clamp(min=0)
     else:
         # Positions before the first new boundary still belong to the previous chunk, at index 0
-        smoothed = smoothed + torch.exp(log_decay.cumsum(dim=-1))[..., None] * previous[:, None].float()
-        smoothed = torch.cat([previous[:, None].float(), smoothed], dim=1)
         chunk_index = boundary_mask.cumsum(dim=1)
-    smoothed = smoothed.gather(1, chunk_index[..., None].expand(-1, -1, smoothed.shape[-1]))
+    smoothed = smoothed.gather(1, chunk_index[..., None].expand(-1, -1, hidden_size))
     return smoothed.to(chunk_states.dtype)
 
 
@@ -1121,7 +1129,11 @@ class HNetModel(HNetPreTrainedModel):
             boundary_prob, boundary_mask = boundaries[stage_idx]
             dechunk_idx = self.dechunk_ids[stage_idx]
             hidden_states = dechunk(
-                hidden_states, boundary_prob, boundary_mask, get_cached_state(past_key_values, dechunk_idx)
+                hidden_states,
+                boundary_prob,
+                boundary_mask,
+                self.config,
+                past_key_values.get_recurrent_state(dechunk_idx) if past_key_values is not None else None,
             )
             if past_key_values is not None:
                 past_key_values.update_recurrent_state(hidden_states[:, -1].float(), dechunk_idx)
