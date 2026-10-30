@@ -22,6 +22,7 @@ import copy
 import math
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
+from functools import cached_property
 
 import torch
 import torch.nn.functional as F
@@ -38,7 +39,13 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+)
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from .configuration_voxcpm2 import (
@@ -237,14 +244,43 @@ class VoxCPM2Snake1d(nn.Module):
         return hidden_states
 
 
+# TODO: this could be imported from Voxtral realtime
 class VoxCPM2CausalConv1d(nn.Conv1d):
+    # def __init__(
+    #     self,
+    #     in_channels: int,
+    #     out_channels: int,
+    #     kernel_size: int,
+    #     # cache_key: str,
+    #     stride: int = 1,
+    #     dilation: int = 1,
+    #     bias: bool = True,
+    # ):
+    #     super().__init__(in_channels, out_channels, kernel_size, stride=stride, dilation=dilation, bias=bias)
+    # self.cache_key = cache_key
+
+    @cached_property
+    def left_pad(self):
+        effective_kernel_size = (self.kernel_size[0] - 1) * self.dilation[0] + 1
+        return effective_kernel_size - self.stride[0]
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        # padding_cache: VoxtralRealtimeConv1dPaddingCache | None = None,  # TODO: we might want to add a cache?
+    ) -> torch.Tensor:
+        # if padding_cache is not None:
+        #     x = padding_cache.update(x, self.cache_key, self)
+        # else:
+        #     x = nn.functional.pad(x, (self.left_pad, 0))
+        x = nn.functional.pad(x, (self.left_pad, 0))
+
+        return super().forward(x)
+
     def __init__(self, *args, padding: int = 0, output_padding: int = 0, **kwargs):
         super().__init__(*args, **kwargs)
         self.causal_padding = padding * 2 - output_padding
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = F.pad(hidden_states, (self.causal_padding, 0))
-        return super().forward(hidden_states)
+        self.left_pad = self.causal_padding
 
 
 class VoxCPM2CausalConvTranspose1d(nn.ConvTranspose1d):
@@ -576,9 +612,11 @@ class VoxCPM2TimestepEmbedding(nn.Module):
         self.linear_2 = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.linear_1(hidden_states)
+        image_features = hidden_states
+        hidden_states = self.linear_1(image_features)
         hidden_states = self.act(hidden_states)
-        return self.linear_2(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
 
 
 def rotate_half(x):

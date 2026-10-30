@@ -21,7 +21,10 @@ rendered properly in your Markdown viewer.
 
 [VoxCPM2](https://github.com/OpenBMB/VoxCPM) is a 2B-parameter multilingual text-to-speech model from OpenBMB. It accepts text, a reference voice, or a transcribed audio prompt and produces 48 kHz speech. Voice descriptions can be written directly at the start of the text, for example `"(warm, calm voice) Welcome home."`.
 
-VoxCPM2 represents speech with continuous AudioVAE V2 latents instead of discrete audio tokens. A MiniCPM4-based text-semantic language model predicts speech patches autoregressively, while a local encoder, residual language model, and diffusion Transformer model the detail inside each patch. The AudioVAE accepts 16 kHz conditioning audio and decodes the generated latents at 48 kHz.
+VoxCPM2 represents speech with continuous AudioVAE V2 latents instead of discrete audio tokens. An autoregressive text-semantic language model predicts speech patches, while a local encoder, residual language model, and diffusion Transformer model the detail inside each patch. The AudioVAE accepts 16 kHz conditioning audio and decodes the generated latents at 48 kHz.
+
+This model was contributed by [sushmanth](https://huggingface.co/sushmanth).
+The original code can be found [here](https://github.com/OpenBMB/VoxCPM).
 
 The original checkpoint stores the main model and AudioVAE weights separately. Download the original repository and convert it to the Transformers layout before loading it natively:
 

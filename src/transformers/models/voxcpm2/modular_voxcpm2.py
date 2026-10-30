@@ -34,9 +34,11 @@ from ...processing_utils import Unpack
 from ...tokenization_utils_base import _get_prepend_scheme
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..dac.modeling_dac import Snake1d
+from ..gemma4.modeling_gemma4 import Gemma4AudioCausalConv1d
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaModel, LlamaRMSNorm, eager_attention_forward
 from ..llama.tokenization_llama import LlamaTokenizer
+from ..llava.modeling_llava import LlavaMultiModalProjector
 from ..olmo.modeling_olmo import OlmoRotaryEmbedding, apply_rotary_pos_emb
 from ..xcodec2.modeling_xcodec2 import Xcodec2FiniteScalarQuantization
 
@@ -622,14 +624,11 @@ class VoxCPM2Snake1d(Snake1d):
     pass
 
 
-class VoxCPM2CausalConv1d(nn.Conv1d):
+class VoxCPM2CausalConv1d(Gemma4AudioCausalConv1d):
     def __init__(self, *args, padding: int = 0, output_padding: int = 0, **kwargs):
-        super().__init__(*args, **kwargs)
+        nn.Conv1d.__init__(self, *args, **kwargs)
         self.causal_padding = padding * 2 - output_padding
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = F.pad(hidden_states, (self.causal_padding, 0))
-        return super().forward(hidden_states)
+        self.left_pad = self.causal_padding
 
 
 class VoxCPM2CausalConvTranspose1d(nn.ConvTranspose1d):
@@ -952,18 +951,17 @@ class VoxCPM2SinusoidalPositionEmbedding(nn.Module):
         return torch.cat((embeddings.sin(), embeddings.cos()), dim=-1)
 
 
-class VoxCPM2TimestepEmbedding(nn.Module):
+class VoxCPM2TimestepEmbedding(LlavaMultiModalProjector):
     def __init__(self, input_dim: int, hidden_dim: int, output_dim: int | None = None):
-        super().__init__()
+        nn.Module.__init__(self)
         output_dim = output_dim if output_dim is not None else hidden_dim
         self.linear_1 = nn.Linear(input_dim, hidden_dim)
         self.act = nn.SiLU()
         self.linear_2 = nn.Linear(hidden_dim, output_dim)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.linear_1(hidden_states)
-        hidden_states = self.act(hidden_states)
-        return self.linear_2(hidden_states)
+        image_features = hidden_states
+        return super().forward(image_features)
 
 
 class VoxCPM2Attention(LlamaAttention):
