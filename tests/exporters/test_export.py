@@ -109,6 +109,7 @@ EXPORT_SKIPS: dict[str, dict[str, str]] = {
         "LwDetrForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
         "RfDetrModel": "Same tied-`topk` selection as `DFineModel`.",
         "RfDetrForObjectDetection": "Same tied-`topk` selection as `DFineModel`.",
+        "RfDetrForInstanceSegmentation": "Same tied-`topk` selection as `DFineModel`.",
     },
     # Every backend, generate path only.
     "generate": {
