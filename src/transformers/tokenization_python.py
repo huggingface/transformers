@@ -566,12 +566,12 @@ class PythonBackend(PreTrainedTokenizerBase):
             elif special_tokens:
                 # doing token.special=True changes the normalization! will fix in rust
                 # this is important and the only reason why the AddedTokens in each class are normalized by default
-                token.__setstate__({"special": True, "normalized": token.normalized})
+                token = AddedToken(**{**token.__getstate__(), "special": True, "normalized": token.normalized})
             if token in self._added_tokens_decoder:
                 continue
             if not token.special and token.normalized and getattr(self, "do_lower_case", False):
                 # Normalize if requested
-                token.content = token.content.lower()
+                token = AddedToken(**{**token.__getstate__(), "content": token.content.lower()})
             if token.content not in current_vocab:
                 token_index = new_idx + added_tokens
                 current_vocab[token.content] = token_index

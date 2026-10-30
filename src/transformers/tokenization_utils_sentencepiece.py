@@ -24,7 +24,6 @@ try:
 except ImportError:
     spm = None
 
-from .convert_slow_tokenizer import import_protobuf
 from .tokenization_python import PreTrainedTokenizer
 from .tokenization_utils_base import (
     INIT_TOKENIZER_DOCSTRING,
@@ -76,6 +75,9 @@ class SentencePieceBackend(PreTrainedTokenizer):
         tokenizer.Load(self.vocab_file)
 
         if not self.legacy:
+            # Imported here: `convert_slow_tokenizer` needs tokenizers<1, this backend doesn't.
+            from .convert_slow_tokenizer import import_protobuf
+
             model_pb2 = import_protobuf()
             proto = model_pb2.ModelProto.FromString(tokenizer.serialized_model_proto())
             if proto.normalizer_spec.add_dummy_prefix:
@@ -155,12 +157,12 @@ class SentencePieceBackend(PreTrainedTokenizer):
             elif special_tokens:
                 # doing token.special=True changes the normalization! will fix in rust
                 # this is important and the only reason why the AddedTokens in each class are normalized by default
-                token.__setstate__({"special": True, "normalized": token.normalized})
+                token = AddedToken(**{**token.__getstate__(), "special": True, "normalized": token.normalized})
 
             if token in self._added_tokens_decoder.values():
                 continue
             if not token.special and token.normalized and getattr(self, "do_lower_case", False):
-                token.content = token.content.lower()
+                token = AddedToken(**{**token.__getstate__(), "content": token.content.lower()})
 
             # Check if token already exists in the SentencePiece base vocab
             tok_id = self.sp_model.piece_to_id(token.content)

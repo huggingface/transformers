@@ -30,6 +30,7 @@ from ...utils import (
     is_g2p_en_available,
     is_sentencepiece_available,
     is_tokenizers_available,
+    is_tokenizers_v1_available,
     logging,
 )
 from ...utils.hub import cached_file, resolve_revision
@@ -48,6 +49,11 @@ if is_tokenizers_available():
     from ...tokenization_utils_tokenizers import TokenizersBackend
 else:
     TokenizersBackend = None
+
+if is_tokenizers_v1_available():
+    from ...tokenization_utils_tokenizers_v1 import TokenizersV1Backend
+else:
+    TokenizersV1Backend = None
 
 if is_sentencepiece_available():
     from ...tokenization_utils_sentencepiece import SentencePieceBackend
@@ -754,6 +760,10 @@ class AutoTokenizer:
             _use_mistral_format(pretrained_model_name_or_path, mistral_format=True, **kwargs)
             tokenizer_class = tokenizer_class_from_name("MistralCommonBackend")
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # tokenizers>=1 can't build the model-specific tokenizer classes, so every `tokenizer.json` loads as is.
+        if TokenizersV1Backend is not None:
+            return TokenizersV1Backend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Resolve the revision once, so the model config, the tokenizer config and every tokenizer file below come
         # from the same repository state.
