@@ -509,6 +509,7 @@ class Kosmos2VisionEncoder(nn.Module):
 
 # Similar to `transformers.models.clip.modeling_clip.CLIPVisionModel` but without docstring for `forward`
 class Kosmos2VisionTransformer(Kosmos2PreTrainedModel):
+    config: Kosmos2VisionConfig
     _can_record_outputs = {
         "hidden_states": Kosmos2VisionEncoderLayer,
         "attentions": Kosmos2VisionAttention,

@@ -334,7 +334,7 @@ class Glm4vMoeModelOutputWithPast(Qwen3VLMoeModelOutputWithPast):
 
 
 class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
-    def __init__(self, config):
+    def __init__(self, config: Glm4vMoeConfig):
         super().__init__(config)
         self.num_experts = config.text_config.num_local_experts
         self.num_experts_per_tok = config.text_config.num_experts_per_tok

@@ -63,7 +63,7 @@ class GemmaQuantizer(HfQuantizer):
         model._keys_to_ignore_on_load_unexpected = ignored  # type: ignore[unresolved-attribute]
 
     def update_parallel_plan(self, model, plan):
-        from ..distributed.tensor_parallel import _get_parameter_plan, replace_layer_number_by_wildcard
+        from ..distributed.parallel_utils import _get_parameter_plan, replace_layer_number_by_wildcard
 
         super().update_parallel_plan(model, plan)
         # Every rank keeps the full scalar activation scales, and the per-output-channel `weight_scale` of a rowwise

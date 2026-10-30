@@ -556,7 +556,7 @@ class ErniePreTrainedModel(PreTrainedModel):
 class ErnieModel(ErniePreTrainedModel):
     _no_split_modules = ["ErnieLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: ErnieConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -738,7 +738,7 @@ class ErnieForPreTraining(ErniePreTrainedModel):
         "cls.predictions.decoder.weight": "ernie.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         self.ernie = ErnieModel(config)
@@ -852,7 +852,7 @@ class ErnieForCausalLM(ErniePreTrainedModel, GenerationMixin):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -943,7 +943,7 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
         "cls.predictions.decoder.weight": "ernie.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1032,7 +1032,7 @@ class ErnieOnlyNSPHead(nn.Module):
     """
 )
 class ErnieForNextSentencePrediction(ErniePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         self.ernie = ErnieModel(config)
@@ -1121,7 +1121,7 @@ class ErnieForNextSentencePrediction(ErniePreTrainedModel):
     """
 )
 class ErnieForSequenceClassification(ErniePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1205,7 +1205,7 @@ class ErnieForSequenceClassification(ErniePreTrainedModel):
 
 @auto_docstring
 class ErnieForMultipleChoice(ErniePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
 
         self.ernie = ErnieModel(config)
@@ -1306,7 +1306,7 @@ class ErnieForMultipleChoice(ErniePreTrainedModel):
 
 @auto_docstring
 class ErnieForTokenClassification(ErniePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1371,7 +1371,7 @@ class ErnieForTokenClassification(ErniePreTrainedModel):
 
 @auto_docstring
 class ErnieForQuestionAnswering(ErniePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: ErnieConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

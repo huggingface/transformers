@@ -487,7 +487,7 @@ class LevitPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class LevitModel(LevitPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LevitConfig):
         super().__init__(config)
         self.config = config
         self.patch_embeddings = LevitPatchEmbeddings(config)
@@ -540,7 +540,7 @@ class LevitModel(LevitPreTrainedModel):
     """
 )
 class LevitForImageClassification(LevitPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LevitConfig):
         super().__init__(config)
         self.config = config
         self.num_labels = config.num_labels
@@ -597,7 +597,7 @@ class LevitForImageClassification(LevitPreTrainedModel):
     """
 )
 class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LevitConfig):
         super().__init__(config)
         self.config = config
         self.num_labels = config.num_labels

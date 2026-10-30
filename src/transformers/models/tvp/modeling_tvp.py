@@ -682,7 +682,7 @@ TVP_PROMPTER_CLASSES_MAPPING = {
     """
 )
 class TvpModel(TvpPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: TvpConfig):
         super().__init__(config)
         self.config = config
         self.vision_model = TvpVisionModel(config)
@@ -799,7 +799,7 @@ class TvpVideoGroundingHead(nn.Module):
     """
 )
 class TvpForVideoGrounding(TvpPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: TvpConfig):
         super().__init__(config)
         self.config = config
         self.model = TvpModel(config)

@@ -573,7 +573,7 @@ class CamembertPooler(nn.Module):
 class CamembertModel(CamembertPreTrainedModel):
     _no_split_modules = ["CamembertEmbeddings", "CamembertLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: CamembertConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -704,7 +704,7 @@ class CamembertForMaskedLM(CamembertPreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -808,7 +808,7 @@ class CamembertClassificationHead(nn.Module):
     """
 )
 class CamembertForSequenceClassification(CamembertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -889,7 +889,7 @@ class CamembertForSequenceClassification(CamembertPreTrainedModel):
 
 @auto_docstring
 class CamembertForMultipleChoice(CamembertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
@@ -982,7 +982,7 @@ class CamembertForMultipleChoice(CamembertPreTrainedModel):
 
 @auto_docstring
 class CamembertForTokenClassification(CamembertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         classifier_dropout = (
@@ -1051,7 +1051,7 @@ class CamembertForTokenClassification(CamembertPreTrainedModel):
 
 @auto_docstring
 class CamembertForQuestionAnswering(CamembertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
@@ -1139,7 +1139,7 @@ class CamembertForCausalLM(CamembertPreTrainedModel, GenerationMixin):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: CamembertConfig):
         super().__init__(config)
 
         if not config.is_decoder:

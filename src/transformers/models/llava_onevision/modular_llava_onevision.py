@@ -51,6 +51,7 @@ from ..llava_next_video.modeling_llava_next_video import (
     image_size_to_num_patches,
     unpad_image,
 )
+from .configuration_llava_onevision import LlavaOnevisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -398,7 +399,7 @@ class LlavaOnevisionPreTrainedModel(LlavaNextVideoPreTrainedModel):
 
 
 class LlavaOnevisionModel(LlavaNextVideoModel):
-    def __init__(self, config):
+    def __init__(self, config: LlavaOnevisionConfig):
         super().__init__(config)
         del self.vision_resampler
 

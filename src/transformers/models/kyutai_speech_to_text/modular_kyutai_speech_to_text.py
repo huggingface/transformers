@@ -29,6 +29,7 @@ from ..encodec.feature_extraction_encodec import EncodecFeatureExtractor
 from ..llama.modeling_llama import LlamaForCausalLM
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from ..moshi.modeling_moshi import MoshiModel, MoshiPreTrainedModel
+from .configuration_kyutai_speech_to_text import KyutaiSpeechToTextConfig
 
 
 logger = logging.get_logger(__name__)
@@ -251,7 +252,7 @@ class KyutaiSpeechToTextEmbeddings(nn.Module):
 
 
 class KyutaiSpeechToTextModel(MoshiModel):
-    def __init__(self, config):
+    def __init__(self, config: KyutaiSpeechToTextConfig):
         super().__init__(config)
         self.embed_tokens = KyutaiSpeechToTextEmbeddings(config)
 
@@ -261,7 +262,7 @@ class KyutaiSpeechToTextForConditionalGeneration(LlamaForCausalLM, GenerationMix
     _keep_in_fp32_modules_strict = ["codec_model"]
     output_modalities = ("audio", "text")
 
-    def __init__(self, config):
+    def __init__(self, config: KyutaiSpeechToTextConfig):
         super().__init__(config)
         self.codec_model = AutoModel.from_config(config.codec_config)
 
