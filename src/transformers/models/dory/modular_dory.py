@@ -67,6 +67,7 @@ class DoryRecurrentLayerMixin:
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.init_args, self.init_kwargs = args, kwargs
         self.later_loops = []
 
     def update(
@@ -84,7 +85,7 @@ class DoryRecurrentLayerMixin:
         if share_across_loops or loop_idx == 0:
             return super().update(key_states, value_states, *args, **kwargs)
         while len(self.later_loops) < loop_idx:
-            self.later_loops.append(self.new_loop_layer())
+            self.later_loops.append(type(self)(*self.init_args, **self.init_kwargs))
         return self.later_loops[loop_idx - 1].update(key_states, value_states, *args, **kwargs)
 
     def crop(self, tokens_to_remove: int) -> None:
@@ -115,9 +116,6 @@ class DoryRecurrentLayerMixin:
 class DoryRecurrentLayer(DoryRecurrentLayerMixin, DynamicLayer):
     _layer_type = "recurrent_full_attention"
 
-    def new_loop_layer(self) -> DynamicLayer:
-        return DynamicLayer()
-
     def read(self, key_states: torch.Tensor, value_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if not self.is_initialized:
             return key_states, value_states
@@ -126,9 +124,6 @@ class DoryRecurrentLayer(DoryRecurrentLayerMixin, DynamicLayer):
 
 class DoryRecurrentSlidingWindowLayer(DoryRecurrentLayerMixin, DynamicSlidingWindowLayer):
     _layer_type = "recurrent_sliding_attention"
-
-    def new_loop_layer(self) -> DynamicSlidingWindowLayer:
-        return DynamicSlidingWindowLayer(self.sliding_window)
 
     def read(self, key_states: torch.Tensor, value_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if not self.is_initialized:
@@ -143,9 +138,6 @@ class DoryRecurrentSlidingWindowLayer(DoryRecurrentLayerMixin, DynamicSlidingWin
 class DoryStaticRecurrentLayer(DoryRecurrentLayerMixin, StaticLayer):
     _layer_type = "recurrent_full_attention"
 
-    def new_loop_layer(self) -> StaticLayer:
-        return StaticLayer(self.max_cache_len)
-
     def read(self, key_states: torch.Tensor, value_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # Write at the next positions without moving past them: the last loop overwrites the same slots
         kv_length = key_states.shape[-2]
@@ -156,10 +148,6 @@ class DoryStaticRecurrentLayer(DoryRecurrentLayerMixin, StaticLayer):
 
 class DoryStaticRecurrentSlidingWindowLayer(DoryRecurrentLayerMixin, StaticSlidingWindowLayer):
     _layer_type = "recurrent_sliding_attention"
-
-    def new_loop_layer(self) -> StaticSlidingWindowLayer:
-        # `max_cache_len` is already the effective window
-        return StaticSlidingWindowLayer(self.max_cache_len, self.max_cache_len)
 
     def read(self, key_states: torch.Tensor, value_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         # Same states `update` returns, without rolling the window
@@ -236,8 +224,7 @@ class DoryAttention(AfmoeAttention):
         query_states = query_states * query_scale.square()
 
         if past_key_values is not None:
-            # CODEPATH: released configs use `per_loop`, every loop keeps its own history. `last_loop` (opt-in, see
-            # the model card) only caches the last loop, so cache memory does not grow with the number of loops.
+            # CODEPATH: released configs use `per_loop` (one cache per loop); `last_loop` (opt-in) only caches the last loop
             key_states, value_states = past_key_values.update(
                 key_states,
                 value_states,
