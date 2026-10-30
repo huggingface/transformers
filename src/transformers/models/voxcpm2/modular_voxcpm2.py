@@ -38,6 +38,7 @@ from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaModel, LlamaRMSNorm, eager_attention_forward
 from ..llama.tokenization_llama import LlamaTokenizer
 from ..olmo.modeling_olmo import OlmoRotaryEmbedding, apply_rotary_pos_emb
+from ..xcodec2.modeling_xcodec2 import Xcodec2FiniteScalarQuantization
 
 
 logger = logging.get_logger(__name__)
@@ -569,6 +570,8 @@ class VoxCPM2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, VoxCPM2SampleRateConditionLayer):
             init.ones_(module.scale_embed.weight)
             init.zeros_(module.bias_embed.weight)
+        elif isinstance(module, VoxCPM2ScalarQuantizationLayer):
+            init.constant_(module.levels, 3)
         elif isinstance(module, VoxCPM2AudioDecoder):
             audio_vae_config = self.config.audio_vae_config
             if not isinstance(audio_vae_config, VoxCPM2AudioVAEConfig):
@@ -581,9 +584,11 @@ class VoxCPM2PreTrainedModel(PreTrainedModel):
             init.copy_(module.sr_bin_boundaries, boundaries)
 
 
-class VoxCPM2ScalarQuantizationLayer(nn.Module):
+class VoxCPM2ScalarQuantizationLayer(Xcodec2FiniteScalarQuantization):
+    """Projected scalar quantization with Xcodec2's bounding helper and VoxCPM2's quantization scale."""
+
     def __init__(self, config: VoxCPM2Config):
-        super().__init__()
+        nn.Module.__init__(self)
         lm_config = config.lm_config
         if not isinstance(lm_config, VoxCPM2TextConfig):
             raise TypeError("`lm_config` must be a `VoxCPM2TextConfig` instance")
@@ -594,9 +599,17 @@ class VoxCPM2ScalarQuantizationLayer(nn.Module):
 
         self.in_proj = nn.Linear(self.in_dim, self.latent_dim)
         self.out_proj = nn.Linear(self.latent_dim, self.out_dim)
+        # A scalar level count of three makes bound(eps=0) equal tanh, independently of the quantization scale.
+        self.levels = nn.Buffer(torch.tensor(3, dtype=torch.int32), persistent=False)
+
+    def _compute_buffers(self, device=None):
+        raise AttributeError("VoxCPM2 does not construct a codebook.")
+
+    def _indices_to_codes(self, indices):
+        raise AttributeError("VoxCPM2 does not use discrete codebook indices.")
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = torch.tanh(self.in_proj(hidden_states))
+        hidden_states = self.bound(self.in_proj(hidden_states), eps=0.0)
         quantized_states = torch.round(hidden_states * self.scale) / self.scale
         if self.training:
             hidden_states = hidden_states + (quantized_states - hidden_states).detach()

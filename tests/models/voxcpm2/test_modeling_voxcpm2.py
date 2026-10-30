@@ -30,7 +30,7 @@ if is_torch_available():
     import torch
 
     from transformers import TextToAudioPipeline, VoxCPM2Model
-    from transformers.models.voxcpm2.modeling_voxcpm2 import VoxCPM2GenerationOutput
+    from transformers.models.voxcpm2.modeling_voxcpm2 import VoxCPM2GenerationOutput, VoxCPM2ScalarQuantizationLayer
 
 
 class VoxCPM2ModelTester:
@@ -210,6 +210,30 @@ class VoxCPM2ModelTest(ModelTesterMixin, unittest.TestCase):
         outputs.loss.backward()
         self.assertIsNotNone(model.stop_head.weight.grad)
         self.assertIsNotNone(inputs["audio_features"].grad)
+
+    def test_scalar_quantization_boundaries(self):
+        config = self.model_tester.get_config()
+        config.scalar_quantization_latent_dim = config.lm_config.hidden_size
+        quantizer = VoxCPM2ScalarQuantizationLayer(config).to(torch_device)
+        with torch.no_grad():
+            for projection in (quantizer.in_proj, quantizer.out_proj):
+                projection.weight.copy_(torch.eye(config.lm_config.hidden_size, device=torch_device))
+                projection.bias.zero_()
+
+        values = torch.tensor(
+            [[-0.95, -0.49975 / 9, -0.50025 / 9, 0.0, 0.49975 / 9, 0.50025 / 9, 0.95, 0.52]],
+            device=torch_device,
+        )
+        expected = torch.tensor([[-1.0, 0.0, -1 / 9, 0.0, 0.0, 1 / 9, 1.0, 5 / 9]], device=torch_device)
+        for training in (True, False):
+            with self.subTest(training=training):
+                quantizer.train(training)
+                inputs = values.atanh().requires_grad_()
+                outputs = quantizer(inputs)
+                torch.testing.assert_close(outputs, expected, rtol=0, atol=0)
+                gradients = torch.autograd.grad(outputs.sum(), inputs)[0]
+                expected_gradients = 1 - values.square() if training else torch.zeros_like(values)
+                torch.testing.assert_close(gradients, expected_gradients)
 
     def test_attention_backends_match(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()

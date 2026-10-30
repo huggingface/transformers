@@ -156,6 +156,8 @@ class VoxCPM2PreTrainedModel(PreTrainedModel):
         elif isinstance(module, VoxCPM2SampleRateConditionLayer):
             init.ones_(module.scale_embed.weight)
             init.zeros_(module.bias_embed.weight)
+        elif isinstance(module, VoxCPM2ScalarQuantizationLayer):
+            init.constant_(module.levels, 3)
         elif isinstance(module, VoxCPM2AudioDecoder):
             audio_vae_config = self.config.audio_vae_config
             if not isinstance(audio_vae_config, VoxCPM2AudioVAEConfig):
@@ -169,6 +171,8 @@ class VoxCPM2PreTrainedModel(PreTrainedModel):
 
 
 class VoxCPM2ScalarQuantizationLayer(nn.Module):
+    """Projected scalar quantization with Xcodec2's bounding helper and VoxCPM2's quantization scale."""
+
     def __init__(self, config: VoxCPM2Config):
         super().__init__()
         lm_config = config.lm_config
@@ -181,9 +185,33 @@ class VoxCPM2ScalarQuantizationLayer(nn.Module):
 
         self.in_proj = nn.Linear(self.in_dim, self.latent_dim)
         self.out_proj = nn.Linear(self.latent_dim, self.out_dim)
+        # A scalar level count of three makes bound(eps=0) equal tanh, independently of the quantization scale.
+        self.levels = nn.Buffer(torch.tensor(3, dtype=torch.int32), persistent=False)
+
+    def bound(self, hidden_states: torch.Tensor, eps: float = 1e-3) -> torch.Tensor:
+        """
+        Constrain `hidden_states` to the valid quantization range for each dimension.
+
+        Uses a scaled tanh to soft-clip values into the interval
+        $[-(L-1)/2, (L-1)/2]$ (offset by 0.5 for even-level dimensions), where $L$ is
+        the number of quantization levels. The small `eps` margin prevents values from
+        saturating exactly at the boundary, which would zero out gradients.
+
+        Args:
+            hidden_states (`torch.Tensor`): Continuous input to be bounded.
+            eps (`float`, *optional*, defaults to `1e-3`):
+                Small margin added to the level range to avoid gradient saturation at boundaries.
+
+        Returns:
+            `torch.Tensor`: Bounded values in the valid quantization range.
+        """
+        half_range = (self.levels - 1) * (1 + eps) / 2
+        offset = torch.where(self.levels % 2 == 0, 0.5, 0.0)
+        shift = (offset / half_range).atanh()
+        return (hidden_states + shift).tanh() * half_range - offset
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = torch.tanh(self.in_proj(hidden_states))
+        hidden_states = self.bound(self.in_proj(hidden_states), eps=0.0)
         quantized_states = torch.round(hidden_states * self.scale) / self.scale
         if self.training:
             hidden_states = hidden_states + (quantized_states - hidden_states).detach()
