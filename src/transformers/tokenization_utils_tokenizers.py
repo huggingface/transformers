@@ -158,6 +158,14 @@ class TokenizersBackend(PreTrainedTokenizerBase):
             if tok_from_file.padding is not None:
                 local_kwargs["_json_padding"] = tok_from_file.padding
 
+            # Pass the decoder and pre_tokenizer types to detect mismatches with the Python class
+            if tokenizer_json.get("decoder") is not None:
+                local_kwargs["_json_decoder_type"] = tokenizer_json["decoder"].get("type")
+                local_kwargs["_json_decoder"] = tok_from_file.decoder
+            if tokenizer_json.get("pre_tokenizer") is not None:
+                local_kwargs["_json_pre_tokenizer_type"] = tokenizer_json["pre_tokenizer"].get("type")
+                local_kwargs["_json_pre_tokenizer"] = tok_from_file.pre_tokenizer
+
             # Extract precompiled SentencePiece charsmap from tokenizer.json normalizer
             # when present (e.g. T5 tokenizers converted with SentencePiece >= 2.x).
             normalizer_config = tokenizer_json.get("normalizer")
@@ -369,6 +377,10 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         # when a class with a custom __init__ rebuilds the backend tokenizer from scratch.
         _json_truncation = kwargs.pop("_json_truncation", None)
         _json_padding = kwargs.pop("_json_padding", None)
+        _json_decoder_type = kwargs.pop("_json_decoder_type", None)
+        _json_decoder = kwargs.pop("_json_decoder", None)
+        _json_pre_tokenizer_type = kwargs.pop("_json_pre_tokenizer_type", None)
+        _json_pre_tokenizer = kwargs.pop("_json_pre_tokenizer", None)
         # Precompiled SentencePiece charsmap is already used by model-specific tokenizers
         # (before calling super().__init__) and should not be stored in `init_kwargs` to keep the tokenizer  serializable.
         kwargs.pop("_spm_precompiled_charsmap", None)
@@ -427,6 +439,32 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
         if self._tokenizer is None:
             raise ValueError("The backend tokenizer is not correctly initialized.")
+
+        # A `ByteLevel` pipeline in tokenizer.json that the Python class did not build means `tokenizer_class` is wrong.
+        mismatches = []
+        for name, json_type in (("decoder", _json_decoder_type), ("pre_tokenizer", _json_pre_tokenizer_type)):
+            built = getattr(self._tokenizer, name)
+            if json_type != "ByteLevel" or built is None:
+                continue
+            try:
+                built_repr = str(built)
+            except Exception as e:
+                logger.debug(f"Could not inspect the {name} of {self.__class__.__name__}: {e}")
+                continue
+            if "ByteLevel" not in built_repr:
+                mismatches.append(f"{name} is '{built_repr.split('(')[0]}' but `tokenizer.json` specifies 'ByteLevel'")
+
+        if mismatches:
+            logger.warning(
+                f"The tokenizer class you loaded from this checkpoint ({self.__class__.__name__}) does not match "
+                f"the `tokenizer.json` file found in this checkpoint: {'; '.join(mismatches)}. "
+                "This usually means the `tokenizer_class` in `tokenizer_config.json` is incorrectly set. "
+                "The decoder and pre-tokenizer are loaded together from `tokenizer.json` to ensure correct tokenization."
+            )
+            if _json_decoder is not None:
+                self._tokenizer.decoder = _json_decoder
+            if _json_pre_tokenizer is not None:
+                self._tokenizer.pre_tokenizer = _json_pre_tokenizer
 
         _truncation = kwargs.pop("tokenizer_truncation", None) or self._tokenizer.truncation or _json_truncation
         if _truncation is not None:
