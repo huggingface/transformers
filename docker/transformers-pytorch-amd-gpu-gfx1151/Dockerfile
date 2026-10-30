@@ -206,9 +206,25 @@ RUN python3 -m pip uninstall -y kernels || true
 # Common extra deps used across the test suite. scipy, librosa and soundfile
 # are easy to miss: transformers' lazy imports turn their absence into errors
 # like `NameError: name 'EncodecFeatureExtractor' is not defined`, not
-# ImportError.
+# ImportError. pycocotools (DETR-family image processors) and peft (adapter
+# tests, e.g. jina_embeddings_v3) are not in the [testing] extra.
+#
+# bitsandbytes: its absence is a *skip*, not a failure -- `require_bitsandbytes`
+# gates the test rather than the import -- so it costs coverage silently. The
+# PyPI wheel has no CUDA in its tag, and at RUN_SLOW=1 across ministral,
+# muse_glimmer_assistant and shieldgemma2 not one bitsandbytes test skipped or
+# failed on gfx1151.
+#
+# NOT optimum-quanto, the obvious companion: it compiles a HIP extension at
+# first use and the build fails on this stack (`ninja: build stopped` from
+# quanto_hip), costing a failure on ministral3 for one test gained on
+# shieldgemma2.
+#
+# matplotlib: auto's test_custom_tokenizer_init loads a remote-code tokenizer
+# that imports it, so without it that slow test fails with an ImportError naming
+# matplotlib, on every GPU.
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words timm \
-      scipy librosa soundfile
+      scipy librosa soundfile pycocotools peft bitsandbytes matplotlib
 
 # Media decoders needed by audio/video model tests:
 #  - PyAV (`av`): torchvision video ops
@@ -219,6 +235,32 @@ RUN python3 -m pip install --no-cache-dir av
 RUN python3 -m pip install --no-cache-dir --no-deps torchcodec==0.13.0 || \
     python3 -m pip install --no-cache-dir --no-deps torchcodec || \
     echo "torchcodec install skipped"
+
+# transformers' [audio] extra, which upstream's AMD image installs and [testing]
+# does not: phonemizer (wav2vec2_phoneme, and one wav2vec2 tokenizer test that
+# fails with ImportError rather than skipping), pyctcdecode and kenlm
+# (wav2vec2_with_lm). espeak-ng, phonemizer's backend, is already in the base.
+# --no-deps because pyctcdecode 0.5.0 pins numpy<2: resolved normally, it
+# downgrades numpy to 1.26 under scipy/librosa/opencv and conftest.py no longer
+# imports. Its other deps are listed by hand, and everything is pinned, since
+# --no-deps cannot notice a new release growing a dep (phonemizer 3.4.0 needs
+# attrs/joblib/typing-extensions, already in the base; older releases also
+# needed segments). Not hypothesis, though pyctcdecode lists it: only its own
+# tests use it, and it is a pytest plugin that would load in every session.
+# The check decodes, not just imports, so a numpy-2 break in pyctcdecode fails
+# the build rather than looking like a wav2vec2_with_lm test failure.
+RUN python3 -m pip install --no-cache-dir --no-deps phonemizer==3.4.0 \
+      dlinfo==2.0.0 pyctcdecode==0.5.0 pygtrie==2.6.2 \
+ && python3 -c "import numpy as np; from pyctcdecode import build_ctcdecoder; \
+      from phonemizer.backend import EspeakBackend; \
+      assert EspeakBackend.is_available(), 'espeak-ng missing'; \
+      build_ctcdecoder(['', 'a', 'b']).decode(np.log(np.full((6, 3), 1/3, 'f4')))"
+# kenlm compiles from source: best-effort, like torchcodec, so a broken
+# compile costs wav2vec2_with_lm's LM tests rather than every image build. The
+# marker keeps a skip visible where results are read, so missing-kenlm
+# failures aren't taken for test problems.
+RUN python3 -m pip install --no-cache-dir --no-deps kenlm==0.3.0 || \
+    { echo "kenlm install skipped"; echo kenlm >> /etc/hf-ci-optional-missing; }
 
 # Pre-fetch the test fixtures into the image, as docker/torch-light.dockerfile
 # does. Otherwise every job downloads them from the Hub, and with many jobs
