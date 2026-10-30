@@ -4702,6 +4702,10 @@ class Trainer:
         """
         return self.args.local_process_index == 0
 
+    def is_main_process(self) -> bool:
+        """Alias for is_world_process_zero for clarity."""
+        return self.is_world_process_zero()
+
     def is_world_process_zero(self) -> bool:
         """
         Whether or not this process is the global main process (when training in a distributed fashion on several
