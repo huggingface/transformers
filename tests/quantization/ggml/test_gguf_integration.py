@@ -106,6 +106,13 @@ class GgufTokenizerTesterMixin:
                     reference(text, add_special_tokens=False).input_ids,
                 )
 
+    def test_tokenizer_matches_transformers_with_special_tokens(self):
+        """BOS and EOS come from the file's `add_bos_token` / `add_eos_token`, so they are added like the reference."""
+        from_gguf, reference = self.tokenizer, self.reference_tokenizer
+        for text in self.tokenizer_texts:
+            with self.subTest(text=text):
+                self.assertEqual(from_gguf(text).input_ids, reference(text).input_ids)
+
     def test_decodes_like_transformers(self):
         """The decoder comes from the tokenizer class, and nothing else here exercises it."""
         from_gguf, reference = self.tokenizer, self.reference_tokenizer
@@ -541,6 +548,13 @@ class TinyLlamaGgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
     quantized_gguf_file = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
     reference_repo = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
+    def test_tokenizer_matches_transformers_with_special_tokens(self):
+        """The file predates `add_bos_token`, so nothing says to add BOS; the reference adds it."""
+        from_gguf, reference = self.tokenizer, self.reference_tokenizer
+        for text in self.tokenizer_texts:
+            with self.subTest(text=text):
+                self.assertEqual([reference.bos_token_id] + from_gguf(text).input_ids, reference(text).input_ids)
+
 
 @slow
 class Phi3GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
@@ -563,6 +577,13 @@ class Gemma4GgufTokenizerTest(GgufTokenizerTesterMixin, unittest.TestCase):
     gguf_repo = "unsloth/gemma-4-E4B-it-GGUF"
     quantized_gguf_file = "gemma-4-E4B-it-Q4_K_M.gguf"
     reference_repo = "google/gemma-4-E4B-it"
+
+    def test_tokenizer_matches_transformers_with_special_tokens(self):
+        """The file sets `add_bos_token`, but the reference adds no BOS: its chat template writes `<bos>` itself."""
+        from_gguf, reference = self.tokenizer, self.reference_tokenizer
+        for text in self.tokenizer_texts:
+            with self.subTest(text=text):
+                self.assertEqual(from_gguf(text).input_ids, [reference.bos_token_id] + reference(text).input_ids)
 
 
 @slow
