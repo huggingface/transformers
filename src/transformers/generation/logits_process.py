@@ -417,6 +417,10 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         vocab_size = scores.shape[-1]
         if self.attention_mask is not None:
             prompt_mask = self.attention_mask[:, self.prompt_ignore_length or 0 :]
+            if prompt_mask.shape[0] != input_ids.shape[0]:
+                if input_ids.shape[0] % prompt_mask.shape[0]:
+                    raise ValueError("Attention mask batch size is incompatible with input_ids")
+                prompt_mask = prompt_mask.repeat_interleave(input_ids.shape[0] // prompt_mask.shape[0], dim=0)
             valid = torch.ones_like(input_ids, dtype=torch.bool)
             n = min(input_ids.shape[1], prompt_mask.shape[1])
             valid[:, :n] = prompt_mask[:, :n].to(device=input_ids.device, dtype=torch.bool)
