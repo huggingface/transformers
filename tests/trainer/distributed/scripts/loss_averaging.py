@@ -87,7 +87,7 @@ def run_distributed_training(training_args, loss_file):
         data_collator=data_collator,
     )
     trainer.train()
-    with open(loss_file, "w") as f:
+    with open(loss_file, "w", encoding="utf-8") as f:
         json.dump(loss_callback.losses, f)
 
 

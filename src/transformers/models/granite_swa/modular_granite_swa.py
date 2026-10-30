@@ -31,8 +31,8 @@ import torch
 from huggingface_hub.dataclasses import strict
 from torch import nn
 from torch.nn import functional as F
-from torch.nn import init
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
@@ -93,6 +93,7 @@ class GraniteSWAConfig(GraniteConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.sinks": "colwise",
+        "layers.*.self_attn": "local_params",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -223,7 +224,11 @@ class GraniteSWADecoderLayer(GraniteDecoderLayer):
 
 class GraniteSWAPreTrainedModel(GranitePreTrainedModel):
     _supports_sdpa = False
-    _compatible_flash_implementations = ["kernels-community/vllm-flash-attn3", "flash_attention_4"]
+    _compatible_flash_implementations = [
+        "kernels-community/vllm-flash-attn3",
+        "flash_attention_4",
+        "kernels-community/aiter-flash-attn",
+    ]
     _can_record_outputs = {
         "hidden_states": GraniteSWADecoderLayer,
         "attentions": GraniteSWAAttention,

@@ -310,7 +310,7 @@ class PatchTSMixerAttention(nn.Module):
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -349,7 +349,7 @@ class PatchTSMixerAttention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.out_proj(attn_output)
 
-        return attn_output, attn_weights, None
+        return attn_output, attn_weights
 
 
 class PatchMixerBlock(nn.Module):
@@ -402,7 +402,7 @@ class PatchMixerBlock(nn.Module):
             batch_size, n_vars, num_patches, d_model = hidden_state.shape
             hidden_state_reshaped = hidden_state.reshape(batch_size * n_vars, num_patches, d_model)
 
-            x_attn, _, _ = self.self_attn_layer(hidden_state_reshaped, output_attentions=False)
+            x_attn, _ = self.self_attn_layer(hidden_state_reshaped, output_attentions=False)
             x_attn = x_attn.reshape(batch_size, n_vars, num_patches, d_model)
 
         # Transpose so that num_patches is the last dimension

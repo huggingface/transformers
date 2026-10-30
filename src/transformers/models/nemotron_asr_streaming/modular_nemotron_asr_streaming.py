@@ -35,7 +35,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..fastspeech2_conformer.modeling_fastspeech2_conformer import FastSpeech2ConformerConvolutionModule
 from ..llama.modeling_llama import eager_attention_forward
@@ -131,10 +131,6 @@ class NemotronAsrStreamingEncoderConfig(ParakeetEncoderConfig):
 @strict
 class NemotronAsrStreamingConfig(ParakeetRNNTConfig):
     r"""
-    This is the NemotronAsrStreaming transducer configuration. The RNN-T (RNN Transducer) joint network emits token
-    logits only (so the joint head outputs just `vocab_size` logits), and during greedy decoding the encoder
-    frame pointer advances by exactly one frame on each blank emission.
-
     decoder_hidden_size (`int`, *optional*, defaults to 640):
         Hidden size of the LSTM prediction network (NeMo's `pred_hidden`). The joint network projects both
         encoder and decoder outputs to this size (NeMo's `joint_hidden`, which all known checkpoints set equal
@@ -172,8 +168,64 @@ class NemotronAsrStreamingConfig(ParakeetRNNTConfig):
 
 
 class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
+    r"""
+    Constructs a NemotronAsrStreaming feature extractor.
+
+    This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
+    most of the main methods. Users should refer to this superclass for more information regarding those methods.
+
+    This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the `Short Time
+    Fourier Transform` which should match pytorch's `torch.stft` equivalent.
+
+    Args:
+        feature_size (`int`, *optional*, defaults to 80):
+            The feature dimension of the extracted features.
+        sampling_rate (`int`, *optional*, defaults to 16000):
+            The sampling rate at which the audio files should be digitalized expressed in hertz (Hz).
+        hop_length (`int`, *optional*, defaults to 160):
+            Length of the overlapping windows for the STFT used to obtain the Mel Frequency coefficients.
+        n_fft (`int`, *optional*, defaults to 512):
+            Size of the Fourier transform.
+        win_length (`int`, *optional*, defaults to 400):
+            The window length for the STFT computation.
+        preemphasis (`float`, *optional*, defaults to 0.97):
+            A preemphasis filter coefficient. 0.0 means no preemphasis filter.
+        padding_value (`float`, *optional*, defaults to 0.0):
+            Padding value used to pad the audio. Should correspond to silences.
+        mel_filters_dtype (`str`, *optional*, defaults to `"float32"`):
+            Precision of the stored mel filter bank and STFT window. Some checkpoints keep these constants in a reduced
+            precision (`"bfloat16"` for Nemotron 3.5 Transcribe): the filter bank and the window are then rounded to
+            that dtype when the features are computed, so the log-mel features match the original front-end; the
+            spectrogram itself is always computed in float32.
+    """
+
+    def __init__(
+        self,
+        feature_size=80,
+        sampling_rate=16000,
+        hop_length=160,
+        n_fft=512,
+        win_length=400,
+        preemphasis=0.97,
+        padding_value=0.0,
+        mel_filters_dtype="float32",
+        **kwargs,
+    ):
+        super().__init__(
+            feature_size=feature_size,
+            sampling_rate=sampling_rate,
+            hop_length=hop_length,
+            n_fft=n_fft,
+            win_length=win_length,
+            preemphasis=preemphasis,
+            padding_value=padding_value,
+            **kwargs,
+        )
+        self.mel_filters_dtype = mel_filters_dtype
+
     def _torch_extract_fbank_features(self, waveform, device="cpu", center=True):
-        window = torch.hann_window(self.win_length, periodic=False, device=device)
+        dtype = getattr(torch, self.mel_filters_dtype)
+        window = torch.hann_window(self.win_length, periodic=False, device=device).to(dtype).float()
         stft = torch.stft(
             waveform,
             self.n_fft,
@@ -189,7 +241,7 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
         magnitudes = magnitudes.pow(2)
 
         # log mel spectrogram
-        mel_filters = self.mel_filters.to(device)
+        mel_filters = self.mel_filters.to(device).to(dtype).float()
         mel_spec = mel_filters @ magnitudes
         mel_spec = torch.log(mel_spec + LOG_ZERO_GUARD_VALUE)
 
@@ -211,6 +263,7 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
         device: str | None = "cpu",
         return_token_timestamps: bool | None = None,
         center: bool = True,
+        is_last_audio_chunk: bool = False,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -250,6 +303,10 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
                 subsequent streaming chunks: feeding `audio[hop * frame - n_fft // 2 : ...]` with `center=False`
                 reproduces, frame-for-frame, the features that a single `center=True` pass over the whole utterance
                 would have produced for those frames.
+            is_last_audio_chunk (`bool`, *optional*, defaults to `False`):
+                Whether the audio is the last chunk of a streaming session. With `center=False`, the end of the audio
+                is then zero-padded by `n_fft // 2 - hop_length`, what the last frame of a `center=True` pass over the
+                whole utterance reaches past the audio at most, so that this frame is kept rather than dropped.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -316,15 +373,21 @@ class NemotronAsrStreamingFeatureExtractor(ParakeetFeatureExtractor):
             )
             input_features = input_features.masked_fill(~timemask, 0.0)
 
+        audio_lengths = padded_inputs.audio_lengths
+        if is_last_audio_chunk and not center:
+            # the last frame a `center=True` pass counts reaches up to `n_fft // 2 - hop` past the audio; padded
+            # after the preemphasis, which would otherwise turn the first zero into `-preemphasis * audio[-1]`
+            num_padding = self.n_fft // 2 - self.hop_length
+            input_features = torch.nn.functional.pad(input_features, (0, num_padding))
+            audio_lengths = audio_lengths + num_padding
+
         input_features = self._torch_extract_fbank_features(input_features, device, center=center)
         if center:
             # `center=True` pads `n_fft // 2` on each side, so the number of valid frames is `floor(L / hop)`.
-            features_lengths = torch.floor_divide(
-                padded_inputs.audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length
-            )
+            features_lengths = torch.floor_divide(audio_lengths + self.n_fft // 2 * 2 - self.n_fft, self.hop_length)
         else:
             # `center=False` does no padding: `floor((L - n_fft) / hop) + 1` frames.
-            features_lengths = torch.floor_divide(padded_inputs.audio_lengths - self.n_fft, self.hop_length) + 1
+            features_lengths = torch.floor_divide(audio_lengths - self.n_fft, self.hop_length) + 1
         attention_mask = torch.arange(input_features.shape[1], device=device)[None, :] < features_lengths[:, None]
 
         # NemotronAsrStreaming never normalizes the mel features
@@ -501,23 +564,14 @@ class NemotronAsrStreamingEncoderRelPositionalEncoding(ParakeetEncoderRelPositio
                 f"config.max_position_embeddings {self.max_position_embeddings}."
             )
         position_ids = torch.arange(seq_length - 1, -seq_length, -1, device=hidden_states.device)
-        inv_freq_expanded = (
-            self.inv_freq[None, :, None].float().expand(hidden_states.shape[0], -1, 1).to(hidden_states.device)
-        )
-        position_ids_expanded = position_ids[None, None, :].float()
-
-        device_type = (
-            hidden_states.device.type
-            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
-            else "cpu"
-        )
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            sin = freqs.sin()
-            cos = freqs.cos()
-            # interleave sin and cos
-            pos_embed = torch.stack([sin, cos], dim=-1)
-            pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
+        freqs = position_ids[:, None].float() * self.inv_freq.to(device=hidden_states.device, dtype=torch.float)
+        # The attention layers expect a batch dimension on the positional embeddings
+        freqs = freqs.expand(hidden_states.shape[0], -1, -1)
+        sin = freqs.sin()
+        cos = freqs.cos()
+        # interleave sin and cos
+        pos_embed = torch.stack([sin, cos], dim=-1)
+        pos_embed = pos_embed.reshape(*pos_embed.shape[:-2], -1)
 
         return pos_embed.to(dtype=hidden_states.dtype)
 
@@ -816,7 +870,6 @@ class NemotronAsrStreamingEncoder(ParakeetEncoder):
     @auto_docstring
     @merge_with_config_defaults
     @capture_outputs
-    @can_return_tuple
     def forward(
         self,
         input_features: torch.Tensor,

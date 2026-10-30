@@ -860,7 +860,7 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
         b = b * self.sigmoid(self.linear_b_g(z))
         b = b * self.linear_b_p(z)
 
-        device_type = a.device.type if a.device.type != "mps" else "cpu"
+        device_type = a.device.type
         if is_fp16_enabled(device_type):
             with maybe_autocast(device_type=device_type, enabled=False):
                 x = self._combine_projections(a.float(), b.float())
@@ -1483,7 +1483,7 @@ class EsmFoldInvariantPointAttention(nn.Module):
             z[0] = z[0].cpu()
 
         # [*, H, N_res, N_res]
-        device_type = q.device.type if q.device.type != "mps" else "cpu"
+        device_type = q.device.type
         if is_fp16_enabled(device_type):
             with maybe_autocast(device_type=device_type, enabled=False):
                 a = torch.matmul(
@@ -1858,7 +1858,7 @@ class EsmFoldingTrunk(nn.Module):
     def set_chunk_size(self, chunk_size):
         # This parameter means the axial attention will be computed
         # in a chunked manner. This should make the memory used more or less O(L) instead of O(L^2).
-        # It's equivalent to running a for loop over chunks of the dimension we're iterative over,
+        # It's equivalent to running a for loop over chunks of the dimension we're iterating over,
         # where the chunk_size is the size of the chunks, so 128 would mean to parse 128-length chunks.
         self.chunk_size = chunk_size
 

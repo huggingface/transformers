@@ -30,7 +30,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -396,7 +396,7 @@ class Gemma3nConfig(PreTrainedConfig):
     ```"""
 
     model_type = "gemma3n"
-    sub_configs = {
+    sub_configs_defaults = {
         "text_config": Gemma3nTextConfig,
         "vision_config": Gemma3nVisionConfig,
         "audio_config": Gemma3nAudioConfig,
@@ -416,27 +416,6 @@ class Gemma3nConfig(PreTrainedConfig):
     initializer_range: float | None = 0.02
     tie_word_embeddings: bool | None = True
     use_cache: bool = True
-
-    def __post_init__(self, **kwargs):
-        if self.text_config is None:
-            self.text_config = Gemma3nTextConfig()
-            logger.info("text_config is None, using default Gemma3nTextConfig text config.")
-        elif isinstance(self.text_config, dict):
-            self.text_config = Gemma3nTextConfig(**self.text_config)
-
-        if isinstance(self.vision_config, dict):
-            self.vision_config = Gemma3nVisionConfig(**self.vision_config)
-        elif self.vision_config is None:
-            self.vision_config = Gemma3nVisionConfig()
-            logger.info("vision_config is None, using default Gemma3nVisionConfig vision config.")
-
-        if isinstance(self.audio_config, dict):
-            self.audio_config = Gemma3nAudioConfig(**self.audio_config)
-        elif self.audio_config is None:
-            self.audio_config = Gemma3nAudioConfig()
-            logger.info("audio_config is None. Using default Gemma3nAudioConfig.")
-
-        super().__post_init__(**kwargs)
 
 
 @auto_docstring
@@ -1645,6 +1624,7 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
         "hidden_states": Gemma3nTextDecoderLayer,
         "attentions": Gemma3nTextAttention,
     }
+    _supports_sdpa = True
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1684,7 +1664,8 @@ class Gemma3nPreTrainedModel(Gemma2PreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
         if hasattr(module, "gradient_clipping"):
-            init.constant_(module.gradient_clipping, self.config.gradient_clipping)
+            gradient_clipping = min(self.config.gradient_clipping, torch.finfo(module.gradient_clipping.dtype).max)
+            init.constant_(module.gradient_clipping, gradient_clipping)
 
     def get_per_layer_input_embeddings(self):
         return self.base_model.embed_tokens_per_layer
@@ -1860,6 +1841,8 @@ class Gemma3nTextModel(Gemma3TextModel):
                 )
 
     def get_per_layer_inputs(self, input_ids: torch.LongTensor) -> torch.Tensor:
+        in_table = torch.logical_and(input_ids >= 0, input_ids < self.config.vocab_size_per_layer_input)
+        input_ids = torch.where(in_table, input_ids, 0)
         return self.embed_tokens_per_layer(input_ids).reshape(
             *input_ids.shape,
             self.config.num_hidden_layers,
@@ -2164,23 +2147,26 @@ class Gemma3nModel(PaliGemmaModel):
         past_key_values: Cache | None = None,
         token_type_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        labels: torch.LongTensor | None = None,
+        per_layer_inputs: torch.Tensor | None = None,
         use_cache: bool | None = None,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma3nModelOutputWithPast:
         r"""
         input_features_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Attention mask for `input_features` where non-zero values mark valid audio frames.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-            config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-            (masked), the loss is only computed for the tokens with labels in `[0, ..., config.text_config.vocab_size]`.
+        per_layer_inputs (`torch.Tensor`, *optional*):
+            Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
+            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from
+            `input_ids` via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds`
+            instead of `input_ids`, you should precompute them and forward them along `inputs_embeds`, otherwise the
+            token-identity component of the per-layer embeddings is omitted.
 
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Gemma3nForConditionalGeneration
 
@@ -2203,13 +2189,17 @@ class Gemma3nModel(PaliGemmaModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if pixel_values is not None and mm_encoder_outputs is not None:
+            raise ValueError("You cannot specify both pixel_values and mm_encoder_outputs at the same time")
+
+        if input_ids is not None and per_layer_inputs is not None:
+            raise ValueError("You cannot specify per_layer_inputs if input_ids is provided")
+
         if input_ids is not None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
             # Prepare per-layer inputs from inputs_ids
-            per_layer_inputs_mask = torch.logical_and(input_ids >= 0, input_ids < self.vocab_size_per_layer_input)
-            per_layer_inputs_tokens = torch.where(per_layer_inputs_mask, input_ids, torch.zeros_like(input_ids))
-            per_layer_inputs = self.language_model.get_per_layer_inputs(per_layer_inputs_tokens)
+            per_layer_inputs = self.language_model.get_per_layer_inputs(input_ids)
 
             # Handle vision tokens (>= embed_vision.vocab_offset and < embed_audio.vocab_offset)
             vision_mask = torch.logical_and(
@@ -2230,13 +2220,14 @@ class Gemma3nModel(PaliGemmaModel):
             audio_embeds = audio_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
             expanded_audio_mask = audio_mask.unsqueeze(-1)
             inputs_embeds = torch.where(expanded_audio_mask, audio_embeds, inputs_embeds)
-        else:
-            per_layer_inputs = None
 
         # Merge text and images
-        if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
+        mm_encoder_outputs = mm_encoder_outputs if mm_encoder_outputs is not None else {}
+        if mm_encoder_outputs.get("image") is None and pixel_values is not None:
+            mm_encoder_outputs["image"] = self.get_image_features(pixel_values, return_dict=True)
+
+        if mm_encoder_outputs.get("image") is not None:
+            image_features = mm_encoder_outputs["image"].pooler_output.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
@@ -2277,15 +2268,15 @@ class Gemma3nModel(PaliGemmaModel):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             return_dict=True,
-            **lm_kwargs,
+            **kwargs,
         )
 
         return Gemma3nModelOutputWithPast(
             last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values if use_cache else None,
+            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
-            image_hidden_states=image_features if pixel_values is not None else None,
+            image_hidden_states=image_features if mm_encoder_outputs.get("image") is not None else None,
             audio_hidden_states=audio_features if input_features is not None else None,
         )
 
@@ -2298,9 +2289,9 @@ class Gemma3nModel(PaliGemmaModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Gemma3nAudioEncoderModelOutput:
         r"""
-        input_features (`torch.FloatTensor]` of shape `(num_images, seq_length, num_features)`):
+        input_features (`torch.FloatTensor` of shape `(num_images, seq_length, num_features)`):
             The tensors corresponding to the input audio.
-        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+        input_features_mask (`torch.FloatTensor` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         """
         audio_outputs: Gemma3nAudioEncoderModelOutput = self.audio_tower(
@@ -2343,7 +2334,9 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
         labels: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         logits_to_keep: int | torch.Tensor = 0,
-        **lm_kwargs: Unpack[TransformersKwargs],
+        per_layer_inputs: torch.Tensor | None = None,
+        mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Gemma3nCausalLMOutputWithPast:
         r"""
         input_features_mask (torch.Tensor, *optional*, defaults to None):
@@ -2353,12 +2346,18 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
             config.text_config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are
             ignored (masked), the loss is only computed for the tokens with labels in
             `[0, ..., config.text_config.vocab_size]`.
+        per_layer_inputs (`torch.Tensor`, *optional*):
+            Pre-computed per-layer input text embeddings of shape `(batch_size, sequence_length, num_hidden_layers,
+            hidden_size_per_layer_input)`. When provided, these are used directly instead of being computed from
+            `input_ids` via `get_per_layer_inputs()` in the text model. If calling the `forward` with `inputs_embeds`
+            instead of `input_ids`, you should precompute them and forward them along `inputs_embeds`, otherwise the
+            token-identity component of the per-layer embeddings is omitted.
 
         Example:
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
@@ -2403,16 +2402,17 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
             past_key_values=past_key_values,
             token_type_ids=token_type_ids,
             inputs_embeds=inputs_embeds,
+            per_layer_inputs=per_layer_inputs,
             labels=labels,
             use_cache=use_cache,
+            mm_encoder_outputs=mm_encoder_outputs,
             return_dict=True,
-            **lm_kwargs,
+            **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
         if (final_logit_softcapping := self.config.get_text_config().final_logit_softcapping) is not None:
             logits = logits / final_logit_softcapping
             logits = torch.tanh(logits)
@@ -2420,7 +2420,7 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.config.get_text_config().vocab_size, **lm_kwargs)
+            loss = self.loss_function(logits, labels, self.config.get_text_config().vocab_size, **kwargs)
 
         return Gemma3nCausalLMOutputWithPast(
             loss=loss,
@@ -2431,6 +2431,9 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
             image_hidden_states=outputs.image_hidden_states,
             audio_hidden_states=outputs.audio_hidden_states,
         )
+
+    def _update_model_kwargs_for_generation(self, **super_kwargs):
+        raise AttributeError("PaliGemma's token_type_ids mark its prefix, Gemma3n's mark image spans!")
 
     def prepare_inputs_for_generation(self, **super_kwargs):
         raise NotImplementedError("Do not inherit prepare_inputs_for_generation from PaliGemma")

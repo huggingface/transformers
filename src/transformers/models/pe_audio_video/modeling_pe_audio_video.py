@@ -35,8 +35,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.deprecation import deprecate_kwarg
-from ...utils.generic import maybe_autocast, merge_with_config_defaults
+from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import capture_outputs
 from ..auto import AutoModel
 from .configuration_pe_audio_video import PeAudioVideoConfig, PeAudioVideoEncoderConfig
@@ -449,8 +448,7 @@ class PeAudioVideoEncoderRMSNorm(nn.Module):
 
 
 class PeAudioVideoEncoderRotaryEmbedding(nn.Module):
-    @deprecate_kwarg("device", version="5.18")
-    def __init__(self, config: PeAudioVideoEncoderConfig, device=None):
+    def __init__(self, config: PeAudioVideoEncoderConfig):
         super().__init__()
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
@@ -461,16 +459,13 @@ class PeAudioVideoEncoderRotaryEmbedding(nn.Module):
         rope_init_fn: Callable = self.compute_default_rope_parameters
         if self.rope_type != "default":
             rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+        inv_freq, self.attention_scaling = rope_init_fn(self.config)
 
         self.inv_freq = nn.Buffer(inv_freq, persistent=False)
         self.original_inv_freq = nn.Buffer(inv_freq.clone(), persistent=False)
 
     @staticmethod
-    @deprecate_kwarg("device", version="5.18")
-    def compute_default_rope_parameters(
-        config: PeAudioVideoEncoderConfig, device=None, **kwargs
-    ) -> tuple[torch.Tensor, float]:
+    def compute_default_rope_parameters(config: PeAudioVideoEncoderConfig, **kwargs) -> tuple[torch.Tensor, float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
         Args:
@@ -486,20 +481,15 @@ class PeAudioVideoEncoderRotaryEmbedding(nn.Module):
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        return inv_freq.to(device), attention_factor
+        return inv_freq, attention_factor
 
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
-
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        freqs = position_ids[..., None].float() * self.inv_freq.to(device=x.device, dtype=torch.float)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        cos = emb.cos() * self.attention_scaling
+        sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
@@ -580,9 +570,9 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
 
         self.post_init()
 
-    @can_return_tuple
     @merge_with_config_defaults
     @capture_outputs
+    @auto_docstring
     def forward(
         self,
         input_values: torch.Tensor | None = None,
@@ -591,6 +581,18 @@ class PeAudioVideoEncoder(PeAudioVideoPreTrainedModel):
         padding_mask_videos: torch.Tensor | None = None,
         **kwargs,
     ) -> tuple | PeAudioVideoEncoderOutput:
+        r"""
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding samples of `input_values`. Mask values selected in `[0, 1]`:
+
+            - 1 for samples that are **not masked**,
+            - 0 for samples that are **masked**.
+        padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask to avoid performing attention on padding video frames. Mask values selected in `[0, 1]`:
+
+            - 1 for frames that are **not masked**,
+            - 0 for frames that are **masked**.
+        """
         inputs_embeds, padding_mask, audio_output, video_output = self.embedder(
             input_values,
             pixel_values_videos,
@@ -875,6 +877,7 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         return self.video_plus_text_head(video_plus_text_embeds)
 
     @can_return_tuple
+    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -886,6 +889,20 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
         return_loss=False,
         **kwargs,
     ) -> PeAudioVideoOutput:
+        r"""
+        padding_mask_videos (`torch.Tensor` of shape `(batch_size, num_frames)`, *optional*):
+            Mask to avoid performing attention on padding video frames. Mask values selected in `[0, 1]`:
+
+            - 1 for frames that are **not masked**,
+            - 0 for frames that are **masked**.
+        padding_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding samples of `input_values`. Mask values selected in `[0, 1]`:
+
+            - 1 for samples that are **not masked**,
+            - 0 for samples that are **masked**.
+        return_loss (`bool`, *optional*):
+            Whether or not to return the loss.
+        """
         if sum([input_ids is not None, pixel_values_videos is not None, input_values is not None]) < 2:
             raise ValueError(
                 "At least two of input_ids, pixel_values_videos, or input_values must be provided. "
@@ -915,7 +932,8 @@ class PeAudioVideoModel(PeAudioVideoPreTrainedModel):
                 return_dict=True,
             )
             video_plus_text_embeds = torch.cat(
-                [outputs.video_outputs.pooler_output, outputs.text_outputs.hidden_states[-1][:, 0]], dim=-1
+                [outputs.mm_encoder_outputs["video"].pooler_output, outputs.text_outputs.hidden_states[-1][:, 0]],
+                dim=-1,
             )
             video_plus_text_embeds = self.video_plus_text_head(video_plus_text_embeds)
             return PeAudioVideoOutput(video_plus_text_embeds=video_plus_text_embeds, **outputs)

@@ -923,7 +923,7 @@ class FastSpeech2ConformerLoss(nn.Module):
             duration_mask (`torch.LongTensor`):
                 Mask used to discern which values the duration loss should be calculated for.
             spectrogram_mask (`torch.LongTensor`):
-                Mask used to discern which values the spectrogam loss should be calculated for.
+                Mask used to discern which values the spectrogram loss should be calculated for.
 
         Returns:
             `tuple(torch.FloatTensor)`: Tuple of tensors containing, in order, the L1 loss value, duration predictor

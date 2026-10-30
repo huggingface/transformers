@@ -53,7 +53,6 @@ from .configuration_sam3_lite_text import (
 if is_torchvision_available():
     import torchvision
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -342,7 +341,7 @@ class Sam3LiteTextTextEmbeddings(nn.Module):
 
 @auto_docstring
 class Sam3LiteTextPreTrainedModel(PreTrainedModel):
-    config_class = Sam3LiteTextConfig
+    config: Sam3LiteTextConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ["image", "text"]
@@ -370,7 +369,7 @@ class Sam3LiteTextPreTrainedModel(PreTrainedModel):
 """
 )
 class Sam3LiteTextTextModel(Sam3LiteTextPreTrainedModel):
-    config_class = Sam3LiteTextTextConfig
+    config: Sam3LiteTextTextConfig
     config: Sam3LiteTextTextConfig
     _can_record_outputs = {
         "hidden_states": Sam3LiteTextTextEncoderLayer,
@@ -1974,7 +1973,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
         ```python
         >>> from transformers import Sam3LiteTextModel, Sam3LiteTextProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> model = Sam3LiteTextModel.from_pretrained("facebook/sam3_lite_text")
@@ -2012,7 +2011,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
         ```python
         >>> from transformers import Sam3LiteTextModel, Sam3LiteTextProcessor
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> model = Sam3LiteTextModel.from_pretrained("facebook/sam3_lite_text")
@@ -2062,7 +2061,7 @@ class Sam3LiteTextModel(Sam3LiteTextPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 

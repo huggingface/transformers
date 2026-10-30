@@ -43,7 +43,7 @@ class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
     min_size (`int`, *optional*, defaults to 14):
         The minimum allowed size for the resized image. Ensures that neither the height nor width
         falls below this value after resizing.
-     high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
+    high_res_size (`dict`, *optional*, defaults to `{"height": 1024, "width": 1024}`):
         Size of the high resolution output image after resizing. Can be overridden by the `high_res_size` parameter in the `preprocess`
         method.
     high_res_resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
@@ -83,17 +83,17 @@ class DeepseekVLHybridImageProcessorPil(PilBackend):
     model_input_names = ["pixel_values", "high_res_pixel_values"]
 
     def __init__(self, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]):
-        if kwargs.get("image_mean") is None:
-            background_color = (127, 127, 127)
-        else:
-            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
-        if kwargs.get("high_res_image_mean") is None:
-            high_res_background_color = (127, 127, 127)
-        else:
-            high_res_background_color = tuple(int(x * 255) for x in kwargs.get("high_res_image_mean"))
         super().__init__(**kwargs)
-        self.background_color = tuple(background_color)
-        self.high_res_background_color = tuple(high_res_background_color)
+        image_mean = getattr(self, "image_mean", None)
+        if image_mean is None:
+            self.background_color = (127, 127, 127)
+        else:
+            self.background_color = tuple(int(x * 255) for x in image_mean)
+        high_res_image_mean = getattr(self, "high_res_image_mean", None)
+        if high_res_image_mean is None:
+            self.high_res_background_color = (127, 127, 127)
+        else:
+            self.high_res_background_color = tuple(int(x * 255) for x in high_res_image_mean)
 
     @auto_docstring
     def preprocess(self, images: ImageInput, **kwargs: Unpack[DeepseekVLHybridImageProcessorKwargs]) -> BatchFeature:

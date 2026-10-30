@@ -182,10 +182,10 @@ class MLukeTokenizer(TokenizersBackend):
             The maximum length of `entity_ids`.
         max_mention_length (`int`, *optional*, defaults to 30):
             The maximum number of tokens inside an entity span.
-        entity_token_1 (`str`, *optional*, defaults to `<ent>`):
+        entity_1_token (`str`, *optional*, defaults to `<ent>`):
             The special token used to represent an entity span in a word token sequence. This token is only used when
             `task` is set to `"entity_classification"` or `"entity_pair_classification"`.
-        entity_token_2 (`str`, *optional*, defaults to `<ent2>`):
+        entity_2_token (`str`, *optional*, defaults to `<ent2>`):
             The special token used to represent an entity span in a word token sequence. This token is only used when
             `task` is set to `"entity_pair_classification"`.
         additional_special_tokens (`list[str]`, *optional*, defaults to `["<s>NOTUSED", "</s>NOTUSED"]`):
@@ -226,8 +226,8 @@ class MLukeTokenizer(TokenizersBackend):
         task=None,
         max_entity_length=32,
         max_mention_length=30,
-        entity_token_1="<ent>",
-        entity_token_2="<ent2>",
+        entity_1_token="<ent>",
+        entity_2_token="<ent2>",
         entity_unk_token="[UNK]",
         entity_pad_token="[PAD]",
         entity_mask_token="[MASK]",
@@ -236,19 +236,23 @@ class MLukeTokenizer(TokenizersBackend):
         entity_vocab: str | dict | list | None = None,
         **kwargs,
     ) -> None:
+        entity_1_token = kwargs.pop("entity_token_1", entity_1_token)
+        entity_2_token = kwargs.pop("entity_token_2", entity_2_token)
+
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
 
-        # we add 2 special tokens for downstream tasks
-        entity_token_1 = (
-            AddedToken(entity_token_1, lstrip=False, rstrip=False)
-            if isinstance(entity_token_1, str)
-            else entity_token_1
+        # we add 2 special tokens for downstream tasks.
+        # v5: add SPIECE_UNDERLINE prefix to add a leading space in decoded output
+        entity_1_token = (
+            AddedToken(SPIECE_UNDERLINE + entity_1_token, lstrip=False, rstrip=False)
+            if isinstance(entity_1_token, str)
+            else entity_1_token
         )
-        entity_token_2 = (
-            AddedToken(entity_token_2, lstrip=False, rstrip=False)
-            if isinstance(entity_token_2, str)
-            else entity_token_2
+        entity_2_token = (
+            AddedToken(SPIECE_UNDERLINE + entity_2_token, lstrip=False, rstrip=False)
+            if isinstance(entity_2_token, str)
+            else entity_2_token
         )
 
         # Handle entity vocab file for backward compatibility
@@ -352,7 +356,7 @@ class MLukeTokenizer(TokenizersBackend):
 
         # Ensure MLuke entity tokens are present exactly once.
         seen = {str(token) for token in extra_tokens}
-        for token in (entity_token_1, entity_token_2):
+        for token in (entity_1_token, entity_2_token):
             token_str = str(token)
             if token_str not in seen:
                 extra_tokens.append(token)
@@ -366,6 +370,8 @@ class MLukeTokenizer(TokenizersBackend):
 
         kwargs["extra_special_tokens"] = extra_tokens
 
+        kwargs.setdefault("clean_up_tokenization_spaces_for_bpe_even_though_it_will_corrupt_output", True)
+
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -377,8 +383,8 @@ class MLukeTokenizer(TokenizersBackend):
             task=task,
             max_entity_length=max_entity_length,
             max_mention_length=max_mention_length,
-            entity_token_1=str(entity_token_1),
-            entity_token_2=str(entity_token_2),
+            entity_1_token=str(entity_1_token),
+            entity_2_token=str(entity_2_token),
             entity_unk_token=entity_unk_token,
             entity_pad_token=entity_pad_token,
             entity_mask_token=entity_mask_token,
@@ -471,7 +477,7 @@ class MLukeTokenizer(TokenizersBackend):
         entities_pair: EntityInput | list[EntityInput] | None = None,
         add_special_tokens: bool = True,
         padding: bool | str | PaddingStrategy = False,
-        truncation: bool | str | TruncationStrategy = None,
+        truncation: bool | str | TruncationStrategy | None = None,
         max_length: int | None = None,
         max_entity_length: int | None = None,
         stride: int = 0,
@@ -1012,12 +1018,8 @@ class MLukeTokenizer(TokenizersBackend):
 
             # add special tokens to input ids
             entity_token_start, entity_token_end = first_entity_token_spans[0]
-            first_ids = (
-                first_ids[:entity_token_end] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_end:]
-            )
-            first_ids = (
-                first_ids[:entity_token_start] + [self.extra_special_tokens_ids[0]] + first_ids[entity_token_start:]
-            )
+            first_ids = first_ids[:entity_token_end] + [self.entity_1_token_id] + first_ids[entity_token_end:]
+            first_ids = first_ids[:entity_token_start] + [self.entity_1_token_id] + first_ids[entity_token_start:]
             first_entity_token_spans = [(entity_token_start, entity_token_end + 2)]
 
         elif self.task == "entity_pair_classification":
@@ -1038,8 +1040,8 @@ class MLukeTokenizer(TokenizersBackend):
 
             head_token_span, tail_token_span = first_entity_token_spans
             token_span_with_special_token_ids = [
-                (head_token_span, self.extra_special_tokens_ids[0]),
-                (tail_token_span, self.extra_special_tokens_ids[1]),
+                (head_token_span, self.entity_1_token_id),
+                (tail_token_span, self.entity_2_token_id),
             ]
             if head_token_span[0] < tail_token_span[0]:
                 first_entity_token_spans[0] = (head_token_span[0], head_token_span[1] + 2)
@@ -1171,7 +1173,7 @@ class MLukeTokenizer(TokenizersBackend):
         pair_entity_token_spans: list[tuple[int, int]] | None = None,
         add_special_tokens: bool = True,
         padding: bool | str | PaddingStrategy = False,
-        truncation: bool | str | TruncationStrategy = None,
+        truncation: bool | str | TruncationStrategy | None = None,
         max_length: int | None = None,
         max_entity_length: int | None = None,
         stride: int = 0,

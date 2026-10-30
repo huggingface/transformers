@@ -23,6 +23,7 @@ from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
+from ...utils.output_capturing import OutputRecorder
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Adapter,
     Wav2Vec2Encoder,
@@ -143,6 +144,10 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+    _can_record_outputs = {
+        "hidden_states": Data2VecAudioEncoderLayer,  # noqa: F821
+        "attentions": OutputRecorder(Data2VecAudioAttention, index=1, layer_name="encoder"),  # noqa: F821
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -160,6 +165,10 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, Data2VecAudioModel) and hasattr(module, "masked_spec_embed"):
+            init.uniform_(module.masked_spec_embed)
+        elif isinstance(module, AMSoftmaxLoss):  # noqa: F821
+            init.normal_(module.weight)
 
     def _get_adapters(self):
         raise AttributeError("Not needed for Data2VecAudio")

@@ -436,6 +436,31 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_tie_word_embeddings(self):
+        # Forced to True, see https://github.com/huggingface/transformers/pull/47620
+        config = self.model_tester.get_config()
+        self.assertTrue(config.tie_word_embeddings)
+        self.assertTrue(config.scale_decoder_outputs)
+
+        config = LongT5Config(
+            vocab_size=99, d_model=16, d_ff=32, d_kv=8, num_layers=2, num_heads=2, tie_word_embeddings=False
+        )
+        self.assertTrue(config.tie_word_embeddings)
+        self.assertFalse(config.scale_decoder_outputs)
+
+        model = LongT5ForConditionalGeneration(config)
+        self.assertEqual(
+            len(
+                {
+                    model.shared.weight.data_ptr(),
+                    model.encoder.embed_tokens.weight.data_ptr(),
+                    model.decoder.embed_tokens.weight.data_ptr(),
+                    model.lm_head.weight.data_ptr(),
+                }
+            ),
+            1,
+        )
+
     def test_shift_right(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_prepare_lm_labels_via_shift_left(*config_and_inputs)

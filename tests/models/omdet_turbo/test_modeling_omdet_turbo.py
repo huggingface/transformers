@@ -32,6 +32,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
@@ -223,12 +224,6 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_object_detection_head_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_object_detection_head_model(config, inputs_dict)
-
-    @unittest.skip(
-        reason="Unsupported as classes_input_ids are classes input are flattened by the processor: https://github.com/huggingface/transformers/issues/33669"
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
     @unittest.skip(reason="OmDet-Turbo does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -603,8 +598,8 @@ class OmDetTurboModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    image = load_test_image(url).convert("RGB")
     return image
 
 
@@ -615,9 +610,9 @@ def prepare_text():
 
 
 def prepare_img_batched():
-    url1 = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    url2 = "http://images.cocodataset.org/train2017/000000257813.jpg"
-    url3 = "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+    url1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/val2017/000000039769.jpg"
+    url2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures-coco/resolve/main/train2017/000000257813.jpg"
+    url3 = "https://huggingface.co/datasets/hf-internal-testing/transformers-synthetic-assets/resolve/main/images/statue_of_liberty.jpg"
 
     return [Image.open(BytesIO(requests.get(url).content)).convert("RGB") for url in [url1, url2, url3]]
 
@@ -787,11 +782,11 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         self.assertEqual(outputs.decoder_class_logits.shape, expected_shape_class_logits)
 
         expected_class_logits = torch.tensor(
-            [[[0.9427, -2.5958, -7.7601]], [[-2.3408, -9.3516, -9.3516]], [[1.0740, -2.3315, -1.1885]]]
+            [[[0.9427, -2.5958, -7.7601]], [[-2.3408, -9.3516, -9.3516]], [[1.292, -2.2389, -1.371]]]
         ).to(torch_device)
 
         expected_coord_logits = torch.tensor(
-            [[[0.2550, 0.5501, 0.4738]], [[0.2535, 0.6006, 0.0353]], [[0.3742, 0.3337, 0.0666]]]
+            [[[0.255, 0.5501, 0.4738]], [[0.2535, 0.6006, 0.0353]], [[0.4041, 0.2596, 0.1161]]]
         ).to(torch_device)
 
         torch.testing.assert_close(
@@ -808,16 +803,16 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
             target_sizes=[image.size[::-1] for image in images_batched],
             threshold=0.2,
         )
-        expected_scores = torch.tensor([0.7675, 0.3016, 0.7454]).to(torch_device)
+        expected_scores = torch.tensor([0.7675, 0.3016, 0.7845]).to(torch_device)
         expected_slice_boxes = torch.tensor(
             [
                 [39.8870, 70.3522, 176.7424, 118.0354],
                 [146.5446, 219.7132, 209.6983, 251.0456],
-                [545.3470, 209.9055, 651.9860, 502.1882],
+                [531.5081, 27.5789, 709.8206, 504.0435],
             ]
         ).to(torch_device)
 
-        self.assertListEqual([len(result["scores"]) for result in results], [4, 4, 6])
+        self.assertListEqual([len(result["scores"]) for result in results], [4, 4, 7])
         torch.testing.assert_close(
             torch.stack([result["scores"][0] for result in results]), expected_scores, rtol=1e-2, atol=1e-2
         )
@@ -828,7 +823,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         expected_text_labels = [
             ["remote", "cat", "remote", "cat"],
             ["boat", "boat", "boat", "boat"],
-            ["statue", "trees", "trees", "torch", "statue", "statue"],
+            ["statue", "trees", "statue", "statue", "trees", "trees", "torch"],
         ]
         self.assertListEqual([result["text_labels"] for result in results], expected_text_labels)
 

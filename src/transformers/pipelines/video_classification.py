@@ -14,7 +14,7 @@
 from io import BytesIO
 from typing import Any, overload
 
-import httpx
+from huggingface_hub.utils import httpx
 
 from ..utils import (
     add_end_docstrings,

@@ -20,7 +20,6 @@ import unittest
 
 import numpy as np
 import pytest
-import requests
 from parameterized import parameterized
 
 from transformers import AutoModelForImageTextToText, AutoProcessor, Kosmos2Config
@@ -40,6 +39,7 @@ from transformers.utils import (
 
 from ...generation.test_utils import GenerationTesterMixin, assert_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
+from ...test_image_processing_common import load_test_image
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
@@ -208,6 +208,8 @@ class Kosmos2ModelTester:
         self.text_model_tester = Kosmos2TextModelTester(parent, **text_kwargs)
         self.vision_model_tester = Kosmos2VisionModelTester(parent, **vision_kwargs)
         self.batch_size = self.text_model_tester.batch_size  # need bs for batching_equivalence test
+        self.num_hidden_layers = self.text_model_tester.num_hidden_layers
+        self.hidden_size = self.text_model_tester.hidden_size
         self.seq_length = self.text_model_tester.seq_length
         self.latent_query_num = latent_query_num
         self.is_training = is_training
@@ -309,6 +311,23 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         )
         global_rng.seed(0)
 
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        # override - old testers that is composed of separate classes for vision/text
+        try:
+            original_batch_size = self.model_tester.batch_size
+            self.model_tester.text_model_tester.batch_size = batch_size
+            self.model_tester.vision_model_tester.batch_size = batch_size
+            config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        finally:
+            self.model_tester.text_model_tester.batch_size = original_batch_size
+            self.model_tester.vision_model_tester.batch_size = original_batch_size
+        return config, inputs_dict
+
+    def test_inputs_embeds_matches_input_ids(self):
+        position_ids = torch.arange(self.model_tester.seq_length).to(torch_device)
+        position_ids = position_ids[None, :].repeat(self.model_tester.batch_size, 1)
+        return super().test_inputs_embeds_matches_input_ids(position_ids=position_ids)
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -346,44 +365,6 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     )
                 # Checking there was no complain of missing weights
                 self.assertEqual(infos["missing_keys"], set())
-
-    # overwrite from common in order to use `self.model_tester.text_model_tester.num_hidden_layers`
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester,
-                "expected_num_hidden_layers",
-                self.model_tester.text_model_tester.num_hidden_layers + 1,
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            seq_length = self.model_tester.text_model_tester.seq_length
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.text_model_tester.hidden_size],
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            self._set_subconfig_attributes(config, "output_hidden_states", True)
-
-            check_hidden_states_output(inputs_dict, config, model_class)
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("KOSMOS-2 doesn't support padding")
@@ -495,7 +476,7 @@ class Kosmos2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "https://huggingface.co/hf-internal-testing/Kosmos2-test-image/resolve/main/demo.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+    im = load_test_image(url)
     return im
 
 
@@ -529,9 +510,9 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         return scores, generated_ids, generated_text, processed_text, final_text_with_entities
 
     def test_snowman_image_captioning(self):
-        url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.png"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/snowman.png"
 
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
         image.save("new_image.jpg")
         image = Image.open("new_image.jpg")
 
@@ -675,9 +656,9 @@ class Kosmos2ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(entities, EXPECTED_ENTITIES_LONG)
 
     def test_snowman_image_captioning_batch(self):
-        url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.png"
+        url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_image_utils/resolve/main/snowman.png"
 
-        image = Image.open(requests.get(url, stream=True).raw)
+        image = load_test_image(url)
         image.save("new_image.jpg")
         image = Image.open("new_image.jpg")
 

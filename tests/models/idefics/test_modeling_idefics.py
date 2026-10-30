@@ -349,6 +349,11 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMi
     ):
         pass
 
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        pass
+
     def test_model_outputs_equivalence(self):
         try:
             orig = self.all_model_classes

@@ -17,7 +17,7 @@ import re
 
 import numpy as np
 
-from ...audio_utils import AudioInput, make_list_of_audio_chat_template
+from ...audio_utils import AudioInput, make_audio_chat_template_content, make_list_of_audio_chat_template
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
@@ -71,8 +71,6 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
     """
 
     valid_processor_kwargs = VibeVoiceAsrProcessorKwargs
-    feature_extractor_class = "VibeVoiceAcousticTokenizerFeatureExtractor"
-    tokenizer_class = "Qwen2TokenizerFast"
 
     def __init__(
         self,
@@ -210,11 +208,7 @@ class VibeVoiceAsrProcessor(ProcessorMixin):
 
         conversations = []
         for prompt_text, audio_item in zip(prompts, audio_items):
-            content = []
-            if isinstance(audio_item, str):
-                content.append({"type": "audio", "path": audio_item})
-            else:
-                content.append({"type": "audio", "audio": audio_item})
+            content = [make_audio_chat_template_content(audio_item)]
 
             if prompt_text is not None:
                 content.append({"type": "text", "text": prompt_text})

@@ -40,8 +40,10 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...models.bamba.test_modeling_bamba import BambaModelTester
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_modeling_common import ModelTesterMixin
 from ...test_pipeline_mixin import PipelineTesterMixin
+from ...test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
 if is_torch_available():
@@ -83,7 +85,14 @@ class GraniteMoeHybridModelTester(BambaModelTester):
 
 
 @require_torch
-class GraniteMoeHybridModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GraniteMoeHybridModelTest(
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    TensorParallelTesterMixin,
+    ExpertParallelTesterMixin,
+    unittest.TestCase,
+):
     model_tester_class = GraniteMoeHybridModelTester
     all_model_classes = (
         (
@@ -370,9 +379,9 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
             out = model(torch.tensor([input_ids]).to(device))
 
         # fmt: off
-        # Expected mean on dim = -1
+        # Expected mean on dim = -1, recorded with the einsum-based CPU chunk scan.
         EXPECTED_MEAN = torch.tensor([
-            [-0.3543, -1.0066, -0.5338, -0.8816, -0.7438,  0.0500, -1.3644, -0.0742, -1.7746, -1.6326, -1.4802, -0.4961]
+            [-0.3543, -1.0456, -0.5024, -0.8578, -0.6664,  0.0618, -1.3840, -0.1416, -1.7800, -1.6412, -1.5263, -0.4934]
         ], device=device)
 
         torch.testing.assert_close(EXPECTED_MEAN, out.logits.float().mean(-1), rtol=1e-2, atol=1e-2)
@@ -395,7 +404,7 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
     @slow
     @parameterized.expand([("cpu",)])
     def test_model_generation(self, device):
-        EXPECTED_TEXT_COMPLETION = "Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers in uniform motion relative"
+        EXPECTED_TEXT_COMPLETION = "Simply put, the theory of relativity states that 1) the laws of physics are the same in all inertial reference frames,"
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.0-h-tiny")
         model = GraniteMoeHybridForCausalLM.from_pretrained("ibm-granite/granite-4.0-h-tiny", device_map=device)

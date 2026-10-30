@@ -74,6 +74,16 @@ For a page nested inside a subsection, add it to the inner `sections` list:
   title: Contribute
 ```
 
+## Keeping code snippets device agnostic
+
+Readers run our snippets on NVIDIA GPUs, AMD ROCm, Intel XPU, Apple MPS, Ascend NPU and CPU, so avoid hard-coding `"cuda"`.
+
+- Use `device_map="auto"` only when automatic dispatch is intended. Keep explicit `cuda` in CUDA-specific examples.
+- Move inputs with `inputs.to(model.device)` instead of `.to("cuda")` or `.cuda()`.
+- Use `torch.accelerator.synchronize()` for synchronization and and `torch.Event(enable_timing=True)` for timing. Memory helpers live under `torch.accelerator.memory`, for example `torch.accelerator.memory.empty_cache()` and `torch.accelerator.memory.max_memory_allocated()`.
+- If you really need a device string, use `device = torch.accelerator.current_accelerator().type if torch.accelerator.is_available() else "cpu"`.
+- Keep `cuda` only where it is genuinely CUDA-specific: toolchain instructions (`nvcc`, `nvidia-smi`), NVIDIA-only backends, PyTorch API names such as `use_cuda_graph`, and sample outputs copied from a real run.
+
 ## doc-builder syntax
 
 doc-builder accepts standard Markdown plus a few extensions you'll see across our docs. For the full set of supported syntax (inference snippets, file-include blocks, redirects, multilingual builds, etc.), see the [doc-builder README](https://github.com/huggingface/doc-builder#writing-documentation-for-hugging-face-libraries).

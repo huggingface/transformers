@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import copy
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -712,11 +713,13 @@ def build_2d_sinusoidal_position_embedding(
         raise ValueError(f"`embed_dim` must be divisible by 4, got {embed_dim}")
 
     pos_dim = embed_dim // 4
-    omega = torch.arange(pos_dim, dtype=torch.float64, device=device) / pos_dim
+    # mps doesn't support float64
+    compute_dtype = torch.float64 if device is None or device.type != "mps" else torch.float32
+    omega = torch.arange(pos_dim, dtype=compute_dtype, device=device) / pos_dim
     omega = 1.0 / temperature**omega  # (D/4,)
 
-    grid_h = torch.arange(height, dtype=torch.float64, device=device)
-    grid_w = torch.arange(width, dtype=torch.float64, device=device)
+    grid_h = torch.arange(height, dtype=compute_dtype, device=device)
+    grid_w = torch.arange(width, dtype=compute_dtype, device=device)
     grid_h, grid_w = torch.meshgrid(grid_h, grid_w, indexing="ij")  # (H, W) each
 
     emb_h = grid_h.flatten().outer(omega)  # (H*W, D/4)
@@ -725,7 +728,7 @@ def build_2d_sinusoidal_position_embedding(
     pos_embed = torch.cat([emb_h.sin(), emb_h.cos(), emb_w.sin(), emb_w.cos()], dim=1)
 
     if cls_token:
-        pos_embed = torch.cat([torch.zeros(1, embed_dim, dtype=torch.float64, device=device), pos_embed], dim=0)
+        pos_embed = torch.cat([torch.zeros(1, embed_dim, dtype=compute_dtype, device=device), pos_embed], dim=0)
 
     return pos_embed.to(dtype)
 
@@ -982,7 +985,7 @@ class Deimv2DecoderLayer(nn.Module):
 @auto_docstring
 class Deimv2PreTrainedModel(PreTrainedModel):
     config: Deimv2Config
-    base_model_prefix = "deimv2"
+    base_model_prefix = "model"
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"Deimv2HybridEncoder", r"Deimv2LiteEncoder", r"Deimv2DecoderLayer"]
@@ -996,19 +999,18 @@ class Deimv2PreTrainedModel(PreTrainedModel):
         """Initialize the weights"""
         super()._init_weights(module)
         # initialize linear layer bias value according to a given probability value.
-        if isinstance(module, (Deimv2ForObjectDetection, Deimv2Decoder)):
-            if module.class_embed is not None:
-                for layer in module.class_embed:
-                    prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
-                    bias = float(-math.log((1 - prior_prob) / prior_prob))
-                    init.xavier_uniform_(layer.weight)
-                    init.constant_(layer.bias, bias)
+        if isinstance(module, Deimv2ForObjectDetection):
+            for layer in module.model.decoder.class_embed:
+                prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+                bias = float(-math.log((1 - prior_prob) / prior_prob))
+                init.xavier_uniform_(layer.weight)
+                init.constant_(layer.bias, bias)
 
-            if module.bbox_embed is not None:
-                for layer in module.bbox_embed:
-                    init.constant_(layer.layers[-1].weight, 0)
-                    init.constant_(layer.layers[-1].bias, 0)
+            for layer in module.model.decoder.bbox_embed:
+                init.constant_(layer.layers[-1].weight, 0)
+                init.constant_(layer.layers[-1].bias, 0)
 
+        if isinstance(module, Deimv2Decoder):
             if hasattr(module, "reg_scale"):
                 init.constant_(module.reg_scale, self.config.reg_scale)
 
@@ -1810,7 +1812,7 @@ class Deimv2Model(Deimv2PreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Deimv2Model
         >>> from PIL import Image
-        >>> import httpx
+        >>> from huggingface_hub.utils import httpx
         >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -2095,8 +2097,8 @@ class Deimv2ForObjectDetection(Deimv2PreTrainedModel):
                 ]
             )
 
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
+        self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
+        self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
         self.post_init()
 
     def _set_aux_loss(self, outputs_class, outputs_coord):

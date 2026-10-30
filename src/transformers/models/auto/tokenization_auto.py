@@ -25,16 +25,14 @@ from transformers.utils.import_utils import is_mistral_common_available
 
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...utils import (
-    extract_commit_hash,
     is_g2p_en_available,
     is_sentencepiece_available,
     is_tokenizers_available,
     logging,
 )
-from ...utils.hub import cached_file, has_file
+from ...utils.hub import cached_file, resolve_revision
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -75,6 +73,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("bart", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("barthez", "BarthezTokenizer" if is_tokenizers_available() else None),
         ("bartpho", "BartphoTokenizer"),
+        ("beam", "TokenizersBackend" if is_tokenizers_available() else None),
         ("bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("bert-generation", "BertGenerationTokenizer" if is_sentencepiece_available() else None),
         ("bert-japanese", "BertJapaneseTokenizer"),
@@ -90,6 +89,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("bros", "BertTokenizer" if is_tokenizers_available() else None),
         ("byt5", "ByT5Tokenizer"),
         ("camembert", "CamembertTokenizer" if is_tokenizers_available() else None),
+        ("canary", "TokenizersBackend" if is_tokenizers_available() else None),
         ("canine", "CanineTokenizer"),
         ("chinese_clip", "BertTokenizer" if is_tokenizers_available() else None),
         ("clap", "RobertaTokenizer"),
@@ -119,6 +119,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("emu3", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("ernie", "BertTokenizer" if is_tokenizers_available() else None),
         ("esm", "EsmTokenizer"),
+        ("esmc", "EsmcTokenizer" if is_tokenizers_available() else None),
+        ("esmfold2", "EsmcTokenizer" if is_tokenizers_available() else None),
         ("falcon_mamba", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("fastspeech2_conformer", "FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None),
         ("flaubert", "FlaubertTokenizer"),
@@ -127,6 +129,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("florence2", "BartTokenizer" if is_tokenizers_available() else None),
         ("fnet", "FNetTokenizer" if is_tokenizers_available() else None),
         ("fsmt", "FSMTTokenizer"),
+        ("fun_asr_nano", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("funnel", "FunnelTokenizer" if is_tokenizers_available() else None),
         ("gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("gemma2", "GemmaTokenizer" if is_tokenizers_available() else None),
@@ -151,15 +154,19 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("gpt_neox", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("gpt_neox_japanese", "GPTNeoXJapaneseTokenizer"),
         ("gptj", "GPT2Tokenizer" if is_tokenizers_available() else None),
+        ("gradium_phonon_tts", "TokenizersBackend" if is_tokenizers_available() else None),
         ("granite", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("granite_speech5_ctc", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("granitemoe", "TokenizersBackend" if is_tokenizers_available() else None),
         ("granitemoehybrid", "TokenizersBackend" if is_tokenizers_available() else None),
         ("granitemoeshared", "TokenizersBackend" if is_tokenizers_available() else None),
         ("grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
         ("groupvit", "CLIPTokenizer" if is_tokenizers_available() else None),
+        ("gte", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("herbert", "HerbertTokenizer" if is_tokenizers_available() else None),
         ("hubert", "Wav2Vec2CTCTokenizer"),
         ("hunyuan_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("hyperclovax_vision_v2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("ibert", "RobertaTokenizer"),
         ("idefics", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("idefics2", "LlamaTokenizer" if is_tokenizers_available() else None),
@@ -169,6 +176,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("jais2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("jina_embeddings_v3", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("kimi_k25", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("kimi_linear", "TokenizersBackend" if is_tokenizers_available() else None),
         ("kosmos-2", "TokenizersBackend" if is_tokenizers_available() else None),
         ("lasr_ctc", "LasrTokenizer" if is_tokenizers_available() else None),
         ("lasr_encoder", "LasrTokenizer" if is_tokenizers_available() else None),
@@ -194,7 +202,9 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("metaclip_2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("mgp-str", "MgpstrTokenizer"),
         ("mimo_v2_flash", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("minicpm_ocr", "TokenizersBackend" if is_tokenizers_available() else None),
         ("minicpmv4_6", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("minicpmv4_7", "TokenizersBackend" if is_tokenizers_available() else None),
         (
             "ministral",
             "MistralCommonBackend"
@@ -220,6 +230,12 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         (
+            "mistral_large4",
+            "MistralCommonBackend"
+            if is_mistral_common_available()
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
+        ),  # TODO: needed?
+        (
             "mixtral",
             "MistralCommonBackend"
             if is_mistral_common_available()
@@ -228,6 +244,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("mluke", "MLukeTokenizer" if is_sentencepiece_available() else None),
         ("mm-grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
         ("mobilebert", "MobileBertTokenizer" if is_tokenizers_available() else None),
+        ("moss_transcribe_diarize", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("mpnet", "MPNetTokenizer" if is_tokenizers_available() else None),
         ("mpt", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("mra", "RobertaTokenizer"),
@@ -236,6 +253,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("musicgen_melody", "T5Tokenizer" if is_tokenizers_available() else None),
         ("mvp", "MvpTokenizer" if is_tokenizers_available() else None),
         ("myt5", "MyT5Tokenizer"),
+        ("nemo_speechlm", "TokenizersBackend" if is_tokenizers_available() else None),
         ("nemotron3_5_asr", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("nemotron_asr_streaming", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("nezha", "BertTokenizer" if is_tokenizers_available() else None),
@@ -273,6 +291,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
             else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         ("plbart", "PLBartTokenizer" if is_tokenizers_available() else None),
+        ("pocket_tts", "TokenizersBackend" if is_tokenizers_available() else None),
         ("pp_formulanet", "NougatTokenizer" if is_tokenizers_available() else None),
         ("prophetnet", "ProphetNetTokenizer"),
         ("qdqbert", "BertTokenizer" if is_tokenizers_available() else None),
@@ -286,12 +305,15 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("qwen3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_5", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_5_moe", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_5_moe_text", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_5_text", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_asr", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_next", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_omni_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("qwen3_vl_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen4_exp", "Qwen3_5Tokenizer" if is_tokenizers_available() else None),
         ("rag", "RagTokenizer"),
         ("realm", "BertTokenizer" if is_tokenizers_available() else None),
         ("recurrent_gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
@@ -327,6 +349,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("umt5", "TokenizersBackend" if is_tokenizers_available() else None),
         ("unispeech", "Wav2Vec2CTCTokenizer"),
         ("unispeech-sat", "Wav2Vec2CTCTokenizer"),
+        ("vibevoice", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("videoprism", "VideoPrismTokenizer" if is_tokenizers_available() else None),
         ("vilt", "BertTokenizer" if is_tokenizers_available() else None),
         ("visual_bert", "BertTokenizer" if is_tokenizers_available() else None),
@@ -366,32 +389,23 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
 # These models will be forced to use TokenizersBackend.
 MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "arctic",
-    "chameleon",
     "chatlm",
-    "deepseek_v2",
-    "deepseek_v3",
-    "deepseek_v32",
-    "deepseek_v4",
-    "deepseek_vl",
-    "deepseek_vl_hybrid",
-    "deepseek_vl_v2",
-    "deepseek_ocr",
-    "deepseek_ocr2",
     "ernie4_5",
     "ernie4_5_moe",
     "fuyu",
     "h2ovl_chat",
     "hyperclovax",
     "hyperclovax_vlm",
+    "hyperclovax_vision_v2",
     "internlm2",
     "jamba",
-    "janus",
     "llava",
     "llava_next",
     "minicpm3",
     "minicpmv",
     "minimax_m2",
     "modernbert",
+    "modernbert-decoder",
     "molmo",
     "molmo2",
     "nemotron",
@@ -403,13 +417,16 @@ MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS: set[str] = {
     "phi3_v",
     "phimoe",
     "qwen2",
-    "step3p5",
+    "qwen3_5",
+    "qwen3_5_moe",
+    "qwen3_5_moe_text",
+    "qwen4_exp",
     "step3_vl",
     "vipllava",
     "cohere_asr",
     "camembertv2-base",
+    "siglip2",
     "smolvlm",
-    "vision-encoder-decoder",
 }
 
 for model_type in MODELS_WITH_INCORRECT_HUB_TOKENIZER_CLASS:
@@ -421,13 +438,15 @@ TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAM
 CONFIG_TO_TYPE = {v: k for k, v in CONFIG_MAPPING_NAMES.items()}
 
 MODEL_IDS_TO_TOKENIZERS_BACKEND = [
-    "deepseek-ai/deepseek-r1-distill-*",
+    "deepseek-ai/deepseek-r1-distill-llama-*",
     "deepseek-ai/deepseek-coder-*",
     "allenai/dolma2-tokenizer",
     "google/umt5-small",
+    "naver-clova-ix/donut-*",
     "salesforce/blip2-opt-*",
     "salesforce/blip2-flan-t5-*",
     "salesforce/instructblip-flan-t5-*",
+    "stepfun-ai/step-3.7-*",
 ]
 
 
@@ -448,23 +467,38 @@ def load_merges(merges_file):
     return merges
 
 
-def _has_tekken_tokenizer_file(
+def _use_mistral_format(
     pretrained_model_name_or_path: str | os.PathLike[str],
+    mistral_format: bool | None = None,
     **kwargs,
 ) -> bool:
-    subfolder = kwargs.get("subfolder", "")
-    tekken_filename = os.path.join(subfolder, "tekken.json") if subfolder else "tekken.json"
-    try:
-        return has_file(
-            pretrained_model_name_or_path,
-            tekken_filename,
-            revision=kwargs.get("revision"),
-            token=kwargs.get("token"),
-            cache_dir=kwargs.get("cache_dir"),
-            local_files_only=kwargs.get("local_files_only", False),
-        )
-    except OSError:
+    """Probe whether to use the MistralCommonBackend for *pretrained_model_name_or_path*.
+
+    Args:
+        pretrained_model_name_or_path: Model identifier or local path.
+        mistral_format: Tri-state flag forwarded to ``resolve_mistral_format``.
+            - ``None``: auto-detect — returns ``True`` only when mistral-common is
+              installed *and* ``tekken.json`` can be found.
+            - ``True``: force mode — raises ``ImportError`` if mistral-common is not
+              installed or ``OSError`` if ``tekken.json`` is absent.
+            - ``False``: short-circuits immediately and returns ``False`` without
+              any network/file probe.
+        **kwargs: Forwarded verbatim; only hub-probe keys
+            (``subfolder``, ``revision``, ``token``, ``cache_dir``,
+            ``local_files_only``) are passed through to ``resolve_mistral_format``.
+
+    Returns:
+        ``True`` if the MistralCommonBackend should be used.
+    """
+    from ...integrations.mistral.tokenizer import resolve_mistral_format
+
+    if mistral_format is False:
         return False
+
+    probe_kwargs = {
+        k: kwargs[k] for k in ("subfolder", "revision", "token", "cache_dir", "local_files_only") if k in kwargs
+    }
+    return resolve_mistral_format(pretrained_model_name_or_path, mistral_format=mistral_format, **probe_kwargs)[0]
 
 
 def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
@@ -590,7 +624,14 @@ def get_tokenizer_config(
     tokenizer.save_pretrained("tokenizer-test")
     tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
-    commit_hash = kwargs.get("_commit_hash")
+    kwargs.pop("_commit_hash", None)  # BC: not used anymore, `revision` is resolved to a commit hash instead
+    revision = resolve_revision(
+        pretrained_model_name_or_path,
+        revision,
+        token=token,
+        local_files_only=local_files_only,
+        cache_dir=cache_dir,
+    )
     resolved_config_file = cached_file(
         pretrained_model_name_or_path,
         TOKENIZER_CONFIG_FILE,
@@ -604,17 +645,13 @@ def get_tokenizer_config(
         _raise_exceptions_for_gated_repo=False,
         _raise_exceptions_for_missing_entries=False,
         _raise_exceptions_for_connection_errors=False,
-        _commit_hash=commit_hash,
     )
     if resolved_config_file is None:
         logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
         return {}
-    commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
 
     with open(resolved_config_file, encoding="utf-8") as reader:
-        result = json.load(reader)
-    result["_commit_hash"] = commit_hash
-    return result
+        return json.load(reader)
 
 
 class AutoTokenizer:
@@ -677,10 +714,6 @@ class AutoTokenizer:
                 facebook/rag-token-base), specify it here.
             tokenizer_type (`str`, *optional*):
                 Tokenizer type to be loaded.
-            backend (`str`, *optional*, defaults to `"tokenizers"`):
-                Backend to use for tokenization. Valid options are:
-                - `"tokenizers"`: Use the HuggingFace tokenizers library backend (default)
-                - `"sentencepiece"`: Use the SentencePiece backend
             trust_remote_code (`bool`, *optional*, defaults to `False`):
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
@@ -706,12 +739,6 @@ class AutoTokenizer:
 
         >>> # Download vocabulary from huggingface.co and define model-specific arguments
         >>> tokenizer = AutoTokenizer.from_pretrained("FacebookAI/roberta-base", add_prefix_space=True)
-
-        >>> # Explicitly use the tokenizers backend
-        >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer", backend="tokenizers")
-
-        >>> # Explicitly use the sentencepiece backend
-        >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer", backend="sentencepiece")
         ```"""
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
@@ -720,7 +747,24 @@ class AutoTokenizer:
         _ = kwargs.pop("use_fast", None)
         tokenizer_type = kwargs.pop("tokenizer_type", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        code_revision = kwargs.pop("code_revision", None)
         gguf_file = kwargs.get("gguf_file")
+        mistral_format = kwargs.pop("mistral_format", None)
+
+        if mistral_format is True:
+            _use_mistral_format(pretrained_model_name_or_path, mistral_format=True, **kwargs)
+            tokenizer_class = tokenizer_class_from_name("MistralCommonBackend")
+            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # Resolve the revision once, so the model config, the tokenizer config and every tokenizer file below come
+        # from the same repository state.
+        kwargs["revision"] = resolve_revision(
+            pretrained_model_name_or_path,
+            kwargs.get("revision"),
+            token=kwargs.get("token"),
+            local_files_only=kwargs.get("local_files_only", False),
+            cache_dir=kwargs.get("cache_dir"),
+        )
 
         # First, let's see whether the tokenizer_type is passed so that we can leverage it
         if tokenizer_type is not None:
@@ -740,13 +784,25 @@ class AutoTokenizer:
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         if gguf_file:
+            # Same split as `PreTrainedConfig.from_pretrained`: fast reader where covered, else legacy.
+            from ...integrations.gguf import GGUF_CONFIG_ARCHS, get_gguf_config, read_gguf_metadata
+
             gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
-            config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
+            metadata, tensor_names = read_gguf_metadata(gguf_path)
+            if metadata["general.architecture"] in GGUF_CONFIG_ARCHS:
+                config_dict = get_gguf_config(metadata, tensor_names)
+            else:
+                from ...modeling_gguf_pytorch_utils import load_gguf_checkpoint
+
+                config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
             config = AutoConfig.for_model(**config_dict)
         elif config is None:
             try:
                 config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    pretrained_model_name_or_path,
+                    trust_remote_code=trust_remote_code,
+                    code_revision=code_revision,
+                    **kwargs,
                 )
             except (ValueError, OSError):
                 config = PreTrainedConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
@@ -757,6 +813,8 @@ class AutoTokenizer:
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
         tokenizer_config_class = tokenizer_config.get("tokenizer_class", None)
+
+        kwargs["_commit_hash"] = tokenizer_config.get("_commit_hash", kwargs.get("_commit_hash"))
 
         # Check for auto_map early to handle dynamic tokenizers properly
         tokenizer_auto_map = None
@@ -776,6 +834,25 @@ class AutoTokenizer:
             and TokenizersBackend is not None
             and any(fnmatch.fnmatch(_config_name_or_path, p) for p in MODEL_IDS_TO_TOKENIZERS_BACKEND)
         ):
+            return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # Hub repos that declare this but ship ByteLevel (Llama3 style) must use TokenizersBackend
+        # because LlamaTokenizer hardcodes Metaspace. Skip Mistral checkpoints (also ByteLevel) so
+        # they still go through the tekken-first MistralCommonBackend check below.
+        _hub_declared_class = tokenizer_config_class or getattr(config, "tokenizer_class", None)
+        if (
+            tokenizer_auto_map is None
+            and TokenizersBackend is not None
+            and _hub_declared_class is not None
+            and _hub_declared_class.removesuffix("Fast") == "LlamaTokenizer"
+            and (TOKENIZER_MAPPING_NAMES.get(config_model_type) or "").removesuffix("Fast") != "MistralCommonBackend"
+            and TokenizersBackend._tokenizer_json_has_byte_level(pretrained_model_name_or_path, **kwargs)
+        ):
+            logger.warning_once(
+                f"`tokenizer_class` is `{_hub_declared_class}` but `tokenizer.json` is ByteLevel; "
+                "loading `TokenizersBackend`. Set `tokenizer_class` to `TokenizersBackend` in "
+                "`tokenizer_config.json`."
+            )
             return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # if there is a config, we can check that the tokenizer class != than model class.
@@ -817,9 +894,8 @@ class AutoTokenizer:
 
             if (
                 registered_class_name == "MistralCommonBackend"
-                and is_mistral_common_available()
                 and "fix_mistral_regex" not in kwargs
-                and _has_tekken_tokenizer_file(pretrained_model_name_or_path, **kwargs)
+                and _use_mistral_format(pretrained_model_name_or_path, mistral_format=mistral_format, **kwargs)
             ):
                 tokenizer_class = tokenizer_class_from_name("MistralCommonBackend")
                 if tokenizer_class is not None:
@@ -832,9 +908,6 @@ class AutoTokenizer:
                 f"Tokenizer class '{_hub_class}' specified in the tokenizer config was not found. "
                 f"The tokenizer may need to be converted or re-saved."
             )
-
-        if "_commit_hash" in tokenizer_config:
-            kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
 
         if tokenizer_config_class and tokenizer_config_class.endswith("Fast"):
             tokenizer_config_class = tokenizer_config_class[:-4]
@@ -886,8 +959,9 @@ class AutoTokenizer:
             # BC v5: register *Fast aliases before remote code loads.
             if tokenizer_config_class:
                 tokenizer_class_from_name(tokenizer_config_class.removesuffix("Fast"))
-            tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
-            _ = kwargs.pop("code_revision", None)
+            tokenizer_class = get_class_from_dynamic_module(
+                class_ref, pretrained_model_name_or_path, code_revision=code_revision, **kwargs
+            )
             tokenizer_class.register_for_auto_class()
             return tokenizer_class.from_pretrained(
                 pretrained_model_name_or_path, *inputs, trust_remote_code=trust_remote_code, **kwargs
@@ -929,7 +1003,7 @@ class AutoTokenizer:
             if tokenizer_class is not None:
                 if getattr(tokenizer_class, "__name__", None) == "MistralCommonBackend" and (
                     "fix_mistral_regex" in kwargs
-                    or not _has_tekken_tokenizer_file(pretrained_model_name_or_path, **kwargs)
+                    or not _use_mistral_format(pretrained_model_name_or_path, mistral_format=mistral_format, **kwargs)
                 ):
                     tokenizer_class = TokenizersBackend
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)

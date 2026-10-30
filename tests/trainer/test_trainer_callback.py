@@ -1081,7 +1081,7 @@ class KubeflowCallbackTest(unittest.TestCase):
         """_get_token should cache the token for TOKEN_CACHE_DURATION."""
         import tempfile
 
-        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".token") as f:
+        with tempfile.NamedTemporaryFile(encoding="utf-8", mode="w", delete=False, suffix=".token") as f:
             f.write("test-service-account-token")
             token_path = f.name
 
