@@ -17,7 +17,7 @@ import json
 import random
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -303,6 +303,40 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
     @unittest.skip("Submodel (VibeVoiceAcousticTokenizerEncoderModel) does not have attention")
     def test_can_set_attention_dynamically_composite_model(self):
         pass
+
+    @pytest.mark.generate
+    def test_audio_streaming(self):
+        config, input_ids, attention_mask = self.model_tester.prepare_config_and_inputs()
+        model = VibeVoiceForConditionalGeneration(config).to(torch_device).eval()
+        chunks = []
+        streamer = Mock(spec=["put", "end"], put=chunks.append)
+
+        # Only audio tokens, so that every step makes a chunk of audio
+        def force_audio(input_ids, scores):
+            scores.fill_(-float("inf"))
+            scores[:, config.audio_token_id] = 0
+            return scores
+
+        kwargs = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "noise_scheduler": DummyNoiseScheduler(),
+            "max_new_tokens": 4,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+            "logits_processor": [force_audio],
+            "num_diffusion_steps": 2,
+        }
+        with torch.no_grad():
+            set_seed(42)
+            model.generate(**kwargs, audio_streamer=streamer)
+            # Diffusion draws noise for every chunk, so the same seed gives the same audio
+            set_seed(42)
+            outputs = model.generate(**kwargs)
+
+        # The streamed chunks add up to the audio `generate` returns
+        streamer.end.assert_called_once_with()
+        torch.testing.assert_close(torch.cat(chunks, dim=-1), torch.stack(outputs.audio).cpu())
 
     @pytest.mark.generate
     def test_vibevoice_generate_max_new_tokens(self):
