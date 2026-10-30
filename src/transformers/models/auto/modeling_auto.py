@@ -626,6 +626,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yoso", "YosoModel"),
         ("youtu", "YoutuModel"),
         ("yue2_acoustic_tokenizer", "YuE2AcousticTokenizerModel"),
+        ("yue2_acoustic_tokenizer_decoder", "YuE2AcousticTokenizerDecoderModel"),
+        ("yue2_acoustic_tokenizer_encoder", "YuE2AcousticTokenizerEncoderModel"),
         ("zamba", "ZambaModel"),
         ("zamba2", "Zamba2Model"),
         ("zaya", "ZayaModel"),

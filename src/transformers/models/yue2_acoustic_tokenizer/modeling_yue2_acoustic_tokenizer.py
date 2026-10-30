@@ -23,12 +23,18 @@ from dataclasses import dataclass
 
 import torch
 from torch import nn
+from torch.nn import Parameter
 
 from ... import initialization as init
-from ...modeling_utils import PreTrainedAudioTokenizerBase
+from ...modeling_utils import PreTrainedAudioTokenizerBase, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
-from .configuration_yue2_acoustic_tokenizer import YuE2AcousticTokenizerConfig
+from ..auto import AutoModel
+from .configuration_yue2_acoustic_tokenizer import (
+    YuE2AcousticTokenizerConfig,
+    YuE2AcousticTokenizerDecoderConfig,
+    YuE2AcousticTokenizerEncoderConfig,
+)
 
 
 @auto_docstring
@@ -47,8 +53,8 @@ class YuE2AcousticTokenizerEncoderOutput(ModelOutput):
 @dataclass
 class YuE2AcousticTokenizerDecoderOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`):
-        Audio waveform decoded from the latents, unclipped.
+    audio_values (`torch.FloatTensor`  of shape `(batch_size, input_length)`, *optional*):
+        Decoded audio values, obtained using the decoder part of YuE2AcousticTokenizer.
     """
 
     audio_values: torch.FloatTensor | None = None
@@ -70,19 +76,43 @@ class YuE2AcousticTokenizerOutput(ModelOutput):
 
 class YuE2AcousticTokenizerSnakeBeta(nn.Module):
     """
-    The SnakeBeta activation of BigVGAN, `x + 1 / beta * sin(alpha * x) ** 2`, with a learnt `alpha` and `beta` per
-    channel, both stored as logarithms.
+    A modified Snake function which uses separate parameters for the magnitude of the periodic components
+    Shape:
+        - Input: (B, C, T)
+        - Output: (B, C, T), same shape as the input
+    Parameters:
+        - alpha - trainable parameter that controls frequency
+        - beta - trainable parameter that controls magnitude
+    References:
+        - This activation function is a modified version based on this paper by Liu Ziyin, Tilman Hartwig, Masahito Ueda:
+        https://huggingface.co/papers/2006.08195
     """
 
-    def __init__(self, channels: int):
+    def __init__(self, in_features, alpha=1.0):
         super().__init__()
-        self.alpha = nn.Parameter(torch.zeros(channels))
-        self.beta = nn.Parameter(torch.zeros(channels))
+        self.in_features = in_features
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        alpha = self.alpha.exp()[None, :, None]
-        beta = self.beta.exp()[None, :, None]
-        return hidden_states + (1.0 / (beta + 1e-9)) * torch.pow(torch.sin(hidden_states * alpha), 2)
+        # initialize alpha
+        self.alpha = Parameter(torch.zeros(in_features) * alpha)
+        self.beta = Parameter(torch.zeros(in_features) * alpha)
+
+        self.no_div_by_zero = 0.000000001
+
+    def forward(self, hidden_states):
+        """
+        Forward pass of the function.
+        Applies the function to the input elementwise.
+        SnakeBeta ∶= x + 1/b * sin^2 (xa)
+        """
+        alpha = self.alpha.unsqueeze(0).unsqueeze(-1)  # line up with x to [B, C, T]
+        beta = self.beta.unsqueeze(0).unsqueeze(-1)
+        alpha = torch.exp(alpha)
+        beta = torch.exp(beta)
+        hidden_states = hidden_states + (1.0 / (beta + self.no_div_by_zero)) * torch.pow(
+            torch.sin(hidden_states * alpha), 2
+        )
+
+        return hidden_states
 
 
 class YuE2AcousticTokenizerResidualUnit(nn.Module):
@@ -164,60 +194,8 @@ class YuE2AcousticTokenizerDecoderBlock(nn.Module):
         return hidden_state
 
 
-class YuE2AcousticTokenizerEncoder(nn.Module):
-    """The Oobleck encoder: audio to the mean and scale of the latent posterior."""
-
-    def __init__(self, config: YuE2AcousticTokenizerConfig):
-        super().__init__()
-        channels = [config.hidden_size * multiplier for multiplier in [1] + config.channel_multipliers]
-        self.conv1 = nn.Conv1d(config.audio_channels, channels[0], kernel_size=7, padding=3)
-        self.block = nn.ModuleList(
-            [
-                YuE2AcousticTokenizerEncoderBlock(channels[index], channels[index + 1], stride)
-                for index, stride in enumerate(config.downsampling_ratios)
-            ]
-        )
-        self.snake1 = YuE2AcousticTokenizerSnakeBeta(channels[-1])
-        self.conv2 = nn.Conv1d(channels[-1], 2 * config.latent_dim, kernel_size=3, padding=1)
-
-    def forward(self, hidden_state):
-        hidden_state = self.conv1(hidden_state)
-
-        for module in self.block:
-            hidden_state = module(hidden_state)
-
-        hidden_state = self.snake1(hidden_state)
-        hidden_state = self.conv2(hidden_state)
-
-        return hidden_state
-
-
-class YuE2AcousticTokenizerDecoder(nn.Module):
-    """The Oobleck decoder: latents to audio, with no output nonlinearity."""
-
-    def __init__(self, config: YuE2AcousticTokenizerConfig):
-        super().__init__()
-        channels = [config.hidden_size * multiplier for multiplier in [1] + config.channel_multipliers]
-        self.conv1 = nn.Conv1d(config.latent_dim, channels[-1], kernel_size=7, padding=3)
-        self.block = nn.ModuleList(
-            [
-                YuE2AcousticTokenizerDecoderBlock(channels[index + 1], channels[index], stride)
-                for index, stride in reversed(list(enumerate(config.downsampling_ratios)))
-            ]
-        )
-        self.snake1 = YuE2AcousticTokenizerSnakeBeta(channels[0])
-        self.conv2 = nn.Conv1d(channels[0], config.audio_channels, kernel_size=7, padding=3, bias=False)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.conv1(hidden_state)
-        for layer in self.block:
-            hidden_state = layer(hidden_state)
-        hidden_state = self.snake1(hidden_state)
-        return self.conv2(hidden_state)
-
-
 @auto_docstring
-class YuE2AcousticTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
+class YuE2AcousticTokenizerPreTrainedModel(PreTrainedModel):
     config: YuE2AcousticTokenizerConfig
     base_model_prefix = "yue2_acoustic_tokenizer"
     main_input_name = "input_values"
@@ -228,9 +206,98 @@ class YuE2AcousticTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, YuE2AcousticTokenizerSnakeBeta):
-            # log-scale: alpha = beta = 1
             init.zeros_(module.alpha)
             init.zeros_(module.beta)
+
+
+@auto_docstring(
+    custom_intro="""
+    The encoder half of YuE2AcousticTokenizer, the Oobleck encoder: from audio to the continuous latents.
+    """
+)
+class YuE2AcousticTokenizerEncoderModel(YuE2AcousticTokenizerPreTrainedModel):
+    config: YuE2AcousticTokenizerEncoderConfig
+    base_model_prefix = "encoder"
+    _keys_to_ignore_on_load_unexpected = [r"^decoder\."]
+
+    def __init__(self, config: YuE2AcousticTokenizerEncoderConfig):
+        super().__init__(config)
+        hidden_sizes = config.hidden_sizes
+        self.conv1 = nn.Conv1d(config.audio_channels, hidden_sizes[0], kernel_size=7, padding=3)
+        self.block = nn.ModuleList(
+            [
+                YuE2AcousticTokenizerEncoderBlock(hidden_sizes[index], hidden_sizes[index + 1], stride)
+                for index, stride in enumerate(config.downsampling_ratios)
+            ]
+        )
+        self.snake1 = YuE2AcousticTokenizerSnakeBeta(hidden_sizes[-1])
+        self.conv2 = nn.Conv1d(hidden_sizes[-1], 2 * config.latent_dim, kernel_size=3, padding=1)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self, input_values: torch.FloatTensor, sample: bool = False, **kwargs: Unpack[TransformersKwargs]
+    ) -> YuE2AcousticTokenizerEncoderOutput:
+        r"""
+        input_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`):
+            Audio waveform at `config.sampling_rate`.
+        sample (`bool`, *optional*, defaults to `False`):
+            Whether to sample the latents from the posterior instead of returning its mean.
+        """
+        hidden_states = self.conv1(input_values)
+        for layer in self.block:
+            hidden_states = layer(hidden_states)
+        hidden_states = self.conv2(self.snake1(hidden_states))
+
+        mean, scale = hidden_states.chunk(2, dim=1)
+        latents = mean
+        if sample:
+            std = nn.functional.softplus(scale) + 1e-4
+            latents = mean + std * torch.randn_like(mean)
+        return YuE2AcousticTokenizerEncoderOutput(latents=latents.transpose(1, 2))
+
+
+@auto_docstring(
+    custom_intro="""
+    The decoder half of YuE2AcousticTokenizer, the Oobleck decoder: from continuous latents to audio. Unlike DAC's
+    decoder, the last convolution has no `tanh` after it.
+    """
+)
+class YuE2AcousticTokenizerDecoderModel(YuE2AcousticTokenizerPreTrainedModel):
+    config: YuE2AcousticTokenizerDecoderConfig
+    main_input_name = "latents"
+    base_model_prefix = "decoder"
+    _keys_to_ignore_on_load_unexpected = [r"^encoder\."]
+
+    def __init__(self, config: YuE2AcousticTokenizerDecoderConfig):
+        super().__init__(config)
+        hidden_sizes = config.hidden_sizes
+        self.conv1 = nn.Conv1d(config.latent_dim, hidden_sizes[-1], kernel_size=7, padding=3)
+        self.block = nn.ModuleList(
+            [
+                YuE2AcousticTokenizerDecoderBlock(hidden_sizes[index + 1], hidden_sizes[index], stride)
+                for index, stride in reversed(list(enumerate(config.downsampling_ratios)))
+            ]
+        )
+        self.snake1 = YuE2AcousticTokenizerSnakeBeta(hidden_sizes[0])
+        self.conv2 = nn.Conv1d(hidden_sizes[0], config.audio_channels, kernel_size=7, padding=3, bias=False)
+        self.post_init()
+
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self, latents: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> YuE2AcousticTokenizerDecoderOutput:
+        r"""
+        latents (`torch.FloatTensor` of shape `(batch_size, num_frames, latent_dim)`):
+            Continuous latents to decode, one frame per `config.hop_length` audio samples.
+        """
+        hidden_states = self.conv1(latents.transpose(1, 2))
+        for layer in self.block:
+            hidden_states = layer(hidden_states)
+        audio_values = self.conv2(self.snake1(hidden_states))
+        return YuE2AcousticTokenizerDecoderOutput(audio_values=audio_values)
 
 
 @auto_docstring(
@@ -239,17 +306,19 @@ class YuE2AcousticTokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
     audio to continuous 64-dimensional latents at 25 Hz and back. YuE2 generates these latents with flow matching.
     """
 )
-class YuE2AcousticTokenizerModel(YuE2AcousticTokenizerPreTrainedModel):
+class YuE2AcousticTokenizerModel(YuE2AcousticTokenizerPreTrainedModel, PreTrainedAudioTokenizerBase):
+    _keys_to_ignore_on_load_unexpected = [r"^encoder\.", r"^decoder\."]
+
     def __init__(self, config: YuE2AcousticTokenizerConfig):
         super().__init__(config)
-        self.encoder = YuE2AcousticTokenizerEncoder(config)
-        self.decoder = YuE2AcousticTokenizerDecoder(config)
+        self.encoder = AutoModel.from_config(config.encoder_config) if config.encoder_config is not None else None
+        self.decoder = AutoModel.from_config(config.decoder_config) if config.decoder_config is not None else None
         self.post_init()
 
     @can_return_tuple
     def encode(self, input_values: torch.FloatTensor, sample: bool = False) -> YuE2AcousticTokenizerEncoderOutput:
         """
-        Encodes audio into continuous latents.
+        Encodes audio into continuous latents, with [`YuE2AcousticTokenizerEncoderModel.forward`].
 
         Args:
             input_values (`torch.FloatTensor` of shape `(batch_size, audio_channels, num_samples)`):
@@ -257,24 +326,26 @@ class YuE2AcousticTokenizerModel(YuE2AcousticTokenizerPreTrainedModel):
             sample (`bool`, *optional*, defaults to `False`):
                 Whether to sample the latents from the posterior instead of returning its mean.
         """
-        mean, scale = self.encoder(input_values).chunk(2, dim=1)
-        latents = mean
-        if sample:
-            std = nn.functional.softplus(scale) + 1e-4
-            latents = mean + std * torch.randn_like(mean)
-        return YuE2AcousticTokenizerEncoderOutput(latents=latents.transpose(1, 2))
+        if self.encoder is None:
+            raise ValueError(
+                "Audio encoding was requested, but the model was initialized without an encoder (`encoder_config=None`)."
+            )
+        return self.encoder(input_values, sample=sample, return_dict=True)
 
     @can_return_tuple
     def decode(self, latents: torch.FloatTensor) -> YuE2AcousticTokenizerDecoderOutput:
         """
-        Decodes continuous latents into audio.
+        Decodes continuous latents into audio, with [`YuE2AcousticTokenizerDecoderModel.forward`].
 
         Args:
             latents (`torch.FloatTensor` of shape `(batch_size, num_frames, latent_dim)`):
                 Continuous latents to decode, one frame per `config.hop_length` audio samples.
         """
-        audio_values = self.decoder(latents.transpose(1, 2))
-        return YuE2AcousticTokenizerDecoderOutput(audio_values=audio_values)
+        if self.decoder is None:
+            raise ValueError(
+                "Audio decoding was requested, but the model was initialized without a decoder (`decoder_config=None`)."
+            )
+        return self.decoder(latents, return_dict=True)
 
     @can_return_tuple
     @auto_docstring
@@ -292,4 +363,9 @@ class YuE2AcousticTokenizerModel(YuE2AcousticTokenizerPreTrainedModel):
         return YuE2AcousticTokenizerOutput(latents=latents, audio_values=audio_values)
 
 
-__all__ = ["YuE2AcousticTokenizerModel", "YuE2AcousticTokenizerPreTrainedModel"]
+__all__ = [
+    "YuE2AcousticTokenizerPreTrainedModel",
+    "YuE2AcousticTokenizerEncoderModel",
+    "YuE2AcousticTokenizerDecoderModel",
+    "YuE2AcousticTokenizerModel",
+]

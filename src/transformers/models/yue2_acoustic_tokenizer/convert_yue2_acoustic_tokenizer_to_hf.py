@@ -95,8 +95,8 @@ def convert_config(original_config: dict) -> YuE2AcousticTokenizerConfig:
     return YuE2AcousticTokenizerConfig(
         sampling_rate=original_config["sample_rate"],
         audio_channels=original_config["audio_channels"],
-        hidden_size=decoder_config["channels"],
-        channel_multipliers=decoder_config["c_mults"],
+        # the original's input convolution outputs `channels`, and each block `channels * c_mult`
+        hidden_sizes=[decoder_config["channels"] * multiplier for multiplier in [1] + decoder_config["c_mults"]],
         downsampling_ratios=decoder_config["strides"],
         latent_dim=original_config["latent_dim"],
     )

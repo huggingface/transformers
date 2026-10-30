@@ -309,6 +309,8 @@ IGNORE_NON_TESTED = (
         "PocketTTSAudioTokenizerDecoderModel",  # Tested through PocketTTSAudioTokenizerModel
         "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
+        "YuE2AcousticTokenizerEncoderModel",  # Tested through YuE2AcousticTokenizerModel
+        "YuE2AcousticTokenizerDecoderModel",  # Tested through YuE2AcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
         "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
         "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly

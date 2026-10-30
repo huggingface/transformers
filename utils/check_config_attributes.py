@@ -138,6 +138,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "MimiDecoderConfig": True,
     "PocketTTSAudioTokenizerEncoderConfig": True,
     "PocketTTSAudioTokenizerDecoderConfig": True,
+    "YuE2AcousticTokenizerEncoderConfig": True,
+    "YuE2AcousticTokenizerDecoderConfig": True,
     "XcodecConfig": ["sample_rate", "audio_channels"],
     "RecurrentGemmaConfig": ["block_types", "attention_window_size"],
     "MambaConfig": ["expand"],

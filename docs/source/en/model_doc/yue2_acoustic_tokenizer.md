@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was contributed to Hugging Face Transformers on 2026-10-29.*
+*This model was contributed to Hugging Face Transformers on 2026-10-30.*
 
 # YuE2 acoustic tokenizer
 
@@ -46,9 +46,27 @@ audio_values = model.decode(latents).audio_values  # (batch_size, audio_channels
 
 [[autodoc]] YuE2AcousticTokenizerConfig
 
+## YuE2AcousticTokenizerEncoderConfig
+
+[[autodoc]] YuE2AcousticTokenizerEncoderConfig
+
+## YuE2AcousticTokenizerDecoderConfig
+
+[[autodoc]] YuE2AcousticTokenizerDecoderConfig
+
 ## YuE2AcousticTokenizerModel
 
 [[autodoc]] YuE2AcousticTokenizerModel
     - encode
     - decode
+    - forward
+
+## YuE2AcousticTokenizerEncoderModel
+
+[[autodoc]] YuE2AcousticTokenizerEncoderModel
+    - forward
+
+## YuE2AcousticTokenizerDecoderModel
+
+[[autodoc]] YuE2AcousticTokenizerDecoderModel
     - forward

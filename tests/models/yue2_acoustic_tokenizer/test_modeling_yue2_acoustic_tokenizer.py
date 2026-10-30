@@ -12,9 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
-from transformers import YuE2AcousticTokenizerConfig
+from transformers import (
+    YuE2AcousticTokenizerConfig,
+    YuE2AcousticTokenizerDecoderConfig,
+    YuE2AcousticTokenizerEncoderConfig,
+)
 from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -25,7 +30,11 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor
 if is_torch_available():
     import torch
 
-    from transformers import YuE2AcousticTokenizerModel
+    from transformers import (
+        YuE2AcousticTokenizerDecoderModel,
+        YuE2AcousticTokenizerEncoderModel,
+        YuE2AcousticTokenizerModel,
+    )
 
 
 class YuE2AcousticTokenizerModelTester:
@@ -35,8 +44,7 @@ class YuE2AcousticTokenizerModelTester:
         batch_size=2,
         num_frames=5,
         audio_channels=2,
-        hidden_size=4,
-        channel_multipliers=[1, 2],
+        hidden_sizes=[4, 4, 8],
         downsampling_ratios=[2, 3],
         latent_dim=6,
         is_training=False,
@@ -45,8 +53,7 @@ class YuE2AcousticTokenizerModelTester:
         self.batch_size = batch_size
         self.num_frames = num_frames
         self.audio_channels = audio_channels
-        self.hidden_size = hidden_size
-        self.channel_multipliers = channel_multipliers
+        self.hidden_sizes = hidden_sizes
         self.downsampling_ratios = downsampling_ratios
         self.latent_dim = latent_dim
         self.is_training = is_training
@@ -54,8 +61,7 @@ class YuE2AcousticTokenizerModelTester:
     def get_config(self):
         return YuE2AcousticTokenizerConfig(
             audio_channels=self.audio_channels,
-            hidden_size=self.hidden_size,
-            channel_multipliers=self.channel_multipliers,
+            hidden_sizes=self.hidden_sizes,
             downsampling_ratios=self.downsampling_ratios,
             latent_dim=self.latent_dim,
         )
@@ -103,6 +109,60 @@ class YuE2AcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
             sampled = model.encode(inputs_dict["input_values"], sample=True).latents
         self.assertEqual(sampled.shape, mean.shape)
         self.assertFalse(torch.allclose(sampled, mean))
+
+    def test_config_without_encoder_or_decoder(self):
+        config = self.model_tester.get_config()
+        self.assertNotIn("encoder_config", config.to_diff_dict())
+
+        config.encoder_config = None
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            config.save_pretrained(tmp_dir)
+            config = YuE2AcousticTokenizerConfig.from_pretrained(tmp_dir)
+        self.assertIsNone(config.encoder_config)
+        self.assertIsInstance(config.decoder_config, YuE2AcousticTokenizerDecoderConfig)
+
+        with self.assertRaises(ValueError):
+            config.decoder_config = None
+        with self.assertRaises(ValueError):
+            config.encoder_config = YuE2AcousticTokenizerEncoderConfig()
+
+    def test_model_without_encoder_or_decoder(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        input_values = inputs_dict["input_values"]
+        model = YuE2AcousticTokenizerModel(config).to(torch_device).eval()
+        with torch.no_grad():
+            latents = model.encode(input_values).latents
+            audio_values = model.decode(latents).audio_values
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            encoder_only, encoder_info = YuE2AcousticTokenizerModel.from_pretrained(
+                tmp_dir, decoder_config=None, output_loading_info=True
+            )
+            decoder_only, decoder_info = YuE2AcousticTokenizerModel.from_pretrained(
+                tmp_dir, encoder_config=None, output_loading_info=True
+            )
+            # each half also loads on its own from the full checkpoint
+            encoder_half, encoder_half_info = YuE2AcousticTokenizerEncoderModel.from_pretrained(
+                tmp_dir, output_loading_info=True
+            )
+            decoder_half, decoder_half_info = YuE2AcousticTokenizerDecoderModel.from_pretrained(
+                tmp_dir, output_loading_info=True
+            )
+        for loading_info in (encoder_info, decoder_info, encoder_half_info, decoder_half_info):
+            self.assertFalse(any(loading_info.values()), loading_info)
+
+        for submodel in (encoder_only, decoder_only, encoder_half, decoder_half):
+            submodel.to(torch_device).eval()
+        with torch.no_grad():
+            torch.testing.assert_close(encoder_only.encode(input_values).latents, latents)
+            torch.testing.assert_close(decoder_only.decode(latents).audio_values, audio_values)
+            torch.testing.assert_close(encoder_half(input_values).latents, latents)
+            torch.testing.assert_close(decoder_half(latents).audio_values, audio_values)
+        with self.assertRaises(ValueError):
+            encoder_only.decode(latents)
+        with self.assertRaises(ValueError):
+            decoder_only.encode(input_values)
 
     @unittest.skip(reason="The acoustic tokenizer has no token embeddings.")
     def test_model_get_set_embeddings(self):
