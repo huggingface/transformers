@@ -103,7 +103,6 @@ class WorkerGroup:
     _running: dict[tuple[int, str], "WorkerGroup"] = {}
 
     def __init__(self, world_size: int, backend: str):
-        self.world_size, self.backend = world_size, backend
         ctx = mp.get_context("spawn")
         # held for as long as the workers live, so another xdist worker cannot claim its port
         self.store = dist.TCPStore("localhost", 0, world_size=None, is_master=True, wait_for_workers=False)
@@ -140,8 +139,7 @@ class WorkerGroup:
                     raise RuntimeError(error)
 
     def kill(self):
-        """Kill the workers, e.g. when some may be stuck in a collective; the next `get_or_start` starts new ones."""
-        del self._running[self.world_size, self.backend]
+        """Kill the workers, e.g. when some may be stuck in a collective."""
         for process in self.processes:
             process.kill()
 
@@ -161,6 +159,8 @@ def run_distributed(world_size: int, backend: str | None = None):
             try:
                 workers.run_test(func, *args, **kwargs)
             except BaseException:
+                # the next `get_or_start` starts new workers
+                del WorkerGroup._running[world_size, backend]
                 workers.kill()
                 raise
 
