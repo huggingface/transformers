@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import copy
+import importlib
 import inspect
 import json
 import os
@@ -56,55 +57,33 @@ from transformers.testing_utils import (
 )
 from transformers.utils import direct_transformers_import, logging
 
-from .pipelines.test_pipelines_any_to_any import AnyToAnyPipelineTests
-from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
-from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests
-from .pipelines.test_pipelines_depth_estimation import DepthEstimationPipelineTests
-from .pipelines.test_pipelines_document_question_answering import DocumentQuestionAnsweringPipelineTests
-from .pipelines.test_pipelines_feature_extraction import FeatureExtractionPipelineTests
-from .pipelines.test_pipelines_fill_mask import FillMaskPipelineTests
-from .pipelines.test_pipelines_image_classification import ImageClassificationPipelineTests
-from .pipelines.test_pipelines_image_feature_extraction import ImageFeatureExtractionPipelineTests
-from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipelineTests
-from .pipelines.test_pipelines_image_text_to_text import ImageTextToTextPipelineTests
-from .pipelines.test_pipelines_mask_generation import MaskGenerationPipelineTests
-from .pipelines.test_pipelines_object_detection import ObjectDetectionPipelineTests
-from .pipelines.test_pipelines_table_question_answering import TQAPipelineTests
-from .pipelines.test_pipelines_text_classification import TextClassificationPipelineTests
-from .pipelines.test_pipelines_text_generation import TextGenerationPipelineTests
-from .pipelines.test_pipelines_text_to_audio import TextToAudioPipelineTests
-from .pipelines.test_pipelines_token_classification import TokenClassificationPipelineTests
-from .pipelines.test_pipelines_video_classification import VideoClassificationPipelineTests
-from .pipelines.test_pipelines_zero_shot import ZeroShotClassificationPipelineTests
-from .pipelines.test_pipelines_zero_shot_audio_classification import ZeroShotAudioClassificationPipelineTests
-from .pipelines.test_pipelines_zero_shot_image_classification import ZeroShotImageClassificationPipelineTests
-from .pipelines.test_pipelines_zero_shot_object_detection import ZeroShotObjectDetectionPipelineTests
-
-
+# Pipeline test classes are stored as dotted-path strings and resolved lazily at test execution time
+# to avoid importing the 24 test_pipelines_*.py files during pytest collection — each of those files
+# imports specific model classes at top level, dragging ~30 model source files into the collection phase.
 pipeline_test_mapping = {
-    "audio-classification": {"test": AudioClassificationPipelineTests},
-    "automatic-speech-recognition": {"test": AutomaticSpeechRecognitionPipelineTests},
-    "depth-estimation": {"test": DepthEstimationPipelineTests},
-    "document-question-answering": {"test": DocumentQuestionAnsweringPipelineTests},
-    "feature-extraction": {"test": FeatureExtractionPipelineTests},
-    "fill-mask": {"test": FillMaskPipelineTests},
-    "image-classification": {"test": ImageClassificationPipelineTests},
-    "image-feature-extraction": {"test": ImageFeatureExtractionPipelineTests},
-    "image-segmentation": {"test": ImageSegmentationPipelineTests},
-    "image-text-to-text": {"test": ImageTextToTextPipelineTests},
-    "mask-generation": {"test": MaskGenerationPipelineTests},
-    "any-to-any": {"test": AnyToAnyPipelineTests},
-    "object-detection": {"test": ObjectDetectionPipelineTests},
-    "table-question-answering": {"test": TQAPipelineTests},
-    "text-classification": {"test": TextClassificationPipelineTests},
-    "text-generation": {"test": TextGenerationPipelineTests},
-    "text-to-audio": {"test": TextToAudioPipelineTests},
-    "token-classification": {"test": TokenClassificationPipelineTests},
-    "video-classification": {"test": VideoClassificationPipelineTests},
-    "zero-shot": {"test": ZeroShotClassificationPipelineTests},
-    "zero-shot-audio-classification": {"test": ZeroShotAudioClassificationPipelineTests},
-    "zero-shot-image-classification": {"test": ZeroShotImageClassificationPipelineTests},
-    "zero-shot-object-detection": {"test": ZeroShotObjectDetectionPipelineTests},
+    "audio-classification": {"test": "tests.pipelines.test_pipelines_audio_classification.AudioClassificationPipelineTests"},
+    "automatic-speech-recognition": {"test": "tests.pipelines.test_pipelines_automatic_speech_recognition.AutomaticSpeechRecognitionPipelineTests"},
+    "depth-estimation": {"test": "tests.pipelines.test_pipelines_depth_estimation.DepthEstimationPipelineTests"},
+    "document-question-answering": {"test": "tests.pipelines.test_pipelines_document_question_answering.DocumentQuestionAnsweringPipelineTests"},
+    "feature-extraction": {"test": "tests.pipelines.test_pipelines_feature_extraction.FeatureExtractionPipelineTests"},
+    "fill-mask": {"test": "tests.pipelines.test_pipelines_fill_mask.FillMaskPipelineTests"},
+    "image-classification": {"test": "tests.pipelines.test_pipelines_image_classification.ImageClassificationPipelineTests"},
+    "image-feature-extraction": {"test": "tests.pipelines.test_pipelines_image_feature_extraction.ImageFeatureExtractionPipelineTests"},
+    "image-segmentation": {"test": "tests.pipelines.test_pipelines_image_segmentation.ImageSegmentationPipelineTests"},
+    "image-text-to-text": {"test": "tests.pipelines.test_pipelines_image_text_to_text.ImageTextToTextPipelineTests"},
+    "mask-generation": {"test": "tests.pipelines.test_pipelines_mask_generation.MaskGenerationPipelineTests"},
+    "any-to-any": {"test": "tests.pipelines.test_pipelines_any_to_any.AnyToAnyPipelineTests"},
+    "object-detection": {"test": "tests.pipelines.test_pipelines_object_detection.ObjectDetectionPipelineTests"},
+    "table-question-answering": {"test": "tests.pipelines.test_pipelines_table_question_answering.TQAPipelineTests"},
+    "text-classification": {"test": "tests.pipelines.test_pipelines_text_classification.TextClassificationPipelineTests"},
+    "text-generation": {"test": "tests.pipelines.test_pipelines_text_generation.TextGenerationPipelineTests"},
+    "text-to-audio": {"test": "tests.pipelines.test_pipelines_text_to_audio.TextToAudioPipelineTests"},
+    "token-classification": {"test": "tests.pipelines.test_pipelines_token_classification.TokenClassificationPipelineTests"},
+    "video-classification": {"test": "tests.pipelines.test_pipelines_video_classification.VideoClassificationPipelineTests"},
+    "zero-shot": {"test": "tests.pipelines.test_pipelines_zero_shot.ZeroShotClassificationPipelineTests"},
+    "zero-shot-audio-classification": {"test": "tests.pipelines.test_pipelines_zero_shot_audio_classification.ZeroShotAudioClassificationPipelineTests"},
+    "zero-shot-image-classification": {"test": "tests.pipelines.test_pipelines_zero_shot_image_classification.ZeroShotImageClassificationPipelineTests"},
+    "zero-shot-object-detection": {"test": "tests.pipelines.test_pipelines_zero_shot_object_detection.ZeroShotObjectDetectionPipelineTests"},
 }
 
 task_to_pipeline_and_spec_mapping = {
@@ -261,7 +240,7 @@ class PipelineTesterMixin:
         """
         # Get an instance of the corresponding class `XXXPipelineTests` in order to use `get_test_pipeline` and
         # `run_pipeline_test`.
-        pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
+        pipeline_test_class_name = pipeline_test_mapping[task]["test"].rsplit(".", 1)[-1]
 
         # If no image processor or feature extractor is found, we still need to test the pipeline with None
         # otherwise for any empty list we might skip all the tests
@@ -410,7 +389,7 @@ class PipelineTesterMixin:
             )
             self.skipTest(f"Could not find or load any tokenizer / processor from {repo_id}.")
 
-        pipeline_test_class_name = pipeline_test_mapping[task]["test"].__name__
+        pipeline_test_class_name = pipeline_test_mapping[task]["test"].rsplit(".", 1)[-1]
         if self.is_pipeline_test_to_skip_more(pipeline_test_class_name, model.config, model, tokenizer, **processors):
             logger.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{dtype} is skipped: test is "
@@ -430,7 +409,9 @@ class PipelineTesterMixin:
 
         # Get an instance of the corresponding class `XXXPipelineTests` in order to use `get_test_pipeline` and
         # `run_pipeline_test`.
-        task_test = pipeline_test_mapping[task]["test"]()
+        _test_path = pipeline_test_mapping[task]["test"]
+        _mod, _cls = _test_path.rsplit(".", 1)
+        task_test = getattr(importlib.import_module(_mod), _cls)()
 
         pipeline, examples = task_test.get_test_pipeline(model, tokenizer, **processors, dtype=dtype)
         if pipeline is None:
