@@ -1876,13 +1876,13 @@ class ReformerPreTrainedModel(PreTrainedModel):
 @dataclass
 class ReformerModelOutput(ModelOutput):
     r"""
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_predict, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, num_predict, hidden_size)`):
         Sequence of hidden-states at the last layer of the model.
 
         `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict`
         corresponds to `sequence_length`.
-    past_buckets_states (`list[tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        List of `tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
+    past_buckets_states (`list[tuple(torch.LongTensor, torch.Tensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        List of `tuple(torch.LongTensor, torch.Tensor` of length `config.n_layers`, with the first element
         being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
         second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
 
@@ -1890,10 +1890,10 @@ class ReformerModelOutput(ModelOutput):
         up sequential decoding.
     """
 
-    last_hidden_state: torch.FloatTensor
-    past_buckets_states: list[tuple[torch.LongTensor, torch.FloatTensor]] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    last_hidden_state: torch.Tensor
+    past_buckets_states: list[tuple[torch.LongTensor, torch.Tensor]] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring(
@@ -1904,15 +1904,15 @@ class ReformerModelOutput(ModelOutput):
 @dataclass
 class ReformerModelWithLMHeadOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape *(1,)*, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, num_predict, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, num_predict, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
 
         `num_predict` corresponds to `target_mapping.shape[1]`. If `target_mapping` is `None`, then `num_predict`
         corresponds to `sequence_length`.
-    past_buckets_states (`list[tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        List of `tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
+    past_buckets_states (`list[tuple(torch.LongTensor, torch.Tensor)]`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        List of `tuple(torch.LongTensor, torch.Tensor` of length `config.n_layers`, with the first element
         being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
         second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
 
@@ -1920,11 +1920,11 @@ class ReformerModelWithLMHeadOutput(ModelOutput):
         up sequential decoding.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    past_buckets_states: list[tuple[torch.LongTensor, torch.FloatTensor]] | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    past_buckets_states: list[tuple[torch.LongTensor, torch.Tensor]] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 @auto_docstring
@@ -1979,7 +1979,7 @@ class ReformerModel(ReformerPreTrainedModel):
 
             For more information, see `num_hashes` in [`ReformerConfig`].
         past_buckets_states (`ReformerDynamicCache`, *optional*):
-            List of `tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
+            List of `tuple(torch.LongTensor, torch.Tensor` of length `config.n_layers`, with the first element
             being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
             second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
 
@@ -2205,8 +2205,8 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
             the default defined in `config.num_hashes`.
 
             For more information, see `num_hashes` in [`ReformerConfig`].
-        past_buckets_states (`list[tuple(torch.LongTensor, torch.FloatTensor)]`, *optional*):
-            List of `tuple(torch.LongTensor, torch.FloatTensor` of length `config.n_layers`, with the first element
+        past_buckets_states (`list[tuple(torch.LongTensor, torch.Tensor)]`, *optional*):
+            List of `tuple(torch.LongTensor, torch.Tensor` of length `config.n_layers`, with the first element
             being the previous *buckets* of shape `(batch_size, num_heads, num_hashes, sequence_length)`) and the
             second being the previous *hidden_states* of shape `(batch_size, sequence_length, hidden_size)`).
 

@@ -42,28 +42,28 @@ from .generation_vibevoice import VibeVoiceGenerationMixin
 @dataclass
 class VibeVoiceBaseModelOutputWithPast(BaseModelOutputWithPast):
     r"""
-    audio_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
+    audio_features (`torch.Tensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
         Extracted audio features that can be used for conditioning the language model.
     """
 
-    audio_features: torch.FloatTensor | None = None
+    audio_features: torch.Tensor | None = None
 
 
 @auto_docstring(custom_intro="""VibeVoice causal language model outputs.""")
 @dataclass
 class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Language modeling loss (for next-token prediction).
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-    audio_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
+    audio_features (`torch.Tensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
         Extracted audio features that can be used for conditioning the language model.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
-    audio_features: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
+    audio_features: torch.Tensor | None = None
 
 
 class VibeVoiceRMSNorm(Qwen2RMSNorm):
@@ -208,12 +208,12 @@ class VibeVoiceModel(VoxtralModel):
     )
     def get_audio_features(
         self,
-        input_values: torch.FloatTensor,
+        input_values: torch.Tensor,
         padding_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        input_values (`torch.FloatTensor`):
+        input_values (`torch.Tensor`):
             Float values of (normalized) audio waveform.
         padding_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
             Padding mask to remove padded parts of audio.
@@ -238,8 +238,8 @@ class VibeVoiceModel(VoxtralModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        inputs_embeds: torch.FloatTensor | None = None,
-        input_values: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        input_values: torch.Tensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPast:
@@ -284,12 +284,12 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     @staticmethod
     def compute_diffusion_loss(
         diffusion_head: nn.Module,
-        audio_features: torch.FloatTensor,
-        condition_features: torch.FloatTensor,
+        audio_features: torch.Tensor,
+        condition_features: torch.Tensor,
         noise_scheduler: object,
         ddpm_batch_multiplier: int,
         num_diffusion_steps: int,
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         audio_len, latent_size = audio_features.shape
         audio_features_repeated = audio_features.repeat_interleave(ddpm_batch_multiplier, dim=0)
         condition_features_repeated = condition_features.repeat_interleave(ddpm_batch_multiplier, dim=0)
@@ -331,10 +331,10 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | slice = 0,
-        input_values: torch.FloatTensor | None = None,
+        input_values: torch.Tensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
         acoustic_loss_mask: torch.BoolTensor | None = None,
         noise_scheduler: object | None = None,
@@ -343,7 +343,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         **kwargs,
     ) -> tuple | VibeVoiceCausalLMOutputWithPast:
         r"""
-        input_values (`torch.FloatTensor`, *optional*):
+        input_values (`torch.Tensor`, *optional*):
             Preprocessed audio waveform for voice cloning.
         padding_mask (`torch.BoolTensor`, *optional*):
             Masks indicating valid input frames.

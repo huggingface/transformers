@@ -280,13 +280,13 @@ class ASTModel(ASTPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, max_length, num_mel_bins)`):
+        input_values (`torch.Tensor` of shape `(batch_size, max_length, num_mel_bins)`):
             Float values mel features extracted from the raw audio waveform. Raw audio waveform can be obtained by
             loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a
             `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or the soundfile library
             (`pip install soundfile`).
             To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the
-            mel features, padding and conversion into a tensor of type `torch.FloatTensor`.
+            mel features, padding and conversion into a tensor of type `torch.Tensor`.
             See [`~ASTFeatureExtractor.__call__`]
         """
 
@@ -347,12 +347,12 @@ class ASTForAudioClassification(ASTPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, max_length, num_mel_bins)`):
+        input_values (`torch.Tensor` of shape `(batch_size, max_length, num_mel_bins)`):
             Float values mel features extracted from the raw audio waveform. Raw audio waveform can be obtained by
             loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a `numpy.ndarray` or a `torch.Tensor`, *e.g.* via
             the torchcodec library (`pip install torchcodec`) or the soundfile library (`pip install soundfile`).
             To prepare the array into `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the
-            mel features, padding and conversion into a tensor of type `torch.FloatTensor`.
+            mel features, padding and conversion into a tensor of type `torch.Tensor`.
             See [`~ASTFeatureExtractor.__call__`]
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the audio classification/regression loss. Indices should be in `[0, ...,

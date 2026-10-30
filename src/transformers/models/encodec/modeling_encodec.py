@@ -41,12 +41,12 @@ class EncodecOutput(ModelOutput):
     r"""
     audio_codes (`torch.LongTensor`  of shape `(nb_frames, batch_size, nb_quantizers, frame_len)`, *optional*):
         Discrete code embeddings computed using `model.encode`.
-    audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
+    audio_values (`torch.Tensor`  of shape `(batch_size, segment_length)`, *optional*):
         Decoded audio values, obtained using the decoder part of Encodec.
     """
 
     audio_codes: torch.LongTensor | None = None
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
 
 
 @auto_docstring
@@ -64,7 +64,7 @@ class EncodecEncoderOutput(ModelOutput):
     """
 
     audio_codes: torch.LongTensor | None = None
-    audio_scales: torch.FloatTensor | None = None
+    audio_scales: torch.Tensor | None = None
     last_frame_pad_length: int | None = None
 
 
@@ -72,11 +72,11 @@ class EncodecEncoderOutput(ModelOutput):
 @dataclass
 class EncodecDecoderOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor`  of shape `(batch_size, segment_length)`, *optional*):
+    audio_values (`torch.Tensor`  of shape `(batch_size, segment_length)`, *optional*):
         Decoded audio values, obtained using the decoder part of Encodec.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
 
 
 class EncodecConv1d(nn.Module):
@@ -716,7 +716,7 @@ class EncodecModel(EncodecPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: torch.FloatTensor,
+        input_values: torch.Tensor,
         padding_mask: torch.BoolTensor | None = None,
         bandwidth: float | None = None,
         audio_codes: torch.LongTensor | None = None,
@@ -725,7 +725,7 @@ class EncodecModel(EncodecPreTrainedModel):
         last_frame_pad_length: int | None = 0,
     ) -> tuple[torch.Tensor, torch.Tensor] | EncodecOutput:
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
+        input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`, *optional*):
             Raw audio input converted to Float and padded to the appropriate length in order to be encoded using chunks
             of length self.chunk_length and a stride of `config.chunk_stride`.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, channels, sequence_length)`, *optional*):

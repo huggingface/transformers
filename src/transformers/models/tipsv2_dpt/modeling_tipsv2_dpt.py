@@ -37,9 +37,9 @@ from .configuration_tipsv2_dpt import Tipsv2DptConfig
 @dataclass
 class Tipsv2DptDensePredictorOutput(ModelOutput):
     r"""
-    normals (`torch.FloatTensor` of shape `(batch_size, 3, height, width)`):
+    normals (`torch.Tensor` of shape `(batch_size, 3, height, width)`):
         Raw normal map predictions (unnormalized).
-    segmentation_logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels, height, width)`):
+    segmentation_logits (`torch.Tensor` of shape `(batch_size, config.num_labels, height, width)`):
         Classification scores for each pixel.
         <Tip warning={true}>
         The logits returned do not necessarily have the same size as the `pixel_values` passed as inputs. This is
@@ -48,11 +48,11 @@ class Tipsv2DptDensePredictorOutput(ModelOutput):
         </Tip>
     """
 
-    predicted_depth: torch.FloatTensor | None = None
-    normals: torch.FloatTensor | None = None
-    segmentation_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    predicted_depth: torch.Tensor | None = None
+    normals: torch.Tensor | None = None
+    segmentation_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 @auto_docstring(
@@ -63,23 +63,23 @@ class Tipsv2DptDensePredictorOutput(ModelOutput):
 @dataclass
 class Tipsv2DptNormalEstimatorOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Normal estimation loss.
-    normals (`torch.FloatTensor` of shape `(batch_size, num_labels, height, width)`):
+    normals (`torch.Tensor` of shape `(batch_size, num_labels, height, width)`):
         Raw normal map predictions as output by the model (unnormalized).
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage)
+    hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.Tensor` (one for the output of the embeddings + one for the output of each stage)
         of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of
         each layer plus the initial embedding outputs.
-    attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `torch.FloatTensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
+    attentions (`tuple(torch.Tensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `torch.Tensor` (one per layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Attentions weights after the attention softmax.
     """
 
-    loss: torch.FloatTensor | None = None
-    normals: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
+    loss: torch.Tensor | None = None
+    normals: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor, ...] | None = None
+    attentions: tuple[torch.Tensor, ...] | None = None
 
 
 class Tipsv2DptReadoutProjectLayer(nn.Module):
@@ -166,7 +166,7 @@ class Tipsv2DptReassembleStage(nn.Module):
     ) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length + 1, hidden_size)`):
                 List of hidden states from the backbone.
         """
         out = []
@@ -310,7 +310,7 @@ class Tipsv2DptNeck(nn.Module):
     def forward(self, hidden_states: list[torch.Tensor], patch_height=None, patch_width=None) -> list[torch.Tensor]:
         """
         Args:
-            hidden_states (`list[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+            hidden_states (`list[torch.Tensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
@@ -409,7 +409,7 @@ class Tipsv2DptForDensePrediction(Tipsv2DptPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Tipsv2DptDensePredictorOutput:
         r"""
@@ -497,8 +497,8 @@ class Tipsv2DptForDepthEstimation(Tipsv2DptPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        labels: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DepthEstimatorOutput:
         r"""
@@ -570,8 +570,8 @@ class Tipsv2DptForNormalEstimation(Tipsv2DptPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
-        labels: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Tipsv2DptNormalEstimatorOutput:
         r"""
@@ -642,7 +642,7 @@ class Tipsv2DptForSemanticSegmentation(Tipsv2DptPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SemanticSegmenterOutput:

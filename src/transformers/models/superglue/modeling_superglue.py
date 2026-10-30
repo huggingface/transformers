@@ -158,32 +158,32 @@ def arange_like(x, dim: int) -> torch.Tensor:
 @dataclass
 class SuperGlueKeypointMatchingOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*):
         Loss computed during training.
-    matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+    matches (`torch.Tensor` of shape `(batch_size, 2, num_matches)`):
         Index of keypoint matched in the other image.
-    matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
+    matching_scores (`torch.Tensor` of shape `(batch_size, 2, num_matches)`):
         Scores of predicted matches.
-    keypoints (`torch.FloatTensor` of shape `(batch_size, num_keypoints, 2)`):
+    keypoints (`torch.Tensor` of shape `(batch_size, num_keypoints, 2)`):
         Absolute (x, y) coordinates of predicted keypoints in a given image.
     mask (`torch.IntTensor` of shape `(batch_size, num_keypoints)`):
         Mask indicating which values in matches and matching_scores are keypoint matching information.
-    hidden_states (`tuple[torch.FloatTensor, ...]`, *optional*):
-        Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
+    hidden_states (`tuple[torch.Tensor, ...]`, *optional*):
+        Tuple of `torch.Tensor` (one for the output of each stage) of shape `(batch_size, 2, num_channels,
         num_keypoints)`, returned when `output_hidden_states=True` is passed or when
         `config.output_hidden_states=True`)
-    attentions (`tuple[torch.FloatTensor, ...]`, *optional*):
-        Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
+    attentions (`tuple[torch.Tensor, ...]`, *optional*):
+        Tuple of `torch.Tensor` (one for each layer) of shape `(batch_size, 2, num_heads, num_keypoints,
         num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
     """
 
-    loss: torch.FloatTensor | None = None
-    matches: torch.FloatTensor | None = None
-    matching_scores: torch.FloatTensor | None = None
-    keypoints: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    matches: torch.Tensor | None = None
+    matching_scores: torch.Tensor | None = None
+    keypoints: torch.Tensor | None = None
     mask: torch.IntTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 class SuperGlueMultiLayerPerceptron(nn.Module):
@@ -257,9 +257,9 @@ class SuperGlueSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         # If this is instantiated as a cross-attention module, the keys
@@ -338,8 +338,8 @@ class SuperGlueAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
@@ -552,11 +552,11 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
                 with. And for each keypoint in image1, the index of the keypoint in image0 that was matched with.
             matching_scores (`torch.Tensor` of shape `(batch_size, 2, num_keypoints)`):
                 Scores of predicted matches for each image pair
-            all_hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-                Tuple of `torch.FloatTensor` (one for the output of each stage) of shape `(1, 2, num_keypoints,
+            all_hidden_states (`tuple(torch.Tensor)`, *optional*):
+                Tuple of `torch.Tensor` (one for the output of each stage) of shape `(1, 2, num_keypoints,
                 num_channels)`.
-            all_attentions (`tuple(torch.FloatTensor)`, *optional*):
-                Tuple of `torch.FloatTensor` (one for each layer) of shape `(1, 2, num_heads, num_keypoints,
+            all_attentions (`tuple(torch.Tensor)`, *optional*):
+                Tuple of `torch.Tensor` (one for each layer) of shape `(1, 2, num_heads, num_keypoints,
                 num_keypoints)`.
         """
         all_hidden_states = () if output_hidden_states else None
@@ -665,7 +665,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         labels: torch.LongTensor | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,

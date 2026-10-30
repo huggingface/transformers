@@ -44,11 +44,11 @@ class DacOutput(ModelOutput):
         Projected latents (continuous representation of input before quantization).
     """
 
-    loss: torch.FloatTensor | None = None
-    audio_values: torch.FloatTensor | None = None
-    quantized_representation: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    audio_values: torch.Tensor | None = None
+    quantized_representation: torch.Tensor | None = None
     audio_codes: torch.LongTensor | None = None
-    projected_latents: torch.FloatTensor | None = None
+    projected_latents: torch.Tensor | None = None
 
 
 @auto_docstring
@@ -65,10 +65,10 @@ class DacEncoderOutput(ModelOutput):
         Projected latents (continuous representation of input before quantization).
     """
 
-    loss: torch.FloatTensor | None = None
-    quantized_representation: torch.FloatTensor | None = None
-    audio_codes: torch.FloatTensor | None = None
-    projected_latents: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    quantized_representation: torch.Tensor | None = None
+    audio_codes: torch.Tensor | None = None
+    projected_latents: torch.Tensor | None = None
 
 
 @auto_docstring
@@ -76,11 +76,11 @@ class DacEncoderOutput(ModelOutput):
 # Copied from transformers.models.encodec.modeling_encodec.EncodecDecoderOutput with Encodec->Dac, segment_length->input_length
 class DacDecoderOutput(ModelOutput):
     r"""
-    audio_values (`torch.FloatTensor`  of shape `(batch_size, input_length)`, *optional*):
+    audio_values (`torch.Tensor`  of shape `(batch_size, input_length)`, *optional*):
         Decoded audio values, obtained using the decoder part of Dac.
     """
 
-    audio_values: torch.FloatTensor | None = None
+    audio_values: torch.Tensor | None = None
 
 
 class Snake1d(nn.Module):
@@ -125,19 +125,19 @@ class DacVectorQuantize(nn.Module):
         Quantizes the input tensor using a fixed codebook and returns the corresponding codebook vectors.
 
         Args:
-            hidden_state (`torch.FloatTensor` of shape `(batch_size, dimension, time_steps)`):
+            hidden_state (`torch.Tensor` of shape `(batch_size, dimension, time_steps)`):
                 Input tensor.
 
         Returns:
             quantized_representation (`torch.Tensor`of shape `(batch_size, dimension, time_steps)`):
                 Quantized continuous representation of input.
-            commitment_loss (`torch.FloatTensor`of shape `(1)`):
+            commitment_loss (`torch.Tensor`of shape `(1)`):
                 Commitment loss to train encoder to predict vectors closer to codebook entries.
-            codebook_loss (`torch.FloatTensor`of shape `(1)`):
+            codebook_loss (`torch.Tensor`of shape `(1)`):
                 Codebook loss to update the codebook.
             audio_codes (`torch.LongTensor` of shape `(batch_size, time_steps)`):
                 Codebook indices for each codebook, quantized discrete representation of input.
-            projected_latents (torch.FloatTensor of shape `(batch_size, num_codebooks * dimension, time_steps)`):
+            projected_latents (torch.Tensor of shape `(batch_size, num_codebooks * dimension, time_steps)`):
                 Projected latents (continuous representation of input before quantization).
         """
 

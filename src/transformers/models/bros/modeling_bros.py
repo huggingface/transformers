@@ -49,19 +49,19 @@ logger = logging.get_logger(__name__)
 @dataclass
 class BrosSpadeOutput(ModelOutput):
     r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
         Classification loss.
-    initial_token_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+    initial_token_logits (`torch.Tensor` of shape `(batch_size, sequence_length, config.num_labels)`):
         Classification scores for entity initial tokens (before SoftMax).
-    subsequent_token_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, sequence_length+1)`):
+    subsequent_token_logits (`torch.Tensor` of shape `(batch_size, sequence_length, sequence_length+1)`):
         Classification scores for entity sequence tokens (before SoftMax).
     """
 
-    loss: torch.FloatTensor | None = None
-    initial_token_logits: torch.FloatTensor | None = None
-    subsequent_token_logits: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
+    loss: torch.Tensor | None = None
+    initial_token_logits: torch.Tensor | None = None
+    subsequent_token_logits: torch.Tensor | None = None
+    hidden_states: tuple[torch.Tensor] | None = None
+    attentions: tuple[torch.Tensor] | None = None
 
 
 class BrosPositionalEmbedding1D(nn.Module):
@@ -347,9 +347,9 @@ class BrosLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         bbox_pos_emb: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         hidden_states = self.attention(
@@ -476,9 +476,9 @@ class BrosEncoder(BrosPreTrainedModel):
         self,
         hidden_states: torch.Tensor,
         bbox_pos_emb: torch.Tensor,
-        attention_mask: torch.FloatTensor | None = None,
-        encoder_hidden_states: torch.FloatTensor | None = None,
-        encoder_attention_mask: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithCrossAttentions:
         for layer_module in self.layer:
@@ -535,7 +535,7 @@ class BrosModel(BrosPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
-        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
+        bbox ('torch.Tensor' of shape '(batch_size, num_boxes, 4)'):
             Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
             (x1, y1, x2, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
             bounding box.
@@ -648,11 +648,11 @@ class BrosForTokenClassification(BrosPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
         r"""
-        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
+        bbox ('torch.Tensor' of shape '(batch_size, num_boxes, 4)'):
             Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
             (x1, y1, x2, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
             bounding box.
-        bbox_first_token_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        bbox_first_token_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the first token of each bounding box. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -761,11 +761,11 @@ class BrosSpadeEEForTokenClassification(BrosPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | BrosSpadeOutput:
         r"""
-        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
+        bbox ('torch.Tensor' of shape '(batch_size, num_boxes, 4)'):
             Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
             (x1, y1, x2, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
             bounding box.
-        bbox_first_token_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        bbox_first_token_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the first token of each bounding box. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
@@ -892,11 +892,11 @@ class BrosSpadeELForTokenClassification(BrosPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
         r"""
-        bbox ('torch.FloatTensor' of shape '(batch_size, num_boxes, 4)'):
+        bbox ('torch.Tensor' of shape '(batch_size, num_boxes, 4)'):
             Bounding box coordinates for each token in the input sequence. Each bounding box is a list of four values
             (x1, y1, x2, y2), where (x1, y1) is the top left corner, and (x2, y2) is the bottom right corner of the
             bounding box.
-        bbox_first_token_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        bbox_first_token_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to indicate the first token of each bounding box. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,

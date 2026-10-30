@@ -318,9 +318,9 @@ class Nemotron3_5AsrProcessor(NemotronAsrStreamingProcessor):
 @dataclass
 class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
     r"""
-    loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
+    loss (`torch.Tensor`, *optional*, returned when `labels` is provided):
         RNN-T transducer loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, encoder_length, decoder_length, vocab_size + 1)`):
+    logits (`torch.Tensor` of shape `(batch_size, encoder_length, decoder_length, vocab_size + 1)`):
         Joint-network scores over the vocabulary plus the blank symbol, for every encoder/decoder frame pair.
     decoder_cache (`Nemotron3_5AsrRNNTDecoderCache`, *optional*):
         Updated decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
@@ -332,8 +332,8 @@ class Nemotron3_5AsrRNNTOutput(BaseModelOutputWithPooling):
         encoding audio with `use_cache=True`. Pass it to the next chunk's forward.
     """
 
-    loss: torch.FloatTensor | None = None
-    logits: torch.FloatTensor | None = None
+    loss: torch.Tensor | None = None
+    logits: torch.Tensor | None = None
     decoder_cache: Nemotron3_5AsrRNNTDecoderCache | None = None
 
     encoder_past_key_values: Cache | None = None
@@ -440,7 +440,7 @@ class Nemotron3_5AsrForRNNT(NemotronAsrStreamingForRNNT, Nemotron3_5AsrGeneratio
             Decoder LSTM cache. Reused on blank predictions to skip the LSTM step.
         use_decoder_cache (`bool`, *optional*):
             Whether to allocate and use a decoder cache when none is provided.
-        encoder_outputs (`tuple(torch.FloatTensor)`, *optional*):
+        encoder_outputs (`tuple(torch.Tensor)`, *optional*):
             Pre-computed encoder outputs (last_hidden_state, pooler_output, ...).
         num_lookahead_tokens (`int`, *optional*):
             Right attention context (lookahead, in subsampled encoder frames) forwarded to the encoder.

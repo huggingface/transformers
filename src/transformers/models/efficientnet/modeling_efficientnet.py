@@ -136,7 +136,7 @@ class EfficientNetExpansionLayer(nn.Module):
         self.expand_bn = nn.BatchNorm2d(num_features=out_dim, eps=config.batch_norm_eps)
         self.expand_act = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # Expand phase
         hidden_states = self.expand_conv(hidden_states)
         hidden_states = self.expand_bn(hidden_states)
@@ -172,7 +172,7 @@ class EfficientNetDepthwiseLayer(nn.Module):
         )
         self.depthwise_act = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         # Depthwise convolution
         if self.stride == 2:
             hidden_states = self.depthwise_conv_pad(hidden_states)
@@ -210,7 +210,7 @@ class EfficientNetSqueezeExciteLayer(nn.Module):
         self.act_reduce = ACT2FN[config.hidden_act]
         self.act_expand = nn.Sigmoid()
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         inputs = hidden_states
         hidden_states = self.squeeze(hidden_states)
         hidden_states = self.reduce(hidden_states)
@@ -245,7 +245,7 @@ class EfficientNetFinalBlockLayer(nn.Module):
         )
         self.dropout = nn.Dropout(p=drop_rate)
 
-    def forward(self, embeddings: torch.FloatTensor, hidden_states: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, embeddings: torch.Tensor, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.project_conv(hidden_states)
         hidden_states = self.project_bn(hidden_states)
 
@@ -324,7 +324,7 @@ class EfficientNetBlock(nn.Module):
             id_skip=id_skip,
         )
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         embeddings = hidden_states
         # Expansion and depthwise convolution phase
         if self.expand_ratio != 1:
@@ -403,7 +403,7 @@ class EfficientNetEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.FloatTensor,
+        hidden_states: torch.Tensor,
         output_hidden_states: bool | None = False,
         return_dict: bool | None = True,
     ) -> BaseModelOutputWithNoAttention:
@@ -471,7 +471,7 @@ class EfficientNetModel(EfficientNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
@@ -529,7 +529,7 @@ class EfficientNetForImageClassification(EfficientNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
         labels: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,

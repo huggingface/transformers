@@ -150,7 +150,7 @@ class PPOCRV5MobileRecBlock(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> torch.Tensor:
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -297,7 +297,7 @@ class PPOCRV5MobileRecEncoderWithSVTR(PPOCRV5MobileRecPreTrainedModel):
 
     @merge_with_config_defaults
     @capture_outputs
-    def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         residual = hidden_states
 
         hidden_states = self.conv_block[0](hidden_states)
@@ -331,9 +331,9 @@ class PPOCRV5MobileRecModel(PPOCRV5MobileRecPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithNoAttention:
         outputs = self.backbone(pixel_values, **kwargs)
         hidden_state = outputs.feature_maps[-1]
         hidden_state = F.avg_pool2d(hidden_state, (3, 2))
@@ -351,7 +351,7 @@ class PPOCRV5MobileRecHead(nn.Module):
         self.encoder = PPOCRV5MobileRecEncoderWithSVTR(config)
         self.head = nn.Linear(config.hidden_size, config.head_out_channels)
 
-    def forward(self, hidden_states: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]):
         outputs = self.encoder(hidden_states, **kwargs)
         hidden_states = self.head(outputs.last_hidden_state)
         hidden_states = F.softmax(hidden_states, dim=2, dtype=torch.float32).to(hidden_states.dtype)
@@ -363,11 +363,11 @@ class PPOCRV5MobileRecHead(nn.Module):
 @dataclass
 class PPOCRV5MobileRecForTextRecognitionOutput(BaseModelOutputWithNoAttention):
     r"""
-    head_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+    head_hidden_states (`tuple(torch.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
         Hidden-states of the PPOCRV5MobileRecHead at the output of each layer plus the optional initial embedding outputs.
     """
 
-    head_hidden_states: torch.FloatTensor | None = None
+    head_hidden_states: torch.Tensor | None = None
 
 
 @auto_docstring(custom_intro="PPOCRV5MobileRec model for text recognition tasks.")
@@ -385,9 +385,9 @@ class PPOCRV5MobileRecForTextRecognition(PPOCRV5MobileRecPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
+        pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithNoAttention:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithNoAttention:
         outputs = self.model(pixel_values, **kwargs)
         head_outputs = self.head(outputs.last_hidden_state, **kwargs)
 

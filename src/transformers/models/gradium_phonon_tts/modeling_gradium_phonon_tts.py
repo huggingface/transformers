@@ -420,24 +420,24 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        audio_prompt_latents: torch.FloatTensor | None = None,
+        audio_prompt_latents: torch.Tensor | None = None,
         audio_prompt_latents_mask: torch.Tensor | None = None,
-        audio_latents: torch.FloatTensor | None = None,
+        audio_latents: torch.Tensor | None = None,
         audio_latents_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
-        audio_prompt_latents (`torch.FloatTensor` of shape `(batch_size, num_prompt_frames, latent_dim)`, *optional*):
+        audio_prompt_latents (`torch.Tensor` of shape `(batch_size, num_prompt_frames, latent_dim)`, *optional*):
             Voice-prompt latents of the audio tokenizer (encoded by the processor, or a checkpoint's `voices/`),
             right-padded to the longest voice of the batch, scattered into the `audio_prompt_token_id` positions.
         audio_prompt_latents_mask (`torch.Tensor` of shape `(batch_size, num_prompt_frames)`, *optional*):
             Mask of the voice frames (`1`) as opposed to padding (`0`) in `audio_prompt_latents`.
-        audio_latents (`torch.FloatTensor` of shape `(batch_size, num_latents, latent_dim)`, *optional*):
+        audio_latents (`torch.Tensor` of shape `(batch_size, num_latents, latent_dim)`, *optional*):
             Normalised audio latents, scattered into the `audio_latent_token_id` positions. The `audio_bos_token_id`
             position before them, which closes the prompt and from which the first frame is generated, always gets the
             learnt BOS latent.
@@ -528,7 +528,7 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
         return latent_embeds + self.get_condition_embeds(latent_embeds.device).to(latent_embeds.device)
 
     def get_token_mask(
-        self, input_ids: torch.LongTensor | None, inputs_embeds: torch.FloatTensor, token_id: int
+        self, input_ids: torch.LongTensor | None, inputs_embeds: torch.Tensor, token_id: int
     ) -> torch.BoolTensor:
         """Mask `(batch_size, seq_len, 1)` of the `token_id` positions, from the ids or the embeddings."""
         if input_ids is None:
@@ -541,8 +541,8 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
     def get_placeholder_mask(
         self,
         input_ids: torch.LongTensor,
-        inputs_embeds: torch.FloatTensor,
-        features: torch.FloatTensor,
+        inputs_embeds: torch.Tensor,
+        features: torch.Tensor,
         placeholder_token_id: int,
     ) -> torch.BoolTensor:
         """
@@ -582,17 +582,17 @@ class GradiumPhononTTSModel(GradiumPhononTTSPreTrainedModel):
 @dataclass
 class GradiumPhononTTSOutputWithPast(CausalLMOutputWithPast):
     r"""
-    loss (`torch.FloatTensor` of shape `()`, *optional*, returned when `labels` is passed):
+    loss (`torch.Tensor` of shape `()`, *optional*, returned when `labels` is passed):
         Training loss: the LSD flow loss of the target latents plus `config.eos_loss_weight` times the end-of-speech loss.
-    logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 1)`):
+    logits (`torch.Tensor` of shape `(batch_size, sequence_length, 1)`):
         End-of-speech logits, one per position.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    last_hidden_state (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Normalised hidden states of the backbone, which condition the flow head.
     """
 
     # Not in `CausalLMOutputWithPast`: generation conditions the flow head on the last hidden state at every step, and
     # `output_hidden_states=True` (CSM's way) would record every layer's hidden states at every step to read only it.
-    last_hidden_state: torch.FloatTensor | None = None
+    last_hidden_state: torch.Tensor | None = None
 
 
 class GradiumPhononTTSFlowLayerNorm(nn.LayerNorm):
@@ -727,27 +727,27 @@ class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, 
     def forward(
         self,
         input_ids: torch.LongTensor | None = None,
-        audio_prompt_latents: torch.FloatTensor | None = None,
+        audio_prompt_latents: torch.Tensor | None = None,
         audio_prompt_latents_mask: torch.Tensor | None = None,
-        audio_latents: torch.FloatTensor | None = None,
-        labels: torch.FloatTensor | None = None,
+        audio_latents: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         labels_mask: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
-        inputs_embeds: torch.FloatTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> GradiumPhononTTSOutputWithPast:
         r"""
-        audio_prompt_latents (`torch.FloatTensor` of shape `(batch_size, num_prompt_frames, latent_dim)`, *optional*):
+        audio_prompt_latents (`torch.Tensor` of shape `(batch_size, num_prompt_frames, latent_dim)`, *optional*):
             Voice-prompt latents of the audio tokenizer, right-padded, scattered into the `audio_prompt_token_id`
             positions.
         audio_prompt_latents_mask (`torch.Tensor` of shape `(batch_size, num_prompt_frames)`, *optional*):
             Mask of the voice frames (`1`) as opposed to padding (`0`) in `audio_prompt_latents`.
-        audio_latents (`torch.FloatTensor` of shape `(batch_size, num_latents, latent_dim)`, *optional*):
+        audio_latents (`torch.Tensor` of shape `(batch_size, num_latents, latent_dim)`, *optional*):
             Normalised audio latents, scattered into the `audio_latent_token_id` positions.
-        labels (`torch.FloatTensor` of shape `(batch_size, num_frames, latent_dim)`, *optional*):
+        labels (`torch.Tensor` of shape `(batch_size, num_frames, latent_dim)`, *optional*):
             Target latents of the audio tokenizer (training), right-padded. Each row's prompt ends with the
             `audio_bos_token_id` position followed by one `audio_latent_token_id` position per frame: the model feeds the
             normalised targets (teacher forcing), applies the flow loss to the outputs of the BOS and all but the last
@@ -832,15 +832,15 @@ class GradiumPhononTTSForConditionalGeneration(GradiumPhononTTSPreTrainedModel, 
         Samples the next latent from `noise` with the flow head.
 
         Args:
-            condition (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
+            condition (`torch.Tensor` of shape `(batch_size, hidden_size)`):
                 Backbone hidden state of the position being generated.
-            noise (`torch.FloatTensor` of shape `(batch_size, latent_dim)`):
+            noise (`torch.Tensor` of shape `(batch_size, latent_dim)`):
                 Gaussian noise scaled by `sqrt(temperature)`, or zeros.
             num_flow_steps (`int`):
                 Number of Euler steps of the LSD sampler (ignored by the drifting head, which takes one call).
 
         Returns:
-            `torch.FloatTensor` of shape `(batch_size, latent_dim)`: the sampled latent, in the normalised space.
+            `torch.Tensor` of shape `(batch_size, latent_dim)`: the sampled latent, in the normalised space.
         """
         # CODEPATH: english_drifting_26-09 takes this side, every other checkpoint the LSD loop below
         if self.config.flow_head_config.flow_type == "drifting":

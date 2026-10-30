@@ -667,9 +667,9 @@ class BarkCoarseModel(BarkCausalModel):
             history_prompt (`Optional[dict[str,torch.Tensor]]`):
                 Optional `Bark` speaker prompt.
         Returns:
-            `tuple(torch.FloatTensor)`:
-            - **x_semantic_history** (`torch.FloatTensor` -- Processed semantic speaker prompt.
-            - **x_coarse_history** (`torch.FloatTensor`) -- Processed coarse speaker prompt.
+            `tuple(torch.Tensor)`:
+            - **x_semantic_history** (`torch.Tensor` -- Processed semantic speaker prompt.
+            - **x_coarse_history** (`torch.Tensor`) -- Processed coarse speaker prompt.
         """
         if history_prompt is not None:
             x_semantic_history = torch.repeat_interleave(history_prompt["semantic_prompt"][None], batch_size, dim=0)

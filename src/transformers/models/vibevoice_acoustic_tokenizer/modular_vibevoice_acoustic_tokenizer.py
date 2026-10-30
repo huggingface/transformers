@@ -36,17 +36,17 @@ from .configuration_vibevoice_acoustic_tokenizer import (
 @dataclass
 class VibeVoiceAcousticTokenizerOutput(ModelOutput):
     r"""
-    audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
+    audio (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
         Decoded audio.
-    latents (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    latents (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Projected latents (continuous representations for acoustic tokens) at the output of the encoder.
     padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*, returned when `use_cache=True` is passed):
         A [`VibeVoiceAcousticTokenizerConv1dPaddingCache`] instance containing cached convolution states for each decoder
         layer that can be passed to subsequent forward calls.
     """
 
-    audio: torch.FloatTensor | None = None
-    latents: torch.FloatTensor | None = None
+    audio: torch.Tensor | None = None
+    latents: torch.Tensor | None = None
     padding_cache: Optional["VibeVoiceAcousticTokenizerConv1dPaddingCache"] = None
 
 
@@ -54,14 +54,14 @@ class VibeVoiceAcousticTokenizerOutput(ModelOutput):
 @dataclass
 class VibeVoiceAcousticTokenizerEncoderOutput(ModelOutput):
     r"""
-    latents (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+    latents (`torch.Tensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Projected latents (continuous representations for acoustic tokens) at the output of the encoder.
     padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*, returned when `use_cache=True` is passed):
         A [`VibeVoiceAcousticTokenizerConv1dPaddingCache`] instance containing cached convolution states for each encoder
         layer that can be passed to subsequent forward calls.
     """
 
-    latents: torch.FloatTensor | None = None
+    latents: torch.Tensor | None = None
     padding_cache: Optional["VibeVoiceAcousticTokenizerConv1dPaddingCache"] = None
 
 
@@ -69,14 +69,14 @@ class VibeVoiceAcousticTokenizerEncoderOutput(ModelOutput):
 @dataclass
 class VibeVoiceAcousticTokenizerDecoderOutput(ModelOutput):
     r"""
-    audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
+    audio (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
         Decoded audio.
     padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*, returned when `use_cache=True` is passed):
         A [`VibeVoiceAcousticTokenizerConv1dPaddingCache`] instance containing cached convolution states for each decoder
         layer that can be passed to subsequent forward calls.
     """
 
-    audio: torch.FloatTensor | None = None
+    audio: torch.Tensor | None = None
     padding_cache: Optional["VibeVoiceAcousticTokenizerConv1dPaddingCache"] = None
 
 
@@ -433,7 +433,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
     @auto_docstring
     def encode(self, input_values, padding_cache=None, use_cache=None, sample=True):
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representation.
         padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*):
             Cache object for streaming mode to maintain convolution states across layers.
@@ -459,7 +459,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
     @auto_docstring
     def decode(self, latents, padding_cache=None, use_cache=False):
         r"""
-        latents (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
+        latents (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
             Input latent representation to be decoded back into audio.
         padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*):
             Cache object for streaming mode to maintain convolution states across layers.
@@ -473,7 +473,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
     @auto_docstring
     def forward(self, input_values, padding_cache=None, use_cache=False, sample=True, **kwargs):
         r"""
-        input_values (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
+        input_values (`torch.Tensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representation.
         padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*):
             Cache object for streaming mode to maintain convolution states across layers. Note only used by decoder.
