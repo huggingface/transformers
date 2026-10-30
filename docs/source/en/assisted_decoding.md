@@ -27,6 +27,9 @@ The method works best when the assistant model is significantly smaller than the
 
 Pass `assistant_model` to [`~GenerationMixin.generate`]. Set `do_sample=True` to resample if token validation fails.
 
+> [!TIP]
+> Pass `cache_implementation="static"` to run the verification step of the main model through [torch.compile](./perf_torch_compile), see [KV cache](./kv_cache#fixed-size-cache). The assistant keeps running eagerly, since its draft length varies between rounds.
+
 <hfoptions id="spec-decoding">
 <hfoption id="greedy search">
 
