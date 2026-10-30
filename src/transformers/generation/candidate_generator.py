@@ -1757,12 +1757,10 @@ class DSparkTokenCandidateGenerator(DFlashTokenCandidateGenerator):
 
         # There are two possible head types for DSpark:
         # - "vanilla": a drafted token is biased only by the one right before it
-        # - "rnn" (NOT SUPPORTED YET): a drafted token is biased by all that came before it, requiring a state to be passed
+        # - "rnn": a drafted token is biased by all that came before it, requiring a state to be passed
         self.head_type = self.assistant_model.config.head_type
-        if self.head_type not in ["vanilla"]:
-            raise ValueError(
-                f"Invalid head type: {self.head_type = }. Only 'vanilla' is supported ('rnn' is not supported yet)."
-            )
+        if self.head_type not in ["vanilla", "rnn"]:
+            raise ValueError(f"Invalid head type: {self.head_type = }. Only 'vanilla' and 'rnn' are supported.")
 
     def get_candidates(
         self,
@@ -1798,22 +1796,30 @@ class DSparkTokenCandidateGenerator(DFlashTokenCandidateGenerator):
         candidate_logits = self.main_model_output_embeddings(
             draft_hidden_states.to(self.main_model_output_embeddings.weight.device)
         ).to(dtype=torch.float32, device=input_ids.device)
-        # For logits processors
-        candidate_ids = input_ids
+
         # We initialize the previous drafted ID with the last real token ID
         previous_drafted_id = input_ids[:, -1]
+        candidate_ids = input_ids  # for logits processors
+        state = None  # for "rnn" head if there is one
 
         for i in range(draft_hidden_states.shape[1]):
             # Compute bias
+            previous_drafted_id = previous_drafted_id.to(self.device)
             if self.head_type == "vanilla":
-                bias = self.assistant_model.sequential_block(previous_drafted_id.to(self.device))
+                bias = self.assistant_model.sequential_block(previous_drafted_id)
+            elif self.head_type == "rnn":
+                bias, state = self.assistant_model.sequential_block(
+                    previous_drafted_id, draft_hidden_states[:, i], state
+                )
             else:
                 raise ValueError(f"Invalid head type: {self.head_type = }")
+
             # Compute logits, maybe apply logits processor, and change them in place
             logits = candidate_logits[:, i] + bias.to(candidate_logits.device)
             if self.logits_processor is not None:
                 logits = self.logits_processor(candidate_ids, logits)
             candidate_logits[:, i, :].copy_(logits)
+
             # Sample next token
             if self.do_sample:
                 probs = nn.functional.softmax(candidate_logits[:, i, :], dim=-1, dtype=torch.float32)
