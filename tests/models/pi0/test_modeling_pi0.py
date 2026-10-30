@@ -13,16 +13,19 @@
 # limitations under the License.
 """Testing suite for the PyTorch PI0 model."""
 
+import os
 import tempfile
 import unittest
 
 from datasets import Dataset, load_dataset
 from parameterized import parameterized
+from safetensors.torch import load_file, save_file
 
 from transformers import PI0Config, PI0Processor, Trainer, TrainingArguments, is_torch_available
 from transformers.image_utils import load_image
 from transformers.testing_utils import (
     require_torch,
+    require_torch_gpu,
     require_torch_large_accelerator,
     require_torch_non_multi_accelerator,
     slow,
@@ -167,6 +170,27 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @require_torch_gpu
+    def test_sample_actions_cuda_graph_matches_eager(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for key in ("actions", "timestep"):
+            inputs_dict.pop(key)
+        model = PI0ForConditionalGeneration(config).eval().to(torch_device)
+
+        with torch.no_grad():
+            expected = model.sample_actions(**inputs_dict, num_steps=3)
+            side_stream = torch.cuda.Stream()
+            side_stream.wait_stream(torch.cuda.current_stream())
+            with torch.cuda.stream(side_stream):
+                model.sample_actions(**inputs_dict, num_steps=3)
+            torch.cuda.current_stream().wait_stream(side_stream)
+            graph = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(graph):
+                replayed = model.sample_actions(**inputs_dict, num_steps=3)
+            graph.replay()
+
+        torch.testing.assert_close(replayed, expected, rtol=0, atol=0)
+
     def test_model_loss_per_sample(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.loss_reduction = "none"  # check that loss per sample is returned
@@ -174,6 +198,29 @@ class PI0ForConditionalGenerationModelTest(ModelTesterMixin, unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs_dict)
         self.assertEqual(outputs.loss.shape, (self.model_tester.batch_size, config.chunk_size, config.max_action_dim))
+
+    def test_load_lerobot_base_and_finetuned_layouts(self):
+        config = self.model_tester.get_config()
+        model = PI0ForConditionalGeneration(config).eval()
+        with tempfile.TemporaryDirectory() as saved_directory:
+            model.save_pretrained(saved_directory)
+            saved_state_dict = load_file(os.path.join(saved_directory, "model.safetensors"))
+            layouts = {
+                "finetuned": {
+                    key if key.startswith("model.") else f"model.{key}": value
+                    for key, value in saved_state_dict.items()
+                },
+                "base": {key.removeprefix("model."): value for key, value in saved_state_dict.items()},
+            }
+            for layout_name, state_dict in layouts.items():
+                save_file(state_dict, os.path.join(saved_directory, "model.safetensors"), metadata={"format": "pt"})
+                reloaded, loading_info = PI0ForConditionalGeneration.from_pretrained(
+                    saved_directory, output_loading_info=True
+                )
+                self.assertEqual(loading_info["missing_keys"], set(), layout_name)
+                self.assertEqual(loading_info["unexpected_keys"], set(), layout_name)
+                for name, parameter in model.state_dict().items():
+                    torch.testing.assert_close(reloaded.state_dict()[name], parameter, rtol=0, atol=0)
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Model architecture is special and requires much higher `tols`")
