@@ -118,6 +118,17 @@ RUN python3 -m pip install --no-cache-dir --no-deps --index-url ${TORCHAUDIO_IND
 RUN printf 'torch==%s\ntorchvision==%s\n' "${TORCH_VERSION}" "${TORCHVISION_VERSION}" > /opt/rocm-constraints.txt
 ENV PIP_CONSTRAINT=/opt/rocm-constraints.txt
 
+# Every other Python package, pinned per GPU arch (the device wheels differ). Unpinned,
+# two builds of the same commit diverged: on 2026-10-24 a rebuild pulled
+# huggingface_hub 2.3.0 where the published image had 1.33.0, plus fastapi, openai,
+# pandas and 40 more, so a "same image plus one change" was not. The files are a pip
+# freeze of a reviewed build; regenerate them with constraints-update.sh and review
+# the diff before an image is pushed. A missing file for an arch fails the build.
+# With REF=main, a main that raises a dependency floor fails the build here
+# rather than drifting: regenerate the file then.
+COPY constraints-${GPU_ARCH}.txt /opt/hf-constraints.txt
+ENV PIP_CONSTRAINT="/opt/rocm-constraints.txt /opt/hf-constraints.txt"
+
 # torchvision image codecs. PyTorch's rocm7.14 channel ships them; AMD's ROCm
 # 10.x torchvision (a TheRock build) is built without libPNG, so decode_png
 # raises "torchvision not compiled with libPNG support" and every fast image
