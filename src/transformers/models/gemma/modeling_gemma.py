@@ -129,7 +129,7 @@ class GemmaRotaryEmbedding(nn.Module):
 
         attention_factor = 1.0  # Unused in this type of RoPE
         # Compute the inverse frequencies
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
         return inv_freq, attention_factor
 
     @torch.no_grad()
