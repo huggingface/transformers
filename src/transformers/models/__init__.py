@@ -266,9 +266,14 @@ if TYPE_CHECKING:
     from .lfm2 import *
     from .lfm2_moe import *
     from .lfm2_vl import *
+    from .lfm3 import *
+    from .lfm3_audio import *
+    from .lfm3_omni import *
+    from .lfm3_vl import *
     from .lightglue import *
     from .lighton_ocr import *
     from .lilt import *
+    from .liquid_codec import *
     from .llama import *
     from .llama4 import *
     from .llava import *

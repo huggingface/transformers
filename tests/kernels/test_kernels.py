@@ -723,6 +723,14 @@ class TestKernelUtilities(TestCasePlus):
             reference(*inputs, cu_seqlens=cu_seqlens)
         with self.assertRaisesRegex(ValueError, "packed sequences"):
             reference(*inputs, seq_idx=torch.tensor([[0, 0, 1, 1]], dtype=torch.int32))
+
+        # a reference that takes the boundaries itself is not refused
+        def segmented_op(hidden_states, weight, seq_idx=None):
+            return hidden_states * weight * (1 + seq_idx)
+
+        segmented = use_kernel_func_from_hub_with_fallback("segmented_op", "missing_kernel_package")(segmented_op)
+        seq_idx = torch.tensor([0, 0, 1, 1], dtype=torch.int32)
+        self.assertTrue(torch.equal(segmented(*inputs, seq_idx=seq_idx), torch.tensor([3.0, 3.0, 6.0, 6.0])))
         self.assertTrue(
             torch.equal(self._make_fallback_func(fake_op)(*inputs, cu_seqlens=cu_seqlens), torch.full((4,), 30.0))
         )
