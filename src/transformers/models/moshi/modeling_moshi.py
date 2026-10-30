@@ -808,7 +808,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
     input_modalities = ("text",)
 
     # Copied from transformers.models.gemma.modeling_gemma.GemmaForCausalLM.__init__ with Gemma->Moshi
-    def __init__(self, config):
+    def __init__(self, config: MoshiConfig):
         super().__init__(config)
         self.model = MoshiModel(config)
         self.vocab_size = config.vocab_size

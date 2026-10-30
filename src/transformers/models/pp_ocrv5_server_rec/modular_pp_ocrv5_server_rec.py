@@ -341,7 +341,7 @@ class PPOCRV5ServerRecEncoderWithSVTR(PPOCRV5ServerRecPreTrainedModel):
 
     def __init__(
         self,
-        config,
+        config: PPOCRV5ServerRecConfig,
     ):
         super().__init__(config)
         in_channels = config.backbone_config.stage_out_channels[-1]

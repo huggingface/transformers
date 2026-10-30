@@ -661,7 +661,7 @@ class XmodPreTrainedModel(PreTrainedModel):
     """
 )
 class XmodModel(XmodPreTrainedModel):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: XmodConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -816,7 +816,7 @@ class XmodForCausalLM(XmodPreTrainedModel, GenerationMixin):
     }
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM.__init__ with Roberta->Xmod
-    def __init__(self, config):
+    def __init__(self, config: XmodConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -924,7 +924,7 @@ class XmodForMaskedLM(XmodPreTrainedModel):
     }
 
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM.__init__ with Roberta->Xmod
-    def __init__(self, config):
+    def __init__(self, config: XmodConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -1026,7 +1026,7 @@ class XmodLMHead(nn.Module):
 )
 class XmodForSequenceClassification(XmodPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->Xmod
-    def __init__(self, config):
+    def __init__(self, config: XmodConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1102,7 +1102,7 @@ class XmodForSequenceClassification(XmodPreTrainedModel):
 @auto_docstring
 class XmodForMultipleChoice(XmodPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice.__init__ with Roberta->Xmod
-    def __init__(self, config):
+    def __init__(self, config: XmodConfig):
         super().__init__(config)
 
         self.roberta = XmodModel(config)
@@ -1199,7 +1199,7 @@ class XmodForMultipleChoice(XmodPreTrainedModel):
 @auto_docstring
 class XmodForTokenClassification(XmodPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->Xmod
-    def __init__(self, config):
+    def __init__(self, config: XmodConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1286,7 +1286,7 @@ class XmodClassificationHead(nn.Module):
 @auto_docstring
 class XmodForQuestionAnswering(XmodPreTrainedModel):
     # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->Xmod
-    def __init__(self, config):
+    def __init__(self, config: XmodConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

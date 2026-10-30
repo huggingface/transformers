@@ -430,7 +430,7 @@ class SmolLM3ForCausalLM(SmolLM3PreTrainedModel, GenerationMixin):
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
     _fsdp_plan = {"lm_head": "keep_full_weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: SmolLM3Config):
         super().__init__(config)
         self.model = SmolLM3Model(config)
         self.vocab_size = config.vocab_size

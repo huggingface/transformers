@@ -710,7 +710,7 @@ class GitModel(GitPreTrainedModel):
         "attentions": GitSelfAttention,
     }
 
-    def __init__(self, config):
+    def __init__(self, config: GitConfig):
         super().__init__(config)
         self.config = config
 
@@ -890,7 +890,7 @@ class GitModel(GitPreTrainedModel):
 class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"output.weight": "git.embeddings.word_embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: GitConfig):
         super().__init__(config)
 
         self.git = GitModel(config)

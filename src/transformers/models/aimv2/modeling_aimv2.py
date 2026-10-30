@@ -535,7 +535,7 @@ class Aimv2VisionModel(Aimv2PreTrainedModel):
 )
 class Aimv2TextModel(Aimv2PreTrainedModel):
     main_input_name = "input_ids"
-
+    config: Aimv2TextConfig
     _can_record_outputs = {
         "hidden_states": Aimv2EncoderLayer,
         "attentions": Aimv2Attention,

@@ -535,7 +535,7 @@ class LayoutLMv3PreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMv3Config):
         super().__init__(config)
         self.config = config
 
@@ -832,7 +832,7 @@ class LayoutLMv3ClassificationHead(nn.Module):
     """
 )
 class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMv3Config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -930,7 +930,7 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
 
 @auto_docstring
 class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMv3Config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1045,7 +1045,7 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
     """
 )
 class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: LayoutLMv3Config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config

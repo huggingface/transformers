@@ -250,7 +250,7 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class PoolFormerModel(PoolFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PoolFormerConfig):
         super().__init__(config)
         self.config = config
 
@@ -314,7 +314,7 @@ class PoolFormerFinalPooler(nn.Module):
     """
 )
 class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PoolFormerConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.poolformer = PoolFormerModel(config)
