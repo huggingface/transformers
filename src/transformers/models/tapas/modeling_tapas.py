@@ -518,7 +518,7 @@ class TapasModel(TapasPreTrainedModel):
 
     """
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: TapasConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -665,7 +665,7 @@ class TapasForMaskedLM(TapasPreTrainedModel):
     config: TapasConfig
     base_model_prefix = "tapas"
 
-    def __init__(self, config):
+    def __init__(self, config: TapasConfig):
         super().__init__(config)
 
         self.tapas = TapasModel(config, add_pooling_layer=False)
@@ -1117,7 +1117,7 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
     """
 )
 class TapasForSequenceClassification(TapasPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: TapasConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

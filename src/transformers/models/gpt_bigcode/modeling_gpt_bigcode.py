@@ -369,7 +369,7 @@ class GPTBigCodePreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class GPTBigCodeModel(GPTBigCodePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTBigCodeConfig):
         super().__init__(config)
         self.multi_query = config.multi_query
         self.embed_dim = config.hidden_size
@@ -511,7 +511,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
 class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"lm_head.weight": "transformer.wte.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: GPTBigCodeConfig):
         super().__init__(config)
         self.transformer = GPTBigCodeModel(config)
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
@@ -600,7 +600,7 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
     """
 )
 class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTBigCodeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = GPTBigCodeModel(config)
@@ -709,7 +709,7 @@ class GPTBigCodeForSequenceClassification(GPTBigCodePreTrainedModel):
 
 @auto_docstring
 class GPTBigCodeForTokenClassification(GPTBigCodePreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: GPTBigCodeConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

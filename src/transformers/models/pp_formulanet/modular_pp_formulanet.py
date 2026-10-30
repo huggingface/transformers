@@ -318,6 +318,8 @@ class PPFormulaNetMultiModalProjector(nn.Module):
 
 
 class PPFormulaNetVisionModel(SLANeXtVisionEncoder):
+    config: PPFormulaNetVisionConfig
+
     def __init__(self, config: PPFormulaNetVisionConfig):
         super().__init__()
         self.multi_modal_projector = PPFormulaNetMultiModalProjector(config)
@@ -350,7 +352,7 @@ class PPFormulaNetTextModel(MBartDecoder):
 
 
 class PPFormulaNetModel(PPFormulaNetPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: PPFormulaNetConfig):
         super().__init__(config)
 
         self.decoder = PPFormulaNetTextModel(config.text_config)

@@ -1091,7 +1091,7 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
     """
 )
 class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: UniSpeechSatConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -1218,7 +1218,7 @@ class UniSpeechSatForCTC(UniSpeechSatPreTrainedModel):
     """
 )
 class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UniSpeechSatConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1311,7 +1311,7 @@ class UniSpeechSatForSequenceClassification(UniSpeechSatPreTrainedModel):
 
 @auto_docstring
 class UniSpeechSatForAudioFrameClassification(UniSpeechSatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UniSpeechSatConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:
@@ -1457,7 +1457,7 @@ class TDNNLayer(nn.Module):
     """
 )
 class UniSpeechSatForXVector(UniSpeechSatPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: UniSpeechSatConfig):
         super().__init__(config)
 
         self.unispeech_sat = UniSpeechSatModel(config)

@@ -416,7 +416,7 @@ class SqueezeBertPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class SqueezeBertModel(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
 
         self.embeddings = SqueezeBertEmbeddings(config)
@@ -506,7 +506,7 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
         "cls.predictions.decoder.weight": "transformer.embeddings.word_embeddings.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
 
         self.transformer = SqueezeBertModel(config)
@@ -576,7 +576,7 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
     """
 )
 class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -657,7 +657,7 @@ class SqueezeBertForSequenceClassification(SqueezeBertPreTrainedModel):
 
 @auto_docstring
 class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
 
         self.transformer = SqueezeBertModel(config)
@@ -756,7 +756,7 @@ class SqueezeBertForMultipleChoice(SqueezeBertPreTrainedModel):
 
 @auto_docstring
 class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -818,7 +818,7 @@ class SqueezeBertForTokenClassification(SqueezeBertPreTrainedModel):
 
 @auto_docstring
 class SqueezeBertForQuestionAnswering(SqueezeBertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: SqueezeBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

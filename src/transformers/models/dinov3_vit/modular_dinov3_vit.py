@@ -455,7 +455,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
 
 @auto_docstring
 class DINOv3ViTBackbone(BackboneMixin, DINOv3ViTPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: DINOv3ViTConfig):
         super().__init__(config)
         self.embeddings = DINOv3ViTEmbeddings(config)
         self.rope_embeddings = DINOv3ViTRopePositionEmbedding(config)
