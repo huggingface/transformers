@@ -215,7 +215,7 @@ def apply_fully_sharded_data_parallelism(
     fsdp_mesh = mesh_manager.get_mesh("fsdp")
     fsdp_policy_kwargs = _get_fsdp_policy_kwargs(distributed_config)
 
-    if distributed_config is not None and distributed_config.ep_size > 1 and ep_plan:
+    if distributed_config is not None and distributed_config.ep_size > 1:
         expert_mesh = mesh_manager.get_mesh("efsdp")
         for module_name, module in model.named_modules():
             if ep_plan.get(module_name) == "ep_dispatch_experts":
