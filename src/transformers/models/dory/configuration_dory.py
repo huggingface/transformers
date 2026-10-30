@@ -91,21 +91,38 @@ class DoryConfig(PreTrainedConfig):
             self.layer_types = [
                 "full_attention" if (i + 1) % 4 == 0 else "sliding_attention" for i in range(self.num_hidden_layers)
             ]
+        if self.n_recurrent_layers is None:
+            self.n_recurrent_layers = self.num_hidden_layers - self.n_input_layers - self.n_output_layers
+        # The recurrent layers run once per loop, their cache keeps one history per loop
+        recurrent_end = self.n_input_layers + self.n_recurrent_layers
+        self.layer_types = [
+            f"recurrent_{layer_type.removeprefix('recurrent_')}"
+            if self.n_input_layers <= i < recurrent_end
+            else layer_type
+            for i, layer_type in enumerate(self.layer_types)
+        ]
         if self.rope_parameters is None:
             rope_thetas = {"sliding_attention": 10_000.0, "full_attention": 10_000_000.0}
             self.rope_parameters = {
                 layer_type: {"rope_type": "default", "rope_theta": rope_thetas[layer_type]}
-                for layer_type in set(self.layer_types)
+                for layer_type in {layer_type.removeprefix("recurrent_") for layer_type in self.layer_types}
             }
-        if self.n_recurrent_layers is None:
-            self.n_recurrent_layers = self.num_hidden_layers - self.n_input_layers - self.n_output_layers
+        # Recurrent layers use the rope of their attention type
+        for layer_type in set(self.layer_types):
+            self.rope_parameters.setdefault(layer_type, self.rope_parameters[layer_type.removeprefix("recurrent_")])
         super().__post_init__(**kwargs)
 
     def to_dict(self):
         output = super().to_dict()
         # Serialize the layout `__post_init__` converted from, as released checkpoints (and vLLM / llama.cpp) store it:
         # each decoder layer is an attention block followed by an mlp block
-        output["layer_types"] = [block for layer_type in self.layer_types for block in (layer_type, "mlp")]
+        layer_types = [layer_type.removeprefix("recurrent_") for layer_type in self.layer_types]
+        output["layer_types"] = [block for layer_type in layer_types for block in (layer_type, "mlp")]
+        output["rope_parameters"] = {
+            layer_type: rope
+            for layer_type, rope in output["rope_parameters"].items()
+            if not layer_type.startswith("recurrent_")
+        }
         for key in ("num_hidden_layers", "n_input_layers", "n_recurrent_layers", "n_output_layers"):
             output[key] = 2 * getattr(self, key)
         return output
