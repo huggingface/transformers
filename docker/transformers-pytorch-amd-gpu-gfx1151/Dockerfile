@@ -200,8 +200,7 @@ RUN cd transformers && python3 setup.py develop
 # tested on NVIDIA either.
 RUN python3 -m pip uninstall -y py3nvml pynvml nvidia-ml-py apex || true
 
-# `kernels` may cause many failing tests.
-RUN python3 -m pip uninstall -y kernels || true
+# `kernels` is pinned in below, not uninstalled; see the note there.
 
 # Common extra deps used across the test suite. scipy, librosa and soundfile
 # are easy to miss: transformers' lazy imports turn their absence into errors
@@ -223,8 +222,22 @@ RUN python3 -m pip uninstall -y kernels || true
 # matplotlib: auto's test_custom_tokenizer_init loads a remote-code tokenizer
 # that imports it, so without it that slow test fails with an ImportError naming
 # matplotlib, on every GPU.
+#
+# kernels, pinned to transformers' range (setup.py: kernels>=0.17.0,<0.18).
+# It used to be uninstalled: adding it took gpt_oss from 5 failures to 25, all
+# resolving the CUDA-only kernels-community/vllm-flash-attn3. Retested on ROCm
+# 10.1 with kernels 0.17.2: the kernel tests in ministral3, granite_swa and
+# granitemoe_swa pass, and ministral3's fp8 slow tests now load
+# finegrained-fp8's torch-rocm build and run. Compiled kernels still fail to
+# load on ROCm 10.1; see "Hub kernels" at the end of this file.
+# urllib3 is pinned here, not globally, because two requirements conflict:
+# transformers[testing] (its "quality" deps) wants urllib3<2.0.0, while kernels
+# 0.17.2 -> sigstore -> tuf wants urllib3~=2.0. Unpinned, the transformers
+# install takes 1.26.x and this step upgrades it. A global constraint would
+# apply to the transformers step too and make it unresolvable.
 RUN python3 -m pip install --no-cache-dir einops blobfile num2words timm \
-      scipy librosa soundfile pycocotools peft bitsandbytes matplotlib
+      scipy librosa soundfile pycocotools peft bitsandbytes matplotlib \
+      "kernels==0.17.2" "urllib3==2.8.0"
 
 # Media decoders needed by audio/video model tests:
 #  - PyAV (`av`): torchvision video ops
@@ -291,3 +304,8 @@ ENV FLASH_ATTENTION_TRITON_AMD_ENABLE=TRUE
 # TMPDIR non-existent, and ROCm then segfaults on the first kernel launch.
 # Container /tmp (overlay, disk-backed) is fine. If a dedicated cache is wanted
 # later, create it at runtime inside whatever is mounted.
+
+# Last: urllib3 must still be 2.x (pinned on the kernels step above, against
+# transformers[testing]'s <2) and kernels must still import. A later step that
+# resolved deps would silently move urllib3 back to 1.26 and break kernels' tuf.
+RUN python3 -c "import urllib3, kernels; assert urllib3.__version__.startswith('2.'), urllib3.__version__"
