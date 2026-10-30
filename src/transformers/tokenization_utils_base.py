@@ -53,6 +53,7 @@ from .utils import (
     is_numpy_array,
     is_protobuf_available,
     is_tokenizers_available,
+    is_tokenizers_v1_available,
     is_torch_available,
     is_torch_device,
     is_torch_tensor,
@@ -100,7 +101,7 @@ def flatten(arr: list):
 if is_tokenizers_available() or TYPE_CHECKING:
     from tokenizers import Encoding as EncodingFast
 
-if is_tokenizers_available():
+if is_tokenizers_available() or is_tokenizers_v1_available():
     from tokenizers import AddedToken
 else:
 
