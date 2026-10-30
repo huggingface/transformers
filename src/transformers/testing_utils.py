@@ -161,6 +161,7 @@ from .utils import (
     is_tiktoken_available,
     is_timm_available,
     is_tokenizers_available,
+    is_tokenizers_v1_available,
     is_torch_available,
     is_torch_bf16_available_on_device,
     is_torch_flex_attn_available,
@@ -910,6 +911,13 @@ def require_tokenizers(test_case):
     Decorator marking a test that requires 🤗 Tokenizers. These tests are skipped when 🤗 Tokenizers isn't installed.
     """
     return unittest.skipUnless(is_tokenizers_available(), "test requires tokenizers")(test_case)
+
+
+def require_tokenizers_v1(test_case):
+    """
+    Decorator marking a test that requires 🤗 Tokenizers 1.x. These tests are skipped when it isn't installed.
+    """
+    return unittest.skipUnless(is_tokenizers_v1_available(), "test requires tokenizers>=1.0")(test_case)
 
 
 def require_pandas(test_case):

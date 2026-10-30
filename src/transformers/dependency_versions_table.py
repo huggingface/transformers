@@ -68,7 +68,7 @@ deps = {
     "timeout-decorator": "timeout-decorator",
     "tiktoken": "tiktoken",
     "timm": "timm>=1.0.23",
-    "tokenizers": "tokenizers>=0.23.1,<0.24.0",
+    "tokenizers": "tokenizers>=0.23.1,<2.0.0",
     "torch": "torch>=2.6",
     "torchaudio": "torchaudio",
     "torchvision": "torchvision",

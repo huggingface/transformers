@@ -117,6 +117,29 @@ def _lfm2_config(metadata: dict, tensor_names: tuple[str, ...]) -> dict:
     }
 
 
+# Lives here rather than in `gguf_tokenizer_mapping`, which needs tokenizers<1, so that loading
+# a GGUF model does not import tokenizers.
+GGUF_TOKENIZER_MAPPING = {
+    "tokenizer": {
+        "ggml.model": "tokenizer_type",
+        "ggml.pre": "pre_tokenizer_type",
+        "ggml.tokens": "tokens",
+        "ggml.scores": "scores",
+        "ggml.token_type": "token_type",
+        "ggml.merges": "merges",
+        "ggml.precompiled_charsmap": "precompiled_charsmap",
+        "ggml.bos_token_id": "bos_token_id",
+        "ggml.eos_token_id": "eos_token_id",
+        "ggml.unknown_token_id": "unk_token_id",
+        "ggml.padding_token_id": "pad_token_id",
+        "ggml.add_space_prefix": "add_prefix_space",
+    },
+    "tokenizer_config": {
+        "chat_template": "chat_template",
+    },
+}
+
+
 GGUF_CONFIG_ARCHS = {
     "qwen35": _qwen35_config,
     "qwen35moe": _qwen35moe_config,
