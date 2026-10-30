@@ -39,12 +39,7 @@ from ...integrations.accelerate import force_accelerate_hooks
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    BaseModelOutputWithPooling,
-    MoeCausalLMOutputWithPast,
-    MoeModelOutputWithPast,
-)
+from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
@@ -1314,7 +1309,7 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -1369,7 +1364,7 @@ class Qwen3_5MoeTextModel(Qwen3_5MoePreTrainedModel):
 
         hidden_states = self.norm(hidden_states)
 
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -1730,13 +1725,7 @@ class Qwen3_5MoeModel(Qwen3_5MoePreTrainedModel):
             use_cache=use_cache,
             **kwargs,
         )
-        return MoeModelOutputWithPast(
-            last_hidden_state=outputs.last_hidden_state,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            router_logits=outputs.router_logits,
-        )
+        return outputs
 
 
 def load_balancing_loss_func(

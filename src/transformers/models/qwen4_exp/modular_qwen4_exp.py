@@ -26,7 +26,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...integrations import use_kernelized_func
 from ...masking_utils import create_causal_mask, create_recurrent_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, MoeModelOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -1023,7 +1023,7 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
 
         hidden_states = self.hyper_connection_mixer(hidden_states)
 
-        return BaseModelOutputWithPast(
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
         )
@@ -1054,7 +1054,7 @@ class Qwen4ExpModel(Qwen3_5MoeModel):
         mm_token_type_ids: torch.IntTensor | None = None,
         mm_encoder_outputs: dict[str, BaseModelOutputWithPooling] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
