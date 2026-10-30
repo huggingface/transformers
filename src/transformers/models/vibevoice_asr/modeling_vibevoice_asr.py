@@ -322,6 +322,7 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         self,
         input_values: torch.FloatTensor,
         padding_mask: torch.BoolTensor | None = None,
+        sample: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
@@ -329,6 +330,9 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
             Input audio tensor sampled at 24kHz.
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
+        sample (`bool`, *optional*, defaults to `True`):
+            Whether to sample the acoustic latents from the VAE. If False, the latent mean is used, so the output
+            is deterministic.
         """
         with torch.no_grad():
             acoustic_encoder_cache, semantic_encoder_cache = None, None
@@ -354,11 +358,11 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
             acoustic_latents = torch.cat(acoustic_latents, dim=1)
             semantic_latents = torch.cat(semantic_latents, dim=1)
 
-            # Sample acoustic tokens
-            noise_std = self.config.acoustic_tokenizer_encoder_config.vae_std * torch.randn(
-                acoustic_latents.shape[0], device=acoustic_latents.device, dtype=acoustic_latents.dtype
-            )
-            acoustic_latents = acoustic_latents + noise_std[:, None, None] * torch.randn_like(acoustic_latents)
+            if sample:
+                noise_std = self.config.acoustic_tokenizer_encoder_config.vae_std * torch.randn(
+                    acoustic_latents.shape[0], device=acoustic_latents.device, dtype=acoustic_latents.dtype
+                )
+                acoustic_latents = acoustic_latents + noise_std[:, None, None] * torch.randn_like(acoustic_latents)
 
         combined_features = self.multi_modal_projector(acoustic_latents, semantic_latents)
         if padding_mask is not None:
@@ -381,18 +385,24 @@ class VibeVoiceAsrModel(VibeVoiceAsrPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         input_values: torch.FloatTensor | None = None,
         padding_mask: torch.BoolTensor | None = None,
+        sample: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VibeVoiceAsrModelOutputWithPast:
         r"""
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
+        sample (`bool`, *optional*, defaults to `True`):
+            Whether to sample the acoustic latents from the VAE. If False, the latent mean is used, so the output
+            is deterministic.
         """
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         audio_embeds = None
         if input_values is not None and input_ids is not None:
-            audio_embeds = self.get_audio_features(input_values=input_values, padding_mask=padding_mask).pooler_output
+            audio_embeds = self.get_audio_features(
+                input_values=input_values, padding_mask=padding_mask, sample=sample
+            ).pooler_output
 
             audio_token_mask = (input_ids == self.config.audio_token_id).unsqueeze(-1)
             inputs_embeds = inputs_embeds.masked_scatter(
@@ -442,11 +452,15 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
         padding_mask: torch.BoolTensor | None = None,
         labels: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        sample: bool = True,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | VibeVoiceAsrCausalLMOutputWithPast:
         r"""
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing operations on padding feature indices.
+        sample (`bool`, *optional*, defaults to `True`):
+            Whether to sample the acoustic latents from the VAE. If False, the latent mean is used, so the output
+            is deterministic.
 
         Example:
 
@@ -464,6 +478,7 @@ class VibeVoiceAsrForConditionalGeneration(VibeVoiceAsrPreTrainedModel, Generati
             inputs_embeds=inputs_embeds,
             input_values=input_values,
             padding_mask=padding_mask,
+            sample=sample,
             **kwargs,
         )
 
