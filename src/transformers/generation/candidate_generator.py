@@ -37,7 +37,7 @@ class CandidateGenerator:
 
     requires_model_outputs: bool = False
 
-    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.FloatTensor]:
+    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.Tensor]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -47,21 +47,21 @@ class CandidateGenerator:
 
         Return:
             `torch.LongTensor` of shape `(batch_size, candidate_length)` containing the candidate sequences to be
-            assessed by the model and, optionally, a `torch.FloatTensor` of shape `(batch_size, candidate_length,
+            assessed by the model and, optionally, a `torch.Tensor` of shape `(batch_size, candidate_length,
             vocabulary_size)` containing the logits associated to each candidate.
         """
         raise NotImplementedError(
             f"{self.__class__} is an abstract class. Only classes inheriting this class can call `get_candidates`."
         )
 
-    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
+    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.Tensor, num_matches: int):
         """
         Updates the candidate generation strategy based on the outcomes if needed.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
-            scores (`torch.FloatTensor` of shape `(batch_size, candidate_length, config.vocab_size)`):
+            scores (`torch.Tensor` of shape `(batch_size, candidate_length, config.vocab_size)`):
                 Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
                 beam search or log softmax for each vocabulary token when using beam search
             num_matches (`int`):
@@ -191,7 +191,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
             self.probs = []
             self.matches = []
 
-    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.FloatTensor]:
+    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.Tensor]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -201,7 +201,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
         Return:
             `torch.LongTensor` of shape `(batch_size, candidate_length)` containing the candidate sequences to be
-            assessed by the model and a `torch.FloatTensor` of shape `(batch_size, candidate_length,
+            assessed by the model and a `torch.Tensor` of shape `(batch_size, candidate_length,
             vocabulary_size)` containing the logits associated to each candidate.
         """
         input_ids = input_ids.to(self.assistant_model.device)
@@ -216,14 +216,14 @@ class AssistedCandidateGenerator(CandidateGenerator):
         candidate_ids, candidate_logits = self._generate_candidates(generation_args)
         return candidate_ids, candidate_logits
 
-    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, num_matches: int):
+    def update_candidate_strategy(self, input_ids: torch.LongTensor, scores: torch.Tensor, num_matches: int):
         """
         Updates the candidate generation strategy based on the outcomes.
 
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
                 Indices of input sequence tokens in the vocabulary. [What are input IDs?](../glossary#input-ids)
-            scores (`torch.FloatTensor` of shape `(batch_size, candidate_length, config.vocab_size)`):
+            scores (`torch.Tensor` of shape `(batch_size, candidate_length, config.vocab_size)`):
                 Prediction scores of a language modeling head. These can be logits for each vocabulary when not using
                 beam search or log softmax for each vocabulary token when using beam search
             num_matches (`int`):
@@ -316,7 +316,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
             "logits_processor": self.logits_processor,
         }
 
-    def _generate_candidates(self, generation_args: dict) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+    def _generate_candidates(self, generation_args: dict) -> tuple[torch.LongTensor, torch.Tensor | None]:
         """Generate candidate sequences using the assistant model."""
         assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
@@ -496,7 +496,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         dest_ids = destination_tokenizer(text, add_special_tokens=True, return_tensors="pt")["input_ids"]
         return dest_ids.to(input_ids.device)
 
-    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.FloatTensor]:
+    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.Tensor]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -506,7 +506,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         Return:
             `torch.LongTensor` of shape `(batch_size, candidate_length)` containing the candidate sequences to be
-            assessed by the model and a `torch.FloatTensor` of shape `(batch_size, candidate_length,
+            assessed by the model and a `torch.Tensor` of shape `(batch_size, candidate_length,
             vocabulary_size)` containing the logits associated to each candidate.
         """
         max_new_tokens = int(self.num_assistant_tokens)
@@ -658,13 +658,13 @@ class _MapInputEmbedding(nn.Module):
         self.assistant_overlap_token_ids = assistant_overlap_token_ids
         self.map = False
 
-    def forward(self, input_ids: torch.LongTensor) -> torch.FloatTensor:
+    def forward(self, input_ids: torch.LongTensor) -> torch.Tensor:
         """
         Args:
             input_ids (torch.LongTensor): Tensor of token IDs (batch_size, seq_len).
 
         Returns:
-            torch.FloatTensor: Corresponding input embeddings.
+            torch.Tensor: Corresponding input embeddings.
         """
         if self.map:
             # Get the last item from input_ids
@@ -817,15 +817,13 @@ class AssistantToTargetTranslator:
             transformed_slice = self._assistant_to_target_input_ids[last_candidate_ids]
             return torch.cat((target_input_ids, transformed_slice.unsqueeze(0)), dim=1)
 
-    def get_target_logits(self, assistant_logits: torch.FloatTensor) -> torch.FloatTensor:
+    def get_target_logits(self, assistant_logits: torch.Tensor) -> torch.Tensor:
         """
         Return the target logits that correspond to the assistant logits.
         """
 
         target_shape: tuple[int, ...] = (*assistant_logits.shape[:-1], self.target_vocab_size)
-        target_logits: torch.FloatTensor = torch.full(
-            target_shape, self.FILTER_VALUE, device=self._assistant_model_device
-        )
+        target_logits: torch.Tensor = torch.full(target_shape, self.FILTER_VALUE, device=self._assistant_model_device)
         # Mask for valid indices
         assistant_indices_mask = self._assistant_to_target_input_ids != self.SUPPRESS_TOKEN_ID
         # Exclude invalid indices
@@ -927,7 +925,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
         self._target_seq_len_with_candidates: int = 0
         self._prev_assistant_ids: torch.LongTensor | None = None
 
-    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.FloatTensor]:
+    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.Tensor]:
         """
         Simplified version of get_candidates that uses the translator cache for token conversion.
         """
@@ -1056,7 +1054,7 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
             raise ValueError("Invalid max_matching_ngram_size or num_output_tokens")
 
-    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.FloatTensor]:
+    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.Tensor]:
         """
         Fetches the candidates to be tried for the current input.
 
@@ -1198,7 +1196,7 @@ class EarlyExitCandidateGenerator(AssistedCandidateGenerator):
         self.assistant_early_exit = self.generation_config.assistant_early_exit
         self.generation_config.assistant_early_exit = None
 
-    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.FloatTensor]:
+    def get_candidates(self, input_ids: torch.LongTensor, **kwargs) -> tuple[torch.LongTensor, torch.Tensor]:
         # Temporarily sets the number of hidden layers to the early exit value
         base_model = getattr(self.assistant_model, self.assistant_model.base_model_prefix)
         original_num_hidden_layers = base_model.config.num_hidden_layers
@@ -1285,7 +1283,7 @@ class SinglePositionMultiTokenCandidateGenerator(CandidateGenerator):
         is_first_iteration: bool,
         n_last_matches: int,
         **kwargs,
-    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+    ) -> tuple[torch.LongTensor, torch.Tensor | None]:
         """Generate draft token candidates using the drafter."""
         # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
         # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the outputs
@@ -1407,7 +1405,7 @@ class MTPCandidateGenerator(CandidateGenerator):
         is_first_iteration: bool,
         n_last_matches: int,
         **kwargs,
-    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+    ) -> tuple[torch.LongTensor, torch.Tensor | None]:
         # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
         # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the outputs
         # (this is because usually `get_candidates` is called first in the main `_assisted_decoding` loop)
@@ -1574,7 +1572,7 @@ class DFlashTokenCandidateGenerator(CandidateGenerator):
         is_first_iteration: bool,
         n_last_matches: int,
         **kwargs,
-    ) -> tuple[torch.LongTensor, torch.FloatTensor | None]:
+    ) -> tuple[torch.LongTensor, torch.Tensor | None]:
         """Generate draft token candidates using the drafter."""
         # This is a trick to skip the first loop of the main model's `_assisted_decoding` method. Since we need the
         # main model's outputs here to get the candidates, we skip the first loop to allow the main model to get the outputs
