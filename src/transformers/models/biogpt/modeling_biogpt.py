@@ -37,7 +37,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import merge_with_config_defaults
@@ -420,7 +420,7 @@ class BioGptModel(BioGptPreTrainedModel):
 class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"output_projection.weight": "biogpt.embed_tokens.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: BioGptConfig):
         super().__init__(config)
 
         self.biogpt = BioGptModel(config)
@@ -466,8 +466,8 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.output_projection(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.output_projection(hidden_states)
 
         loss = None
         if labels is not None:
@@ -485,7 +485,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class BioGptForTokenClassification(BioGptPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BioGptConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

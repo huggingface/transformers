@@ -314,7 +314,7 @@ class JinaEmbeddingsV3Pooler(nn.Module):
 
 @auto_docstring
 class JinaEmbeddingsV3PreTrainedModel(PreTrainedModel):
-    config_class = JinaEmbeddingsV3Config
+    config: JinaEmbeddingsV3Config
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -452,7 +452,7 @@ class JinaEmbeddingsV3ForMaskedLM(JinaEmbeddingsV3PreTrainedModel):
         "lm_head.decoder.bias": "lm_head.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__(config=config)
 
         self.lm_head = JinaEmbeddingsV3LMHead(config)
@@ -547,7 +547,7 @@ class JinaEmbeddingsV3ClassificationHead(nn.Module):
     """
 )
 class JinaEmbeddingsV3ForSequenceClassification(JinaEmbeddingsV3PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -628,7 +628,7 @@ class JinaEmbeddingsV3ForSequenceClassification(JinaEmbeddingsV3PreTrainedModel)
 
 @auto_docstring
 class JinaEmbeddingsV3ForTokenClassification(JinaEmbeddingsV3PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__(config)
         self.num_labels = config.num_labels
         classifier_dropout = (
@@ -697,7 +697,7 @@ class JinaEmbeddingsV3ForTokenClassification(JinaEmbeddingsV3PreTrainedModel):
 
 @auto_docstring
 class JinaEmbeddingsV3ForQuestionAnswering(JinaEmbeddingsV3PreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: JinaEmbeddingsV3Config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)

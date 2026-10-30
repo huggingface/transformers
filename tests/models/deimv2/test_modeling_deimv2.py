@@ -347,10 +347,6 @@ class Deimv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Decoder heads are shared via reference assignment so untied saving is not applicable")
-    def test_load_save_without_tied_weights(self):
-        pass
-
     # Override: Multi-scale deformable attention outputs have different shapes than standard self-attention
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -929,10 +925,6 @@ class Deimv2LiteEncoderModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Decoder heads are shared via reference assignment so untied saving is not applicable")
-    def test_load_save_without_tied_weights(self):
-        pass
-
     @unittest.skip(
         reason="LiteEncoder has no encoder_hidden_states so the base test fails accessing encoder_hidden_states[0]"
     )
@@ -1268,10 +1260,6 @@ class Deimv2DINOv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
 
     @unittest.skip(reason="Base test asserts get_input_embeddings() returns nn.Embedding which vision models lack")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="Decoder heads are shared via reference assignment so untied saving is not applicable")
-    def test_load_save_without_tied_weights(self):
         pass
 
     @unittest.skip(reason="DINOv3 RoPE with dynamic interpolation causes torch.compile inductor overflow")

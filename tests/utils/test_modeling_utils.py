@@ -103,6 +103,7 @@ from transformers.utils.import_utils import (
     is_torch_npu_available,
 )
 
+from ..test_memory_cleanup_mixin import MemoryCleanupMixin
 from ..test_modeling_common import compare_state_dicts
 
 
@@ -143,6 +144,7 @@ if is_torch_available():
         _find_disjoint,
         _find_identical,
         get_total_byte_count,
+        slice_logits_to_keep,
     )
 
     if is_torch_distributed_available():
@@ -2745,18 +2747,24 @@ class ModelUtilsTest(TestCasePlus):
 class ModelOnTheFlyConversionTester(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.user = "huggingface-hub-ci"
-        cls.token = os.getenv("HUGGINGFACE_PRODUCTION_USER_TOKEN", None)
+        cls.org = "hf-ci-ephemeral-repos"
+        # Requires a fine-grained token with repo create/delete + discussion access on cls.org
+        cls.token = os.getenv("HF_CI_EPHEMERAL_REPO_MANIPULATION_TOKEN") or os.getenv("HF_TOKEN")
 
-        if cls.token is None:
-            raise ValueError("Cannot run tests as secret isn't setup.")
+        if not cls.token:
+            raise unittest.SkipTest("HF_CI_EPHEMERAL_REPO_MANIPULATION_TOKEN (or HF_TOKEN) not set, skipping.")
 
         cls.api = HfApi(token=cls.token)
 
     def setUp(self) -> None:
-        self.repo_name = f"{self.user}/test-model-on-the-fly-{uuid.uuid4()}"
+        self.repo_name = f"{self.org}/test-model-on-the-fly-{uuid.uuid4()}"
+        # conftest.py disables conversion globally to avoid Hub traffic in regular tests;
+        # this class specifically tests conversion, so we re-enable it.
+        self._prev_disable = os.environ.pop("DISABLE_SAFETENSORS_CONVERSION", None)
 
     def tearDown(self) -> None:
+        if self._prev_disable is not None:
+            os.environ["DISABLE_SAFETENSORS_CONVERSION"] = self._prev_disable
         self.api.delete_repo(self.repo_name)
 
     def test_safetensors_on_the_fly_conversion(self):
@@ -2800,9 +2808,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name, token=self.token)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
+    @unittest.skip(reason="SFconvertbot cannot agree to gating on dynamically-created repos")
     def test_safetensors_on_the_fly_conversion_gated(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2867,9 +2876,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
+    @unittest.skip(reason="SFconvertbot cannot agree to gating on dynamically-created repos")
     def test_safetensors_on_the_fly_sharded_conversion_gated(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
@@ -2913,7 +2923,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         with self.subTest("PR was open with the safetensors account"):
             discussions = self.api.get_repo_discussions(self.repo_name)
             discussion = next(discussions)
-            self.assertEqual(discussion.author, self.user)
+            self.assertEqual(discussion.author, "hf-transformers-bot")
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
         # We now switch the repo visibility to public
@@ -2974,8 +2984,10 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
         BertModel.from_pretrained(self.repo_name, token=self.token)
 
         for thread in threading.enumerate():
-            if thread.name == "Thread-autoconversion":
-                thread.join(timeout=10)
+            if thread.name == "Thread-auto_conversion":
+                # The conversion is spawned as a background thread by from_pretrained. Wait up to 60s for
+                # it to finish (it makes an API call to the conversion Space, which can take several seconds).
+                thread.join(timeout=60)
 
         discussions = self.api.get_repo_discussions(self.repo_name)
 
@@ -3277,6 +3289,42 @@ class TestAttentionImplementation(unittest.TestCase):
                 torch.nn.Module(), query, key, value, attention_mask, is_causal=is_causal, position_bias=position_bias
             )
         self.assertEqual(attn_output.shape, (1, 16, 8, 64))
+
+    @parameterized.expand([("0", False), ("1", True)])
+    def test_transformers_sdpa_force_gqa_env_var_overrides_use_gqa_in_sdpa_attention_forward(
+        self, env_var_value, expected_enable_gqa
+    ):
+        from transformers.integrations.sdpa_attention import sdpa_attention_forward
+
+        module = torch.nn.Module()
+        module.num_key_value_groups = 2
+        query = torch.randn(1, 4, 16, 1, dtype=torch.float16)
+        key = torch.randn(1, 2, 16, 1, dtype=torch.float16)
+        value = torch.randn(1, 2, 16, 1, dtype=torch.float16)
+
+        # use an attention mask and set _is_torch_{xpu,mps}_available to False, so that use_gqa_in_sdpa
+        # falls back to returning False when the env var is not set to 1
+        attention_mask = torch.zeros(1, 1, 16, 16, dtype=torch.float16)
+
+        with (
+            patch("transformers.integrations.sdpa_attention._is_torch_xpu_available", False),
+            patch("transformers.integrations.sdpa_attention._is_torch_mps_available", False),
+            patch(
+                "torch.nn.functional.scaled_dot_product_attention",
+                wraps=torch.nn.functional.scaled_dot_product_attention,
+            ) as mock_sdpa,
+            patch.dict(os.environ, {"TRANSFORMERS_SDPA_FORCE_GQA": env_var_value}),
+        ):
+            sdpa_attention_forward(module, query, key, value, attention_mask=attention_mask)
+
+        mock_sdpa.assert_called_once()
+        self.assertEqual(mock_sdpa.call_args.kwargs.get("enable_gqa", False), expected_enable_gqa)
+        self.assertEqual(
+            mock_sdpa.call_args.args[1].shape[1], 2 if expected_enable_gqa else 4
+        )  # check if key was repeated
+        self.assertEqual(
+            mock_sdpa.call_args.args[2].shape[1], 2 if expected_enable_gqa else 4
+        )  # check if value was repeated
 
     def test_flash_attn_available_no_keyerror_when_missing_from_distribution_map(self):
         # Regression test for https://github.com/huggingface/transformers/issues/45520.
@@ -3621,6 +3669,62 @@ class TestSaveAndLoadModelWithExtraState(TestCasePlus):
             self.assertEqual(len(loading_info["unexpected_keys"]), 0)
             self.assertEqual(len(loading_info["mismatched_keys"]), 0)
             self.assertEqual(len(loading_info["error_msgs"]), 0)
+
+
+@require_torch
+class TestSliceLogitsToKeep(MemoryCleanupMixin, unittest.TestCase):
+    """`slice_logits_to_keep` is called by the models right before the `lm_head` projection."""
+
+    def setUp(self):
+        super().setUp()
+        # (batch_size=3, sequence_length=7, hidden_size=2), all values are unique so a wrong position shows up
+        self.hidden_states = torch.arange(3 * 7 * 2, dtype=torch.float32).reshape(3, 7, 2)
+
+    def test_int(self):
+        hidden_states = self.hidden_states
+        # `0` is a special case: keep all the positions
+        self.assertTrue(slice_logits_to_keep(hidden_states, 0).equal(hidden_states))
+        self.assertTrue(slice_logits_to_keep(hidden_states, 1).equal(hidden_states[:, -1:]))
+        self.assertTrue(slice_logits_to_keep(hidden_states, 3).equal(hidden_states[:, -3:]))
+
+    def test_1d_tensor(self):
+        hidden_states = self.hidden_states
+        # same positions for every sample
+        out = slice_logits_to_keep(hidden_states, torch.tensor([1, 4]))
+        self.assertEqual(out.shape, (3, 2, 2))
+        self.assertTrue(out.equal(hidden_states[:, [1, 4]]))
+        # negative positions are supported
+        self.assertTrue(slice_logits_to_keep(hidden_states, torch.tensor([-1])).equal(hidden_states[:, -1:]))
+
+    def test_2d_integer_tensor(self):
+        hidden_states = self.hidden_states
+        # different positions for each sample, same count
+        positions = torch.tensor([[1, 2], [3, 4], [0, 6]])
+        out = slice_logits_to_keep(hidden_states, positions)
+        self.assertEqual(out.shape, (3, 2, 2))
+        for i in range(3):
+            self.assertTrue(out[i].equal(hidden_states[i, positions[i]]))
+
+    def test_2d_boolean_tensor(self):
+        hidden_states = self.hidden_states
+        # the count can differ per sample, the output is flattened over batch and sequence
+        mask = torch.zeros(3, 7, dtype=torch.bool)
+        mask[0, [1, 2, 3]] = True
+        mask[1, 0] = True
+        mask[2, [4, 5]] = True
+        out = slice_logits_to_keep(hidden_states, mask)
+        self.assertEqual(out.shape, (6, 2))
+        self.assertTrue(out.equal(torch.cat([hidden_states[0, 1:4], hidden_states[1, :1], hidden_states[2, 4:6]])))
+        # nothing to keep
+        self.assertEqual(slice_logits_to_keep(hidden_states, torch.zeros(3, 7, dtype=torch.bool)).shape, (0, 2))
+
+    def test_2d_integer_and_boolean_tensors_select_the_same_values(self):
+        # (sorted) positions or a mask selecting them give the same values, only the layout differs
+        positions = torch.tensor([[1, 2], [3, 4], [0, 6]])
+        mask = torch.zeros(3, 7, dtype=torch.bool).scatter_(1, positions, True)
+        from_positions = slice_logits_to_keep(self.hidden_states, positions)
+        from_mask = slice_logits_to_keep(self.hidden_states, mask)
+        self.assertTrue(from_positions.flatten(0, 1).equal(from_mask))
 
 
 class TestGetDecoder(unittest.TestCase):

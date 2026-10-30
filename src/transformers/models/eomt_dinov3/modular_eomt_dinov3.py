@@ -190,7 +190,7 @@ class EomtDinov3ForUniversalSegmentationOutput(EomtForUniversalSegmentationOutpu
 
 
 class EomtDinov3PreTrainedModel(EomtPreTrainedModel):
-    config_class = EomtDinov3Config
+    config: EomtDinov3Config
     base_model_prefix = "eomt_dinov3"
     _no_split_modules = ["EomtDinov3Layer"]
     _can_record_outputs = {

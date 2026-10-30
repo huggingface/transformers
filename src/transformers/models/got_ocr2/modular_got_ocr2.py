@@ -23,7 +23,7 @@ from ... import initialization as init
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, SubConfigSpec
 from ...modeling_outputs import BaseModelOutputWithPooling
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import AutoConfig
@@ -132,7 +132,7 @@ class GotOcr2Config(PreTrainedConfig):
                 "attention_dropout": 0.0,
             },
         ),
-        "vision_config": SubConfigSpec(config_class=GotOcr2VisionConfig),
+        "vision_config": GotOcr2VisionConfig,
     }
 
     vision_config: dict | PreTrainedConfig | None = None
@@ -182,6 +182,7 @@ class GotOcr2PreTrainedModel(SamPreTrainedModel):
 
 class GotOcr2VisionEncoder(SamVisionEncoder, GotOcr2PreTrainedModel):
     input_modalities = ("image",)
+    config: GotOcr2VisionConfig
 
 
 class GotOcr2MultiModalProjector(nn.Module):
@@ -368,9 +369,8 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         )
 
         hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

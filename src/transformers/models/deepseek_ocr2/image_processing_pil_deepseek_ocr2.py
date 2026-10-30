@@ -37,7 +37,6 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TensorType, auto_docstring
-from ...utils.import_utils import requires
 
 
 class DeepseekOcr2ImageProcessorKwargs(ImagesKwargs, total=False):
@@ -139,7 +138,6 @@ def get_optimal_tiled_canvas(
     return best_grid
 
 
-@requires(backends=("vision",))
 @auto_docstring
 class DeepseekOcr2ImageProcessorPil(PilBackend):
     valid_kwargs = DeepseekOcr2ImageProcessorKwargs

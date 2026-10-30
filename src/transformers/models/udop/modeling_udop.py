@@ -197,7 +197,8 @@ def combine_image_text_embeddings(
     )
     ocr_points = ocr_points_x + ocr_points_y
     # make sure bounding boxes are of type float to calculate means
-    bbox = bbox.to(torch.float64)
+    dtype = torch.float32 if bbox.device.type == "mps" else torch.float64
+    bbox = bbox.to(dtype)
     target_seg = (bbox.mean(-1) == 0.0) | (bbox.mean(-1) == 1.0)
     repeated_vision_embeds = torch.gather(
         image_embeddings, 1, ocr_points.unsqueeze(-1).repeat(1, 1, image_embeddings.size(-1))
@@ -1064,7 +1065,7 @@ class UdopStack(UdopPreTrainedModel):
     embeddings.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: UdopConfig):
         super().__init__(config)
         # text and image embeddings
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
@@ -1255,7 +1256,7 @@ class UdopModel(UdopPreTrainedModel):
         "encoder.embed_patches.proj.bias": "patch_embed.proj.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: UdopConfig):
         super().__init__(config)
 
         # text and image embeddings
@@ -1412,7 +1413,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         "lm_head.weight": "shared.weight",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: UdopConfig):
         super().__init__(config)
 
         # text and image embeddings

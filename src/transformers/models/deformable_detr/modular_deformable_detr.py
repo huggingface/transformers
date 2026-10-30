@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import math
 import warnings
 from dataclasses import dataclass
@@ -36,7 +37,7 @@ from ...utils import (
     torch_compilable_check,
 )
 from ...utils.generic import can_return_tuple, merge_with_config_defaults
-from ...utils.import_utils import requires, requires_backends
+from ...utils.import_utils import requires
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ..detr.image_processing_detr import DetrImageProcessor
 from ..detr.image_processing_pil_detr import DetrImageProcessorPil
@@ -154,7 +155,6 @@ class DeformableDetrImageProcessorPil(DetrImageProcessorPil):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        requires_backends(self, ["torch"])
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if target_sizes is not None:
@@ -1396,10 +1396,10 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         # Convert to instance attribute before modifying
         self._tied_weights_keys = self._tied_weights_keys.copy()
         if config.with_box_refine:
-            self.model.decoder.bbox_embed = self.bbox_embed
+            self.model.decoder.bbox_embed = copy.deepcopy(self.bbox_embed)
             self._tied_weights_keys["bbox_embed"] = "model.decoder.bbox_embed"
         if config.two_stage:
-            self.model.decoder.class_embed = self.class_embed
+            self.model.decoder.class_embed = copy.deepcopy(self.class_embed)
             self._tied_weights_keys["class_embed"] = "model.decoder.class_embed"
         self.post_init()
 

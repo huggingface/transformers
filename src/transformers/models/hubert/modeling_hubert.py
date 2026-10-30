@@ -901,7 +901,7 @@ class HubertModel(HubertPreTrainedModel):
     """
 )
 class HubertForCTC(HubertPreTrainedModel):
-    def __init__(self, config, target_lang: str | None = None):
+    def __init__(self, config: HubertConfig, target_lang: str | None = None):
         r"""
         target_lang (`str`, *optional*):
             Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
@@ -1028,7 +1028,7 @@ class HubertForCTC(HubertPreTrainedModel):
     """
 )
 class HubertForSequenceClassification(HubertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: HubertConfig):
         super().__init__(config)
 
         if hasattr(config, "add_adapter") and config.add_adapter:

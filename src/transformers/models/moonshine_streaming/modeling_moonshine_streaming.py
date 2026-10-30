@@ -764,7 +764,7 @@ class MoonshineStreamingDecoder(MoonshineStreamingPreTrainedModel):
         "cross_attentions": OutputRecorder(MoonshineStreamingAttention, index=1, layer_name="encoder_attn"),
     }
 
-    def __init__(self, config):
+    def __init__(self, config: MoonshineStreamingConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -869,7 +869,7 @@ class MoonshineStreamingDecoder(MoonshineStreamingPreTrainedModel):
 
 @auto_docstring
 class MoonshineStreamingModel(MoonshineStreamingPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: MoonshineStreamingConfig):
         super().__init__(config)
         self.encoder = MoonshineStreamingEncoder(config.encoder_config)
         self.decoder = MoonshineStreamingDecoder(config)

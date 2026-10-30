@@ -75,11 +75,11 @@ RUN python3 -m pip install --no-cache-dir einops blobfile num2words
 # timm is required for many vision models tests
 RUN python3 -m pip install --no-cache-dir timm
 
-RUN python3 -m pip install --no-cache-dir onnxruntime
+RUN python3 -m pip install --no-cache-dir onnxruntime onnxscript bitsandbytes peft
 
 # Deterministic MIOpen conv kernel selection, otherwise bf16 outputs can change between runners.
 ENV MIOPEN_DEBUG_CONV_IMPLICIT_GEMM=0
 ENV MIOPEN_FIND_MODE=2
 
 # Fail the build if the installs above broke the ROCm stack.
-RUN python3 -c "import torch, torchvision, torchcodec, flash_attn, kenlm, numpy, pyarrow, datasets, transformers; assert torch.version.hip is not None; print(torch.__version__, torch.version.hip, torchvision.__version__, flash_attn.__version__)"
+RUN python3 -c "import torch, torchvision, torchcodec, flash_attn, kenlm, bitsandbytes, onnxscript, peft, numpy, pyarrow, datasets, transformers; assert torch.version.hip is not None; print(torch.__version__, torch.version.hip, torchvision.__version__, flash_attn.__version__)"

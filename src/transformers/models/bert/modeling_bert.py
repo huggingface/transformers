@@ -38,7 +38,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging
@@ -530,7 +530,7 @@ class BertPreTrainingHeads(nn.Module):
 
 @auto_docstring
 class BertPreTrainedModel(PreTrainedModel):
-    config_class = BertConfig
+    config: BertConfig
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
@@ -594,7 +594,7 @@ class BertForPreTrainingOutput(ModelOutput):
 class BertModel(BertPreTrainedModel):
     _no_split_modules = ["BertEmbeddings", "BertLayer"]
 
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self, config: BertConfig, add_pooling_layer=True):
         r"""
         add_pooling_layer (bool, *optional*, defaults to `True`):
             Whether to add a pooling layer
@@ -730,7 +730,7 @@ class BertForPreTraining(BertPreTrainedModel):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         self.bert = BertModel(config)
@@ -827,7 +827,7 @@ class BertLMHeadModel(BertPreTrainedModel, GenerationMixin):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         if not config.is_decoder:
@@ -887,9 +887,8 @@ class BertLMHeadModel(BertPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.cls(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.cls(hidden_states)
 
         loss = None
         if labels is not None:
@@ -912,7 +911,7 @@ class BertForMaskedLM(BertPreTrainedModel):
         "cls.predictions.decoder.bias": "cls.predictions.bias",
     }
 
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         if config.is_decoder:
@@ -982,7 +981,7 @@ class BertForMaskedLM(BertPreTrainedModel):
     """
 )
 class BertForNextSentencePrediction(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         self.bert = BertModel(config)
@@ -1064,7 +1063,7 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     """
 )
 class BertForSequenceClassification(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1139,7 +1138,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
 @auto_docstring
 class BertForMultipleChoice(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
 
         self.bert = BertModel(config)
@@ -1233,7 +1232,7 @@ class BertForMultipleChoice(BertPreTrainedModel):
 
 @auto_docstring
 class BertForTokenClassification(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1289,7 +1288,7 @@ class BertForTokenClassification(BertPreTrainedModel):
 
 @auto_docstring
 class BertForQuestionAnswering(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: BertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

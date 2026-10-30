@@ -28,9 +28,10 @@ from ...image_processing_backends import TorchvisionBackend
 from ...image_transforms import group_images_by_shape, reorder_images
 from ...image_utils import PILImageResampling, SizeDict
 from ...processing_utils import ImagesKwargs
-from ...utils import auto_docstring, requires_backends
+from ...utils import auto_docstring
 from ...utils.constants import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from ...utils.generic import TensorType
+from ...utils.import_utils import requires
 
 
 class PPOCRV6SmallRecImageProcessorKwargs(ImagesKwargs, total=False):
@@ -145,6 +146,7 @@ class PPOCRV6SmallRecImageProcessor(TorchvisionBackend):
 
         return SizeDict(height=target_height, width=target_width)
 
+    @requires(backends=("torch",))
     def post_process_text_recognition(
         self,
         predictions,
@@ -161,7 +163,6 @@ class PPOCRV6SmallRecImageProcessor(TorchvisionBackend):
                 - "text" (str): The decoded text string.
                 - "score" (float): The average confidence score of the characters in the decoded text.
         """
-        requires_backends(self, ["torch"])
 
         logits = predictions.last_hidden_state
         batch_size = logits.shape[0]

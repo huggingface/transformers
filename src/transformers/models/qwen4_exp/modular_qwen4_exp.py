@@ -980,13 +980,13 @@ class Qwen4ExpTextModel(Qwen3_5MoeTextModel):
         else:
             text_position_ids = None
 
-        # We need the full position_ids in the indexer, not just the current ones, so bind them to the cache if any (as they
-        # are 3D, it's otherwise not easy to compute them back from only current positions)
-        if past_key_values is not None:
-            if hasattr(past_key_values, "position_ids"):
-                previous_positions = past_key_values.position_ids
-                position_ids = torch.cat([previous_positions, position_ids], dim=-1)
-            past_key_values.position_ids = position_ids
+        # All indexers share the full 3D positions. Store them on the first indexed layer so cache operations
+        # such as reset, crop and beam reordering also update the position history.
+        if past_key_values is not None and "indexed_attention" in self.config.layer_types:
+            indexer_cache = past_key_values.layers[self.config.layer_types.index("indexed_attention")]
+            if indexer_cache.indexer_position_ids is not None:
+                position_ids = torch.cat([indexer_cache.indexer_position_ids, position_ids], dim=-1)
+            indexer_cache.indexer_position_ids = position_ids
 
         if not isinstance(causal_mask_mapping := attention_mask, dict):
             mask_kwargs = {
@@ -1045,6 +1045,9 @@ class Qwen4ExpVisionModel(Qwen3_5MoeVisionModel):
 
 
 class Qwen4ExpModel(Qwen3_5MoeModel):
+    # Qwen4ExpDecoderLayer, inherited from Qwen3_5MoeModel and renamed by prefix, does not exist
+    _no_split_modules = ["Qwen4ExpTextDecoderLayer", "Qwen4ExpVisionBlock"]
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
