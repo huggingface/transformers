@@ -279,7 +279,7 @@ class DistributedMixin:
         # Tied embed/lm_head weights are wrapped once: fold the head's FSDP rule into the embedding's.
         fsdp_plan = _resolve_tied_embed_lm_head_plan(fsdp_plan, self)
 
-        # The parameters of an FSDP2 group must all share a dtype: shard each module kept in float32 as its own group.
+        # FSDP2 needs one group per dtype: give the modules kept in float32 their own group.
         if fsdp_plan and (dtype_plan := self._get_dtype_plan(self.dtype)):
             kept_in_fp32, _, _ = build_glob_alternation(list(dtype_plan))
             fp32_modules = {name.rpartition(".")[0] for name in param_names if kept_in_fp32.search(name)}
