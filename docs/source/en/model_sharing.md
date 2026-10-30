@@ -103,6 +103,12 @@ trainer = Trainer(
 trainer.push_to_hub()
 ```
 
+To upload the model to a private repository, set `hub_private_repo=True` in [`TrainingArguments`]. If the repository hasn't been created yet (for example, when `push_to_hub=False` in [`TrainingArguments`]), you can also pass `private=True` to [`~transformers.Trainer.push_to_hub`] instead. The `private` argument only takes effect when the repository is created, so it doesn't change the visibility of an existing repository.
+
+```py
+trainer.push_to_hub(private=True)
+```
+
 ### PushToHubMixin
 
 The [`~utils.PushToHubMixin`] provides functionality for pushing a model or tokenizer to the Hub.

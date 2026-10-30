@@ -4193,9 +4193,16 @@ class Trainer:
 
     # ---- Hub Integration ----
 
-    def init_hf_repo(self, token: str | None = None) -> None:
+    def init_hf_repo(self, token: str | None = None, private: bool | None = None) -> None:
         """
         Initializes a git repo in `self.args.hub_model_id`.
+
+        Args:
+            token (`str`, *optional*):
+                Token with write permission. Defaults to `self.args.hub_token`.
+            private (`bool`, *optional*):
+                Whether to make the repo private when it is created. Defaults to `self.args.hub_private_repo`. Has
+                no effect if the repo already exists.
         """
         # Only on process zero
         if not self.is_world_process_zero():
@@ -4207,7 +4214,8 @@ class Trainer:
             repo_name = self.args.hub_model_id
 
         token = token if token is not None else self.args.hub_token
-        repo_url = hf_api().create_repo(repo_name, token=token, private=self.args.hub_private_repo, exist_ok=True)
+        private = private if private is not None else self.args.hub_private_repo
+        repo_url = hf_api().create_repo(repo_name, token=token, private=private, exist_ok=True)
         self.hub_model_id = repo_url.repo_id
         self.push_in_progress = None
 
@@ -4291,6 +4299,7 @@ class Trainer:
         blocking: bool = True,
         token: str | None = None,
         revision: str | None = None,
+        private: bool | None = None,
         **kwargs,
     ) -> CommitInfo:
         """
@@ -4305,6 +4314,9 @@ class Trainer:
                 Token with write permission to overwrite Trainer's original args.
             revision (`str`, *optional*):
                 The git revision to commit from. Defaults to the head of the "main" branch.
+            private (`bool`, *optional*):
+                Whether to make the repo private when it is created. Defaults to `args.hub_private_repo`. Has no
+                effect if the repo already exists.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to [`~Trainer.create_model_card`].
 
@@ -4324,7 +4336,7 @@ class Trainer:
 
         # In case the user calls this method with args.push_to_hub = False
         if self.hub_model_id is None:
-            self.init_hf_repo(token=token)
+            self.init_hf_repo(token=token, private=private)
 
         # Needs to be executed on all processes for TPU training, but will only save on the processed determined by
         # self.args.should_save.
