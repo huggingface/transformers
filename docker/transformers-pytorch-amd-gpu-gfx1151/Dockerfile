@@ -360,6 +360,35 @@ assert len(r) == 1, r; print(r[0]._revision)")" \
       && test -f /opt/hub-kernels/gdn/build/torch214-cxx11-rocm72-x86_64-linux/metadata.json; \
     fi
 
+# aiter-flash-attn (the flash-attention kernel transformers uses on ROCm) is
+# Triton-only and already handles gfx1201, but its Hub build ships per-arch
+# tuning files for gfx1150/gfx1151/gfx1250/gfx942/gfx950 only. On gfx1201 the
+# first call dies opening configs/gfx1201-MHA-DEFAULT.json (FileNotFoundError)
+# and every later call raises KeyError: 'default': 166 failures in one fast run.
+# So this takes the torch-rocm variant of amd/aiter-flash-attn's v2 branch (the
+# version transformers asks for) straight from the Hub, pinned to AITER_V2_COMMIT,
+# copies gfx1151's config to gfx1201 (same RDNA family) and adds it to the
+# metadata digest. Built here rather than downloaded, so the image needs no
+# file host of AMD's. With it, a full gfx1201 fast run has none of those failures.
+# It is done on every arch so both images run the same pinned kernel.
+# LOCAL_KERNELS keeps serving this copy after the Hub's v2 moves (it moved twice
+# in one month), so the build warns when the v2 head is newer: bump
+# AITER_V2_COMMIT then. A warning, not a failure: the pinned copy still works.
+ARG AITER_V2_COMMIT=b81254e94d4a6a22a9c55caec145d95c8c78ac34
+RUN python3 -c "from huggingface_hub import snapshot_download, HfApi; \
+import json, hashlib, base64, shutil; \
+d=snapshot_download('amd/aiter-flash-attn', repo_type='kernel', revision='${AITER_V2_COMMIT}', \
+    allow_patterns=['build/torch-rocm/*'], local_dir='/opt/hub-kernels/aiter-flash-attn') + '/build/torch-rocm'; \
+c=d + '/configs/'; shutil.copyfile(c + 'gfx1151-MHA-DEFAULT.json', c + 'gfx1201-MHA-DEFAULT.json'); \
+h=lambda p: base64.b64encode(hashlib.sha256(open(p, 'rb').read()).digest()).decode(); \
+m=json.load(open(d + '/metadata.json')); f=m['digest']['files']; \
+assert f['configs/gfx1151-MHA-DEFAULT.json'] == h(c + 'gfx1151-MHA-DEFAULT.json'), 'digest scheme changed'; \
+f['configs/gfx1201-MHA-DEFAULT.json']=h(c + 'gfx1201-MHA-DEFAULT.json'); \
+json.dump(m, open(d + '/metadata.json', 'w'), indent=2); \
+v=[b.target_commit for b in HfApi().list_repo_refs('amd/aiter-flash-attn', repo_type='kernel').branches if b.name == 'v2'][0]; \
+print('aiter-flash-attn v2 head', v[:7], 'matches' if v == '${AITER_V2_COMMIT}' else '-- WARNING: newer than AITER_V2_COMMIT; bump it')" \
+    && test -f "/opt/hub-kernels/aiter-flash-attn/build/torch-rocm/configs/${GPU_ARCH}-MHA-DEFAULT.json"
+
 # megablocks (gpt_oss) is a build AMD made: the Hub's ROCm builds carry
 # gfx942/gfx950 only. Built with kernel-builder from kernels-community/megablocks
 # 460047c with gfx1151 and gfx1201 added to build.toml's rocm-archs; the tar holds
@@ -382,7 +411,7 @@ RUN if [ -n "${HF_KERNELS_URL}" ]; then \
     else echo "HF_KERNELS_URL empty: no local megablocks build"; fi
 # megablocks is named only when it was fetched: an entry for a missing directory
 # would replace the Hub lookup with a failing local one.
-ENV LOCAL_KERNELS=Atlas-Inference/gdn=/opt/hub-kernels/gdn/build/torch214-cxx11-rocm72-x86_64-linux${HF_KERNELS_URL:+:kernels-community/megablocks=/opt/hub-kernels/megablocks/torch214-rocm714-x86_64-linux}
+ENV LOCAL_KERNELS=Atlas-Inference/gdn=/opt/hub-kernels/gdn/build/torch214-cxx11-rocm72-x86_64-linux:kernels-community/aiter-flash-attn=/opt/hub-kernels/aiter-flash-attn/build/torch-rocm${HF_KERNELS_URL:+:kernels-community/megablocks=/opt/hub-kernels/megablocks/torch214-rocm714-x86_64-linux}
 
 # Last: urllib3 must still be 2.x (pinned on the kernels step above, against
 # transformers[testing]'s <2) and kernels must still import. A later step that
