@@ -46,7 +46,7 @@ from typing import Any
 
 from ..utils import logging
 from ..utils.import_utils import is_executorch_available, is_torch_available
-from .configs import ExecutorchConfig
+from .configs import ExecutorchConfig, ExportFormat
 from .exporter_dynamo import DynamoExporter
 from .utils import (
     apply_fx_node_fixes,
@@ -93,6 +93,7 @@ if is_executorch_available():
     from executorch.exir.program import EdgeProgramManager, ExecutorchProgramManager, to_edge_transform_and_lower
     from executorch.exir.sym_util import eval_expr
     from executorch.exir.tensor import determine_tensor_dynanism
+    from executorch.runtime import Runtime
 
     # The ExecuTorch CUDA backend pulls in `triton`, which CPU-only torch builds don't ship. Guard the
     # import on CUDA availability so the module still imports (and the xnnpack CPU path still works) on
@@ -115,25 +116,26 @@ class ExecutorchExporter(DynamoExporter):
     >>> from transformers.exporters.exporter_executorch import ExecutorchExporter, ExecutorchConfig
 
     >>> exporter = ExecutorchExporter()
-    >>> et_program = exporter.export(model, inputs, config=ExecutorchConfig(backend="xnnpack"))
-    >>> et_program.write_to_file("model.pte")
+    >>> exported = exporter.export(model, inputs, config=ExecutorchConfig(backend="xnnpack"))
+    >>> exported.save_pretrained("exported")  # `model.pte`, its metadata and the model config
     ```
     """
+
+    export_format = ExportFormat.EXECUTORCH
+    config_class = ExecutorchConfig
+    program_suffix = ".pte"
 
     required_packages = ["torch", "executorch"]
     tested_versions = {"torch": "2.13.0", "executorch": "1.4.1"}
 
-    def export(
+    def export_program(
         self,
         model: PreTrainedModel,
         sample_inputs: MutableMapping[str, Any],
         config: ExecutorchConfig | dict[str, Any],
-    ) -> ExecutorchProgramManager:
+    ) -> tuple[ExecutorchProgramManager, dict[str, Any]]:
         """Export a model to ExecuTorch, applying backend preparation and torch op patches."""
-        if isinstance(config, dict):
-            config = ExecutorchConfig(**config)
-        elif type(config) is not ExecutorchConfig:
-            raise TypeError(f"Expected config to be an ExecutorchConfig or dict, got {type(config)}")
+        config = self._as_config(config)
 
         prepare_for_backend = _BACKEND_PREPARE.get(config.backend)
         if prepare_for_backend is None:
@@ -142,7 +144,7 @@ class ExecutorchExporter(DynamoExporter):
         model, sample_inputs, partitioner = prepare_for_backend(model, sample_inputs)
 
         with apply_patches("executorch"), apply_patches(f"executorch.{config.backend}"):
-            exported_program: ExportedProgram = super().export(model, sample_inputs, config=config)
+            exported_program, metadata = super().export_program(model, sample_inputs, config=config)
             apply_fx_program_fixes("executorch", exported_program)
             apply_fx_node_fixes("executorch", exported_program.graph_module)
             edge_program_manager: EdgeProgramManager = to_edge_transform_and_lower(
@@ -155,7 +157,19 @@ class ExecutorchExporter(DynamoExporter):
                 config=_get_backend_config(config)
             )
 
-        return executorch_programs_manager
+        return executorch_programs_manager, metadata
+
+    @classmethod
+    def save_program(cls, program: ExecutorchProgramManager, path) -> None:
+        """Stream the `.pte` to `path` (`.buffer` would materialize the whole program first)."""
+        with open(path, "wb") as file:
+            program.write_to_file(file)
+
+    @classmethod
+    def load_program(cls, path):
+        """The saved `.pte` as an `executorch.runtime.Program`, ready to run: the export-time
+        `ExecutorchProgramManager` can't be rebuilt from the file."""
+        return Runtime.get().load_program(str(path))
 
 
 def _get_transform_passes(backend: str):

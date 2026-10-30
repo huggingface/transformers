@@ -28,19 +28,28 @@ Current coverage — the generation `decode` component:
   via `CudaSession` buffer sharing. That contract belongs to the exported graph rather than to a
   device, so the ONNX check runs in host memory everywhere and upgrades itself to device-resident
   buffers on CUDA (the max-performance path: in-place input updates, no per-step allocations or host
-  round-trips) — a provider that copies instead of aliasing device memory only shows up there.
+  round-trips) — a provider that copies instead of aliasing device memory only shows up there;
+- **save and load** — each backend's export saves, loads back, and names in its metadata the inputs and
+  outputs of the saved file, including past protobuf's 2GB limit on ONNX.
 """
 
 import copy
+import json
+import tempfile
 import unittest
+from pathlib import Path
 
 import pytest
 
+from tests.exporters.test_export import _run_onnx_program
 from transformers import GenerationConfig, LlamaConfig, LlamaForCausalLM
+from transformers.exporters import ExportArtifacts
 from transformers.exporters.utils import decompose_for_generation
 from transformers.testing_utils import (
+    require_executorch,
     require_onnxruntime,
     require_onnxscript,
+    require_openvino,
     require_torch,
     slow,
     torch_device,
@@ -98,7 +107,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         decode = (
             DynamoExporter()
             .export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True))
-            .module()
+            .program.module()
         )
 
         for query_len in (1, 2, 4):
@@ -129,7 +138,7 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         decode = (
             DynamoExporter()
             .export(decode_model, copy.deepcopy(decode_inputs), config=DynamoConfig(dynamic=True))
-            .module()
+            .program.module()
         )
 
         past_key_values = copy.deepcopy(decode_inputs["past_key_values"])
@@ -149,6 +158,146 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         self.assertEqual(int(past_key_values.get_seq_length()), 4)
         run(torch.randint(0, 64, (1, 1)), torch.tensor([4]))  # one decode step
         self.assertEqual(int(past_key_values.get_seq_length()), 5)
+
+    # ──────────────────────── Save and load ────────────────────────
+
+    def _save_and_load_decode(self, exporter, config, directory):
+        """Export the static-cache decode, save it and load it back, checking that the backend's `program_files`
+        (what a Hub download fetches) name every file it wrote. Returns the manifest entry and the loaded export."""
+        decode_model, decode_inputs = self._decompose_static_decode(self._tiny_model(), torch.randint(0, 64, (1, 4)))
+        exported = exporter.export(decode_model, copy.deepcopy(decode_inputs), config=config)
+        exported.save_pretrained(directory)
+        entry = json.loads((Path(directory) / "export.json").read_text(encoding="utf-8"))["components"]["model"]
+        written = {path.name for path in Path(directory).iterdir()} - {"export.json", "config.json"}
+        self.assertIn(entry["file"], written)
+        self.assertLessEqual(written, set(exporter.program_files(entry["file"])))
+        loaded = ExportArtifacts.from_pretrained(directory)
+        self.assertEqual(loaded["model"].metadata, exported["model"].metadata)
+        return entry, loaded
+
+    @pytest.mark.torch_export_test
+    def test_saved_dynamo_program_loads_back(self):
+        from transformers.exporters import DynamoConfig, DynamoExporter
+
+        with tempfile.TemporaryDirectory() as directory:
+            entry, loaded = self._save_and_load_decode(DynamoExporter(), DynamoConfig(dynamic=True), directory)
+        self.assertEqual(entry["file"], "model.pt2")
+        self.assertIsInstance(loaded.program, torch.export.ExportedProgram)
+
+    @require_executorch
+    @pytest.mark.executorch_export_test
+    def test_saved_executorch_program_loads_back(self):
+        from executorch.runtime import Program
+
+        from transformers.exporters import ExecutorchConfig, ExecutorchExporter
+
+        with tempfile.TemporaryDirectory() as directory:
+            entry, loaded = self._save_and_load_decode(ExecutorchExporter(), ExecutorchConfig(), directory)
+            self.assertEqual(entry["file"], "model.pte")
+            # Positional binding needs these, and they can't be recovered from a saved `.pte`.
+            self.assertIn("num_user_outputs", entry["metadata"])
+            self.assertIn("constant_inputs", entry["metadata"])
+            self.assertIsInstance(loaded.program, Program)
+            self.assertIn("forward", loaded.program.method_names)
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_saved_metadata_names_match_onnx_model(self):
+        """The saved metadata names the inputs and outputs of the saved `.onnx` file, cache pairs included."""
+        import onnxruntime as ort
+
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        with tempfile.TemporaryDirectory() as directory:
+            entry, _ = self._save_and_load_decode(OnnxExporter(), OnnxConfig(dynamic=True), directory)
+            session = ort.InferenceSession(str(Path(directory) / entry["file"]), providers=["CPUExecutionProvider"])
+            self.assertEqual(entry["metadata"]["input_names"], [node.name for node in session.get_inputs()])
+            self.assertEqual(entry["metadata"]["output_names"], [node.name for node in session.get_outputs()])
+        self.assertTrue(any(name.startswith("input.") for name in entry["metadata"]["input_names"]))
+        self.assertNotIn("num_user_outputs", entry["metadata"])
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_saved_onnx_program_runs(self):
+        """A loaded `.onnx` runs like the exported program, ONNX Runtime reading its weights from
+        `model.onnx.data`."""
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
+        exported = OnnxExporter().export(self._tiny_model(), copy.deepcopy(inputs), OnnxConfig())
+        expected = _run_onnx_program(exported.program, inputs)
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            loaded = ExportArtifacts.from_pretrained(directory)
+            torch.testing.assert_close(_run_onnx_program(loaded.program, inputs), expected)
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_onnx_program_loaded_through_symlinks_runs(self):
+        """Loaded through symlinks, as from the Hub cache, an ONNX program runs: ONNX Runtime reads the saved file."""
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        inputs = {"input_ids": torch.randint(0, 64, (1, 4)), "attention_mask": torch.ones(1, 4, dtype=torch.long)}
+        exported = OnnxExporter().export(self._tiny_model(), copy.deepcopy(inputs), OnnxConfig())
+        expected = _run_onnx_program(exported.program, inputs)
+        with tempfile.TemporaryDirectory() as directory:
+            blobs, snapshot = Path(directory, "blobs"), Path(directory, "snapshot")
+            exported.save_pretrained(blobs)
+            snapshot.mkdir()
+            for file in blobs.iterdir():
+                (snapshot / file.name).symlink_to(file)
+            loaded = ExportArtifacts.from_pretrained(snapshot)
+            torch.testing.assert_close(_run_onnx_program(loaded.program, inputs), expected)
+
+    @require_onnxscript
+    @require_onnxruntime
+    @pytest.mark.onnx_export_test
+    def test_onnx_model_past_2gb_saves_and_loads(self):
+        """A model past protobuf's 2GB limit saves with its weights in `model.onnx.data`, loads, and runs like the
+        exported program. A one-layer Llama with a 150k vocabulary holds 2.3GB of untied embeddings."""
+        from transformers.exporters import OnnxConfig, OnnxExporter
+
+        config = LlamaConfig(
+            hidden_size=2048,
+            intermediate_size=64,
+            num_hidden_layers=1,
+            num_attention_heads=16,
+            num_key_value_heads=4,
+            vocab_size=150_000,
+        )
+        model = LlamaForCausalLM(config).eval()
+        self.assertGreater(sum(p.numel() * p.element_size() for p in model.parameters()), 2**31)
+        inputs = {"input_ids": torch.randint(0, 64, (1, 8)), "attention_mask": torch.ones(1, 8, dtype=torch.long)}
+        exported = OnnxExporter().export(model, copy.deepcopy(inputs), OnnxConfig())
+        expected = _run_onnx_program(exported.program, inputs)
+
+        with tempfile.TemporaryDirectory() as directory:
+            exported.save_pretrained(directory)
+            self.assertLess((Path(directory) / "model.onnx").stat().st_size, 2**31)
+            self.assertGreater((Path(directory) / "model.onnx.data").stat().st_size, 2**31)
+            outputs = _run_onnx_program(ExportArtifacts.from_pretrained(directory).program, inputs)
+        torch.testing.assert_close(outputs, expected, atol=0, rtol=0)
+
+    @require_openvino
+    @pytest.mark.openvino_export_test
+    def test_saved_metadata_names_match_openvino_model(self):
+        """The saved metadata names the ports of the saved `.xml` model: with `stateful`, no cache ports and a
+        `beam_idx` input."""
+        import openvino
+
+        from transformers.exporters import OpenVINOConfig, OpenVINOExporter
+
+        with tempfile.TemporaryDirectory() as directory:
+            entry, _ = self._save_and_load_decode(OpenVINOExporter(), OpenVINOConfig(dynamic=True), directory)
+            self.assertEqual(entry["file"], "openvino_model.xml")
+            ov_model = openvino.Core().read_model(str(Path(directory) / entry["file"]))
+            self.assertEqual(entry["metadata"]["input_names"], [port.get_any_name() for port in ov_model.inputs])
+            self.assertEqual(entry["metadata"]["output_names"], [port.get_any_name() for port in ov_model.outputs])
+        self.assertIn("beam_idx", entry["metadata"]["input_names"])
+        self.assertNotIn("num_user_outputs", entry["metadata"])
 
     # ──────────────────────── ONNX Runtime ────────────────────────
 
@@ -181,8 +330,8 @@ class ExportedDecodeRuntimeTest(unittest.TestCase):
         model = self._tiny_model()
         prompt = torch.randint(0, 64, (1, 4))
         decode_model, decode_inputs = self._decompose_static_decode(model, prompt)
-        onnx_program = OnnxExporter().export(
-            decode_model, copy.deepcopy(decode_inputs), config=OnnxConfig(dynamic=True, external_data=False)
+        onnx_program = (
+            OnnxExporter().export(decode_model, copy.deepcopy(decode_inputs), config=OnnxConfig(dynamic=True)).program
         )
 
         # cache exposed as matched `input.<name>` / `output.<name>` pairs (graph-input order lines up

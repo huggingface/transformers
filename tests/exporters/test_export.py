@@ -1033,7 +1033,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported_program = exporter.export(model, inputs, config=config)
+                    exported_program = exporter.export(model, inputs, config=config).program
 
                     with torch.no_grad():
                         set_seed(1234)
@@ -1070,7 +1070,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    onnx_program = exporter.export(model, inputs, config=config)
+                    onnx_program = exporter.export(model, inputs, config=config).program
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, f"ONNX outputs are empty for {name}.")
                     self.assertEqual(set(onnx_outputs.keys()), set(eager_outputs[name].keys()))
@@ -1102,7 +1102,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    ov_model = exporter.export(model, inputs, config=config)
+                    ov_model = exporter.export(model, inputs, config=config).program
                     ov_outputs = _run_openvino_model(ov_model, inputs)
                     self.assertTrue(ov_outputs, f"OpenVINO outputs are empty for {name}.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
@@ -1142,7 +1142,7 @@ class ExportTesterMixin:
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    program = exporter.export(model, inputs, config=config)
+                    program = exporter.export(model, inputs, config=config).program
                     executorch_outputs = _run_executorch_program(program, inputs)
                     if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
                         continue
@@ -1239,7 +1239,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
                 ):
                     check_device = False
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    exported_program = exporter.export(model, inputs, config=config)
+                    exported_program = exporter.export(model, inputs, config=config).program
 
                     with torch.no_grad():
                         set_seed(1234)
@@ -1288,7 +1288,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    onnx_program = exporter.export(model, inputs, config=config)
+                    onnx_program = exporter.export(model, inputs, config=config).program
                     set_seed(1234)
                     onnx_outputs = _run_onnx_program(onnx_program, inputs)
                     self.assertTrue(onnx_outputs, "ONNX outputs are empty.")
@@ -1321,7 +1321,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    ov_model = exporter.export(model, inputs, config=config)
+                    ov_model = exporter.export(model, inputs, config=config).program
                     ov_outputs = _run_openvino_model(ov_model, inputs)
                     self.assertTrue(ov_outputs, "OpenVINO outputs are empty.")
                     self.assertEqual(set(ov_outputs.keys()), set(eager_outputs[name].keys()))
@@ -1360,7 +1360,7 @@ class ExportGenerateTesterMixin(ExportTesterMixin):
 
             for name, (model, inputs) in components.items():
                 with self.subTest(f"{model_class.__name__}/{name}"):
-                    program = exporter.export(model, inputs, config=config)
+                    program = exporter.export(model, inputs, config=config).program
                     executorch_outputs = _run_executorch_program(program, inputs)
                     if executorch_outputs is None:  # ExecuTorch runtime limit / inputs not reconstructible
                         continue
