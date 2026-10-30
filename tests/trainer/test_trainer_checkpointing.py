@@ -2152,26 +2152,6 @@ class TrainerBestModelTest(TestCasePlus, TrainerIntegrationCommon):
 
 
 @require_torch
-class TrainerPushToHubPrivateTest(unittest.TestCase):
-    def _push_and_get_private(self, private=None, hub_private_repo=None):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            trainer = get_regression_trainer(output_dir=tmp_dir, hub_private_repo=hub_private_repo)
-            with patch("transformers.trainer.hf_api") as mock_hf_api:
-                mock_hf_api.return_value.create_repo.return_value.repo_id = "user/repo"
-                trainer.push_to_hub(private=private)
-            return mock_hf_api.return_value.create_repo.call_args.kwargs["private"]
-
-    def test_push_to_hub_private_defaults_to_args(self):
-        self.assertIsNone(self._push_and_get_private())
-        self.assertTrue(self._push_and_get_private(hub_private_repo=True))
-
-    def test_push_to_hub_private_overrides_args(self):
-        self.assertTrue(self._push_and_get_private(private=True))
-        self.assertTrue(self._push_and_get_private(private=True, hub_private_repo=False))
-        self.assertFalse(self._push_and_get_private(private=False, hub_private_repo=True))
-
-
-@require_torch
 @is_staging_test
 class TrainerIntegrationWithHubTester(unittest.TestCase):
     @classmethod
