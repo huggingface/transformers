@@ -614,6 +614,8 @@ class MistralLarge4PreTrainedModel(GlmMoeDsaPreTrainedModel):
 
 
 class MistralLarge4TextModel(MistralLarge4PreTrainedModel, GlmMoeDsaModel):
+    config: MistralLarge4TextConfig
+
     def __init__(self, config: MistralLarge4TextConfig):
         super().__init__(config)
         self.norm = MistralLarge4RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
