@@ -187,7 +187,9 @@ class DistributedMixin:
 
         return distributed_config, device_map, mesh_manager
 
-    def _validate_parallel_plan(self, plan: dict[str, str], supported_styles, plan_name: str) -> None:
+    def _validate_parallel_plan(
+        self, plan: dict[str, str], supported_styles, plan_name: str, names: set[str] | None = None
+    ) -> None:
         """Raise on a style that `supported_styles` does not know, warn on a rule that names nothing in the model."""
         unsupported_styles = {style for style in plan.values() if style not in supported_styles}
         if unsupported_styles:
@@ -195,7 +197,10 @@ class DistributedMixin:
                 f"Unsupported `{plan_name}` styles: {unsupported_styles}. Supported styles are {list(supported_styles)}"
             )
 
-        names = {replace_layer_number_by_wildcard(n) for n, _ in chain(self.named_modules(), self.named_parameters())}
+        if names is None:
+            names = {
+                replace_layer_number_by_wildcard(n) for n, _ in chain(self.named_modules(), self.named_parameters())
+            }
         if unused := plan.keys() - names:
             if _get_torch_distributed_rank() == 0:
                 logger.warning(
@@ -263,9 +268,9 @@ class DistributedMixin:
         is_expert = re.compile(rf"(?:{'|'.join(map(re.escape, ep_plan))})(?:\..+)?").fullmatch
         tp_plan = {name: style for name, style in tp_plan.items() if not is_expert(name)}
 
-        self._validate_parallel_plan(tp_plan, ALL_PARALLEL_STYLES, "tp_plan")
-        self._validate_parallel_plan(ep_plan, ALL_PARALLEL_STYLES, "ep_plan")
-        self._validate_parallel_plan(fsdp_plan, ALL_FSDP_STYLES, "fsdp_plan")
+        self._validate_parallel_plan(tp_plan, ALL_PARALLEL_STYLES, "tp_plan", names)
+        self._validate_parallel_plan(ep_plan, ALL_PARALLEL_STYLES, "ep_plan", names)
+        self._validate_parallel_plan(fsdp_plan, ALL_FSDP_STYLES, "fsdp_plan", names)
         distributed_config._validate_resolved_ep_plan(ep_plan)
 
         # Tied embed/lm_head weights are wrapped once: fold the head's FSDP rule into the embedding's.
