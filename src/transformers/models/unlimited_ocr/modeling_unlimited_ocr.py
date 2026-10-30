@@ -578,8 +578,8 @@ class UnlimitedOcrSamVisionProj(nn.Module):
 
 class UnlimitedOcrSamVisionEncoder(UnlimitedOcrPreTrainedModel):
     _can_record_outputs = {"hidden_states": UnlimitedOcrSamVisionLayer, "attentions": UnlimitedOcrSamVisionAttention}
-    _input_embed_layer = "patch_embed"
     config: UnlimitedOcrSamVisionConfig
+    _input_embed_layer = "patch_embed"
 
     def __init__(self, config: UnlimitedOcrSamVisionConfig):
         super().__init__(config)

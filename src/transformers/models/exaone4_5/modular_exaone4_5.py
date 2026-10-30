@@ -71,7 +71,7 @@ class Exaone4_5_VisionConfig(Qwen2_5_VLVisionConfig):
 class Exaone4_5_Config(PreTrainedConfig):
     model_type = "exaone4_5"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="exaone4_5_vision"),
+        "vision_config": SubConfigSpec(config_class=Exaone4_5_VisionConfig),
         "text_config": SubConfigSpec(config_class=AutoConfig, model_type="exaone4"),
     }
     keys_to_ignore_at_inference = ["past_key_values"]

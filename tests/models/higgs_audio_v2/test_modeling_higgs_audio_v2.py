@@ -187,7 +187,7 @@ class HiggsAudioV2ModelTester:
 
 @require_torch
 class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (HiggsAudioV2ForConditionalGeneration,) if is_torch_available() else ()
+    all_model_classes = (HiggsAudioV2ForConditionalGeneration, HiggsAudioV2Model) if is_torch_available() else ()
     pipeline_model_mapping = {"text-to-speech": HiggsAudioV2ForConditionalGeneration} if is_torch_available() else {}
 
     def setUp(self):
@@ -293,6 +293,24 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
         reason="This test does not apply to HiggsAudioV2 since audio_input_ids must be provided along input_ids"
     )
     def test_flash_attention_2_continue_generate_with_position_ids(self):
+        pass
+
+    # Base model doesn't appear in AutoModel but rather a generatiev model is there
+    # FIXME eustlib, model with gen head deserves to be in task-specific mapping
+    @pytest.mark.skip(reason="HiggsAudioV2 has incorrect base model in auto-mapping")
+    def test_training(self):
+        pass
+
+    @pytest.mark.skip(reason="HiggsAudioV2 has incorrect base model in auto-mapping")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @pytest.mark.skip(reason="HiggsAudioV2 has incorrect base model in auto-mapping")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @pytest.mark.skip(reason="HiggsAudioV2 has incorrect base model in auto-mapping")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])

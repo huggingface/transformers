@@ -31,7 +31,6 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
 
@@ -39,8 +38,6 @@ from ...test_processing_common import MODALITY_INPUT_DATA, ProcessorTesterMixin
 if is_torch_available():
     import torch
 
-if is_vision_available():
-    pass
 
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 

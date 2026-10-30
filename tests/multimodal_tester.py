@@ -14,6 +14,9 @@
 from copy import deepcopy
 from inspect import signature
 
+import torch
+
+from transformers import PreTrainedConfig
 from transformers.testing_utils import _TEXT_MODEL_TESTER_DEFAULTS
 
 from .test_configuration_common import ConfigTester
@@ -22,7 +25,6 @@ from .test_modeling_common import (
     GenerationTesterMixin,
     ModelTesterMixin,
     ids_tensor,
-    is_torch_available,
     require_torch,
     torch_device,
 )
@@ -30,15 +32,10 @@ from .test_pipeline_mixin import PipelineTesterMixin
 from .test_tensor_parallel_mixin import TensorParallelTesterMixin
 
 
-if is_torch_available():
-    import torch
-
-
 class MultiModalModelTester:
     """Shared tester base for VLM (vision-language) and ALM (audio-language) models.
 
     Concrete subclasses (e.g. `VLMModelTester`, `ALMModelTester`) supply:
-      - the modality-specific sub-config class (`vision_config_class` for VLMs, `audio_config_class` for ALMs, ...),
       - the modality-specific defaults and helper methods,
       - the hooks `_build_modality_sub_configs` and `_prepare_modality_inputs`,
       - optionally an extended `_special_token_ids` and `pipeline_model_mapping`.
@@ -51,12 +48,12 @@ class MultiModalModelTester:
     # (the others are inferred from available public classes).
     base_model_class = None
     config_class = None
-    text_config_class = None
     conditional_generation_class = None
     sequence_classification_class = None
+    sub_configs_to_skip = []
 
     # Required attributes after the initialization phase of the tester. Subclasses extend.
-    _required_attributes = ("config_class", "text_config_class", "conditional_generation_class")
+    _required_attributes = ("config_class", "conditional_generation_class")
 
     # Arguments that should be passed to the config class even if not in its signature
     forced_config_args = ["pad_token_id"]
@@ -108,7 +105,7 @@ class MultiModalModelTester:
 
     def create_attention_mask(self, input_ids):
         """Default causal (lower-triangular) attention mask. Override for bidirectional models like Gemma3."""
-        return torch.tril(torch.ones_like(input_ids).to(torch_device))
+        return input_ids.ne(self.pad_token_id).to(device=torch_device, dtype=torch.int64)
 
     def get_additional_inputs(self, config, input_ids, modality_inputs, batch_size: int | None = None):
         """Model-specific extra inputs (e.g. LlavaNext `image_sizes`, Qwen3VL `mm_token_type_ids`).
@@ -124,7 +121,12 @@ class MultiModalModelTester:
 
     def _build_modality_sub_configs(self):
         """Return the {sub-config-key: sub-config-instance} entries for the main config constructor."""
-        raise NotImplementedError
+        sub_configs = {}
+        for key, specs in self.config_class.sub_configs_defaults.items():
+            if key not in self.sub_configs_to_skip:
+                subconfig_cls = self._resolve_config_cls(specs)
+                sub_configs[key] = self._build_sub_config(subconfig_cls, prefix=key[:-7])
+        return sub_configs
 
     def _prepare_modality_inputs(self, input_ids, config, batch_size: int | None = None):
         """Create modality features, place modality placeholder tokens in ``input_ids``, and return:
@@ -168,15 +170,7 @@ class MultiModalModelTester:
     def config_args(self):
         return list(signature(self.config_class.__init__).parameters.keys())
 
-    @property
-    def text_config_args(self):
-        args = list(signature(self.text_config_class.__init__).parameters.keys())
-        for token_arg in ["pad_token_id", "bos_token_id", "eos_token_id"]:  # Not always explicitly in the sig
-            if token_arg not in args:
-                args.append(token_arg)
-        return args
-
-    def _collect_kwargs(self, sig_keys, config_class):
+    def _collect_kwargs(self, sig_keys, config_class, prefix=""):
         """Collect kwargs for ``config_class`` by matching ``sig_keys`` (and its ``attribute_map``) against ``self``."""
         attribute_map = getattr(config_class, "attribute_map", {})
         model_name_to_common_name = {v: k for k, v in attribute_map.items()}
@@ -186,7 +180,9 @@ class MultiModalModelTester:
             # from pointing to the same object. For ex: both might share the "same"
             # `rope_params` and overriding the value for text config causes an override
             # for all other subconfig, messing up with test settings
-            if hasattr(self, k) and k != "self":
+            if prefix is not None and hasattr(self, f"{prefix}_{k}") and k != "self":
+                kwargs[k] = deepcopy(getattr(self, f"{prefix}_{k}"))
+            elif hasattr(self, k) and k != "self":
                 kwargs[k] = deepcopy(getattr(self, k))
             elif k in model_name_to_common_name and hasattr(self, model_name_to_common_name[k]):
                 kwargs[k] = deepcopy(getattr(self, model_name_to_common_name[k]))
@@ -194,13 +190,28 @@ class MultiModalModelTester:
 
     def get_config(self):
         kwargs = self._collect_kwargs(self.config_args + self.forced_config_args, self.config_class)
-        kwargs["text_config"] = self.get_text_config()
         kwargs.update(self._build_modality_sub_configs())
         return self.config_class(**kwargs)
 
-    def get_text_config(self):
-        kwargs = self._collect_kwargs(self.text_config_args, self.text_config_class)
-        return self.text_config_class(**kwargs)
+    def _resolve_config_cls(self, specs):
+        if issubclass(specs.config_class, PreTrainedConfig):
+            return specs.config_class
+        return specs.get_config_class(specs.model_type)
+
+    def _build_sub_config(self, config_cls, prefix):
+        sig = list(signature(config_cls.__init__).parameters.keys())
+        # not all text config defien special tokens in signature - allow anyway
+        if "text" in prefix:
+            sig += ["bos_token_id", "eos_token_id", "pad_token_id"]
+        kwargs = self._collect_kwargs(sig, config_cls, prefix=prefix)
+
+        # Recurse into nested sub-configs, if the class declares any
+        nested_defaults = getattr(config_cls, "sub_configs_defaults", None) or {}
+        for key, specs in nested_defaults.items():
+            nested_cls = self._resolve_config_cls(specs)
+            kwargs[key] = self._build_sub_config(nested_cls, prefix=f"{prefix}_{key[:-7]}")
+
+        return config_cls(**kwargs)
 
     def create_and_check_model(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels

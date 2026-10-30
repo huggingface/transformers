@@ -155,6 +155,7 @@ class Cosmos3EdgeVisionConfig(Siglip2VisionConfig):
     num_attention_heads: int = 16
     num_patches: int = 256
     spatial_merge_size: int = 2
+    vision_use_head = AttributeError()
 
 
 @auto_docstring(checkpoint="nvidia/Cosmos3-Edge")
@@ -481,13 +482,17 @@ class Cosmos3EdgeTextModel(LlamaModel, Cosmos3EdgePreTrainedModel):
         if position_ids is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            position_ids = position_ids.view(1, 1, -1)
+            position_ids = position_ids.view(1, 1, -1).expand(3, inputs_embeds.shape[0], -1)
         elif position_ids.ndim == 2:
-            position_ids = position_ids.unsqueeze(0)
-        if position_ids.shape[0] == 1:
-            position_ids = position_ids.expand(3, inputs_embeds.shape[0], -1)
+            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
 
-        text_position_ids = position_ids[0]
+        if position_ids.ndim == 3 and position_ids.shape[0] == 4:
+            text_position_ids = position_ids[0]
+            position_ids = position_ids[1:]
+        else:
+            # If inputs are not packed (usual 3D positions), do not prepare mask from position_ids
+            text_position_ids = None
+
         causal_mask = create_causal_mask(
             config=self.config,
             inputs_embeds=inputs_embeds,

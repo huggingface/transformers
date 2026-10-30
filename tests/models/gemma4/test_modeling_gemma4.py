@@ -22,10 +22,8 @@ from parameterized import parameterized
 
 from transformers import (
     AutoTokenizer,
-    Gemma4AudioConfig,
     Gemma4Config,
     Gemma4TextConfig,
-    Gemma4VisionConfig,
     is_torch_available,
     logging,
     set_seed,
@@ -196,8 +194,8 @@ class Gemma4Audio2TextModelTester(ALMModelTester):
     base_model_class = Gemma4Model
     conditional_generation_class = Gemma4ForConditionalGeneration
     config_class = Gemma4Config
-    text_config_class = Gemma4TextConfig
-    audio_config_class = Gemma4AudioConfig
+
+    sub_configs_to_skip = ["vision_config"]
     audio_mask_key = "input_features_mask"
 
     def __init__(self, parent, **kwargs):
@@ -355,8 +353,8 @@ class Gemma4Vision2TextModelTester(VLMModelTester):
     base_model_class = Gemma4Model
     conditional_generation_class = Gemma4ForConditionalGeneration
     config_class = Gemma4Config
-    text_config_class = Gemma4TextConfig
-    vision_config_class = Gemma4VisionConfig
+
+    sub_configs_to_skip = ["audio_config"]
 
     def __init__(self, parent, **kwargs):
         kwargs.setdefault("image_token_id", 4)

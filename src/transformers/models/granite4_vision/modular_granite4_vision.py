@@ -126,7 +126,7 @@ class Granite4VisionConfig(LlavaNextConfig):
 
     model_type = "granite4_vision"
     sub_configs_defaults = {
-        "text_config": SubConfigSpec(config_class=AutoConfig, model_type="granite4_vision_text"),
+        "text_config": SubConfigSpec(config_class=Granite4VisionTextConfig),
         "vision_config": SubConfigSpec(config_class=AutoConfig, model_type="clip_vision_model"),
         "qformer_config": SubConfigSpec(
             config_class=AutoConfig,

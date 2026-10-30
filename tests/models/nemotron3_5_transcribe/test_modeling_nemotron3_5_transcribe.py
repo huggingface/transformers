@@ -21,11 +21,9 @@ from pathlib import Path
 from transformers import (
     AutoModelForMultimodalLM,
     AutoProcessor,
-    Nemotron3_5TranscribeAudioConfig,
     Nemotron3_5TranscribeConfig,
     Nemotron3_5TranscribeForConditionalGeneration,
     Nemotron3_5TranscribeModel,
-    NemotronHConfig,
     is_torch_available,
 )
 from transformers.audio_utils import load_audio
@@ -54,8 +52,6 @@ class Nemotron3_5TranscribeModelTester(ALMModelTester):
     config_class = Nemotron3_5TranscribeConfig
     base_model_class = Nemotron3_5TranscribeModel
     conditional_generation_class = Nemotron3_5TranscribeForConditionalGeneration
-    text_config_class = NemotronHConfig
-    audio_config_class = Nemotron3_5TranscribeAudioConfig
     audio_mask_key = "input_features_mask"
 
     def __init__(self, parent, **kwargs):
@@ -66,76 +62,48 @@ class Nemotron3_5TranscribeModelTester(ALMModelTester):
         kwargs.setdefault("subsampling_factor", 8)
         kwargs.setdefault("num_speakers", 4)
         kwargs.setdefault("num_hidden_layers", 3)
+        kwargs.setdefault("layers_block_type", ["linear_attention", "moe", "full_attention"])
+        kwargs.setdefault("head_dim", 16)
+        kwargs.setdefault("moe_intermediate_size", 16)
+        kwargs.setdefault("moe_shared_expert_intermediate_size", 16)
+        kwargs.setdefault("mamba_num_heads", 4)
+        kwargs.setdefault("mamba_n_groups", 1)
+        kwargs.setdefault("mamba_head_dim", 16)
+        kwargs.setdefault("ssm_state_size", 8)
+        kwargs.setdefault("mamba_chunk_size", 16)
+        kwargs.setdefault("n_routed_experts", 4)
+        kwargs.setdefault("n_groups", 1)
+        kwargs.setdefault("num_experts_per_tok", 2)
+        kwargs.setdefault("max_position_embeddings", 5000)
+
+        kwargs.setdefault("audio_asr_hidden_size", 32)
+        kwargs.setdefault("audio_asr_intermediate_size", 64)
+        kwargs.setdefault("audio_asr_num_hidden_layers", 2)
+        kwargs.setdefault("audio_asr_num_attention_heads", 2)
+
+        kwargs.setdefault("audio_diarization_audio_hidden_size", 16)
+        kwargs.setdefault("audio_diarization_audio_intermediate_size", 32)
+        kwargs.setdefault("audio_diarization_audio_num_hidden_layers", 1)
+        kwargs.setdefault("audio_diarization_audio_num_attention_heads", 2)
+
+        kwargs.setdefault("audio_diarization_head_hidden_size", 8)
+        kwargs.setdefault("audio_hidden_size", 16)
+
+        kwargs.setdefault("chunk_size", 16)
+        kwargs.setdefault("chunk_length", 500)
+        kwargs.setdefault("chunk_left_context", 50)
+        kwargs.setdefault("chunk_right_context", 50)
+
+        kwargs.setdefault("word_timestamp_hidden_size", 32)
+        kwargs.setdefault("word_timestamp_intermediate_size", 16)
+        kwargs.setdefault("word_timestamp_num_hidden_layers", 1)
+        kwargs.setdefault("word_timestamp_num_attention_heads", 2)
+        kwargs.setdefault("word_timestamp_vocab_size", 16)
+        kwargs.setdefault("word_timestamp_blank_token_id", 15)
+        kwargs.setdefault("word_timestamp_residual_scale", 0.1)
+        kwargs.setdefault("word_timestamp_max_position_embeddings", 5000)
+
         super().__init__(parent, **kwargs)
-
-    def get_text_config(self):
-        return NemotronHConfig(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            layers_block_type=["linear_attention", "moe", "full_attention"],
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            head_dim=16,
-            intermediate_size=self.intermediate_size,
-            moe_intermediate_size=16,
-            moe_shared_expert_intermediate_size=16,
-            mamba_num_heads=4,
-            mamba_n_groups=1,
-            mamba_head_dim=16,
-            ssm_state_size=8,
-            mamba_chunk_size=16,
-            n_routed_experts=4,
-            num_experts_per_tok=2,
-            max_position_embeddings=self.max_position_embeddings,
-            pad_token_id=self.pad_token_id,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-        )
-
-    def get_audio_config(self):
-        return Nemotron3_5TranscribeAudioConfig(
-            asr_config={
-                "hidden_size": 32,
-                "intermediate_size": 64,
-                "num_hidden_layers": 2,
-                "num_attention_heads": 2,
-                "num_mel_bins": self.num_mel_bins,
-                "subsampling_factor": self.subsampling_factor,
-            },
-            diarization_config={
-                "audio_config": {
-                    "hidden_size": 16,
-                    "intermediate_size": 32,
-                    "num_hidden_layers": 1,
-                    "num_attention_heads": 2,
-                    "num_mel_bins": self.num_mel_bins,
-                    "subsampling_factor": self.subsampling_factor,
-                },
-                "head_config": {
-                    "hidden_size": 8,
-                    "num_speakers": self.num_speakers,
-                    "audio_hidden_size": 16,
-                    "subsampling_factor": self.subsampling_factor,
-                },
-                "streaming_config": {"num_speakers": self.num_speakers, "subsampling_factor": self.subsampling_factor},
-                "chunk_length": 500,
-                "chunk_left_context": 50,
-                "chunk_right_context": 50,
-            },
-        )
-
-    def _build_modality_sub_configs(self):
-        word_timestamp_config = {
-            "hidden_size": 32,
-            "intermediate_size": 16,
-            "num_hidden_layers": 1,
-            "num_attention_heads": 2,
-            "vocab_size": 16,
-            "blank_token_id": 15,
-            "residual_scale": 0.1,
-            "max_position_embeddings": 5000,
-        }
-        return {**super()._build_modality_sub_configs(), "word_timestamp_config": word_timestamp_config}
 
     def create_audio_features(self, batch_size: int | None = None):
         batch_size = batch_size if batch_size is not None else self.batch_size
@@ -171,7 +139,7 @@ class Nemotron3_5TranscribeForConditionalGenerationModelTest(ALMModelTest, unitt
     )
 
     def _audio_features_get_expected_num_attentions(self, model_tester=None):
-        return self.model_tester.get_audio_config().asr_config.num_hidden_layers
+        return self.model_tester.get_config().audio_config.asr_config.num_hidden_layers
 
     @unittest.skip(
         reason="The speech recognition encoder is a sub-model that records its own layers and reads `output_attentions` "

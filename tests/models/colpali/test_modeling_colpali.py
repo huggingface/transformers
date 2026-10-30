@@ -47,7 +47,7 @@ class ColPaliForRetrievalModelTester:
         self,
         parent,
         ignore_index=-100,
-        image_token_index=0,
+        image_token_id=0,
         projector_hidden_act="gelu",
         seq_length=25,
         vision_feature_select_strategy="default",
@@ -100,8 +100,8 @@ class ColPaliForRetrievalModelTester:
     ):
         self.parent = parent
         self.ignore_index = ignore_index
-        # `image_token_index` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.image_token_index = image_token_index
+        # `image_token_id` is set to 0 to pass "resize_embeddings" test, do not modify
+        self.image_token_id = image_token_id
         self.projector_hidden_act = projector_hidden_act
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
@@ -129,7 +129,7 @@ class ColPaliForRetrievalModelTester:
             "text_config": self.text_config,
             "vision_config": self.vision_config,
             "ignore_index": self.ignore_index,
-            "image_token_index": self.image_token_index,
+            "image_token_id": self.image_token_id,
             "projector_hidden_act": self.projector_hidden_act,
             "projection_dim": self.projection_dim,
             "vision_feature_select_strategy": self.vision_feature_select_strategy,
@@ -162,8 +162,8 @@ class ColPaliForRetrievalModelTester:
         attention_mask = input_ids.ne(1).to(torch_device)
         # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
         # do not change this unless you modified image size or patch size
-        input_ids[input_ids == config.vlm_config.image_token_index] = self.pad_token_id
-        input_ids[:, :16] = config.vlm_config.image_token_index
+        input_ids[input_ids == config.vlm_config.image_token_id] = self.pad_token_id
+        input_ids[:, :16] = config.vlm_config.image_token_id
         inputs_dict = {
             "pixel_values": pixel_values,
             "input_ids": input_ids,

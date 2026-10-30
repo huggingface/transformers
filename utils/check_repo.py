@@ -158,14 +158,10 @@ IGNORE_NON_TESTED = (
         # models to ignore for not tested
         "RecurrentGemmaModel",  # Building part of bigger (tested) model.
         "FuyuForCausalLM",  # Not tested fort now
-        "InstructBlipQFormerModel",  # Building part of bigger (tested) model.
-        "InstructBlipVideoQFormerModel",  # Building part of bigger (tested) model.
         "UMT5EncoderModel",  # Building part of bigger (tested) model.
-        "Blip2QFormerModel",  # Building part of bigger (tested) model.
         "ErnieMForInformationExtraction",
         "FastSpeech2ConformerHifiGan",  # Already tested by SpeechT5HifiGan (# Copied from)
         "FastSpeech2ConformerWithHifiGan",  # Built with two smaller (tested) models.
-        "GlmImageVQVAE",  # Building part of bigger (tested) model.
         "GraphormerDecoderHead",  # Building part of bigger (tested) model.
         "JukeboxVQVAE",  # Building part of bigger (tested) model.
         "JukeboxPrior",  # Building part of bigger (tested) model.
@@ -194,15 +190,9 @@ IGNORE_NON_TESTED = (
         "Sam3VideoModel",  # Partly tested in Sam3Model, not regular model.
         "EdgeTamVisionModel",  # Building part of bigger (tested) model.
         "EdgeTamVideoModel",  # Partly tested in EdgeTamModel, not regular model.
-        "Cosmos3EdgeVisionModel",  # Building part of the tested Cosmos3EdgeModel.
         "SeamlessM4TTextToUnitModel",  # Building part of bigger (tested) model.
         "SeamlessM4TCodeHifiGan",  # Building part of bigger (tested) model.
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
-        "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
-        "SLANetSLAHead",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
-        "SLANetBackbone",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
-        "SLANeXtSLAHead",  # Buildinere is used only for encoding (discretizing) and is tested as part of bigger model
-        "SLANeXtBackbone",  # Building part of bigger (tested) model. Tested implicitly through SLANeXtForTableRecognition.
         "PPFormulaNetTextModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPFormulaNetVisionModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
         "PPOCRV5MobileDetModel",  # Building part of bigger (tested) model. Tested implicitly through PPOCRV5MobileDetForObjectDetection.
@@ -253,89 +243,33 @@ IGNORE_NON_TESTED = (
         "Qwen3OmniMoeCode2WavTransformerModel",
         "Qwen3OmniMoeTalkerForConditionalGeneration",
         "Qwen3OmniMoeTalkerModel",
-        "Qwen3OmniMoeThinkerTextModel",
         "Qwen3OmniMoeForConditionalGeneration",  # Bigger model tested through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
         "Qwen3OmniMoeTalkerCodePredictorModelForConditionalGeneration",  # Building part of bigger (tested) model. Tested implicitly through Qwen3OmniMoeForConditionalGenerationIntegrationTest.
-        "Molmo2TextModel",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
-        "Molmo2VisionModel",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
-        "Molmo2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
-        "Molmo2Adapter",  # Building part of bigger (tested) model. Tested implicitly through Molmo2ForConditionalGeneration.
-        "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
-        "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
-        "Llama4TextModel",  # Building part of bigger (tested) model. # TODO: add tests
-        "Llama4VisionModel",  # Building part of bigger (tested) model. # TODO: add tests
-        "Emu3VQVAE",  # Building part of bigger (tested) model
-        "Emu3TextModel",  # Building part of bigger (tested) model
-        "Glm4vTextModel",  # Building part of bigger (tested) model
-        "Glm4vMoeTextModel",  # Building part of bigger (tested) model
-        "GlmImageTextModel",  # Building part of bigger (tested) model
-        "GlmOcrTextModel",  # Building part of bigger (tested) model
-        "Glm5NextTextModel",  # Building part of bigger (tested) model
-        "Glm5NextVisionModel",  # Building part of bigger (tested) model
-        "Qwen2VLTextModel",  # Building part of bigger (tested) model
-        "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
-        "Step3p7Model",  # `base_model_class = Step3p7Model if is_torch_available() else None`; check_repo's regex can't parse the conditional. Tested implicitly through Step3p7ForConditionalGeneration.
-        "Step3p7TextModel",  # Building part of bigger (tested) model
-        "Step3p7VisionModel",  # Building part of bigger (tested) model
-        "InternVLVisionModel",  # Building part of bigger (tested) model
-        "DeepseekOcr2TextModel",  # Building part of bigger (tested) model
-        "DeepseekOcr2VisionModel",  # Building part of bigger (tested) model
-        "UnlimitedOcrTextModel",  # Building part of bigger (tested) model
-        "UnlimitedOcrVisionModel",  # Building part of bigger (tested) model
-        "QianfanOCRVisionModel",  # Building part of bigger (tested) model
-        "JanusVisionModel",  # Building part of bigger (tested) model
         "PPDocLayoutV3Model",  # Building part of bigger (tested) model
         "PPDocLayoutV4Model",  # Building part of bigger (tested) model
         "TimesFmModel",  # Building part of bigger (tested) model
         "TimesFm2_5Model",  # Building part of bigger (tested) model
-        "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
-        "CsmDepthDecoderModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
-        "CsmBackboneModel",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
-        "BltPatcher",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
-        "BltLocalEncoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
-        "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
-        "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
-        "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
-        "VibeVoiceModel",  # Building part of bigger (tested) model. Tested implicitly through VibeVoiceForConditionalGeneration
-        "HiggsAudioV2Model",  # Building part of bigger (tested) model. Tested implicitly through HiggsAudioV2ForConditionalGenerationIntegrationTest.
-        "Ernie4_5_VLMoeTextModel",  # Building part of bigger (tested) model
         "Ernie4_5_VL_MoeForConditionalGeneration",  # BC alias
         "Ernie4_5_VL_MoeModel",  # BC alias
         "Ernie4_5_VL_MoeTextModel",  # BC alias
         "PeAudioFrameLevelModel",
-        "PeAudioVideoModel",
-        "MimiEncoderModel",  # Tested through MimiModel
-        "MimiDecoderModel",  # Tested through MimiModel
-        "PocketTTSAudioTokenizerEncoderModel",  # Tested through PocketTTSAudioTokenizerModel
-        "PocketTTSAudioTokenizerDecoderModel",  # Tested through PocketTTSAudioTokenizerModel
-        "VibeVoiceAcousticTokenizerEncoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
-        "VibeVoiceAcousticTokenizerDecoderModel",  # Tested through VibeVoiceAcousticTokenizerModel
         "PI0Model",  # special arch, tested through PI0ForConditionalGeneration
         "UVDocBridge",  # Building part of a bigger model, tested implicitly through UVDocModel
-        "Gemma4VisionModel",  # Building part of a bigger model, tested implicitly
-        "Gemma4AudioModel",  # Building part of a bigger model, tested implicitly
-        "Sam3LiteTextTextModel",  # Building part of a bigger model, tested implicitly through Sam3LiteTextModel
-        "Exaone4_5_VisionModel",  # Building part of a bigger model
-        "Granite4VisionTextModel",  # Building part of bigger (tested) model. Tested implicitly through Granite4VisionModel.
-        "DiffusionGemmaDecoderModel",  # TODO(joaogante)
-        "DiffusionGemmaEncoderModel",  # TODO(joaogante)
-        "DiffusionGemmaEncoderTextModel",  # TODO(joaogante)
-        "Kimi_K25VisionModel",
-        "MuseGlimmerTextModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
-        "MuseGlimmerVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MuseGlimmerForConditionalGeneration.
-        "MuseSparkTextModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
-        "MuseSparkVisionModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
-        "MuseSparkAudioModel",  # Building part of bigger (tested) model. Tested implicitly through MuseSparkForConditionalGeneration.
-        "HunYuanVLTextModel",
-        "HunYuanVLVisionTransformer",
-        "InklingForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
-        "InklingAudioModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
-        "InklingVisionModel",  # Building part of bigger (tested) model. Tested implicitly through InklingForConditionalGeneration.
-        "Nemotron3DiarizationAudioModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3DiarizationModel.
-        "Nemotron3_5TranscribeAsrAudioModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3_5TranscribeModel.
-        "Nemotron3_5TranscribeAudioModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3_5TranscribeModel.
-        "Nemotron3_5TranscribeWordTimestampModel",  # Building part of bigger (tested) model. Tested implicitly through Nemotron3_5TranscribeModel.
-        "MossTranscribeDiarizeAudioModel",  # Building part of bigger (tested) model. Tested implicitly through MossTranscribeDiarizeForConditionalGeneration.
+        "InklingForCausalLM",
+        "VibeVoiceAcousticTokenizerDecoderModel",
+        "VibeVoiceAcousticTokenizerEncoderModel",
+        "PocketTTSAudioTokenizerEncoderModel",
+        "PocketTTSAudioTokenizerDecoderModel",
+        "MimiEncoderModel",
+        "MimiDecoderModel",
+        "DiffusionGemmaDecoderModel",
+        "DiffusionGemmaEncoderModel",
+        "SLANetSLAHead",
+        "SLANeXtBackbone",
+        "SLANeXtSLAHead",
+        "SLANetBackbone",
+        "CsmBackboneModel",
+        "PeAudioVideoModel",  # FIXME @eustlib, model isn't convered as backbone
     ]
 )
 
@@ -930,6 +864,25 @@ def find_tested_models(test_file: str) -> set[str]:
     return model_tested
 
 
+def filter_out_non_tested_backbones(defined_models: tuple):
+    """
+    When a model has nested config and each subconfig is defined
+    in the same file (e.g. QwenVLConfig, QwenVLVisionConfig, etc),
+    then we assume that all public models which are init from subconfigs
+    do not need to be tested. A single test on bigger VLM model is enough
+    and encompasses backbone-specific tests if needed!
+    """
+    backbone_configs = []
+    for _, module in defined_models:
+        if module.config_class is not None:
+            for specs in module.config_class.sub_configs_defaults.values():
+                if specs.config_class is not None:
+                    backbone_configs.append(specs.config_class)
+
+    tested_models = [(name, module) for name, module in defined_models if module.config_class not in backbone_configs]
+    return tested_models
+
+
 def should_be_tested(model_name: str) -> bool:
     """
     Whether or not a model should be tested.
@@ -961,8 +914,11 @@ def check_models_are_tested(module: types.ModuleType, test_file: str) -> list[st
             "If this intentional, add the test filename to `TEST_FILES_WITH_NO_COMMON_TESTS` in the file "
             "`utils/check_repo.py`."
         ]
+
+    defined_models = filter_out_non_tested_backbones(defined_models)
+
     failures = []
-    for model_name, _ in defined_models:
+    for model_name, x in defined_models:
         if model_name not in tested_models and should_be_tested(model_name):
             failures.append(
                 f"{model_name} is defined in {module.__name__} but is not tested in "

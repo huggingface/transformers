@@ -94,7 +94,7 @@ class MossTranscribeDiarizeConfig(PreTrainedConfig):
 
     model_type = "moss_transcribe_diarize"
     sub_configs_defaults = {
-        "audio_config": SubConfigSpec(config_class=AutoConfig, model_type="moss_transcribe_diarize_audio"),
+        "audio_config": SubConfigSpec(config_class=MossTranscribeDiarizeAudioConfig),
         "text_config": SubConfigSpec(
             config_class=AutoConfig,
             model_type="qwen3",

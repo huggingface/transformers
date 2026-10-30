@@ -42,7 +42,6 @@ if is_torch_available():
         Qwen4ExpModel,
         Qwen4ExpTextConfig,
         Qwen4ExpTextModel,
-        Qwen4ExpVisionConfig,
         StaticCache,
     )
     from transformers.distributed.fsdp import ALL_FSDP_STYLES
@@ -334,8 +333,7 @@ class Qwen4ExpTextModelTest(CausalLMModelTest, unittest.TestCase):
 class Qwen4ExpVisionText2TextModelTester(VLMModelTester):
     base_model_class = Qwen4ExpModel
     config_class = Qwen4ExpConfig
-    text_config_class = Qwen4ExpTextConfig
-    vision_config_class = Qwen4ExpVisionConfig
+
     conditional_generation_class = Qwen4ExpForConditionalGeneration
 
     def __init__(self, parent, **kwargs):
