@@ -21,9 +21,8 @@ import os
 import sys
 import time
 import traceback
-from dataclasses import dataclass
 from datetime import timedelta
-from multiprocessing.connection import Connection, wait
+from multiprocessing.connection import wait
 
 from transformers import set_seed
 from transformers.distributed.utils import get_distributed_backend
@@ -65,56 +64,36 @@ def _set_rank_device(rank, backend=None):
         torch.accelerator.set_device_index(rank)
 
 
-@dataclass
-class Worker:
-    """One worker process: it joins the process group as `rank`, then runs every test function received on `pipe`."""
+def _worker_main(rank, world_size, master_port, backend, pipe):
+    """Entry point of a worker process: joins the process group as `rank`, then runs every test function received on
+    `pipe` until pytest exits."""
+    # pytest captures our output under the test running when it is written, and a worker may be killed (after
+    # another one failed) before it flushes a block-buffered stdout
+    sys.stdout.reconfigure(line_buffering=True)
+    os.environ.update(WORLD_SIZE=str(world_size), RANK=str(rank), LOCAL_RANK=str(rank))
+    # some backends, e.g. tpu, require the rank to be set before initializing the process group
+    _set_rank_device(rank, backend)
+    store = dist.TCPStore("localhost", master_port, world_size=None, is_master=False)
+    dist.init_process_group(backend, store=store, rank=rank, world_size=world_size, timeout=_COLLECTIVE_TIMEOUT)
 
-    rank: int
-    world_size: int
-    master_port: int
-    backend: str
-    pipe: Connection
-
-    def main(self):
-        """Entry point of the process, which runs until pytest exits."""
-        # pytest captures our output under the test running when it is written, and a worker may be killed (after
-        # another one failed) before it flushes a block-buffered stdout
-        sys.stdout.reconfigure(line_buffering=True)
-        os.environ.update(
-            WORLD_SIZE=str(self.world_size),
-            RANK=str(self.rank),
-            LOCAL_RANK=str(self.rank),
-            MASTER_ADDR="localhost",
-            MASTER_PORT=str(self.master_port),
-        )
-        # some backends, e.g. tpu, require the rank to be set before initializing the process group
-        _set_rank_device(self.rank, self.backend)
-        store = dist.TCPStore("localhost", self.master_port, world_size=None, is_master=False)
-        dist.init_process_group(
-            self.backend, store=store, rank=self.rank, world_size=self.world_size, timeout=_COLLECTIVE_TIMEOUT
-        )
-
-        while True:
-            try:
-                func, args, kwargs = self.pipe.recv()
-            except EOFError:  # pytest exited
-                return
-            self.clean_up_previous_test()
-            try:
-                func(self.rank, *args, **kwargs)
-                dist.barrier()
-                error = None
-            except BaseException:
-                error = f"Rank {self.rank} failed:\n{traceback.format_exc()}"
-            self.pipe.send(error)
-
-    def clean_up_previous_test(self):
-        """Free the previous test's models, compiled graphs and device mesh groups, and reset the RNG."""
+    while True:
+        try:
+            func, args, kwargs = pipe.recv()
+        except EOFError:  # pytest exited
+            return
+        # free the previous test's models, compiled graphs and device mesh groups, and reset the RNG
         cleanup(_get_distributed_device_type(), gc_collect=True)
         for group in list(_world.pg_map):
             if group is not GroupMember.WORLD:
                 dist.destroy_process_group(group)
         set_seed(42)
+        try:
+            func(rank, *args, **kwargs)
+            dist.barrier()
+            error = None
+        except BaseException:
+            error = f"Rank {rank} failed:\n{traceback.format_exc()}"
+        pipe.send(error)
 
 
 class WorkerGroup:
@@ -131,10 +110,10 @@ class WorkerGroup:
         self.pipes, self.processes = [], []
         for rank in range(world_size):
             pipe, worker_pipe = ctx.Pipe()
-            worker = Worker(rank, world_size, self.store.port, backend, worker_pipe)
-            # spawn pickles `worker` and calls `main` on it in the new process; daemon: multiprocessing kills the
-            # workers when pytest exits
-            process = ctx.Process(target=worker.main, daemon=True)
+            # daemon: multiprocessing kills the workers when pytest exits
+            process = ctx.Process(
+                target=_worker_main, args=(rank, world_size, self.store.port, backend, worker_pipe), daemon=True
+            )
             process.start()
             # the worker now holds the only copy of its end, so `pipe` reads EOF once the worker dies
             worker_pipe.close()
