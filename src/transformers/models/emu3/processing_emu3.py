@@ -68,9 +68,9 @@ class Emu3ProcessorKwargs(ProcessingKwargs, total=False):
 class Emu3Processor(ProcessorMixin):
     valid_processor_kwargs = Emu3ProcessorKwargs
 
-    return_for_image_generation: bool = False
-    ratio: str = "1:1"
-    image_area: int = 518400
+    return_for_image_generation = False
+    ratio = "1:1"
+    image_area = 518400
 
     def __init__(
         self,

@@ -56,7 +56,7 @@ class MiniCPMV4_7Processor(ProcessorMixin):
     images_kwargs = {
         "return_tensors": "pt",
     }
-    use_image_id: bool | None = None
+    use_image_id = None
     return_mm_token_type_ids = True
 
     def __init__(self, image_processor=None, video_processor=None, tokenizer=None, chat_template=None, **kwargs):

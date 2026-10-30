@@ -98,9 +98,9 @@ class Kosmos2Processor(ProcessorMixin):
         "add_special_tokens": True,
         "return_token_type_ids": False,
     }
-    num_image_tokens: int = 64
-    first_image_token_id: int | None = None
-    add_eos_token: bool = False
+    num_image_tokens = 64
+    first_image_token_id = None
+    add_eos_token = False
 
     def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
         r"""

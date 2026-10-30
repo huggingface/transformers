@@ -66,7 +66,7 @@ class ChameleonProcessor(ProcessorMixin):
     images_kwargs = {
         "return_tensors": "pt",
     }
-    return_for_text_completion: bool = False
+    return_for_text_completion = False
 
     def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
         r"""

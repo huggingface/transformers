@@ -83,7 +83,7 @@ There are three ways to add custom arguments to a processor:
 | Where to add | Use for | Example |
 |---|---|---|
 | `__init__` | Settings saved in the config (model properties) | `image_seq_length` in [`Gemma3Processor`] |
-| `__call__` | Inputs only known at runtime | `images` or `text` |
+| `__call__` | Inputs only known at runtime | `images`, `labels`, `suffix`, etc. |
 | Custom `MyModelProcessingKwargs` class | Settings that can be configured at runtime | `use_image_id` in [`MiniCPMV4_7Processor`] |
 
 Arguments passed to `__init__` are saved in the config, have typically a default, and are not configurable at runtime.
@@ -119,6 +119,7 @@ class MyModelProcessor(ProcessingMixin):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        suffix: str | None = None,
         **kwargs: Unpack[MyModelProcessorKwargs],
     ):
         images, text, videos, audio = self.prepare_inputs_layout(images=images, text=text, **kwargs)

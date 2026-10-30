@@ -166,7 +166,7 @@ class IdeficsProcessor(ProcessorMixin):
         "return_tensors": "pt",
     }
 
-    add_eos_token: bool = False
+    add_eos_token = False
 
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
         r"""

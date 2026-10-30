@@ -135,10 +135,10 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
         "truncation": False,
         "return_attention_mask": True,
     }
-    seconds_per_chunk: float = 2.0
-    position_id_per_seconds: int | float = 13.0
-    use_audio_in_video: bool = False
-    n_window: int = 50
+    seconds_per_chunk = 2.0
+    position_id_per_seconds = 13.0
+    use_audio_in_video = False
+    n_window = 50
 
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None

@@ -93,7 +93,6 @@ class EmbeddingGemma2Processor(ProcessorMixin):
         "padding": True,
     }
     videos_kwargs = {"return_metadata": True}
-    valid_processor_kwargs = ProcessingKwargs
 
     def __init__(
         self,

@@ -66,7 +66,7 @@ class JanusProcessor(ProcessorMixin):
         "return_tensors": "pt",
     }
     images_kwargs = {"return_tensors": "pt"}
-    generation_mode: str = "text"
+    generation_mode = "text"
 
     def __init__(
         self,

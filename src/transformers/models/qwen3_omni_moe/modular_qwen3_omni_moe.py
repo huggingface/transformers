@@ -2788,8 +2788,8 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
         "truncation": False,
         "return_attention_mask": True,
     }
-    position_id_per_seconds: int | float = 13.0
-    n_window: int = 50
+    position_id_per_seconds = 13.0
+    n_window = 50
 
     def replace_multimodal_special_tokens(
         self,

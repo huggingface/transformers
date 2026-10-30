@@ -842,7 +842,6 @@ class EmbeddingGemma2VideoProcessor(Gemma4VideoProcessor):
 
 
 class EmbeddingGemma2Processor(Gemma4Processor):
-    valid_processor_kwargs = ProcessingKwargs
     return_mm_token_type_ids = AttributeError()
 
     def model_input_names(self):

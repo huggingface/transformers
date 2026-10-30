@@ -79,8 +79,8 @@ class GlmImageProcessor(ProcessorMixin):
     valid_processor_kwargs = GlmImageProcessorKwargs
 
     model_input_names = ["input_ids", "attention_mask", "pixel_values", "image_grid_thw", "images_per_sample"]
-    target_h: int = 1152
-    target_w: int = 768
+    target_h = 1152
+    target_w = 768
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token

@@ -118,9 +118,9 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
         "sampling_rate": 16000,
         "return_attention_mask": True,
     }
-    seconds_per_chunk: float = 2.0
-    position_id_per_seconds: int | float = 25
-    use_audio_in_video: bool = False
+    seconds_per_chunk = 2.0
+    position_id_per_seconds = 25
+    use_audio_in_video = False
 
     def __init__(
         self, image_processor=None, video_processor=None, feature_extractor=None, tokenizer=None, chat_template=None

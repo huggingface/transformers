@@ -123,10 +123,10 @@ def preprocess_box_annotation(box: list | tuple, image_size: tuple[int, int]) ->
 class GotOcr2Processor(ProcessorMixin):
     valid_processor_kwargs = GotOcr2ProcessorKwargs
 
-    format: bool = False
-    color: str | None = None
-    num_image_tokens: int = 256
-    multi_page: bool = False
+    format = False
+    color = None
+    num_image_tokens = 256
+    multi_page = False
 
     images_kwargs = {
         "crop_to_patches": False,

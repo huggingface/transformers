@@ -64,6 +64,7 @@ class ShieldGemma2Processor(Gemma3Processor):
 
     text_kwargs = {
         "padding": True,
+        "padding_side": "left",
     }
     images_kwargs = {
         # Value is "null" in preprocessor_config.json
@@ -128,10 +129,11 @@ class ShieldGemma2Processor(Gemma3Processor):
             images_kwargs["do_pan_and_scan"] = False
 
         # Enable padding on the batch during tokenization
+        # This happens before super().__call__ for BC.
         text_kwargs = kwargs.setdefault("text_kwargs", {})
         if "padding" not in text_kwargs:
-            text_kwargs["padding"] = kwargs.pop("padding", True)
-            text_kwargs["padding_side"] = kwargs.pop("padding_side", "left")
+            text_kwargs["padding"] = kwargs.pop("padding", self.text_kwargs["padding"])
+            text_kwargs["padding_side"] = kwargs.pop("padding_side", self.text_kwargs["padding_side"])
 
         # Kwargs validation only accepts lists and dicts, convert for BC
         if kwargs.get("policies") is not None:
