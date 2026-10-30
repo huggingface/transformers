@@ -2090,8 +2090,9 @@ that match your environment. Please note that you may need to restart your runti
 
 # docstyle-ignore
 PYTORCH_IMPORT_ERROR = """
-{0} requires the PyTorch library but it was not found in your environment. Check out the instructions on the
-installation page: https://pytorch.org/get-started/locally/ and follow the ones that match your environment.
+{0} requires PyTorch >= 2.6, but PyTorch was not found or an older version is installed.
+Please install or upgrade PyTorch by following the instructions on the installation page:
+https://pytorch.org/get-started/locally/
 Please note that you may need to restart your runtime after installation.
 """
 

@@ -53,7 +53,7 @@ if is_torch_available():
 
     from transformers.distributed import DistributedConfig
     from transformers.distributed.checkpoint import load_optimizer_distributed, save_optimizer_distributed
-    from transformers.distributed.fsdp import _resolve_tied_embed_lm_head_plan, expand_fsdp_plan
+    from transformers.distributed.fsdp import _resolve_tied_embed_lm_head_plan
     from transformers.distributed.utils import gather_full_state_dict
 
 
@@ -423,9 +423,8 @@ def _test_fsdp2_sharding_structure_impl(rank, config_class, config_dict, tie_wor
         model = AutoModelForCausalLM.from_pretrained(init_dir, distributed_config=distributed_config)
         dist.barrier()
 
-        adapted_fsdp_plan = _resolve_tied_embed_lm_head_plan(model._fsdp_plan, model)
-        reshard_targets, no_reshard_targets = expand_fsdp_plan(model, adapted_fsdp_plan)
-        expected_targets = {""} | {name for name, _ in reshard_targets + no_reshard_targets}
+        fsdp_plan = _resolve_tied_embed_lm_head_plan(model._fsdp_plan, model)
+        expected_targets = {""} | model._expand_parallel_plan(fsdp_plan).keys()
         actual_targets = {name for name, module in model.named_modules() if type(module).__name__.startswith("FSDP")}
 
         if rank == 0:
