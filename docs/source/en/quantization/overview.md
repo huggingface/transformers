@@ -85,7 +85,7 @@ Most GGUF models are dequantized to full precision as they load, so they use as 
 
 ## Save a quantized model
 
-Call [`~PreTrainedModel.save_pretrained`] or [`~PreTrainedModel.push_to_hub`] to save the quantized weights and their `quantization_config`. Not every method can save its quantized weights. The Save column in [Choose a method](./selecting#compare-methods) shows which ones can.
+Call [`~PreTrainedModel.save_pretrained`] or [`~PreTrainedModel.push_to_hub`] to save the quantized weights and their `quantization_config`. Not every method can save its quantized weights.
 
 ## Choose a method
 

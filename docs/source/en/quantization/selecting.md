@@ -20,7 +20,7 @@ If your checkpoint is already quantized, the checkpoint decides the method. Load
 
 ## Start from your goal
 
-Each row recommends a first method to try. Check the [comparison table](#compare-methods) before you commit to one.
+Each row recommends a first method to try. Check the full comparison table before you commit to one.
 
 | Goal | Start with | Why |
 |---|---|---|
