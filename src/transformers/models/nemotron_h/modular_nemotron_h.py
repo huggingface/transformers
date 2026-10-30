@@ -51,6 +51,7 @@ class NemotronHRMSNormGated(Zamba2RMSNormGated):
 class NemotronHMamba2Mixer(Zamba2MambaMixer):
     def __init__(self, config: NemotronHConfig, layer_idx: int | None = None, initialize_mixer_weights: bool = True):
         super().__init__(config, layer_idx, initialize_mixer_weights)
+        self.time_step_limit = config.time_step_limit
         self.ssm_state_size = config.ssm_state_size
         self.conv_kernel_size = config.conv_kernel
         self.intermediate_size = config.mamba_num_heads * config.mamba_head_dim
