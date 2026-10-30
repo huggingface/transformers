@@ -37,7 +37,7 @@ from transformers import (
 from transformers.testing_utils import require_torch, require_torchvision, require_vision
 
 from .test_modeling_mimo_v2_vl import get_config
-from .test_processing_mimo_v2 import make_processor
+from .test_processing_mimo_v2_vl import make_processor
 
 
 class MiMoV2VLConfigValidationTest(unittest.TestCase):

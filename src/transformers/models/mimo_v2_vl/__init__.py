@@ -25,10 +25,10 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_mimo_v2_vl import *
-    from .feature_extraction_mimo_v2 import *
+    from .feature_extraction_mimo_v2_vl import *
     from .image_processing_mimo_v2_vl import *
     from .modeling_mimo_v2_vl import *
-    from .processing_mimo_v2 import *
+    from .processing_mimo_v2_vl import *
     from .video_processing_mimo_v2_vl import *
 else:
     import sys

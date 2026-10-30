@@ -28,7 +28,7 @@ from ...tokenization_utils_base import TextInput
 from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import CONFIG_NAME, auto_docstring, cached_file
 from ...video_utils import VideoInput, VideoMetadata
-from .feature_extraction_mimo_v2 import MiMoV2FeatureExtractor
+from .feature_extraction_mimo_v2_vl import MiMoV2FeatureExtractor
 from .image_processing_mimo_v2_vl import MiMoV2ImageProcessor
 from .video_processing_mimo_v2_vl import MiMoV2VideoProcessor
 
@@ -228,6 +228,7 @@ class MiMoV2Processor(ProcessorMixin):
             min_frames=processor_config.get("min_frames") or MiMoV2VideoProcessor.min_frames,
             max_frames=processor_config.get("max_frames") or MiMoV2VideoProcessor.max_frames,
         )
+        # Checkpoint `audio_*` settings, renamed to the feature extractor arguments where they differ.
         audio_config_mapping = {
             "audio_sampling_rate": "sampling_rate",
             "audio_nfft": "n_fft",
@@ -236,22 +237,24 @@ class MiMoV2Processor(ProcessorMixin):
             "audio_fmin": "f_min",
             "audio_fmax": "f_max",
             "audio_n_mels": "feature_size",
-            "audio_channels": "audio_channels",
-            "audio_group_size": "audio_group_size",
-            "audio_segment_size": "audio_segment_size",
-            "audio_kernel_size": "audio_kernel_size",
-            "audio_stride_size": "audio_stride_size",
-            "audio_avg_pooler": "audio_avg_pooler",
-            "audio_input_id_per_second": "audio_input_id_per_second",
         }
+        shared_audio_names = (
+            "audio_channels",
+            "audio_group_size",
+            "audio_segment_size",
+            "audio_kernel_size",
+            "audio_stride_size",
+            "audio_avg_pooler",
+            "audio_input_id_per_second",
+        )
         processor_dict["feature_extractor"] = {
             "audio_channels": audio_config.get("audio_channels", 8),
             "audio_group_size": audio_config.get("group_size", 4),
             "audio_segment_size": audio_config.get("audio_segment_size", 6000),
             **{
-                target: processor_config[source]
-                for source, target in audio_config_mapping.items()
-                if source in processor_config
+                audio_config_mapping.get(name, name): value
+                for name, value in processor_config.items()
+                if name in audio_config_mapping or name in shared_audio_names
             },
         }
         for key in ("video_audio_interleave_length", "use_per_grid_t_timestamps"):
@@ -492,30 +495,24 @@ class MiMoV2Processor(ProcessorMixin):
         pattern = self._get_multimodal_token_pattern()
         expanded_text, batch_replacement_offsets = [], []
         for sample in text:
-            if not return_replacement_offsets:
-                expanded_text.append(pattern.sub(replace_placeholder, sample))
-                batch_replacement_offsets.append([])
-                continue
-            offset = 0
-            replacement_offsets = []
-
-            def replace_with_offsets(match):
-                nonlocal offset
-                replacement = replace_placeholder(match)
+            pieces, replacement_offsets, last, shift = [], [], 0, 0
+            for match in pattern.finditer(sample):
                 start, end = match.span()
-                replacement_offsets.append(
-                    {
-                        "type": match.lastgroup,
-                        "span": (start, end),
-                        "new_span": (start + offset, start + offset + len(replacement)),
-                        "text": match.group(),
-                        "replacement": replacement,
-                    }
-                )
-                offset += len(replacement) - (end - start)
-                return replacement
-
-            expanded_text.append(pattern.sub(replace_with_offsets, sample))
+                replacement = replace_placeholder(match)
+                pieces.append(sample[last:start] + replacement)
+                if return_replacement_offsets:
+                    replacement_offsets.append(
+                        {
+                            "type": match.lastgroup,
+                            "span": (start, end),
+                            "new_span": (start + shift, start + shift + len(replacement)),
+                            "text": match.group(),
+                            "replacement": replacement,
+                        }
+                    )
+                shift += len(replacement) - (end - start)
+                last = end
+            expanded_text.append("".join(pieces) + sample[last:])
             batch_replacement_offsets.append(replacement_offsets)
         if counts != expected_counts:
             raise ValueError("Every image, video and audio input must have a matching placeholder.")

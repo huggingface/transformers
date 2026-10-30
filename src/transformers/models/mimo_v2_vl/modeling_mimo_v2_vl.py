@@ -535,19 +535,14 @@ class MiMoV2VLTextModel(MiMoV2VLPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        use_cache=None,
-        **kwargs,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
-        if position_ids is None and isinstance(attention_mask, torch.Tensor) and attention_mask.ndim == 2:
-            # Direct left-padded calls use the same positions as generation.
-            sequence_length = (input_ids if inputs_embeds is None else inputs_embeds).shape[1]
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids = position_ids.masked_fill(attention_mask == 0, 0)[:, -sequence_length:]
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -940,23 +935,22 @@ class MiMoV2VLAudioTokenizerAttention(nn.Module):
             for projection in (self.q_proj, self.k_proj, self.v_proj)
         ]
         query, key = apply_rotary_pos_emb_fp32(query, key, *position_embeddings)
+        config = self.config
+        # With hybrid attention, the last layer of every `swa_per_block` cycle is unwindowed.
+        use_window = not config.hybrid_attention or self.layer_idx % config.swa_per_block < config.swa_per_block - 1
+        left, right = config.encoder_attn_window_size if use_window else (-1, -1)
         positions = torch.arange(sequence_length, device=hidden_states.device)
+        distance = positions[None, :] - positions[:, None]
         allowed = positions[None, None, :] < lengths[:, None, None]
-        if self.config.encoder_causal:
-            allowed = allowed & (positions[None, :] <= positions[:, None])
-        if self.window_size[0] >= 0:
-            allowed = allowed & (positions[None, :] >= positions[:, None] - self.window_size[0])
-        if self.window_size[1] >= 0:
-            allowed = allowed & (positions[None, :] <= positions[:, None] + self.window_size[1])
+        if config.encoder_causal:
+            allowed = allowed & (distance <= 0)
+        if left >= 0:
+            allowed = allowed & (distance >= -left)
+        if right >= 0:
+            allowed = allowed & (distance <= right)
         mask = hidden_states.new_zeros(batch_size, sequence_length, sequence_length).masked_fill(~allowed, -torch.inf)
         output = F.scaled_dot_product_attention(query, key, value, attn_mask=mask[:, None])
         return self.out_proj(output.transpose(1, 2).reshape(batch_size, sequence_length, -1))
-
-    @property
-    def window_size(self):
-        config = self.config
-        use_window = not config.hybrid_attention or self.layer_idx % config.swa_per_block < config.swa_per_block - 1
-        return config.encoder_attn_window_size if use_window else (-1, -1)
 
 
 class MiMoV2VLAudioTokenizerLayer(GradientCheckpointingLayer):
@@ -1138,12 +1132,12 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
     @auto_docstring(custom_args=_MULTIMODAL_ARGS)
     def get_audio_features(
         self,
-        input_audio_codes=None,
-        audio_feature_lens=None,
-        audio_segment_offsets=None,
-        input_features=None,
-        feature_attention_mask=None,
-    ):
+        input_audio_codes: torch.LongTensor | None = None,
+        audio_feature_lens: torch.LongTensor | None = None,
+        audio_segment_offsets: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        feature_attention_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         config = self.config.audio_config
         group_shape = (config.group_size, config.audio_channels)
         if (input_audio_codes is None) == (input_features is None):
@@ -1193,18 +1187,18 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
 
     def get_multimodal_embeddings(
         self,
-        input_ids,
-        inputs_embeds=None,
-        pixel_values=None,
-        image_grid_thw=None,
-        pixel_values_videos=None,
-        video_grid_thw=None,
-        input_audio_codes=None,
-        input_features=None,
-        audio_feature_lens=None,
-        feature_attention_mask=None,
-        audio_segment_offsets=None,
-    ):
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        input_audio_codes: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        audio_feature_lens: torch.LongTensor | None = None,
+        feature_attention_mask: torch.Tensor | None = None,
+        audio_segment_offsets: torch.LongTensor | None = None,
+    ) -> torch.FloatTensor:
         """Encode every supplied modality and scatter it into the matching placeholder tokens."""
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1245,23 +1239,23 @@ class MiMoV2VLModel(MiMoV2VLPreTrainedModel):
     @auto_docstring(custom_args=_MULTIMODAL_ARGS)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        use_cache=None,
-        pixel_values=None,
-        image_grid_thw=None,
-        pixel_values_videos=None,
-        video_grid_thw=None,
-        input_audio_codes=None,
-        input_features=None,
-        feature_attention_mask=None,
-        audio_feature_lens=None,
-        audio_segment_offsets=None,
-        **kwargs,
-    ):
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        input_audio_codes: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        feature_attention_mask: torch.Tensor | None = None,
+        audio_feature_lens: torch.LongTensor | None = None,
+        audio_segment_offsets: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> MoeModelOutputWithPast:
         inputs_embeds = self.get_multimodal_embeddings(
             input_ids,
             inputs_embeds=inputs_embeds,
@@ -1317,25 +1311,25 @@ class MiMoV2VLForConditionalGeneration(MiMoV2VLPreTrainedModel, GenerationMixin)
     @auto_docstring(custom_args=_MULTIMODAL_ARGS)
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        past_key_values=None,
-        inputs_embeds=None,
-        labels=None,
-        use_cache=None,
-        logits_to_keep=0,
-        pixel_values=None,
-        image_grid_thw=None,
-        pixel_values_videos=None,
-        video_grid_thw=None,
-        input_audio_codes=None,
-        input_features=None,
-        feature_attention_mask=None,
-        audio_feature_lens=None,
-        audio_segment_offsets=None,
-        **kwargs,
-    ) -> tuple | CausalLMOutputWithPast:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        pixel_values_videos: torch.Tensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        input_audio_codes: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        feature_attention_mask: torch.Tensor | None = None,
+        audio_feature_lens: torch.LongTensor | None = None,
+        audio_segment_offsets: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> CausalLMOutputWithPast:
         """Run the MiMo V2 VL language-model head."""
         kwargs.update(
             pixel_values=pixel_values,
@@ -1376,13 +1370,6 @@ class MiMoV2VLForConditionalGeneration(MiMoV2VLPreTrainedModel, GenerationMixin)
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    @classmethod
-    def from_original_checkpoint(cls, pretrained_model_name_or_path, **kwargs):
-        """Load original TP-interleaved FP8/MXFP4 weights, including the separate audio tokenizer, into a native model."""
-        from ...modeling_mimo_v2_utils import load_original_checkpoint
-
-        return load_original_checkpoint(pretrained_model_name_or_path, **kwargs)
 
     def prepare_inputs_for_generation(self, input_ids, is_first_iteration=False, **kwargs):
         use_cache = kwargs.get("use_cache", True)

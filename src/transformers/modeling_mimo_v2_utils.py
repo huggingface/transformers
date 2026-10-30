@@ -85,18 +85,28 @@ def dequantize_fp8(
     return weight.float() * expanded[: weight.shape[0], : weight.shape[1]]
 
 
+def _attention_dims(config, layer_idx):
+    """Return query heads, KV heads, query/key head dim and value head dim of a decoder layer."""
+    if config.layer_types[layer_idx] == "sliding_attention":
+        return (
+            config.swa_num_attention_heads,
+            config.swa_num_key_value_heads,
+            config.swa_head_dim,
+            config.swa_v_head_dim,
+        )
+    return config.num_attention_heads, config.num_key_value_heads, config.head_dim, config.v_head_dim
+
+
+def _is_valid_tp_size(tp_size, num_heads, num_kv_heads):
+    # KV heads are either sharded evenly across ranks or replicated when there are fewer heads than ranks.
+    kv_ok = num_kv_heads % tp_size == 0 if num_kv_heads >= tp_size else tp_size % num_kv_heads == 0
+    return num_heads % tp_size == 0 and kv_ok
+
+
 def split_interleaved_qkv(weight, config, layer_idx, tp_size, scales=None, block_size=(128, 128)):
     """Undo [Q_rank0,K_rank0,V_rank0,Q_rank1,...] packing before forming the canonical Q/K/V tensors."""
-    sliding = config.layer_types[layer_idx] == "sliding_attention"
-    num_heads = config.swa_num_attention_heads if sliding else config.num_attention_heads
-    num_kv_heads = config.swa_num_key_value_heads if sliding else config.num_key_value_heads
-    head_dim = config.swa_head_dim if sliding else config.head_dim
-    value_dim = config.swa_v_head_dim if sliding else config.v_head_dim
-    if (
-        num_heads % tp_size
-        or (num_kv_heads >= tp_size and num_kv_heads % tp_size)
-        or (num_kv_heads < tp_size and tp_size % num_kv_heads)
-    ):
+    num_heads, num_kv_heads, head_dim, value_dim = _attention_dims(config, layer_idx)
+    if not _is_valid_tp_size(tp_size, num_heads, num_kv_heads):
         raise ValueError("Checkpoint TP size is incompatible with the configured query/KV heads.")
     q_size = num_heads // tp_size * head_dim
     k_size = max(1, num_kv_heads // tp_size) * head_dim
@@ -138,21 +148,13 @@ def _native_audio_tokenizer_key(name):
 
 def _infer_checkpoint_tp_size(config, layer_idx, rows):
     """Infer TP only when KV replication makes the packed row count unambiguous."""
-    sliding = config.layer_types[layer_idx] == "sliding_attention"
-    num_heads = config.swa_num_attention_heads if sliding else config.num_attention_heads
-    num_kv_heads = config.swa_num_key_value_heads if sliding else config.num_key_value_heads
-    head_dim = config.swa_head_dim if sliding else config.head_dim
-    value_dim = config.swa_v_head_dim if sliding else config.v_head_dim
-    candidates = []
-    for size in range(1, num_heads + 1):
-        if (
-            num_heads % size
-            or (num_kv_heads >= size and num_kv_heads % size)
-            or (num_kv_heads < size and size % num_kv_heads)
-        ):
-            continue
-        if num_heads * head_dim + max(size, num_kv_heads) * (head_dim + value_dim) == rows:
-            candidates.append(size)
+    num_heads, num_kv_heads, head_dim, value_dim = _attention_dims(config, layer_idx)
+    candidates = [
+        size
+        for size in range(1, num_heads + 1)
+        if _is_valid_tp_size(size, num_heads, num_kv_heads)
+        and num_heads * head_dim + max(size, num_kv_heads) * (head_dim + value_dim) == rows
+    ]
     if len(candidates) != 1:
         raise ValueError(
             "Fused QKV layout is ambiguous. Supply checkpoint_tp_size or metadata.tp_size in the weight index."

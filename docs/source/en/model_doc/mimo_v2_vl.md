@@ -309,7 +309,6 @@ call `processor.save_pretrained()`; the resulting directory can be loaded with [
 
 [[autodoc]] MiMoV2VLForConditionalGeneration
     - forward
-    - from_original_checkpoint
 
 ## MiMoV2Processor
 

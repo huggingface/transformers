@@ -17,7 +17,7 @@ import argparse
 
 from ...modeling_mimo_v2_utils import load_original_checkpoint
 from ...tokenization_utils_tokenizers import TokenizersBackend
-from .processing_mimo_v2 import MiMoV2Processor
+from .processing_mimo_v2_vl import MiMoV2Processor
 
 
 def main():

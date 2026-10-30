@@ -411,6 +411,7 @@ class MiMoV2VLModelTest(unittest.TestCase):
             actual = self.model(
                 input_ids=torch.tensor([[0, 0, 2, 7, 8]]),
                 attention_mask=torch.tensor([[0, 0, 1, 1, 1]]),
+                position_ids=torch.tensor([[0, 0, 0, 1, 2]]),
                 use_cache=False,
             ).logits
         torch.testing.assert_close(actual[:, -3:], expected, rtol=1e-4, atol=1e-5)
