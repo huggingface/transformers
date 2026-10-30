@@ -255,3 +255,7 @@ class AudioFlamingo3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue((labels[pad_positions] == -100).all())
         kept_positions = ~pad_positions
         self.assertTrue((labels[kept_positions] == input_ids[kept_positions]).all())
+
+    @unittest.skip(reason="Cannot change the default of output_labels in __call__ without breaking BC.")
+    def test_call_arguments_default_none(self):
+        pass

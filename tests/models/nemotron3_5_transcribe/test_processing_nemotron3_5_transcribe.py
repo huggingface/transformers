@@ -93,6 +93,10 @@ class Nemotron3_5TranscribeProcessorTest(ProcessorTesterMixin, unittest.TestCase
     def test_apply_chat_template_tool_calls_no_content(self):
         pass
 
+    @unittest.skip(reason="Cannot change the default of output_labels in __call__ without breaking BC.")
+    def test_call_arguments_default_none(self):
+        pass
+
     def test_content_parts_render_as_training_prompt(self):
         """As NeMo's training prompt: the text parts joined by a space, then one `<|audio|>` per audio part."""
         processor = self.get_processor()

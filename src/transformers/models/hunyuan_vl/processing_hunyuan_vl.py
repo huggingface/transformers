@@ -17,19 +17,10 @@ from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
-
-
-class HunYuanVLProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": True,
-            "add_special_tokens": False,
-            "return_mm_token_type_ids": True,
-        },
-    }
 
 
 @auto_docstring
@@ -42,7 +33,11 @@ class HunYuanVLProcessor(ProcessorMixin):
     build HunYuanVL's multimodal RoPE position ids at runtime.
     """
 
-    valid_processor_kwargs = HunYuanVLProcessorKwargs
+    text_kwargs = {
+        "padding": True,
+        "add_special_tokens": False,
+    }
+    return_mm_token_type_ids = True
 
     def __init__(
         self, image_processor=None, tokenizer=None, chat_template=None, cat_extra_token: bool = True, **kwargs
@@ -110,7 +105,7 @@ class HunYuanVLProcessor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[HunYuanVLProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         super().validate_inputs(images=images, text=text, **kwargs)
 
@@ -145,8 +140,7 @@ class HunYuanVLProcessor(ProcessorMixin):
         """Compute the number of placeholder tokens needed for the given list of image sizes."""
         vision_data: dict = {}
         if image_sizes is not None:
-            images_kwargs = HunYuanVLProcessorKwargs._defaults.get("images_kwargs", {}).copy()
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             merge_size = images_kwargs.get("merge_size") or self.image_processor.merge_size
 
             num_image_patches_size = [
@@ -166,5 +160,7 @@ class HunYuanVLProcessor(ProcessorMixin):
     def model_input_names(self):
         return super().model_input_names + ["mm_token_type_ids"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"HunYuanVLProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["HunYuanVLProcessor"]

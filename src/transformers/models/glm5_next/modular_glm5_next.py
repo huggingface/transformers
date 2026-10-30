@@ -51,7 +51,7 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, Unpack
 from ...utils import (
     TensorType,
     TransformersKwargs,
@@ -60,6 +60,7 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
+from ...utils.deprecation import deprecate_attr
 from ...utils.generic import merge_with_config_defaults
 from ...utils.output_capturing import OutputRecorder, capture_outputs
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
@@ -2357,6 +2358,8 @@ class Glm5NextVideoProcessor(GlmgaVideoProcessor):
         grid_t = (num_frames + -num_frames % temporal_patch_size) // temporal_patch_size
         return grid_t * grid_h * grid_w
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Glm5NextProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "Glm5NextConfig",

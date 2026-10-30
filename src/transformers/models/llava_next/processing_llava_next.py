@@ -23,26 +23,17 @@ from ...processing_utils import (
     ProcessorMixin,
 )
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class LlavaNextProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": False,
-            "return_mm_token_type_ids": False,
-        },
-        "images_kwargs": {
-            "do_pad": True,
-        },
-    }
-
-
 @auto_docstring
 class LlavaNextProcessor(ProcessorMixin):
-    valid_processor_kwargs = LlavaNextProcessorKwargs
+    images_kwargs = {
+        "do_pad": True,
+    }
 
     def __init__(
         self,
@@ -143,8 +134,7 @@ class LlavaNextProcessor(ProcessorMixin):
         """
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = LlavaNextProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
 
             size = images_kwargs.get("size", None) or self.image_processor.size
             if isinstance(size, SizeDict):
@@ -175,5 +165,7 @@ class LlavaNextProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"LlavaNextProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["LlavaNextProcessor"]

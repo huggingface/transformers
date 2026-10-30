@@ -16,22 +16,14 @@ from ...audio_utils import AudioInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
 
 
-class GraniteSpeech5ProcessorKwargs(ProcessingKwargs, total=False):
-    # the defaults this model needs are shipped with the checkpoint rather than hardcoded here: the audio
-    # ones are the feature extractor's own signature defaults, and the tokenizer's `padding` comes from
-    # `tokenizer_config.json` (`ProcessorMixin._merge_kwargs` reads the tokenizer's init kwargs)
-    _defaults = {}
-
-
 @auto_docstring
 class GraniteSpeech5Processor(ProcessorMixin):
-    valid_processor_kwargs = GraniteSpeech5ProcessorKwargs
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
@@ -41,7 +33,7 @@ class GraniteSpeech5Processor(ProcessorMixin):
         audio: AudioInput,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         sampling_rate: int | None = None,
-        **kwargs: Unpack[GraniteSpeech5ProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""
         sampling_rate (`int`, *optional*):
@@ -51,7 +43,6 @@ class GraniteSpeech5Processor(ProcessorMixin):
             issued and the default sampling rate will be assumed.
         """
         output_kwargs = self._merge_kwargs(
-            GraniteSpeech5ProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
@@ -77,5 +68,7 @@ class GraniteSpeech5Processor(ProcessorMixin):
         feature_extractor_input_names = self.feature_extractor.model_input_names
         return feature_extractor_input_names + ["labels"]
 
+
+__getattr__ = deprecate_attr(__name__, rename={"GraniteSpeech5ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["GraniteSpeech5Processor"]

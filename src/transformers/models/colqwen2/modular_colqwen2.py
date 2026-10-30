@@ -20,6 +20,7 @@ from ...image_utils import ImageInput, make_flat_list_of_images
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available, logging
+from ...utils.deprecation import deprecate_attr
 from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
 from ..colpali.processing_colpali import ColPaliProcessor
 from .configuration_colqwen2 import ColQwen2Config
@@ -32,23 +33,15 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-class ColQwen2ProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "text_kwargs": {
-            "padding": "longest",
-            "return_mm_token_type_ids": False,
-            "return_text_replacement_offsets": False,
-        },
-        "images_kwargs": {
-            "data_format": "channels_first",
-            "do_convert_rgb": True,
-        },
-        "common_kwargs": {"return_tensors": "pt"},
-    }
-
-
 class ColQwen2Processor(ColPaliProcessor):
-    valid_processor_kwargs = ColQwen2ProcessorKwargs
+    text_kwargs = {
+        "padding": "longest",
+        "return_tensors": "pt",
+    }
+    images_kwargs = {
+        "data_format": "channels_first",
+        "return_tensors": "pt",
+    }
 
     def __init__(
         self,
@@ -77,17 +70,38 @@ class ColQwen2Processor(ColPaliProcessor):
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
-        **kwargs: Unpack[ColQwen2ProcessorKwargs],
+        suffix: TextInput | None = None,
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
+        r"""
+        suffix (`str | list[str] | list[list[str]]`, *optional*):
+            The suffix appended to all input texts.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`. If `suffix`
+                is provided, the `input_ids` will also contain the suffix input ids.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+                `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+                `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **labels** -- Labels compatible with training if `suffix` is not None
+        """
         if text is not None and images is not None:
             raise ValueError("Only one of text or images can be processed at a time")
 
         output_kwargs = self._merge_kwargs(
-            self.valid_processor_kwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-        suffix = output_kwargs["text_kwargs"].pop("suffix", None)
+        if "suffix" in output_kwargs["text_kwargs"]:
+            logger.warning_once(
+                "Passing `suffix` in `text_kwargs` is deprecated "
+                "and will be removed in v5.29.0. Pass it directly to the processor instead."
+            )
+        # text_kwargs has priority for backwards compatibility
+        suffix = output_kwargs["text_kwargs"].pop("suffix", suffix)
         output_kwargs["text_kwargs"]["return_token_type_ids"] = suffix is not None
 
         if text is not None:
@@ -139,8 +153,7 @@ class ColQwen2Processor(ColPaliProcessor):
 
         vision_data = {}
         if image_sizes is not None:
-            images_kwargs = ColQwen2ProcessorKwargs._defaults.get("images_kwargs", {})
-            images_kwargs.update(kwargs)
+            images_kwargs = self._merge_kwargs(**kwargs)["images_kwargs"]
             merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
 
             num_image_patches = [
@@ -287,6 +300,8 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
             attentions=vlm_output.attentions,
         )
 
+
+__getattr__ = deprecate_attr(__name__, rename={"ColQwen2ProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = [
     "ColQwen2ForRetrieval",

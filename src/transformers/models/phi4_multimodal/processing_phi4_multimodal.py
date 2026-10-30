@@ -24,17 +24,10 @@ from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import TextInput
 from ...utils import auto_docstring, logging
+from ...utils.deprecation import deprecate_attr
 
 
 logger = logging.get_logger(__name__)
-
-
-class Phi4MultimodalProcessorKwargs(ProcessingKwargs, total=False):
-    _defaults = {
-        "audio_kwargs": {
-            "device": "cpu",
-        },
-    }
 
 
 @auto_docstring
@@ -58,7 +51,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
         text: TextInput | list[TextInput],
         images: ImageInput | None = None,
         audio: AudioInput | None = None,
-        **kwargs: Unpack[Phi4MultimodalProcessorKwargs],
+        **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         r"""
         Returns:
@@ -73,7 +66,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
             - **audio_embed_sizes** -- List of integers specifying the size of each audio in `input_audio_embeds`.
         """
 
-        output_kwargs = self._merge_kwargs(Phi4MultimodalProcessorKwargs, self.tokenizer.init_kwargs, **kwargs)
+        output_kwargs = self._merge_kwargs(tokenizer_init_kwargs=self.tokenizer.init_kwargs, **kwargs)
         image_kwargs = output_kwargs["images_kwargs"]
         audio_kwargs = output_kwargs["audio_kwargs"]
 
@@ -129,5 +122,7 @@ class Phi4MultimodalProcessor(ProcessorMixin):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+
+__getattr__ = deprecate_attr(__name__, rename={"Phi4MultimodalProcessorKwargs": (ProcessingKwargs, "5.29.0")})
 
 __all__ = ["Phi4MultimodalProcessor"]
