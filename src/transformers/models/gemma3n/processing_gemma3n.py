@@ -81,6 +81,12 @@ class Gemma3nProcessor(ProcessorMixin):
             model_inputs["token_type_ids"] = model_inputs.pop("mm_token_type_ids")
         return model_inputs
 
+    def replace_image_token(self, image_inputs: dict, image_idx: int, **kwargs) -> str:
+        return self.full_image_sequence
+
+    def replace_audio_token(self, audio_inputs: dict, audio_idx: int, **kwargs) -> str:
+        return self.full_audio_sequence
+
     def prepare_inputs_layout(self, images=None, text=None, audio=None, **kwargs):
         images, text, _, audio = super().prepare_inputs_layout(images=images, text=text, audio=audio, **kwargs)
         if images is not None:
