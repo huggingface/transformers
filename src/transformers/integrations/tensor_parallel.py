@@ -27,6 +27,7 @@ from ..distributed.expert_parallel import (
     MoeTensorParalellMegaMoeExperts,
     RouterParallelMegaMoe,
 )
+from ..distributed.parallel_utils import replace_layer_number_by_wildcard
 from ..distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     AllReduceParallel,
@@ -43,7 +44,6 @@ from ..distributed.tensor_parallel import (
     TensorParallelLayer,
     apply_tensor_parallelism,
     gather_state_dict_for_save,
-    replace_layer_number_by_wildcard,
     verify_tp_plan,
 )
 from ..distributed.utils import initialize_tensor_parallelism

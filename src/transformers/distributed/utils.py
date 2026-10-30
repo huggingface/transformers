@@ -65,6 +65,12 @@ def _get_torch_distributed_rank() -> int:
     return torch.distributed.get_rank()
 
 
+def _warning_once_on_rank_zero(message: str) -> None:
+    """Log a warning once per process, on rank 0 only."""
+    if _get_torch_distributed_rank() == 0:
+        logger.warning_once(message)
+
+
 def _get_torch_distributed_world_size() -> int:
     if not _is_torch_distributed_initialized():
         return 1
