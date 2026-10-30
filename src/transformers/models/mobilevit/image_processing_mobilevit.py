@@ -35,7 +35,6 @@ from ...utils import (
     TensorType,
     auto_docstring,
     logging,
-    requires_backends,
 )
 
 
@@ -232,7 +231,6 @@ class MobileViTImageProcessor(TorchvisionBackend):
             `(height, width)`) and `segmentation_scores` (shape `(num_classes, height, width)`). In both cases,
             `(height, width)` corresponds to the target size (if `target_sizes` is specified).
         """
-        requires_backends(self, "torch")
         logits = outputs.logits
         batch_size = len(logits)
         if target_sizes is not None:

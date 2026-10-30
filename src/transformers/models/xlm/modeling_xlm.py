@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import PreTrainedModel, slice_logits_to_keep
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import ModelOutput, auto_docstring, logging
 from .configuration_xlm import XLMConfig
@@ -667,7 +667,7 @@ class XLMForQuestionAnsweringOutput(ModelOutput):
 
 @auto_docstring
 class XLMModel(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
 
         # encoder / decoder, output layer
@@ -915,7 +915,7 @@ class XLMPredLayer(nn.Module):
 class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
     _tied_weights_keys = {"pred_layer.proj.weight": "transformer.embeddings.weight"}
 
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
         self.transformer = XLMModel(config)
         self.pred_layer = XLMPredLayer(config)
@@ -1013,10 +1013,10 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = transformer_outputs[0]
-        # Only compute necessary logits
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+
         outputs = self.pred_layer(
-            hidden_states[:, slice_indices, :],
+            hidden_states,
             labels,
         )  # (loss, logits) or (logits,) depending on if labels are provided.
 
@@ -1038,7 +1038,7 @@ class XLMWithLMHeadModel(XLMPreTrainedModel, GenerationMixin):
     """
 )
 class XLMForSequenceClassification(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
@@ -1144,7 +1144,7 @@ class XLMForSequenceClassification(XLMPreTrainedModel):
     """
 )
 class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
 
         self.transformer = XLMModel(config)
@@ -1243,7 +1243,7 @@ class XLMForQuestionAnsweringSimple(XLMPreTrainedModel):
 
 @auto_docstring
 class XLMForQuestionAnswering(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
 
         self.transformer = XLMModel(config)
@@ -1361,7 +1361,7 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
 
 @auto_docstring
 class XLMForTokenClassification(XLMPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config: XLMConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -1446,7 +1446,7 @@ class XLMForTokenClassification(XLMPreTrainedModel):
 
 @auto_docstring
 class XLMForMultipleChoice(XLMPreTrainedModel):
-    def __init__(self, config, *inputs, **kwargs):
+    def __init__(self, config: XLMConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.transformer = XLMModel(config)

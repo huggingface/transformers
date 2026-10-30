@@ -25,7 +25,7 @@ from huggingface_hub.dataclasses import strict
 from ... import initialization as init
 from ...activations import ACT2CLS
 from ...backbone_utils import filter_output_hidden_states
-from ...configuration_utils import PreTrainedConfig, SubConfigSpec
+from ...configuration_utils import PreTrainedConfig
 from ...image_processing_backends import TorchvisionBackend
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import group_images_by_shape, reorder_images
@@ -35,7 +35,6 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import TensorType, merge_with_config_defaults
-from ...utils.import_utils import requires
 from ...utils.output_capturing import capture_outputs
 from ..got_ocr2.configuration_got_ocr2 import GotOcr2VisionConfig
 from ..got_ocr2.modeling_got_ocr2 import (
@@ -78,7 +77,7 @@ class SLANeXtConfig(PreTrainedConfig):
 
     model_type = "slanext"
     sub_configs_defaults = {
-        "vision_config": SubConfigSpec(config_class=SLANeXtVisionConfig),
+        "vision_config": SLANeXtVisionConfig,
     }
 
     vision_config: dict | SLANeXtVisionConfig | None = None
@@ -306,7 +305,6 @@ class SLANeXtForTableRecognition(SLANeXtPreTrainedModel):
 
 
 @auto_docstring
-@requires(backends=("torch",))
 class SLANeXtImageProcessor(TorchvisionBackend):
     resample = 2  # PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN

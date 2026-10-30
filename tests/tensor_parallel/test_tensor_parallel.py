@@ -11,11 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 from unittest.mock import patch
 
 import torch
-from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import AutoModelForCausalLM
 from transformers.distributed import tensor_parallel
@@ -23,15 +21,12 @@ from transformers.distributed.sharding_utils import DtensorShardOperation
 from transformers.distributed.tensor_parallel import (
     ALL_PARALLEL_STYLES,
     ColwiseParallel,
-    EpDispatchExpertsParallel,
     PackedColwiseParallel,
     PackedRowwiseParallel,
     RowwiseParallel,
     get_kv_heads_per_rank,
 )
 from transformers.testing_utils import TestCasePlus, is_tensor_parallel_test
-
-from ..test_tensor_parallel_mixin import _init_distributed
 
 
 @is_tensor_parallel_test
@@ -81,14 +76,15 @@ class TestTensorParallelProperties(TestCasePlus):
         self.assertIn("Supported styles are", error_message)
 
     def test_apply_tensor_parallelism_reports_all_invalid_styles(self):
-        model = torch.nn.Module()
-        model.tp_plan = {
+        model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
+        model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+        tp_plan = {
             "first_layer": "invalid_style",
             "second_layer": "another_invalid_style",
         }
 
         with self.assertRaises(ValueError) as context:
-            tensor_parallel.apply_tensor_parallelism(model, tp_mesh=None)
+            model._validate_parallel_plan(tp_plan, ALL_PARALLEL_STYLES, "tp_plan")
 
         error_message = str(context.exception)
         self.assertIn("'invalid_style'", error_message)
@@ -100,15 +96,9 @@ class TestTensorParallelProperties(TestCasePlus):
         model_id = "hf-internal-testing/tiny-random-LlamaForCausalLM"
         model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
 
-        # Test warning for non-existent layer pattern
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
+        with self.assertLogs("transformers.distributed.mixin", level="WARNING") as logs:
             model.tp_plan = {"nonexistent.*.layer": "colwise"}
-
-            # Check that a warning was issued
-            self.assertTrue(len(w) > 0)
-            warning_message = str(w[0].message)
-            self.assertIn("Layer pattern 'nonexistent.*.layer' does not match any parameters", warning_message)
+        self.assertIn("`tp_plan` rules ['nonexistent.*.layer'] match nothing in LlamaForCausalLM", logs.output[0])
 
     def test_tp_plan_valid_layer_patterns(self):
         """Test that valid layer patterns are accepted without warnings."""
@@ -123,24 +113,8 @@ class TestTensorParallelProperties(TestCasePlus):
         ]
 
         for plan in valid_plans:
-            with warnings.catch_warnings(record=True) as w:
-                warnings.simplefilter("always")
+            with self.assertNoLogs("transformers.distributed.mixin", level="WARNING"):
                 model.tp_plan = plan
-
-                # Filter out any warnings that are not about layer patterns
-                layer_warnings = [
-                    warning
-                    for warning in w
-                    if "Layer pattern" in str(warning.message)
-                    and "does not match any parameters" in str(warning.message)
-                ]
-
-                # Should not have layer pattern warnings for valid patterns
-                self.assertEqual(
-                    len(layer_warnings),
-                    0,
-                    f"Unexpected warning for valid pattern {plan}: {[str(w.message) for w in layer_warnings]}",
-                )
 
         # Verify the final plan was set correctly
         self.assertEqual(model.tp_plan, valid_plans[-1])
@@ -355,19 +329,8 @@ class TestTensorParallelLayer(TestCasePlus):
             self.assertEqual(op.shard_tensor(packed).shape, (16, 32))
             self.assertEqual(op.shard_tensor(unpacked).shape, (16, 16))
 
-    def test_grouped_gemm_updates_local_expert_count(self):
-        module = torch.nn.Module()
-        module.num_experts = 8
-        module.register_parameter("weight", torch.nn.Parameter(torch.empty(8, 16, 32)))
-        grouped_gemm = ALL_PARALLEL_STYLES["grouped_gemm"]
-
-        placements = self._get_parameter_placements(module, grouped_gemm, self.MockDeviceMesh(world_size=4, rank=0))
-
-        self.assertEqual(placements["weight"].dim, 0)
-        self.assertEqual(module.num_experts, 2)
-
     def test_sharding_does_not_create_unrelated_module_attributes(self):
-        styles = (ColwiseParallel(), RowwiseParallel(), ALL_PARALLEL_STYLES["grouped_gemm"])
+        styles = (ColwiseParallel(), RowwiseParallel())
 
         for style in styles:
             with self.subTest(style=type(style).__name__):
@@ -379,25 +342,3 @@ class TestTensorParallelLayer(TestCasePlus):
 
                 self.assertEqual(module.random_attr, 123)
                 self.assertFalse(hasattr(module, "num_experts"))
-
-    def test_dispatch_hands_experts_the_received_rows(self):
-        """The all-to-all's pending result (`AsyncCollectiveTensor`) holds a null pointer until a torch op waits on
-        it, and experts that launch kernels on raw pointers would read it: the dispatch waits before any experts run."""
-        _init_distributed(tp=2, backend="gloo")(_dispatch_hands_experts_the_received_rows)()
-
-
-class _DummyExperts(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-        self.num_experts = 2
-
-    def forward(self, tokens, expert_ids, weights):
-        assert type(tokens) is torch.Tensor, type(tokens)
-        return tokens
-
-
-# Worker functions for the expert-parallel layer tests, spawned through `_init_distributed`.
-def _dispatch_hands_experts_the_received_rows(rank):
-    hidden_states = torch.arange(32.0).view(4, 8) + 100 * rank
-    experts = EpDispatchExpertsParallel().install_forward(_DummyExperts(), init_device_mesh("cpu", (2,)))
-    experts(hidden_states, torch.tensor([[0, 3], [1, 2], [2, 1], [3, 0]]), torch.ones(4, 2))

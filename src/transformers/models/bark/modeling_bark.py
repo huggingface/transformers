@@ -360,7 +360,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkSubModelConfig
     output_modalities = ("audio",)
 
-    def __init__(self, config):
+    def __init__(self, config: BarkSubModelConfig):
         super().__init__(config)
         self.config = config
 
@@ -866,7 +866,7 @@ class BarkFineModel(BarkPreTrainedModel):
     config: BarkFineConfig
     main_input_name = "codebook_idx"
 
-    def __init__(self, config):
+    def __init__(self, config: BarkFineConfig):
         # non-causal gpt-like model with one embedding layer and one lm_head for each codebook of Encodec
         super().__init__(config)
         self.config = config
@@ -1258,7 +1258,7 @@ class BarkFineModel(BarkPreTrainedModel):
 class BarkModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkConfig
 
-    def __init__(self, config):
+    def __init__(self, config: BarkConfig):
         super().__init__(config)
 
         self.semantic = BarkSemanticModel(config.semantic_config)

@@ -29,6 +29,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import SubConfigSpec
 from ...feature_extraction_utils import BatchFeature
 from ...modeling_outputs import BaseModelOutputWithPooling
+from ...modeling_utils import slice_logits_to_keep
 from ...processing_utils import Unpack, prepare_keyword_inputs, prepare_prompt_input
 from ...tokenization_utils_base import TextInput
 from ...utils import (
@@ -441,8 +442,9 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         audio: str | list[str] | AudioInput,
         prompt: str | list[str] | None = None,
         keywords: str | list[str] | list[list[str]] | None = None,
+        tokenize: bool = True,
         **kwargs: Unpack[MossTranscribeDiarizeProcessorKwargs],
-    ) -> BatchFeature:
+    ) -> BatchFeature | list[str]:
         """
         Prepare inputs for transcription / diarization without manually writing the chat template.
 
@@ -457,6 +459,11 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
                 Hotwords/domain terms (e.g. proper nouns) to bias transcription toward the correct spelling. A
                 string or flat list of strings is shared across the batch; a nested list supplies separate
                 keywords per audio sample.
+            tokenize (`bool`, *optional*, defaults to `True`):
+                Whether to tokenize the prompts and process the audio. If `False`, the audio is not loaded and
+                the prompts are returned as strings with unexpanded audio placeholders. Passing them with the
+                audio to the processor, `processor(text=prompts, audio=audio)`, gives the same outputs as
+                `tokenize=True`.
             **kwargs:
                 Additional keyword arguments forwarded to [`~MossTranscribeDiarizeProcessor.apply_chat_template`].
         """
@@ -481,7 +488,7 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
 
         return self.apply_chat_template(
             conversations,
-            tokenize=True,
+            tokenize=tokenize,
             add_generation_prompt=True,
             return_dict=True,
             **kwargs,
@@ -494,6 +501,9 @@ class MossTranscribeDiarizeProcessor(VibeVoiceAsrProcessor):
         `MM:SS` / `HH:MM:SS` string (`"1:23"`, `"01:02:03"`), for MOSS-Transcribe-Diarize's diarization output.
         """
         return sum(float(part) * 60**i for i, part in enumerate(reversed(value.strip().split(":"))))
+
+    def _decode_complete_segments(self, *args, **kwargs):
+        raise AttributeError("Not needed for MossTranscribeDiarize")
 
     def extract_speaker_dict(self, text: str | list[str]) -> list[dict] | str | list[list[dict] | str]:
         """
@@ -826,8 +836,8 @@ class MossTranscribeDiarizeForConditionalGeneration(AudioFlamingo3ForConditional
         )
 
         hidden_states = outputs.last_hidden_state
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
-        logits = self.lm_head(hidden_states[:, slice_indices, :])
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
+        logits = self.lm_head(hidden_states)
 
         loss = None
         if labels is not None:

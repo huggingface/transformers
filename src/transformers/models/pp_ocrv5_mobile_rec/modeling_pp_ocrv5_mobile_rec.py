@@ -262,7 +262,7 @@ class PPOCRV5MobileRecEncoderWithSVTR(PPOCRV5MobileRecPreTrainedModel):
 
     def __init__(
         self,
-        config,
+        config: PPOCRV5MobileRecConfig,
     ):
         super().__init__(config)
         in_channels = make_divisible(  # noqa

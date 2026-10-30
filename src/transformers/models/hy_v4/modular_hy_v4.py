@@ -27,7 +27,7 @@ from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import RopeParameters
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel, slice_logits_to_keep
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring
 from ...utils.generic import maybe_autocast
@@ -97,6 +97,7 @@ class HYV4Config(PreTrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.self_attn.gate_proj": "colwise",
         "layers.*.self_attn.sinks": "colwise",
+        "layers.*.self_attn": "local_params",
         "layers.*.mlp.experts.gate_up_proj": "packed_colwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
         "layers.*.mlp.experts": "moe_tp_experts",
@@ -619,10 +620,9 @@ class HYV4ForCausalLM(Glm4MoeLiteForCausalLM):
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        hidden_states = slice_logits_to_keep(hidden_states, logits_to_keep)
         # Key difference of the lm_head being kept in float
-        logits = self.lm_head(hidden_states[:, slice_indices, :].to(dtype=self.lm_head.weight.dtype))
+        logits = self.lm_head(hidden_states.to(dtype=self.lm_head.weight.dtype))
 
         loss = None
         if labels is not None:

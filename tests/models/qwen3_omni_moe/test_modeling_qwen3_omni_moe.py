@@ -49,6 +49,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
+from ...test_expert_parallel_mixin import ExpertParallelTesterMixin
 from ...test_memory_cleanup_mixin import MemoryCleanupMixin
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -264,7 +265,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
 
 @require_torch
 class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(
-    ModelTesterMixin, GenerationTesterMixin, TensorParallelTesterMixin, unittest.TestCase
+    ModelTesterMixin, GenerationTesterMixin, TensorParallelTesterMixin, ExpertParallelTesterMixin, unittest.TestCase
 ):
     """
     Model tester for `Qwen3OmniMoeThinkerForConditionalGeneration`.
