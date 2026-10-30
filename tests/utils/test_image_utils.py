@@ -860,6 +860,10 @@ class UtilFunctionTester(unittest.TestCase):
         image = np.random.randint(0, 256, (3, 32, 64))
         self.assertEqual(get_image_size(image, channel_dim=ChannelDimension.LAST), (3, 32))
 
+        # Test PIL image returns (height, width) consistent with numpy
+        pil_image = PIL.Image.new("RGB", (64, 32))
+        self.assertEqual(get_image_size(pil_image), (32, 64))
+
     def test_infer_channel_dimension(self):
         # Test we fail with invalid input
         with pytest.raises(ValueError):
