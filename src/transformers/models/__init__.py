@@ -248,6 +248,7 @@ if TYPE_CHECKING:
     from .jamba import *
     from .janus import *
     from .jetmoe import *
+    from .jev import *
     from .jina_embeddings_v3 import *
     from .kimi_k25 import *
     from .kimi_linear import *

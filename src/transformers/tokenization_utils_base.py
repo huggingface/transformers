@@ -67,7 +67,6 @@ from .utils.chat_parsing import parse_response as _template_parse_response
 from .utils.chat_template_utils import (
     _get_control_token_patterns,
     _get_template_literal_text,
-    encode_marked_chat,
     mark_control_tokens,
     render_jinja_template,
 )
@@ -2930,6 +2929,15 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             **kwargs,
         )
 
+    def decode_decision(self, scores, decision_questions) -> dict[str, dict]:
+        """
+        The System One answers to the questions of a decision prompt (`decision_questions`, from
+        [`DecisionConfig.chat_template_kwargs`]), from the option scores that `model.decide` returns for them.
+        """
+        from .decision import decode_decision
+
+        return decode_decision(scores, decision_questions)
+
     def batch_decode(
         self,
         sequences: list[int] | list[list[int]] | np.ndarray | torch.Tensor,
@@ -3072,8 +3080,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
             sanitize_control_tokens (`bool`, defaults to `False`):
-                If set, control tokens that appear in messages, tools or documents are encoded as ordinary text, so
-                only the control tokens written by the chat template itself are encoded as tokens. Control tokens are
+                If set, control tokens that appear in messages, tools, documents or the template variables passed as
+                `**kwargs` are encoded as ordinary text, so only the control tokens written by the chat template itself
+                are encoded as tokens. Control tokens are
                 the tokenizer's special tokens, plus the added tokens in `tokenizer.chat_control_tokens`. If that
                 variable is not set, control tokens are inferred from the added tokens that appear in the chat
                 template's text and string literals. Only whole control tokens are sanitized, so if the template joins
@@ -3146,18 +3155,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 raise ValueError("continue_final_message is not compatible with return_assistant_tokens_mask.")
 
         if sanitize_control_tokens:
-            if not tokenize or return_assistant_tokens_mask:
-                raise ValueError(
-                    "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
-                    "`return_assistant_tokens_mask=True`."
-                )
-            # Wrap control tokens that appear in the user's strings with private markers
-            control_tokens_re, markers_re = _get_control_token_patterns(self._get_control_tokens(chat_template))
-            conversations = [
-                mark_control_tokens(getattr(chat, "messages", chat), control_tokens_re) for chat in conversations
-            ]
-            tools = mark_control_tokens(tools, control_tokens_re)
-            documents = mark_control_tokens(documents, control_tokens_re)
+            conversations, tools, documents, kwargs = self._mark_chat_inputs(
+                chat_template, conversations, tools, documents, kwargs, tokenize, return_assistant_tokens_mask
+            )
 
         template_kwargs = {**self.special_tokens_map, **kwargs}  # kwargs overwrite special tokens if both are present
         rendered_chat, generation_indices = render_jinja_template(
@@ -3174,24 +3174,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         if not is_batched:
             rendered_chat = rendered_chat[0]
 
-        if tokenize and sanitize_control_tokens:
-            input_ids = [
-                encode_marked_chat(self, chat, markers_re)
-                for chat in (rendered_chat if is_batched else [rendered_chat])
-            ]
-            if truncation and truncation != TruncationStrategy.DO_NOT_TRUNCATE:
-                max_length = max_length or self.model_max_length
-                input_ids = [
-                    ids[:max_length] if self.truncation_side == "right" else ids[-max_length:] for ids in input_ids
-                ]
-            out = self.pad(
-                {"input_ids": input_ids if is_batched or return_tensors else input_ids[0]},
-                padding=padding,
-                max_length=max_length,
-                return_tensors=return_tensors,
-                **tokenizer_kwargs,
-            )
-        elif tokenize:
+        if tokenize:
             out = self(
                 rendered_chat,
                 padding=padding,
@@ -3199,6 +3182,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 max_length=max_length,
                 add_special_tokens=False,
                 return_tensors=return_tensors,
+                sanitize_control_tokens=sanitize_control_tokens,
                 **tokenizer_kwargs,
             )
 
@@ -3235,6 +3219,23 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 return out["input_ids"]
         else:
             return rendered_chat
+
+    def _mark_chat_inputs(
+        self, chat_template: str, conversations, tools, documents, template_kwargs: dict, tokenize, assistant_mask
+    ):
+        """Wrap the control tokens that appear in the user's strings with private markers, see `mark_control_tokens`."""
+        if not tokenize or assistant_mask:
+            raise ValueError(
+                "`sanitize_control_tokens=True` requires `tokenize=True` and is not compatible with "
+                "`return_assistant_tokens_mask=True`."
+            )
+        control_tokens_re, _ = _get_control_token_patterns(self._get_control_tokens(chat_template))
+        conversations = [
+            mark_control_tokens(getattr(chat, "messages", chat), control_tokens_re) for chat in conversations
+        ]
+        tools = mark_control_tokens(tools, control_tokens_re)
+        documents = mark_control_tokens(documents, control_tokens_re)
+        return conversations, tools, documents, mark_control_tokens(template_kwargs, control_tokens_re)
 
     def _get_control_tokens(self, chat_template: str) -> tuple[str, ...]:
         """The tokens that `apply_chat_template(..., sanitize_control_tokens=True)` encodes as text in user input."""

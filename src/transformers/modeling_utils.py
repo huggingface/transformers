@@ -4259,6 +4259,20 @@ class PreTrainedModel(
                 transformers_explicit_filename=getattr(config, "transformers_weights", None),
                 tqdm_class=tqdm_class,
             )
+            # A model reading the checkpoint of another one (a decision head) finds its own weights next to them, e.g.
+            # `readout.safetensors`: only the safetensors files its config class names, in the same repo. From the class,
+            # so that no `config.json` can add files to load
+            for filename in getattr(type(config), "extra_files", ()):
+                if not filename.endswith(".safetensors") or os.path.basename(filename) != filename:
+                    raise ValueError(f"`extra_files` are safetensors file names in the repo, got {filename!r}.")
+                path = cached_file(
+                    pretrained_model_name_or_path,
+                    filename,
+                    _raise_exceptions_for_missing_entries=False,
+                    **download_kwargs,
+                )
+                if path is not None and checkpoint_files is not None and path not in checkpoint_files:
+                    checkpoint_files.append(path)
 
         is_quantized = hf_quantizer is not None
 
