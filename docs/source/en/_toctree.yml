@@ -569,6 +569,8 @@
         title: BLOOM
       - local: model_doc/blt
         title: BLT
+      - local: model_doc/bolmo
+        title: Bolmo
       - local: model_doc/byt5
         title: ByT5
       - local: model_doc/camembert
