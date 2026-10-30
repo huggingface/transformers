@@ -1505,6 +1505,8 @@
         title: Phi4 Multimodal
       - local: model_doc/pi0
         title: PI0
+      - local: model_doc/pi05
+        title: PI0.5
       - local: model_doc/pix2struct
         title: Pix2Struct
       - local: model_doc/pixtral

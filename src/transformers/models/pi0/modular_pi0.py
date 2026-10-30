@@ -490,13 +490,11 @@ class PI0Model(PI0PreTrainedModel):
             dit_attention_mask = torch.cat([attention_mask, noise_mask], dim=1)
             dit_position_ids = (torch.cumsum(dit_attention_mask, dim=1) - 1)[:, -action_embeds.shape[1] :]
 
-        # We have three blocks: vlm-inputss, state and actions from which only 1 token is `state`
-        # The mask should be bidirectional within each block and to prev blocks, but not to next blocks
-        vlm_input_length = past_key_values.get_seq_length()
+        vlm_block_length = past_key_values.get_seq_length() + action_embeds.shape[1] - self.config.chunk_size
         block_sequence_ids = torch.cat(
             [
-                torch.zeros(vlm_input_length + 1, device=action_embeds.device, dtype=torch.long),
-                torch.ones(action_embeds.shape[1] - 1, device=action_embeds.device, dtype=torch.long),
+                torch.zeros(vlm_block_length, device=action_embeds.device, dtype=torch.long),
+                torch.ones(self.config.chunk_size, device=action_embeds.device, dtype=torch.long),
             ]
         )
         block_sequence_ids = block_sequence_ids[None, :].repeat(action_embeds.shape[0], 1)
@@ -622,7 +620,6 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
     @torch.no_grad()
     def sample_actions(
         self,
-        state: torch.FloatTensor,
         input_ids: torch.LongTensor,
         pixel_values: torch.FloatTensor,
         noise: torch.FloatTensor | None = None,
@@ -672,7 +669,6 @@ class PI0ForConditionalGeneration(PI0PreTrainedModel):
             time = 1.0 + step * dt
             time_tensor = torch.full((batch_size,), time, dtype=torch.float32, device=device)
             output = self(
-                state=state,
                 noise=noise,
                 timestep=time_tensor,
                 pixel_attention_mask=pixel_attention_mask,
