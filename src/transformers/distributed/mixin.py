@@ -245,30 +245,18 @@ class DistributedMixin:
         ep_plan = dict(self.ep_plan) if distributed_config.ep_size > 1 else {}
         fsdp_plan = dict(self.fsdp_plan) if distributed_config.fsdp_size > 1 else {}
 
-        if distributed_config.tp_size > 1 and not tp_plan:
-            raise ValueError(
-                f"Tensor parallelism was requested (`tp_size={distributed_config.tp_size}`), but `{type(self).__name__}` "
-                "does not define a tensor-parallel plan. Pass `tp_plan` in `DistributedConfig`, add a "
-                "`base_model_tp_plan` to the model's config, or disable tensor parallelism."
-            )
-
-        if distributed_config.ep_size > 1 and not ep_plan:
-            raise ValueError(
-                f"Expert parallelism was requested (`ep_size={distributed_config.ep_size}`), but `{type(self).__name__}` "
-                "does not define an expert-parallel plan. Pass `ep_plan` in `DistributedConfig`, add a "
-                "`base_model_ep_plan` to the model's config, or disable expert parallelism."
-            )
+        for kind, plan in (("tp", tp_plan), ("ep", ep_plan), ("fsdp", fsdp_plan)):
+            size = getattr(distributed_config, f"{kind}_size")
+            if size > 1 and not plan:
+                raise ValueError(
+                    f"`{kind}_size={size}` was requested, but `{type(self).__name__}` has no `{kind}_plan`. Pass "
+                    f"`{kind}_plan` in `DistributedConfig`, add `base_model_{kind}_plan` to the model's config, "
+                    f"or set `{kind}_size=1`."
+                )
 
         if "ep_dispatch_experts" in ep_plan.values() and "ep_router" in ep_plan.values():
             raise ValueError(
                 "`ep_dispatch_experts` routes tokens itself; remove the `ep_router` rules from `ep_plan`."
-            )
-
-        if distributed_config.fsdp_size > 1 and not fsdp_plan:
-            raise ValueError(
-                f"FSDP was requested (`fsdp_size={distributed_config.fsdp_size}`), but `{type(self).__name__}` "
-                "does not define an FSDP plan. Pass `fsdp_plan` in `DistributedConfig`, add a "
-                "`base_model_fsdp_plan` to the model's config, or disable FSDP."
             )
 
         # EP rules take precedence: drop TP rules on EP modules and their children.
