@@ -37,16 +37,6 @@ from huggingface_hub import (
 )
 
 from transformers.models.auto.processing_auto import PROCESSOR_MAPPING_NAMES
-from transformers.pipelines import (
-    AudioClassificationPipeline,
-    AutomaticSpeechRecognitionPipeline,
-    DepthEstimationPipeline,
-    ImageClassificationPipeline,
-    ImageSegmentationPipeline,
-    ObjectDetectionPipeline,
-    VideoClassificationPipeline,
-    ZeroShotImageClassificationPipeline,
-)
 from transformers.testing_utils import (
     is_pipeline_test,
     require_av,
@@ -88,15 +78,16 @@ pipeline_test_mapping = {
 
 task_to_pipeline_and_spec_mapping = {
     # Adding a task to this list will cause its pipeline input signature to be checked against the corresponding
-    # task spec in the HF Hub
-    "audio-classification": (AudioClassificationPipeline, AudioClassificationInput),
-    "automatic-speech-recognition": (AutomaticSpeechRecognitionPipeline, AutomaticSpeechRecognitionInput),
-    "depth-estimation": (DepthEstimationPipeline, DepthEstimationInput),
-    "image-classification": (ImageClassificationPipeline, ImageClassificationInput),
-    "image-segmentation": (ImageSegmentationPipeline, ImageSegmentationInput),
-    "object-detection": (ObjectDetectionPipeline, ObjectDetectionInput),
-    "video-classification": (VideoClassificationPipeline, VideoClassificationInput),
-    "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, ZeroShotImageClassificationInput),
+    # task spec in the HF Hub. Pipeline classes are dotted-path strings resolved lazily at test execution time
+    # to avoid importing pipelines/__init__.py (eager, loads all 28 pipeline source files) during collection.
+    "audio-classification": ("transformers.pipelines.audio_classification.AudioClassificationPipeline", AudioClassificationInput),
+    "automatic-speech-recognition": ("transformers.pipelines.automatic_speech_recognition.AutomaticSpeechRecognitionPipeline", AutomaticSpeechRecognitionInput),
+    "depth-estimation": ("transformers.pipelines.depth_estimation.DepthEstimationPipeline", DepthEstimationInput),
+    "image-classification": ("transformers.pipelines.image_classification.ImageClassificationPipeline", ImageClassificationInput),
+    "image-segmentation": ("transformers.pipelines.image_segmentation.ImageSegmentationPipeline", ImageSegmentationInput),
+    "object-detection": ("transformers.pipelines.object_detection.ObjectDetectionPipeline", ObjectDetectionInput),
+    "video-classification": ("transformers.pipelines.video_classification.VideoClassificationPipeline", VideoClassificationInput),
+    "zero-shot-image-classification": ("transformers.pipelines.zero_shot_image_classification.ZeroShotImageClassificationPipeline", ZeroShotImageClassificationInput),
 }
 
 # The default value `hf-internal-testing` is for running the pipeline testing against the tiny models on the Hub.
@@ -195,8 +186,10 @@ class PipelineTesterMixin:
             at_least_one_model_is_tested = True
 
         if task in task_to_pipeline_and_spec_mapping:
-            pipeline, hub_spec = task_to_pipeline_and_spec_mapping[task]
-            compare_pipeline_args_to_hub_spec(pipeline, hub_spec)
+            pipeline_path, hub_spec = task_to_pipeline_and_spec_mapping[task]
+            _mod, _cls = pipeline_path.rsplit(".", 1)
+            pipeline_class = getattr(importlib.import_module(_mod), _cls)
+            compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec)
 
         if not at_least_one_model_is_tested:
             self.skipTest(
