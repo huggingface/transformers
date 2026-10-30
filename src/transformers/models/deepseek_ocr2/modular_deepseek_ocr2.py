@@ -788,14 +788,13 @@ class DeepseekOcr2VisionEncoderLayer(Qwen2DecoderLayer):
 
 @auto_docstring(custom_intro="Vision encoder for DeepSeek-OCR-2.")
 class DeepseekOcr2VisionEncoder(Qwen2Model, DeepseekOcr2PreTrainedModel):
-    config: DeepseekOcr2VisionConfig
+    config: DeepseekOcr2VisionEncoderConfig
     _can_record_outputs = {
         "hidden_states": DeepseekOcr2VisionEncoderLayer,
         "attentions": DeepseekOcr2VisionAttention,
     }
-    config: DeepseekOcr2VisionConfig
 
-    def __init__(self, config):
+    def __init__(self, config: DeepseekOcr2VisionEncoderConfig):
         super().__init__(config)
         del self.embed_tokens
         self.layers = nn.ModuleList(
