@@ -273,6 +273,18 @@
   - local: quantization/concept_guide
     title: Quantization concepts
   - sections:
+    - local: quantization/save
+      title: Save and share a model
+    - local: quantization/skip_modules
+      title: Keep modules in full precision
+    - local: quantization/dequantize
+      title: Dequantize a model
+    - local: quantization/finetune
+      title: Fine-tune a model
+    - local: quantization/compile
+      title: Compile a model
+    title: Common tasks
+  - sections:
     - local: quantization/bitsandbytes
       title: bitsandbytes
     - local: quantization/eetq
